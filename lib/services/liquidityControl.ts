@@ -2,8 +2,8 @@ import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-11-20.acacia' as any,
-});
+  apiVersion: '2024-11-20.acacia',
+} as Stripe.StripeConfig);
 
 /**
  * LIQUIDITY BUFFER CONTROL
@@ -85,11 +85,11 @@ export async function checkLiquidityStatus(): Promise<LiquidityStatus> {
       },
     },
     select: {
-      totalPrice: true,
+      price: true,
     },
   });
 
-  const refundExposure30Days = recentBookings.reduce((sum, b) => sum + b.totalPrice, 0);
+  const refundExposure30Days = recentBookings.reduce((sum, b) => sum + b.price, 0);
   console.log('[LIQUIDITY] 30-day refund exposure:', refundExposure30Days);
 
   // ============================================
@@ -132,11 +132,11 @@ export async function checkLiquidityStatus(): Promise<LiquidityStatus> {
       status: { in: ['CONFIRMED', 'COMPLETED'] },
     },
     _sum: {
-      totalPrice: true,
+      price: true,
     },
   });
 
-  const monthlyGMV = monthlyBookings._sum.totalPrice || 0;
+  const monthlyGMV = monthlyBookings._sum.price || 0;
   console.log('[LIQUIDITY] Monthly GMV:', monthlyGMV);
 
   // ============================================
