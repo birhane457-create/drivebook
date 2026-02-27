@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' }
       });
       
-      instructorId = latestBooking?.instructorId;
+      instructorId = latestBooking?.instructorId || null;
     }
 
     if (!instructorId) {

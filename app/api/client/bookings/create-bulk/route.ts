@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
         // Ensure instructor exists
         const instructor = await tx.instructor.findUnique({ where: { id: item.instructorId } });
         if (!instructor) throw new Error(`Instructor ${item.instructorName} not found`);
+        if (!client) throw new Error('Client not found');
 
         // Calculate commission for this booking
         const commission = await paymentService.calculateCommission(
@@ -162,16 +163,13 @@ export async function POST(request: NextRequest) {
 
         // NEW: Record booking payment in ledger (3 entries per booking)
         try {
-          const ledgerResult = await recordBookingPayment(tx, {
+          const ledgerResult = await recordBookingPayment({
             bookingId: booking.id,
             userId: user.id,
             instructorId: item.instructorId,
-            clientId: client.id,
             totalAmount: commission.totalAmount,
             platformFee: commission.platformFee,
             instructorPayout: commission.instructorPayout,
-            commissionRate: commission.commissionRate,
-            isFirstBooking: commission.isFirstBooking,
             createdBy: user.id
           });
           

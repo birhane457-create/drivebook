@@ -16,7 +16,9 @@ export default async function DashboardPage() {
   if (session.user.role === 'CLIENT') {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email! },
-      include: {
+      select: {
+        id: true,
+        email: true,
         wallet: {
           include: {
             transactions: {
@@ -53,7 +55,7 @@ export default async function DashboardPage() {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back, {user.name}!</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back!</h1>
           <p className="text-sm sm:text-base text-gray-600">Manage your lessons and account.</p>
         </div>
 
