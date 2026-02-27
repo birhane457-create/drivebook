@@ -66,13 +66,13 @@ export async function detectSameCardAcrossAccounts(): Promise<FraudAlert[]> {
   const payments = await prisma.booking.findMany({
     where: {
       isPaid: true,
-      stripePaymentIntentId: { not: null },
+      paymentIntentId: { not: null },
     },
     select: {
       id: true,
       userId: true,
       clientId: true,
-      stripePaymentIntentId: true,
+      paymentIntentId: true,
       metadata: true,
     },
   });
