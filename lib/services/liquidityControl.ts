@@ -110,14 +110,17 @@ export async function checkLiquidityStatus(): Promise<LiquidityStatus> {
   // ============================================
   // 4. Calculate dispute liability
   // ============================================
-  const activeDisputes = await prisma.booking.count({
+  // Note: Disputes are tracked via Stripe metadata, not booking status
+  // For now, we'll estimate based on recent refunds
+  const recentRefunds = await prisma.booking.count({
     where: {
-      status: 'DISPUTED',
+      refundAmount: { gt: 0 },
+      createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) }, // Last 90 days
     },
   });
 
-  // Estimate: Each dispute = booking amount + $15 fee
-  const disputeLiability = activeDisputes * 85; // Average booking $70 + $15 fee
+  // Estimate: Each potential dispute = average booking amount + $15 fee
+  const disputeLiability = recentRefunds * 85; // Average booking $70 + $15 fee
   console.log('[LIQUIDITY] Dispute liability estimate:', disputeLiability);
 
   // ============================================
