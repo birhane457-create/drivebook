@@ -1,0 +1,1177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  email         String    @unique
+  password      String
+  role          UserRole  @default(INSTRUCTOR)
+  
+  // Password reset
+  resetToken    String?
+  resetTokenExpiry DateTime?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  instructor    Instructor?
+  clients       Client[]
+  wallet        ClientWallet?
+  bookings      Booking[]
+  incompleteBooking IncompleteBooking?
+  staffMember   StaffMember?
+  
+  @@index([resetToken])
+}
+
+enum UserRole {
+  INSTRUCTOR
+  CLIENT
+  ADMIN
+  STAFF
+  SUPER_ADMIN
+}
+
+model Instructor {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String              @unique @db.ObjectId
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name              String
+  phone             String
+  bio               String?
+  profileImage      String?
+  carImage          String?
+  carMake           String?
+  carModel          String?
+  carYear           Int?
+  baseLatitude      Float
+  baseLongitude     Float
+  baseAddress       String
+  
+  hourlyRate        Float
+  vehicleTypes      VehicleType[]
+  languages         String[]
+  qualifications    Json?
+  workingHours      Json               // {monday: [{start: "09:00", end: "17:00"}], ...}
+  serviceRadiusKm   Int                @default(20)
+  
+  // Booking Slot Configuration
+  allowedDurations     Int[]           @default([60, 120]) // Allowed lesson durations in minutes: 30, 60, 90, 120
+  bookingBufferMinutes Int             @default(15)        // Buffer time between bookings (10, 15, or 20 minutes)
+  enableTravelTime     Boolean         @default(false)     // Whether to add extra travel time
+  travelTimeMinutes    Int?            @default(10)        // Optional travel time on top of buffer (5-60 minutes)
+  
+  // Google Calendar Integration (Per Instructor)
+  googleCalendarId  String?
+  googleAccessToken String?
+  googleRefreshToken String?
+  googleTokenExpiry DateTime?
+  syncGoogleCalendar Boolean           @default(false)
+  calendarBufferMode String            @default("auto") // "auto" or "manual"
+  
+  // Consent for automated services
+  consentCalendarSync Boolean          @default(false)
+  consentDate         DateTime?
+  
+  // Platform Management
+  approvalStatus    ApprovalStatus     @default(PENDING)
+  approvedAt        DateTime?
+  approvedBy        String?            @db.ObjectId
+  rejectionReason   String?
+  
+  // Subscription & Billing
+  subscriptionTier  SubscriptionTier   @default(BASIC)
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  trialEndsAt       DateTime?          // 14-day trial end date
+  commissionRate    Float              @default(15.0) // Commission % per booking
+  newStudentBonus   Float              @default(8.0)  // Extra % for first booking with new client
+  
+  // Business Tier Features
+  customDomain      String?            @unique // Custom subdomain for PRO/BUSINESS tier (e.g., "john")
+  brandedBookingPage Boolean           @default(false)
+  maxInstructors    Int                @default(1) // 1 for Basic/Pro, unlimited for Business
+  
+  // Branding Features (PRO/BUSINESS tier)
+  brandLogo                String?     // Cloudinary URL for logo
+  brandColorPrimary        String?     // Hex color for primary brand color
+  brandColorSecondary      String?     // Hex color for secondary brand color
+  showBrandingOnBookingPage Boolean    @default(false) // Show branding on public booking page
+  
+  // Stripe Integration
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+  stripeAccountId       String?        // For Stripe Connect payouts
+  
+  // Test Package Configuration
+  offersTestPackage     Boolean   @default(false)
+  testPackagePrice      Float?
+  testPackageDuration   Int?      // Duration in minutes (e.g., 150 for 2.5 hours)
+  testPackageIncludes   String[]  @default([]) // Array of what's included
+  
+  // Verification Documents
+  licenseNumber     String?
+  licenseExpiry     DateTime?
+  insuranceNumber   String?
+  insuranceExpiry   DateTime?
+  policeCheckExpiry DateTime?
+  wwcCheckExpiry    DateTime?
+  documentsVerified Boolean            @default(false)
+  
+  // Document URLs (Cloudinary)
+  licenseImageFront     String?
+  licenseImageBack      String?
+  insurancePolicyDoc    String?
+  policeCheckDoc        String?
+  wwcCheckDoc           String?        // Working with Children Check
+  photoIdDoc            String?
+  certificationDoc      String?
+  vehicleRegistrationDoc String?
+  
+  // Document verification tracking
+  documentsVerifiedAt   DateTime?
+  documentsVerifiedBy   String?        @db.ObjectId
+  
+  // Performance Metrics
+  averageRating     Float?
+  totalReviews      Int                @default(0)
+  totalBookings     Int                @default(0)
+  completionRate    Float?
+  
+  isActive          Boolean            @default(true)
+  isVerified        Boolean            @default(false)
+  isFeatured        Boolean            @default(false)
+  
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  serviceAreas      ServiceArea[]
+  clients           Client[]
+  bookings          Booking[]
+  pdaTests          PDATest[]
+  availabilityExceptions AvailabilityException[]
+  waitingList       WaitingList[]
+  subscriptions     Subscription[]
+  reviews           Review[]
+  transactions      Transaction[]
+  penalties         InstructorPenalty[]
+  incompleteBookings IncompleteBooking[]
+  payouts           Payout[]
+  staffAssignments  InstructorAssignment[]
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum SubscriptionTier {
+  BASIC
+  PRO
+  BUSINESS
+}
+
+enum VehicleType {
+  AUTO
+  MANUAL
+}
+
+model ServiceArea {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId  String      @db.ObjectId
+  instructor    Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  suburb        String
+  postcode      String
+  state         String
+  isActive      Boolean     @default(true)
+  
+  createdAt     DateTime    @default(now())
+  
+  @@index([instructorId])
+}
+
+model Client {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String?     @db.ObjectId
+  user              User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  instructorId      String      @db.ObjectId
+  instructor        Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  // Preferred instructor (selected during registration, may differ from instructorId)
+  preferredInstructorId String?  @db.ObjectId
+  
+  name              String
+  phone             String
+  email             String
+  addressLatitude   Float?
+  addressLongitude  Float?
+  addressText       String?
+  
+  // Relationship to account holder (if registered by someone else)
+  relationship      String?     // "self", "child", "partner", "grandchild", "parent", "friend", "other"
+  
+  preferredLessonType String?
+  notes             String?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  bookings          Booking[]
+  pdaTests          PDATest[]
+  reviews           Review[]
+  
+  @@index([instructorId])
+  @@index([instructorId, email])
+  @@index([preferredInstructorId])
+}
+
+model Booking {
+  id                String        @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId      String        @db.ObjectId
+  instructor        Instructor    @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  clientId          String        @db.ObjectId
+  client            Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  userId            String?       @db.ObjectId
+  user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  bookingType       BookingType   @default(LESSON)
+  status            BookingStatus @default(PENDING)
+  
+  startTime         DateTime
+  endTime           DateTime
+  duration          Float?       // Duration in hours (optional, can be calculated from startTime/endTime)
+  
+  // Track original booking time for cancellation policy (prevents reschedule loophole)
+  originalBookingTime DateTime?  // Set on first reschedule, used for cancellation policy
+  rescheduledCount    Int        @default(0)  // Track how many times rescheduled
+  
+  pickupLatitude    Float?
+  pickupLongitude   Float?
+  pickupAddress     String?
+  
+  dropoffLatitude   Float?
+  dropoffLongitude  Float?
+  dropoffAddress    String?
+  
+  distanceKm        Float?
+  travelTimeMinutes Int?
+  price             Float
+  
+  notes             String?
+  createdBy         String        // 'client' or 'instructor'
+  
+  // Google Calendar Integration
+  googleCalendarEventId String?
+  
+  // Check-in/Check-out tracking (dispute prevention)
+  checkInTime       DateTime?
+  checkInLocation   String?       // "lat,lng"
+  checkInBy         String?       // 'instructor' or 'client'
+  checkInPhoto      String?       // URL to photo
+  
+  checkOutTime      DateTime?
+  checkOutLocation  String?       // "lat,lng"
+  checkOutBy        String?       // 'instructor' or 'client'
+  checkOutPhoto     String?       // URL to photo
+  
+  actualDuration    Int?          // Actual minutes (checkOut - checkIn)
+  
+  // No-show tracking
+  clientShowedUp    Boolean?      @default(true)
+  instructorShowedUp Boolean?     @default(true)
+  noShowReason      String?       // "client_no_show", "instructor_no_show", "both_no_show"
+  
+  // SMS notifications tracking
+  smsReminderSent   Boolean       @default(false)
+  smsCheckInSent    Boolean       @default(false)
+  smsCheckOutSent   Boolean       @default(false)
+  
+  // Cancellation tracking
+  cancelledAt       DateTime?
+  cancellationReason String?
+  cancellationFee   Float?        // 50% for late cancellation
+  refundAmount      Float?
+  refundPercentage  Int?
+  
+  // Payment & Commission tracking
+  isPaid            Boolean       @default(false)
+  paidAt            DateTime?
+  paymentIntentId   String?
+  
+  // Payment capture tracking
+  paymentCaptured   Boolean       @default(false)
+  paymentCapturedAt DateTime?
+  paymentCancelled  Boolean       @default(false)
+  paymentCancelledAt DateTime?
+  
+  platformFee       Float?        // Amount platform takes
+  instructorPayout  Float?        // Amount instructor receives
+  commissionRate    Float?        // % applied to this booking
+  isFirstBooking    Boolean       @default(false) // First booking with this client
+  
+  // Outcome tracking
+  outcome           String?       // "completed", "client_no_show", "instructor_no_show", "cancelled", "late_cancellation"
+  
+  // Review tracking
+  isReviewed        Boolean       @default(false)
+  
+  // Package tracking (for bulk bookings)
+  isPackageBooking    Boolean      @default(false)
+  packageHours        Float?       // Total hours in package
+  packageHoursUsed    Float        @default(0) // Hours consumed from package
+  packageHoursRemaining Float?     // Calculated: packageHours - packageHoursUsed
+  packageExpiryDate   DateTime?    // When package expires (90 days from purchase)
+  packageStatus       String?      @default("active") // "active", "completed", "expired", "cancelled"
+  parentBookingId     String?      @db.ObjectId // Reference to parent package booking (if this is a child)
+  
+  // Lesson Feedback & Performance Tracking
+  lessonFeedback      Int[]        @default([]) // Array of numeric feedback codes (1-100)
+  instructorNotes     String?      // Free-text notes from instructor
+  feedbackGivenAt     DateTime?    // When feedback was recorded
+  studentStrengths    Int[]        @default([]) // Numeric codes for positive observations
+  focusAreas          Int[]        @default([]) // Numeric codes for areas to improve
+  performanceScore    Int?         // 0-100 rating (calculated from feedback)
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  reviews           Review[]
+  transactions      Transaction[]
+  penalties         InstructorPenalty[]
+  
+  @@index([instructorId, startTime])
+  @@index([clientId])
+  @@index([userId])
+  @@index([status, startTime])
+  @@index([paymentIntentId])
+  @@index([isPackageBooking])
+  @@index([parentBookingId])
+}
+
+enum BookingType {
+  LESSON
+  PDA_TEST
+  MOCK_TEST
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model PDATest {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId      String      @db.ObjectId
+  instructor        Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  clientId          String      @db.ObjectId
+  client            Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  testCenterLatitude  Float
+  testCenterLongitude Float
+  testCenterName      String
+  testCenterAddress   String
+  
+  testDate          DateTime
+  testTime          String      // "14:30"
+  
+  result            TestResult? @default(PENDING)
+  notes             String?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([instructorId, testDate])
+}
+
+enum TestResult {
+  PENDING
+  PASS
+  FAIL
+}
+
+model AvailabilityException {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId      String      @db.ObjectId
+  instructor        Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  exceptionDate     DateTime
+  startTime         String      // "09:00"
+  endTime           String      // "17:00"
+  reason            String      // 'pda_test', 'personal', 'holiday'
+  
+  isRecurring       Boolean     @default(false)
+  recurringPattern  Json?       // {frequency: 'weekly', daysOfWeek: [1,3,5]}
+  
+  createdAt         DateTime    @default(now())
+  
+  @@index([instructorId, exceptionDate])
+}
+
+model WaitingList {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId      String      @db.ObjectId
+  instructor        Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  clientName        String
+  clientEmail       String
+  clientPhone       String
+  
+  // Their original booking
+  originalBookingDate DateTime
+  originalBookingTime String
+  
+  // Willing to take earlier slots
+  earliestDate      DateTime    // Earliest date they can take
+  preferredDuration Int         // Duration in minutes
+  pickupAddress     String?
+  notes             String?
+  
+  isActive          Boolean     @default(true)
+  notifiedCount     Int         @default(0)
+  lastNotified      DateTime?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([instructorId, isActive])
+  @@index([instructorId, earliestDate])
+}
+
+// Platform Configuration
+model Platform {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String   @default("DriveBook")
+  domain            String?
+  
+  // Pricing Model
+  subscriptionModel String   @default("hybrid") // "commission", "subscription", or "hybrid"
+  
+  // Subscription Pricing (monthly)
+  proMonthlyPrice      Float    @default(29.00)
+  businessMonthlyPrice Float    @default(59.00)
+  
+  // Commission Rates
+  proCommissionRate      Float    @default(12.0)  // PRO tier commission %
+  businessCommissionRate Float    @default(7.0)   // BUSINESS tier commission %
+  newStudentBonusRate    Float    @default(8.0)   // Extra % for first booking with client
+  
+  // Trial Period
+  trialDays         Int      @default(14)
+  
+  // Platform Settings
+  settings          Json?    // {currency: "USD", timezone: "UTC", etc}
+  stripePublishableKey String?
+  stripeSecretKey   String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Instructor Subscriptions
+model Subscription {
+  id                    String      @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId          String      @db.ObjectId
+  instructor            Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  tier                  SubscriptionTier
+  status                SubscriptionStatus @default(TRIAL)
+  monthlyAmount         Float
+  billingCycle          String      @default("monthly") // "monthly", "annual"
+  
+  trialEndsAt           DateTime?
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean     @default(false)
+  cancelledAt           DateTime?
+  
+  // Stripe Integration
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+  stripePaymentMethodId String?
+  
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  @@index([instructorId])
+  @@index([status])
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+// Webhook Event Tracking (for idempotency)
+model WebhookEvent {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  idempotencyKey  String   @unique
+  eventType       String
+  stripeEventId   String
+  processedAt     DateTime @default(now())
+  metadata        Json?
+  
+  @@index([stripeEventId])
+  @@index([eventType])
+}
+
+// Transaction Records
+model Transaction {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId         String?     @db.ObjectId
+  booking           Booking?    @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  instructorId      String      @db.ObjectId
+  instructor        Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  type              TransactionType
+  amount            Float       // Total transaction amount
+  platformFee       Float       // Amount platform takes
+  instructorPayout  Float       // Amount instructor receives
+  commissionRate    Float?      // % applied (for bookings)
+  
+  status            TransactionStatus @default(PENDING)
+  paymentMethod     String?
+  
+  // Stripe Integration
+  stripePaymentIntentId String?
+  stripeChargeId    String?
+  stripeRefundId    String?
+  stripeTransferId  String?     // For payouts to instructor
+  
+  description       String?
+  metadata          Json?
+  
+  processedAt       DateTime?
+  failedAt          DateTime?
+  failureReason     String?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([instructorId])
+  @@index([bookingId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum TransactionType {
+  BOOKING_PAYMENT
+  SUBSCRIPTION_PAYMENT
+  REFUND
+  PAYOUT
+  COMMISSION
+  PENALTY
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+// Instructor Penalty Tracking
+model InstructorPenalty {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId  String      @db.ObjectId
+  instructor    Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  bookingId     String      @db.ObjectId @unique
+  booking       Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  reason        String      // "no_show", "late_cancellation", "policy_violation"
+  amount        Float
+  status        String      // "PENDING", "DEDUCTED", "CHARGED", "WAIVED"
+  
+  deductedFrom  String?     @db.ObjectId // Transaction ID if deducted from payout
+  chargedAt     DateTime?
+  waivedAt      DateTime?
+  waivedBy      String?     @db.ObjectId // Admin ID if waived
+  
+  notes         String?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  @@index([instructorId, status])
+  @@index([status])
+}
+
+// Reviews and Ratings
+model Review {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId      String      @db.ObjectId
+  instructor        Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  clientId          String      @db.ObjectId
+  client            Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  bookingId         String      @db.ObjectId
+  booking           Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  rating            Int         // 1-5 stars
+  comment           String?
+  
+  // Detailed Ratings
+  punctualityRating Int?        // 1-5
+  teachingRating    Int?        // 1-5
+  vehicleRating     Int?        // 1-5
+  communicationRating Int?      // 1-5
+  
+  // Instructor Response
+  response          String?
+  respondedAt       DateTime?
+  
+  isVerified        Boolean     @default(true) // Verified if from actual booking
+  isPublished       Boolean     @default(true)
+  isFlagged         Boolean     @default(false)
+  flagReason        String?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([instructorId])
+  @@index([rating])
+  @@index([createdAt])
+}
+
+// Support Tickets
+model SupportTicket {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String      @db.ObjectId
+  userType          String      // "instructor", "client", "guest"
+  userEmail         String
+  userName          String
+  
+  subject           String
+  description       String
+  category          String      // "technical", "billing", "account", "booking", "other"
+  
+  status            TicketStatus @default(OPEN)
+  priority          TicketPriority @default(MEDIUM)
+  
+  assignedTo        String?     @db.ObjectId
+  assignedToName    String?
+  
+  messages          Json[]      // [{from: "user", message: "...", timestamp: "..."}]
+  
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([status])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_USER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Platform Analytics
+model PlatformAnalytics {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  date              DateTime    @unique
+  
+  // Instructor Metrics
+  totalInstructors  Int         @default(0)
+  activeInstructors Int         @default(0)
+  newInstructors    Int         @default(0)
+  
+  // Booking Metrics
+  totalBookings     Int         @default(0)
+  completedBookings Int         @default(0)
+  cancelledBookings Int         @default(0)
+  
+  // Financial Metrics
+  totalRevenue      Float       @default(0)
+  platformRevenue   Float       @default(0)
+  instructorPayouts Float       @default(0)
+  
+  // User Metrics
+  totalClients      Int         @default(0)
+  newClients        Int         @default(0)
+  
+  createdAt         DateTime    @default(now())
+}
+
+// Client Wallet System
+model ClientWallet {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String              @unique @db.ObjectId
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  balance           Float               @default(0)
+  totalPaid         Float               @default(0)
+  totalSpent        Float               @default(0)
+  creditsRemaining  Float               @default(0)
+  
+  // Optimistic locking for concurrency control
+  version           Int                 @default(0)
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  transactions      WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  walletId    String        @db.ObjectId
+  wallet      ClientWallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  
+  type        String        // "credit", "debit", "refund", "booking"
+  amount      Float
+  description String
+  status      String        @default("completed")
+  
+  // Idempotency protection (non-nullable to allow unique index in MongoDB)
+  idempotencyKey String     @default(cuid()) @unique
+  
+  // Optional booking reference
+  bookingId   String?       @db.ObjectId
+  
+  metadata    Json?
+  
+  createdAt   DateTime      @default(now())
+  
+  @@index([walletId])
+  @@index([createdAt])
+}
+
+
+// Incomplete booking - tracks booking in progress
+model IncompleteBooking {
+  id                  String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId              String      @unique @db.ObjectId
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  instructorId        String      @db.ObjectId
+  instructor          Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  // Package details
+  packageType         String      // 'single', 'package', 'test'
+  packageHours        Int?
+  testPackageIncluded Boolean     @default(false)
+  totalPrice          Float
+  
+  // Location info
+  pickupLocation      String?
+  pickupLatitude      Float?
+  pickupLongitude     Float?
+  
+  // Booking state
+  status              String      @default("INCOMPLETE") // INCOMPLETE, SCHEDULED, PAID
+  bookNowOrLater      String?     // 'now', 'later'
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  expiresAt           DateTime    // Auto-expire after 30 days
+  
+  @@index([status])
+  @@index([expiresAt])
+}
+
+
+// Audit Log - tracks all admin and critical actions (forensic trail for legal protection)
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  action      String   // APPROVE_INSTRUCTOR, CHECK_IN, CHECK_OUT, BOOKING_CANCELLED, etc.
+  actorId     String   // User ID who performed action (or "SYSTEM" for automated)
+  actorRole   String?  // INSTRUCTOR, CLIENT, ADMIN, SYSTEM
+  targetType  String   // INSTRUCTOR, TRANSACTION, BOOKING, CLIENT, PAYOUT, WALLET
+  targetId    String   // ID of the affected entity
+  metadata    Json?    // Additional context (previous values, amounts, reasons, etc.)
+  ipAddress   String?
+  userAgent   String?
+  success     Boolean  @default(true)
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  
+  @@index([actorId])
+  @@index([action])
+  @@index([targetType])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@index([success])
+}
+
+// Payout tracking - tracks actual money transfers
+model Payout {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId      String   @db.ObjectId
+  instructor        Instructor @relation(fields: [instructorId], references: [id])
+  amount            Float
+  stripePayoutId    String?  @unique // Stripe payout ID
+  status            String   // pending, paid, failed, cancelled
+  transactionIds    String[] // Array of transaction IDs included in this payout
+  processedBy       String   // Admin user ID who processed it
+  createdAt         DateTime @default(now())
+  paidAt            DateTime?
+  failureReason     String?
+  failureCode       String?
+  
+  @@index([instructorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Notification Queue - retry failed notifications
+model NotificationQueue {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  type        String   // SMS, EMAIL
+  recipient   String
+  subject     String?
+  message     String
+  status      String   @default("PENDING") // PENDING, SENT, FAILED
+  retryCount  Int      @default(0)
+  maxRetries  Int      @default(3)
+  error       String?
+  createdAt   DateTime @default(now())
+  sentAt      DateTime?
+  
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Financial Ledger - Double-Entry Accounting System (APPEND-ONLY)
+model FinancialLedger {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Double-entry fields
+  debitAccount      String   // Account money is leaving (e.g., "CLIENT_WALLET:user-123")
+  creditAccount     String   // Account money is entering (e.g., "PLATFORM_ESCROW")
+  amount            Float    // Always positive
+  
+  // Metadata
+  description       String
+  idempotencyKey    String   @unique // Prevents duplicate entries
+  
+  // References (optional, for traceability)
+  bookingId         String?  @db.ObjectId
+  transactionId     String?  @db.ObjectId
+  payoutId          String?  @db.ObjectId
+  userId            String?  @db.ObjectId
+  instructorId      String?  @db.ObjectId
+  
+  // Additional context
+  metadata          Json?    // Flexible storage for extra data
+  
+  // Audit trail
+  createdBy         String   // User/Admin ID or "SYSTEM"
+  createdAt         DateTime @default(now())
+  
+  // CRITICAL: No updatedAt field - this is append-only
+  // No updates or deletes allowed
+  
+  @@index([debitAccount])
+  @@index([creditAccount])
+  @@index([bookingId])
+  @@index([transactionId])
+  @@index([payoutId])
+  @@index([createdAt])
+}
+
+// ============================================
+// STAFF MANAGEMENT SYSTEM
+// ============================================
+
+// Staff members who manage operations
+model StaffMember {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @unique @db.ObjectId
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name          String
+  email         String   @unique
+  phone         String?
+  department    StaffDepartment
+  isActive      Boolean  @default(true)
+  
+  // Workload tracking
+  maxCapacity   Int      @default(20) // Max concurrent tasks
+  currentLoad   Int      @default(0)  // Current active tasks
+  
+  // Skills & Permissions
+  skills        String[] // ["financial", "technical", "support", "all"]
+  canReassignTasks Boolean @default(false)
+  canAccessFinancials Boolean @default(false)
+  
+  // Financial Authority Limits (GOVERNANCE CONTROL #1)
+  canApproveRefunds Boolean @default(false)
+  refundApprovalLimit Float @default(0) // Max refund amount they can approve alone
+  canProcessPayouts Boolean @default(false)
+  payoutApprovalLimit Float @default(0) // Max payout amount they can process alone
+  canModifyWallet Boolean @default(false)
+  canOverridePolicy Boolean @default(false) // Can override automated refund calculations
+  
+  // Operational Permissions
+  canCancelBookings Boolean @default(false)
+  canModifyBookingData Boolean @default(false)
+  canAccessLogs Boolean @default(false)
+  canAccessIntegrations Boolean @default(false)
+  
+  // Supervisor/Escalation
+  isSupervisor Boolean @default(false)
+  supervisorId String? @db.ObjectId // Who supervises this staff member
+  canEscalateTo String[] @default([]) // Staff IDs who can receive escalations
+  
+  // Performance metrics
+  tasksCompleted Int     @default(0)
+  avgResolutionTimeHours Float? // Average time to resolve tasks
+  satisfactionScore Float? // Customer satisfaction rating
+  
+  // Availability
+  workingHours  Json?    // {monday: [{start: "09:00", end: "17:00"}], ...}
+  timezone      String   @default("Australia/Perth")
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  assignedInstructors InstructorAssignment[]
+  tasks         Task[]
+  taskNotes     TaskNote[]
+  
+  @@index([department, isActive])
+}
+
+enum StaffDepartment {
+  FINANCIAL   // Handles payments, refunds, payouts, wallet issues
+  TECHNICAL   // Handles booking errors, calendar sync, app issues
+  SUPPORT     // Handles cancellations, reschedules, disputes, inquiries
+  GENERAL     // Can handle any type of task
+}
+
+// Assignment of instructors to staff members (optional feature)
+model InstructorAssignment {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  staffId       String   @db.ObjectId
+  staff         StaffMember @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  instructorId  String   @db.ObjectId
+  instructor    Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  assignedAt    DateTime @default(now())
+  assignedBy    String?  @db.ObjectId // Admin who made the assignment
+  isActive      Boolean  @default(true)
+  notes         String?
+  
+  @@unique([staffId, instructorId])
+  @@index([staffId, isActive])
+  @@index([instructorId])
+}
+
+// Tasks for staff to handle
+model Task {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Task classification
+  type          TaskType
+  category      TaskCategory
+  priority      TaskPriority
+  status        TaskStatus @default(OPEN)
+  
+  // Task details
+  title         String
+  description   String
+  
+  // Related entities
+  instructorId  String?  @db.ObjectId
+  clientId      String?  @db.ObjectId
+  bookingId     String?  @db.ObjectId
+  userId        String?  @db.ObjectId
+  
+  // Contact information
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  
+  // Assignment
+  assignedToId  String?  @db.ObjectId
+  assignedTo    StaffMember? @relation(fields: [assignedToId], references: [id])
+  assignedAt    DateTime?
+  autoAssigned  Boolean  @default(false) // Was it auto-assigned or manual?
+  
+  // Resolution (GOVERNANCE CONTROL #2)
+  resolvedAt    DateTime?
+  resolvedBy    String?  @db.ObjectId
+  resolution    String? // REQUIRED for closure
+  resolutionTimeHours Float? // Time taken to resolve
+  
+  // Financial Impact Tracking (GOVERNANCE CONTROL #1)
+  financialAmount Float? // Amount involved (refund, payout, etc.)
+  financialImpact Json? // {grossAmount, stripeFee, commission, netInstructorImpact, netPlatformLoss}
+  requiresApproval Boolean @default(false) // Does this need supervisor approval?
+  approvedBy String? @db.ObjectId // Supervisor who approved
+  approvedAt DateTime? // When approved
+  approvalNotes String? // Why approved/rejected
+  
+  // Escalation Tracking (GOVERNANCE CONTROL #5)
+  escalatedAt DateTime? // When escalated
+  escalatedTo String? @db.ObjectId // Staff ID escalated to
+  escalationReason String? // Why escalated
+  escalationCount Int @default(0) // How many times escalated
+  
+  // Audit Trail (GOVERNANCE CONTROL #2)
+  closedBy String? @db.ObjectId // Who closed the task
+  closedAt DateTime? // When closed
+  cannotCloseReason String? // If closure blocked, why?
+  linkedEntityVerified Boolean @default(false) // Verified booking/client exists
+  
+  // SLA Tracking (GOVERNANCE CONTROL #5)
+  slaBreached Boolean @default(false) // Did it miss SLA?
+  slaBreachReason String? // Why SLA was missed
+  autoEscalated Boolean @default(false) // Was it auto-escalated?
+  
+  // Tracking
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  dueDate       DateTime? // When task should be completed by
+  firstResponseAt DateTime? // When staff first responded
+  
+  // Customer satisfaction
+  customerRating Int? // 1-5 rating
+  customerFeedback String?
+  
+  notes         TaskNote[]
+  
+  @@index([status, priority])
+  @@index([assignedToId, status])
+  @@index([type, category])
+  @@index([createdAt])
+  @@index([dueDate])
+}
+
+enum TaskType {
+  // Booking related
+  BOOKING_ISSUE
+  CANCELLATION_REQUEST
+  RESCHEDULE_REQUEST
+  NO_SHOW_REPORT
+  
+  // Financial
+  REFUND_REQUEST
+  PAYMENT_DISPUTE
+  WALLET_ISSUE
+  PAYOUT_REQUEST
+  INVOICE_REQUEST
+  
+  // Technical
+  TECHNICAL_ISSUE
+  CALENDAR_SYNC_ERROR
+  APP_BUG
+  INTEGRATION_ERROR
+  
+  // Documents & Verification
+  DOCUMENT_VERIFICATION
+  DOCUMENT_EXPIRY
+  LICENSE_ISSUE
+  
+  // Support
+  GENERAL_INQUIRY
+  COMPLAINT
+  DISPUTE
+  ACCOUNT_ISSUE
+  FEATURE_REQUEST
+}
+
+enum TaskCategory {
+  FINANCIAL
+  TECHNICAL
+  SUPPORT
+}
+
+enum TaskPriority {
+  URGENT    // Resolve within 1 hour (red)
+  HIGH      // Resolve within 4 hours (orange)
+  NORMAL    // Resolve within 24 hours (yellow)
+  LOW       // Resolve within 3 days (green)
+}
+
+enum TaskStatus {
+  OPEN              // New task, not assigned
+  ASSIGNED          // Assigned to staff member
+  IN_PROGRESS       // Staff is working on it
+  WAITING_RESPONSE  // Waiting for customer/instructor response
+  ESCALATED         // Escalated to supervisor/admin
+  RESOLVED          // Task completed
+  CLOSED            // Task closed (resolved + confirmed)
+  CANCELLED         // Task cancelled/no longer needed
+}
+
+// Notes and updates on tasks
+model TaskNote {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  taskId        String   @db.ObjectId
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  staffId       String   @db.ObjectId
+  staff         StaffMember @relation(fields: [staffId], references: [id])
+  
+  note          String
+  isInternal    Boolean  @default(true) // Internal notes vs customer-facing updates
+  
+  // Attachments
+  attachments   String[] @default([]) // URLs to uploaded files
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([taskId, createdAt])
+  @@index([staffId])
+}
+
+// Task templates for common issues
+model TaskTemplate {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  name          String
+  type          TaskType
+  category      TaskCategory
+  priority      TaskPriority
+  
+  titleTemplate String
+  descriptionTemplate String
+  
+  // Auto-response templates
+  autoResponseEnabled Boolean @default(false)
+  autoResponseMessage String?
+  
+  isActive      Boolean  @default(true)
+  usageCount    Int      @default(0)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([type, isActive])
+}
+

@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-02-24T09:47:27.399Z",
+  "environment": "TEST_DATA",
+  "results": {
+    "wallets": {
+      "migrated": 3,
+      "skipped": 0,
+      "failed": 0
+    },
+    "bookings": {
+      "migrated": 4,
+      "skipped": 0,
+      "failed": 0
+    },
+    "payouts": {
+      "migrated": 16,
+      "skipped": 0,
+      "failed": 0
+    },
+    "verification": {
+      "ledger": {
+        "payable": -2934.46,
+        "paid": 3238.0600000000004,
+        "revenue": 41.4,
+        "escrow": 0
+      },
+      "oldSystem": {
+        "payable": 7561.255,
+        "paid": 3238.06,
+        "revenue": 2662.255
+      },
+      "differences": {
+        "payable": 10495.715,
+        "paid": 4.547473508864641e-13,
+        "revenue": 2620.855
+      },
+      "allMatch": false
+    }
+  },
+  "status": "INCOMPLETE"
+}
