@@ -1,0 +1,79 @@
+# Documentation File Organization
+
+**Quick Fix**: The documentation files at the root level should be moved to the `docs/` folder.
+
+## Current State
+```
+Root level (old way):
+├── README.md                    ✅ Keep here
+├── STATUS.md                    ✅ Keep here
+├── INTEGRATION_GUIDE.md         → Move to docs/
+├── ARCHITECTURE.md              → Move to docs/
+├── AI_SYSTEM_GUIDE.md           → Move to docs/
+├── QUICK_REFERENCE.md           → Move to docs/
+├── DEPLOYMENT.md                → Move to docs/
+└── docs/
+    └── INDEX.md                 ✅ New index (created)
+```
+
+## Target State
+```
+Root level (new way):
+├── README.md                    ⭐ Main entry point
+├── STATUS.md                    📊 Changelog & progress
+├── package.json
+├── server.js
+├── Dockerfile
+├── docker-compose.yml
+└── docs/                        📁 All detailed docs
+    ├── INDEX.md                 📑 Documentation index
+    ├── ARCHITECTURE.md          🏗️ System design
+    ├── INTEGRATION.md           🔌 Integration guide
+    ├── DEPLOYMENT.md            ⚙️ Deployment options
+    ├── QUICK_REFERENCE.md       ⚡ Quick lookup
+    └── AI_SYSTEM.md            🤖 AI agent setup
+```
+
+## Manual Steps (If Not Auto-Moved)
+
+Using PowerShell:
+```powershell
+cd e:\DOC\AI voice assistance\drivebook\drivebook-hybrid
+
+# Move old docs to docs folder
+Move-Item ARCHITECTURE.md docs/ARCHITECTURE.md -Force
+Move-Item INTEGRATION_GUIDE.md docs/INTEGRATION.md -Force
+Move-Item DEPLOYMENT.md docs/DEPLOYMENT.md -Force
+Move-Item QUICK_REFERENCE.md docs/QUICK_REFERENCE.md -Force
+Move-Item AI_SYSTEM_GUIDE.md docs/AI_SYSTEM.md -Force
+
+# Verify
+ls -Name | grep -E ".(md|json|js)" | select -First 20
+```
+
+## File Structure Result
+
+After moving, your root should only have:
+- Core files: `server.js`, `package.json`, `Dockerfile`, `docker-compose.yml`, `.env`, `.gitignore`
+- Metadata: `README.md`, `STATUS.md` (documentation entry points)
+- Folders: `routes/`, `services/`, `utils/`, `tests/`, `prisma/`, `docs/`, `node_modules/`
+
+---
+
+## **Action Required**: Move Files Using Terminal
+
+```powershell
+# Copy and paste to PowerShell in your project directory:
+
+cd "e:\DOC\AI voice assistance\drivebook\drivebook-hybrid"
+Move-Item -Path .\ARCHITECTURE.md -Destination .\docs\ARCHITECTURE.md -Force
+Move-Item -Path .\INTEGRATION_GUIDE.md -Destination .\docs\INTEGRATION.md -Force
+Move-Item -Path .\DEPLOYMENT.md -Destination .\docs\DEPLOYMENT.md -Force
+Move-Item -Path .\QUICK_REFERENCE.md -Destination .\docs\QUICK_REFERENCE.md -Force
+Move-Item -Path .\AI_SYSTEM_GUIDE.md -Destination .\docs\AI_SYSTEM.md -Force
+
+# Verify
+Get-ChildItem -Filter "*.md" -Path .\docs\
+```
+
+Once moved, your project will be clean with docs organized!
