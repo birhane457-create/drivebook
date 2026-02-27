@@ -572,16 +572,7 @@ async function autoFreezeHighRiskInstructors(scores: RiskScore[]) {
       },
     });
 
-    // Update instructor metadata
-    await prisma.instructor.update({
-      where: { id: score.instructorId },
-      data: {
-        // Note: Storing risk data in instructor notes until metadata field is added
-        notes: `RISK ALERT: Score ${score.score}, Level ${score.level}. Payouts frozen due to high fraud risk. Requires verification. Frozen at ${new Date().toISOString()}`,
-      },
-    });
-
-    // Create audit log
+    // Create audit log (risk data stored here instead of instructor record)
     await prisma.auditLog.create({
       data: {
         actorId: 'SYSTEM',
@@ -592,6 +583,7 @@ async function autoFreezeHighRiskInstructors(scores: RiskScore[]) {
         metadata: {
           riskScore: JSON.parse(JSON.stringify(score)),
           timestamp: new Date().toISOString(),
+          reason: 'High fraud risk - payouts frozen',
         } as any,
       },
     });
@@ -607,12 +599,19 @@ async function autoFlagMediumRiskInstructors(scores: RiskScore[]) {
   for (const score of mediumRisk) {
     console.log('[FRAUD] ⚠️ Auto-flagging medium-risk instructor:', score.instructorName);
 
-    // Update instructor metadata
-    await prisma.instructor.update({
-      where: { id: score.instructorId },
+    // Create audit log to track medium-risk instructors
+    await prisma.auditLog.create({
       data: {
-        // Note: Storing risk data in instructor notes until metadata field is added
-        notes: `RISK FLAG: Score ${score.score}, Level ${score.level}. Requires review. Flagged at ${new Date().toISOString()}`,
+        actorId: 'SYSTEM',
+        actorRole: 'SYSTEM',
+        action: 'AUTO_FLAG_MEDIUM_RISK',
+        targetType: 'INSTRUCTOR',
+        targetId: score.instructorId,
+        metadata: {
+          riskScore: JSON.parse(JSON.stringify(score)),
+          timestamp: new Date().toISOString(),
+          reason: 'Medium fraud risk - requires review',
+        } as any,
       },
     });
   }
