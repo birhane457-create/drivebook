@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { walletRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { logAuditAction } from '@/lib/services/audit';
 import { recordWalletAdd } from '@/lib/services/ledger-operations';
-import { getAccountBalance, buildAccountName, AccountType } from '@/lib/services/ledger';
+import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { z } from 'zod';
 
 // FIXED: Input validation
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
       
       // NEW: Verify ledger balance matches old system
       const ledgerBalance = await getAccountBalance(
-        buildAccountName(AccountType.CLIENT_WALLET, user.id)
+        buildAccount(AccountType.CLIENT_WALLET, user.id)
       );
       
       if (Math.abs(ledgerBalance - updatedWallet.balance) > 0.01) {

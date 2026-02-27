@@ -51,13 +51,13 @@ export async function GET(request: NextRequest) {
         status: { in: ['CONFIRMED', 'COMPLETED'] },
       },
       select: {
-        totalPrice: true,
+        price: true,
         refundAmount: true,
         status: true,
       },
     });
 
-    const totalRevenue = weeklyBookings.reduce((sum, b) => sum + b.totalPrice, 0);
+    const totalRevenue = weeklyBookings.reduce((sum, b) => sum + b.price, 0);
     const completedBookings = weeklyBookings.filter(b => b.status === 'COMPLETED').length;
     const avgBookingValue = completedBookings > 0 ? totalRevenue / completedBookings : 0;
 
