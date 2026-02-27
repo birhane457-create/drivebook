@@ -7,7 +7,8 @@
     "dev": "nodemon server.js",
     "test": "jest --runInBand",
     "test:ci": "jest --runInBand --coverage",
-    "build": "npm run test"
+    "build": "npm run test",
+    "vercel-build": "npm run build"
   },
   "keywords": [],
   "author": "",
