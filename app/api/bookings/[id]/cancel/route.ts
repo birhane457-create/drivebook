@@ -153,17 +153,9 @@ export async function POST(
                 description: `Booking cancelled - ${refundPercentage}% refund`,
                 status: 'COMPLETED'
               }
-            }),
-            prisma.ledgerEntry.create({
-              data: {
-                userId: walletUserId,
-                amount: refundAmount,
-                type: 'CREDIT',
-                category: 'REFUND',
-                description: `Booking cancellation refund - ${refundPercentage}%`,
-                bookingId: booking.id
-              }
             })
+            // Note: Ledger entries are now handled by the ledger-operations service
+            // The recordFullRefund or recordPartialRefund functions should be called instead
           ]);
         }
       }
