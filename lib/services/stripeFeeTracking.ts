@@ -64,7 +64,7 @@ export async function recordStripeFeeFromWebhook(event: Stripe.Event) {
 
     // Determine if international
     const paymentMethod = charge.payment_method_details;
-    const cardCountry = paymentMethod?.card?.country;
+    const cardCountry = paymentMethod?.card?.country || undefined;
     const isInternational = cardCountry && cardCountry !== 'AU'; // Assuming Australian platform
 
     const feeRecord: StripeFeeRecord = {
@@ -74,7 +74,7 @@ export async function recordStripeFeeFromWebhook(event: Stripe.Event) {
       feePercent,
       currency: balanceTransaction.currency.toUpperCase(),
       cardCountry,
-      cardType: paymentMethod?.card?.brand,
+      cardType: paymentMethod?.card?.brand || undefined,
       isInternational: !!isInternational,
       balanceTransactionId: balanceTransaction.id,
     };
