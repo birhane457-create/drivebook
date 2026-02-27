@@ -524,14 +524,14 @@ export async function runFraudScan() {
   console.log('[FRAUD] High severity:', results.summary.highSeverity);
   console.log('[FRAUD] High risk instructors:', results.summary.highRiskInstructors);
 
-  // Store scan results
+  // Store scan results (convert to JSON-safe format)
   await prisma.auditLog.create({
     data: {
       adminId: 'SYSTEM',
       action: 'FRAUD_SCAN',
       targetType: 'PLATFORM',
       targetId: 'fraud_detection',
-      metadata: results,
+      metadata: JSON.parse(JSON.stringify(results)) as any,
     },
   });
 
@@ -588,9 +588,9 @@ async function autoFreezeHighRiskInstructors(scores: RiskScore[]) {
         targetType: 'INSTRUCTOR',
         targetId: score.instructorId,
         metadata: {
-          riskScore: score,
+          riskScore: JSON.parse(JSON.stringify(score)),
           timestamp: new Date().toISOString(),
-        },
+        } as any,
       },
     });
   }
