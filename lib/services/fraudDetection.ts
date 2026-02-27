@@ -73,6 +73,7 @@ export async function detectSameCardAcrossAccounts(): Promise<FraudAlert[]> {
       userId: true,
       clientId: true,
       paymentIntentId: true,
+      metadata: true,
     },
   });
 
