@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../lib/auth';
-import { prisma } from '../../../../lib/prisma';
-import { decodeFeedback } from '../../../../lib/config/feedback-codes';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { decodeFeedback } from '@/lib/config/feedback-codes';
 
 export async function GET(req: NextRequest) {
   try {
