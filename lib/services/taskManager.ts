@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma';
+import { TaskType } from '@prisma/client';
 
 interface CreateTaskParams {
-  type: string;
+  type: TaskType;
   category: 'FINANCIAL' | 'TECHNICAL' | 'SUPPORT';
   priority: 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW';
   title: string;

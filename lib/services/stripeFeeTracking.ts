@@ -79,23 +79,35 @@ export async function recordStripeFeeFromWebhook(event: Stripe.Event) {
       balanceTransactionId: balanceTransaction.id,
     };
 
-    // Store in database
-    await prisma.walletTransaction.updateMany({
+    // Store in database - find transactions with this payment intent ID
+    const transactions = await prisma.walletTransaction.findMany({
       where: {
-        metadata: {
-          path: ['stripePaymentIntentId'],
-          equals: paymentIntent.id,
-        },
-      },
-      data: {
-        metadata: {
-          actualStripeFee: fee,
-          actualFeePercent: feePercent,
-          stripeFeeDetails: feeRecord,
-          feeRecordedAt: new Date().toISOString(),
-        },
+        type: 'DEBIT',
       },
     });
+
+    // Filter by metadata in memory (MongoDB JSON queries have limitations)
+    const matchingTransactions = transactions.filter(t => {
+      const meta = t.metadata as any;
+      return meta?.stripePaymentIntentId === paymentIntent.id;
+    });
+
+    // Update each matching transaction
+    for (const transaction of matchingTransactions) {
+      const existingMeta = transaction.metadata as any || {};
+      await prisma.walletTransaction.update({
+        where: { id: transaction.id },
+        data: {
+          metadata: {
+            ...existingMeta,
+            actualStripeFee: fee,
+            actualFeePercent: feePercent,
+            stripeFeeDetails: feeRecord,
+            feeRecordedAt: new Date().toISOString(),
+          } as any,
+        },
+      });
+    }
 
     console.log('[STRIPE FEE] ✓ Recorded actual fee:', {
       paymentIntentId: paymentIntent.id,
@@ -117,17 +129,19 @@ export async function recordStripeFeeFromWebhook(event: Stripe.Event) {
  * Get actual Stripe fee for a payment intent
  */
 export async function getActualStripeFee(paymentIntentId: string): Promise<number> {
-  // First check if we have it stored
-  const transaction = await prisma.walletTransaction.findFirst({
+  // First check if we have it stored - fetch all and filter in memory
+  const transactions = await prisma.walletTransaction.findMany({
     where: {
-      metadata: {
-        path: ['stripePaymentIntentId'],
-        equals: paymentIntentId,
-      },
+      type: 'DEBIT',
     },
     select: {
       metadata: true,
     },
+  });
+
+  const transaction = transactions.find(t => {
+    const meta = t.metadata as any;
+    return meta?.stripePaymentIntentId === paymentIntentId;
   });
 
   if (transaction?.metadata) {
@@ -226,10 +240,6 @@ export async function backfillStripeFees() {
   const transactions = await prisma.walletTransaction.findMany({
     where: {
       type: 'DEBIT',
-      metadata: {
-        path: ['stripePaymentIntentId'],
-        not: undefined,
-      },
     },
     select: {
       id: true,
@@ -237,12 +247,18 @@ export async function backfillStripeFees() {
     },
   });
 
-  console.log(`[BACKFILL] Found ${transactions.length} transactions to backfill`);
+  // Filter for transactions with stripePaymentIntentId
+  const transactionsToBackfill = transactions.filter(t => {
+    const meta = t.metadata as any;
+    return meta?.stripePaymentIntentId && !meta?.actualStripeFee;
+  });
+
+  console.log(`[BACKFILL] Found ${transactionsToBackfill.length} transactions to backfill`);
 
   let successCount = 0;
   let failCount = 0;
 
-  for (const transaction of transactions) {
+  for (const transaction of transactionsToBackfill) {
     const metadata = transaction.metadata as any;
     
     // Skip if already has actual fee
@@ -260,7 +276,7 @@ export async function backfillStripeFees() {
             ...metadata,
             actualStripeFee: fee,
             backfilledAt: new Date().toISOString(),
-          },
+          } as any,
         },
       });
 
