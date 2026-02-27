@@ -1,19 +1,9 @@
-'use client'
-
-import { SessionProvider } from 'next-auth/react'
-import ClientDashboardNav from '@/components/ClientDashboardNav'
+export const dynamic = 'force-dynamic';
 
 export default function ClientDashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  return (
-    <SessionProvider>
-      <div className="min-h-screen bg-gray-50">
-        <ClientDashboardNav />
-        <main>{children}</main>
-      </div>
-    </SessionProvider>
-  )
+  return <>{children}</>;
 }
