@@ -65,16 +65,9 @@ export async function GET(request: NextRequest) {
     const totalRefunds = weeklyBookings.reduce((sum, b) => sum + (b.refundAmount || 0), 0);
     const refundPercentage = totalRevenue > 0 ? (totalRefunds / totalRevenue) * 100 : 0;
 
-    // Disputes
-    const disputes = await prisma.booking.count({
-      where: {
-        createdAt: { gte: weekStart },
-        metadata: {
-          path: ['disputeId'],
-          not: null,
-        },
-      },
-    });
+    // Disputes - metadata field doesn't exist in Booking model
+    // TODO: Add proper dispute tracking field to schema if needed
+    const disputes = 0;
 
     const disputePercentage = completedBookings > 0 ? (disputes / completedBookings) * 100 : 0;
 
