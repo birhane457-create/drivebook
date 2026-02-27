@@ -185,11 +185,11 @@ export async function POST(req: NextRequest) {
     // Verify ledger balance after payout
     try {
       const payableBalance = await getAccountBalance(
-        buildAccountName(AccountType.INSTRUCTOR_PAYABLE, instructorId)
+        buildAccount(AccountType.INSTRUCTOR_PAYABLE, instructorId)
       );
       
       const paidBalance = await getAccountBalance(
-        buildAccountName(AccountType.INSTRUCTOR_PAID, instructorId)
+        buildAccount(AccountType.INSTRUCTOR_PAID, instructorId)
       );
       
       console.log('[Ledger] Payout verification', {
