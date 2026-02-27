@@ -527,7 +527,8 @@ export async function runFraudScan() {
   // Store scan results (convert to JSON-safe format)
   await prisma.auditLog.create({
     data: {
-      adminId: 'SYSTEM',
+      actorId: 'SYSTEM',
+      actorRole: 'SYSTEM',
       action: 'FRAUD_SCAN',
       targetType: 'PLATFORM',
       targetId: 'fraud_detection',
@@ -583,7 +584,8 @@ async function autoFreezeHighRiskInstructors(scores: RiskScore[]) {
     // Create audit log
     await prisma.auditLog.create({
       data: {
-        adminId: 'SYSTEM',
+        actorId: 'SYSTEM',
+        actorRole: 'SYSTEM',
         action: 'AUTO_FREEZE_HIGH_RISK',
         targetType: 'INSTRUCTOR',
         targetId: score.instructorId,
