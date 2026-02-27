@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../../lib/auth';
-import { validateMobileToken } from '../../../../../lib/mobile-auth';
-import { prisma } from '../../../../../lib/prisma';
-import { emailService } from '../../../../../lib/services/email';
+import { authOptions } from '@/lib/auth';
+import { validateMobileToken } from '@/lib/mobile-auth';
+import { prisma } from '@/lib/prisma';
+import { emailService } from '@/lib/services/email';
 
 // GET - Fetch reviews
 export async function GET(req: NextRequest) {

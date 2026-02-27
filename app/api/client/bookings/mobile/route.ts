@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateMobileToken } from '../../../../lib/mobile-auth';
-import { prisma } from '../../../../lib/prisma';
+import { validateMobileToken } from '@/lib/mobile-auth';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
   try {

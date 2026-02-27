@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateMobileToken } from '../../../../lib/mobile-auth';
-import { prisma } from '../../../../lib/prisma';
-import { geocodeAddress, calculateDistance, getBoundingBox } from '../../../../lib/utils/distance';
+import { validateMobileToken } from '@/lib/mobile-auth';
+import { prisma } from '@/lib/prisma';
+import { geocodeAddress, calculateDistance, getBoundingBox } from '@/lib/utils/distance';
 
 export async function GET(req: NextRequest) {
   try {
