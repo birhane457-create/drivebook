@@ -71,14 +71,13 @@ export async function GET(request: NextRequest) {
 
     const disputePercentage = completedBookings > 0 ? (disputes / completedBookings) * 100 : 0;
 
-    // Overrides
+    // Overrides - simplified query since financialImpact path syntax may not work with MongoDB
     const overrides = await prisma.task.findMany({
       where: {
         createdAt: { gte: weekStart },
         type: 'REFUND_REQUEST',
         financialImpact: {
-          path: ['manualOverride'],
-          equals: true,
+          not: null,
         },
       },
       select: {
@@ -88,7 +87,11 @@ export async function GET(request: NextRequest) {
 
     const totalOverrides = overrides.reduce((sum, t) => {
       const impact = t.financialImpact as any;
-      return sum + (impact?.overrideAmount || 0);
+      // Check if this is a manual override and get the amount
+      if (impact?.manualOverride === true) {
+        return sum + (impact?.overrideAmount || 0);
+      }
+      return sum;
     }, 0);
 
     const overridePercentage = totalRefunds > 0 ? (totalOverrides / totalRefunds) * 100 : 0;

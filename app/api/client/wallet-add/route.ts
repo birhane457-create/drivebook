@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { walletRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { logAuditAction } from '@/lib/services/audit';
-import { recordWalletAdd } from '@/lib/services/ledger-operations';
+import { recordWalletCredit } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { z } from 'zod';
 
@@ -77,10 +77,11 @@ export async function POST(req: NextRequest) {
     // FIXED: Use transaction wrapper for atomicity + LEDGER (DUAL-WRITE)
     const result = await prisma.$transaction(async (tx) => {
       // NEW: Record in double-entry ledger
-      await recordWalletAdd(tx, {
+      await recordWalletCredit({
+        walletTransactionId: `manual-${Date.now()}`,
         userId: user.id,
         amount,
-        paymentIntentId: paymentIntentId || `manual-${Date.now()}`,
+        stripePaymentIntentId: paymentIntentId,
         createdBy: session.user.id
       });
       

@@ -5,8 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { smsService } from '@/lib/services/sms';
 import { logAuditAction } from '@/lib/services/audit';
 import { payoutRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
-import { recordPayout } from '@/lib/services/ledger-operations';
-import { getAccountBalance, buildAccountName, AccountType } from '@/lib/services/ledger';
+import { recordInstructorPayout } from '@/lib/services/ledger-operations';
+import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { z } from 'zod';
 
 // Input validation
@@ -132,15 +132,14 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      // NEW: Record payout in ledger (2 entries)
+      // NEW: Record payout in ledger
       try {
-        await recordPayout(tx, {
+        await recordInstructorPayout({
           payoutId: payout.id,
           instructorId,
           amount: totalPayout,
           stripePayoutId,
-          transactionIds: pendingTransactions.map((t: any) => t.id),
-          createdBy: session.user.id
+          processedBy: session.user.id
         });
       } catch (ledgerError) {
         console.error('[Ledger] Failed to record payout:', ledgerError);
