@@ -14,7 +14,7 @@ interface Instructor {
   vehicleTypes: string[]
   distance?: number
   serviceRadiusKm?: number
-  averageRating?: number
+  averageRating?: number | null
   totalReviews?: number
 }
 

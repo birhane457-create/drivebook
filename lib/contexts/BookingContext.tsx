@@ -169,8 +169,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       return {
         ...pricing,
         testPackage: customTestPrice,
-        total: pricing.total - pricing.testPackage + customTestPrice,
-        installments: (pricing.total - pricing.testPackage + customTestPrice) / 4
+        total: pricing.total - pricing.testPackage + customTestPrice
       };
     }
 

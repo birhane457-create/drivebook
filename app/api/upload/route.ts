@@ -6,8 +6,9 @@ import { existsSync } from 'fs'
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
-    const file = formData.get('file') as File
-    const type = formData.get('type') as string
+    // TypeScript workaround: formData is Web API FormData with get() method
+    const file = (formData as any).get('file') as File | null
+    const type = (formData as any).get('type') as string | null
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })

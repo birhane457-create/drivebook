@@ -102,14 +102,6 @@ export default function MobileBookingSummary() {
                 <span className="text-gray-900">${pricing.platformFee.toFixed(2)}</span>
               </div>
             </div>
-
-            {/* Installment Info */}
-            <div className="bg-blue-50 rounded-lg p-3 mt-3">
-              <p className="text-xs text-blue-800 text-center">
-                Or pay in 4 installments of{' '}
-                <span className="font-semibold">${pricing.installments.toFixed(2)}</span>
-              </p>
-            </div>
           </div>
         </div>
       )}
