@@ -1,11 +1,5 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "framework": "nextjs",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD ./",
-  "build": {
-    "env": {
-      "SKIP_ENV_VALIDATION": "1"
-    }
-  }
+  "framework": "nextjs"
 }
