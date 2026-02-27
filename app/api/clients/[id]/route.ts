@@ -84,7 +84,7 @@ export async function DELETE(
     // Verify client belongs to instructor
     const existingClient = await prisma.client.findUnique({
       where: { id: params.id },
-      select: { instructorId: true }
+      select: { instructorId: true, notes: true }
     })
 
     if (!existingClient || existingClient.instructorId !== session.user.instructorId) {
