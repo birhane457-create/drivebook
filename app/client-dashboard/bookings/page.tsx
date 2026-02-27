@@ -46,18 +46,24 @@ export default function ClientBookingsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all');
-  const [rescheduleModal, setRescheduleModal] = useState<{ 
-    isOpen: boolean; 
-    bookingId: string; 
+  const [rescheduleModal, setRescheduleModal] = useState<{
+    isOpen: boolean;
+    bookingId: string;
     instructorId: string;
-    date: string; 
-    time: string; 
+    date: string;
+    time: string;
     duration: number;
     price: number;
     instructor: string;
     hourlyRate: number;
   } | null>(null);
-  const [cancelDialog, setCancelDialog] = useState<{ isOpen: boolean; bookingId: string; date: string; instructor: string; price: number } | null>(null);
+  const [cancelDialog, setCancelDialog] = useState<{
+    isOpen: boolean;
+    bookingId: string;
+    date: string;
+    instructor: string;
+    price: number;
+  } | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -110,9 +116,7 @@ export default function ClientBookingsPage() {
 
   const upcomingBookings = profile.bookings.filter(b => b.status === 'upcoming');
   const pastBookings = profile.bookings.filter(b => b.status === 'completed');
-  
-  const filteredBookings = 
-    filter === 'upcoming' ? upcomingBookings :
+  const filteredBookings = filter === 'upcoming' ? upcomingBookings :
     filter === 'past' ? pastBookings :
     profile.bookings;
 
@@ -196,11 +200,13 @@ export default function ClientBookingsPage() {
                         <h3 className="text-lg font-bold text-gray-900">
                           {booking.instructor.name}
                         </h3>
-                        <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
-                          booking.status === 'upcoming'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}>
+                        <span
+                          className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
+                            booking.status === 'upcoming'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
                           {booking.status === 'upcoming' ? 'Upcoming' : 'Completed'}
                         </span>
                       </div>
@@ -221,17 +227,13 @@ export default function ClientBookingsPage() {
                           </p>
                         </div>
                       </div>
-
                       <div className="flex items-center gap-2 text-gray-600">
                         <Clock className="w-5 h-5 text-blue-600" />
                         <div>
                           <p className="text-xs text-gray-500">Time & Duration</p>
-                          <p className="font-semibold">
-                            {booking.time} • {booking.duration}h
-                          </p>
+                          <p className="font-semibold">{booking.time} • {booking.duration}h</p>
                         </div>
                       </div>
-
                       <div className="flex items-center gap-2 text-gray-600">
                         <BookOpen className="w-5 h-5 text-blue-600" />
                         <div>
@@ -246,7 +248,7 @@ export default function ClientBookingsPage() {
 
                   {booking.status === 'upcoming' && (
                     <div className="flex flex-col gap-2 ml-4">
-                      <button 
+                      <button
                         onClick={() => setRescheduleModal({
                           isOpen: true,
                           bookingId: booking.id,
@@ -263,7 +265,7 @@ export default function ClientBookingsPage() {
                         <Edit2 className="w-4 h-4" />
                         Reschedule
                       </button>
-                      <button 
+                      <button
                         onClick={() => setCancelDialog({
                           isOpen: true,
                           bookingId: booking.id,
@@ -293,7 +295,8 @@ export default function ClientBookingsPage() {
                 ? "You don't have any upcoming lessons scheduled."
                 : filter === 'past'
                 ? "You haven't completed any lessons yet."
-                : "You haven't made any bookings yet."}
+                : "You haven't made any bookings yet."
+              }
             </p>
             <Link
               href="/client-dashboard/book-lesson"
