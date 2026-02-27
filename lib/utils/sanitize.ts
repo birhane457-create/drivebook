@@ -247,7 +247,8 @@ export async function logDataAccess(
     await (prisma as any).auditLog.create({
       data: {
         action: `DATA_ACCESS_${action}`,
-        adminId: accessorId,
+        actorId: accessorId,
+        actorRole: accessorRole || 'UNKNOWN',
         targetType: dataType,
         targetId: dataIds[0] || 'multiple',
         metadata: {

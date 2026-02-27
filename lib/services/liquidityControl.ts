@@ -224,7 +224,8 @@ export async function autoManageLiquidity() {
     // Create critical audit log
     await prisma.auditLog.create({
       data: {
-        adminId: 'SYSTEM',
+        actorId: 'SYSTEM',
+        actorRole: 'SYSTEM',
         action: 'LIQUIDITY_CRITICAL',
         targetType: 'PLATFORM',
         targetId: 'liquidity',
@@ -235,7 +236,7 @@ export async function autoManageLiquidity() {
           reserveRatio: status.reserveRatio,
           actions: status.actions,
           timestamp: new Date().toISOString(),
-        },
+        } as any,
       },
     });
 
@@ -285,7 +286,8 @@ Generated: ${new Date().toISOString()}
   // Store report
   await prisma.auditLog.create({
     data: {
-      adminId: 'SYSTEM',
+      actorId: 'SYSTEM',
+      actorRole: 'SYSTEM',
       action: 'LIQUIDITY_REPORT',
       targetType: 'PLATFORM',
       targetId: 'liquidity',
@@ -293,7 +295,7 @@ Generated: ${new Date().toISOString()}
         report,
         status,
         timestamp: new Date().toISOString(),
-      },
+      } as any,
     },
   });
 

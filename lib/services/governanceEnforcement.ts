@@ -406,7 +406,8 @@ async function createAuditLog(params: AuditLogParams) {
   // Create audit log entry
   await prisma.auditLog.create({
     data: {
-      adminId: staffId || 'SYSTEM',
+      actorId: staffId || 'SYSTEM',
+      actorRole: staffId ? 'STAFF' : 'SYSTEM',
       action,
       targetType: taskId ? 'TASK' : bookingId ? 'BOOKING' : 'OTHER',
       targetId: taskId || bookingId || 'N/A',
@@ -416,7 +417,7 @@ async function createAuditLog(params: AuditLogParams) {
         clientId,
         instructorId,
         timestamp: new Date().toISOString(),
-      },
+      } as any,
     },
   });
 }

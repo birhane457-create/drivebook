@@ -68,7 +68,8 @@ export async function logAuditAction(
   await tx.auditLog.create({
     data: {
       action,
-      adminId,
+      actorId: adminId,
+      actorRole: adminId === 'SYSTEM' ? 'SYSTEM' : 'ADMIN',
       targetType,
       targetId,
       metadata: metadata || {},
@@ -156,7 +157,7 @@ export async function getEntityAuditTrail(
  */
 export async function getRecentAdminActivity(adminId: string, limit = 50) {
   return (prisma as any).auditLog.findMany({
-    where: { adminId },
+    where: { actorId: adminId },
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
