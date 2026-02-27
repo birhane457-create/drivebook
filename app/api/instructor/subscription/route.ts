@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS, getTrialEndDate, calculateCommission } from '@/lib/config/subscriptions';
 
+
+export const dynamic = 'force-dynamic';
 // GET - Get current subscription details
 export async function GET(req: NextRequest) {
   try {

@@ -12,6 +12,8 @@ import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidati
 import { z } from 'zod'
 import { bookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 
+
+export const dynamic = 'force-dynamic';
 const bookingSchema = z.object({
   clientId: z.string(),
   startTime: z.string().datetime(),

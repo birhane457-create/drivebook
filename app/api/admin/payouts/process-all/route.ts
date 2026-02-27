@@ -7,6 +7,8 @@ import { logAuditAction } from '@/lib/services/audit';
 import { bulkPayoutRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { z } from 'zod';
 
+
+export const dynamic = 'force-dynamic';
 // FIXED: Require confirmation to prevent accidental bulk operations
 const bulkPayoutSchema = z.object({
   confirmed: z.literal(true, {

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { googleCalendarService } from '@/lib/services/googleCalendar';
 import jwt from 'jsonwebtoken';
 
+
+export const dynamic = 'force-dynamic';
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'your-secret-key';
 
 interface JWTPayload {

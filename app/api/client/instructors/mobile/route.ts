@@ -3,6 +3,8 @@ import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 import { geocodeAddress, calculateDistance, getBoundingBox } from '@/lib/utils/distance';
 
+
+export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     // Validate mobile token (optional - allow searches without auth too)

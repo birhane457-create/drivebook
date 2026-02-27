@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 
+
+export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     // Validate mobile token

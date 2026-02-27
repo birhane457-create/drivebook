@@ -6,6 +6,8 @@ import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
 import { z } from 'zod'
 
+
+export const dynamic = 'force-dynamic';
 const updateSchema = z.object({
   status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']).optional(),
   notes: z.string().optional(),

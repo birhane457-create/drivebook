@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 
+
+export const dynamic = 'force-dynamic';
 // Get connection status
 export async function GET(req: NextRequest) {
   try {

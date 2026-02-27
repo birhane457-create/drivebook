@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { prisma } from '@/lib/prisma';
 
+
+export const dynamic = 'force-dynamic';
 // POST - Add note to task
 export async function POST(
   req: NextRequest,

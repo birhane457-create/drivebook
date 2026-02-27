@@ -8,6 +8,8 @@ import { recordWalletCredit } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { z } from 'zod';
 
+
+export const dynamic = 'force-dynamic';
 // FIXED: Input validation
 const walletAddSchema = z.object({
   amount: z.number()

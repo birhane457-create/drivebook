@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { logAuditAction } from '@/lib/services/audit';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }

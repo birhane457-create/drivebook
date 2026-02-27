@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const { bookingId, amount } = await req.json();

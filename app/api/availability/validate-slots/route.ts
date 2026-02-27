@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+
+export const dynamic = 'force-dynamic';
 const validateSlotsSchema = z.object({
   instructorId: z.string(),
   slots: z.array(z.object({

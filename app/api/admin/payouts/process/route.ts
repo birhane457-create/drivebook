@@ -9,6 +9,8 @@ import { recordInstructorPayout } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { z } from 'zod';
 
+
+export const dynamic = 'force-dynamic';
 // Input validation
 const payoutSchema = z.object({
   instructorId: z.string().min(1, 'Instructor ID is required'),

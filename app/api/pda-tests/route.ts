@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { pdaService } from '@/lib/services/pda'
 import { z } from 'zod'
 
+
+export const dynamic = 'force-dynamic';
 const pdaTestSchema = z.object({
   clientId: z.string(),
   testCenterLatitude: z.number(),

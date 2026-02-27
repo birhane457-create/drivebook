@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { cloudinaryService } from '@/lib/services/cloudinary';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     // JWT authentication

@@ -5,6 +5,8 @@ import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 
+
+export const dynamic = 'force-dynamic';
 // GET - Fetch reviews
 export async function GET(req: NextRequest) {
   try {

@@ -5,6 +5,8 @@ import { calculateBulkCommissionDynamic } from '@/lib/config/packages';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 
+
+export const dynamic = 'force-dynamic';
 const bulkBookingSchema = z.object({
   instructorId: z.string(),
   packageType: z.enum(['CUSTOM', 'PACKAGE_6', 'PACKAGE_10', 'PACKAGE_15']),

@@ -6,6 +6,8 @@ import { emailService } from '@/lib/services/email';
 import { logAuditAction } from '@/lib/services/audit';
 import { z } from 'zod';
 
+
+export const dynamic = 'force-dynamic';
 // FIXED: Add input validation
 const rejectSchema = z.object({
   reason: z.string()

@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import { availabilityService } from '@/lib/services/availability';
 import { googleCalendarService } from '@/lib/services/googleCalendar';
 
+
+export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     // Get token from Authorization header

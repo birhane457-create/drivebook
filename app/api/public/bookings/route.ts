@@ -7,6 +7,8 @@ import { paymentService } from '@/lib/services/payment'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
+
+export const dynamic = 'force-dynamic';
 const publicBookingSchema = z.object({
   instructorId: z.string(),
   clientName: z.string(),

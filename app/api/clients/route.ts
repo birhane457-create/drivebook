@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { safeClientSelect, sanitizeClientForInstructor, logDataAccess } from '@/lib/utils/sanitize'
 
+
+export const dynamic = 'force-dynamic';
 const clientSchema = z.object({
   name: z.string(),
   phone: z.string(),

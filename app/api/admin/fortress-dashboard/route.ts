@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { checkLiquidityStatus } from '@/lib/services/liquidityControl';
 import { calculateAllInstructorRiskScores } from '@/lib/services/fraudDetection';
 
+
+export const dynamic = 'force-dynamic';
 /**
  * FORTRESS DASHBOARD API
  * 

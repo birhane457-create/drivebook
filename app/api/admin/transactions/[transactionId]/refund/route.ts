@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { stripeService } from '@/lib/services/stripe';
 import { smsService } from '@/lib/services/sms';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(
   req: NextRequest,
   { params }: { params: { transactionId: string } }

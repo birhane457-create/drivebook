@@ -8,6 +8,8 @@ import { validateTransition, getTransitionErrorMessage } from '@/lib/services/bo
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger';
 import { bookingActionRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }

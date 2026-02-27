@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { startOfWeek, startOfMonth, startOfYear, endOfDay } from 'date-fns';
 
+
+export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     // JWT authentication

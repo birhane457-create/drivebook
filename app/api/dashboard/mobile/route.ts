@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 
+
+export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     console.log('[Dashboard Mobile API] Request received');

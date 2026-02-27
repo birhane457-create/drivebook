@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+
+export const dynamic = 'force-dynamic';
 const testPackageSchema = z.object({
   offersTestPackage: z.boolean(),
   testPackagePrice: z.number().min(0).optional().nullable(),

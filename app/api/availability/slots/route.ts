@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { addMinutes, format, parse, startOfDay, endOfDay } from 'date-fns'
 
+
+export const dynamic = 'force-dynamic';
 interface TimeSlot {
   time: string
   available: boolean

@@ -8,6 +8,8 @@ import { recordBookingPayment } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { paymentService } from '@/lib/services/payment';
 
+
+export const dynamic = 'force-dynamic';
 const cartItemSchema = z.object({
   instructorId: z.string().min(1),
   instructorName: z.string().min(1),

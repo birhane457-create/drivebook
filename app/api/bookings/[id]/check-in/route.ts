@@ -6,6 +6,8 @@ import { smsService } from '@/lib/services/sms';
 import { bookingActionRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 import jwt from 'jsonwebtoken';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }

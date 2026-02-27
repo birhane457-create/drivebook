@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
+
+export const dynamic = 'force-dynamic';
 const settingsSchema = z.object({
   hourlyRate: z.number().positive().optional(),
   serviceRadiusKm: z.number().min(5).max(100).optional(),

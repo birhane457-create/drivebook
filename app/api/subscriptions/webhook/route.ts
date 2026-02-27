@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { SUBSCRIPTION_PLANS } from '@/lib/config/subscriptions';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text();
