@@ -18,7 +18,7 @@ Connect with qualified instructors near you. Book lessons instantly. Pass your t
 - 📱 Manage everything 24/7 from your personal dashboard
 - 🤖 AI voice receptionist available to help you book or reschedule anytime
 
-[Find Instructors Near You](#) • [Join as an Instructor](#) • [Start Free Trial](#)
+[Find Instructors Near You](https://drivebook.vercel.app/search) • [Join as an Instructor](https://drivebook.vercel.app/instructor/signup) • [Start Free Trial](https://drivebook.vercel.app/signup)
 
 ---
 
