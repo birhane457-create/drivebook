@@ -67,6 +67,11 @@ drivebook-hybrid/
 
 ---
 
+## Marketing / Home Page
+
+- Suggested landing page copy and content: [docs/HOMEPAGE.md](docs/HOMEPAGE.md)
+
+
 ## Architecture
 
 ```

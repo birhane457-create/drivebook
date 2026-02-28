@@ -17,6 +17,7 @@ All documentation for drivebook-hybrid is organized here. Start with the links b
 ## 🤖 AI System
 
 - **[AI_SYSTEM.md](AI_SYSTEM.md)** — Copilot agent integration, response formats, AI flow
+- **[HOMEPAGE.md](HOMEPAGE.md)** — Suggested public landing page / marketing copy
 
 ## 📝 Status & Changelog
 

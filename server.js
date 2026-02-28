@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -28,6 +29,14 @@ app.use('/api/bookings', bookingRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+// Serve docs folder (static preview)
+app.use('/docs', express.static(path.join(__dirname, 'docs')));
+
+// Serve homepage preview at root path
+app.get('/HOMEPAGE.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'docs', 'HOMEPAGE.html'));
 });
 
 // Root endpoint - API documentation
