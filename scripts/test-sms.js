@@ -1,10 +1,10 @@
 // Test Twilio SMS functionality
-// Hardcoded credentials from your .env file
+// Uses environment variables for security
 
 async function testSMS() {
-  const accountSid = 'ACd97478e87ca4d78d699ca742f636edef';
-  const authToken = '585d4a1d2d8e8f399cdd4d5e8948eaa6';
-  const fromNumber = '+17089335601';
+  const accountSid = process.env.TWILIO_ACCOUNT_SID || 'YOUR_ACCOUNT_SID';
+  const authToken = process.env.TWILIO_AUTH_TOKEN || 'YOUR_AUTH_TOKEN';
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER || 'YOUR_PHONE_NUMBER';
   
   console.log('🔧 Testing Twilio SMS Configuration...\n');
   console.log('Account SID:', accountSid);
