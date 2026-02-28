@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Car, Calendar, MapPin, Users } from 'lucide-react'
+import { Car, Calendar, MapPin, Users, CheckCircle, DollarSign, Clock, Shield, TrendingUp, Smartphone } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -15,8 +15,8 @@ export default function HomePage() {
               <Link href="/login" className="text-gray-700 hover:text-blue-600 text-sm sm:text-base px-2 sm:px-0">
                 Login
               </Link>
-              <Link href="/admin/register" className="hidden sm:inline text-gray-700 hover:text-blue-600">
-                Admin
+              <Link href="/book" className="hidden sm:inline text-gray-700 hover:text-blue-600">
+                For Learners
               </Link>
               <Link href="/register" className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 text-sm sm:text-base">
                 For Instructors
@@ -30,17 +30,31 @@ export default function HomePage() {
         {/* Hero Section */}
         <div className="text-center mb-12">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 sm:mb-6">
-            Book Your Driving Lesson
+            Your Driving Licence Journey Made Simple
           </h1>
           <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-6 max-w-3xl mx-auto px-4">
-            Find qualified instructors in your area and book instantly
+            Connect with qualified instructors near you. Book lessons instantly. Pass your test with confidence.
           </p>
-          <Link 
-            href="/book"
-            className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 inline-block"
-          >
-            Find Instructors Near You
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+            <Link 
+              href="/book"
+              className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 inline-block w-full sm:w-auto"
+            >
+              Find Instructors Near You
+            </Link>
+            <Link 
+              href="/register"
+              className="bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 inline-block w-full sm:w-auto"
+            >
+              Join as an Instructor
+            </Link>
+          </div>
+          <div className="max-w-2xl mx-auto text-left space-y-2 text-gray-700">
+            <p className="flex items-start gap-2"><span className="text-blue-600 mt-1">🎯</span> Smart booking with real-time availability—no waiting, no phone tag</p>
+            <p className="flex items-start gap-2"><span className="text-blue-600 mt-1">📍</span> Location-based matching to find instructors who service your area</p>
+            <p className="flex items-start gap-2"><span className="text-blue-600 mt-1">💰</span> Save up to 12% with bulk hour packages and test preparation bundles</p>
+            <p className="flex items-start gap-2"><span className="text-blue-600 mt-1">🤖</span> AI voice receptionist available to help you book or reschedule anytime</p>
+          </div>
         </div>
 
         {/* Instructor CTA */}
