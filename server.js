@@ -74,22 +74,25 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: err.message || 'Internal Server Error' });
 });
 
-const server = app.listen(config.PORT, () => {
-  logger.logInfo(`Server running on port ${config.PORT}`);
-  logger.logInfo('Registered routes: /api/voice, /api/bookings, /api/health');
-});
-
-// Graceful shutdown
-const shutdown = () => {
-  logger.logInfo('Shutting down server...');
-  server.close(() => {
-    logger.logInfo('Server closed');
-    process.exit(0);
+// Only start server if not in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  const server = app.listen(config.PORT, () => {
+    logger.logInfo(`Server running on port ${config.PORT}`);
+    logger.logInfo('Registered routes: /api/voice, /api/bookings, /api/health');
   });
-  setTimeout(() => process.exit(1), 10000);
-};
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+  // Graceful shutdown
+  const shutdown = () => {
+    logger.logInfo('Shutting down server...');
+    server.close(() => {
+      logger.logInfo('Server closed');
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10000);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
 
 module.exports = app;
