@@ -6,15 +6,25 @@ const morgan = require('morgan');
 const { randomUUID } = require('crypto');
 const config = require('./utils/config');
 const logger = require('./utils/logger');
+const { PrismaClient } = require('@prisma/client');
 
 const voiceRouter = require('./routes/voice-webhook');
 const bookingRouter = require('./routes/booking-api');
+const instructorRouter = require('./routes/instructor-api');
 
 const app = express();
+const prisma = new PrismaClient();
+
+// Security: Configure CORS properly
+const corsOptions = {
+  origin: config.ALLOWED_ORIGINS || ['http://localhost:3000', 'http://localhost:3001'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
 
 app.use(helmet());
-app.use(cors());
-app.use(express.json());
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '1mb' })); // Limit payload size
 app.use(morgan('combined'));
 
 // Request ID middleware
@@ -24,11 +34,43 @@ app.use((req, res, next) => {
   next();
 });
 
+// Request timeout middleware
+app.use((req, res, next) => {
+  req.setTimeout(config.REQUEST_TIMEOUT, () => {
+    logger.logWarning('Request timeout', { 
+      requestId: req.requestId,
+      method: req.method,
+      path: req.path 
+    });
+    res.status(408).json({ error: 'Request timeout' });
+  });
+  next();
+});
+
 app.use('/api/voice', voiceRouter);
 app.use('/api/bookings', bookingRouter);
+app.use('/api/instructor', instructorRouter);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
+// Enhanced health check with database verification
+app.get('/api/health', async (req, res) => {
+  try {
+    // Check database connection
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ 
+      status: 'ok', 
+      uptime: process.uptime(),
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.logError(error, { context: 'health-check' });
+    res.status(503).json({ 
+      status: 'error', 
+      uptime: process.uptime(),
+      database: 'disconnected',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Serve docs folder (static preview)
@@ -67,11 +109,27 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', message: 'See GET / for API documentation' });
 });
 
-// Error handler
+// Error handler with better logging
 app.use((err, req, res, next) => {
-  logger.logError(err, { requestId: req.requestId });
+  const errorContext = {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+    userAgent: req.get('user-agent')
+  };
+  
+  logger.logError(err, errorContext);
+  
   const status = err.status || 500;
-  res.status(status).json({ error: err.message || 'Internal Server Error' });
+  const message = config.NODE_ENV === 'production' 
+    ? 'Internal Server Error' 
+    : err.message;
+    
+  res.status(status).json({ 
+    error: message,
+    requestId: req.requestId
+  });
 });
 
 // Only start server if not in Vercel serverless environment
@@ -81,18 +139,40 @@ if (process.env.VERCEL !== '1') {
     logger.logInfo('Registered routes: /api/voice, /api/bookings, /api/health');
   });
 
-  // Graceful shutdown
-  const shutdown = () => {
+  // Graceful shutdown with database cleanup
+  const shutdown = async () => {
     logger.logInfo('Shutting down server...');
-    server.close(() => {
-      logger.logInfo('Server closed');
-      process.exit(0);
+    
+    server.close(async () => {
+      try {
+        // Close database connections
+        await prisma.$disconnect();
+        logger.logInfo('Database connections closed');
+        logger.logInfo('Server closed');
+        process.exit(0);
+      } catch (error) {
+        logger.logError(error, { context: 'shutdown' });
+        process.exit(1);
+      }
     });
-    setTimeout(() => process.exit(1), 10000);
+    
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      logger.logError(new Error('Forced shutdown after timeout'));
+      process.exit(1);
+    }, 10000);
   };
 
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+  process.on('uncaughtException', (error) => {
+    logger.logError(error, { context: 'uncaughtException' });
+    shutdown();
+  });
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.logError(new Error('Unhandled Rejection'), { reason, promise });
+    shutdown();
+  });
 }
 
 module.exports = app;

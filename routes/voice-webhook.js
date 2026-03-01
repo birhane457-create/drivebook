@@ -1,12 +1,48 @@
 const express = require('express');
 const router = express.Router();
 const twilio = require('twilio');
+const config = require('../utils/config');
 const instructorService = require('../services/instructor-service');
 const copilotService = require('../services/copilot-service');
 const messageService = require('../services/message-service');
 const logger = require('../utils/logger');
 
-router.post('/incoming', async (req, res) => {
+// Twilio signature validation middleware
+const validateTwilioRequest = (req, res, next) => {
+  // Skip validation in development if configured
+  if (config.NODE_ENV === 'development' && config.SKIP_TWILIO_VALIDATION) {
+    logger.logWarning('Skipping Twilio signature validation in development');
+    return next();
+  }
+
+  const twilioSignature = req.headers['x-twilio-signature'];
+  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  
+  if (!twilioSignature) {
+    logger.logWarning('Missing Twilio signature', { requestId: req.requestId });
+    return res.status(403).send('Forbidden: Missing signature');
+  }
+
+  const isValid = twilio.validateRequest(
+    config.TWILIO_AUTH_TOKEN,
+    twilioSignature,
+    url,
+    req.body
+  );
+
+  if (!isValid) {
+    logger.logWarning('Invalid Twilio signature', { 
+      requestId: req.requestId,
+      url,
+      signature: twilioSignature 
+    });
+    return res.status(403).send('Forbidden: Invalid signature');
+  }
+
+  next();
+};
+
+router.post('/incoming', validateTwilioRequest, async (req, res) => {
   const { From, To } = req.body || {};
   const requestId = req.requestId;
   try {
@@ -45,7 +81,7 @@ router.post('/incoming', async (req, res) => {
 });
 
 // Simple voicemail handler (stores message)
-router.post('/voicemail', async (req, res) => {
+router.post('/voicemail', validateTwilioRequest, async (req, res) => {
   const { RecordingUrl, From } = req.body || {};
   try {
     if (!RecordingUrl || !From) return res.status(400).send('Missing fields');
