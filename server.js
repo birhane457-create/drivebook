@@ -11,6 +11,7 @@ const { PrismaClient } = require('@prisma/client');
 const voiceRouter = require('./routes/voice-webhook');
 const bookingRouter = require('./routes/booking-api');
 const instructorRouter = require('./routes/instructor-api');
+const { restrictAccess, hideApiDocs } = require('./middleware/auth');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -33,6 +34,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', req.requestId);
   next();
 });
+
+// Security: Hide API docs and restrict access
+app.use(hideApiDocs);
+app.use(restrictAccess);
 
 // Request timeout middleware
 app.use((req, res, next) => {

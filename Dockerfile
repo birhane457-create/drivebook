@@ -1,29 +1,27 @@
-FROM node:20-alpine AS builder
+# Use Node.js LTS
+FROM node:18-alpine
+
+# Set working directory
 WORKDIR /app
 
-# Install dependencies (including dev deps so prisma can generate)
+# Copy package files
 COPY package*.json ./
-RUN npm ci
 
-# Copy source and generate Prisma client
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy application files
 COPY . .
-RUN npx prisma generate || true
 
-# Production image
-FROM node:20-alpine
-WORKDIR /app
-ENV NODE_ENV=production
+# Generate Prisma Client
+RUN npx prisma generate
 
-# Copy only necessary files from build stage
-COPY --from=builder /app .
+# Expose port
+EXPOSE 3001
 
-# Install production dependencies only
-RUN npm ci --production
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/health || exit 1
-
-USER node
-CMD ["node", "server.js"]
+# Start the application
+CMD ["npm", "start"]

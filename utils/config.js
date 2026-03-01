@@ -48,4 +48,7 @@ module.exports = {
   COPILOT_TIMEOUT_MS: parseInt(process.env.COPILOT_TIMEOUT_MS || '5000', 10),
   MESSAGE_RATE_LIMIT: parseInt(process.env.MESSAGE_RATE_LIMIT || '5', 10),
   MESSAGE_RATE_WINDOW_HOURS: parseInt(process.env.MESSAGE_RATE_WINDOW_HOURS || '1', 10),
+  
+  // Security: Internal API key for accessing service documentation
+  INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || 'dev-key-change-in-production',
 };
