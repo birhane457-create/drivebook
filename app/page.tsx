@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+const VOICE_NUMBER = process.env.NEXT_PUBLIC_VOICE_PHONE_NUMBER
+
 export default function HomePage() {
   return (
     <div className="min-h-screen">
@@ -45,6 +47,38 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-5">
+        {/* AI Voice Receptionist CTA */}
+        <section className="my-10">
+          <div className="bg-white border border-purple-200 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8">
+            <div className="flex-1 text-left">
+              <h2 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-2">Book by Phone with our AI Voice Receptionist</h2>
+              <p className="text-gray-700">
+                Prefer to talk to someone? Our AI voice receptionist can answer calls 24/7, find your instructor, and start a real booking that is confirmed by SMS.
+              </p>
+            </div>
+            {VOICE_NUMBER ? (
+              <div className="flex flex-col items-start md:items-end gap-2">
+                <p className="text-sm uppercase tracking-wide text-purple-100 bg-purple-700 px-3 py-1 rounded-full">
+                  Call to try it now
+                </p>
+                <a
+                  href={`tel:${VOICE_NUMBER}`}
+                  className="inline-block bg-purple-600 text-white px-5 py-3 rounded-lg no-underline font-semibold hover:bg-purple-700 transition-colors"
+                >
+                  {VOICE_NUMBER}
+                </a>
+                <p className="text-xs text-gray-200 md:text-right">
+                  This number is powered by the DriveBook voice service and Twilio.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-200">
+                To show your AI receptionist phone number here, set <code className="font-mono">NEXT_PUBLIC_VOICE_PHONE_NUMBER</code> in your environment.
+              </p>
+            )}
+          </div>
+        </section>
+
         {/* Why Choose DriveBook */}
         <section className="my-16">
           <h2 className="text-4xl text-center mb-6 text-gray-800">Why Choose DriveBook?</h2>
