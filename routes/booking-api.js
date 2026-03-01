@@ -22,12 +22,26 @@ router.post('/', async (req, res) => {
       data: { instructorId, clientName, clientPhone, date, time, duration }
     });
 
+    // Look up instructor name for a friendlier SMS (best-effort)
+    let instructorName = 'your instructor';
+    try {
+      const instructor = await db.prisma.instructor.findUnique({
+        where: { id: instructorId },
+        select: { name: true }
+      });
+      if (instructor?.name) {
+        instructorName = instructor.name;
+      }
+    } catch (lookupErr) {
+      logger.logWarning('Failed to look up instructor for SMS', { requestId, instructorId, error: lookupErr.message });
+    }
+
     // send SMS confirmation (async, don't block)
     smsService.sendBookingConfirmation(clientPhone, {
       phone: clientPhone,
       date,
       time,
-      instructorName: `Instructor ${instructorId}`,
+      instructorName,
       bookingId: booking.id
     }).catch(err => logger.logError(err, { requestId }));
 
