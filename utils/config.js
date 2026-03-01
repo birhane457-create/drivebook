@@ -1,13 +1,8 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
-const required = [
-  'DATABASE_URL',
-  'TWILIO_ACCOUNT_SID',
-  'TWILIO_AUTH_TOKEN',
-  'TWILIO_PHONE_NUMBER',
-  'COPILOT_BASE_URL'
-];
+// Only DATABASE_URL is truly required - others have sensible defaults
+const required = ['DATABASE_URL'];
 
 const missing = required.filter(k => !process.env[k]);
 if (missing.length) {
@@ -18,6 +13,20 @@ if (missing.length) {
     console.warn(`⚠️  WARNING: ${message}`);
     console.warn('   Some features may not work correctly.');
   }
+}
+
+// Warn about missing optional but important variables
+const recommended = [
+  'TWILIO_ACCOUNT_SID',
+  'TWILIO_AUTH_TOKEN',
+  'TWILIO_PHONE_NUMBER',
+  'COPILOT_BASE_URL'
+];
+
+const missingRecommended = recommended.filter(k => !process.env[k]);
+if (missingRecommended.length && process.env.NODE_ENV !== 'test') {
+  console.warn(`⚠️  Missing recommended env vars: ${missingRecommended.join(', ')}`);
+  console.warn('   Voice service features may not work correctly.');
 }
 
 module.exports = {
