@@ -66,11 +66,11 @@ router.post('/incoming', validateTwilioRequest, async (req, res) => {
       } else {
         // fallback - take message
         twiml.say('The instructor is currently unavailable. Please leave a message after the beep.');
-        twiml.record({ maxLength: 120, action: '/api/voice/voicemail' });
+        twiml.record({ maxLength: config.VOICEMAIL_MAX_LENGTH, action: '/api/voice/voicemail' });
       }
     } else {
       twiml.say('We could not find the instructor. Please leave a message after the beep.');
-      twiml.record({ maxLength: 120, action: '/api/voice/voicemail' });
+      twiml.record({ maxLength: config.VOICEMAIL_MAX_LENGTH, action: '/api/voice/voicemail' });
     }
 
     res.type('text/xml').send(twiml.toString());

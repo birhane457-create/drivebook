@@ -3,7 +3,7 @@ const config = require('../utils/config');
 const logger = require('../utils/logger');
 
 async function connectToCopilotAgent(instructorId, callerData) {
-  const timeout = 5000;
+  const timeout = config.COPILOT_TIMEOUT_MS;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   const url = `${config.COPILOT_BASE_URL}/agents/${instructorId}/connect`;

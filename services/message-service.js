@@ -1,19 +1,20 @@
 const db = require('./database-service');
 const smsService = require('./sms-service');
 const logger = require('../utils/logger');
+const config = require('../utils/config');
 
 // Simple in-memory rate limiter: { phone: { count, windowStart } }
 const rateMap = new Map();
 
 function allowedToMessage(phone) {
   const now = Date.now();
-  const hour = 60 * 60 * 1000;
+  const windowMs = config.MESSAGE_RATE_WINDOW_HOURS * 60 * 60 * 1000;
   const entry = rateMap.get(phone) || { count: 0, windowStart: now };
-  if (now - entry.windowStart > hour) {
+  if (now - entry.windowStart > windowMs) {
     entry.count = 0;
     entry.windowStart = now;
   }
-  if (entry.count >= 5) return false;
+  if (entry.count >= config.MESSAGE_RATE_LIMIT) return false;
   entry.count += 1;
   rateMap.set(phone, entry);
   return true;

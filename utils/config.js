@@ -10,8 +10,14 @@ const required = [
 ];
 
 const missing = required.filter(k => !process.env[k]);
-if (missing.length && process.env.NODE_ENV === 'production') {
-  throw new Error(`Missing required env vars: ${missing.join(', ')}`);
+if (missing.length) {
+  const message = `Missing required env vars: ${missing.join(', ')}`;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(message);
+  } else {
+    console.warn(`⚠️  WARNING: ${message}`);
+    console.warn('   Some features may not work correctly.');
+  }
 }
 
 module.exports = {
@@ -26,5 +32,11 @@ module.exports = {
     ? process.env.ALLOWED_ORIGINS.split(',') 
     : ['http://localhost:3000', 'http://localhost:3001'],
   SKIP_TWILIO_VALIDATION: process.env.SKIP_TWILIO_VALIDATION === 'true',
-  REQUEST_TIMEOUT: parseInt(process.env.REQUEST_TIMEOUT || '30000', 10)
+  REQUEST_TIMEOUT: parseInt(process.env.REQUEST_TIMEOUT || '30000', 10),
+  
+  // Voice service configuration
+  VOICEMAIL_MAX_LENGTH: parseInt(process.env.VOICEMAIL_MAX_LENGTH || '120', 10),
+  COPILOT_TIMEOUT_MS: parseInt(process.env.COPILOT_TIMEOUT_MS || '5000', 10),
+  MESSAGE_RATE_LIMIT: parseInt(process.env.MESSAGE_RATE_LIMIT || '5', 10),
+  MESSAGE_RATE_WINDOW_HOURS: parseInt(process.env.MESSAGE_RATE_WINDOW_HOURS || '1', 10),
 };
