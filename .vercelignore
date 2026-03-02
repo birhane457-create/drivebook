@@ -1,5 +1,6 @@
 # Ignore voice service - it should be deployed separately
 drivebook-hybrid/
+drivebook-hybrid
 
 # Ignore documentation
 *.md
