@@ -34,7 +34,7 @@ export default async function AdminInstructorsPage({
       },
     },
     orderBy: { id: 'desc' },
-  });
+  }) as any;
 
   return (
     <div className="min-h-screen bg-gray-50">
