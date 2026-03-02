@@ -173,24 +173,24 @@ export default async function AdminDashboard() {
                   <div key={booking.id} className="p-4">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="font-medium text-gray-900">{booking.client?.name || 'N/A'}</p>
-                        <p className="text-xs text-gray-500">{booking.client?.email || 'N/A'}</p>
+                        <p className="font-medium text-gray-900">{booking.clientName || 'N/A'}</p>
+                        <p className="text-xs text-gray-500">{booking.clientPhone || 'N/A'}</p>
                       </div>
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        booking.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                        booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                        booking.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                        (booking as any).status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                        (booking as any).status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                        (booking as any).status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {booking.status}
+                        {(booking as any).status || 'N/A'}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-600">{booking.instructor?.name || 'N/A'}</span>
-                      <span className="font-medium text-gray-900">${booking.price.toFixed(2)}</span>
+                      <span className="font-medium text-gray-900">{booking.date} {booking.time}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      {new Date(booking.startTime).toLocaleDateString()}
+                      Duration: {booking.duration} min
                     </p>
                   </div>
                 ))}
@@ -220,27 +220,27 @@ export default async function AdminDashboard() {
                   recentBookings.map((booking) => (
                     <tr key={booking.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{booking.client?.name || 'N/A'}</div>
-                        <div className="text-sm text-gray-500">{booking.client?.email || 'N/A'}</div>
+                        <div className="text-sm font-medium text-gray-900">{booking.clientName || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{booking.clientPhone || 'N/A'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {booking.instructor?.name || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(booking.startTime).toLocaleDateString()}
+                        {booking.date || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          booking.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                          booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                          booking.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                          (booking as any).status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                          (booking as any).status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          (booking as any).status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
-                          {booking.status}
+                          {(booking as any).status || 'N/A'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${booking.price.toFixed(2)}
+                        ${((booking as any).price || 0).toFixed(2)}
                       </td>
                     </tr>
                   ))
