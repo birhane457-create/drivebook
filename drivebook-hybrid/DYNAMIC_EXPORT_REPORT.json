@@ -1,0 +1,637 @@
+[
+  {
+    "path": "app\\api\\admin\\bookings\\route.ts",
+    "modified": false,
+    "reason": "already has dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\clients\\route.ts",
+    "modified": false,
+    "reason": "already has dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\clients\\[id]\\wallet\\add-credit\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\clients\\[id]\\wallet\\deduct-credit\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\clients\\[id]\\wallet\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\clients\\[id]\\wallet\\transactions\\[transactionId]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\documents\\compliance\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\documents\\instructor\\[instructorId]\\approve\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\documents\\instructor\\[instructorId]\\expiry\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\documents\\instructor\\[instructorId]\\reject\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\documents\\instructor\\[instructorId]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\fortress-dashboard\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\instructors\\[id]\\approve\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\instructors\\[id]\\reject\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\instructors\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\instructors\\[id]\\suspend\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\payouts\\preview-all\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\payouts\\process\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\payouts\\process-all\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\payouts\\route.ts",
+    "modified": false,
+    "reason": "already has dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\pricing\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\register\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\revenue\\route.ts",
+    "modified": false,
+    "reason": "already has dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\transactions\\[transactionId]\\invoice\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\admin\\transactions\\[transactionId]\\refund\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\analytics\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\analytics\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\auth\\check-email\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\auth\\forgot-password\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\auth\\google\\callback\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\auth\\mobile-login\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\auth\\reset-password\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\auth\\[...nextauth]\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\availability\\check-and-reserve\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\availability\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\availability\\slots\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\availability\\validate-slots\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\mobile\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\[id]\\cancel\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\[id]\\check-in\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\[id]\\check-out\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\[id]\\reschedule\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\bookings\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\calendar\\callback\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\client\\bookings\\create-bulk\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\bookings\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\bookings\\[id]\\reschedule\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\confirm-package-booking\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\current-instructor\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\dashboard\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\instructors\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\my-performance\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\packages\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\packages\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\pending-reviews\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\profile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\schedule-package-hours\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\transactions\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\wallet\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\wallet\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\wallet\\summary\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\client\\wallet-add\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\clients\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\clients\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\clients\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\create-payment-intent\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\dashboard\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\feedback\\categories\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\google-calendar\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\google-calendar\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\google-calendar\\sync\\mobile\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\google-calendar\\sync\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\health\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\instructor\\branding\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\client-lesson-feedback\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\client-performance\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\consent\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\documents\\expiry\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\documents\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\documents\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\earnings\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\invoices\\[transactionId]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\lesson-feedback\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\packages\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\profile\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\profile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\receipts\\weekly\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\service-areas\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\service-areas\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\settings\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\settings\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\subdomain\\check\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\subscription\\billing-portal\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\subscription\\change-plan\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\subscription\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\subscription\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructor\\test-package\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructors\\search\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructors\\[id]\\availability\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\instructors\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\payments\\create-intent\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\payments\\webhook\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\pda-tests\\mobile\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\pda-tests\\mobile\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\pda-tests\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\pda-tests\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\public\\bookings\\bulk\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\public\\bookings\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\public\\bookings\\[id]\\cancel\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\public\\bookings\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\public\\instructor\\[instructorId]\\branding\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\public\\instructors\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\register\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\reviews\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\staff\\members\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\staff\\tasks\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\staff\\tasks\\[id]\\notes\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\staff\\tasks\\[id]\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\stripe\\webhook\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\subscriptions\\checkout\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\subscriptions\\webhook\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\test-email\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\upload\\route.ts",
+    "modified": false,
+    "reason": "does not use prisma"
+  },
+  {
+    "path": "app\\api\\waiting-list\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  },
+  {
+    "path": "app\\api\\webhooks\\stripe\\route.ts",
+    "modified": true,
+    "reason": "added dynamic export"
+  }
+]
