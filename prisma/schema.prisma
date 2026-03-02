@@ -9,12 +9,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model Instructor {
-  id                  String   @id @default(uuid())
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
   name                String
   phone               String   @unique
   hourlyRate          Float
@@ -24,18 +24,18 @@ model Instructor {
 }
 
 model Booking {
-  id           String   @id @default(uuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   instructor   Instructor @relation(fields: [instructorId], references: [id])
-  instructorId String
-  clientName   String
-  clientPhone  String
-  date         String
-  time         String
-  duration     Int
+  instructorId String   @db.ObjectId
+  clientName   String?
+  clientPhone  String?
+  date         String?
+  time         String?
+  duration     Int?
 }
 
 model Message {
-  id           String   @id @default(uuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   callerNumber String
   callerName   String?
   message      String
