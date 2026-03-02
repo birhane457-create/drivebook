@@ -11,17 +11,13 @@ export default async function AdminPricingPage() {
     redirect('/login');
   }
 
-  // Get or create platform settings
-  let platform = await prisma.platform.findFirst();
-  
-  if (!platform) {
-    platform = await prisma.platform.create({
-      data: {
-        name: 'DriveBook',
-        subscriptionModel: 'hybrid'
-      }
-    });
-  }
+  // Use default platform settings since Platform model doesn't exist in schema
+  const platform = {
+    name: 'DriveBook',
+    subscriptionModel: 'hybrid',
+    commissionRate: 12.0,
+    newStudentBonusRate: 8.0,
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
