@@ -1,5 +1,5 @@
 const request = require('supertest');
-// prevent Prisma initialization during tests by mocking database service
+// prevent. Prisma initialization during tests by mocking database service
 jest.mock('../services/database-service', () => ({
   prisma: {
     booking: { findFirst: jest.fn() },
