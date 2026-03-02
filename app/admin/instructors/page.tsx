@@ -27,7 +27,6 @@ export default async function AdminInstructorsPage({
   const instructors = await prisma.instructor.findMany({
     where: whereClause,
     include: {
-      user: { select: { email: true } },
       _count: {
         select: {
           bookings: true,
@@ -35,7 +34,7 @@ export default async function AdminInstructorsPage({
       },
     },
     orderBy: { createdAt: 'desc' },
-  }) as any;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
