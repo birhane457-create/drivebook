@@ -1,0 +1,10 @@
+# Ignore voice service - it should be deployed separately
+drivebook-hybrid/
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore local files
+.env.local
+.env*.local
