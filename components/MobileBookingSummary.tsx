@@ -19,14 +19,14 @@ export default function MobileBookingSummary() {
     : HOUR_PACKAGES[packageType];
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-40">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-40 safe-area-bottom">
       {/* Collapsed View */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-3 flex items-center justify-between"
+        className="w-full px-4 py-3 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
       >
-        <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
             {instructor.profileImage ? (
               <Image
                 src={instructor.profileImage}
@@ -40,13 +40,13 @@ export default function MobileBookingSummary() {
               </div>
             )}
           </div>
-          <div className="text-left">
-            <p className="text-sm font-semibold text-gray-900">{instructor.name}</p>
-            <p className="text-xs text-gray-600">{packageInfo.name}</p>
+          <div className="text-left min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate">{instructor.name}</p>
+            <p className="text-xs text-gray-600 truncate">{packageInfo.name}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-blue-600">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-lg sm:text-xl font-bold text-blue-600">
             ${pricing.total.toFixed(2)}
           </span>
           <svg
@@ -62,7 +62,7 @@ export default function MobileBookingSummary() {
 
       {/* Expanded View */}
       {isExpanded && (
-        <div className="px-4 pb-4 border-t">
+        <div className="px-4 pb-4 sm:pb-6 border-t max-h-[60vh] overflow-y-auto">
           <div className="space-y-3 pt-4">
             {/* Package Details */}
             <div className="flex justify-between text-sm">
