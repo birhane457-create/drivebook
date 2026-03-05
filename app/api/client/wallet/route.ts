@@ -42,7 +42,10 @@ export async function GET(req: NextRequest) {
       wallet = await prisma.clientWallet.create({
         data: {
           userId: user.id,
-          balance: 0
+          balance: 0,
+          creditsRemaining: 0,
+          totalPaid: 0,
+          totalSpent: 0
         },
         include: {
           transactions: true
@@ -53,34 +56,18 @@ export async function GET(req: NextRequest) {
     // Calculate from wallet transactions
     const transactions = wallet.transactions || [];
     
-    // Total Credits Added = only actual money paid by user (exclude admin refunds/credits, duration adjustments)
+    // Total Credits Added = all credits (money paid by user)
     const totalPaid = transactions
-      .filter(t => 
-        t.type.toUpperCase() === 'CREDIT' && 
-        !t.description?.toLowerCase().includes('duration reduction') &&
-        !t.description?.toLowerCase().includes('manual credit') &&
-        !t.description?.toLowerCase().includes('refund') &&
-        !t.description?.toLowerCase().includes('admin')
-      )
+      .filter(t => t.type.toUpperCase() === 'CREDIT')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    // Net Booking Costs = booking charges minus cancellation refunds
-    const bookingCharges = transactions
-      .filter(t => 
-        t.type.toUpperCase() === 'DEBIT' && 
-        !t.description?.toLowerCase().includes('duration increase')
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
+    // Total Spent = all debits (booking charges)
+    const totalSpent = transactions
+      .filter(t => t.type.toUpperCase() === 'DEBIT')
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     
-    const cancellationRefunds = transactions
-      .filter(t => 
-        t.type.toUpperCase() === 'CREDIT' && 
-        (t.description?.toLowerCase().includes('refund') || 
-         t.description?.toLowerCase().includes('cancel'))
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalSpent = bookingCharges - cancellationRefunds;
+    // Calculate actual remaining balance
+    const creditsRemaining = totalPaid - totalSpent;
 
     // Get all confirmed/completed bookings for this user to calculate hours
     const clientRecords = await prisma.client.findMany({
@@ -92,10 +79,7 @@ export async function GET(req: NextRequest) {
 
     const bookings = await prisma.booking.findMany({
       where: {
-        OR: [
-          { userId: user.id },
-          { clientId: { in: clientIds } }
-        ],
+        clientId: { in: clientIds },
         status: { in: ['COMPLETED', 'CONFIRMED', 'PENDING'] }
       }
     });
@@ -108,10 +92,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       id: wallet.id,
-      balance: wallet.creditsRemaining,  // Use creditsRemaining as the source of truth
+      balance: creditsRemaining,
       totalPaid: Number(totalPaid),
       totalSpent: Number(totalSpent),
-      creditsRemaining: wallet.creditsRemaining,
+      creditsRemaining: creditsRemaining,
       totalBookedHours,
       transactions: wallet.transactions,
       bookingsCount: bookings.length

@@ -54,10 +54,16 @@ export default function DocumentReviewPage() {
   const [expiryDates, setExpiryDates] = useState<{ [key: string]: string }>({});
   const [rejectionReasons, setRejectionReasons] = useState<{ [key: string]: string }>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchInstructorDocuments();
   }, [instructorId]);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchInstructorDocuments = async () => {
     try {
@@ -73,9 +79,12 @@ export default function DocumentReviewPage() {
           policeCheckExpiry: data.policeCheckExpiry ? new Date(data.policeCheckExpiry).toISOString().split('T')[0] : '',
           wwcCheckExpiry: data.wwcCheckExpiry ? new Date(data.wwcCheckExpiry).toISOString().split('T')[0] : '',
         });
+      } else {
+        showToast('error', 'Failed to load instructor documents.');
       }
     } catch (error) {
       console.error('Failed to fetch documents:', error);
+      showToast('error', 'Failed to load instructor documents. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -91,12 +100,14 @@ export default function DocumentReviewPage() {
       });
 
       if (res.ok) {
-        alert('Expiry dates saved successfully');
+        showToast('success', 'Expiry dates saved successfully.');
         fetchInstructorDocuments();
+      } else {
+        showToast('error', 'Failed to save expiry dates.');
       }
     } catch (error) {
       console.error('Failed to save expiry dates:', error);
-      alert('Failed to save expiry dates');
+      showToast('error', 'Failed to save expiry dates. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -111,12 +122,14 @@ export default function DocumentReviewPage() {
       });
 
       if (res.ok) {
-        alert('Documents approved successfully');
+        showToast('success', 'Documents approved successfully.');
         fetchInstructorDocuments();
+      } else {
+        showToast('error', 'Failed to approve documents.');
       }
     } catch (error) {
       console.error('Failed to approve documents:', error);
-      alert('Failed to approve documents');
+      showToast('error', 'Failed to approve documents. Please try again.');
     }
   };
 
@@ -134,12 +147,14 @@ export default function DocumentReviewPage() {
       });
 
       if (res.ok) {
-        alert('Document rejected. Instructor will be notified.');
+        showToast('success', 'Document rejected. Instructor will be notified.');
         fetchInstructorDocuments();
+      } else {
+        showToast('error', 'Failed to reject document.');
       }
     } catch (error) {
       console.error('Failed to reject document:', error);
-      alert('Failed to reject document');
+      showToast('error', 'Failed to reject document. Please try again.');
     }
   };
 
@@ -316,6 +331,19 @@ export default function DocumentReviewPage() {
           </button>
         </div>
       </div>
+
+      {/* Toast notifications */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
+              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

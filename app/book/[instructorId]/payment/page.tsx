@@ -21,6 +21,7 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
   const { bookingState, resetBooking } = useBooking();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorData, setErrorData] = useState<any>(null);
   const [success, setSuccess] = useState(false);
   
   const stripe = useStripe();
@@ -89,7 +90,18 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
 
       if (!bookingResponse.ok) {
         const errorData = await bookingResponse.json();
-        throw new Error(errorData.error || 'Failed to create booking');
+        
+        // Store error data for display
+        setErrorData(errorData);
+        
+        // Handle email already exists error
+        if (errorData.code === 'EMAIL_EXISTS') {
+          setError(errorData.message);
+        } else {
+          setError(errorData.error || 'Failed to create booking');
+        }
+        
+        return; // Stop processing
       }
 
       const bookingResult = await bookingResponse.json();
@@ -223,7 +235,46 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
             <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
-            <p className="text-sm text-red-800 font-medium">{error}</p>
+            <div className="flex-1">
+              <p className="text-sm text-red-800 font-medium">{error}</p>
+              
+              {/* Show helpful actions for EMAIL_EXISTS error */}
+              {errorData?.code === 'EMAIL_EXISTS' && (
+                <div className="mt-3 space-y-2">
+                  {errorData.help && (
+                    <p className="text-sm text-red-700">{errorData.help}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {errorData.actions?.map((action: any, index: number) => (
+                      action.url ? (
+                        <a
+                          key={index}
+                          href={action.url}
+                          className={`inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                            action.primary
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {action.label}
+                        </a>
+                      ) : (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            setError(null);
+                            setErrorData(null);
+                          }}
+                          className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors"
+                        >
+                          {action.label}
+                        </button>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

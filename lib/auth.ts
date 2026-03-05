@@ -19,8 +19,8 @@ export const authOptions: NextAuthOptions = {
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
           include: {
-            instructor: true,
-            clients: true
+            clients: true,
+            instructor: true
           }
         })
 

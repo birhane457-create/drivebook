@@ -19,13 +19,15 @@ export async function GET(req: NextRequest) {
       where: { id: session.user.instructorId },
       select: {
         syncGoogleCalendar: true,
-        googleTokenExpiry: true
+        googleTokenExpiry: true,
+        calendarBufferMode: true
       }
     })
 
     return NextResponse.json({
       connected: instructor?.syncGoogleCalendar || false,
-      tokenExpiry: instructor?.googleTokenExpiry
+      tokenExpiry: instructor?.googleTokenExpiry,
+      bufferMode: instructor?.calendarBufferMode || 'auto'
     })
   } catch (error) {
     console.error('Get calendar status error:', error)

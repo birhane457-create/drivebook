@@ -15,8 +15,9 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // Instructor dashboard
-  if (session.user.role === 'INSTRUCTOR' || session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN') {
+  // ✅ SECURITY: Only INSTRUCTOR role can access instructor dashboard
+  // Admins should use /admin routes, not /dashboard routes
+  if (session.user.role === 'INSTRUCTOR') {
     if (!session.user.instructorId) {
       redirect('/login')
     }
@@ -37,6 +38,11 @@ export default async function DashboardLayout({
         {children}
       </div>
     )
+  }
+
+  // ✅ SECURITY: Redirect admins to admin area, not instructor dashboard
+  if (session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN') {
+    redirect('/admin')
   }
 
   redirect('/login')

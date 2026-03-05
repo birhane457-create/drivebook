@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
 import BookingFormNew from '@/components/BookingFormNew'
 
@@ -28,8 +29,13 @@ interface Booking {
 
 export default function EditBookingPage({ params }: { params: { id: string } }) {
   const router = useRouter()
+  const { data: session } = useSession()
   const [loading, setLoading] = useState(true)
   const [booking, setBooking] = useState<Booking | null>(null)
+
+  // Determine redirect URL based on user role
+  const isAdmin = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN'
+  const redirectUrl = isAdmin ? '/admin/bookings' : '/dashboard/bookings'
 
   useEffect(() => {
     fetchBooking()
@@ -43,7 +49,7 @@ export default function EditBookingPage({ params }: { params: { id: string } }) 
         setBooking(data)
       } else {
         alert('Booking not found')
-        router.push('/dashboard/bookings')
+        router.push(redirectUrl)
       }
     } catch (error) {
       console.error('Failed to fetch booking:', error)
@@ -63,7 +69,7 @@ export default function EditBookingPage({ params }: { params: { id: string } }) 
 
       if (response.ok) {
         alert('Booking cancelled successfully!')
-        router.push('/dashboard/bookings')
+        router.push(redirectUrl)
       } else {
         const error = await response.json()
         alert(error.error || 'Failed to cancel booking')
@@ -142,6 +148,7 @@ export default function EditBookingPage({ params }: { params: { id: string } }) 
             bookingType: booking.bookingType,
             status: booking.status
           }}
+          redirectAfterUpdate={redirectUrl}
         />
 
         <div className="mt-6">

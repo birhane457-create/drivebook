@@ -36,7 +36,17 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    return NextResponse.json(bookings);
+    // Add fallback fields for bookings without client relation
+    const bookingsWithFallback = bookings.map(booking => ({
+      ...booking,
+      client: booking.client || {
+        name: (booking as any).clientName || 'Unknown',
+        email: (booking as any).clientEmail || 'No email',
+        phone: (booking as any).clientPhone || 'N/A',
+      }
+    }));
+
+    return NextResponse.json(bookingsWithFallback);
   } catch (error) {
     console.error('Admin bookings fetch error:', error);
     return NextResponse.json(

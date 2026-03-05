@@ -24,16 +24,15 @@ export async function GET(req: NextRequest) {
         name: true,
         phone: true,
         licenseNumber: true,
-        licenseExpiry: true,
         insuranceNumber: true,
-        insuranceExpiry: true,
-        policeCheckExpiry: true,
-        wwcCheckExpiry: true,
         licenseImageFront: true,
         licenseImageBack: true,
         insurancePolicyDoc: true,
         policeCheckDoc: true,
         wwcCheckDoc: true,
+        photoIdDoc: true,
+        certificationDoc: true,
+        vehicleRegistrationDoc: true,
         documentsVerified: true,
         isActive: true,
         user: {
@@ -44,60 +43,9 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const now = new Date();
-    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
     const compliance = instructors.map((instructor: any) => {
       const issues = [];
       let status: 'valid' | 'expiring' | 'expired' = 'valid';
-
-      // Check license
-      if (!instructor.licenseExpiry) {
-        issues.push('License expiry date not set');
-        status = 'expired';
-      } else if (new Date(instructor.licenseExpiry) < now) {
-        issues.push('License expired');
-        status = 'expired';
-      } else if (new Date(instructor.licenseExpiry) < thirtyDaysFromNow) {
-        issues.push('License expiring soon');
-        if (status === 'valid') status = 'expiring';
-      }
-
-      // Check insurance
-      if (!instructor.insuranceExpiry) {
-        issues.push('Insurance expiry date not set');
-        status = 'expired';
-      } else if (new Date(instructor.insuranceExpiry) < now) {
-        issues.push('Insurance expired');
-        status = 'expired';
-      } else if (new Date(instructor.insuranceExpiry) < thirtyDaysFromNow) {
-        issues.push('Insurance expiring soon');
-        if (status === 'valid') status = 'expiring';
-      }
-
-      // Check police check
-      if (!instructor.policeCheckExpiry) {
-        issues.push('Police check expiry date not set');
-        status = 'expired';
-      } else if (new Date(instructor.policeCheckExpiry) < now) {
-        issues.push('Police check expired');
-        status = 'expired';
-      } else if (new Date(instructor.policeCheckExpiry) < thirtyDaysFromNow) {
-        issues.push('Police check expiring soon');
-        if (status === 'valid') status = 'expiring';
-      }
-
-      // Check WWC
-      if (!instructor.wwcCheckExpiry) {
-        issues.push('WWC check expiry date not set');
-        status = 'expired';
-      } else if (new Date(instructor.wwcCheckExpiry) < now) {
-        issues.push('WWC check expired');
-        status = 'expired';
-      } else if (new Date(instructor.wwcCheckExpiry) < thirtyDaysFromNow) {
-        issues.push('WWC check expiring soon');
-        if (status === 'valid') status = 'expiring';
-      }
 
       // Check documents uploaded
       if (!instructor.licenseImageFront || !instructor.licenseImageBack) {
@@ -116,20 +64,34 @@ export async function GET(req: NextRequest) {
         issues.push('WWC check document missing');
         status = 'expired';
       }
+      if (!instructor.photoIdDoc) {
+        issues.push('Photo ID missing');
+        status = 'expired';
+      }
+      if (!instructor.certificationDoc) {
+        issues.push('Certification document missing');
+        status = 'expired';
+      }
+      if (!instructor.vehicleRegistrationDoc) {
+        issues.push('Vehicle registration missing');
+        status = 'expired';
+      }
+
+      if (!instructor.documentsVerified && issues.length === 0) {
+        issues.push('Documents pending verification');
+        status = 'expiring';
+      }
 
       return {
         instructorId: instructor.id,
         userId: instructor.userId,
         name: instructor.name,
-        email: instructor.user.email,
+        email: instructor.user?.email || 'No email',
         phone: instructor.phone,
         status,
         issues,
         isActive: instructor.isActive,
-        licenseExpiry: instructor.licenseExpiry,
-        insuranceExpiry: instructor.insuranceExpiry,
-        policeCheckExpiry: instructor.policeCheckExpiry,
-        wwcCheckExpiry: instructor.wwcCheckExpiry,
+        documentsVerified: instructor.documentsVerified,
       };
     });
 
@@ -188,56 +150,53 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'autoProcess') {
-      // Auto-process all instructors
+      // Auto-process all instructors - check for missing documents
       const instructors: any = await (prisma.instructor.findMany as any)({
         where: {
           approvalStatus: { in: ['APPROVED'] }
         },
         include: { user: true }
       });
-
-      const now = new Date();
-      const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       
       let deactivated = 0;
       let reminded = 0;
 
       for (const instructor of instructors) {
-        const hasExpired = 
-          (instructor.licenseExpiry && instructor.licenseExpiry < now) ||
-          (instructor.insuranceExpiry && instructor.insuranceExpiry < now) ||
-          (instructor.policeCheckExpiry && instructor.policeCheckExpiry < now) ||
-          (instructor.wwcCheckExpiry && instructor.wwcCheckExpiry < now);
+        const missingDocs = [];
+        
+        if (!instructor.licenseImageFront || !instructor.licenseImageBack) missingDocs.push('license');
+        if (!instructor.insurancePolicyDoc) missingDocs.push('insurance');
+        if (!instructor.policeCheckDoc) missingDocs.push('police check');
+        if (!instructor.wwcCheckDoc) missingDocs.push('WWC');
+        if (!instructor.photoIdDoc) missingDocs.push('photo ID');
+        if (!instructor.certificationDoc) missingDocs.push('certification');
+        if (!instructor.vehicleRegistrationDoc) missingDocs.push('vehicle registration');
 
-        const isExpiringSoon = 
-          (instructor.licenseExpiry && instructor.licenseExpiry < thirtyDaysFromNow) ||
-          (instructor.insuranceExpiry && instructor.insuranceExpiry < thirtyDaysFromNow) ||
-          (instructor.policeCheckExpiry && instructor.policeCheckExpiry < thirtyDaysFromNow) ||
-          (instructor.wwcCheckExpiry && instructor.wwcCheckExpiry < thirtyDaysFromNow);
-
-        if (hasExpired && instructor.isActive) {
-          // Deactivate
-          await prisma.instructor.update({
-            where: { id: instructor.id },
-            data: { isActive: false }
-          });
-          deactivated++;
-
-          // Send notification
-          if (instructor.phone) {
-            await smsService.sendSMS({
-              to: instructor.phone,
-              message: `DriveBook: Your account has been suspended due to expired documents. Please update your license/insurance/police check/WWC to reactivate.`
+        if (missingDocs.length > 0 && instructor.isActive) {
+          // Deactivate if critical documents missing
+          if (missingDocs.includes('license') || missingDocs.includes('insurance')) {
+            await prisma.instructor.update({
+              where: { id: instructor.id },
+              data: { isActive: false }
             });
-          }
-        } else if (isExpiringSoon && instructor.isActive) {
-          // Send reminder
-          if (instructor.phone) {
-            await smsService.sendSMS({
-              to: instructor.phone,
-              message: `DriveBook Alert: Your documents are expiring soon. Update them in the app to avoid suspension.`
-            });
-            reminded++;
+            deactivated++;
+
+            // Send notification
+            if (instructor.phone) {
+              await smsService.sendSMS({
+                to: instructor.phone,
+                message: `DriveBook: Your account has been suspended due to missing documents: ${missingDocs.join(', ')}. Please upload them to reactivate.`
+              });
+            }
+          } else {
+            // Send reminder for non-critical documents
+            if (instructor.phone) {
+              await smsService.sendSMS({
+                to: instructor.phone,
+                message: `DriveBook Alert: Please upload missing documents: ${missingDocs.join(', ')}.`
+              });
+              reminded++;
+            }
           }
         }
       }

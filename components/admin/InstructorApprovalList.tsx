@@ -234,7 +234,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                       )}
                       <div className="ml-3">
                         <div className="text-sm font-medium text-gray-900">{instructor.name}</div>
-                        <div className="text-xs text-gray-500">{instructor.user.email}</div>
+                        <div className="text-xs text-gray-500">{instructor.user?.email || instructor.email || 'No email'}</div>
                       </div>
                     </div>
                   </td>
@@ -317,7 +317,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                         <div>
                           <p className="font-semibold text-gray-700 mb-2">Contact</p>
                           <p className="text-gray-600">Phone: {instructor.phone}</p>
-                          <p className="text-gray-600">Email: {instructor.user.email}</p>
+                          <p className="text-gray-600">Email: {instructor.user?.email || instructor.email || 'No email'}</p>
                           <p className="text-gray-600">Joined: {new Date(instructor.createdAt).toLocaleDateString()}</p>
                         </div>
                         <div>

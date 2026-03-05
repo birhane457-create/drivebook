@@ -17,7 +17,14 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { licenseExpiry, insuranceExpiry, policeCheckExpiry, wwcCheckExpiry } = body;
+    const { 
+      licenseExpiry, 
+      insuranceExpiry, 
+      policeCheckExpiry, 
+      wwcCheckExpiry,
+      certificationExpiry,
+      vehicleRegistrationExpiry 
+    } = body;
 
     const updateData: any = {};
     
@@ -25,6 +32,8 @@ export async function POST(
     if (insuranceExpiry) updateData.insuranceExpiry = new Date(insuranceExpiry);
     if (policeCheckExpiry) updateData.policeCheckExpiry = new Date(policeCheckExpiry);
     if (wwcCheckExpiry) updateData.wwcCheckExpiry = new Date(wwcCheckExpiry);
+    if (certificationExpiry) updateData.certificationExpiry = new Date(certificationExpiry);
+    if (vehicleRegistrationExpiry) updateData.vehicleRegistrationExpiry = new Date(vehicleRegistrationExpiry);
 
     await prisma.instructor.update({
       where: { id: params.instructorId },

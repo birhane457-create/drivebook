@@ -8,12 +8,17 @@ import { z } from 'zod'
 export const dynamic = 'force-dynamic';
 const settingsSchema = z.object({
   hourlyRate: z.number().positive().optional(),
-  serviceRadiusKm: z.number().min(5).max(100).optional(),
+  serviceRadiusKm: z.number().min(1).max(100).optional(), // Changed from min(5) to min(1)
   vehicleTypes: z.array(z.enum(['AUTO', 'MANUAL'])).optional(),
-  workingHours: z.record(z.array(z.object({
-    start: z.string(),
-    end: z.string()
-  }))).optional(),
+  workingHours: z.object({
+    monday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+    tuesday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+    wednesday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+    thursday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+    friday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+    saturday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+    sunday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+  }).optional(),
   licenseNumber: z.string().optional(),
   insuranceNumber: z.string().optional(),
   // New booking slot configuration fields
@@ -32,7 +37,23 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json()
-    const data = settingsSchema.parse(body)
+    console.log('📥 Settings update request body:', JSON.stringify(body, null, 2))
+    
+    // Validate the data
+    const validationResult = settingsSchema.safeParse(body)
+    
+    if (!validationResult.success) {
+      console.error('❌ Validation failed:', JSON.stringify(validationResult.error, null, 2))
+      const errorDetails = validationResult.error.errors?.map(e => `${e.path.join('.')}: ${e.message}`).join(', ') || 'Invalid data format'
+      return NextResponse.json({ 
+        error: 'Validation failed',
+        details: errorDetails,
+        fields: validationResult.error.errors || []
+      }, { status: 400 })
+    }
+    
+    const data = validationResult.data
+    console.log('✅ Validation passed')
 
     // Build update object with only provided fields
     const updateData: any = {}
@@ -59,10 +80,33 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(instructor)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      console.error('Settings validation error:', error.errors)
+      return NextResponse.json({ 
+        error: 'Validation failed',
+        details: error.errors?.map(e => `${e.path.join('.')}: ${e.message}`).join(', ') || 'Invalid data',
+        fields: error.errors 
+      }, { status: 400 })
     }
+    
+    // Log the actual error for debugging
     console.error('Settings update error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Error type:', typeof error)
+    console.error('Error constructor:', error?.constructor?.name)
+    
+    // Check if it's a Prisma error
+    if (error && typeof error === 'object' && 'code' in error) {
+      const prismaError = error as any
+      return NextResponse.json({ 
+        error: 'Database error',
+        details: prismaError.message || 'Failed to update settings',
+        code: prismaError.code
+      }, { status: 400 })
+    }
+    
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }
 

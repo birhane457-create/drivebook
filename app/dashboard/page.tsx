@@ -197,7 +197,12 @@ export default async function DashboardPage() {
   }
 
   // Instructor dashboard
-  if (!session.user.instructorId) {
+  if (session.user.role === 'INSTRUCTOR') {
+    if (!session.user.instructorId) {
+      redirect('/login')
+    }
+  } else {
+    // User is neither CLIENT nor INSTRUCTOR, redirect to login
     redirect('/login')
   }
 

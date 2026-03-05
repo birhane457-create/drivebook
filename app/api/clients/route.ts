@@ -8,9 +8,9 @@ import { safeClientSelect, sanitizeClientForInstructor, logDataAccess } from '@/
 
 export const dynamic = 'force-dynamic';
 const clientSchema = z.object({
-  name: z.string(),
-  phone: z.string(),
-  email: z.string().email(),
+  name: z.string().min(1, 'Name is required'),
+  phone: z.string().min(1, 'Phone is required'),
+  email: z.string().email('Valid email address is required'),
   addressText: z.string().optional(),
   addressLatitude: z.number().optional(),
   addressLongitude: z.number().optional(),
@@ -44,7 +44,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(client, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      const errorMessages = error.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ')
+      return NextResponse.json({ 
+        error: 'Validation failed', 
+        details: errorMessages,
+        fields: error.errors 
+      }, { status: 400 })
     }
     console.error('Client creation error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -15,10 +15,9 @@ export async function GET(req: NextRequest) {
     // Normalize email: lowercase and trim
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if user exists with this email
+    // Check if user exists in database
     const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      select: { id: true, email: true }
+      where: { email: normalizedEmail }
     });
 
     return NextResponse.json({

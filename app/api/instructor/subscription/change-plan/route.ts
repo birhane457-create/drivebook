@@ -31,7 +31,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
+    // Parse request body with error handling
+    let body;
+    try {
+      const text = await req.text();
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { error: 'Request body is empty' },
+          { status: 400 }
+        );
+      }
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
     const { newTier, billingCycle = 'monthly' } = body;
 
     // Validate tier

@@ -30,10 +30,6 @@ export async function GET(
         photoIdDoc: true,
         certificationDoc: true,
         vehicleRegistrationDoc: true,
-        licenseExpiry: true,
-        insuranceExpiry: true,
-        policeCheckExpiry: true,
-        wwcCheckExpiry: true,
         documentsVerified: true,
         documentsVerifiedAt: true,
         user: {

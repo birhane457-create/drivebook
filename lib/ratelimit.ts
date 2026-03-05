@@ -13,10 +13,12 @@ import { Redis } from '@upstash/redis';
  *    UPSTASH_REDIS_REST_TOKEN=...
  */
 
-// Check if Upstash is configured
+// Check if Upstash is configured (and not using placeholder values)
 const isConfigured = !!(
   process.env.UPSTASH_REDIS_REST_URL && 
-  process.env.UPSTASH_REDIS_REST_TOKEN
+  process.env.UPSTASH_REDIS_REST_TOKEN &&
+  !process.env.UPSTASH_REDIS_REST_URL.includes('your-database') &&
+  !process.env.UPSTASH_REDIS_REST_TOKEN.includes('your-upstash')
 );
 
 // Create Redis client (or null if not configured)
@@ -233,9 +235,9 @@ export async function checkRateLimit(
 }
 
 /**
- * STRICT rate limit check - FAIL CLOSED
+ * STRICT rate limit check - FAIL CLOSED (but OPEN in development)
  * Use for financial and critical operations
- * If rate limiter fails, REJECT the request for safety
+ * If rate limiter fails, REJECT the request for safety (except in development)
  */
 export async function checkRateLimitStrict(
   limiter: any,
@@ -264,7 +266,14 @@ export async function checkRateLimitStrict(
     return { success: true, headers };
   } catch (error) {
     console.error('Rate limit check error (strict mode):', error);
-    // FAIL CLOSED - reject the request for safety
+    
+    // In development without Upstash, fail open
+    if (process.env.NODE_ENV === 'development' && !isConfigured) {
+      console.warn('⚠️  Rate limiter failed in development, allowing request (Upstash not configured)');
+      return { success: true };
+    }
+    
+    // FAIL CLOSED in production - reject the request for safety
     console.error('🚨 Rate limiter failed in strict mode, REJECTING request for safety');
     return {
       success: false,

@@ -35,10 +35,8 @@ export async function POST(
         where: { id: params.id },
         data: {
           approvalStatus: 'APPROVED',
-          approvedAt: new Date(),
-          approvedBy: session.user.id,
           isActive: true,
-        } as any,
+        },
         include: {
           user: true,
         },

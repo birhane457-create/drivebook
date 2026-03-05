@@ -16,14 +16,14 @@ export async function GET(req: NextRequest) {
     // Get all transactions
     const transactions = await (prisma as any).transaction.findMany({
       include: {
-        instructor: {
-          select: {
-            id: true,
-            name: true,
-          }
-        },
         booking: {
           select: {
+            instructor: {
+              select: {
+                id: true,
+                name: true,
+              }
+            },
             client: {
               select: {
                 name: true,
@@ -83,10 +83,10 @@ export async function GET(req: NextRequest) {
     const instructorEarnings = new Map<string, { name: string; earnings: number; count: number }>();
     
     transactions
-      .filter((t: any) => t.status === 'COMPLETED')
+      .filter((t: any) => t.status === 'COMPLETED' && t.booking?.instructor)
       .forEach((t: any) => {
         const existing = instructorEarnings.get(t.instructorId) || { 
-          name: t.instructor.name, 
+          name: t.booking.instructor.name, 
           earnings: 0, 
           count: 0 
         };

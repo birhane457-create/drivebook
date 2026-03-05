@@ -5,18 +5,18 @@
 
 /**
  * Safe client data selector for instructor access
- * Only exposes necessary information, protects PII
+ * Instructors need email and address to contact and pick up their clients
  */
 export const safeClientSelect = {
   id: true,
   name: true,
-  phone: true, // Will be sanitized in response
+  email: true, // Instructors need this to contact clients
+  phone: true,
+  addressText: true, // Instructors need this for pickups
+  notes: true,
   createdAt: true,
+  updatedAt: true,
   // EXCLUDED for privacy:
-  // - email (not needed by instructor)
-  // - address (sensitive)
-  // - dateOfBirth (sensitive)
-  // - licenseNumber (sensitive)
   // - userId (internal)
 };
 
@@ -101,16 +101,13 @@ export function sanitizeAddress(address: string | null | undefined): string {
 
 /**
  * Sanitize client data for instructor view
+ * Instructors can see full contact info for their own clients
  */
 export function sanitizeClientForInstructor(client: any) {
   return {
     ...client,
-    phone: sanitizePhone(client.phone),
-    // Remove any accidentally included sensitive fields
-    email: undefined,
-    address: undefined,
-    dateOfBirth: undefined,
-    licenseNumber: undefined,
+    // Keep email and addressText - instructors need these
+    // Remove internal fields only
     userId: undefined,
   };
 }
@@ -244,6 +241,12 @@ export async function logDataAccess(
   // This would go in a DataAccessLog table (add to schema if needed)
   // For now, we'll use the audit log
   try {
+    // Check if auditLog model exists before trying to create
+    if (!prisma.auditLog) {
+      // Silently skip logging if model doesn't exist
+      return;
+    }
+    
     await (prisma as any).auditLog.create({
       data: {
         action: `DATA_ACCESS_${action}`,

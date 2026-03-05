@@ -67,15 +67,19 @@ export async function GET(
             }
           }
         },
-        bookings: {
+        clients: {
           select: {
-            id: true,
-            startTime: true,
-            status: true,
-            price: true,
-            instructor: { select: { name: true } }
-          },
-          orderBy: { startTime: 'desc' }
+            bookings: {
+              select: {
+                id: true,
+                startTime: true,
+                status: true,
+                price: true,
+                instructor: { select: { name: true } }
+              },
+              orderBy: { startTime: 'desc' }
+            }
+          }
         }
       }
     });
@@ -84,35 +88,45 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Flatten bookings from all client records
+    const allBookings = user.clients?.flatMap(c => c.bookings) || [];
+
     // Calculate totals from wallet transactions
     const transactions = user.wallet?.transactions || [];
     
-    // Total Credits Added = only actual money paid by user (exclude admin refunds/credits, duration adjustments)
-    const totalPaid = transactions
+    // Count all CREDIT transactions to wallet (manual adds, initial credits, etc)
+    const walletCredits = transactions
       .filter(t => 
-        t.type === 'CREDIT' && 
+        t.type.toUpperCase() === 'CREDIT' && 
         !t.description?.toLowerCase().includes('duration reduction') &&
-        !t.description?.toLowerCase().includes('manual credit') &&
         !t.description?.toLowerCase().includes('refund') &&
-        !t.description?.toLowerCase().includes('admin')
+        !t.description?.toLowerCase().includes('cancel')
       )
       .reduce((sum, t) => sum + t.amount, 0);
+    
+    // Count booking payments (money paid for bookings)
+    const bookingPayments = allBookings
+      .filter(b => b.status === 'CONFIRMED' || b.status === 'COMPLETED')
+      .reduce((sum, b) => sum + (b.price || 0), 0);
+    
+    // Total paid = wallet credits + booking payments
+    const totalPaid = walletCredits + bookingPayments;
     
     // Net Booking Costs = booking charges minus cancellation refunds
     const bookingCharges = transactions
       .filter(t => 
-        t.type === 'DEBIT' && 
+        t.type.toUpperCase() === 'DEBIT' && 
         !t.description?.toLowerCase().includes('duration increase')
       )
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     
     const cancellationRefunds = transactions
       .filter(t => 
-        t.type === 'CREDIT' && 
+        t.type.toUpperCase() === 'CREDIT' && 
         (t.description?.toLowerCase().includes('refund') || 
          t.description?.toLowerCase().includes('cancel'))
       )
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     
     const totalSpent = bookingCharges - cancellationRefunds;
     
@@ -133,13 +147,13 @@ export async function GET(
         creditsRemaining: Number(balance),
         transactions: transactions
       },
-      bookings: user.bookings?.map((b: any) => ({
+      bookings: allBookings.map((b: any) => ({
         id: b.id,
         startTime: b.startTime,
         status: b.status,
         price: b.price,
         instructor: b.instructor
-      })) || []
+      }))
     });
   } catch (error) {
     console.error('Get client wallet error:', error);

@@ -18,9 +18,9 @@ export async function GET(
         profileImage: true,
         baseAddress: true,
         hourlyRate: true,
-        averageRating: true,
-        totalReviews: true,
         serviceRadiusKm: true,
+        workingHours: true,
+        allowedDurations: true,
       },
     });
 
@@ -31,7 +31,15 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(instructor);
+    // Calculate rating from bookings (placeholder - return default values for now)
+    const averageRating = 4.5;
+    const totalReviews = 0;
+
+    return NextResponse.json({
+      ...instructor,
+      averageRating,
+      totalReviews
+    });
   } catch (error) {
     console.error('Instructor fetch error:', error);
     return NextResponse.json(

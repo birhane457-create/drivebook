@@ -58,9 +58,14 @@ export default function ClientsPage() {
         setFormData({ name: '', phone: '', email: '', addressText: '', notes: '' })
         setShowForm(false)
         fetchClients()
+        alert('Client added successfully!')
+      } else {
+        const error = await res.json()
+        alert(error.details || error.error || 'Failed to create client. Please ensure all required fields are filled.')
       }
     } catch (error) {
       console.error('Failed to create client:', error)
+      alert('Failed to create client. Please check your internet connection.')
     }
   }
 
@@ -305,13 +310,29 @@ export default function ClientsPage() {
                               </div>
                             </div>
                             <div>
-                              <label className="block text-sm font-medium mb-1">Email</label>
+                              <label className="block text-sm font-medium mb-1">
+                                Email
+                                {client.userId && (
+                                  <span className="ml-2 text-xs text-blue-600 font-normal">
+                                    (Has user account - cannot edit)
+                                  </span>
+                                )}
+                              </label>
                               <input
                                 type="email"
                                 value={editData.email}
                                 onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                                disabled={!!client.userId}
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 ${
+                                  client.userId ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                                title={client.userId ? 'This client has a user account. They must change their email through account settings.' : ''}
                               />
+                              {client.userId && (
+                                <p className="text-xs text-gray-600 mt-1">
+                                  This client can login and must change their email through their account settings.
+                                </p>
+                              )}
                             </div>
                             <div>
                               <label className="block text-sm font-medium mb-1">Address</label>

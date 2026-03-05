@@ -27,10 +27,16 @@ export default function DocumentCompliancePage() {
   const [filter, setFilter] = useState<'all' | 'valid' | 'expiring' | 'expired'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchCompliance();
   }, []);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchCompliance = async () => {
     try {
@@ -38,9 +44,12 @@ export default function DocumentCompliancePage() {
       if (res.ok) {
         const data = await res.json();
         setRecords(data);
+      } else {
+        showToast('error', 'Failed to load compliance data.');
       }
     } catch (error) {
       console.error('Failed to fetch compliance:', error);
+      showToast('error', 'Failed to load compliance data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -69,11 +78,14 @@ export default function DocumentCompliancePage() {
       });
 
       if (res.ok) {
-        alert('Instructor deactivated');
+        showToast('success', 'Instructor deactivated.');
         fetchCompliance();
+      } else {
+        showToast('error', 'Failed to deactivate instructor.');
       }
     } catch (error) {
       console.error('Failed to deactivate:', error);
+      showToast('error', 'Failed to deactivate instructor. Please try again.');
     }
   };
 
@@ -86,10 +98,13 @@ export default function DocumentCompliancePage() {
       });
 
       if (res.ok) {
-        alert('SMS reminder sent');
+        showToast('success', 'SMS reminder sent.');
+      } else {
+        showToast('error', 'Failed to send SMS reminder.');
       }
     } catch (error) {
       console.error('Failed to send reminder:', error);
+      showToast('error', 'Failed to send SMS reminder. Please try again.');
     }
   };
 
@@ -108,11 +123,14 @@ export default function DocumentCompliancePage() {
 
       if (res.ok) {
         const result = await res.json();
-        alert(result.message);
+        showToast('success', result.message || 'Auto-process completed.');
         fetchCompliance();
+      } else {
+        showToast('error', 'Failed to auto-process compliance records.');
       }
     } catch (error) {
       console.error('Failed to auto-process:', error);
+      showToast('error', 'Failed to auto-process compliance records. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -371,6 +389,19 @@ export default function DocumentCompliancePage() {
           </div>
         )}
       </div>
+
+      {/* Toast notifications */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
+              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

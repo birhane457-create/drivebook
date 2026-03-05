@@ -281,7 +281,7 @@ export async function GET(req: NextRequest) {
     const bookings = await prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
-        status: { in: ['CONFIRMED', 'COMPLETED', 'CANCELLED'] } // ✅ Exclude PENDING (failed/incomplete payments)
+        status: { in: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] } // ✅ Include PENDING for manual confirmation
       },
       include: {
         client: true

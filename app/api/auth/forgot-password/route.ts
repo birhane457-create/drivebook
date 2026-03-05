@@ -45,23 +45,38 @@ export async function POST(req: NextRequest) {
     // Create reset URL
     const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${resetToken}`;
 
-    // Send email
-    await (emailService as any).sendPasswordResetEmail({
-      email: user.email,
-      resetUrl,
-      userName: user.email
-    });
+    // Send email (skip if SMTP not configured)
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        await (emailService as any).sendPasswordResetEmail({
+          email: user.email,
+          resetUrl,
+          userName: user.email
+        });
+      } catch (emailError) {
+        console.error('Failed to send reset email:', emailError);
+        // Continue anyway - token is saved in database
+      }
+    } else {
+      console.log('SMTP not configured, skipping email. Reset URL:', resetUrl);
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'If an account exists with that email, a password reset link has been sent.'
+      message: 'If an account exists with that email, a password reset link has been sent.',
+      // For development: include reset URL in response (REMOVE IN PRODUCTION!)
+      ...(process.env.NODE_ENV === 'development' && { resetUrl })
     });
 
   } catch (error) {
     console.error('Forgot password error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process request' },
-      { status: 500 }
-    );
+    
+    // Return more detailed error in development
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
+    const errorDetails = process.env.NODE_ENV === 'development' 
+      ? { error: errorMessage, details: error }
+      : { error: 'Failed to process request' };
+    
+    return NextResponse.json(errorDetails, { status: 500 });
   }
 }

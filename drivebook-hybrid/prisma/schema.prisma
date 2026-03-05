@@ -9,33 +9,133 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
+// User model for authentication
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  password  String?
+  name      String?
+  role      String   @default("CLIENT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  clients   Client[]
+  wallet    ClientWallet?
+}
+
+// Client model for booking clients
+model Client {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String?  @db.ObjectId
+  user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  instructorId          String   @db.ObjectId
+  instructor            Instructor @relation(fields: [instructorId], references: [id])
+  name                  String
+  email                 String
+  phone                 String
+  preferredInstructorId String?  @db.ObjectId
+  bookings              Booking[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 model Instructor {
-  id                  String   @id @default(uuid())
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
   name                String
-  phone               String   @unique
+  phone               String
   hourlyRate          Float
   serviceAreas        String?
   copilotAgentEndpoint String?
   bookings            Booking[]
+  clients             Client[]
 }
 
 model Booking {
-  id           String   @id @default(uuid())
-  instructor   Instructor @relation(fields: [instructorId], references: [id])
-  instructorId String
-  clientName   String
-  clientPhone  String
-  date         String
-  time         String
-  duration     Int
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  instructor            Instructor @relation(fields: [instructorId], references: [id])
+  instructorId          String   @db.ObjectId
+  client                Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId              String?  @db.ObjectId
+  clientName            String?
+  clientPhone           String?
+  bookingType           String?
+  status                String   @default("PENDING")
+  startTime             DateTime?
+  endTime               DateTime?
+  duration              Float?
+  price                 Float    @default(0)
+  platformFee           Float    @default(0)
+  instructorPayout      Float    @default(0)
+  commissionRate        Float    @default(0)
+  isPaid                Boolean  @default(false)
+  paidAt                DateTime?
+  paymentCaptured       Boolean  @default(false)
+  paymentCapturedAt     DateTime?
+  paymentIntentId       String?
+  pickupAddress         String?
+  notes                 String?
+  isFirstBooking        Boolean  @default(false)
+  isPackageBooking      Boolean  @default(false)
+  parentBookingId       String?  @db.ObjectId
+  packageHours          Float?
+  packageHoursUsed      Float    @default(0)
+  packageHoursRemaining Float?
+  packageExpiryDate     DateTime?
+  packageStatus         String?
+  createdBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  transactions          Transaction[]
+}
+
+model Transaction {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId             String   @db.ObjectId
+  booking               Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  instructorId          String   @db.ObjectId
+  type                  String
+  amount                Float
+  platformFee           Float    @default(0)
+  instructorPayout      Float    @default(0)
+  commissionRate        Float    @default(0)
+  status                String   @default("PENDING")
+  description           String?
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  metadata              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+model ClientWallet {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @unique @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance     Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  walletId    String   @db.ObjectId
+  wallet      ClientWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount      Float
+  type        String
+  description String?
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Message {
-  id           String   @id @default(uuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   callerNumber String
   callerName   String?
   message      String

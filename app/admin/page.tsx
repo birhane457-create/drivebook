@@ -31,6 +31,7 @@ export default async function AdminDashboard() {
       orderBy: { id: 'desc' },
       include: {
         instructor: { select: { name: true } },
+        client: { select: { name: true, phone: true } },
       },
     }),
     Promise.resolve({ pro: 0, business: 0, trial: 0, pastDue: 0 }), // Subscription stats not available
@@ -173,8 +174,12 @@ export default async function AdminDashboard() {
                   <div key={booking.id} className="p-4">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="font-medium text-gray-900">{booking.clientName || 'N/A'}</p>
-                        <p className="text-xs text-gray-500">{booking.clientPhone || 'N/A'}</p>
+                        <p className="font-medium text-gray-900">
+                          {booking.client?.name || booking.clientName || 'N/A'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {booking.client?.phone || booking.clientPhone || 'N/A'}
+                        </p>
                       </div>
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         (booking as any).status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
@@ -220,14 +225,18 @@ export default async function AdminDashboard() {
                   recentBookings.map((booking) => (
                     <tr key={booking.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{booking.clientName || 'N/A'}</div>
-                        <div className="text-sm text-gray-500">{booking.clientPhone || 'N/A'}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {booking.client?.name || booking.clientName || 'N/A'}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {booking.client?.phone || booking.clientPhone || 'N/A'}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {booking.instructor?.name || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {booking.date || 'N/A'}
+                        {booking.startTime ? new Date(booking.startTime).toLocaleDateString() : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${

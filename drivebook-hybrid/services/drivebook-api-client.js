@@ -7,8 +7,8 @@ const config = require('../utils/config');
 
 class DriveBookAPIClient {
   constructor() {
-    this.baseUrl = config.DRIVEBOOK_BASE_URL || 'http://localhost:3001';
-    this.apiKey = config.DRIVEBOOK_API_KEY || '';
+    this.baseUrl = config.DRIVEBOOK_BASE_URL || 'http://localhost:3000';
+    this.apiKey = config.DRIVEBOOK_API_KEY || 'dev-voice-key-change-in-production';
     this.timeout = 10000;
   }
 
@@ -62,26 +62,10 @@ class DriveBookAPIClient {
 
   // Find instructor by phone number
   async findInstructorByPhone(phone) {
-    const res = await this._request('GET', `/api/instructors?phone=${encodeURIComponent(phone)}`);
+    const res = await this._request('GET', `/api/voice/instructors/lookup?phone=${encodeURIComponent(phone)}`);
     if (!res.success) return null;
     
-    const instructors = Array.isArray(res.data) ? res.data : [res.data];
-    if (instructors.length === 0) return null;
-    
-    const instructor = instructors[0];
-    return {
-      id: instructor.id,
-      name: instructor.name,
-      phone: instructor.phone,
-      hourlyRate: instructor.hourlyRate,
-      approvalStatus: instructor.approvalStatus,
-      subscriptionStatus: instructor.subscriptionStatus,
-      serviceRadiusKm: instructor.serviceRadiusKm,
-      workingHours: instructor.workingHours,
-      baseLatitude: instructor.baseLatitude,
-      baseLongitude: instructor.baseLongitude,
-      copilotAgentEndpoint: instructor.copilotAgentEndpoint || ''
-    };
+    return res.data;
   }
 
   // Get instructor details
@@ -117,27 +101,23 @@ class DriveBookAPIClient {
 
   // Create a booking
   async createBooking(bookingData) {
-    const res = await this._request('POST', `/api/bookings`, {
+    const res = await this._request('POST', `/api/voice/bookings`, {
       instructorId: bookingData.instructorId,
-      clientId: bookingData.clientId,
-      startTime: new Date(bookingData.startTime).toISOString(),
-      endTime: new Date(bookingData.endTime).toISOString(),
-      pickupAddress: bookingData.pickupAddress,
-      pickupLatitude: bookingData.pickupLatitude,
-      pickupLongitude: bookingData.pickupLongitude,
-      dropoffAddress: bookingData.dropoffAddress,
-      dropoffLatitude: bookingData.dropoffLatitude,
-      dropoffLongitude: bookingData.dropoffLongitude,
+      clientPhone: bookingData.clientPhone,
+      clientName: bookingData.clientName,
+      clientEmail: bookingData.clientEmail,
+      date: bookingData.date, // YYYY-MM-DD
+      time: bookingData.time, // HH:MM
+      duration: bookingData.duration || 60,
       notes: bookingData.notes,
-      price: bookingData.price,
-      createdBy: 'voice'
+      pickupAddress: bookingData.pickupAddress
     });
 
     if (!res.success) return { success: false, error: res.error };
     return { 
       success: true, 
-      bookingId: res.data.id,
-      confirmationCode: res.data.confirmationCode || res.data.id.substring(0, 8).toUpperCase()
+      bookingId: res.data.bookingId,
+      message: res.data.message
     };
   }
 

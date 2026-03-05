@@ -12,11 +12,7 @@ export async function GET(
       where: { id: params.id },
       include: {
         client: true,
-        instructor: {
-          include: {
-            user: true
-          }
-        }
+        instructor: true
       }
     })
 
@@ -33,15 +29,12 @@ export async function GET(
       price: booking.price,
       status: booking.status,
       notes: booking.notes,
-      client: {
-        name: booking.client.name,
-        email: booking.client.email,
-        phone: booking.client.phone
-      },
+      clientName: booking.clientName,
+      clientEmail: booking.clientEmail,
+      clientPhone: booking.clientPhone,
       instructor: {
         name: booking.instructor.name,
-        phone: booking.instructor.phone,
-        email: booking.instructor.user.email
+        phone: booking.instructor.phone
       },
       createdAt: booking.createdAt
     })

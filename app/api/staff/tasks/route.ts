@@ -13,19 +13,17 @@ export async function GET(req: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { staffMember: true }
+      where: { email: session.user.email }
     });
 
-    if (!user || (!user.staffMember && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Not a staff member' }, { status: 403 });
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN' && user.role !== 'STAFF')) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
     const priority = searchParams.get('priority');
     const category = searchParams.get('category');
-    const assignedToMe = searchParams.get('assignedToMe') === 'true';
 
     // Build filter
     const where: any = {};
@@ -33,11 +31,6 @@ export async function GET(req: NextRequest) {
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (category) where.category = category;
-    
-    // If staff member, filter by their department or assigned tasks
-    if (user.staffMember) {
-      if (assignedToMe) {
-        where.assignedToId = user.staffMember.id;
       } else {
         // Show tasks for their department that are unassigned or assigned to them
         where.OR = [

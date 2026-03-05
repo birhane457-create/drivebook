@@ -26,6 +26,10 @@ export async function GET(req: NextRequest) {
         email: true,
         createdAt: true,
         userId: true,
+        instructorId: true,
+        bookings: {
+          select: { id: true, status: true, price: true }
+        },
         user: {
           select: {
             wallet: {
@@ -35,9 +39,6 @@ export async function GET(req: NextRequest) {
                   select: { amount: true, type: true, description: true }
                 }
               }
-            },
-            bookings: {
-              select: { id: true, status: true }
             }
           }
         }
@@ -49,36 +50,41 @@ export async function GET(req: NextRequest) {
     const formattedUsers = clients.map((client: any) => {
       const wallet = client.user?.wallet;
       const transactions = wallet?.transactions || [];
-      const bookings = client.user?.bookings || [];
+      const bookings = client.bookings || [];
       
-      // Calculate from wallet transactions
-      // Only count actual money paid by user (initial credits, Stripe payments)
-      // Exclude: duration adjustments, manual admin refunds/credits
-      const totalPaid = transactions
+      // Count all CREDIT transactions to wallet (manual adds, refunds, etc)
+      const walletCredits = transactions
         .filter((t: any) => 
-          t.type === 'CREDIT' && 
+          t.type.toUpperCase() === 'CREDIT' && 
           !t.description?.toLowerCase().includes('duration reduction') &&
-          !t.description?.toLowerCase().includes('manual credit') &&
           !t.description?.toLowerCase().includes('refund') &&
-          !t.description?.toLowerCase().includes('admin')
+          !t.description?.toLowerCase().includes('cancel')
         )
         .reduce((sum: number, t: any) => sum + t.amount, 0);
+      
+      // Count booking payments (money paid for bookings)
+      const bookingPayments = bookings
+        .filter((b: any) => b.status === 'CONFIRMED' || b.status === 'COMPLETED')
+        .reduce((sum: number, b: any) => sum + (b.price || 0), 0);
+      
+      // Total paid = wallet credits + booking payments
+      const totalPaid = walletCredits + bookingPayments;
       
       // Net Booking Costs = booking charges minus cancellation refunds
       const bookingCharges = transactions
         .filter((t: any) => 
-          t.type === 'DEBIT' && 
+          t.type.toUpperCase() === 'DEBIT' && 
           !t.description?.toLowerCase().includes('duration increase')
         )
-        .reduce((sum: number, t: any) => sum + t.amount, 0);
+        .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
       
       const cancellationRefunds = transactions
         .filter((t: any) => 
-          t.type === 'CREDIT' && 
+          t.type.toUpperCase() === 'CREDIT' && 
           (t.description?.toLowerCase().includes('refund') || 
            t.description?.toLowerCase().includes('cancel'))
         )
-        .reduce((sum: number, t: any) => sum + t.amount, 0);
+        .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
       
       const totalSpent = bookingCharges - cancellationRefunds;
       

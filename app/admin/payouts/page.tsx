@@ -26,10 +26,16 @@ export default function AdminPayoutsPage() {
   const [payouts, setPayouts] = useState<PayoutData | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchPayouts();
   }, []);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchPayouts = async () => {
     try {
@@ -37,9 +43,12 @@ export default function AdminPayoutsPage() {
       if (res.ok) {
         const data = await res.json();
         setPayouts(data);
+      } else {
+        showToast('error', 'Failed to load payout data.');
       }
     } catch (error) {
       console.error('Failed to fetch payouts:', error);
+      showToast('error', 'Failed to load payout data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -59,15 +68,15 @@ export default function AdminPayoutsPage() {
       });
 
       if (res.ok) {
-        alert('Payout processed successfully!');
+        showToast('success', 'Payout processed successfully.');
         fetchPayouts(); // Refresh data
       } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to process payout');
+        const data = await res.json().catch(() => ({}));
+        showToast('error', (data as any).error || 'Failed to process payout.');
       }
     } catch (error) {
       console.error('Payout error:', error);
-      alert('Failed to process payout');
+      showToast('error', 'Failed to process payout. Please try again.');
     } finally {
       setProcessing(null);
     }
@@ -86,15 +95,15 @@ export default function AdminPayoutsPage() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(`Successfully processed ${data.count} payouts totaling $${data.total.toFixed(2)}`);
+        showToast('success', `Processed ${data.count} payouts totaling $${data.total.toFixed(2)}.`);
         fetchPayouts();
       } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to process payouts');
+        const data = await res.json().catch(() => ({}));
+        showToast('error', (data as any).error || 'Failed to process payouts.');
       }
     } catch (error) {
       console.error('Bulk payout error:', error);
-      alert('Failed to process payouts');
+      showToast('error', 'Failed to process payouts. Please try again.');
     } finally {
       setProcessing(null);
     }
@@ -243,6 +252,19 @@ export default function AdminPayoutsPage() {
           </div>
         </div>
       </div>
+
+      {/* Toast notifications */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
+              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

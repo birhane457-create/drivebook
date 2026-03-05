@@ -105,6 +105,8 @@ paths:
       operationId: createBooking
       tags:
         - Bookings
+      security:
+        - ApiKeyAuth: []
       parameters:
         - name: body
           in: body
@@ -174,6 +176,113 @@ paths:
                 type: string
         '409':
           description: Time slot not available
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '500':
+          description: Server error
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /availability/check:
+    post:
+      summary: Check time slot availability
+      description: Check if a specific time slot is available for booking. Returns alternative times if requested slot is taken.
+      operationId: checkAvailability
+      tags:
+        - Bookings
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: body
+          in: body
+          required: true
+          description: Availability check details
+          schema:
+            type: object
+            required:
+              - instructorId
+              - date
+              - time
+              - duration
+            properties:
+              instructorId:
+                type: string
+                description: Unique identifier of the instructor
+                example: "clx123abc456"
+              date:
+                type: string
+                format: date
+                description: Requested date in YYYY-MM-DD format
+                example: "2026-03-23"
+              time:
+                type: string
+                description: Requested time in HH:MM format (24-hour)
+                example: "13:00"
+              duration:
+                type: integer
+                description: Lesson duration in minutes
+                example: 60
+                default: 60
+      responses:
+        '200':
+          description: Availability check completed
+          schema:
+            type: object
+            properties:
+              available:
+                type: boolean
+                description: Whether the time slot is available
+                example: true
+              instructorName:
+                type: string
+                description: Instructor's name (if available)
+                example: "Debesay Birhane"
+              date:
+                type: string
+                description: Requested date
+                example: "2026-03-23"
+              time:
+                type: string
+                description: Requested time
+                example: "13:00"
+              duration:
+                type: integer
+                description: Lesson duration
+                example: 60
+              reason:
+                type: string
+                description: Reason if not available
+                example: "Time slot already booked"
+              alternatives:
+                type: array
+                description: Alternative available time slots (if requested slot is taken)
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                      example: "2026-03-23"
+                    time:
+                      type: string
+                      example: "14:00"
+                    available:
+                      type: boolean
+                      example: true
+        '400':
+          description: Invalid request data
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '404':
+          description: Instructor not found
           schema:
             type: object
             properties:

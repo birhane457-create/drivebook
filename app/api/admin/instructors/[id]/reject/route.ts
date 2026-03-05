@@ -43,14 +43,13 @@ export async function POST(
         throw new Error('Instructor not found');
       }
 
-      // Update instructor
+      // Update instructor - store rejection reason in audit log only
       const updatedInstructor = await tx.instructor.update({
         where: { id: params.id },
         data: {
           approvalStatus: 'REJECTED',
-          rejectionReason: reason,
           isActive: false,
-        } as any,
+        },
         include: {
           user: true,
         },
@@ -76,8 +75,9 @@ export async function POST(
 
     // Send rejection email
     try {
-      await emailService.sendGenericEmail({
-        to: instructor.user.email,
+      if (instructor.user?.email) {
+        await emailService.sendGenericEmail({
+          to: instructor.user.email,
         subject: 'Application Status Update',
         html: `
           <!DOCTYPE html>
@@ -105,12 +105,10 @@ export async function POST(
                 
                 <p>After careful review of your application, we regret to inform you that we are unable to approve your registration at this time.</p>
                 
-                ${instructor.rejectionReason ? `
                 <div class="info-box">
                   <h3 style="margin-top: 0;">Reason:</h3>
-                  <p>${instructor.rejectionReason}</p>
+                  <p>${reason}</p>
                 </div>
-                ` : ''}
                 
                 <p><strong>What you can do:</strong></p>
                 <ul>
@@ -142,6 +140,9 @@ export async function POST(
           </html>
         `
       });
+      } else {
+        console.log('Instructor has no user email, skipping rejection email');
+      }
     } catch (emailError) {
       console.error('Failed to send rejection email:', emailError);
       // Don't fail the rejection if email fails

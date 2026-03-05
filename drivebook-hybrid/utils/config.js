@@ -35,6 +35,8 @@ module.exports = {
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
   TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || '',
   COPILOT_BASE_URL: process.env.COPILOT_BASE_URL || 'http://localhost:3001',
+  DRIVEBOOK_BASE_URL: process.env.DRIVEBOOK_BASE_URL || 'http://localhost:3000',
+  DRIVEBOOK_API_KEY: process.env.DRIVEBOOK_API_KEY || 'dev-voice-key-change-in-production',
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 3000,
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS 

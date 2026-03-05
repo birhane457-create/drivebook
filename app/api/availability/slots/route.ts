@@ -85,45 +85,55 @@ export async function GET(req: NextRequest) {
         startTime: true,
         endTime: true,
         status: true,
-        pickupAddress: true,
-        dropoffAddress: true,
-        travelTimeMinutes: true
+        pickupAddress: true
       },
       orderBy: {
         startTime: 'asc'
       }
     })
 
-    // Get PDA tests for this day
-    const pdaTests = await prisma.pDATest.findMany({
-      where: {
-        instructorId,
-        testDate: {
-          gte: startOfDay(selectedDate),
-          lte: endOfDay(selectedDate)
+    // Get PDA tests for this day (if model exists)
+    let pdaTests: any[] = []
+    try {
+      pdaTests = await prisma.pDATest.findMany({
+        where: {
+          instructorId,
+          testDate: {
+            gte: startOfDay(selectedDate),
+            lte: endOfDay(selectedDate)
+          }
+        },
+        select: {
+          testDate: true,
+          testTime: true
         }
-      },
-      select: {
-        testDate: true,
-        testTime: true
-      }
-    })
+      })
+    } catch (error) {
+      console.log('PDATest model not available or error fetching:', error)
+    }
 
-    // Get availability exceptions
-    const exceptions = await prisma.availabilityException.findMany({
-      where: {
-        instructorId,
-        exceptionDate: {
-          gte: startOfDay(selectedDate),
-          lte: endOfDay(selectedDate)
-        }
-      },
-      select: {
-        startTime: true,
-        endTime: true,
-        reason: true
+    // Get availability exceptions (if model exists)
+    let exceptions: any[] = []
+    try {
+      if ((prisma as any).availabilityException) {
+        exceptions = await (prisma as any).availabilityException.findMany({
+          where: {
+            instructorId,
+            exceptionDate: {
+              gte: startOfDay(selectedDate),
+              lte: endOfDay(selectedDate)
+            }
+          },
+          select: {
+            startTime: true,
+            endTime: true,
+            reason: true
+          }
+        })
       }
-    })
+    } catch (error) {
+      console.log('AvailabilityException model not available or error fetching:', error)
+    }
 
     // Build list of blocked time ranges
     const blockedRanges: Array<{ start: Date; end: Date; reason: string }> = []

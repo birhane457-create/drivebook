@@ -32,10 +32,16 @@ export default function BookingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Partial<Booking>>({})
   const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
     fetchBookings()
   }, [])
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), 4000)
+  }
 
   const fetchBookings = async () => {
     try {
@@ -44,6 +50,7 @@ export default function BookingsPage() {
       setBookings(data)
     } catch (error) {
       console.error('Failed to fetch bookings:', error)
+      showToast('error', 'Failed to load bookings. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -60,10 +67,15 @@ export default function BookingsPage() {
       })
 
       if (res.ok) {
+        showToast('success', 'Booking cancelled successfully.')
         fetchBookings()
+      } else {
+        const error = await res.json()
+        showToast('error', error.error || 'Failed to cancel booking.')
       }
     } catch (error) {
       console.error('Failed to delete booking:', error)
+      showToast('error', 'Failed to cancel booking. Please try again.')
     }
   }
 
@@ -78,15 +90,15 @@ export default function BookingsPage() {
       })
 
       if (res.ok) {
-        alert('Checked in successfully!')
+        showToast('success', 'Checked in successfully.')
         fetchBookings()
       } else {
         const error = await res.json()
-        alert(error.error || 'Check-in failed')
+        showToast('error', error.error || 'Check-in failed.')
       }
     } catch (error) {
       console.error('Failed to check in:', error)
-      alert('Check-in failed')
+      showToast('error', 'Check-in failed. Please try again.')
     }
   }
 
@@ -101,15 +113,36 @@ export default function BookingsPage() {
       })
 
       if (res.ok) {
-        alert('Checked out successfully!')
+        showToast('success', 'Checked out successfully.')
         fetchBookings()
       } else {
         const error = await res.json()
-        alert(error.error || 'Check-out failed')
+        showToast('error', error.error || 'Check-out failed.')
       }
     } catch (error) {
       console.error('Failed to check out:', error)
-      alert('Check-out failed')
+      showToast('error', 'Check-out failed. Please try again.')
+    }
+  }
+
+  const handleConfirm = async (id: string) => {
+    if (!confirm('Confirm this PENDING booking? This will notify the client.')) return
+    
+    try {
+      const res = await fetch(`/api/bookings/${id}/confirm`, {
+        method: 'POST'
+      })
+
+      if (res.ok) {
+        showToast('success', 'Booking confirmed successfully! Client has been notified.')
+        fetchBookings()
+      } else {
+        const error = await res.json()
+        showToast('error', error.error || 'Failed to confirm booking.')
+      }
+    } catch (error) {
+      console.error('Failed to confirm booking:', error)
+      showToast('error', 'Failed to confirm booking. Please try again.')
     }
   }
 
@@ -141,24 +174,25 @@ export default function BookingsPage() {
       })
 
       if (res.ok) {
-        alert('Booking updated successfully!')
+        showToast('success', 'Booking updated successfully.')
         setEditingId(null)
         setEditForm({})
         fetchBookings()
       } else {
         const error = await res.json()
-        alert(error.error || 'Update failed')
+        showToast('error', error.error || 'Update failed.')
       }
     } catch (error) {
       console.error('Failed to update booking:', error)
-      alert('Update failed')
+      showToast('error', 'Update failed. Please try again.')
     } finally {
       setSaving(false)
     }
   }
 
   const filteredBookings = bookings.filter(booking => {
-    const matchesSearch = booking.client.name.toLowerCase().includes(search.toLowerCase())
+    const clientName = booking.client?.name || (booking as any).clientName || ''
+    const matchesSearch = clientName.toLowerCase().includes(search.toLowerCase())
     const bookingDate = new Date(booking.startTime)
     const now = new Date()
     
@@ -251,6 +285,7 @@ export default function BookingsPage() {
                 const endTime = new Date(booking.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
                 const canCheckIn = booking.status === 'CONFIRMED' && !booking.checkInTime
                 const canCheckOut = booking.checkInTime && !booking.checkOutTime
+                const canConfirm = booking.status === 'PENDING'
 
                 return (
                   <div key={booking.id} className="hover:bg-gray-50 transition">
@@ -265,7 +300,9 @@ export default function BookingsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold truncate">{booking.client.name}</h3>
+                            <h3 className="font-semibold truncate">
+                              {booking.client?.name || (booking as any).clientName || 'Unknown Client'}
+                            </h3>
                             <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(booking.status)}`}>
                               {booking.status}
                             </span>
@@ -297,9 +334,20 @@ export default function BookingsPage() {
                       </div>
                     </div>
 
-                    {/* Check-in/out Quick Actions (Compact View) */}
-                    {(canCheckIn || canCheckOut) && !isExpanded && (
+                    {/* Check-in/out/Confirm Quick Actions (Compact View) */}
+                    {(canCheckIn || canCheckOut || canConfirm) && !isExpanded && (
                       <div className="px-4 pb-4 flex gap-2">
+                        {canConfirm && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleConfirm(booking.id)
+                            }}
+                            className="flex-1 bg-yellow-600 text-white px-3 py-2 rounded-lg hover:bg-yellow-700 text-sm font-medium"
+                          >
+                            ⚠️ Confirm Pending Booking
+                          </button>
+                        )}
                         {canCheckIn && (
                           <button
                             onClick={(e) => {
@@ -334,15 +382,15 @@ export default function BookingsPage() {
                             <div className="space-y-2 text-gray-600">
                               <div className="flex items-center gap-2">
                                 <User className="h-4 w-4" />
-                                {booking.client.name}
+                                {booking.client?.name || (booking as any).clientName || 'Unknown Client'}
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs">📞</span>
-                                {booking.client.phone}
+                                {booking.client?.phone || (booking as any).clientPhone || 'N/A'}
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs">✉️</span>
-                                {booking.client.email}
+                                {booking.client?.email || (booking as any).clientEmail || 'N/A'}
                               </div>
                             </div>
                           </div>
@@ -480,6 +528,17 @@ export default function BookingsPage() {
                           ) : (
                             // View Mode Buttons
                             <>
+                              {canConfirm && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleConfirm(booking.id)
+                                  }}
+                                  className="flex-1 min-w-[120px] bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 flex items-center justify-center gap-2"
+                                >
+                                  ⚠️ Confirm Booking
+                                </button>
+                              )}
                               {canCheckIn && (
                                 <button
                                   onClick={(e) => {
@@ -526,6 +585,19 @@ export default function BookingsPage() {
           </div>
         )}
       </div>
+
+      {/* Toast notifications */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
+              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

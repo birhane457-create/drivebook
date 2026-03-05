@@ -27,8 +27,7 @@ export async function GET(
             client: true,
             instructor: true
           }
-        },
-        instructor: true
+        }
       }
     });
 
@@ -58,12 +57,12 @@ Payment Intent: ${transaction.stripePaymentIntentId || 'N/A'}
 PARTIES
 --------------------------------------------------------------------------------
 
-Instructor: ${transaction.instructor.name}
+Instructor: ${transaction.booking?.instructor?.name || 'N/A'}
 Instructor ID: ${transaction.instructorId}
 
-${transaction.booking ? `Client: ${transaction.booking.client.name}
-Client Email: ${transaction.booking.client.email}
-Client Phone: ${transaction.booking.client.phone}` : ''}
+${transaction.booking ? `Client: ${transaction.booking.client?.name || 'N/A'}
+Client Email: ${transaction.booking.client?.email || 'N/A'}
+Client Phone: ${transaction.booking.client?.phone || 'N/A'}` : ''}
 
 --------------------------------------------------------------------------------
 FINANCIAL BREAKDOWN

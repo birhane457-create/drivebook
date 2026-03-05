@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
           billingCycle,
         },
         subscription_data: {
-          trial_period_days: 0, // No additional trial, they're already on trial
+          // Don't set trial_period_days - let it start billing immediately
           metadata: {
             instructorId: user.instructor.id,
             tier,

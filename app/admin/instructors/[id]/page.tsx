@@ -27,7 +27,8 @@ interface InstructorData {
   averageRating: number | null;
   isActive: boolean;
   createdAt: Date;
-  user: { email: string };
+  email?: string;
+  user: { email: string } | null;
   _count: {
     bookings: number;
     reviews: number;
@@ -153,7 +154,7 @@ export default function AdminInstructorProfilePage() {
                   </span>
                 </div>
                 <div className="space-y-1 text-gray-600">
-                  <p>📧 {instructor.user.email}</p>
+                  <p>📧 {instructor.user?.email || instructor.email || 'No email'}</p>
                   <p>📞 {instructor.phone}</p>
                   <p>🆔 License: {instructor.licenseNumber || 'Not provided'}</p>
                   <p>📅 Joined: {new Date(instructor.createdAt).toLocaleDateString()}</p>
@@ -359,8 +360,12 @@ export default function AdminInstructorProfilePage() {
                           <tr key={booking.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm text-gray-900">#{formatBookingId(booking.id)}</td>
                             <td className="px-4 py-3">
-                              <div className="text-sm font-medium text-gray-900">{booking.client.name}</div>
-                              <div className="text-xs text-gray-500">{booking.client.email}</div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {booking.client?.name || booking.clientName || 'N/A'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {booking.client?.email || booking.clientEmail || 'N/A'}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {new Date(booking.startTime).toLocaleDateString()}

@@ -262,7 +262,6 @@ export default function RegistrationForm() {
               errors.accountHolderEmail ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="your.email@example.com"
-            disabled={isLoggedIn}
           />
           {checkingEmail && (
             <p className="mt-1 text-sm text-gray-500">Checking email...</p>

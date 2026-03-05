@@ -27,18 +27,18 @@ export async function GET(req: NextRequest) {
         }
       },
       include: {
-        instructor: {
-          select: {
-            id: true,
-            name: true,
-          }
-        },
         booking: {
           select: {
             id: true,
             startTime: true,
             endTime: true,
             status: true,
+            instructor: {
+              select: {
+                id: true,
+                name: true,
+              }
+            },
             client: {
               select: {
                 name: true
@@ -55,11 +55,12 @@ export async function GET(req: NextRequest) {
     
     pendingTransactions.forEach((transaction: any) => {
       const instructorId = transaction.instructorId;
+      const instructorName = transaction.booking.instructor.name;
       
       if (!payoutsByInstructor.has(instructorId)) {
         payoutsByInstructor.set(instructorId, {
           instructorId,
-          instructorName: transaction.instructor.name,
+          instructorName,
           totalAmount: 0,
           transactionCount: 0,
           transactions: [],
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
         createdAt: transaction.createdAt,
         bookingDate: transaction.booking.startTime,
         bookingEndDate: transaction.booking.endTime,
-        clientName: transaction.booking.client.name,
+        clientName: transaction.booking.client?.name || 'Unknown',
         bookingStatus: transaction.booking.status,
       });
     });
@@ -91,7 +92,7 @@ export async function GET(req: NextRequest) {
     const completedThisMonth = await (prisma as any).transaction.aggregate({
       where: {
         status: 'COMPLETED',
-        processedAt: { gte: startOfMonth }
+        updatedAt: { gte: startOfMonth } // Use updatedAt since processedAt doesn't exist
       },
       _sum: {
         instructorPayout: true

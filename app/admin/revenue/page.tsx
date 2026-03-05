@@ -49,10 +49,16 @@ export default function AdminRevenuePage() {
   const [revenue, setRevenue] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'refunds' | 'reports'>('overview');
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchRevenue();
   }, []);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   async function fetchRevenue() {
     try {
@@ -60,9 +66,12 @@ export default function AdminRevenuePage() {
       if (res.ok) {
         const data = await res.json();
         setRevenue(data);
+      } else {
+        showToast('error', 'Failed to load revenue data.');
       }
     } catch (error) {
       console.error('Error fetching revenue:', error);
+      showToast('error', 'Failed to load revenue data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -81,6 +90,7 @@ export default function AdminRevenuePage() {
       }
     } catch (error) {
       console.error('Error downloading invoice:', error);
+      showToast('error', 'Failed to download invoice.');
     }
   };
 
@@ -93,13 +103,15 @@ export default function AdminRevenuePage() {
       });
       
       if (res.ok) {
-        alert('Refund processed successfully');
+        showToast('success', 'Refund processed successfully.');
         fetchRevenue();
       } else {
-        alert('Failed to process refund');
+        const data = await res.json().catch(() => ({}));
+        showToast('error', (data as any).error || 'Failed to process refund.');
       }
     } catch (error) {
       console.error('Error processing refund:', error);
+      showToast('error', 'Failed to process refund. Please try again.');
     }
   };
 
@@ -353,11 +365,11 @@ export default function AdminRevenuePage() {
                               href={`/admin/instructors/${transaction.instructorId}`}
                               className="hover:text-blue-600"
                             >
-                              {transaction.instructor.name}
+                              {transaction.booking?.instructor?.name || 'N/A'}
                             </Link>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {transaction.booking?.client.name || 'N/A'}
+                            {transaction.booking?.client?.name || 'N/A'}
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
                             ${transaction.amount.toFixed(2)}
@@ -466,6 +478,19 @@ export default function AdminRevenuePage() {
           </div>
         </div>
       </div>
+
+      {/* Toast notifications */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
+              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

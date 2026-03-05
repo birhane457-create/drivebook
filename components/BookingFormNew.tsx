@@ -31,6 +31,7 @@ interface BookingFormProps {
     bookingType: string
     status: string
   }
+  redirectAfterUpdate?: string // URL to redirect to after successful update
 }
 
 export default function BookingForm({ 
@@ -38,7 +39,8 @@ export default function BookingForm({
   hourlyRate,
   preselectedClient,
   isInstructorBooking = false,
-  existingBooking
+  existingBooking,
+  redirectAfterUpdate
 }: BookingFormProps) {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -165,7 +167,7 @@ export default function BookingForm({
 
         if (response.ok) {
           alert('Booking updated successfully!')
-          window.location.href = '/dashboard/bookings'
+          window.location.href = redirectAfterUpdate || '/dashboard/bookings'
         } else {
           const error = await response.json()
           alert(error.error || 'Failed to update booking')

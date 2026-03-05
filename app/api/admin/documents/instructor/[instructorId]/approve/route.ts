@@ -27,7 +27,6 @@ export async function POST(
       data: {
         documentsVerified: true,
         documentsVerifiedAt: new Date(),
-        documentsVerifiedBy: session.user.id,
       },
     });
 

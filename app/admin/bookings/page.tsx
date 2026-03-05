@@ -36,10 +36,16 @@ export default function AdminBookingsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchBookings();
   }, []);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchBookings = async () => {
     try {
@@ -47,9 +53,12 @@ export default function AdminBookingsPage() {
       if (res.ok) {
         const data = await res.json();
         setBookings(data);
+      } else {
+        showToast('error', 'Failed to load bookings. Please try again.');
       }
     } catch (error) {
       console.error('Failed to fetch bookings:', error);
+      showToast('error', 'Failed to load bookings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +75,7 @@ export default function AdminBookingsPage() {
   };
 
   const handleEditBooking = (bookingId: string) => {
-    router.push(`/dashboard/bookings/${bookingId}/edit`);
+    router.push(`/admin/bookings/${bookingId}/edit`);
   };
 
   const handleCancelBooking = async (bookingId: string) => {
@@ -82,15 +91,38 @@ export default function AdminBookingsPage() {
       });
 
       if (res.ok) {
-        alert('Booking cancelled successfully');
+        showToast('success', 'Booking cancelled successfully.');
         fetchBookings(); // Refresh the list
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to cancel booking');
+        showToast('error', data.error || 'Failed to cancel booking.');
       }
     } catch (error) {
       console.error('Cancel error:', error);
-      alert('Failed to cancel booking');
+      showToast('error', 'Failed to cancel booking. Please try again.');
+    }
+  };
+
+  const handleConfirmBooking = async (bookingId: string) => {
+    if (!confirm('Confirm this PENDING booking? The client will be notified.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/confirm`, {
+        method: 'POST'
+      });
+
+      if (res.ok) {
+        showToast('success', 'Booking confirmed successfully! Client has been notified.');
+        fetchBookings(); // Refresh the list
+      } else {
+        const data = await res.json();
+        showToast('error', data.error || 'Failed to confirm booking.');
+      }
+    } catch (error) {
+      console.error('Confirm error:', error);
+      showToast('error', 'Failed to confirm booking. Please try again.');
     }
   };
 
@@ -109,10 +141,13 @@ export default function AdminBookingsPage() {
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
+      const clientName = booking.client?.name || (booking as any).clientName || '';
+      const clientEmail = booking.client?.email || (booking as any).clientEmail || '';
+      const instructorName = booking.instructor?.name || '';
       return (
-        booking.client.name.toLowerCase().includes(query) ||
-        booking.client.email.toLowerCase().includes(query) ||
-        booking.instructor.name.toLowerCase().includes(query) ||
+        clientName.toLowerCase().includes(query) ||
+        clientEmail.toLowerCase().includes(query) ||
+        instructorName.toLowerCase().includes(query) ||
         booking.id.toLowerCase().includes(query)
       );
     }
@@ -244,11 +279,15 @@ export default function AdminBookingsPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-gray-900">{booking.client.name}</div>
-                        <div className="text-xs text-gray-500">{booking.client.email}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {booking.client?.name || (booking as any).clientName || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {booking.client?.email || (booking as any).clientEmail || 'No email'}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm text-gray-900">{booking.instructor.name}</div>
+                        <div className="text-sm text-gray-900">{booking.instructor?.name || 'Unknown'}</div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {new Date(booking.startTime).toLocaleDateString()}
@@ -278,9 +317,9 @@ export default function AdminBookingsPage() {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
                             <div>
                               <p className="font-semibold text-gray-700 mb-2">Client Details</p>
-                              <p className="text-gray-600">Name: {booking.client.name}</p>
-                              <p className="text-gray-600">Email: {booking.client.email}</p>
-                              <p className="text-gray-600">Phone: {booking.client.phone}</p>
+                              <p className="text-gray-600">Name: {booking.client?.name || (booking as any).clientName || 'Unknown'}</p>
+                              <p className="text-gray-600">Email: {booking.client?.email || (booking as any).clientEmail || 'No email'}</p>
+                              <p className="text-gray-600">Phone: {booking.client?.phone || 'N/A'}</p>
                             </div>
                             <div>
                               <p className="font-semibold text-gray-700 mb-2">Instructor Details</p>
@@ -325,6 +364,14 @@ export default function AdminBookingsPage() {
                           </div>
                           {/* Admin Actions */}
                           <div className="flex gap-3 pt-3 border-t border-gray-200">
+                            {booking.status === 'PENDING' && (
+                              <button
+                                onClick={() => handleConfirmBooking(booking.id)}
+                                className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm font-medium"
+                              >
+                                ⚠️ Confirm Pending Booking
+                              </button>
+                            )}
                             <button
                               onClick={() => handleEditBooking(booking.id)}
                               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
@@ -362,6 +409,19 @@ export default function AdminBookingsPage() {
           )}
         </div>
       </div>
+
+      {/* Toast notifications */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
+              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Save, DollarSign, Clock, MapPin } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Save, DollarSign, Clock, MapPin, Plus, X } from 'lucide-react'
 import GoogleCalendarSettings from '@/components/GoogleCalendarSettings'
 
 interface TimeSlot {
@@ -21,10 +21,10 @@ interface WorkingHours {
 
 export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState<{
     hourlyRate: number
     serviceRadiusKm: number
-    travelBufferMinutes: number
     vehicleTypes: string[]
     workingHours: WorkingHours
     allowedDurations: number[]
@@ -34,7 +34,6 @@ export default function SettingsPage() {
   }>({
     hourlyRate: 60,
     serviceRadiusKm: 20,
-    travelBufferMinutes: 15,
     vehicleTypes: ['AUTO'],
     workingHours: {
       monday: [{ start: '09:00', end: '17:00' }],
@@ -51,6 +50,41 @@ export default function SettingsPage() {
     travelTimeMinutes: 10
   })
 
+  // Load settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch('/api/instructor/settings')
+        if (res.ok) {
+          const data = await res.json()
+          setFormData({
+            hourlyRate: data.hourlyRate || 60,
+            serviceRadiusKm: data.serviceRadiusKm || 20,
+            vehicleTypes: data.vehicleTypes || ['AUTO'],
+            workingHours: data.workingHours || {
+              monday: [{ start: '09:00', end: '17:00' }],
+              tuesday: [{ start: '09:00', end: '17:00' }],
+              wednesday: [{ start: '09:00', end: '17:00' }],
+              thursday: [{ start: '09:00', end: '17:00' }],
+              friday: [{ start: '09:00', end: '17:00' }],
+              saturday: [{ start: '09:00', end: '13:00' }],
+              sunday: []
+            },
+            allowedDurations: data.allowedDurations || [60, 120],
+            bookingBufferMinutes: data.bookingBufferMinutes || 15,
+            enableTravelTime: data.enableTravelTime || false,
+            travelTimeMinutes: data.travelTimeMinutes || 10
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch settings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchSettings()
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -59,6 +93,8 @@ export default function SettingsPage() {
       alert('Please select at least one lesson duration')
       return
     }
+    
+    console.log('📤 Submitting settings:', JSON.stringify(formData, null, 2))
     
     setSaving(true)
     
@@ -73,7 +109,8 @@ export default function SettingsPage() {
         alert('Settings saved successfully!')
       } else {
         const error = await res.json()
-        alert(error.error || 'Failed to save settings')
+        console.error('❌ Settings save error:', error)
+        alert(`Failed to save: ${error.details || error.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Failed to save settings:', error)
@@ -90,7 +127,12 @@ export default function SettingsPage() {
       <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
         <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6">Settings</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+        {loading ? (
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <p className="text-gray-600">Loading settings...</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <DollarSign className="h-5 w-5" />
@@ -127,25 +169,6 @@ export default function SettingsPage() {
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
                 />
                 <p className="text-xs text-gray-500 mt-1">Maximum distance you're willing to travel for pickups</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Travel Buffer Between Bookings</label>
-                <select
-                  value={formData.travelBufferMinutes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, travelBufferMinutes: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value={10}>10 minutes</option>
-                  <option value={15}>15 minutes (Recommended)</option>
-                  <option value={20}>20 minutes</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Time blocked between bookings for travel to next student's location
-                </p>
-                <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-2 text-xs text-blue-800">
-                  <strong>💡 Tip:</strong> This ensures students get their full lesson time. Choose based on your typical travel distances.
-                </div>
               </div>
             </div>
           </div>
@@ -302,40 +325,75 @@ export default function SettingsPage() {
               Working Hours
             </h2>
             
+            <p className="text-sm text-gray-600 mb-4">
+              Set your availability for each day. You can add multiple time slots per day (e.g., 8:00-12:00 and 14:00-18:00 for split shifts).
+            </p>
+            
             <div className="space-y-4">
               {days.map((day) => (
-                <div key={day} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                  <div className="w-full sm:w-32 font-medium capitalize">{day}</div>
-                  <div className="flex-1 flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="time"
-                      value={formData.workingHours[day as keyof typeof formData.workingHours][0]?.start || ''}
-                      onChange={(e) => {
+                <div key={day} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-medium capitalize">{day}</div>
+                    <button
+                      type="button"
+                      onClick={() => {
                         const newHours = { ...formData.workingHours }
-                        if (!newHours[day as keyof typeof newHours][0]) {
-                          newHours[day as keyof typeof newHours] = [{ start: e.target.value, end: '17:00' }]
-                        } else {
-                          newHours[day as keyof typeof newHours][0].start = e.target.value
-                        }
+                        const dayKey = day as keyof typeof formData.workingHours
+                        newHours[dayKey] = [...(newHours[dayKey] || []), { start: '09:00', end: '17:00' }]
                         setFormData(prev => ({ ...prev, workingHours: newHours }))
                       }}
-                      className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                    />
-                    <span className="flex items-center justify-center sm:justify-start">to</span>
-                    <input
-                      type="time"
-                      value={formData.workingHours[day as keyof typeof formData.workingHours][0]?.end || ''}
-                      onChange={(e) => {
-                        const newHours = { ...formData.workingHours }
-                        if (!newHours[day as keyof typeof newHours][0]) {
-                          newHours[day as keyof typeof newHours] = [{ start: '09:00', end: e.target.value }]
-                        } else {
-                          newHours[day as keyof typeof newHours][0].end = e.target.value
-                        }
-                        setFormData(prev => ({ ...prev, workingHours: newHours }))
-                      }}
-                      className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                    />
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Time Slot
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {(formData.workingHours[day as keyof typeof formData.workingHours] || []).length === 0 ? (
+                      <div className="text-sm text-gray-500 italic">Not working this day</div>
+                    ) : (
+                      formData.workingHours[day as keyof typeof formData.workingHours].map((slot, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={slot.start}
+                            onChange={(e) => {
+                              const newHours = { ...formData.workingHours }
+                              const dayKey = day as keyof typeof newHours
+                              newHours[dayKey][index].start = e.target.value
+                              setFormData(prev => ({ ...prev, workingHours: newHours }))
+                            }}
+                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                          />
+                          <span className="text-gray-500">to</span>
+                          <input
+                            type="time"
+                            value={slot.end}
+                            onChange={(e) => {
+                              const newHours = { ...formData.workingHours }
+                              const dayKey = day as keyof typeof newHours
+                              newHours[dayKey][index].end = e.target.value
+                              setFormData(prev => ({ ...prev, workingHours: newHours }))
+                            }}
+                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newHours = { ...formData.workingHours }
+                              const dayKey = day as keyof typeof newHours
+                              newHours[dayKey] = newHours[dayKey].filter((_, i) => i !== index)
+                              setFormData(prev => ({ ...prev, workingHours: newHours }))
+                            }}
+                            className="text-red-600 hover:text-red-700 p-2"
+                            title="Remove time slot"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               ))}
@@ -353,6 +411,7 @@ export default function SettingsPage() {
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
         </form>
+        )}
       </div>
     </div>
   )

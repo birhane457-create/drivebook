@@ -91,16 +91,40 @@ export async function POST(request: NextRequest) {
       if (!user) throw new Error('User not found');
 
       const client = await tx.client.findFirst({ where: { userId: user.id } });
-      if (!user) throw new Error('Client not found');
+      if (!client) throw new Error('Client not found');
 
-      const wallet = await tx.clientWallet.findUnique({ where: { userId: user.id } });
+      const wallet = await tx.clientWallet.findUnique({ 
+        where: { userId: user.id },
+        include: {
+          transactions: true
+        }
+      });
       if (!wallet) throw new Error('Wallet not found');
+
+      // Calculate actual balance from transactions
+      const totalCredits = wallet.transactions
+        .filter(t => t.type.toUpperCase() === 'CREDIT')
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      const totalDebits = wallet.transactions
+        .filter(t => t.type.toUpperCase() === 'DEBIT')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      const actualBalance = totalCredits - totalDebits;
 
       const totalCost = cartItems.reduce((s, it) => s + it.price, 0);
       
-      // Check wallet balance
-      if (wallet.creditsRemaining < totalCost) {
-        throw new Error('Insufficient credits');
+      console.log('[BOOKING] Balance check:', {
+        totalCredits,
+        totalDebits,
+        actualBalance,
+        totalCost,
+        sufficient: actualBalance >= totalCost
+      });
+      
+      // Check wallet balance using calculated balance
+      if (actualBalance < totalCost) {
+        throw new Error(`Insufficient credits. You have $${actualBalance.toFixed(2)} but need $${totalCost.toFixed(2)}`);
       }
 
       const created: any[] = [];
@@ -144,7 +168,6 @@ export async function POST(request: NextRequest) {
           data: {
             instructorId: item.instructorId,
             clientId: client.id,
-            userId: user.id,
             bookingType: 'LESSON',
             status: 'CONFIRMED',
             startTime,

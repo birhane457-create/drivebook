@@ -36,59 +36,52 @@ export async function GET(req: NextRequest) {
     // Get the most recent client record
     const clientRecord = user.clients[0];
 
-    // Get user's bookings - check both userId and clientId
+    // Get user's bookings by matching email
     const bookings = await prisma.booking.findMany({
       where: {
-        OR: [
-          { userId: user.id },
-          { clientId: { in: user.clients.map(c => c.id) } }
-        ]
+        clientEmail: user.email
       },
       include: {
         instructor: {
           select: {
             id: true,
             name: true,
-            profileImage: true,
             hourlyRate: true
           }
         }
       },
-      orderBy: { startTime: 'desc' }
+      orderBy: { createdAt: 'desc' }
     });
 
     const now = new Date();
-    const upcomingBookings = bookings.filter(b => 
-      new Date(b.startTime) > now && b.status !== 'CANCELLED'
-    );
-    const pastBookings = bookings.filter(b => 
-      new Date(b.startTime) <= now && b.status !== 'CANCELLED'
-    );
+    const upcomingBookings = bookings.filter(b => {
+      if (!b.startTime) return false;
+      return b.startTime > now;
+    });
+    const pastBookings = bookings.filter(b => {
+      if (!b.startTime) return false;
+      return b.startTime <= now;
+    });
 
-    // Filter out cancelled bookings from the response
     const activeBookings = bookings.filter(b => b.status !== 'CANCELLED');
 
     return NextResponse.json({
       user: {
-        name: clientRecord?.name || user.email.split('@')[0],
+        name: clientRecord?.name || user.name || user.email.split('@')[0],
         email: user.email,
-        phone: clientRecord?.phone || '',
-        pickupLocation: clientRecord?.addressText || ''
+        phone: clientRecord?.phone || ''
       },
       bookings: activeBookings.map(b => ({
         id: b.id,
-        date: b.startTime.toISOString(),
-        time: new Date(b.startTime).toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
-        duration: (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / (1000 * 60 * 60),
+        date: b.startTime ? b.startTime.toISOString().split('T')[0] : null,
+        time: b.startTime ? b.startTime.toISOString().split('T')[1].substring(0, 5) : null,
+        duration: b.duration || null,
+        status: b.status,
         price: b.price,
-        status: new Date(b.startTime) > now ? 'upcoming' : 'completed',
+        isPaid: b.isPaid,
         instructor: {
           id: b.instructor.id,
           name: b.instructor.name,
-          avatar: b.instructor.profileImage,
           hourlyRate: b.instructor.hourlyRate
         }
       })),
@@ -134,15 +127,12 @@ export async function PUT(req: NextRequest) {
     }
 
     // Update all client records for this user to keep consistency
-    // This ensures the same name/phone appears across all instructors
     if (user.clients.length > 0) {
       await prisma.client.updateMany({
         where: { userId: user.id },
         data: {
             name,
-            phone,
-            email: user.email, // Also update email to keep it in sync
-            addressText: pickupLocation || undefined
+            phone
           }
       });
     }

@@ -262,12 +262,15 @@ export default function DocumentsPage() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {hasDoc ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <>
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <span className="text-sm text-green-600 font-medium">Uploaded</span>
+                          </>
                         ) : (
-                          <XCircle className="h-5 w-5 text-gray-400" />
-                        )}
-                        {doc.expiryKey && (
-                          <span className="text-xl">{expiryStatus.icon}</span>
+                          <>
+                            <XCircle className="h-5 w-5 text-gray-400" />
+                            <span className="text-sm text-gray-500">Not Uploaded</span>
+                          </>
                         )}
                       </div>
                     </td>
@@ -282,13 +285,21 @@ export default function DocumentsPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {doc.expiryKey && documents?.[doc.expiryKey] ? (
-                        <div>
-                          <p className={`text-sm font-medium ${expiryStatus.color}`}>
-                            {expiryStatus.text}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {formatDate(documents[doc.expiryKey] as string)}
-                          </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{expiryStatus.icon}</span>
+                          <div>
+                            <p className={`text-sm font-medium ${expiryStatus.color}`}>
+                              {expiryStatus.text}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {formatDate(documents[doc.expiryKey] as string)}
+                            </p>
+                          </div>
+                        </div>
+                      ) : doc.expiryKey && hasDoc ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">⚪</span>
+                          <span className="text-sm text-gray-500">Pending Review</span>
                         </div>
                       ) : (
                         <span className="text-sm text-gray-400">-</span>
@@ -338,15 +349,34 @@ export default function DocumentsPage() {
 
         {/* Help Text */}
         <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h4 className="font-semibold text-blue-900 mb-2">Document Requirements</h4>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• 🟢 Green: Document valid and current</li>
-            <li>• 🟡 Yellow: Document expiring within 30 days</li>
-            <li>• 🔴 Red: Document expired - upload new one</li>
-            <li>• All documents must be clear and readable</li>
-            <li>• Images: JPG or PNG format</li>
-            <li>• PDFs: Less than 10MB</li>
-          </ul>
+          <h4 className="font-semibold text-blue-900 mb-2">Document Status Guide</h4>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-blue-900 mb-2">Upload Status:</p>
+              <ul className="text-sm text-blue-800 space-y-1">
+                <li>• ✅ Uploaded: Document received</li>
+                <li>• ❌ Not Uploaded: Please upload</li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-blue-900 mb-2">Expiry Status:</p>
+              <ul className="text-sm text-blue-800 space-y-1">
+                <li>• 🟢 Valid: Document current</li>
+                <li>• 🟡 Expiring Soon: Renew within 30 days</li>
+                <li>• 🔴 Expired: Upload new document</li>
+                <li>• ⚪ Pending Review: Awaiting admin verification</li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-blue-200">
+            <p className="text-sm font-medium text-blue-900 mb-1">Requirements:</p>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li>• All documents must be clear and readable</li>
+              <li>• Images: JPG or PNG format</li>
+              <li>• PDFs: Less than 10MB</li>
+              <li>• Documents marked with * are required</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>

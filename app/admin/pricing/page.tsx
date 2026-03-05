@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import PricingSettingsForm from '@/components/admin/PricingSettingsForm';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminPricingPage() {
   const session = await getServerSession(authOptions);
 
@@ -11,12 +14,41 @@ export default async function AdminPricingPage() {
     redirect('/login');
   }
 
-  // Use default platform settings since Platform model doesn't exist in schema
+  // Fetch platform settings from database
+  let platformData = await prisma.platform.findFirst();
+  
+  // If no platform record exists, use defaults
+  if (!platformData) {
+    platformData = {
+      id: '',
+      name: 'DriveBook',
+      subscriptionModel: 'hybrid',
+      settings: {
+        pricing: {
+          platformFeePercentage: 3.6,
+          package6Discount: 5,
+          package10Discount: 10,
+          package15Discount: 12,
+          basicCommissionRate: 15,
+          proCommissionRate: 12,
+          businessCommissionRate: 10,
+          basicNewStudentBonus: 8,
+          proNewStudentBonus: 10,
+          businessNewStudentBonus: 12,
+          drivingTestPackagePrice: 225,
+          discountPaidBy: 'shared'
+        }
+      },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    } as any;
+  }
+
   const platform = {
-    name: 'DriveBook',
-    subscriptionModel: 'hybrid',
-    commissionRate: 12.0,
-    newStudentBonusRate: 8.0,
+    id: platformData.id || '',
+    name: platformData.name,
+    subscriptionModel: platformData.subscriptionModel,
+    settings: platformData.settings
   };
 
   return (

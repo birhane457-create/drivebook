@@ -18,7 +18,21 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { amount, reason, deductFromInstructor } = await req.json();
+    let amount, reason, deductFromInstructor;
+    
+    // Handle empty request body
+    try {
+      const body = await req.json();
+      amount = body.amount;
+      reason = body.reason;
+      deductFromInstructor = body.deductFromInstructor;
+    } catch (e) {
+      // Empty body is okay, we'll use defaults
+      amount = null;
+      reason = null;
+      deductFromInstructor = false;
+    }
+    
     const transactionId = params.transactionId;
 
     // Get transaction details
@@ -34,8 +48,7 @@ export async function POST(
               }
             }
           }
-        },
-        instructor: true
+        }
       }
     });
 
@@ -104,9 +117,9 @@ export async function POST(
       });
 
       // Notify instructor
-      if (transaction.instructor.phone) {
+      if (transaction.booking?.instructor?.phone) {
         await smsService.sendSMS({
-          to: transaction.instructor.phone,
+          to: transaction.booking.instructor.phone,
           message: `A refund of $${refundAmount.toFixed(2)} has been processed and will be deducted from your next payout. Reason: ${reason || 'Admin refund'}`
         });
       }

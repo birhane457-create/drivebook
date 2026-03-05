@@ -103,13 +103,20 @@ export default function BookLessonPage() {
     }
   }, [session]);
 
-  // Check for pre-selected instructor
+  // Check for pre-selected instructor or new instructor search
   useEffect(() => {
     const instructorId = searchParams?.get('instructorId');
-    if (instructorId && session?.user?.email) {
+    const newInstructor = searchParams?.get('newInstructor');
+    
+    if (newInstructor === 'true' && clientLocation) {
+      // User wants to search for new instructor, start from location with pre-filled address
+      setUserLocation(clientLocation);
+      setPickupLocation(clientLocation);
+      setStep('location');
+    } else if (instructorId && session?.user?.email) {
       loadPreSelectedInstructor(instructorId);
     }
-  }, [searchParams, session]);
+  }, [searchParams, session, clientLocation]);
 
   const loadPreSelectedInstructor = async (instructorId: string) => {
     try {
@@ -117,6 +124,11 @@ export default function BookLessonPage() {
       if (res.ok) {
         const instructor = await res.json();
         setSelectedInstructor(instructor);
+        // If user has location, skip directly to services
+        if (clientLocation) {
+          setUserLocation(clientLocation);
+          setPickupLocation(clientLocation);
+        }
         setStep('services');
       }
     } catch (error) {
@@ -185,6 +197,17 @@ export default function BookLessonPage() {
     setPickupLocation(clientLocation);
     setShowFullProfile(false);
     setStep('services');
+  };
+
+  const switchInstructor = () => {
+    // If we have instructors list, go to instructors step
+    // Otherwise, go to location step to search
+    if (instructors.length > 0) {
+      setStep('instructors');
+    } else {
+      setStep('location');
+    }
+    setSelectedInstructor(null);
   };
 
   const selectService = (duration: number) => {
@@ -496,7 +519,7 @@ export default function BookLessonPage() {
                     <h2 className="text-2xl font-bold">{selectedInstructor.name}</h2>
                   </div>
                   <button
-                    onClick={() => setStep('instructors')}
+                    onClick={switchInstructor}
                     className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 font-semibold transition"
                   >
                     Switch Instructor
@@ -535,7 +558,7 @@ export default function BookLessonPage() {
                   <div className="flex items-start justify-between mb-4">
                     <h2 className="text-2xl font-bold text-gray-900">{selectedInstructor.name}</h2>
                     <button
-                      onClick={() => setStep('instructors')}
+                      onClick={switchInstructor}
                       className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 font-semibold transition"
                     >
                       Switch Instructor

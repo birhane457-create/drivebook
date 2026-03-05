@@ -24,19 +24,31 @@ export async function PATCH(
   try {
     const session = await getServerSession(authOptions)
     
-    if (!session?.user?.instructorId) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await req.json()
     const data = updateSchema.parse(body)
 
-    // Verify booking belongs to instructor
+    // Check if user is admin or instructor
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
+    const instructorId = session.user.instructorId
+
+    // Only admins and instructors can edit bookings
+    if (!isAdmin && !instructorId) {
+      return NextResponse.json({ error: 'Unauthorized - must be admin or instructor' }, { status: 403 })
+    }
+
+    // Verify booking exists and user has permission
+    const bookingWhere: any = { id: params.id }
+    if (!isAdmin) {
+      // Non-admins (instructors) can only edit their own bookings
+      bookingWhere.instructorId = instructorId
+    }
+
     const booking = await prisma.booking.findFirst({
-      where: {
-        id: params.id,
-        instructorId: session.user.instructorId
-      },
+      where: bookingWhere,
       include: {
         client: true,
         instructor: true
@@ -44,7 +56,7 @@ export async function PATCH(
     })
 
     if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Booking not found or access denied' }, { status: 404 })
     }
 
     // FIXED: Prevent editing completed or cancelled bookings
@@ -87,6 +99,75 @@ export async function PATCH(
 
       // If price changed and transaction exists, update it
       if (data.price && data.price !== booking.price) {
+        const priceDifference = data.price - booking.price;
+        
+        // If price increased, need to charge the client
+        if (priceDifference > 0 && booking.client?.userId) {
+          // Check if client has wallet
+          const wallet = await tx.clientWallet.findUnique({
+            where: { userId: booking.client.userId }
+          });
+
+          if (wallet) {
+            // Check if client has enough balance
+            if (wallet.creditsRemaining < priceDifference) {
+              throw new Error(`Insufficient wallet balance. Need $${priceDifference.toFixed(2)} more for the duration increase.`);
+            }
+
+            // Deduct from wallet
+            await tx.clientWallet.update({
+              where: { userId: booking.client.userId },
+              data: {
+                creditsRemaining: { decrement: priceDifference },
+                totalSpent: { increment: priceDifference },
+                version: { increment: 1 }
+              }
+            });
+
+            // Create wallet transaction
+            await tx.walletTransaction.create({
+              data: {
+                walletId: wallet.id,
+                type: 'debit',
+                amount: -priceDifference,
+                description: `Duration increase for booking on ${new Date(booking.startTime).toLocaleDateString()}`,
+                status: 'completed'
+              }
+            });
+          }
+        }
+        
+        // If price decreased, refund the client
+        if (priceDifference < 0 && booking.client?.userId) {
+          const refundAmount = Math.abs(priceDifference);
+          
+          const wallet = await tx.clientWallet.findUnique({
+            where: { userId: booking.client.userId }
+          });
+
+          if (wallet) {
+            // Add to wallet
+            await tx.clientWallet.update({
+              where: { userId: booking.client.userId },
+              data: {
+                creditsRemaining: { increment: refundAmount },
+                version: { increment: 1 }
+              }
+            });
+
+            // Create wallet transaction
+            await tx.walletTransaction.create({
+              data: {
+                walletId: wallet.id,
+                type: 'credit',
+                amount: refundAmount,
+                description: `Duration reduction for booking on ${new Date(booking.startTime).toLocaleDateString()}`,
+                status: 'completed'
+              }
+            });
+          }
+        }
+
         const existingTransaction = await (tx as any).transaction.findFirst({
           where: { bookingId: params.id }
         })
@@ -115,7 +196,7 @@ export async function PATCH(
       bookingId: params.id,
       action: AuditAction.BOOKING_UPDATED,
       actorId: session.user.id!,
-      actorRole: 'INSTRUCTOR' as ActorRole,
+      actorRole: (isAdmin ? 'ADMIN' : 'INSTRUCTOR') as ActorRole,
       ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
       userAgent: req.headers.get('user-agent') || 'unknown',
       metadata: { changes }
@@ -159,23 +240,35 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions)
     
-    if (!session?.user?.instructorId) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify booking belongs to instructor
+    // Check if user is admin or instructor
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
+    const instructorId = session.user.instructorId
+
+    // Only admins and instructors can view bookings
+    if (!isAdmin && !instructorId) {
+      return NextResponse.json({ error: 'Unauthorized - must be admin or instructor' }, { status: 403 })
+    }
+
+    // Verify booking exists and user has permission
+    const bookingWhere: any = { id: params.id }
+    if (!isAdmin) {
+      // Non-admins (instructors) can only view their own bookings
+      bookingWhere.instructorId = instructorId
+    }
+
     const booking = await prisma.booking.findFirst({
-      where: {
-        id: params.id,
-        instructorId: session.user.instructorId
-      },
+      where: bookingWhere,
       include: {
         client: true
       }
     })
 
     if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Booking not found or access denied' }, { status: 404 })
     }
 
     return NextResponse.json(booking)
@@ -192,22 +285,35 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions)
     
-    if (!session?.user?.instructorId) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Check if user is admin or instructor
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
+    const instructorId = session.user.instructorId
+
+    // Only admins and instructors can delete bookings
+    if (!isAdmin && !instructorId) {
+      return NextResponse.json({ error: 'Unauthorized - must be admin or instructor' }, { status: 403 })
+    }
+
+    // Verify booking exists and user has permission
+    const bookingWhere: any = { id: params.id }
+    if (!isAdmin) {
+      // Non-admins (instructors) can only delete their own bookings
+      bookingWhere.instructorId = instructorId
+    }
+
     const booking = await prisma.booking.findFirst({
-      where: {
-        id: params.id,
-        instructorId: session.user.instructorId
-      },
+      where: bookingWhere,
       include: {
         instructor: true
       }
     })
 
     if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Booking not found or access denied' }, { status: 404 })
     }
 
     // FIXED: Prevent deleting completed bookings (financial records)

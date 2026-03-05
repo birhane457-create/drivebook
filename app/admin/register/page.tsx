@@ -48,14 +48,15 @@ export default function AdminRegisterPage() {
         }),
       });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (res.ok) {
-        alert('Admin account created successfully! You can now login.');
-        router.push('/login');
-      } else {
-        setError(data.error || 'Failed to create admin account');
-      }
+    if (res.ok) {
+      setError('');
+      // Simple inline success message via state; redirect after a short delay
+      setTimeout(() => router.push('/login'), 800);
+    } else {
+      setError(data.error || 'Failed to create admin account');
+    }
     } catch (error) {
       setError('An error occurred. Please try again.');
     } finally {

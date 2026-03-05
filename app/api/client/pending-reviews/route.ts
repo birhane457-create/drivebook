@@ -48,10 +48,18 @@ export async function GET(req: NextRequest) {
 
 async function getClientPendingReviews(userId: string) {
   try {
+    // First, find all clients associated with this user
+    const clients = await prisma.client.findMany({
+      where: { userId: userId },
+      select: { id: true }
+    });
+
+    const clientIds = clients.map(c => c.id);
+
     // Get completed bookings that don't have reviews yet
     const completedBookings = await prisma.booking.findMany({
       where: {
-        userId: userId,
+        clientId: { in: clientIds },
         status: 'COMPLETED',
         reviews: {
           none: {} // No reviews yet
@@ -68,7 +76,7 @@ async function getClientPendingReviews(userId: string) {
       id: booking.id,
       bookingId: booking.id,
       instructorName: booking.instructor.name,
-      bookingDate: booking.startTime.toISOString()
+      bookingDate: booking.startTime?.toISOString() || new Date().toISOString()
     }));
 
     return NextResponse.json(pendingReviews);

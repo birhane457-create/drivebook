@@ -60,7 +60,7 @@ export default function PackageSelector() {
       <h3 className="text-lg font-semibold text-gray-900">Select Your Package</h3>
       
       {/* Predefined Package Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         {predefinedPackages.map(({ type, hours, discount }) => {
           const isSelected = bookingState.packageType === type;
           const basePrice = hourlyRate * hours;
@@ -72,43 +72,27 @@ export default function PackageSelector() {
               key={type}
               onClick={() => handlePackageSelect(type)}
               className={`
-                relative p-6 rounded-lg border-2 text-left transition-all
-                ${isSelected 
-                  ? 'border-blue-600 bg-blue-50 shadow-md' 
-                  : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'
-                }
+                relative p-4 rounded-lg border text-left transition-all flex flex-col justify-between
+                ${isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-gray-200 hover:border-blue-300'}
               `}
             >
-              {/* Discount Badge */}
-              <div className="absolute top-3 right-3 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">
-                Save {discount}%
-              </div>
-
-              {/* Radio Button */}
-              <div className={`
-                w-5 h-5 rounded-full border-2 flex items-center justify-center mb-3
-                ${isSelected ? 'border-blue-600' : 'border-gray-300'}
-              `}>
-                {isSelected && (
-                  <div className="w-3 h-3 rounded-full bg-blue-600" />
-                )}
-              </div>
-
-              <h4 className="font-semibold text-gray-900 mb-2">{hours} Hour Package</h4>
-              <p className="text-sm text-gray-600 mb-3">{hours} hours of lessons</p>
-              
-              <div className="space-y-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-sm text-gray-400 line-through">
-                    ${basePrice.toFixed(2)}
-                  </span>
-                  <span className="text-2xl font-bold text-blue-600">
-                    ${finalPrice.toFixed(2)}
-                  </span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-blue-600' : 'border-gray-300'}`}>
+                    {isSelected && <div className="w-2 h-2 rounded-full bg-blue-600" />}
+                  </div>
+                  <h4 className="font-medium text-gray-900">{hours} hr</h4>
                 </div>
-                <p className="text-xs text-gray-500">
-                  Save ${savings.toFixed(2)} • ${(finalPrice / hours).toFixed(2)}/hour
-                </p>
+
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-gray-500 line-through">${basePrice.toFixed(0)}</div>
+                  <div className="text-lg font-bold text-blue-600">${finalPrice.toFixed(0)}</div>
+                </div>
+              </div>
+
+              <div className="mt-2 text-sm text-gray-600 flex items-center justify-between">
+                <div className="truncate">{hours} hours • ${(finalPrice / hours).toFixed(2)}/hr</div>
+                <div className="text-xs text-green-600">Save ${savings.toFixed(0)}</div>
               </div>
             </button>
           );

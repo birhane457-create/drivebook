@@ -15,12 +15,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+
     // Get booking details
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
         instructor: { select: { name: true } },
-        client: { select: { name: true, email: true } },
+        // Database schema in this project has no client relation
+        // so only select instructor info.
       },
     }) as any;
 
@@ -56,13 +58,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Use clientEmail from booking (added in schema update)
+    const clientEmail = booking.clientEmail || 'customer@example.com';
+
     // Create payment intent
     const paymentIntent = await stripeService.createPaymentIntent({
       amount: paymentAmount,
       instructorId: booking.instructorId,
       bookingId: booking.id,
-      clientEmail: booking.client.email,
-      description: `Driving lesson package with ${booking.instructor.name}`,
+      clientEmail,
+      description: `Driving lesson with ${booking.instructor.name}`,
     });
 
     // Update booking with payment intent ID

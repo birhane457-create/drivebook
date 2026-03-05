@@ -4,11 +4,13 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
 export default function BookingConfirmationPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const bookingId = params.id as string;
   const paymentStatus = searchParams.get('payment');
   
@@ -122,12 +124,21 @@ export default function BookingConfirmationPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4">
-          <Link
-            href="/dashboard"
-            className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center"
-          >
-            Go to Dashboard
-          </Link>
+          {session?.user ? (
+            <Link
+              href={session.user.role === 'CLIENT' ? '/client/dashboard' : '/dashboard'}
+              className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center"
+            >
+              Go to Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center"
+            >
+              Login to View Booking
+            </Link>
+          )}
           <Link
             href="/"
             className="flex-1 bg-white text-gray-700 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors border border-gray-300 text-center"

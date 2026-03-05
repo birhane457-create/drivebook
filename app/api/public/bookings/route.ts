@@ -6,19 +6,26 @@ import { calculateTravelTimeToNextBooking } from '@/lib/services/travelTime'
 import { paymentService } from '@/lib/services/payment'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
-
+import { bookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
 
 export const dynamic = 'force-dynamic';
+
+const phoneSchema = z
+  .string()
+  .transform((s) => s.replace(/\s+/g, ''))
+  .refine((p) => /^\+?\d{9,15}$/.test(p), { message: 'Invalid phone number' })
+
 const publicBookingSchema = z.object({
   instructorId: z.string(),
   clientName: z.string(),
   clientEmail: z.string().email(),
-  clientPhone: z.string(),
+  clientPhone: phoneSchema,
   pickupAddress: z.string(),
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
   notes: z.string().optional(),
-  price: z.number(),
+  // price field is accepted from client but will be recomputed server-side
+  price: z.number().optional(),
   createAccount: z.boolean().optional(),
   password: z.string().optional()
 })
@@ -31,6 +38,11 @@ export async function POST(req: NextRequest) {
     const startTime = new Date(data.startTime)
     const endTime = new Date(data.endTime)
 
+    // Basic sanity check on times
+    if (!(startTime instanceof Date) || isNaN(startTime.getTime()) || !(endTime instanceof Date) || isNaN(endTime.getTime()) || endTime <= startTime) {
+      return NextResponse.json({ error: 'Invalid start or end time' }, { status: 400 })
+    }
+
     // Check if instructor exists
     const instructor = await prisma.instructor.findUnique({
       where: { id: data.instructorId },
@@ -40,6 +52,29 @@ export async function POST(req: NextRequest) {
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
+
+    // Rate limiting: limit bookings per client/instructor/IP
+    const ip = req.headers.get('x-forwarded-for') || req.ip || 'unknown'
+    const identifier = getRateLimitIdentifier(undefined, ip, `public-booking:${data.clientEmail}:${data.instructorId}`)
+    const rate = await checkRateLimitStrict(bookingRateLimit, identifier)
+    if (!rate.success) {
+      return new NextResponse(JSON.stringify({ error: rate.error }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(rate.headers || {}),
+        },
+      })
+    }
+
+    // Compute authoritative price on server (ignore client-provided amount)
+    const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)
+    if (durationHours <= 0) {
+      return NextResponse.json({ error: 'Invalid booking duration' }, { status: 400 })
+    }
+
+    const rawPrice = instructor.hourlyRate * durationHours
+    const bookingPrice = Math.round(rawPrice * 100) / 100
 
     // Create user account if requested
     let userId: string | undefined;
@@ -98,6 +133,30 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ✅ CHECK SLOT AVAILABILITY BEFORE CREATING BOOKING
+    // This prevents creating PENDING bookings for unavailable slots
+    const conflictingBooking = await prisma.booking.findFirst({
+      where: {
+        instructorId: data.instructorId,
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        OR: [
+          // New booking starts during existing booking
+          { startTime: { lte: startTime }, endTime: { gt: startTime } },
+          // New booking ends during existing booking
+          { startTime: { lt: endTime }, endTime: { gte: endTime } },
+          // New booking completely contains existing booking
+          { startTime: { gte: startTime }, endTime: { lte: endTime } }
+        ]
+      }
+    });
+
+    if (conflictingBooking) {
+      return NextResponse.json({ 
+        error: 'This time slot is no longer available. Please select a different time.',
+        code: 'SLOT_UNAVAILABLE'
+      }, { status: 409 });
+    }
+
     // Calculate travel time from previous booking to this one
     const travelTime = await calculateTravelTimeToNextBooking(
       data.instructorId,
@@ -110,20 +169,21 @@ export async function POST(req: NextRequest) {
     const commission = await paymentService.calculateCommission(
       data.instructorId,
       client.id,
-      data.price
+      bookingPrice
     )
 
     // Create booking with commission details
+    // Status is PENDING until payment succeeds (webhook will confirm)
     const booking = await prisma.booking.create({
       data: {
         instructorId: data.instructorId,
         clientId: client.id,
         bookingType: 'LESSON',
-        status: 'PENDING',
+        status: 'PENDING', // Will be CONFIRMED by webhook on payment success
         startTime,
         endTime,
         pickupAddress: data.pickupAddress,
-        price: data.price,
+        price: bookingPrice,
         platformFee: commission.platformFee,
         instructorPayout: commission.instructorPayout,
         commissionRate: commission.commissionRate,

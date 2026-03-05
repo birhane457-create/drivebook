@@ -62,7 +62,8 @@ export default function PricingSettingsForm({ platform }: PricingSettingsFormPro
 
       if (response.ok) {
         alert('Pricing settings updated successfully!');
-        router.refresh();
+        // Force a hard refresh to reload data from server
+        window.location.reload();
       } else {
         const data = await response.json();
         alert(data.error || 'Failed to update settings');
