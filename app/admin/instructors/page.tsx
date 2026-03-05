@@ -35,7 +35,6 @@ export default async function AdminInstructorsPage({
       _count: {
         select: {
           bookings: true,
-          reviews: true,
         },
       },
     },

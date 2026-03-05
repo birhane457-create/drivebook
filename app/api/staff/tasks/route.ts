@@ -31,14 +31,6 @@ export async function GET(req: NextRequest) {
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (category) where.category = category;
-      } else {
-        // Show tasks for their department that are unassigned or assigned to them
-        where.OR = [
-          { category: user.staffMember.department },
-          { assignedToId: user.staffMember.id }
-        ];
-      }
-    }
 
     const tasks = await prisma.task.findMany({
       where,
