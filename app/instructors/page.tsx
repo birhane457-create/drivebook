@@ -3,6 +3,10 @@ import { Car } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
 import InstructorCard from '@/components/InstructorCard'
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function InstructorsPage() {
   const instructors = await prisma.instructor.findMany({
     where: {
