@@ -12,8 +12,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Force dynamic rendering for all pages (no static generation)
-  output: 'standalone',
 }
 
 module.exports = nextConfig
