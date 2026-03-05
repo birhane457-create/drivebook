@@ -5,7 +5,7 @@ info:
   version: 1.0.0
   contact:
     name: DriveBook Support
-host: your-service-url.railway.app
+host: drivebook-production-12ab.up.railway.app
 basePath: /api
 schemes:
   - https
