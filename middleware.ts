@@ -7,6 +7,14 @@ export async function middleware(req: NextRequest) {
   const hostname = req.headers.get('host') || ''
   const url = req.nextUrl.clone()
   
+  // Skip middleware for public routes
+  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/api/auth']
+  const isPublicPath = publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path))
+  
+  if (isPublicPath && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
+    return NextResponse.next()
+  }
+  
   // Extract subdomain
   const subdomain = extractSubdomain(hostname)
   
