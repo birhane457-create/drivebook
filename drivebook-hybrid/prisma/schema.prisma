@@ -15,16 +15,19 @@ datasource db {
 
 // User model for authentication
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  email     String   @unique
-  password  String?
-  name      String?
-  role      String   @default("CLIENT")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  email            String    @unique
+  password         String?
+  name             String?
+  role             String    @default("CLIENT")
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
   
-  clients   Client[]
-  wallet    ClientWallet?
+  clients      Client[]
+  wallet       ClientWallet?
+  instructor   Instructor?
 }
 
 // Client model for booking clients
@@ -39,19 +42,117 @@ model Client {
   phone                 String
   preferredInstructorId String?  @db.ObjectId
   bookings              Booking[]
+  pdaTests              PDATest[]
+  reviews               Review[]
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
 
 model Instructor {
+  id                     String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                 String?  @unique @db.ObjectId
+  user                   User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                   String
+  phone                  String
+  email                  String?
+  bio                    String?
+  profileImage           String?
+  carImage               String?
+  carMake                String?
+  carModel               String?
+  carYear                Int?
+  baseAddress            String?
+  baseLatitude           Float?
+  baseLongitude          Float?
+  hourlyRate             Float
+  commissionRate         Float    @default(0.15)
+  newStudentBonus        Float    @default(0.05)
+  vehicleTypes           String[]
+  serviceRadiusKm        Float?
+  serviceAreas           String?
+  languages              String[]
+  licenseNumber          String?
+  insuranceNumber        String?
+  licenseImageFront      String?
+  licenseImageBack       String?
+  insurancePolicyDoc     String?
+  policeCheckDoc         String?
+  wwcCheckDoc            String?
+  photoIdDoc             String?
+  certificationDoc       String?
+  vehicleRegistrationDoc String?
+  
+  // Document expiry dates
+  licenseExpiry          DateTime?
+  insuranceExpiry        DateTime?
+  policeCheckExpiry      DateTime?
+  wwcCheckExpiry         DateTime?
+  certificationExpiry    DateTime?
+  vehicleRegistrationExpiry DateTime?
+  
+  documentsVerified      Boolean  @default(false)
+  documentsVerifiedAt    DateTime?
+  approvalStatus         String   @default("PENDING")
+  isActive               Boolean  @default(false)
+  isVerified             Boolean  @default(false)
+  workingHours           Json?
+  copilotAgentEndpoint   String?
+  twilioPhoneNumber      String?  // Twilio number for voice service
+  
+  // Booking configuration fields
+  allowedDurations       Int[]    @default([60, 120])
+  bookingBufferMinutes   Int      @default(15)
+  enableTravelTime       Boolean  @default(false)
+  travelTimeMinutes      Int      @default(10)
+  
+  // Google Calendar sync fields
+  syncGoogleCalendar     Boolean  @default(false)
+  googleAccessToken      String?
+  googleRefreshToken     String?
+  googleTokenExpiry      DateTime?
+  googleCalendarId       String?
+  lastSyncedAt           DateTime?
+  calendarBufferMode     String   @default("auto") // "auto" or "manual"
+  
+  // Subscription fields
+  subscriptionStatus     String   @default("TRIAL")
+  subscriptionTier       String   @default("STARTER")
+  trialEndsAt            DateTime?
+  stripeCustomerId       String?
+  maxInstructors         Int      @default(1)
+  customDomain           String?
+  brandedBookingPage     Boolean  @default(false)
+  brandLogo              String?
+  brandColorPrimary      String?
+  brandColorSecondary    String?
+  showBrandingOnBookingPage Boolean @default(false)
+  
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  bookings               Booking[]
+  clients                Client[]
+  reviews                Review[]
+  subscriptions          Subscription[]
+}
+
+model Subscription {
   id                  String   @id @default(auto()) @map("_id") @db.ObjectId
-  name                String
-  phone               String
-  hourlyRate          Float
-  serviceAreas        String?
-  copilotAgentEndpoint String?
-  bookings            Booking[]
-  clients             Client[]
+  instructorId        String   @db.ObjectId
+  instructor          Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  tier                String   // STARTER, PRO, BUSINESS
+  status              String   // TRIAL, ACTIVE, PAST_DUE, CANCELED
+  monthlyAmount       Float
+  billingCycle        String   @default("monthly") // monthly, annual
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  trialEndsAt         DateTime?
+  cancelledAt         DateTime?
+  stripeSubscriptionId String?
+  stripeCustomerId    String?
+  stripePriceId       String?
+  cancelAtPeriodEnd   Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model Booking {
@@ -61,6 +162,7 @@ model Booking {
   client                Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId              String?  @db.ObjectId
   clientName            String?
+  clientEmail           String?
   clientPhone           String?
   bookingType           String?
   status                String   @default("PENDING")
@@ -91,12 +193,13 @@ model Booking {
   updatedAt             DateTime @updatedAt
   
   transactions          Transaction[]
+  reviews               Review[]
 }
 
 model Transaction {
   id                    String   @id @default(auto()) @map("_id") @db.ObjectId
-  bookingId             String   @db.ObjectId
-  booking               Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId             String?  @db.ObjectId
+  booking               Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   instructorId          String   @db.ObjectId
   type                  String
   amount                Float
@@ -107,17 +210,21 @@ model Transaction {
   description           String?
   stripePaymentIntentId String?
   stripeChargeId        String?
-  metadata              String?
+  metadata              Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
+
 model ClientWallet {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @unique @db.ObjectId
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balance     Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String   @unique @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance           Float    @default(0)
+  creditsRemaining  Float    @default(0)
+  totalPaid         Float    @default(0)
+  totalSpent        Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
   
   transactions WalletTransaction[]
 }
@@ -141,4 +248,86 @@ model Message {
   message      String
   timestamp    DateTime @default(now())
   status       String
+}
+
+model PDATest {
+  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId         String   @db.ObjectId
+  clientId             String   @db.ObjectId
+  client               Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  testCenterLatitude   Float
+  testCenterLongitude  Float
+  testCenterName       String
+  testCenterAddress    String
+  testDate             DateTime
+  testTime             String
+  status               String   @default("SCHEDULED")
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ServiceArea {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId String   @db.ObjectId
+  postcode     String
+  suburb       String?
+  state        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([instructorId, postcode])
+}
+
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  action      String   // SUBSCRIPTION_UPDATED, BOOKING_CREATED, etc.
+  actorId     String   @db.ObjectId
+  actorRole   String   // INSTRUCTOR, CLIENT, ADMIN, SYSTEM
+  targetType  String   // BOOKING, TRANSACTION, SUBSCRIPTION, etc.
+  targetId    String   @db.ObjectId
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  success     Boolean  @default(true)
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  
+  @@index([actorId])
+  @@index([targetId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Platform {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  name               String   @default("DriveBook")
+  subscriptionModel  String   @default("hybrid") // hybrid, subscription-only, commission-only
+  settings           Json     // Stores pricing, features, and other platform-wide settings
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Review {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId String   @db.ObjectId
+  clientId     String   @db.ObjectId
+  bookingId    String?  @db.ObjectId
+  rating       Int      // 1-5 stars
+  comment      String?
+  isPublished  Boolean  @default(true)
+  isFlagged    Boolean  @default(false)
+  flagReason   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  client       Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  booking      Booking?   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  
+  @@index([instructorId])
+  @@index([clientId])
+  @@index([bookingId])
+  @@index([createdAt])
 }
