@@ -57,9 +57,11 @@ paths:
     get:
       summary: Get smart instructor recommendations (AI-POWERED)
       description: |
-        Returns top instructors ranked by intelligent scoring algorithm.
-        Considers rating, distance, price, and experience.
-        This is the BEST endpoint for AI to use - provides pre-ranked, personalized results.
+        Returns top 3 instructors ranked by intelligent scoring algorithm based on location.
+        Each instructor includes a reason (Top rated, Best value, Closest) to help AI explain choices naturally.
+        Scoring considers: rating (40%), distance (25%), price (20%), experience (15%).
+        This is the PRIMARY endpoint for AI when user doesn't specify an instructor preference.
+        Returns instructors who actually serve the requested location (within their service radius).
       operationId: getInstructorRecommendations
       tags:
         - Instructors
@@ -157,10 +159,11 @@ paths:
 
   /instructors/search:
     get:
-      summary: Search instructors by location (PRIMARY ENDPOINT)
+      summary: Search instructors by location
       description: |
-        Find instructors who serve a specific location, sorted by distance and rating.
-        This is the MAIN endpoint for the AI to use when a student provides their pickup location.
+        Find all instructors who serve a specific location, sorted by distance and rating.
+        Returns complete list (not limited to 3). Use /instructors/recommendations instead for AI conversations.
+        This endpoint is better for web UI where users want to browse all options.
       operationId: searchInstructorsByLocation
       tags:
         - Instructors
@@ -268,11 +271,12 @@ paths:
 
   /locations/validate:
     post:
-      summary: Validate pickup location
+      summary: Validate and geocode pickup location
       description: |
-        Validates and geocodes a pickup location.
-        Prevents bad addresses during voice calls.
-        Returns formatted address and coordinates.
+        Validates a pickup location address and returns geocoded coordinates with formatted address.
+        Use this BEFORE calling instructor recommendations to ensure location is valid.
+        Prevents bad addresses during voice calls by providing helpful suggestions if location not found.
+        Returns suburb, state, and postcode components for Australian addresses.
       operationId: validateLocation
       tags:
         - Locations
@@ -324,10 +328,14 @@ paths:
 
   /packages:
     get:
-      summary: Get available lesson packages
+      summary: Get lesson packages with pricing and savings
       description: |
-        Returns available lesson packages with pricing.
-        AI should call this to present package options to students.
+        Returns available lesson packages (6hr, 10hr, 15hr) with calculated pricing, discounts, and savings for a specific instructor.
+        Each package shows original price, discounted price, savings amount, and discount percentage.
+        The 10-hour package has badge: "Most Popular" - AI should mention this naturally: "Most students choose the 10-hour package - it saves you $75".
+        Also includes test package option ($150) that can be added to any package.
+        Use this to present package options with natural upsell, not as a list of all options.
+        EXAMPLE: "I recommend the 10-hour package - it's our most popular and saves you $75. Would that work for you?"
       operationId: getPackages
       tags:
         - Packages
@@ -367,6 +375,10 @@ paths:
                     savings:
                       type: number
                       description: Amount saved
+                    badge:
+                      type: string
+                      description: Badge label like "Most Popular" for the 10-hour package
+                      example: "Most Popular"
               testPackage:
                 type: object
                 properties:
@@ -381,8 +393,12 @@ paths:
 
   /availability/slots:
     get:
-      summary: Get available time slots
-      description: Returns available booking slots for an instructor on a specific date
+      summary: Get available time slots for booking
+      description: |
+        Returns available time slots for an instructor on a specific date and duration.
+        Slots marked as available=true are free to book. Slots marked as available=false are already booked.
+        AI should present available slots naturally: "I have 9am, 11am, and 2pm available on Monday".
+        Duration must be 60, 90, or 120 minutes.
       operationId: getAvailableSlots
       tags:
         - Availability
@@ -426,12 +442,24 @@ paths:
 
   /public/bookings/bulk:
     post:
-      summary: Create booking with package
+      summary: Create booking with package (PENDING_PAYMENT status)
       description: |
-        Create a new booking or package purchase.
-        IMPORTANT: Backend calculates pricing - AI should NOT send pricing fields.
-        AI only sends: instructor, package type, schedule, and account details.
-        PASSWORD IS OPTIONAL - backend auto-generates if not provided.
+        Creates a new booking with PENDING_PAYMENT status. Booking expires in 10 minutes if payment not completed.
+        Backend auto-generates password if not provided and will send via SMS/email.
+        Backend calculates all pricing - AI should NOT send pricing fields.
+        Returns bookingId and Stripe Checkout URL. AI should tell user: "I'm holding your time slot for 10 minutes while you complete payment".
+        After payment confirmed via webhook, booking status changes to CONFIRMED and notifications are sent.
+        AI sends: instructorId, packageType, hours, bookingType, schedule, account details (name, email, phone).
+        
+        BOOKING STATUS FLOW:
+        1. Booking created → status: PENDING_PAYMENT, expiresAt: now + 10 minutes
+        2. Payment completed → status: CONFIRMED, expiresAt: null
+        3. Payment not completed → status: EXPIRED (auto-updated by cron job)
+        
+        TIME SLOT HOLD:
+        - Slot is reserved while booking status is PENDING_PAYMENT or CONFIRMED
+        - Expired bookings release the slot automatically
+        - No separate reservation table needed
       operationId: createBooking
       tags:
         - Bookings
@@ -511,7 +539,7 @@ paths:
                       type: string
       responses:
         '200':
-          description: Booking created successfully
+          description: Booking created successfully with PENDING_PAYMENT status
           schema:
             type: object
             properties:
@@ -519,23 +547,20 @@ paths:
                 type: boolean
               bookingId:
                 type: string
-              clientId:
+                description: Booking ID for tracking
+              status:
                 type: string
+                example: "PENDING_PAYMENT"
+              checkoutUrl:
+                type: string
+                description: Stripe Checkout Session URL to complete payment
+              expiresAt:
+                type: string
+                format: date-time
+                description: When the booking will expire if not paid (10 minutes from creation)
               total:
                 type: number
-                description: Total amount charged (calculated by backend)
-              pricing:
-                type: object
-                description: Pricing breakdown (calculated by backend)
-                properties:
-                  subtotal:
-                    type: number
-                  discount:
-                    type: number
-                  platformFee:
-                    type: number
-                  total:
-                    type: number
+                description: Total amount to be charged (calculated by backend)
         '400':
           description: Invalid booking data
           schema:
@@ -543,6 +568,117 @@ paths:
             properties:
               error:
                 type: string
+
+  /bookings/lookup:
+    get:
+      summary: Find bookings by phone number
+      description: |
+        Returns all active bookings (PENDING_PAYMENT or CONFIRMED) for a phone number.
+        Only returns future bookings. Useful for rescheduling or cancellation flows.
+        AI can use this when user says "I need to change my lesson" or "Cancel my booking".
+      operationId: lookupBookings
+      tags:
+        - Bookings
+      parameters:
+        - name: phone
+          in: query
+          type: string
+          required: true
+          description: Client phone number
+          example: "0400123456"
+      responses:
+        '200':
+          description: Bookings found
+          schema:
+            type: object
+            properties:
+              bookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    status:
+                      type: string
+                      enum: [PENDING_PAYMENT, CONFIRMED]
+                    startTime:
+                      type: string
+                      format: date-time
+                    duration:
+                      type: number
+                    pickupLocation:
+                      type: string
+                    instructor:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        phone:
+                          type: string
+                    expiresAt:
+                      type: string
+                      format: date-time
+                      description: Present only if status is PENDING_PAYMENT
+        '400':
+          description: Phone parameter missing
+
+  /instructors/lookup:
+    get:
+      summary: Find instructor by name or phone (OPTIONAL)
+      description: |
+        Finds an instructor by name or phone number if user has a preference.
+        Use this when user says "I want to book with Debesay" or provides instructor phone.
+        If not found, use /instructors/recommendations instead to suggest alternatives.
+        This is OPTIONAL - most users won't know instructor name, so use recommendations by default.
+      operationId: lookupInstructor
+      tags:
+        - Instructors
+      parameters:
+        - name: query
+          in: query
+          type: string
+          required: true
+          description: Instructor name or phone number
+          example: "Debesay"
+      responses:
+        '200':
+          description: Instructor found
+          schema:
+            type: object
+            properties:
+              found:
+                type: boolean
+              instructor:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  hourlyRate:
+                    type: number
+                  rating:
+                    type: number
+                  vehicleTypes:
+                    type: array
+                    items:
+                      type: string
+                  languages:
+                    type: array
+                    items:
+                      type: string
+        '404':
+          description: Instructor not found
+          schema:
+            type: object
+            properties:
+              found:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "Instructor not found"
 
 tags:
   - name: System

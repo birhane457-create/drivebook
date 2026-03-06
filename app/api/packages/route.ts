@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
         savings: hourlyRate * 10 * 0.10,
         description: 'Most popular - best value',
         popular: true,
+        badge: 'Most Popular',
       },
       {
         type: 'PACKAGE_15',

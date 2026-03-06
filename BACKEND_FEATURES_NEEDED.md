@@ -11,96 +11,105 @@
 5. **Password Auto-Generation** - Backend generates if not provided
 6. **Availability Slots** - `/api/availability/slots`
 
-### ⚠️ Needs Implementation
+### ⚠️ Needs Implementation (REVISED ARCHITECTURE)
 
-1. **10-Minute Time Slot Hold**
-2. **OTP/Password via SMS**
-3. **Payment Link Generation**
-4. **Instructor Lookup by Name/Phone**
+1. **Booking Status & Expiry** - Add PENDING_PAYMENT, CONFIRMED, EXPIRED, CANCELLED
+2. **Stripe Checkout Session** - Replace payment links with Checkout Sessions
+3. **Payment Webhook** - Confirm bookings when payment succeeds
+4. **SMS/Email Notifications** - Send password and payment link
+5. **Booking Expiry Cron** - Auto-expire unpaid bookings after 10 minutes
+6. **Booking Lookup** - Find bookings by phone number
+7. **Instructor Lookup** - Find instructor by name/phone (optional enhancement)
 
 ---
 
-## Feature 1: 10-Minute Time Slot Hold
+## Feature 1: Booking Status & Expiry (CRITICAL)
 
 ### What It Does
 
-When user selects a time slot, it's "soft reserved" for 10 minutes while they complete payment.
+Bookings start as PENDING_PAYMENT and expire after 10 minutes if not paid. This automatically releases the time slot without needing a separate reservation table.
 
 ### Implementation
 
-**Add to `/api/availability/slots` response:**
-
-```typescript
-// When returning available slots
-{
-  slots: [
-    {
-      time: "09:00",
-      available: true,
-      canReserve: true
-    }
-  ]
-}
-```
-
-**Add new endpoint: `/api/availability/reserve`**
-
-```typescript
-POST /api/availability/reserve
-{
-  instructorId: "inst_123",
-  date: "2026-03-10",
-  time: "09:00",
-  duration: 60,
-  clientEmail: "john@email.com"
-}
-
-Response:
-{
-  reserved: true,
-  reservationId: "res_abc123",
-  expiresAt: "2026-03-10T09:10:00Z", // 10 minutes from now
-  message: "Time slot reserved for 10 minutes"
-}
-```
-
-**Database:**
+**Update Booking Model:**
 
 ```prisma
-model SlotReservation {
-  id            String   @id @default(cuid())
-  instructorId  String
-  startTime     DateTime
-  endTime       DateTime
-  clientEmail   String
-  expiresAt     DateTime
-  status        String   // RESERVED, CONFIRMED, EXPIRED
-  createdAt     DateTime @default(now())
+model Booking {
+  // ... existing fields
+  status        String   @default("PENDING_PAYMENT") // PENDING_PAYMENT, CONFIRMED, EXPIRED, CANCELLED
+  expiresAt     DateTime? // Set to now + 10 minutes for PENDING_PAYMENT bookings
+  // ... rest of fields
 }
 ```
 
-**Cron Job:**
+**Update `/api/public/bookings/bulk`:**
 
-```javascript
-// Every minute, expire old reservations
-setInterval(async () => {
-  await prisma.slotReservation.updateMany({
+```typescript
+const booking = await prisma.booking.create({
+  data: {
+    // ... existing fields
+    status: 'PENDING_PAYMENT',
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes from now
+    // ... rest of fields
+  }
+});
+```
+
+**Update `/api/availability/slots`:**
+
+```typescript
+// When checking availability, exclude bookings with these statuses:
+const bookedSlots = await prisma.booking.findMany({
+  where: {
+    instructorId,
+    date,
+    status: {
+      in: ['PENDING_PAYMENT', 'CONFIRMED'] // Both block the slot
+    }
+  }
+});
+```
+
+**Cron Job (runs every minute):**
+
+```typescript
+// api/cron/expire-bookings/route.ts
+export async function GET() {
+  const expiredBookings = await prisma.booking.updateMany({
     where: {
-      expiresAt: { lt: new Date() },
-      status: 'RESERVED'
+      status: 'PENDING_PAYMENT',
+      expiresAt: { lt: new Date() }
     },
-    data: { status: 'EXPIRED' }
-  })
-}, 60000)
+    data: {
+      status: 'EXPIRED'
+    }
+  });
+  
+  return NextResponse.json({ 
+    expired: expiredBookings.count 
+  });
+}
+```
+
+**Setup Vercel Cron:**
+
+```json
+// vercel.json
+{
+  "crons": [{
+    "path": "/api/cron/expire-bookings",
+    "schedule": "* * * * *"
+  }]
+}
 ```
 
 ---
 
-## Feature 2: OTP/Password via SMS
+## Feature 2: Stripe Checkout Session (CRITICAL)
 
 ### What It Does
 
-After booking created, send password via SMS and email.
+Creates a Stripe Checkout Session (not payment link) with booking metadata. Returns checkout URL to send via SMS/email.
 
 ### Implementation
 
@@ -108,28 +117,123 @@ After booking created, send password via SMS and email.
 
 ```typescript
 // After creating booking
-if (shouldSendPassword) {
-  // Send SMS
-  await smsService.send({
-    to: data.accountHolderPhone,
-    message: `Welcome to DriveBook! Your account password is: ${password}. Login at drivebook.com.au to manage your lessons.`
-  });
-  
-  // Send Email
-  await emailService.send({
-    to: data.accountHolderEmail,
-    subject: 'Welcome to DriveBook - Your Account Details',
-    html: `
-      <h1>Welcome to DriveBook!</h1>
-      <p>Your account has been created successfully.</p>
-      <p><strong>Email:</strong> ${data.accountHolderEmail}</p>
-      <p><strong>Password:</strong> ${password}</p>
-      <p><a href="https://drivebook.com.au/login">Click here to login</a></p>
-      <p>Please change your password after first login.</p>
-    `
-  });
+const session = await stripe.checkout.sessions.create({
+  mode: 'payment',
+  line_items: [{
+    price_data: {
+      currency: 'aud',
+      product_data: {
+        name: `${data.packageType} with ${instructor.name}`,
+        description: `${data.hours} hours of driving lessons`
+      },
+      unit_amount: Math.round(data.pricing.total * 100) // Convert to cents
+    },
+    quantity: 1
+  }],
+  success_url: `https://drivebook.com.au/booking-success?session_id={CHECKOUT_SESSION_ID}`,
+  cancel_url: `https://drivebook.com.au/booking-cancelled?booking_id=${booking.id}`,
+  metadata: {
+    bookingId: booking.id,
+    clientEmail: data.accountHolderEmail,
+    instructorId: data.instructorId
+  },
+  customer_email: data.accountHolderEmail,
+  expires_at: Math.floor(Date.now() / 1000) + (10 * 60) // 10 minutes
+});
+
+return NextResponse.json({
+  success: true,
+  bookingId: booking.id,
+  checkoutUrl: session.url,
+  expiresAt: booking.expiresAt,
+  total: data.pricing.total
+});
+```
+
+**Why Checkout Session is Better:**
+- Easier to pass bookingId via metadata
+- Webhook integration is cleaner
+- Built-in expiry handling
+- Better mobile experience
+
+---
+
+## Feature 3: Payment Webhook (CRITICAL)
+
+### What It Does
+
+Stripe webhook confirms payment and updates booking status from PENDING_PAYMENT to CONFIRMED.
+
+### Implementation
+
+**Create webhook endpoint:**
+
+```typescript
+// app/api/payments/webhook/route.ts
+import { headers } from 'next/headers';
+import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+
+export async function POST(req: Request) {
+  const body = await req.text();
+  const signature = headers().get('stripe-signature')!;
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+  } catch (err) {
+    return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+  }
+
+  // Handle checkout.session.completed
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const bookingId = session.metadata?.bookingId;
+
+    if (bookingId) {
+      // Update booking status to CONFIRMED
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'CONFIRMED',
+          expiresAt: null // No longer needs to expire
+        }
+      });
+
+      // Send confirmation email/SMS
+      const booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        include: { instructor: true }
+      });
+
+      if (booking) {
+        await sendConfirmationNotifications(booking);
+      }
+    }
+  }
+
+  return new Response(JSON.stringify({ received: true }), { status: 200 });
 }
 ```
+
+**Configure in Stripe Dashboard:**
+1. Go to Developers → Webhooks
+2. Add endpoint: `https://drivebook.com.au/api/payments/webhook`
+3. Select event: `checkout.session.completed`
+4. Copy webhook secret to `.env`
+
+---
+
+## Feature 4: SMS & Email Notifications (CRITICAL)
+
+### What It Does
+
+After booking created, send password and checkout link via SMS and email.
+
+### Implementation
 
 **SMS Service (Twilio):**
 
@@ -153,90 +257,100 @@ export const smsService = {
 };
 ```
 
----
-
-## Feature 3: Payment Link Generation
-
-### What It Does
-
-After booking created, generate Stripe payment link and send to user.
-
-### Implementation
-
-**Update `/api/public/bookings/bulk` response:**
+**Update `/api/public/bookings/bulk`:**
 
 ```typescript
-// After creating booking
-const paymentIntent = await stripe.paymentIntents.create({
-  amount: Math.round(data.pricing.total * 100), // Convert to cents
-  currency: 'aud',
-  metadata: {
-    bookingId: booking.id,
-    clientEmail: data.accountHolderEmail
-  }
-});
-
-const paymentLink = `https://drivebook.com.au/payment/${paymentIntent.id}`;
-
-// Send payment link via email
-await emailService.send({
-  to: data.accountHolderEmail,
-  subject: 'Complete Your DriveBook Booking',
-  html: `
-    <h1>Complete Your Booking</h1>
-    <p>Your lesson with ${instructor.name} is reserved for 10 minutes.</p>
-    <p><strong>Total:</strong> $${data.pricing.total}</p>
-    <p><a href="${paymentLink}">Click here to complete payment</a></p>
-    <p>Time slot expires in 10 minutes.</p>
-  `
-});
-
-// Send payment link via SMS
-await smsService.send({
-  to: data.accountHolderPhone,
-  message: `Complete your DriveBook booking: ${paymentLink} (expires in 10 min)`
-});
-
-return NextResponse.json({
-  success: true,
-  bookingId: booking.id,
-  paymentLink: paymentLink,
-  expiresAt: new Date(Date.now() + 10 * 60 * 1000)
-});
-```
-
-**Create Payment Page:**
-
-```typescript
-// app/payment/[intentId]/page.tsx
-export default async function PaymentPage({ params }: { params: { intentId: string } }) {
-  const intent = await stripe.paymentIntents.retrieve(params.intentId);
+// After creating Stripe session
+if (shouldSendPassword) {
+  // Send SMS
+  await smsService.send({
+    to: data.accountHolderPhone,
+    message: `DriveBook: Your account is ready!\n\nLogin: ${data.accountHolderEmail}\nPassword: ${password}\n\nComplete payment: ${session.url}\n\n(Link expires in 10 min)`
+  });
   
-  return (
-    <div>
-      <h1>Complete Your Booking</h1>
-      <StripeCheckout clientSecret={intent.client_secret} />
-    </div>
-  );
+  // Send Email
+  await emailService.send({
+    to: data.accountHolderEmail,
+    subject: 'Complete Your DriveBook Booking',
+    html: `
+      <h1>Your DriveBook Account is Ready!</h1>
+      <p>Your lesson with ${instructor.name} is reserved for 10 minutes.</p>
+      
+      <h2>Account Details</h2>
+      <p><strong>Email:</strong> ${data.accountHolderEmail}</p>
+      <p><strong>Password:</strong> ${password}</p>
+      
+      <h2>Complete Payment</h2>
+      <p><strong>Total:</strong> $${data.pricing.total}</p>
+      <a href="${session.url}" style="background: #0070f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+        Pay Now
+      </a>
+      
+      <p style="color: #666; margin-top: 20px;">
+        ⏰ Time slot expires in 10 minutes
+      </p>
+    `
+  });
 }
 ```
 
 ---
 
-## Feature 4: Instructor Lookup by Name/Phone
+## Feature 5: Booking Lookup (IMPORTANT)
 
 ### What It Does
 
-Allow AI to find instructor by name or phone number.
+Allow AI to find bookings by phone number for rescheduling/cancellation.
 
 ### Implementation
 
-**Add endpoint: `/api/instructors/lookup`**
+**Add endpoint:**
 
 ```typescript
-GET /api/instructors/lookup?query=Debesay
-GET /api/instructors/lookup?query=0400123456
+// app/api/bookings/lookup/route.ts
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const phone = searchParams.get('phone');
+  
+  if (!phone) {
+    return NextResponse.json({ error: 'phone required' }, { status: 400 });
+  }
+  
+  const bookings = await prisma.booking.findMany({
+    where: {
+      clientPhone: phone,
+      status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] },
+      startTime: { gte: new Date() } // Only future bookings
+    },
+    include: {
+      instructor: {
+        select: {
+          name: true,
+          phone: true
+        }
+      }
+    },
+    orderBy: { startTime: 'asc' }
+  });
+  
+  return NextResponse.json({ bookings });
+}
+```
 
+---
+
+## Feature 6: Instructor Lookup (OPTIONAL)
+
+### What It Does
+
+Allow AI to find instructor by name or phone if user has a preference.
+
+### Implementation
+
+**Add endpoint:**
+
+```typescript
+// app/api/instructors/lookup/route.ts
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const query = searchParams.get('query');
@@ -245,13 +359,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'query required' }, { status: 400 });
   }
   
-  // Search by name or phone
   const instructor = await prisma.instructor.findFirst({
     where: {
       OR: [
         { name: { contains: query, mode: 'insensitive' } },
-        { phone: query },
-        { user: { email: query } }
+        { phone: query }
       ],
       isActive: true,
       approvalStatus: 'APPROVED'
@@ -261,8 +373,6 @@ export async function GET(req: NextRequest) {
       name: true,
       hourlyRate: true,
       rating: true,
-      profileImage: true,
-      baseAddress: true,
       vehicleTypes: true,
       languages: true
     }
@@ -275,77 +385,87 @@ export async function GET(req: NextRequest) {
     }, { status: 404 });
   }
   
-  return NextResponse.json({
-    found: true,
-    instructor
-  });
+  return NextResponse.json({ found: true, instructor });
 }
-```
-
-**Update OpenAPI spec:**
-
-```yaml
-/instructors/lookup:
-  get:
-    summary: Find instructor by name or phone
-    parameters:
-      - name: query
-        in: query
-        type: string
-        required: true
-        description: Instructor name or phone number
-    responses:
-      '200':
-        description: Instructor found
-      '404':
-        description: Instructor not found
 ```
 
 ---
 
-## Priority Implementation Order
+## Priority Implementation Order (REVISED)
 
-### Phase 1 (Critical - Do First)
+### Phase 1 (Critical - Must Have for Production)
 
-1. **OTP/Password via SMS** ⭐ CRITICAL
-   - Users need password to login
-   - Estimated time: 2 hours
+1. **Booking Status & Expiry** ⭐ CRITICAL
+   - Add status field and expiresAt to Booking model
+   - Update booking creation to set PENDING_PAYMENT
+   - Estimated time: 30 minutes
 
-2. **Payment Link Generation** ⭐ CRITICAL
-   - Users need to pay
-   - Estimated time: 3 hours
+2. **Stripe Checkout Session** ⭐ CRITICAL
+   - Replace payment link with Checkout Session
+   - Pass bookingId in metadata
+   - Estimated time: 1.5 hours
 
-### Phase 2 (Important - Do Soon)
-
-3. **Instructor Lookup** ⭐ IMPORTANT
-   - Better UX if user knows instructor
+3. **Payment Webhook** ⭐ CRITICAL
+   - Handle checkout.session.completed
+   - Update booking status to CONFIRMED
    - Estimated time: 1 hour
 
-4. **10-Minute Time Slot Hold** ⭐ IMPORTANT
-   - Prevents double booking
-   - Estimated time: 4 hours
+4. **SMS & Email Notifications** ⭐ CRITICAL
+   - Send password and checkout link
+   - Twilio integration for SMS
+   - Estimated time: 1.5 hours
 
-### Phase 3 (Nice to Have - Do Later)
+5. **Booking Expiry Cron** ⭐ CRITICAL
+   - Auto-expire unpaid bookings
+   - Setup Vercel cron job
+   - Estimated time: 1 hour
 
-5. **Rescheduling API**
-6. **Cancellation API**
-7. **Booking Lookup by Phone**
+**Phase 1 Total: ~5.5 hours**
+
+### Phase 2 (Important - Nice to Have)
+
+6. **Booking Lookup** ⭐ IMPORTANT
+   - Find bookings by phone
+   - For rescheduling/cancellation
+   - Estimated time: 30 minutes
+
+7. **Instructor Lookup** ⭐ OPTIONAL
+   - Find instructor by name/phone
+   - Better UX if user has preference
+   - Estimated time: 30 minutes
+
+**Phase 2 Total: ~1 hour**
+
+### Phase 3 (Future Enhancements)
+
+8. **Rescheduling API**
+9. **Cancellation API**
+10. **Refund handling**
 
 ---
 
 ## Testing Checklist
 
-### After Implementation
+### After Phase 1 Implementation
 
-- [ ] SMS received with password
-- [ ] Email received with password
-- [ ] Payment link works
-- [ ] Payment link expires after 10 minutes
-- [ ] Booking status updates after payment
+- [ ] Booking created with PENDING_PAYMENT status
+- [ ] expiresAt set to 10 minutes from creation
+- [ ] SMS received with password and checkout link
+- [ ] Email received with password and checkout link
+- [ ] Stripe Checkout Session opens correctly
+- [ ] Payment completes successfully
+- [ ] Webhook receives checkout.session.completed event
+- [ ] Booking status updates to CONFIRMED after payment
+- [ ] Booking expiresAt cleared after confirmation
+- [ ] Cron job expires unpaid bookings after 10 minutes
+- [ ] Expired bookings release time slots
+- [ ] Availability endpoint excludes PENDING_PAYMENT and CONFIRMED bookings
+
+### After Phase 2 Implementation
+
+- [ ] Booking lookup by phone returns correct bookings
 - [ ] Instructor lookup by name works
 - [ ] Instructor lookup by phone works
-- [ ] Time slot hold prevents double booking
-- [ ] Expired reservations are cleaned up
 
 ---
 
@@ -360,6 +480,7 @@ TWILIO_PHONE_NUMBER=+61400000000
 # Stripe (for payments)
 STRIPE_SECRET_KEY=sk_live_xxxxx
 STRIPE_PUBLISHABLE_KEY=pk_live_xxxxx
+STRIPE_WEBHOOK_SECRET=whsec_xxxxx
 
 # Email (already configured)
 RESEND_API_KEY=re_xxxxx
@@ -378,12 +499,18 @@ RESEND_API_KEY=re_xxxxx
 - Availability slots
 
 ### Needs Implementation ⚠️
-1. OTP/Password via SMS (2 hours) ⭐ CRITICAL
-2. Payment link generation (3 hours) ⭐ CRITICAL
-3. Instructor lookup (1 hour) ⭐ IMPORTANT
-4. 10-minute slot hold (4 hours) ⭐ IMPORTANT
 
-**Total Estimated Time:** 10 hours
+**Phase 1 (Critical - 5.5 hours):**
+1. Booking status & expiry (30 min) ⭐ CRITICAL
+2. Stripe Checkout Session (1.5h) ⭐ CRITICAL
+3. Payment webhook (1h) ⭐ CRITICAL
+4. SMS & Email notifications (1.5h) ⭐ CRITICAL
+5. Booking expiry cron (1h) ⭐ CRITICAL
 
-**Priority:** Implement Phase 1 first (SMS + Payment) to make the system functional end-to-end.
+**Phase 2 (Important - 1 hour):**
+6. Booking lookup (30 min) ⭐ IMPORTANT
+7. Instructor lookup (30 min) ⭐ OPTIONAL
 
+**Total Estimated Time:** 6.5 hours
+
+**Architecture Improvement:** Using booking status instead of separate reservation table simplifies the system significantly.
