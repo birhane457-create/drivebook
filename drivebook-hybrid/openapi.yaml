@@ -474,7 +474,7 @@ paths:
                 type: string
               accountHolderPhone:
                 type: string
-                description: Phone number for account (AI will generate secure password automatically)
+                description: Phone number - password will be auto-generated and sent via SMS/email
               learnerName:
                 type: string
                 description: Required if registrationType is someone-else
