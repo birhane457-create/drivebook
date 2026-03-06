@@ -1,0 +1,559 @@
+swagger: '2.0'
+info:
+  title: DriveBook Voice Service API
+  description: |
+    API for AI voice agent to interact with DriveBook platform for booking driving lessons.
+    
+    RECOMMENDED AI CONVERSATION FLOW (OPTIMIZED):
+    1. Ask user for pickup location
+    2. Validate location via /locations/validate
+    3. Get smart recommendations via /instructors/recommendations (AI-ranked, top 3)
+    4. Present options: "I found 3 great instructors: Debesay (top rated), Michael (best value), Sarah (closest)"
+    5. User selects instructor
+    6. Call /availability/slots to check times
+    7. Call /packages to present package options with savings
+    8. Create booking via /public/bookings/bulk (backend calculates pricing, generates password)
+    
+    KEY IMPROVEMENTS:
+    - AI does NOT ask for password (backend generates secure password automatically)
+    - Smart recommendations with reasons (top rated, best value, closest, etc.)
+    - Location validation prevents bad addresses
+    - Backend handles all pricing calculations
+    - Intelligent ranking algorithm (rating 40%, distance 25%, price 20%, experience 15%)
+  version: 2.0.0
+  contact:
+    name: DriveBook Support
+host: drivebook.com.au
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Check if the service is running and database is connected
+      operationId: healthCheck
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: ok
+              database:
+                type: string
+                example: connected
+
+  /instructors/recommendations:
+    get:
+      summary: Get smart instructor recommendations (AI-POWERED)
+      description: |
+        Returns top instructors ranked by intelligent scoring algorithm.
+        Considers rating, distance, price, and experience.
+        This is the BEST endpoint for AI to use - provides pre-ranked, personalized results.
+      operationId: getInstructorRecommendations
+      tags:
+        - Instructors
+      parameters:
+        - name: location
+          in: query
+          type: string
+          required: true
+          description: Pickup location
+          example: "Joondalup WA"
+        - name: vehicleType
+          in: query
+          type: string
+          required: false
+          description: Preferred vehicle type
+          enum: [AUTO, MANUAL]
+        - name: language
+          in: query
+          type: string
+          required: false
+          description: Preferred language
+          example: "English"
+        - name: budget
+          in: query
+          type: number
+          required: false
+          description: Maximum hourly rate
+          example: 75
+        - name: experienceLevel
+          in: query
+          type: string
+          required: false
+          enum: [beginner, intermediate, advanced]
+        - name: limit
+          in: query
+          type: integer
+          required: false
+          description: Number of recommendations to return
+          default: 3
+          example: 3
+      responses:
+        '200':
+          description: Recommended instructors with reasons
+          schema:
+            type: object
+            properties:
+              recommendations:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    hourlyRate:
+                      type: number
+                    distance:
+                      type: number
+                    rating:
+                      type: number
+                    reviews:
+                      type: integer
+                    totalBookings:
+                      type: integer
+                    vehicleTypes:
+                      type: array
+                      items:
+                        type: string
+                    languages:
+                      type: array
+                      items:
+                        type: string
+                    car:
+                      type: string
+                      example: "Toyota Corolla 2020"
+                    score:
+                      type: integer
+                      description: Recommendation score (0-100)
+                    reason:
+                      type: string
+                      description: Why this instructor is recommended
+                      example: "Top rated instructor near you"
+                    badges:
+                      type: array
+                      items:
+                        type: string
+                      example: ["Featured", "Top Rated", "Nearby"]
+              count:
+                type: integer
+              message:
+                type: string
+              searchLocation:
+                type: object
+
+  /instructors/search:
+    get:
+      summary: Search instructors by location (PRIMARY ENDPOINT)
+      description: |
+        Find instructors who serve a specific location, sorted by distance and rating.
+        This is the MAIN endpoint for the AI to use when a student provides their pickup location.
+      operationId: searchInstructorsByLocation
+      tags:
+        - Instructors
+      parameters:
+        - name: location
+          in: query
+          type: string
+          required: true
+          description: Pickup location - address, suburb, or postcode
+          example: "Joondalup WA"
+      responses:
+        '200':
+          description: List of instructors serving the location
+          schema:
+            type: object
+            properties:
+              instructors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    hourlyRate:
+                      type: number
+                    distance:
+                      type: number
+                      description: Distance in kilometers
+                    rating:
+                      type: number
+                      description: Average rating (0-5)
+                    reviews:
+                      type: integer
+                    totalBookings:
+                      type: integer
+                    bio:
+                      type: string
+                    vehicleTypes:
+                      type: array
+                      items:
+                        type: string
+                      description: AUTO, MANUAL
+                    languages:
+                      type: array
+                      items:
+                        type: string
+                    profileImage:
+                      type: string
+                    carMake:
+                      type: string
+                    carModel:
+                      type: string
+                    carYear:
+                      type: integer
+              count:
+                type: integer
+              searchLocation:
+                type: object
+                properties:
+                  displayName:
+                    type: string
+        '404':
+          description: No instructors serve that area
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/instructors:
+    get:
+      summary: Get all approved instructors
+      description: Returns all active instructors. Use /instructors/search for location-based search.
+      operationId: getAllInstructors
+      tags:
+        - Instructors
+      responses:
+        '200':
+          description: List of all instructors
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+                hourlyRate:
+                  type: number
+                rating:
+                  type: number
+                reviews:
+                  type: integer
+                vehicleTypes:
+                  type: array
+                  items:
+                    type: string
+                languages:
+                  type: array
+                  items:
+                    type: string
+
+  /locations/validate:
+    post:
+      summary: Validate pickup location
+      description: |
+        Validates and geocodes a pickup location.
+        Prevents bad addresses during voice calls.
+        Returns formatted address and coordinates.
+      operationId: validateLocation
+      tags:
+        - Locations
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - pickupLocation
+            properties:
+              pickupLocation:
+                type: string
+                description: Address, suburb, or postcode to validate
+                example: "123 Main St, Joondalup WA"
+      responses:
+        '200':
+          description: Location validation result
+          schema:
+            type: object
+            properties:
+              valid:
+                type: boolean
+              formattedAddress:
+                type: string
+                example: "123 Main St, Joondalup WA 6027"
+              lat:
+                type: number
+              lng:
+                type: number
+              components:
+                type: object
+                properties:
+                  suburb:
+                    type: string
+                  state:
+                    type: string
+                  postcode:
+                    type: string
+              error:
+                type: string
+                description: Present if valid is false
+              suggestions:
+                type: array
+                items:
+                  type: string
+                description: Suggestions if location not found
+
+  /packages:
+    get:
+      summary: Get available lesson packages
+      description: |
+        Returns available lesson packages with pricing.
+        AI should call this to present package options to students.
+      operationId: getPackages
+      tags:
+        - Packages
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+          description: Instructor ID to get their specific pricing
+      responses:
+        '200':
+          description: Available packages
+          schema:
+            type: object
+            properties:
+              packages:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
+                    hours:
+                      type: integer
+                    price:
+                      type: number
+                      description: Total price after discount
+                    originalPrice:
+                      type: number
+                    discount:
+                      type: number
+                      description: Discount amount
+                    discountPercentage:
+                      type: integer
+                      description: Discount percentage (5, 10, 12)
+                    savings:
+                      type: number
+                      description: Amount saved
+              testPackage:
+                type: object
+                properties:
+                  available:
+                    type: boolean
+                  price:
+                    type: number
+                    example: 150
+                  includes:
+                    type: string
+                    example: "1-hour pre-test lesson, car rental, test day support"
+
+  /availability/slots:
+    get:
+      summary: Get available time slots
+      description: Returns available booking slots for an instructor on a specific date
+      operationId: getAvailableSlots
+      tags:
+        - Availability
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+        - name: date
+          in: query
+          type: string
+          required: true
+          description: Date in YYYY-MM-DD format
+          example: "2026-03-25"
+        - name: duration
+          in: query
+          type: integer
+          required: true
+          description: Lesson duration in minutes (60, 90, or 120)
+          example: 60
+      responses:
+        '200':
+          description: Available slots
+          schema:
+            type: object
+            properties:
+              slots:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    time:
+                      type: string
+                      example: "09:00"
+                    available:
+                      type: boolean
+              date:
+                type: string
+              duration:
+                type: integer
+
+  /public/bookings/bulk:
+    post:
+      summary: Create booking with package
+      description: |
+        Create a new booking or package purchase.
+        IMPORTANT: Backend calculates pricing - AI should NOT send pricing fields.
+        AI only sends: instructor, package type, schedule, and account details.
+        PASSWORD IS OPTIONAL - backend auto-generates if not provided.
+      operationId: createBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - instructorId
+              - packageType
+              - bookingType
+              - registrationType
+              - accountHolderName
+              - accountHolderEmail
+              - accountHolderPhone
+            properties:
+              instructorId:
+                type: string
+                description: Instructor ID from search results
+              packageType:
+                type: string
+                enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
+              hours:
+                type: number
+                description: Required only for CUSTOM package
+              includeTestPackage:
+                type: boolean
+                default: false
+              bookingType:
+                type: string
+                enum: [now, later]
+                description: Schedule now or buy credits for later
+              registrationType:
+                type: string
+                enum: [myself, someone-else]
+              accountHolderName:
+                type: string
+              accountHolderEmail:
+                type: string
+              accountHolderPhone:
+                type: string
+                description: Phone number - password will be auto-generated and sent via SMS/email
+              learnerName:
+                type: string
+                description: Required if registrationType is someone-else
+              learnerPhone:
+                type: string
+              learnerRelationship:
+                type: string
+                enum: [child, partner, grandchild, parent, friend, other]
+              scheduledBookings:
+                type: array
+                description: Required if bookingType is now
+                items:
+                  type: object
+                  required:
+                    - date
+                    - time
+                    - duration
+                    - pickupLocation
+                  properties:
+                    date:
+                      type: string
+                      example: "2026-03-25"
+                    time:
+                      type: string
+                      example: "09:00"
+                    duration:
+                      type: integer
+                      example: 60
+                    pickupLocation:
+                      type: string
+                      example: "123 Main St, Joondalup WA 6027"
+                    notes:
+                      type: string
+      responses:
+        '200':
+          description: Booking created successfully
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              clientId:
+                type: string
+              total:
+                type: number
+                description: Total amount charged (calculated by backend)
+              pricing:
+                type: object
+                description: Pricing breakdown (calculated by backend)
+                properties:
+                  subtotal:
+                    type: number
+                  discount:
+                    type: number
+                  platformFee:
+                    type: number
+                  total:
+                    type: number
+        '400':
+          description: Invalid booking data
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+tags:
+  - name: System
+    description: System health and status
+  - name: Instructors
+    description: Instructor discovery and search
+  - name: Locations
+    description: Location validation and geocoding
+  - name: Packages
+    description: Lesson packages and pricing
+  - name: Availability
+    description: Time slot availability
+  - name: Bookings
+    description: Booking creation

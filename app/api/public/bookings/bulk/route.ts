@@ -22,7 +22,7 @@ const bulkBookingSchema = z.object({
   accountHolderName: z.string(),
   accountHolderEmail: z.string().email(),
   accountHolderPhone: z.string(),
-  accountHolderPassword: z.string(),
+  accountHolderPassword: z.string().optional(), // Optional - will be generated if not provided
   // Learner (only if someone-else)
   learnerName: z.string().optional(),
   learnerPhone: z.string().optional(),
@@ -100,7 +100,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Create new user account
-    const hashedPassword = await bcrypt.hash(data.accountHolderPassword, 10);
+    // Generate secure password if not provided (for AI voice bookings)
+    const password = data.accountHolderPassword || 
+      Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = await prisma.user.create({
       data: {
         email: data.accountHolderEmail,
@@ -109,6 +113,9 @@ export async function POST(req: NextRequest) {
       }
     });
     userId = newUser.id;
+
+    // Store plain password to send via SMS/email (only if auto-generated)
+    const shouldSendPassword = !data.accountHolderPassword;
 
     // Determine client details based on registration type
     const clientName = data.registrationType === 'myself' 
