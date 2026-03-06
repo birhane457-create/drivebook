@@ -71,6 +71,10 @@ paths:
         - While waiting for response, say: "Checking who's available near [Location] for you now..."
         - If user doesn't like top 3, fallback to /instructors/search for full list
         - Present with reasons: "I found 3 great instructors: [Name] is top rated, [Name] offers best value, [Name] is closest to you"
+        
+        RATE LIMITING:
+        - 30 requests per minute per IP address
+        - 60 requests per minute per API key
       operationId: getInstructorRecommendations
       tags:
         - Instructors
@@ -178,6 +182,14 @@ paths:
         Use this endpoint when user says "None of those work for me" or "Show me more options" after seeing top 3 recommendations.
         Present as: "Let me show you all available instructors in your area..."
         Still limit verbal presentation to 5-7 instructors max to avoid overwhelming user.
+        
+        PAGINATION:
+        - Returns 20 instructors per page by default
+        - Use page parameter to get more results
+        - AI should present 5-7 at a time, then ask "Would you like to hear more?"
+        
+        RATE LIMITING:
+        - 60 requests per minute per IP address
       operationId: searchInstructorsByLocation
       tags:
         - Instructors
@@ -188,6 +200,21 @@ paths:
           required: true
           description: Pickup location - address, suburb, or postcode
           example: "Joondalup WA"
+        - name: page
+          in: query
+          type: integer
+          required: false
+          default: 1
+          description: Page number for pagination
+          example: 1
+        - name: limit
+          in: query
+          type: integer
+          required: false
+          default: 20
+          maximum: 50
+          description: Number of results per page (max 50)
+          example: 20
       responses:
         '200':
           description: List of instructors serving the location
@@ -236,6 +263,16 @@ paths:
                       type: integer
               count:
                 type: integer
+                description: Total number of instructors found
+              page:
+                type: integer
+                description: Current page number
+              totalPages:
+                type: integer
+                description: Total number of pages
+              hasMore:
+                type: boolean
+                description: Whether there are more results available
               searchLocation:
                 type: object
                 properties:
@@ -248,6 +285,14 @@ paths:
             properties:
               error:
                 type: string
+              code:
+                type: string
+                example: "NO_INSTRUCTORS_FOUND"
+              suggestions:
+                type: array
+                items:
+                  type: string
+                description: Nearby areas that have instructors
 
   /public/instructors:
     get:
@@ -485,10 +530,24 @@ paths:
         - Slot is reserved while booking status is PENDING_PAYMENT or CONFIRMED
         - Expired bookings release the slot automatically
         - No separate reservation table needed
+        
+        RATE LIMITING:
+        - 10 requests per minute per phone number
+        - 20 requests per minute per IP address
+        - Use Idempotency-Key header to prevent duplicate bookings
       operationId: createBooking
       tags:
         - Bookings
       parameters:
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: true
+          description: |
+            Unique key to prevent duplicate bookings (e.g., UUID).
+            If same key is sent within 24 hours, returns original booking instead of creating duplicate.
+            AI should generate once per booking attempt and retry with same key if request fails.
+          example: "8x7w3k9m2q4r6t1y5u8v"
         - name: body
           in: body
           required: true
@@ -593,6 +652,58 @@ paths:
             properties:
               error:
                 type: string
+                description: Human-readable error message
+              code:
+                type: string
+                enum: [INVALID_LOCATION, SLOT_UNAVAILABLE, EXPIRED_BOOKING, EMAIL_EXISTS, INVALID_PACKAGE, INSTRUCTOR_NOT_FOUND]
+                description: Machine-readable error code
+              retryable:
+                type: boolean
+                description: Whether the request can be retried
+              suggestions:
+                type: array
+                items:
+                  type: string
+                description: Helpful suggestions for fixing the error
+            example:
+              error: "Time slot no longer available"
+              code: "SLOT_UNAVAILABLE"
+              retryable: true
+              suggestions: ["Try 10:00am", "Try 2:00pm", "Choose a different date"]
+        '409':
+          description: Email already registered
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+                example: "EMAIL_EXISTS"
+              actions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    label:
+                      type: string
+                    url:
+                      type: string
+                    primary:
+                      type: boolean
+        '429':
+          description: Rate limit exceeded
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+                example: "RATE_LIMIT_EXCEEDED"
+              retryAfter:
+                type: integer
+                description: Seconds until rate limit resets
 
   /bookings/lookup:
     get:
@@ -869,7 +980,7 @@ paths:
                   type: string
                 description: Alternative available time slots
 
-  /instructors/lookup:
+  /bookings/lookup:
     get:
       summary: Find bookings by phone number
       description: |
@@ -922,6 +1033,14 @@ paths:
                       description: Present only if status is PENDING_PAYMENT
         '400':
           description: Phone parameter missing
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+                example: "PHONE_REQUIRED"
 
   /instructors/lookup:
     get:
@@ -980,6 +1099,90 @@ paths:
                 type: string
                 example: "Instructor not found"
 
+  /webhooks/stripe:
+    post:
+      summary: Stripe payment confirmation webhook
+      description: |
+        Called by Stripe when payment is completed (checkout.session.completed event).
+        Updates booking status from PENDING_PAYMENT → CONFIRMED.
+        Sends confirmation SMS/email to client.
+        Releases hold on funds for instructor payout.
+        
+        SECURITY:
+        - Verifies Stripe signature in header
+        - Rejects requests without valid signature
+        - Idempotent (handles duplicate webhook calls)
+        
+        WORKFLOW:
+        1. Stripe calls this endpoint after successful payment
+        2. Backend verifies webhook signature
+        3. Extracts bookingId from session.metadata
+        4. Updates booking status to CONFIRMED
+        5. Clears expiresAt field
+        6. Sends confirmation notifications
+        7. Returns 200 OK to Stripe
+        
+        NOTE: This endpoint is called by Stripe, not by the AI agent.
+      operationId: stripeWebhook
+      tags:
+        - Webhooks
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          type: string
+          required: true
+          description: Stripe webhook signature for verification
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Stripe event ID
+              type:
+                type: string
+                enum: [checkout.session.completed]
+              data:
+                type: object
+                properties:
+                  object:
+                    type: object
+                    description: Stripe Checkout Session object
+                    properties:
+                      id:
+                        type: string
+                      metadata:
+                        type: object
+                        properties:
+                          bookingId:
+                            type: string
+                            description: DriveBook booking ID
+                          clientEmail:
+                            type: string
+                          instructorId:
+                            type: string
+      responses:
+        '200':
+          description: Webhook processed successfully
+          schema:
+            type: object
+            properties:
+              received:
+                type: boolean
+                example: true
+        '400':
+          description: Invalid signature or malformed request
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+                example: "INVALID_SIGNATURE"
+
 tags:
   - name: System
     description: System health and status
@@ -992,4 +1195,6 @@ tags:
   - name: Availability
     description: Time slot availability
   - name: Bookings
-    description: Booking creation
+    description: Booking creation and management
+  - name: Webhooks
+    description: External webhook integrations
