@@ -143,8 +143,7 @@ paths:
           in: query
           type: string
           required: true
-          description: Pickup location
-          example: "Joondalup WA"
+          description: Pickup location - "Joondalup WA" or "123 Main St, Maylands" or "6027"
         - name: vehicleType
           in: query
           type: string
@@ -155,14 +154,12 @@ paths:
           in: query
           type: string
           required: false
-          description: Preferred language
-          example: "English"
+          description: Preferred language (e.g., "English", "Mandarin")
         - name: budget
           in: query
           type: number
           required: false
-          description: Maximum hourly rate
-          example: 75
+          description: Maximum hourly rate (e.g., 75)
         - name: experienceLevel
           in: query
           type: string
@@ -172,9 +169,8 @@ paths:
           in: query
           type: integer
           required: false
-          description: Number of recommendations to return
+          description: Number of recommendations to return (default 3)
           default: 3
-          example: 3
       responses:
         '200':
           description: Recommended instructors with reasons
@@ -258,23 +254,20 @@ paths:
           in: query
           type: string
           required: true
-          description: Pickup location - address, suburb, or postcode
-          example: "Joondalup WA"
+          description: Pickup location - address, suburb, or postcode (e.g., "Joondalup WA")
         - name: page
           in: query
           type: integer
           required: false
           default: 1
-          description: Page number for pagination
-          example: 1
+          description: Page number for pagination (default 1)
         - name: limit
           in: query
           type: integer
           required: false
           default: 20
           maximum: 50
-          description: Number of results per page (max 50)
-          example: 20
+          description: Number of results per page, max 50 (default 20)
       responses:
         '200':
           description: List of instructors serving the location
@@ -554,14 +547,12 @@ paths:
           in: query
           type: string
           required: true
-          description: Date in YYYY-MM-DD format
-          example: "2026-03-25"
+          description: Date in YYYY-MM-DD format (e.g., "2026-03-25")
         - name: duration
           in: query
           type: integer
           required: true
-          description: Lesson duration in minutes (60, 90, or 120)
-          example: 60
+          description: Lesson duration in minutes - 60, 90, or 120 (e.g., 60)
       responses:
         '200':
           description: Available slots
@@ -617,10 +608,9 @@ paths:
           type: string
           required: true
           description: |
-            Unique key to prevent duplicate bookings (e.g., UUID).
+            Unique key to prevent duplicate bookings (e.g., UUID like "8x7w3k9m2q4r6t1y5u8v").
             If same key is sent within 24 hours, returns original booking instead of creating duplicate.
             AI should generate once per booking attempt and retry with same key if request fails.
-          example: "8x7w3k9m2q4r6t1y5u8v"
         - name: body
           in: body
           required: true
@@ -793,8 +783,7 @@ paths:
           in: query
           type: string
           required: true
-          description: Client phone number
-          example: "0400123456"
+          description: Client phone number (e.g., "0400123456")
       responses:
         '200':
           description: Bookings found
@@ -1077,8 +1066,7 @@ paths:
           in: query
           type: string
           required: true
-          description: Instructor name or phone number
-          example: "Debesay"
+          description: Instructor name or phone number (e.g., "Debesay" or "0400123456")
       responses:
         '200':
           description: Instructor found
