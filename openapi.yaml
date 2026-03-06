@@ -4,6 +4,53 @@ info:
   description: |
     API for AI voice agent to interact with DriveBook platform for booking driving lessons.
     
+    🔒 SECURITY PRINCIPLES - CRITICAL:
+    
+    What AI Should NEVER Do:
+    ❌ Collect credit card numbers
+    ❌ Store payment details
+    ❌ Process payments directly
+    ❌ Ask for CVV codes
+    ❌ Handle sensitive financial data
+    
+    Why:
+    - PCI DSS Compliance: Voice channels aren't secure for payment data
+    - Audit Trail: Need written confirmation for financial transactions
+    - Dispute Resolution: Can't prove what was said in a call
+    - Fraud Prevention: Voice can be recorded/spoofed
+    - User Trust: People are uncomfortable giving payment info verbally
+    
+    CORRECT PAYMENT FLOW:
+    1. AI collects booking details (name, email, phone, date, time, location)
+    2. Backend creates PENDING_PAYMENT booking via /public/bookings/bulk
+    3. Backend returns Stripe Checkout URL
+    4. AI sends payment link via SMS: "Click the link I just texted you to complete your booking securely"
+    5. User pays on Stripe's secure page (NOT via voice)
+    6. Stripe webhook confirms payment → booking status: CONFIRMED
+    7. Confirmation SMS/email sent automatically
+    
+    BOOKING STATUS FLOW:
+    ┌─────────────────┐
+    │ PENDING_PAYMENT │ ← AI creates booking, sends payment link
+    └────────┬────────┘
+             │
+    ┌────────▼────────┐
+    │  User pays via  │
+    │ Stripe Checkout │
+    └────────┬────────┘
+             │ Webhook
+    ┌────────▼────────┐
+    │   CONFIRMED     │ ← Webhook updates status, sends confirmation
+    └────────┬────────┘
+             │
+    ┌────────▼────────┐
+    │   COMPLETED     │ ← After lesson
+    └────────┬────────┘
+             │
+    ┌────────▼────────┐
+    │     PAID        │ ← Instructor paid
+    └─────────────────┘
+    
     RECOMMENDED AI CONVERSATION FLOW (OPTIMIZED):
     1. Ask user for pickup location
     2. Ask vehicle preference: "Do you prefer an automatic or manual car?" (improves recommendation accuracy)
@@ -16,13 +63,26 @@ info:
     9. Call /availability/slots to check times
     10. Call /packages to present package options with savings
     11. Create booking via /public/bookings/bulk (backend calculates pricing, generates password)
+    12. AI says: "I've reserved your time slot for 10 minutes. I'm sending a secure payment link to your phone now."
+    13. User receives SMS with Stripe Checkout link
+    14. User completes payment on Stripe (NOT via voice)
+    15. Webhook confirms payment, sends confirmation
     
     KEY IMPROVEMENTS:
     - AI does NOT ask for password (backend generates secure password automatically)
+    - AI does NOT handle payment (Stripe Checkout link sent via SMS)
     - Smart recommendations with reasons (top rated, best value, closest, etc.)
     - Location validation prevents bad addresses
     - Backend handles all pricing calculations
     - Intelligent ranking algorithm (rating 40%, distance 25%, price 20%, experience 15%)
+    
+    RATE LIMITING:
+    All endpoints are rate-limited to prevent abuse. Headers returned with every response:
+    - X-RateLimit-Limit: Maximum requests per window
+    - X-RateLimit-Remaining: Requests remaining in window
+    - X-RateLimit-Reset: Time when limit resets (Unix timestamp)
+    
+    When exceeded, returns 429 Too Many Requests with Retry-After header.
   version: 2.0.0
   contact:
     name: DriveBook Support
@@ -342,6 +402,11 @@ paths:
         - If valid=false, present suggestions to user: "I couldn't find that exact address. Did you mean [suggestion]?"
         - Use formattedAddress in all subsequent calls and confirmations
         - While validating, say: "Let me confirm that location..."
+        
+        RATE LIMITING:
+        - 20 requests per minute per IP address
+        - 40 requests per minute per API key
+        - Error: "Location validation limit reached. Please wait."
       operationId: validateLocation
       tags:
         - Locations
@@ -406,6 +471,10 @@ paths:
         - If user hesitant, mention alternatives: "We also have a 6-hour package if you'd like to start smaller, or 15-hour for maximum savings"
         - Emphasize savings in dollars, not percentages: "$75 savings" not "10% off"
         - While fetching, say: "Let me check the package options for [Instructor Name]..."
+        
+        RATE LIMITING:
+        - 30 requests per minute per IP address
+        - 60 requests per minute per API key
       operationId: getPackages
       tags:
         - Packages
@@ -469,6 +538,10 @@ paths:
         Slots marked as available=true are free to book. Slots marked as available=false are already booked.
         AI should present available slots naturally: "I have 9am, 11am, and 2pm available on Monday".
         Duration must be 60, 90, or 120 minutes.
+        
+        RATE LIMITING:
+        - 30 requests per minute per IP address
+        - 60 requests per minute per API key
       operationId: getAvailableSlots
       tags:
         - Availability
@@ -842,6 +915,10 @@ paths:
         - Refund goes to wallet balance immediately
         - Can be used for future bookings or withdrawn
         - Original payment method refund takes 5-7 business days
+        
+        RATE LIMITING:
+        - 3 requests per hour per booking ID
+        - Error: "Too many cancellation attempts. Please contact support."
       operationId: cancelBooking
       tags:
         - Bookings
@@ -918,6 +995,10 @@ paths:
         - Rescheduling >48h before: Free
         - Rescheduling 24-48h before: 50% fee
         - Rescheduling <24h before: Not allowed (must cancel and rebook)
+        
+        RATE LIMITING:
+        - 3 requests per hour per booking ID
+        - Error: "Too many reschedule attempts. Please contact support."
       operationId: rescheduleBooking
       tags:
         - Bookings
@@ -1101,28 +1182,62 @@ paths:
 
   /webhooks/stripe:
     post:
-      summary: Stripe payment confirmation webhook
+      summary: Stripe payment confirmation webhook (CRITICAL)
       description: |
-        Called by Stripe when payment is completed (checkout.session.completed event).
-        Updates booking status from PENDING_PAYMENT → CONFIRMED.
-        Sends confirmation SMS/email to client.
-        Releases hold on funds for instructor payout.
+        CRITICAL ENDPOINT - Called by Stripe when payment events occur.
+        Updates booking status and sends confirmations.
+        
+        IMPORTANT: This is how PENDING_PAYMENT bookings become CONFIRMED.
+        The AI never handles payment - it creates the booking with PENDING_PAYMENT
+        status, then this webhook confirms when payment succeeds.
+        
+        BOOKING STATUS FLOW:
+        ┌─────────────────┐
+        │ PENDING_PAYMENT │ ← AI creates booking, sends payment link
+        └────────┬────────┘
+                 │
+        ┌────────▼────────┐
+        │  User pays via  │
+        │ Stripe Checkout │
+        └────────┬────────┘
+                 │ Webhook
+        ┌────────▼────────┐
+        │   CONFIRMED     │ ← This endpoint called, booking confirmed
+        └────────┬────────┘
+                 │
+        ┌────────▼────────┐
+        │   COMPLETED     │ ← After lesson
+        └────────┬────────┘
+                 │
+        ┌────────▼────────┐
+        │     PAID        │ ← Instructor paid
+        └─────────────────┘
+        
+        EVENTS HANDLED:
+        - checkout.session.completed: Initial payment success
+        - payment_intent.succeeded: Alternative payment confirmation
+        - charge.refunded: Handle refunds from Stripe dashboard
         
         SECURITY:
-        - Verifies Stripe signature in header
-        - Rejects requests without valid signature
-        - Idempotent (handles duplicate webhook calls)
+        - Validates Stripe signature using webhook secret
+        - Idempotent processing (prevents double-confirmation)
+        - Requires no authentication (signature is auth)
+        - Rate limit: No limit (signature validation only)
         
-        WORKFLOW:
-        1. Stripe calls this endpoint after successful payment
-        2. Backend verifies webhook signature
-        3. Extracts bookingId from session.metadata
-        4. Updates booking status to CONFIRMED
-        5. Clears expiresAt field
-        6. Sends confirmation notifications
-        7. Returns 200 OK to Stripe
+        IMPLEMENTATION:
+        1. Verify Stripe signature in Stripe-Signature header
+        2. Extract bookingId from session.metadata
+        3. Update booking status to CONFIRMED
+        4. Clear expiresAt field
+        5. Send confirmation SMS/email
+        6. Return 200 OK to Stripe
         
-        NOTE: This endpoint is called by Stripe, not by the AI agent.
+        TESTING:
+        - Use Stripe CLI: stripe listen --forward-to localhost:3000/api/webhooks/stripe
+        - Test with Stripe test mode and test cards
+        - Use /webhooks/stripe/test endpoint for development (disable in production)
+        
+        NOTE: This endpoint is called by Stripe, NOT by the AI agent.
       operationId: stripeWebhook
       tags:
         - Webhooks
@@ -1131,7 +1246,7 @@ paths:
           in: header
           type: string
           required: true
-          description: Stripe webhook signature for verification
+          description: Stripe signature for verification (HMAC SHA256)
         - name: body
           in: body
           required: true
@@ -1141,9 +1256,11 @@ paths:
               id:
                 type: string
                 description: Stripe event ID
+                example: "evt_1234567890"
               type:
                 type: string
-                enum: [checkout.session.completed]
+                enum: [checkout.session.completed, payment_intent.succeeded, charge.refunded]
+                description: Event type
               data:
                 type: object
                 properties:
@@ -1153,16 +1270,27 @@ paths:
                     properties:
                       id:
                         type: string
+                        example: "cs_test_xyz123"
+                      payment_status:
+                        type: string
+                        example: "paid"
+                      amount_total:
+                        type: integer
+                        description: Amount in cents
+                        example: 70000
                       metadata:
                         type: object
                         properties:
                           bookingId:
                             type: string
                             description: DriveBook booking ID
+                            example: "bk_abc123"
                           clientEmail:
                             type: string
+                            example: "john@example.com"
                           instructorId:
                             type: string
+                            example: "inst_xyz789"
       responses:
         '200':
           description: Webhook processed successfully
@@ -1172,6 +1300,12 @@ paths:
               received:
                 type: boolean
                 example: true
+              bookingId:
+                type: string
+                description: Booking that was confirmed
+              status:
+                type: string
+                example: "CONFIRMED"
         '400':
           description: Invalid signature or malformed request
           schema:
@@ -1179,9 +1313,95 @@ paths:
             properties:
               error:
                 type: string
+                example: "Invalid signature"
               code:
                 type: string
                 example: "INVALID_SIGNATURE"
+        '409':
+          description: Already processed (idempotent)
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: "already_processed"
+              bookingId:
+                type: string
+
+  /webhooks/stripe/test:
+    post:
+      summary: Test endpoint for Stripe webhooks (DEVELOPMENT ONLY)
+      description: |
+        Development-only endpoint to test webhook handling without real Stripe.
+        Simulates payment confirmation for testing the flow.
+        
+        WARNING: DISABLE IN PRODUCTION!
+        
+        This endpoint allows testing the complete payment flow:
+        1. Create booking with PENDING_PAYMENT status
+        2. Call this test endpoint with bookingId
+        3. Booking status updates to CONFIRMED
+        4. Confirmation SMS/email sent
+        
+        Use this to test the flow without needing Stripe test cards.
+      operationId: testStripeWebhook
+      tags:
+        - Webhooks
+        - Testing
+      parameters:
+        - name: X-Test-Secret
+          in: header
+          type: string
+          required: true
+          description: Test secret to prevent abuse (set in environment variable)
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - bookingId
+            properties:
+              bookingId:
+                type: string
+                description: Booking ID to confirm
+                example: "bk_abc123"
+              eventType:
+                type: string
+                enum: [checkout.session.completed, payment_intent.succeeded]
+                default: checkout.session.completed
+      responses:
+        '200':
+          description: Test webhook processed
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              status:
+                type: string
+                example: "CONFIRMED"
+              message:
+                type: string
+                example: "Test webhook processed successfully"
+        '401':
+          description: Invalid test secret
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid test secret"
+        '403':
+          description: Test endpoint disabled in production
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Test endpoint not available in production"
 
 tags:
   - name: System
