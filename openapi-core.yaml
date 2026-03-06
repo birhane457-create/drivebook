@@ -1,0 +1,443 @@
+swagger: '2.0'
+info:
+  title: DriveBook Core Booking API
+  description: |
+    Core API for AI voice agents to book driving lessons.
+    
+    🔒 SECURITY: AI NEVER handles payment. Payment via Stripe link sent via SMS.
+    
+    FLOW:
+    1. Validate location → Get recommendations → Check availability → Present packages → Create booking
+    2. Backend sends Stripe Checkout link via SMS
+    3. User pays securely, webhook confirms
+    
+    FEATURES:
+    - Smart recommendations (top 3 with reasons)
+    - Auto-generated passwords
+    - Backend pricing calculation
+    - 10-minute booking hold
+  version: 2.0.0
+  contact:
+    name: DriveBook Support
+host: drivebook.com.au
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+              database:
+                type: string
+
+  /locations/validate:
+    post:
+      summary: Validate pickup location (CALL FIRST)
+      description: |
+        Validates address and returns geocoded coordinates.
+        ALWAYS call this before searching instructors.
+        Returns suggestions if location invalid.
+        
+        RATE LIMIT: 20/min per IP
+      operationId: validateLocation
+      tags:
+        - Locations
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - pickupLocation
+            properties:
+              pickupLocation:
+                type: string
+                description: Address, suburb, or postcode
+      responses:
+        '200':
+          description: Location validation result
+          schema:
+            type: object
+            properties:
+              valid:
+                type: boolean
+              formattedAddress:
+                type: string
+              lat:
+                type: number
+              lng:
+                type: number
+              components:
+                type: object
+              error:
+                type: string
+              suggestions:
+                type: array
+                items:
+                  type: string
+
+  /instructors/recommendations:
+    get:
+      summary: Get top 3 instructor recommendations (PRIMARY)
+      description: |
+        Returns top 3 instructors with reasons (top rated, best value, closest).
+        Scoring: rating 40%, distance 25%, price 20%, experience 15%.
+        
+        AI: Ask vehicle preference BEFORE calling this.
+        While waiting: "Checking who's available near [Location]..."
+        
+        RATE LIMIT: 30/min per IP
+      operationId: getRecommendations
+      tags:
+        - Instructors
+      parameters:
+        - name: location
+          in: query
+          type: string
+          required: true
+          description: Pickup location
+        - name: vehicleType
+          in: query
+          type: string
+          required: false
+          enum: [AUTO, MANUAL]
+        - name: language
+          in: query
+          type: string
+          required: false
+        - name: budget
+          in: query
+          type: number
+          required: false
+        - name: experienceLevel
+          in: query
+          type: string
+          required: false
+          enum: [beginner, intermediate, advanced]
+        - name: limit
+          in: query
+          type: integer
+          required: false
+          default: 3
+      responses:
+        '200':
+          description: Top 3 recommendations
+          schema:
+            type: object
+            properties:
+              recommendations:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    hourlyRate:
+                      type: number
+                    distance:
+                      type: number
+                    rating:
+                      type: number
+                    reviews:
+                      type: integer
+                    totalBookings:
+                      type: integer
+                    vehicleTypes:
+                      type: array
+                      items:
+                        type: string
+                    languages:
+                      type: array
+                      items:
+                        type: string
+                    car:
+                      type: string
+                    score:
+                      type: integer
+                    reason:
+                      type: string
+                    badges:
+                      type: array
+                      items:
+                        type: string
+              count:
+                type: integer
+              message:
+                type: string
+
+  /instructors/search:
+    get:
+      summary: Search all instructors (FALLBACK)
+      description: |
+        Returns all instructors (paginated). Use only if user rejects top 3.
+        Present 5-7 at a time verbally.
+        
+        RATE LIMIT: 60/min per IP
+      operationId: searchInstructors
+      tags:
+        - Instructors
+      parameters:
+        - name: location
+          in: query
+          type: string
+          required: true
+        - name: page
+          in: query
+          type: integer
+          required: false
+          default: 1
+        - name: limit
+          in: query
+          type: integer
+          required: false
+          default: 20
+          maximum: 50
+      responses:
+        '200':
+          description: Instructor list
+          schema:
+            type: object
+            properties:
+              instructors:
+                type: array
+                items:
+                  type: object
+              count:
+                type: integer
+              page:
+                type: integer
+              totalPages:
+                type: integer
+              hasMore:
+                type: boolean
+
+  /packages:
+    get:
+      summary: Get lesson packages with savings
+      description: |
+        Returns 6hr, 10hr, 15hr packages with pricing.
+        10-hour has "Most Popular" badge.
+        
+        AI: Lead with "Most Popular" - "I recommend the 10-hour package, saves you $75"
+        
+        RATE LIMIT: 30/min per IP
+      operationId: getPackages
+      tags:
+        - Packages
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Available packages
+          schema:
+            type: object
+            properties:
+              packages:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    hours:
+                      type: integer
+                    price:
+                      type: number
+                    originalPrice:
+                      type: number
+                    discount:
+                      type: number
+                    discountPercentage:
+                      type: integer
+                    savings:
+                      type: number
+                    badge:
+                      type: string
+              testPackage:
+                type: object
+
+  /availability/slots:
+    get:
+      summary: Get available time slots
+      description: |
+        Returns available slots for instructor on specific date.
+        Duration: 60, 90, or 120 minutes.
+        
+        RATE LIMIT: 30/min per IP
+      operationId: getAvailableSlots
+      tags:
+        - Availability
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+        - name: date
+          in: query
+          type: string
+          required: true
+          description: YYYY-MM-DD format
+        - name: duration
+          in: query
+          type: integer
+          required: true
+          description: 60, 90, or 120 minutes
+      responses:
+        '200':
+          description: Available slots
+          schema:
+            type: object
+            properties:
+              slots:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    time:
+                      type: string
+                    available:
+                      type: boolean
+              date:
+                type: string
+              duration:
+                type: integer
+
+  /public/bookings/bulk:
+    post:
+      summary: Create booking (PENDING_PAYMENT)
+      description: |
+        Creates booking with PENDING_PAYMENT status. Expires in 10 minutes.
+        Backend auto-generates password and sends via SMS/email.
+        Returns Stripe Checkout URL.
+        
+        AI: "I'm holding your slot for 10 minutes. Sending payment link to your phone now."
+        
+        RATE LIMIT: 10/min per phone, 20/min per IP
+      operationId: createBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: true
+          description: UUID to prevent duplicates
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - instructorId
+              - packageType
+              - bookingType
+              - registrationType
+              - accountHolderName
+              - accountHolderEmail
+              - accountHolderPhone
+            properties:
+              instructorId:
+                type: string
+              packageType:
+                type: string
+                enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
+              hours:
+                type: number
+              includeTestPackage:
+                type: boolean
+              bookingType:
+                type: string
+                enum: [now, later]
+              registrationType:
+                type: string
+                enum: [myself, someone-else]
+              accountHolderName:
+                type: string
+              accountHolderEmail:
+                type: string
+              accountHolderPhone:
+                type: string
+              learnerName:
+                type: string
+              learnerPhone:
+                type: string
+              learnerRelationship:
+                type: string
+              scheduledBookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                    time:
+                      type: string
+                    duration:
+                      type: integer
+                    pickupLocation:
+                      type: string
+                    notes:
+                      type: string
+      responses:
+        '200':
+          description: Booking created
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              status:
+                type: string
+              checkoutUrl:
+                type: string
+              expiresAt:
+                type: string
+              total:
+                type: number
+        '400':
+          description: Invalid data
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+              retryable:
+                type: boolean
+              suggestions:
+                type: array
+                items:
+                  type: string
+
+tags:
+  - name: System
+  - name: Locations
+  - name: Instructors
+  - name: Packages
+  - name: Availability
+  - name: Bookings

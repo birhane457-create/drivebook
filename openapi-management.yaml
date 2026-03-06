@@ -1,0 +1,264 @@
+swagger: '2.0'
+info:
+  title: DriveBook Management API
+  description: |
+    API for managing existing bookings - lookup, cancel, reschedule.
+    
+    CANCELLATION POLICY:
+    - 48+ hours: 100% refund
+    - 24-48 hours: 50% refund
+    - <24 hours: No refund
+    
+    AI: Always check policy before cancelling/rescheduling.
+  version: 2.0.0
+  contact:
+    name: DriveBook Support
+host: drivebook.com.au
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+  /bookings/lookup:
+    get:
+      summary: Find bookings by phone
+      description: |
+        Returns active bookings (PENDING_PAYMENT or CONFIRMED) for phone number.
+        Only future bookings.
+        
+        AI: Use when user says "I need to change my lesson"
+      operationId: lookupBookings
+      tags:
+        - Bookings
+      parameters:
+        - name: phone
+          in: query
+          type: string
+          required: true
+          description: Client phone number
+      responses:
+        '200':
+          description: Bookings found
+          schema:
+            type: object
+            properties:
+              bookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    status:
+                      type: string
+                    startTime:
+                      type: string
+                    duration:
+                      type: number
+                    pickupLocation:
+                      type: string
+                    instructor:
+                      type: object
+                    expiresAt:
+                      type: string
+
+  /bookings/{bookingId}/cancellation-policy:
+    get:
+      summary: Check cancellation eligibility
+      description: |
+        Returns refund percentage based on time remaining.
+        
+        AI: Call this BEFORE cancelling to inform user of fees.
+      operationId: getCancellationPolicy
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Policy details
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              hoursBeforeLesson:
+                type: number
+              policy:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  refundPercentage:
+                    type: number
+                  cancellationFee:
+                    type: number
+                  refundAmount:
+                    type: number
+                  feeAmount:
+                    type: number
+                  reason:
+                    type: string
+              message:
+                type: string
+
+  /bookings/{bookingId}/cancel:
+    post:
+      summary: Cancel booking
+      description: |
+        Cancels booking and processes refund per policy.
+        
+        RATE LIMIT: 3/hour per booking
+      operationId: cancelBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - reason
+            properties:
+              reason:
+                type: string
+                enum: [student_request, weather, safety, medical, other]
+              notes:
+                type: string
+      responses:
+        '200':
+          description: Cancelled successfully
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              status:
+                type: string
+              refundAmount:
+                type: number
+              refundPercentage:
+                type: number
+              message:
+                type: string
+
+  /bookings/{bookingId}/reschedule:
+    post:
+      summary: Reschedule booking
+      description: |
+        Reschedules to new date/time. Same policy applies.
+        
+        RATE LIMIT: 3/hour per booking
+      operationId: rescheduleBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - newDate
+              - newTime
+            properties:
+              newDate:
+                type: string
+              newTime:
+                type: string
+              reason:
+                type: string
+      responses:
+        '200':
+          description: Rescheduled successfully
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              oldStartTime:
+                type: string
+              newStartTime:
+                type: string
+              feeApplied:
+                type: number
+              message:
+                type: string
+
+  /instructors/lookup:
+    get:
+      summary: Find instructor by name/phone (OPTIONAL)
+      description: |
+        Finds instructor if user has preference.
+        Use when user says "I want to book with Debesay"
+        
+        If not found, use recommendations instead.
+      operationId: lookupInstructor
+      tags:
+        - Instructors
+      parameters:
+        - name: query
+          in: query
+          type: string
+          required: true
+          description: Instructor name or phone
+      responses:
+        '200':
+          description: Instructor found
+          schema:
+            type: object
+            properties:
+              found:
+                type: boolean
+              instructor:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  hourlyRate:
+                    type: number
+                  rating:
+                    type: number
+                  vehicleTypes:
+                    type: array
+                    items:
+                      type: string
+                  languages:
+                    type: array
+                    items:
+                      type: string
+        '404':
+          description: Not found
+          schema:
+            type: object
+            properties:
+              found:
+                type: boolean
+              message:
+                type: string
+
+tags:
+  - name: Bookings
+  - name: Instructors

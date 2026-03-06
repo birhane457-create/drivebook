@@ -1,0 +1,183 @@
+swagger: '2.0'
+info:
+  title: DriveBook Webhooks API
+  description: |
+    Webhook endpoints for external integrations (Stripe).
+    
+    NOTE: These are called by external services, NOT by AI agents.
+    
+    STRIPE WEBHOOK:
+    - Confirms payment when user completes Stripe Checkout
+    - Updates booking: PENDING_PAYMENT → CONFIRMED
+    - Sends confirmation SMS/email
+  version: 2.0.0
+  contact:
+    name: DriveBook Support
+host: drivebook.com.au
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+  /webhooks/stripe:
+    post:
+      summary: Stripe payment confirmation (CRITICAL)
+      description: |
+        Called by Stripe when payment completes.
+        
+        WORKFLOW:
+        1. Stripe calls this after successful payment
+        2. Verifies signature
+        3. Extracts bookingId from metadata
+        4. Updates booking to CONFIRMED
+        5. Sends confirmation notifications
+        
+        SECURITY:
+        - Validates Stripe-Signature header
+        - Idempotent (handles duplicates)
+        - No rate limit (signature is auth)
+        
+        TESTING:
+        - Stripe CLI: stripe listen --forward-to localhost:3000/api/webhooks/stripe
+        - Use /webhooks/stripe/test for development
+      operationId: stripeWebhook
+      tags:
+        - Webhooks
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          type: string
+          required: true
+          description: Stripe signature for verification
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Stripe event ID
+              type:
+                type: string
+                enum: [checkout.session.completed, payment_intent.succeeded, charge.refunded]
+              data:
+                type: object
+                properties:
+                  object:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      payment_status:
+                        type: string
+                      amount_total:
+                        type: integer
+                      metadata:
+                        type: object
+                        properties:
+                          bookingId:
+                            type: string
+                          clientEmail:
+                            type: string
+                          instructorId:
+                            type: string
+      responses:
+        '200':
+          description: Webhook processed
+          schema:
+            type: object
+            properties:
+              received:
+                type: boolean
+              bookingId:
+                type: string
+              status:
+                type: string
+        '400':
+          description: Invalid signature
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+        '409':
+          description: Already processed
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+              bookingId:
+                type: string
+
+  /webhooks/stripe/test:
+    post:
+      summary: Test webhook (DEVELOPMENT ONLY)
+      description: |
+        Development endpoint to test webhook flow without Stripe.
+        Simulates payment confirmation.
+        
+        WARNING: DISABLE IN PRODUCTION!
+      operationId: testStripeWebhook
+      tags:
+        - Webhooks
+        - Testing
+      parameters:
+        - name: X-Test-Secret
+          in: header
+          type: string
+          required: true
+          description: Test secret from environment
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - bookingId
+            properties:
+              bookingId:
+                type: string
+              eventType:
+                type: string
+                enum: [checkout.session.completed, payment_intent.succeeded]
+                default: checkout.session.completed
+      responses:
+        '200':
+          description: Test processed
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              status:
+                type: string
+              message:
+                type: string
+        '401':
+          description: Invalid test secret
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '403':
+          description: Disabled in production
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+tags:
+  - name: Webhooks
+  - name: Testing
