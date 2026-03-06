@@ -583,3 +583,319 @@ AI: [Looks up booking]
 
 **Ready to integrate with Copilot Studio!** 🚀
 
+
+
+---
+
+## Pro-Tips for Voice Agent Optimization
+
+### 1. Latency Management (Mask API Response Time)
+
+**Problem:** API calls can take 1-3 seconds, creating awkward silence.
+
+**Solution:** Use "filler phrases" while waiting for API response.
+
+```
+✅ GOOD:
+User: "Joondalup"
+AI: "Checking who's available near Joondalup for you now..." 
+    [Calls /instructors/recommendations]
+    [Response arrives]
+    "I found 3 great instructors..."
+
+❌ BAD:
+User: "Joondalup"
+AI: [Silent for 2 seconds]
+    "I found 3 great instructors..."
+```
+
+**Filler Phrases by Endpoint:**
+- `/locations/validate` → "Let me confirm that location..."
+- `/instructors/recommendations` → "Checking who's available near [Location] for you now..."
+- `/packages` → "Let me check the package options for [Instructor Name]..."
+- `/availability/slots` → "Looking at [Instructor]'s schedule..."
+- `/public/bookings/bulk` → "Creating your booking now..."
+
+---
+
+### 2. Ask for Vehicle Preference BEFORE Recommendations
+
+**Why:** Improves recommendation accuracy by filtering instructors who teach that vehicle type.
+
+```
+✅ OPTIMAL FLOW:
+AI: "Where would you like to be picked up?"
+User: "Joondalup"
+AI: "Do you prefer an automatic or manual car?"
+User: "Automatic"
+AI: [Calls /instructors/recommendations?location=Joondalup&vehicleType=AUTO]
+
+❌ SUBOPTIMAL:
+AI: "Where would you like to be picked up?"
+User: "Joondalup"
+AI: [Calls /instructors/recommendations without vehicleType]
+    [Shows instructors who might only teach manual]
+```
+
+**Implementation:**
+```javascript
+// After location validated
+if (!vehicleTypeProvided) {
+  ask("Do you prefer an automatic or manual car?");
+  vehicleType = await getUserResponse();
+}
+
+recommendations = await getRecommendations({
+  location,
+  vehicleType, // Filters results
+  limit: 3
+});
+```
+
+---
+
+### 3. Handling "None of the Above" (Fallback Strategy)
+
+**Problem:** User doesn't like top 3 recommendations.
+
+**Solution:** Fallback to `/instructors/search` for full list, but still limit verbal presentation.
+
+```
+User: "None of those work for me"
+
+AI: "Let me show you all available instructors in your area..."
+    [Calls /instructors/search?location=Joondalup]
+    [Returns 15 instructors]
+    
+    "I have 12 more instructors available. Here are the next 5:
+    
+    • Alex - 4.6★, $72/hr, 3.2km
+    • Emma - 4.5★, $78/hr, 2.8km
+    • David - 4.7★, $80/hr, 4.1km
+    • Lisa - 4.4★, $70/hr, 5.2km
+    • Tom - 4.8★, $85/hr, 3.5km
+    
+    Would any of these work for you?"
+```
+
+**Key Points:**
+- Don't read all 15 instructors verbally
+- Present 5-7 at a time
+- Offer to "hear more" if still not satisfied
+- Suggest booking online if user wants to browse all
+
+---
+
+### 4. Emphasize Dollar Savings, Not Percentages
+
+**Why:** Dollar amounts are more tangible and persuasive than percentages.
+
+```
+✅ GOOD:
+"The 10-hour package saves you $75"
+"You'll save $135 with the 15-hour package"
+
+❌ LESS EFFECTIVE:
+"The 10-hour package has a 10% discount"
+"15% off with the 15-hour package"
+```
+
+**Implementation:**
+```javascript
+// API returns both
+{
+  "discountPercentage": 10,
+  "savings": 75
+}
+
+// AI uses savings in conversation
+AI: `The 10-hour package is $675 - that saves you $${savings}`
+```
+
+---
+
+### 5. Lead with "Most Popular" Package
+
+**Why:** Social proof increases conversion. People trust what others choose.
+
+```
+✅ OPTIMAL:
+AI: "I recommend the 10-hour package - it's our most popular and saves you $75. 
+     Would that work for you?"
+
+❌ SUBOPTIMAL:
+AI: "We have 6-hour, 10-hour, and 15-hour packages. Which would you like?"
+```
+
+**Only show alternatives if user hesitant:**
+```
+User: "That's too much"
+AI: "No problem! We have a 6-hour package for $427 if you'd like to start smaller."
+```
+
+---
+
+### 6. Confirm Vehicle Type Match
+
+**Problem:** User books instructor who doesn't teach their preferred vehicle type.
+
+**Solution:** Confirm match before proceeding.
+
+```
+User: "I'll go with Michael"
+
+AI: [Checks instructor.vehicleTypes]
+    
+    If match:
+      "Great! Michael teaches automatic. When would you like your lesson?"
+    
+    If no match:
+      "Just to confirm - Michael teaches manual transmission. 
+       You mentioned you prefer automatic. 
+       Would you like to choose a different instructor, or is manual okay?"
+```
+
+---
+
+### 7. Natural Language Date/Time Parsing
+
+**Accept flexible input:**
+```
+"Next Monday" → Parse to actual date
+"Tomorrow morning" → Parse to next day, 9am-11am range
+"ASAP" → Check next available slot
+"In 2 weeks" → Parse to date 14 days from now
+"Weekday afternoons" → Filter for Mon-Fri, 2pm-5pm
+```
+
+**Implementation:**
+```javascript
+// Use date parsing library
+const parsedDate = parseNaturalLanguage("next Monday");
+// → "2026-03-17"
+
+const timeRange = parseTimePreference("morning");
+// → { start: "09:00", end: "11:00" }
+```
+
+---
+
+### 8. Combine Questions to Reduce Back-and-Forth
+
+**Instead of:**
+```
+AI: "What's your name?"
+User: "John Smith"
+AI: "What's your email?"
+User: "john@email.com"
+AI: "What's your phone?"
+User: "0400123456"
+```
+
+**Do this:**
+```
+AI: "I need your name, email, and phone number to create your account."
+User: "John Smith, john@email.com, 0400123456"
+```
+
+**AI extracts all three at once using entity recognition.**
+
+---
+
+### 9. Proactive Exception Handling
+
+**Weather Detection (Future Enhancement):**
+```
+// Check weather 24h before lesson
+if (severeWeatherWarning && hoursBeforeLesson < 24) {
+  sendProactiveMessage({
+    message: "Severe weather expected for your lesson tomorrow. 
+              Would you like to reschedule at no charge?",
+    actions: ['reschedule', 'keep_booking']
+  });
+}
+```
+
+---
+
+### 10. Confirmation Before Booking
+
+**Always confirm key details before creating booking:**
+
+```
+AI: "Perfect! Let me confirm your booking:
+    
+    • Instructor: Debesay (4.9★)
+    • Package: 10 hours (save $75!)
+    • First lesson: Monday, March 10th at 9am
+    • Pickup: Joondalup
+    • Total: $675
+    
+    Does everything look correct?"
+
+User: "Yes" → Proceed with booking
+User: "Actually, change the time" → Go back to scheduling
+```
+
+---
+
+## Performance Metrics to Track
+
+### Conversation Efficiency
+- Average turns to complete booking (target: <8)
+- Average conversation duration (target: <3 minutes)
+- Abandonment rate (target: <15%)
+
+### User Satisfaction
+- Successful bookings / total conversations (target: >60%)
+- User feedback ratings (target: >4.5/5)
+- Repeat usage rate (target: >30%)
+
+### API Performance
+- Average API response time (target: <1.5s)
+- API error rate (target: <1%)
+- Recommendation acceptance rate (target: >70% choose top 3)
+
+### Business Metrics
+- Package upsell rate (target: >80% choose package vs single)
+- 10-hour package selection rate (target: >50% of packages)
+- Payment completion rate (target: >85%)
+
+---
+
+## Common Pitfalls to Avoid
+
+### ❌ Don't Do This:
+
+1. **Listing all options** - "We have 15 instructors available..."
+2. **Asking for password** - Backend generates it
+3. **Reading full addresses** - "123 Main Street, Joondalup, Western Australia, 6027..."
+4. **Strict form-filling** - "I need your name. Now your email. Now your phone..."
+5. **Ignoring context** - User says "tomorrow" and AI asks "what date?"
+6. **Over-explaining** - Long descriptions of how the platform works
+7. **Technical jargon** - "I'll create a booking entity in our database..."
+8. **Apologizing excessively** - "Sorry, sorry, my apologies..."
+
+### ✅ Do This Instead:
+
+1. **Top 3 only** - "I found 3 great instructors..."
+2. **Auto-generate** - "I'll send your password via SMS"
+3. **Confirm briefly** - "Joondalup, got it"
+4. **Flexible collection** - "I need your name, email, and phone"
+5. **Smart parsing** - "Tomorrow" → Parse to actual date
+6. **Concise** - 2-3 sentences max per response
+7. **Natural language** - "I'm creating your booking now..."
+8. **Confident** - "Let me fix that for you"
+
+---
+
+## Ready for Production ✅
+
+With these optimizations, your AI voice agent will:
+- Feel natural and conversational
+- Complete bookings efficiently (<3 minutes)
+- Handle edge cases gracefully
+- Maximize package upsell (>80%)
+- Provide excellent user experience (>4.5/5 rating)
+
+**Next Step:** Import `openapi.yaml` into Copilot Studio and configure with these guidelines.

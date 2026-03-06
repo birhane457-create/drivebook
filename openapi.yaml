@@ -6,13 +6,16 @@ info:
     
     RECOMMENDED AI CONVERSATION FLOW (OPTIMIZED):
     1. Ask user for pickup location
-    2. Validate location via /locations/validate
-    3. Get smart recommendations via /instructors/recommendations (AI-ranked, top 3)
-    4. Present options: "I found 3 great instructors: Debesay (top rated), Michael (best value), Sarah (closest)"
-    5. User selects instructor
-    6. Call /availability/slots to check times
-    7. Call /packages to present package options with savings
-    8. Create booking via /public/bookings/bulk (backend calculates pricing, generates password)
+    2. Ask vehicle preference: "Do you prefer an automatic or manual car?" (improves recommendation accuracy)
+    3. Validate location via /locations/validate
+    4. While fetching recommendations, say: "Checking who's available near [Location] for you now..." (masks API latency)
+    5. Get smart recommendations via /instructors/recommendations (AI-ranked, top 3)
+    6. Present options: "I found 3 great instructors: Debesay (top rated), Michael (best value), Sarah (closest)"
+    7. If user doesn't like top 3, fallback to /instructors/search for full list
+    8. User selects instructor
+    9. Call /availability/slots to check times
+    10. Call /packages to present package options with savings
+    11. Create booking via /public/bookings/bulk (backend calculates pricing, generates password)
     
     KEY IMPROVEMENTS:
     - AI does NOT ask for password (backend generates secure password automatically)
@@ -62,6 +65,12 @@ paths:
         Scoring considers: rating (40%), distance (25%), price (20%), experience (15%).
         This is the PRIMARY endpoint for AI when user doesn't specify an instructor preference.
         Returns instructors who actually serve the requested location (within their service radius).
+        
+        AI BEST PRACTICES:
+        - Ask for vehicle preference (AUTO/MANUAL) BEFORE calling this endpoint for better accuracy
+        - While waiting for response, say: "Checking who's available near [Location] for you now..."
+        - If user doesn't like top 3, fallback to /instructors/search for full list
+        - Present with reasons: "I found 3 great instructors: [Name] is top rated, [Name] offers best value, [Name] is closest to you"
       operationId: getInstructorRecommendations
       tags:
         - Instructors
@@ -159,11 +168,16 @@ paths:
 
   /instructors/search:
     get:
-      summary: Search instructors by location
+      summary: Search instructors by location (FALLBACK)
       description: |
         Find all instructors who serve a specific location, sorted by distance and rating.
         Returns complete list (not limited to 3). Use /instructors/recommendations instead for AI conversations.
         This endpoint is better for web UI where users want to browse all options.
+        
+        AI USAGE - FALLBACK ONLY:
+        Use this endpoint when user says "None of those work for me" or "Show me more options" after seeing top 3 recommendations.
+        Present as: "Let me show you all available instructors in your area..."
+        Still limit verbal presentation to 5-7 instructors max to avoid overwhelming user.
       operationId: searchInstructorsByLocation
       tags:
         - Instructors
@@ -271,12 +285,18 @@ paths:
 
   /locations/validate:
     post:
-      summary: Validate and geocode pickup location
+      summary: Validate and geocode pickup location (CALL FIRST)
       description: |
         Validates a pickup location address and returns geocoded coordinates with formatted address.
-        Use this BEFORE calling instructor recommendations to ensure location is valid.
+        CRITICAL: Use this BEFORE calling instructor recommendations to ensure location is valid.
         Prevents bad addresses during voice calls by providing helpful suggestions if location not found.
         Returns suburb, state, and postcode components for Australian addresses.
+        
+        AI BEST PRACTICES:
+        - ALWAYS call this first before searching for instructors
+        - If valid=false, present suggestions to user: "I couldn't find that exact address. Did you mean [suggestion]?"
+        - Use formattedAddress in all subsequent calls and confirmations
+        - While validating, say: "Let me confirm that location..."
       operationId: validateLocation
       tags:
         - Locations
@@ -335,7 +355,12 @@ paths:
         The 10-hour package has badge: "Most Popular" - AI should mention this naturally: "Most students choose the 10-hour package - it saves you $75".
         Also includes test package option ($150) that can be added to any package.
         Use this to present package options with natural upsell, not as a list of all options.
-        EXAMPLE: "I recommend the 10-hour package - it's our most popular and saves you $75. Would that work for you?"
+        
+        AI BEST PRACTICES:
+        - Lead with the most popular: "I recommend the 10-hour package - it's our most popular and saves you $75. Would that work for you?"
+        - If user hesitant, mention alternatives: "We also have a 6-hour package if you'd like to start smaller, or 15-hour for maximum savings"
+        - Emphasize savings in dollars, not percentages: "$75 savings" not "10% off"
+        - While fetching, say: "Let me check the package options for [Instructor Name]..."
       operationId: getPackages
       tags:
         - Packages
