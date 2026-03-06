@@ -1061,68 +1061,6 @@ paths:
                   type: string
                 description: Alternative available time slots
 
-  /bookings/lookup:
-    get:
-      summary: Find bookings by phone number
-      description: |
-        Returns all active bookings (PENDING_PAYMENT or CONFIRMED) for a phone number.
-        Only returns future bookings. Useful for rescheduling or cancellation flows.
-        AI can use this when user says "I need to change my lesson" or "Cancel my booking".
-      operationId: lookupBookings
-      tags:
-        - Bookings
-      parameters:
-        - name: phone
-          in: query
-          type: string
-          required: true
-          description: Client phone number
-          example: "0400123456"
-      responses:
-        '200':
-          description: Bookings found
-          schema:
-            type: object
-            properties:
-              bookings:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    status:
-                      type: string
-                      enum: [PENDING_PAYMENT, CONFIRMED]
-                    startTime:
-                      type: string
-                      format: date-time
-                    duration:
-                      type: number
-                    pickupLocation:
-                      type: string
-                    instructor:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                        phone:
-                          type: string
-                    expiresAt:
-                      type: string
-                      format: date-time
-                      description: Present only if status is PENDING_PAYMENT
-        '400':
-          description: Phone parameter missing
-          schema:
-            type: object
-            properties:
-              error:
-                type: string
-              code:
-                type: string
-                example: "PHONE_REQUIRED"
-
   /instructors/lookup:
     get:
       summary: Find instructor by name or phone (OPTIONAL)
