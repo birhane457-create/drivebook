@@ -342,8 +342,8 @@ paths:
         - name: Idempotency-Key
           in: header
           type: string
-          required: true
-          description: UUID to prevent duplicates
+          required: false
+          description: UUID to prevent duplicates (AI auto-generates, do not ask user)
         - name: body
           in: body
           required: true
@@ -433,6 +433,50 @@ paths:
                 type: array
                 items:
                   type: string
+
+  /instructors/lookup:
+    get:
+      summary: Find instructor by name (OPTIONAL)
+      description: |
+        Finds instructor if user mentions name like "Debesay" or "book with Debesay".
+        If not found, use /instructors/recommendations instead.
+      operationId: lookupInstructor
+      tags:
+        - Instructors
+      parameters:
+        - name: query
+          in: query
+          type: string
+          required: true
+          description: Instructor name
+      responses:
+        '200':
+          description: Instructor found
+          schema:
+            type: object
+            properties:
+              found:
+                type: boolean
+              instructor:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  hourlyRate:
+                    type: number
+                  rating:
+                    type: number
+        '404':
+          description: Not found
+          schema:
+            type: object
+            properties:
+              found:
+                type: boolean
+              message:
+                type: string
 
 tags:
   - name: System
