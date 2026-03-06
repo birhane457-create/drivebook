@@ -339,7 +339,264 @@ export async function GET(req: NextRequest) {
 
 ---
 
-## Feature 6: Instructor Lookup (OPTIONAL)
+## Feature 7: Cancellation Policy Check (IMPORTANT)
+
+### What It Does
+
+Returns cancellation policy for a booking based on time remaining. AI calls this before cancelling to inform user of fees.
+
+### Implementation
+
+**Add endpoint:**
+
+```typescript
+// app/api/bookings/[id]/cancellation-policy/route.ts
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: params.id },
+    include: { instructor: true }
+  });
+  
+  if (!booking) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+  }
+  
+  const now = new Date();
+  const lessonTime = new Date(booking.startTime);
+  const hoursBeforeLesson = (lessonTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+  
+  let policy;
+  
+  if (hoursBeforeLesson > 48) {
+    policy = {
+      allowed: true,
+      refundPercentage: 100,
+      cancellationFee: 0,
+      refundAmount: booking.price,
+      feeAmount: 0,
+      reason: 'more_than_48_hours'
+    };
+  } else if (hoursBeforeLesson > 24) {
+    policy = {
+      allowed: true,
+      refundPercentage: 50,
+      cancellationFee: 50,
+      refundAmount: booking.price * 0.5,
+      feeAmount: booking.price * 0.5,
+      reason: 'between_24_and_48_hours'
+    };
+  } else {
+    policy = {
+      allowed: false,
+      refundPercentage: 0,
+      cancellationFee: 100,
+      refundAmount: 0,
+      feeAmount: booking.price,
+      reason: 'less_than_24_hours'
+    };
+  }
+  
+  return NextResponse.json({
+    bookingId: booking.id,
+    hoursBeforeLesson: Math.round(hoursBeforeLesson * 10) / 10,
+    policy,
+    message: policy.allowed 
+      ? `Cancellation allowed with ${policy.cancellationFee}% fee`
+      : 'Cancellation not allowed within 24 hours'
+  });
+}
+```
+
+---
+
+## Feature 8: Cancel Booking (IMPORTANT)
+
+### What It Does
+
+Cancels a booking and processes refund according to cancellation policy.
+
+### Implementation
+
+**Add endpoint:**
+
+```typescript
+// app/api/bookings/[id]/cancel/route.ts
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const body = await req.json();
+  const { reason, notes } = body;
+  
+  const booking = await prisma.booking.findUnique({
+    where: { id: params.id }
+  });
+  
+  if (!booking) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+  }
+  
+  // Check cancellation policy
+  const now = new Date();
+  const lessonTime = new Date(booking.startTime);
+  const hoursBeforeLesson = (lessonTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+  
+  let refundPercentage = 0;
+  
+  if (hoursBeforeLesson > 48) {
+    refundPercentage = 100;
+  } else if (hoursBeforeLesson > 24) {
+    refundPercentage = 50;
+  } else if (reason === 'weather' || reason === 'safety') {
+    // Exception: weather/safety always gets 100% refund
+    refundPercentage = 100;
+  } else {
+    return NextResponse.json({
+      error: 'Cancellation not allowed within 24 hours',
+      policy: {
+        hoursBeforeLesson,
+        refundPercentage: 0
+      }
+    }, { status: 400 });
+  }
+  
+  const refundAmount = booking.price * (refundPercentage / 100);
+  
+  // Update booking status
+  await prisma.booking.update({
+    where: { id: params.id },
+    data: {
+      status: 'CANCELLED',
+      cancellationReason: reason,
+      cancellationNotes: notes,
+      cancelledAt: new Date(),
+      refundAmount: refundAmount,
+      refundPercentage: refundPercentage
+    }
+  });
+  
+  // Process refund to wallet
+  await prisma.transaction.create({
+    data: {
+      clientId: booking.clientId,
+      type: 'REFUND',
+      amount: refundAmount,
+      description: `Refund for cancelled booking ${booking.id}`,
+      status: 'COMPLETED'
+    }
+  });
+  
+  return NextResponse.json({
+    success: true,
+    bookingId: booking.id,
+    status: 'CANCELLED',
+    refundAmount,
+    refundPercentage,
+    message: `Booking cancelled. $${refundAmount.toFixed(2)} refunded to your wallet.`
+  });
+}
+```
+
+---
+
+## Feature 9: Reschedule Booking (IMPORTANT)
+
+### What It Does
+
+Reschedules a booking to a new date/time. Same cancellation policy applies.
+
+### Implementation
+
+**Add endpoint:**
+
+```typescript
+// app/api/bookings/[id]/reschedule/route.ts
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const body = await req.json();
+  const { newDate, newTime, reason } = body;
+  
+  const booking = await prisma.booking.findUnique({
+    where: { id: params.id }
+  });
+  
+  if (!booking) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+  }
+  
+  // Check if new slot is available
+  const newStartTime = new Date(`${newDate}T${newTime}`);
+  const newEndTime = new Date(newStartTime.getTime() + booking.duration * 60 * 60 * 1000);
+  
+  const conflictingBooking = await prisma.booking.findFirst({
+    where: {
+      instructorId: booking.instructorId,
+      status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] },
+      startTime: { lte: newEndTime },
+      endTime: { gte: newStartTime }
+    }
+  });
+  
+  if (conflictingBooking) {
+    return NextResponse.json({
+      error: 'Time slot not available',
+      availableSlots: [] // TODO: fetch available slots
+    }, { status: 400 });
+  }
+  
+  // Check rescheduling policy (same as cancellation)
+  const now = new Date();
+  const oldLessonTime = new Date(booking.startTime);
+  const hoursBeforeLesson = (oldLessonTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+  
+  let feePercentage = 0;
+  
+  if (hoursBeforeLesson <= 24) {
+    return NextResponse.json({
+      error: 'Rescheduling not allowed within 24 hours. Please cancel and create new booking.',
+      policy: { hoursBeforeLesson }
+    }, { status: 400 });
+  } else if (hoursBeforeLesson <= 48) {
+    feePercentage = 50;
+  }
+  
+  const feeAmount = booking.price * (feePercentage / 100);
+  
+  // Update booking
+  const updatedBooking = await prisma.booking.update({
+    where: { id: params.id },
+    data: {
+      startTime: newStartTime,
+      endTime: newEndTime,
+      rescheduledFrom: booking.startTime,
+      rescheduledAt: new Date(),
+      reschedulingFee: feeAmount,
+      reschedulingReason: reason
+    }
+  });
+  
+  return NextResponse.json({
+    success: true,
+    bookingId: booking.id,
+    oldStartTime: booking.startTime,
+    newStartTime: updatedBooking.startTime,
+    feeApplied: feePercentage,
+    feeAmount,
+    message: feePercentage > 0
+      ? `Lesson rescheduled. $${feeAmount.toFixed(2)} rescheduling fee applied.`
+      : 'Lesson rescheduled successfully with no fee.'
+  });
+}
+```
+
+---
+
+## Feature 10: Instructor Lookup (OPTIONAL)
 
 ### What It Does
 
@@ -429,18 +686,33 @@ export async function GET(req: NextRequest) {
    - For rescheduling/cancellation
    - Estimated time: 30 minutes
 
-7. **Instructor Lookup** ⭐ OPTIONAL
+7. **Cancellation Policy Endpoint** ⭐ IMPORTANT
+   - Check cancellation eligibility and fees
+   - Returns refund percentage based on time remaining
+   - Estimated time: 1 hour
+
+8. **Cancel Booking Endpoint** ⭐ IMPORTANT
+   - Cancel booking with automatic refund
+   - Apply cancellation policy rules
+   - Estimated time: 1.5 hours
+
+9. **Reschedule Booking Endpoint** ⭐ IMPORTANT
+   - Reschedule to new date/time
+   - Apply same cancellation policy
+   - Estimated time: 1.5 hours
+
+10. **Instructor Lookup** ⭐ OPTIONAL
    - Find instructor by name/phone
    - Better UX if user has preference
    - Estimated time: 30 minutes
 
-**Phase 2 Total: ~1 hour**
+**Phase 2 Total: ~5 hours**
 
 ### Phase 3 (Future Enhancements)
 
-8. **Rescheduling API**
-9. **Cancellation API**
-10. **Refund handling**
+11. **Automatic Weather Detection**
+12. **Instructor Approval Override**
+13. **Refund to original payment method**
 
 ---
 
@@ -511,6 +783,6 @@ RESEND_API_KEY=re_xxxxx
 6. Booking lookup (30 min) ⭐ IMPORTANT
 7. Instructor lookup (30 min) ⭐ OPTIONAL
 
-**Total Estimated Time:** 6.5 hours
+**Total Estimated Time:** 10.5 hours (Phase 1: 5.5h + Phase 2: 5h)
 
 **Architecture Improvement:** Using booking status instead of separate reservation table simplifies the system significantly.

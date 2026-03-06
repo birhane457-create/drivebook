@@ -623,6 +623,281 @@ paths:
         '400':
           description: Phone parameter missing
 
+  /bookings/{bookingId}/cancellation-policy:
+    get:
+      summary: Check cancellation eligibility and fees
+      description: |
+        Returns cancellation policy for a specific booking based on time remaining.
+        AI should call this BEFORE cancelling to inform user of any fees.
+        
+        POLICY RULES (from docs/04-legal/CANCELLATION_POLICY.md):
+        - 48+ hours before: 100% refund, no fee
+        - 24-48 hours before: 50% refund, 50% fee
+        - Less than 24 hours: No refund, 100% fee (lesson counted as used)
+        
+        EXCEPTIONS (override normal rules):
+        - Instructor cancellation: 100% refund always
+        - Weather/safety: 100% refund always
+        - Platform issue: 100% refund always
+        
+        AI USAGE: "Let me check the cancellation policy for your booking..."
+      operationId: getCancellationPolicy
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+          description: Booking ID
+      responses:
+        '200':
+          description: Cancellation policy details
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              hoursBeforeLesson:
+                type: number
+                description: Hours remaining until lesson starts
+              policy:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                    description: Whether cancellation is allowed
+                  refundPercentage:
+                    type: number
+                    description: Percentage of refund (0, 50, or 100)
+                  cancellationFee:
+                    type: number
+                    description: Percentage kept as fee (0, 50, or 100)
+                  refundAmount:
+                    type: number
+                    description: Dollar amount to be refunded
+                  feeAmount:
+                    type: number
+                    description: Dollar amount kept as fee
+                  reason:
+                    type: string
+                    enum: [more_than_48_hours, between_24_and_48_hours, less_than_24_hours]
+              message:
+                type: string
+                example: "Cancellation allowed with 50% fee"
+        '404':
+          description: Booking not found
+
+  /bookings/{bookingId}/cancel:
+    post:
+      summary: Cancel a booking
+      description: |
+        Cancels a booking and processes refund according to cancellation policy.
+        AI should call /cancellation-policy first to inform user of fees.
+        
+        CONVERSATION FLOW:
+        1. AI: "Let me check the cancellation policy..." (call /cancellation-policy)
+        2. AI: "Your lesson is X hours away. Cancelling will result in Y% refund. Shall I proceed?"
+        3. User confirms
+        4. AI: "Cancelling now..." (call this endpoint)
+        5. AI: "Done! You'll receive $X refund within 5-7 business days."
+        
+        REFUND PROCESSING:
+        - Refund goes to wallet balance immediately
+        - Can be used for future bookings or withdrawn
+        - Original payment method refund takes 5-7 business days
+      operationId: cancelBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - reason
+            properties:
+              reason:
+                type: string
+                enum: [student_request, weather, safety, medical, other]
+                description: Reason for cancellation
+              notes:
+                type: string
+                description: Additional notes (optional)
+      responses:
+        '200':
+          description: Booking cancelled successfully
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              status:
+                type: string
+                example: "CANCELLED"
+              refundAmount:
+                type: number
+                description: Amount refunded to wallet
+              refundPercentage:
+                type: number
+              message:
+                type: string
+                example: "Booking cancelled. $42.50 refunded to your wallet."
+        '400':
+          description: Cancellation not allowed or invalid request
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              policy:
+                type: object
+                description: Policy details explaining why cancellation failed
+
+  /bookings/{bookingId}/reschedule:
+    post:
+      summary: Reschedule a booking
+      description: |
+        Reschedules a booking to a new date/time. Same cancellation policy applies.
+        If rescheduling within 24 hours, 50% fee may apply (check policy first).
+        
+        AI CONVERSATION FLOW:
+        1. User: "I need to reschedule my lesson"
+        2. AI: "When would you like to reschedule to?"
+        3. User: "Next Tuesday at 10am"
+        4. AI: Validates new slot availability
+        5. AI: Checks cancellation policy for current booking
+        6. AI: "Rescheduling will have a 50% fee. Shall I proceed?"
+        7. User confirms
+        8. AI: Calls this endpoint
+        
+        POLICY NOTES:
+        - Rescheduling >48h before: Free
+        - Rescheduling 24-48h before: 50% fee
+        - Rescheduling <24h before: Not allowed (must cancel and rebook)
+      operationId: rescheduleBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - newDate
+              - newTime
+            properties:
+              newDate:
+                type: string
+                format: date
+                example: "2026-03-20"
+              newTime:
+                type: string
+                example: "10:00"
+              reason:
+                type: string
+                description: Reason for rescheduling (optional)
+      responses:
+        '200':
+          description: Booking rescheduled successfully
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              oldStartTime:
+                type: string
+                format: date-time
+              newStartTime:
+                type: string
+                format: date-time
+              feeApplied:
+                type: number
+                description: Fee charged for rescheduling (0, 50, or 100%)
+              message:
+                type: string
+                example: "Lesson rescheduled successfully with no fee."
+        '400':
+          description: Rescheduling not allowed or slot unavailable
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              availableSlots:
+                type: array
+                items:
+                  type: string
+                description: Alternative available time slots
+
+  /instructors/lookup:
+    get:
+      summary: Find bookings by phone number
+      description: |
+        Returns all active bookings (PENDING_PAYMENT or CONFIRMED) for a phone number.
+        Only returns future bookings. Useful for rescheduling or cancellation flows.
+        AI can use this when user says "I need to change my lesson" or "Cancel my booking".
+      operationId: lookupBookings
+      tags:
+        - Bookings
+      parameters:
+        - name: phone
+          in: query
+          type: string
+          required: true
+          description: Client phone number
+          example: "0400123456"
+      responses:
+        '200':
+          description: Bookings found
+          schema:
+            type: object
+            properties:
+              bookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    status:
+                      type: string
+                      enum: [PENDING_PAYMENT, CONFIRMED]
+                    startTime:
+                      type: string
+                      format: date-time
+                    duration:
+                      type: number
+                    pickupLocation:
+                      type: string
+                    instructor:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        phone:
+                          type: string
+                    expiresAt:
+                      type: string
+                      format: date-time
+                      description: Present only if status is PENDING_PAYMENT
+        '400':
+          description: Phone parameter missing
+
   /instructors/lookup:
     get:
       summary: Find instructor by name or phone (OPTIONAL)
