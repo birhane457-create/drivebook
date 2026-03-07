@@ -107,13 +107,45 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
       const bookingResult = await bookingResponse.json();
 
       // Step 2: Create payment intent
+      // The backend returns different shapes for "book now" vs "book later":
+      // - bookingType === 'later'  → { transactionId, total, ... }
+      // - bookingType === 'now'    → { bookingIds: string[], total, ... }
+      const paymentPayload: {
+        bookingId?: string;
+        transactionId?: string;
+        amount: number;
+      } = {
+        amount: bookingState.pricing.total
+      };
+
+      let primaryBookingId: string | null = null;
+
+      if (bookingState.bookingType === 'later') {
+        if (!bookingResult.transactionId) {
+          throw new Error('Missing transactionId from booking response');
+        }
+        paymentPayload.transactionId = bookingResult.transactionId;
+      } else {
+        // For "book now" we get an array of booking IDs – use the first as the
+        // canonical one for payment metadata and confirmation routing.
+        if (Array.isArray(bookingResult.bookingIds) && bookingResult.bookingIds.length > 0) {
+          primaryBookingId = bookingResult.bookingIds[0];
+        } else if (bookingResult.bookingId) {
+          // Fallback for any legacy responses that still return bookingId
+          primaryBookingId = bookingResult.bookingId;
+        }
+
+        if (!primaryBookingId) {
+          throw new Error('Missing bookingId from booking response');
+        }
+
+        paymentPayload.bookingId = primaryBookingId;
+      }
+
       const paymentResponse = await fetch('/api/payments/create-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId: bookingResult.bookingId,
-          amount: bookingState.pricing.total
-        })
+        body: JSON.stringify(paymentPayload)
       });
 
       if (!paymentResponse.ok) {
@@ -154,9 +186,14 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
         setSuccess(true);
         setError(null);
         setIsRedirecting(true);
-        
+
+        const confirmationUrl =
+          bookingState.bookingType === 'later'
+            ? '/client-dashboard?payment=success&bookingType=later'
+            : `/booking/${primaryBookingId || bookingResult.bookingId}/confirmation?payment=success`;
+
         setTimeout(() => {
-          router.push(`/booking/${bookingResult.bookingId}/confirmation?payment=success`);
+          router.push(confirmationUrl);
           setTimeout(() => resetBooking(), 500);
         }, 1500);
       } else if (paymentIntent.status === 'requires_action') {
@@ -166,9 +203,14 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
         setSuccess(true);
         setError(null);
         setIsRedirecting(true);
-        
+
+        const confirmationUrl =
+          bookingState.bookingType === 'later'
+            ? '/client-dashboard?payment=processing&bookingType=later'
+            : `/booking/${primaryBookingId || bookingResult.bookingId}/confirmation?payment=processing`;
+
         setTimeout(() => {
-          router.push(`/booking/${bookingResult.bookingId}/confirmation?payment=processing`);
+          router.push(confirmationUrl);
           setTimeout(() => resetBooking(), 500);
         }, 1500);
       } else {

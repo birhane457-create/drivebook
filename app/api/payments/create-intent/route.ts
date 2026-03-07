@@ -2,27 +2,101 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
 
-
 export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   try {
-    const { bookingId, amount } = await req.json();
+    const { bookingId, transactionId, amount } = await req.json();
 
-    if (!bookingId) {
+    // Handle both booking payments AND wallet/package purchases
+    if (!bookingId && !transactionId) {
       return NextResponse.json(
-        { error: 'Missing bookingId' },
+        { error: 'Missing bookingId or transactionId' },
         { status: 400 }
       );
     }
 
+    // ✅ Handle wallet/package purchase (book later)
+    if (transactionId) {
+      return handleWalletPaymentIntent(transactionId, amount);
+    }
 
+    // ✅ Handle booking payment (book now)
+    return handleBookingPaymentIntent(bookingId, amount);
+  } catch (error) {
+    console.error('Error creating payment intent:', error);
+    return NextResponse.json(
+      { error: 'Failed to create payment intent' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Create payment intent for wallet/package purchase (book later)
+ */
+async function handleWalletPaymentIntent(transactionId: string, amount?: number) {
+  try {
+    // Get wallet transaction details
+    const transaction = await prisma.walletTransaction.findUnique({
+      where: { id: transactionId },
+      include: {
+        wallet: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+
+    if (!transaction) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+
+    if (transaction.status === 'CONFIRMED') {
+      return NextResponse.json(
+        { error: 'Transaction already confirmed' },
+        { status: 400 }
+      );
+    }
+
+    // Use provided amount or transaction amount
+    const paymentAmount = amount || transaction.amount;
+    const clientEmail = transaction.wallet.user.email;
+
+    // Create payment intent with transactionId in metadata
+    const paymentIntent = await stripeService.createPaymentIntent({
+      amount: paymentAmount,
+      instructorId: '', // Not applicable for wallet purchases
+      transactionId: transaction.id, // ✅ Pass transactionId instead of bookingId
+      walletId: transaction.walletId, // ✅ Also pass walletId for webhook
+      clientEmail,
+      description: transaction.description || 'Package purchase',
+    });
+
+    return NextResponse.json({
+      clientSecret: paymentIntent.clientSecret,
+      amount: paymentIntent.amount,
+    });
+  } catch (error) {
+    console.error('Error in handleWalletPaymentIntent:', error);
+    return NextResponse.json(
+      { error: 'Failed to create wallet payment intent' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Create payment intent for booking payment (book now)
+ */
+async function handleBookingPaymentIntent(bookingId: string, amount?: number) {
+  try {
     // Get booking details
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        instructor: { select: { name: true } },
-        // Database schema in this project has no client relation
-        // so only select instructor info.
+        instructor: { select: { name: true } }
       },
     }) as any;
 
@@ -58,7 +132,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Use clientEmail from booking (added in schema update)
+    // Use clientEmail from booking
     const clientEmail = booking.clientEmail || 'customer@example.com';
 
     // Create payment intent
@@ -81,9 +155,9 @@ export async function POST(req: NextRequest) {
       amount: paymentIntent.amount,
     });
   } catch (error) {
-    console.error('Error creating payment intent:', error);
+    console.error('Error in handleBookingPaymentIntent:', error);
     return NextResponse.json(
-      { error: 'Failed to create payment intent' },
+      { error: 'Failed to create booking payment intent' },
       { status: 500 }
     );
   }

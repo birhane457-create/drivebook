@@ -121,8 +121,7 @@ export async function POST(req: NextRequest) {
           userId: userId, // Link to user account if created
           name: data.clientName,
           email: data.clientEmail,
-          phone: data.clientPhone,
-          addressText: data.pickupAddress
+          phone: data.clientPhone
         }
       })
     } else if (userId && !client.userId) {
@@ -228,7 +227,7 @@ export async function POST(req: NextRequest) {
       clientEmail: data.clientEmail,
       clientPhone: data.clientPhone,
       instructorName: instructor.name,
-      instructorEmail: instructor.user.email,
+      instructorEmail: instructor.user?.email || instructor.email || '',
       instructorPhone: instructor.phone,
       startTime,
       endTime,
@@ -242,7 +241,7 @@ export async function POST(req: NextRequest) {
     }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      return NextResponse.json({ error: error.issues }, { status: 400 })
     }
     console.error('Public booking error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { prisma } from '@/lib/prisma';
-import { TransactionType } from '@prisma/client';
-
+import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 
 export const dynamic = 'force-dynamic';
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -32,7 +32,6 @@ export async function POST(
     }
 
     // The ID could be either a client ID or user ID
-    // Try to find client first, then get user
     let userId: string | null = null;
     
     const client = await prisma.client.findUnique({
@@ -61,38 +60,29 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Update or create wallet
-    const wallet = await prisma.clientWallet.upsert({
-      where: { userId: user.id },
-      update: { 
-        balance: { increment: amount }
-      },
-      create: {
-        userId: user.id,
-        balance: amount
-      }
-    });
+    // Get or create wallet
+    const wallet = await getOrCreateWallet(user.id);
 
-    // Create wallet transaction record
+    // ✅ P0 FIX #2: Create wallet transaction (no stored balance update)
     await prisma.walletTransaction.create({
       data: {
         walletId: wallet.id,
         type: 'CREDIT',
         amount: amount,
+        status: 'CONFIRMED',
         description: reason || `Manual credit added by admin`,
-        status: 'COMPLETED'
       }
     });
 
-    // Create ledger entry
-    // Note: LedgerEntry model not available, using wallet transactions only
+    // Get updated balance
+    const newBalance = await getWalletBalance(user.id);
 
     return NextResponse.json({
       success: true,
-      message: `Added $${amount} to ${user?.email}'s wallet`,
+      message: `Added ${amount} to ${user?.email}'s wallet`,
       wallet: {
         id: wallet.id,
-        balance: Number(wallet.balance)
+        balance: newBalance.balance
       }
     });
   } catch (error) {

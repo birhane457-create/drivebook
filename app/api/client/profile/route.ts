@@ -20,8 +20,7 @@ export async function GET(req: NextRequest) {
       where: { email: session.user.email },
       include: {
         clients: {
-          orderBy: { id: 'desc' },
-          take: 1 // Get most recent client record
+          orderBy: { id: 'desc' }
         }
       }
     });
@@ -33,13 +32,21 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get the most recent client record
+    // Get the most recent client record (for display details)
     const clientRecord = user.clients[0];
 
-    // Get user's bookings by matching email
-    const bookings = await prisma.booking.findMany({
+    // Collect all client IDs linked to this user
+    const clientIds = user.clients.map((c) => c.id);
+
+    // Get user's bookings primarily via clientId, but also fall back to clientEmail
+    const bookingsRaw = await prisma.booking.findMany({
       where: {
-        clientEmail: user.email
+        OR: [
+          clientIds.length > 0
+            ? { clientId: { in: clientIds } }
+            : undefined,
+          { clientEmail: user.email }
+        ].filter(Boolean) as any
       },
       include: {
         instructor: {
@@ -53,17 +60,27 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' }
     });
 
+    // De-duplicate bookings in case a record matches both clientId and clientEmail
+    const bookingMap = new Map<string, typeof bookingsRaw[number]>();
+    for (const b of bookingsRaw) {
+      bookingMap.set(b.id, b);
+    }
+    const bookings = Array.from(bookingMap.values());
+
     const now = new Date();
     const upcomingBookings = bookings.filter(b => {
       if (!b.startTime) return false;
-      return b.startTime > now;
+      // Only count CONFIRMED bookings as upcoming
+      return b.startTime > now && (b.status === 'CONFIRMED' || b.status === 'PENDING');
     });
     const pastBookings = bookings.filter(b => {
       if (!b.startTime) return false;
-      return b.startTime <= now;
+      return b.startTime <= now && b.status === 'COMPLETED';
     });
 
-    const activeBookings = bookings.filter(b => b.status !== 'CANCELLED');
+    const activeBookings = bookings.filter(b => 
+      b.status !== 'CANCELLED' && b.status !== 'EXPIRED'
+    );
 
     return NextResponse.json({
       user: {
@@ -71,20 +88,33 @@ export async function GET(req: NextRequest) {
         email: user.email,
         phone: clientRecord?.phone || ''
       },
-      bookings: activeBookings.map(b => ({
-        id: b.id,
-        date: b.startTime ? b.startTime.toISOString().split('T')[0] : null,
-        time: b.startTime ? b.startTime.toISOString().split('T')[1].substring(0, 5) : null,
-        duration: b.duration || null,
-        status: b.status,
-        price: b.price,
-        isPaid: b.isPaid,
-        instructor: {
-          id: b.instructor.id,
-          name: b.instructor.name,
-          hourlyRate: b.instructor.hourlyRate
+      bookings: activeBookings.map(b => {
+        // Map database status to frontend status
+        let displayStatus = 'upcoming';
+        if (b.status === 'COMPLETED') {
+          displayStatus = 'completed';
+        } else if (b.status === 'PENDING_PAYMENT') {
+          displayStatus = 'pending_payment';
+        } else if (b.startTime && b.startTime <= now) {
+          displayStatus = 'completed';
         }
-      })),
+        
+        return {
+          id: b.id,
+          date: b.startTime ? b.startTime.toISOString().split('T')[0] : null,
+          time: b.startTime ? b.startTime.toISOString().split('T')[1].substring(0, 5) : null,
+          duration: b.duration || null,
+          status: displayStatus,
+          dbStatus: b.status, // Include raw status for debugging
+          price: b.price,
+          isPaid: b.isPaid,
+          instructor: {
+            id: b.instructor.id,
+            name: b.instructor.name,
+            hourlyRate: b.instructor.hourlyRate
+          }
+        };
+      }),
       upcomingCount: upcomingBookings.length,
       pastCount: pastBookings.length
     });

@@ -451,14 +451,79 @@ AI: "It looks like you already have an account with us!
 ### 1. Import OpenAPI Spec
 
 ```
-URL: https://drivebook.com.au/openapi.yaml
+URL: https://drivebook.com.au/openapi-core.yaml
 ```
 
-### 2. System Instructions
+### 2. Configure UUID Auto-Generation (CRITICAL)
+
+The `/public/bookings/bulk` endpoint requires an `Idempotency-Key` header to prevent duplicate bookings. The AI must auto-generate this value - NEVER ask the user.
+
+**In Copilot Studio:**
+
+1. Go to the `createBooking` action configuration
+2. Find the `Idempotency-Key` parameter
+3. Set the value to auto-generate a UUID v4
+
+**Power Fx Formula:**
+```powerFx
+GUID()
+```
+
+**Or use this expression:**
+```powerFx
+Concatenate(
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  "-",
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  "-4",
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  "-",
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  "-",
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0"),
+  Text(Rand() * 16, "[$-en-US]0")
+)
+```
+
+**Alternative (if GUID() not available):**
+- Use a pre-action step to generate UUID
+- Store in a variable
+- Pass variable to the API call
+
+**Example Configuration:**
+```yaml
+Action: createBooking
+Parameters:
+  Idempotency-Key: 
+    Type: Expression
+    Value: GUID()
+    Visible to User: false
+  body:
+    Type: User Input
+    Visible to User: true
+```
+
+**Test it:**
+```
+User: "Book a lesson"
+AI: [Generates UUID internally: "550e8400-e29b-41d4-a716-446655440000"]
+    [Calls API with header: Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000]
+    [NEVER mentions UUID to user]
+```
+
+### 3. System Instructions
 
 Copy from `AI_VOICE_IMPROVED_PROMPT.md`
 
-### 3. Key Settings
+### 4. Key Settings
 
 ```yaml
 Conversation Style: Friendly, helpful, conversational
@@ -474,7 +539,7 @@ Features:
 - Confirmation: ALWAYS (before booking)
 ```
 
-### 4. Entity Extraction
+### 5. Entity Extraction
 
 ```yaml
 Entities to Extract:

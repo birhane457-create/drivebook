@@ -22,13 +22,18 @@ export async function GET(req: NextRequest) {
         wallet: {
           include: {
             transactions: {
+              where: { status: 'CONFIRMED' },
               orderBy: { createdAt: 'desc' },
               take: 10
             }
           }
         },
-        bookings: {
-          include: { instructor: true }
+        clients: {
+          include: { 
+            bookings: {
+              include: { instructor: true }
+            }
+          }
         }
       }
     });
@@ -42,7 +47,9 @@ export async function GET(req: NextRequest) {
 
     // Get wallet or create default
     const wallet = user.wallet;
-    const bookings = user.bookings || [];
+    
+    // Get bookings from all client records
+    const bookings = user.clients?.flatMap(c => c.bookings) || [];
     
     if (!wallet) {
       return NextResponse.json({
@@ -67,14 +74,15 @@ export async function GET(req: NextRequest) {
     // Calculate from wallet transactions
     const transactions = wallet.transactions || [];
     const totalPaid = transactions
-      .filter(t => t.type === 'CREDIT')
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter((t: any) => t.type === 'CREDIT' && t.status === 'CONFIRMED')
+      .reduce((sum: number, t: any) => sum + t.amount, 0);
     
     const totalSpent = transactions
-      .filter(t => t.type === 'DEBIT')
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter((t: any) => t.type === 'DEBIT' && t.status === 'CONFIRMED')
+      .reduce((sum: number, t: any) => sum + t.amount, 0);
     
-    const creditsRemaining = wallet.balance;
+    // ✅ P0 FIX #2: Calculate balance from transactions (single source of truth)
+    const creditsRemaining = totalPaid - totalSpent;
 
     const totalBookedHours = bookings.reduce((sum: number, b: any) => {
       const duration = (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / (1000 * 60 * 60);

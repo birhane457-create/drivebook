@@ -224,18 +224,92 @@ async function handleCheckoutCompleted(
 // BOOKING PAYMENT HANDLERS
 // ============================================================================
 
+/**
+ * Handle wallet/package purchase payment success (book later)
+ */
+async function handleWalletPaymentSuccess(
+  paymentIntent: Stripe.PaymentIntent,
+  idempotencyKey: string,
+  transactionId?: string,
+  walletId?: string
+): Promise<void> {
+  console.log(`💰 Processing wallet payment: transactionId=${transactionId}, walletId=${walletId}`);
+
+  await prisma.$transaction(async (tx) => {
+    // Record webhook event
+    await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
+      transactionId,
+      walletId,
+      amount: paymentIntent.amount / 100,
+      type: 'wallet_purchase'
+    });
+
+    // Find wallet transaction(s) to confirm
+    let transactions: any[] = [];
+    
+    if (transactionId) {
+      // Specific transaction ID provided
+      const transaction = await tx.walletTransaction.findUnique({
+        where: { id: transactionId }
+      });
+      if (transaction) {
+        transactions = [transaction];
+      }
+    } else if (walletId) {
+      // Find recent PENDING transactions for this wallet
+      transactions = await tx.walletTransaction.findMany({
+        where: {
+          walletId,
+          status: 'PENDING',
+          createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) } // Last 10 minutes
+        }
+      });
+    }
+
+    if (transactions.length === 0) {
+      console.error('❌ No wallet transactions found to confirm');
+      throw new Error('No wallet transactions found');
+    }
+
+    // ✅ Confirm all PENDING wallet transactions
+    for (const transaction of transactions) {
+      await tx.walletTransaction.update({
+        where: { id: transaction.id },
+        data: { status: 'CONFIRMED' }
+      });
+      
+      console.log(`✅ Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount})`);
+    }
+
+    // Get wallet details for logging
+    const wallet = await tx.clientWallet.findUnique({
+      where: { id: transactions[0].walletId },
+      include: { user: true }
+    });
+
+    console.log(`✅ Wallet payment processed: ${wallet?.user.email} - ${transactions.length} transaction(s) confirmed`);
+  });
+}
+
 async function handleBookingPaymentSuccess(
   paymentIntent: Stripe.PaymentIntent,
   idempotencyKey: string
 ): Promise<void> {
   const { id: paymentIntentId, metadata } = paymentIntent;
-  const { bookingId } = metadata;
+  const { bookingId, transactionId, walletId } = metadata;
 
-  if (!bookingId) {
-    console.error('❌ No bookingId in payment intent metadata');
+  // Handle both booking payments AND wallet/package purchases
+  if (!bookingId && !transactionId && !walletId) {
+    console.error('❌ No bookingId, transactionId, or walletId in payment intent metadata');
     await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
-      error: 'Missing bookingId'
+      error: 'Missing bookingId, transactionId, or walletId'
     });
+    return;
+  }
+
+  // ✅ Handle wallet/package purchase (book later)
+  if (transactionId || walletId) {
+    await handleWalletPaymentSuccess(paymentIntent, idempotencyKey, transactionId, walletId);
     return;
   }
 
@@ -246,7 +320,61 @@ async function handleBookingPaymentSuccess(
       amount: paymentIntent.amount / 100
     });
 
-    // Update booking
+    // Fetch booking to validate
+    const booking = await tx.booking.findUnique({
+      where: { id: bookingId },
+      include: { client: true }
+    });
+
+    if (!booking) {
+      console.error('❌ Booking not found:', bookingId);
+      throw new Error(`Booking not found: ${bookingId}`);
+    }
+
+    // ✅ P0 FIX #3: Validate payment amount matches booking price
+    const expectedAmount = Math.round(booking.price * 100); // Convert to cents
+    const receivedAmount = paymentIntent.amount_received;
+    
+    if (receivedAmount !== expectedAmount) {
+      console.error('❌ Payment amount mismatch:', {
+        expected: expectedAmount,
+        received: receivedAmount,
+        bookingId
+      });
+      throw new Error(
+        `Payment amount mismatch: expected ${expectedAmount} cents, received ${receivedAmount} cents`
+      );
+    }
+
+    // Get userId from client relation or lookup by phone via Client
+    let userId = booking.client?.userId;
+    
+    if (!userId && booking.clientPhone) {
+      const client = await tx.client.findFirst({
+        where: { 
+          phone: booking.clientPhone
+        }
+      });
+      userId = client?.userId;
+    }
+
+    // ✅ P0 FIX #5: Verify payment customer matches instructor
+    if (paymentIntent.customer) {
+      const instructor = await tx.instructor.findUnique({ 
+        where: { id: booking.instructorId } 
+      });
+      
+      if (instructor?.stripeCustomerId && instructor.stripeCustomerId !== paymentIntent.customer) {
+        console.error('❌ Payment customer mismatch:', {
+          instructorId: booking.instructorId,
+          instructorStripeCustomerId: instructor.stripeCustomerId,
+          paymentCustomerId: paymentIntent.customer
+        });
+        throw new Error('Payment customer does not match instructor');
+      }
+    }
+
+    // ✅ All validations passed - Update booking
     await tx.booking.update({
       where: { id: bookingId },
       data: {
@@ -268,37 +396,29 @@ async function handleBookingPaymentSuccess(
       }
     });
 
-    // Update wallet
-    const booking = await tx.booking.findUnique({
-      where: { id: bookingId },
-      include: { client: true }
-    });
-
-    if (booking?.client?.userId) {
+    // ✅ P0 FIX #2: Update wallet transactions (PENDING → CONFIRMED)
+    // Do NOT update stored balance fields - let them be calculated
+    if (userId) {
       const wallet = await tx.clientWallet.findUnique({
-        where: { userId: booking.client.userId }
+        where: { userId }
       });
 
       if (wallet) {
-        await tx.clientWallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: booking.price } }
-        });
-
-        await tx.walletTransaction.create({
-          data: {
+        // Update existing PENDING wallet transactions to CONFIRMED
+        await tx.walletTransaction.updateMany({
+          where: {
             walletId: wallet.id,
-            amount: booking.price,
-            type: 'CREDIT',
-            description: `Payment received for booking`,
-            status: 'COMPLETED'
-          }
+            status: 'PENDING',
+            // Match transactions created around the same time as booking
+            createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
+          },
+          data: { status: 'CONFIRMED' }
         });
       }
     }
   });
 
-  console.log(`✅ Booking payment processed: ${bookingId}`);
+  console.log(`✅ Booking payment processed with validations: ${bookingId}`);
 }
 
 async function handleBookingPaymentFailed(
@@ -376,7 +496,6 @@ async function handleSubscriptionUpdate(
         commissionRate: plan.commissionRate,
         newStudentBonus: plan.newStudentBonus,
         trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
-        stripeSubscriptionId: subscription.id,
         stripeCustomerId: subscription.customer as string,
       }
     });
@@ -434,7 +553,7 @@ async function handleSubscriptionUpdate(
       include: { user: true }
     });
 
-    if (instructor) {
+    if (instructor?.user) {
       await emailService.sendGenericEmail({
         to: instructor.user.email,
         subject: 'Subscription Activated',
@@ -517,7 +636,7 @@ async function handleTrialEnding(
     include: { user: true }
   });
 
-  if (instructor && trial_end) {
+  if (instructor?.user && trial_end) {
     const daysLeft = Math.ceil((new Date(trial_end * 1000).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     
     await emailService.sendGenericEmail({
@@ -587,21 +706,32 @@ async function handleInvoicePaymentFailed(
       data: { status: 'PAST_DUE' }
     });
 
-    await tx.instructor.updateMany({
-      where: { stripeSubscriptionId: subscription as string },
-      data: { subscriptionStatus: 'PAST_DUE' as any }
+    // Find instructor via subscription
+    const subscriptionRecord = await tx.subscription.findFirst({
+      where: { stripeSubscriptionId: subscription as string }
     });
+
+    if (subscriptionRecord) {
+      await tx.instructor.update({
+        where: { id: subscriptionRecord.instructorId },
+        data: { subscriptionStatus: 'PAST_DUE' as any }
+      });
+    }
   });
 
   // Send payment failed email
-  const instructor = await prisma.instructor.findFirst({
+  const subscriptionRecord = await prisma.subscription.findFirst({
     where: { stripeSubscriptionId: subscription as string },
-    include: { user: true }
+    include: { 
+      instructor: {
+        include: { user: true }
+      }
+    }
   });
 
-  if (instructor) {
+  if (subscriptionRecord?.instructor?.user) {
     await emailService.sendGenericEmail({
-      to: instructor.user.email,
+      to: subscriptionRecord.instructor.user.email,
       subject: 'Payment Failed',
       html: `
         <h2>Payment Failed</h2>

@@ -6,6 +6,7 @@ import { walletRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/r
 import { logAuditAction } from '@/lib/services/audit';
 import { recordWalletCredit } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
+import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 import { z } from 'zod';
 
 
@@ -66,15 +67,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Create wallet if it doesn't exist
-    let wallet = user.wallet;
-    if (!wallet) {
-      wallet = await prisma.clientWallet.create({
-        data: {
-          userId: user.id,
-          balance: 0
-        }
-      });
-    }
+    const wallet = await getOrCreateWallet(user.id);
+    
+    // Get current balance before transaction
+    const previousBalance = await getWalletBalance(user.id);
 
     // FIXED: Use transaction wrapper for atomicity + LEDGER (DUAL-WRITE)
     const result = await prisma.$transaction(async (tx) => {
@@ -87,26 +83,14 @@ export async function POST(req: NextRequest) {
         createdBy: session.user.id
       });
       
-      // OLD SYSTEM: Keep for now (dual-write during migration)
-      // Update wallet balance
-      const updatedWallet = await tx.clientWallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: { increment: amount }
-        }
-      });
-
-      // Create transaction record
+      // ✅ P0 FIX #2: Create transaction record (no stored balance update)
       const walletTx = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: 'CREDIT',
           amount: amount,
-          description: `Added ${amount.toFixed(2)} credits`,
-          metadata: {
-            paymentIntentId: paymentIntentId || null,
-            source: 'manual_add'
-          }
+          status: 'CONFIRMED',
+          description: `Added ${amount.toFixed(2)} credits via ${paymentIntentId ? 'Stripe' : 'manual'}`
         }
       });
 
@@ -119,33 +103,35 @@ export async function POST(req: NextRequest) {
         metadata: {
           amount,
           paymentIntentId,
-          previousBalance: wallet.balance,
-          newBalance: updatedWallet.balance,
+          previousBalance: previousBalance.balance,
           userEmail: session.user.email,
         },
         req,
       });
       
-      // NEW: Verify ledger balance matches old system
-      const ledgerBalance = await getAccountBalance(
-        buildAccount(AccountType.CLIENT_WALLET, user.id)
-      );
-      
-      if (Math.abs(ledgerBalance - updatedWallet.balance) > 0.01) {
-        console.error(
-          `[LEDGER MISMATCH] User ${user.id}: Ledger=${ledgerBalance}, Old=${updatedWallet.balance}`
-        );
-      }
-
-      return { updatedWallet, walletTx, ledgerBalance };
+      return { walletTx };
     });
+    
+    // Get updated balance after transaction
+    const newBalance = await getWalletBalance(user.id);
+    
+    // Verify ledger balance matches
+    const ledgerBalance = await getAccountBalance(
+      buildAccount(AccountType.CLIENT_WALLET, user.id)
+    );
+    
+    if (Math.abs(ledgerBalance - newBalance.balance) > 0.01) {
+      console.error(
+        `[LEDGER MISMATCH] User ${user.id}: Ledger=${ledgerBalance}, Calculated=${newBalance.balance}`
+      );
+    }
 
     return NextResponse.json({
       success: true,
       wallet: {
-        balance: result.updatedWallet.balance,
-        totalPaid: result.ledgerBalance, // Use ledger balance
-        creditsRemaining: result.updatedWallet.balance
+        balance: newBalance.balance,
+        totalPaid: newBalance.totalPaid,
+        creditsRemaining: newBalance.balance
       },
       transaction: {
         id: result.walletTx.id,
@@ -153,8 +139,8 @@ export async function POST(req: NextRequest) {
         createdAt: result.walletTx.createdAt
       },
       ledger: {
-        balance: result.ledgerBalance,
-        verified: Math.abs(result.ledgerBalance - result.updatedWallet.balance) < 0.01
+        balance: ledgerBalance,
+        verified: Math.abs(ledgerBalance - newBalance.balance) < 0.01
       }
     });
 

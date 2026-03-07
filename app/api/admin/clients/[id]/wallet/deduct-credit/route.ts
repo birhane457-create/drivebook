@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-
+import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 
 export const dynamic = 'force-dynamic';
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -39,43 +40,42 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Get or create wallet
-    let wallet = await prisma.clientWallet.findUnique({
-      where: { userId: user.id }
-    });
-
-    if (!wallet) {
-      return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
-    }
+    // Get wallet and current balance
+    const wallet = await getOrCreateWallet(user.id);
+    const currentBalance = await getWalletBalance(user.id);
 
     // Check if wallet has enough balance
-    if (wallet.balance < amount) {
+    if (currentBalance.balance < amount) {
       return NextResponse.json(
-        { error: 'Insufficient balance' },
+        { 
+          error: 'Insufficient balance',
+          available: currentBalance.balance,
+          requested: amount
+        },
         { status: 400 }
       );
     }
 
-    // Deduct from wallet balance
-    await prisma.clientWallet.update({
-      where: { id: wallet.id },
-      data: {
-        balance: { decrement: amount }
-      }
-    });
-
-    // Create wallet transaction
+    // ✅ P0 FIX #2: Create debit transaction (no stored balance update)
     await prisma.walletTransaction.create({
       data: {
         walletId: wallet.id,
         amount,
         type: 'DEBIT',
+        status: 'CONFIRMED',
         description: reason || 'Manual deduction by admin',
-        status: 'completed'
       }
     });
 
-    return NextResponse.json({ success: true });
+    // Get updated balance
+    const newBalance = await getWalletBalance(user.id);
+
+    return NextResponse.json({ 
+      success: true,
+      previousBalance: currentBalance.balance,
+      newBalance: newBalance.balance,
+      deducted: amount
+    });
   } catch (error) {
     console.error('Deduct credit error:', error);
     return NextResponse.json(

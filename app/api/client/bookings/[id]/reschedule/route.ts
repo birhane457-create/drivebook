@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,7 @@ export async function PUT(
       where: { id: bookingId },
       include: {
         instructor: true,
+        client: true,
       },
     });
 
@@ -49,7 +51,7 @@ export async function PUT(
       where: { email: session.user.email },
     });
 
-    if (!user || booking.userId !== user.id) {
+    if (!user || booking.client?.userId !== user.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 403 }
@@ -57,6 +59,13 @@ export async function PUT(
     }
 
     // Check reschedule policy - must be at least 12 hours before lesson
+    if (!booking.startTime) {
+      return NextResponse.json(
+        { error: 'Booking has no start time' },
+        { status: 400 }
+      );
+    }
+
     const now = new Date();
     const bookingTime = new Date(booking.startTime);
     const hoursUntilBooking = (bookingTime.getTime() - now.getTime()) / (1000 * 60 * 60);
@@ -72,22 +81,14 @@ export async function PUT(
       );
     }
 
-    // Get wallet
-    const wallet = await prisma.clientWallet.findUnique({
-      where: { userId: user.id },
-    });
-
-    if (!wallet) {
-      return NextResponse.json(
-        { error: 'Wallet not found' },
-        { status: 404 }
-      );
-    }
+    // Get wallet and current balance
+    const wallet = await getOrCreateWallet(user.id);
+    const walletBalance = await getWalletBalance(user.id);
 
     // Prepare update data
     const updateData: any = {};
-    let newStartTime = booking.startTime;
-    let newEndTime = booking.endTime;
+    let newStartTime: Date = booking.startTime;
+    let newEndTime: Date = booking.endTime || new Date(booking.startTime.getTime() + 60 * 60 * 1000);
     let newPrice = booking.price;
     let priceDifference = 0;
 
@@ -105,8 +106,7 @@ export async function PUT(
       // Handle duration change
       if (body.duration !== undefined) {
         newEndTime.setHours(newEndTime.getHours() + body.duration);
-        const oldDuration = booking.duration || (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60);
-        const durationDifference = body.duration - oldDuration;
+        const oldDuration = booking.duration || (booking.endTime ? (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60) : 1);
         
         newPrice = (booking.instructor.hourlyRate || 0) * body.duration;
         priceDifference = newPrice - booking.price;
@@ -118,8 +118,7 @@ export async function PUT(
       updateData.endTime = newEndTime;
     } else if (body.duration !== undefined) {
       // Only duration changed
-      const oldDuration = booking.duration || (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60);
-      const durationDifference = body.duration - oldDuration;
+      const oldDuration = booking.duration || (booking.endTime ? (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60) : 1);
 
       newEndTime = new Date(newStartTime);
       newEndTime.setHours(newEndTime.getHours() + body.duration);
@@ -140,74 +139,59 @@ export async function PUT(
     if (priceDifference !== 0) {
       if (priceDifference > 0) {
         // Price increased - check if client has enough credits
-        if (wallet.balance < priceDifference) {
+        if (walletBalance.balance < priceDifference) {
           return NextResponse.json(
             {
               error: 'Insufficient credits for duration increase',
               required: priceDifference,
-              available: wallet.balance,
+              available: walletBalance.balance,
             },
             { status: 400 }
           );
         }
 
-        // Deduct additional credits
-        await prisma.clientWallet.update({
-          where: { userId: user.id },
-          data: {
-            balance: wallet.balance - priceDifference,
-          },
-        });
-
-        // Create debit transaction
+        // ✅ P0 FIX #2: Create debit transaction (no stored balance update)
         await prisma.walletTransaction.create({
           data: {
             walletId: wallet.id,
             type: 'DEBIT',
             amount: priceDifference,
+            status: 'CONFIRMED',
             description: `Duration increase: +${(priceDifference / (booking.instructor.hourlyRate || 1)).toFixed(1)}h`,
-            status: 'COMPLETED',
             bookingId,
-          },
+          } as any,
         });
       } else if (priceDifference < 0) {
         // Price decreased - refund credits
         const refundAmount = Math.abs(priceDifference);
 
-        await prisma.clientWallet.update({
-          where: { userId: user.id },
-          data: {
-            balance: wallet.balance + refundAmount,
-          },
-        });
-
-        // Create credit transaction
+        // ✅ P0 FIX #2: Create credit transaction (no stored balance update)
         await prisma.walletTransaction.create({
           data: {
             walletId: wallet.id,
             type: 'CREDIT',
             amount: refundAmount,
+            status: 'CONFIRMED',
             description: `Duration reduction: -${((refundAmount / (booking.instructor.hourlyRate || 1)).toFixed(1))}h`,
-            status: 'COMPLETED',
             bookingId,
-          },
+          } as any,
         });
       }
 
       updateData.price = newPrice;
     }
 
-    // Track original booking time for cancellation policy (prevents reschedule loophole)
-    if (!booking.originalBookingTime) {
-      updateData.originalBookingTime = booking.startTime;
-    }
-    updateData.rescheduledCount = (booking.rescheduledCount || 0) + 1;
+    // Note: originalBookingTime and rescheduledCount fields don't exist in schema
+    // Remove these lines or add fields to schema if needed
 
     // Update the booking
     const updatedBooking = await prisma.booking.update({
       where: { id: bookingId },
       data: updateData,
     });
+    
+    // Get updated balance
+    const newBalance = await getWalletBalance(user.id);
 
     console.log('Booking updated:', {
       bookingId,
@@ -221,7 +205,7 @@ export async function PUT(
       booking: updatedBooking,
       priceDifference,
       newPrice,
-      remainingBalance: wallet.balance + (priceDifference < 0 ? Math.abs(priceDifference) : -priceDifference),
+      remainingBalance: newBalance.balance,
     });
   } catch (error) {
     console.error('Reschedule error:', error);

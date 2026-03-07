@@ -6,8 +6,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 interface CreatePaymentIntentParams {
   amount: number; // in dollars
-  instructorId: string;
-  bookingId: string;
+  instructorId?: string; // Optional for wallet purchases
+  bookingId?: string; // For booking payments
+  transactionId?: string; // For wallet purchases
+  walletId?: string; // For wallet purchases
   clientEmail: string;
   description: string;
 }
@@ -27,32 +29,43 @@ export class StripeService {
   }
 
   /**
-   * Create a payment intent for a booking
+   * Create a payment intent for a booking or wallet purchase
    * Uses automatic capture for immediate payment
    */
   async createPaymentIntent(params: CreatePaymentIntentParams) {
-    const { amount, instructorId, bookingId, clientEmail, description } = params;
+    const { amount, instructorId, bookingId, transactionId, walletId, clientEmail, description } = params;
 
-    // Calculate platform fee
-    const platformFee = (amount * this.commissionRate) / 100;
-    const instructorPayout = amount - platformFee;
+    // Calculate platform fee (only for bookings with instructorId)
+    const platformFee = instructorId ? (amount * this.commissionRate) / 100 : 0;
+    const instructorPayout = instructorId ? amount - platformFee : 0;
 
     // Convert to cents for Stripe
     const amountInCents = Math.round(amount * 100);
+
+    // Build metadata based on payment type
+    const metadata: any = {};
+    
+    if (bookingId) {
+      // Booking payment
+      metadata.bookingId = bookingId;
+      metadata.instructorId = instructorId;
+      metadata.platformFee = platformFee.toFixed(2);
+      metadata.instructorPayout = instructorPayout.toFixed(2);
+    } else if (transactionId || walletId) {
+      // Wallet/package purchase
+      if (transactionId) metadata.transactionId = transactionId;
+      if (walletId) metadata.walletId = walletId;
+      metadata.type = 'wallet_purchase';
+    }
 
     try {
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
         currency: 'aud', // Australian dollars
-        capture_method: 'automatic', // Immediate capture for booking payments
+        capture_method: 'automatic', // Immediate capture
         receipt_email: clientEmail,
         description,
-        metadata: {
-          bookingId,
-          instructorId,
-          platformFee: platformFee.toFixed(2),
-          instructorPayout: instructorPayout.toFixed(2),
-        },
+        metadata,
       });
 
       return {

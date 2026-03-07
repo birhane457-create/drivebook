@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
+import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers'
 import { z } from 'zod'
 
 
@@ -109,29 +110,22 @@ export async function PATCH(
           });
 
           if (wallet) {
+            // ✅ P0 FIX #2: Calculate balance from transactions
+            const { balance } = await getWalletBalance(booking.client.userId);
+            
             // Check if client has enough balance
-            if (wallet.creditsRemaining < priceDifference) {
+            if (balance < priceDifference) {
               throw new Error(`Insufficient wallet balance. Need $${priceDifference.toFixed(2)} more for the duration increase.`);
             }
 
-            // Deduct from wallet
-            await tx.clientWallet.update({
-              where: { userId: booking.client.userId },
-              data: {
-                creditsRemaining: { decrement: priceDifference },
-                totalSpent: { increment: priceDifference },
-                version: { increment: 1 }
-              }
-            });
-
-            // Create wallet transaction
+            // Create wallet transaction (debit)
             await tx.walletTransaction.create({
               data: {
                 walletId: wallet.id,
-                type: 'debit',
-                amount: -priceDifference,
-                description: `Duration increase for booking on ${new Date(booking.startTime).toLocaleDateString()}`,
-                status: 'completed'
+                type: 'DEBIT',
+                amount: priceDifference,
+                description: `Duration increase for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString() : 'N/A'}`,
+                status: 'CONFIRMED'
               }
             });
           }
@@ -146,23 +140,14 @@ export async function PATCH(
           });
 
           if (wallet) {
-            // Add to wallet
-            await tx.clientWallet.update({
-              where: { userId: booking.client.userId },
-              data: {
-                creditsRemaining: { increment: refundAmount },
-                version: { increment: 1 }
-              }
-            });
-
-            // Create wallet transaction
+            // Create wallet transaction (credit)
             await tx.walletTransaction.create({
               data: {
                 walletId: wallet.id,
-                type: 'credit',
+                type: 'CREDIT',
                 amount: refundAmount,
-                description: `Duration reduction for booking on ${new Date(booking.startTime).toLocaleDateString()}`,
-                status: 'completed'
+                description: `Duration reduction for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString() : 'N/A'}`,
+                status: 'CONFIRMED'
               }
             });
           }

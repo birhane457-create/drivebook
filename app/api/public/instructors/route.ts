@@ -21,7 +21,6 @@ export async function GET() {
         languages: true,
         phone: true,
         vehicleTypes: true,
-        qualifications: true,
         _count: {
           select: {
             bookings: true,
@@ -40,10 +39,10 @@ export async function GET() {
     });
 
     // Calculate average rating and format response
-    const formattedInstructors = instructors.map((instructor: typeof instructors[number]) => {
+    const formattedInstructors = instructors.map((instructor) => {
       const avgRating =
         instructor.reviews.length > 0
-          ? instructor.reviews.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) / instructor.reviews.length
+          ? instructor.reviews.reduce((sum, r) => sum + r.rating, 0) / instructor.reviews.length
           : null;
 
       return {

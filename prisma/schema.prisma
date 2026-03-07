@@ -20,6 +20,10 @@ model User {
   password         String?
   name             String?
   role             String    @default("CLIENT")
+  emailVerified    Boolean   @default(false)
+  emailVerifiedAt  DateTime?
+  verificationToken String?
+  verificationTokenExpiry DateTime?
   resetToken       String?
   resetTokenExpiry DateTime?
   createdAt        DateTime  @default(now())
@@ -188,12 +192,20 @@ model Booking {
   packageHoursRemaining Float?
   packageExpiryDate     DateTime?
   packageStatus         String?
+  isGuestCheckout       Boolean  @default(false) // ✅ REFINEMENT #3: Track if booked without login
   createdBy             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
   transactions          Transaction[]
   reviews               Review[]
+  
+  // ✅ P0 FIX #1: Prevent double-booking at database level
+  // Unique constraint ensures same instructor cannot have same startTime
+  // This prevents race conditions during concurrent bookings
+  @@unique([instructorId, startTime])
+  @@index([instructorId, startTime, status])
+  @@index([instructorId, startTime, endTime])
 }
 
 model Transaction {
@@ -219,10 +231,11 @@ model ClientWallet {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   userId            String   @unique @db.ObjectId
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balance           Float    @default(0)
-  creditsRemaining  Float    @default(0)
-  totalPaid         Float    @default(0)
-  totalSpent        Float    @default(0)
+  
+  // ✅ P0 FIX #2: Removed stored balance fields to prevent drift
+  // Balance is now ALWAYS calculated from WalletTransaction records
+  // This ensures single source of truth and prevents inconsistencies
+  
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
@@ -330,4 +343,18 @@ model Review {
   @@index([clientId])
   @@index([bookingId])
   @@index([createdAt])
+}
+
+// Webhook event tracking for idempotency
+model WebhookEvent {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  idempotencyKey  String   @unique
+  eventType       String
+  stripeEventId   String
+  metadata        Json?
+  processedAt     DateTime @default(now())
+  
+  @@index([stripeEventId])
+  @@index([eventType])
+  @@index([processedAt])
 }

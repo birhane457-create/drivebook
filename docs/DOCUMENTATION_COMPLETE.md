@@ -282,4 +282,3 @@ You now have:
 ---
 
 **Start reading: [START_HERE.md](START_HERE.md) →**
-

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get or create wallet
+    // Get or create wallet (no stored balance fields – everything is derived from transactions)
     let wallet = await prisma.clientWallet.findUnique({
       where: { userId: user.id },
       include: {
@@ -41,29 +41,28 @@ export async function GET(req: NextRequest) {
     if (!wallet) {
       wallet = await prisma.clientWallet.create({
         data: {
-          userId: user.id,
-          balance: 0,
-          creditsRemaining: 0,
-          totalPaid: 0,
-          totalSpent: 0
+          userId: user.id
         },
         include: {
-          transactions: true
+          transactions: {
+            take: 10,
+            orderBy: { createdAt: 'desc' }
+          }
         }
       });
     }
 
-    // Calculate from wallet transactions
+    // Calculate from wallet transactions (only CONFIRMED)
     const transactions = wallet.transactions || [];
     
-    // Total Credits Added = all credits (money paid by user)
+    // Total Credits Added = all CONFIRMED credits (money paid by user)
     const totalPaid = transactions
-      .filter(t => t.type.toUpperCase() === 'CREDIT')
+      .filter(t => t.type.toUpperCase() === 'CREDIT' && t.status === 'CONFIRMED')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    // Total Spent = all debits (booking charges)
+    // Total Spent = all CONFIRMED debits (booking charges)
     const totalSpent = transactions
-      .filter(t => t.type.toUpperCase() === 'DEBIT')
+      .filter(t => t.type.toUpperCase() === 'DEBIT' && t.status === 'CONFIRMED')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     
     // Calculate actual remaining balance

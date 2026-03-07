@@ -1,3 +1,7 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [{
+    "path": "/api/cron/cleanup-expired-bookings",
+    "schedule": "*/5 * * * *"
+  }]
 }
