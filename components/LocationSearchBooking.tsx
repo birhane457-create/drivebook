@@ -74,8 +74,8 @@ export default function LocationSearchBooking() {
   return (
     <div>
       {/* Search Bar */}
-      <div className="max-w-3xl mx-auto">
-        <form onSubmit={handleSearch} className="bg-white rounded-lg shadow-xl p-6">
+      <div className="max-w-5xl mx-auto">
+        <form onSubmit={handleSearch} className="bg-white rounded-lg shadow-xl p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -153,7 +153,7 @@ export default function LocationSearchBooking() {
                 </p>
               </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {instructors.map((instructor) => (
                   <CompactInstructorCard 
                     key={instructor.id} 

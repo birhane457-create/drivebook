@@ -1,19 +1,35 @@
+"use client";
+
 import Link from 'next/link';
-import { Car } from 'lucide-react';
+import { Car, Menu, X } from 'lucide-react';
+import { useState } from 'react';
 import LocationSearchBooking from '@/components/LocationSearchBooking';
 
 export default function BookingLandingPage() {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <nav className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-2 sm:px-5 lg:px-7">
           <div className="flex justify-between h-16 items-center">
             <Link href="/" className="flex items-center">
               <Car className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
               <span className="ml-2 text-lg sm:text-xl font-bold text-gray-900">DriveBook</span>
             </Link>
-            <div className="flex gap-2 sm:gap-4">
+            
+            {/* Desktop Menu */}
+            <div className="hidden md:flex gap-2 sm:gap-4 items-center">
+              <Link href="/about" className="text-gray-700 hover:text-blue-600 text-sm sm:text-base">
+                About Us
+              </Link>
+              <Link href="/contact" className="text-gray-700 hover:text-blue-600 text-sm sm:text-base">
+                Contact Us
+              </Link>
+              <Link href="/blog" className="text-gray-700 hover:text-blue-600 text-sm sm:text-base">
+                Blog
+              </Link>
               <Link href="/login" className="text-gray-700 hover:text-blue-600 text-sm sm:text-base">
                 Login
               </Link>
@@ -21,12 +37,50 @@ export default function BookingLandingPage() {
                 Become Instructor
               </Link>
             </div>
+            
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100"
+              aria-label="Toggle menu"
+            >
+              {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
           </div>
         </div>
+        
+        {/* Mobile Menu */}
+        {menuOpen && (
+          <div className="md:hidden bg-white border-t border-gray-200 py-4">
+            <div className="max-w-7xl mx-auto px-2 sm:px-5 lg:px-7 space-y-2">
+              <Link href="/about" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
+                About Us
+              </Link>
+              <Link href="/contact" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
+                Contact Us
+              </Link>
+              <Link href="/blog" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
+                Blog
+              </Link>
+              <Link href="/terms" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
+                Terms & Conditions
+              </Link>
+              <Link href="/privacy" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
+                Privacy Policy
+              </Link>
+              <Link href="/login" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
+                Login
+              </Link>
+              <Link href="/register" className="block bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 text-sm sm:text-base text-center">
+                Become Instructor
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-2 sm:px-5 lg:px-7 py-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">
             Book Your Driving Lesson

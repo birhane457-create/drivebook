@@ -227,6 +227,50 @@ model Transaction {
   updatedAt             DateTime @updatedAt
 }
 
+// Lesson Feedback - PDA Performance Tracking
+// Stores integer codes (10-89) that map to detailed feedback text
+// Aligned with Department of Transport WA PDA criteria
+model LessonFeedback {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId    String   @db.ObjectId
+  instructorId String   @db.ObjectId
+  clientId     String   @db.ObjectId
+  
+  // Array of feedback codes (e.g., [10, 20, 32] = signal error, blind spot, harsh braking)
+  feedbackCodes Int[]
+  
+  // Overall performance scores (0-100)
+  signalScore          Int?
+  lookBehindScore      Int?
+  movementScore        Int?
+  pathScore            Int?
+  vehicleManagementScore Int?
+  responsivenessScore  Int?
+  flowScore            Int?
+  overallScore         Int?
+  
+  // Test readiness assessment
+  testReady            Boolean  @default(false)
+  hasCriticalIssues    Boolean  @default(false)
+  
+  // Additional notes from instructor
+  instructorNotes      String?
+  strengths            String?  // What student did well
+  areasToImprove       String?  // What needs work
+  
+  // Lesson context
+  lessonType           String?  // e.g., "REGULAR", "MOCK_TEST", "TEST_PREP"
+  lessonDuration       Float?   // in hours
+  lessonDate           DateTime
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@index([clientId, lessonDate])
+  @@index([instructorId, lessonDate])
+  @@index([bookingId])
+}
+
 model ClientWallet {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   userId            String   @unique @db.ObjectId

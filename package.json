@@ -3,8 +3,8 @@
   "version": "0.1.1",
   "private": true,
   "scripts": {
-    "dev": "set NODE_OPTIONS=--max-old-space-size=4096 && next dev -H 0.0.0.0",
-    "build": "prisma generate && set NODE_OPTIONS=--max-old-space-size=4096 && next build",
+    "dev": "set NODE_OPTIONS=--max-old-space-size=8192 && next dev -H 0.0.0.0",
+    "build": "prisma generate && set NODE_OPTIONS=--max-old-space-size=8192 && next build",
     "vercel-build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",

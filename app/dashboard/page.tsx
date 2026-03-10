@@ -53,7 +53,7 @@ export default async function DashboardPage() {
     })
 
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-7 py-4 sm:py-8">
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back!</h1>
           <p className="text-sm sm:text-base text-gray-600">Manage your lessons and account.</p>
@@ -321,7 +321,7 @@ export default async function DashboardPage() {
     : 0
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-7 py-4 sm:py-8">
       <div className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back, {instructor.name}!</h1>
         <p className="text-sm sm:text-base text-gray-600">Here's what's happening with your driving school today.</p>
