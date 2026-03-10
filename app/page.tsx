@@ -1,17 +1,42 @@
+'use client'
+
 import Link from 'next/link'
+import { useState } from 'react'
+import { Menu, X } from 'lucide-react'
+import BookingFlowShowcase from '@/components/landing/BookingFlowShowcase'
+import TrustSafetyShowcase from '@/components/landing/TrustSafetyShowcase'
+import AIReceptionistShowcase from '@/components/landing/AIReceptionistShowcase'
+import ProgressTrackingShowcase from '@/components/landing/ProgressTrackingShowcase'
+import PackagePricingShowcase from '@/components/landing/PackagePricingShowcase'
 
 const VOICE_NUMBER = process.env.NEXT_PUBLIC_VOICE_PHONE_NUMBER
 
 export default function HomePage() {
+  const [menuOpen, setMenuOpen] = useState(false)
+
   return (
     <div className="min-h-screen">
       {/* Navigation */}
-      <nav className="bg-white shadow-sm py-4 px-5">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
+      <nav className="bg-white shadow-sm py-4 px-4">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold text-purple-600 no-underline">
             DriveBook
           </Link>
-          <div className="space-x-4">
+          
+          {/* Desktop Menu */}
+          <div className="hidden md:flex items-center space-x-4">
+            <Link href="/about" className="text-gray-700 hover:text-purple-600 no-underline font-medium">
+              About Us
+            </Link>
+            <Link href="/contact" className="text-gray-700 hover:text-purple-600 no-underline font-medium">
+              Contact Us
+            </Link>
+            <Link href="/blog" className="text-gray-700 hover:text-purple-600 no-underline font-medium">
+              Blog
+            </Link>
+            <Link href="/teach-with-drivebook" className="text-gray-700 hover:text-purple-600 no-underline font-medium">
+              For Instructors
+            </Link>
             <Link href="/login" className="text-gray-700 hover:text-purple-600 no-underline font-medium">
               Login
             </Link>
@@ -19,116 +44,142 @@ export default function HomePage() {
               Sign Up
             </Link>
           </div>
+          
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100"
+            aria-label="Toggle menu"
+          >
+            {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
+        
+        {/* Mobile Menu */}
+        {menuOpen && (
+          <div className="md:hidden bg-white border-t border-gray-200 py-4">
+            <div className="max-w-7xl mx-auto px-4 space-y-2">
+              <Link href="/about" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                About Us
+              </Link>
+              <Link href="/contact" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                Contact Us
+              </Link>
+              <Link href="/blog" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                Blog
+              </Link>
+              <Link href="/terms" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                Terms & Conditions
+              </Link>
+              <Link href="/privacy" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                Privacy Policy
+              </Link>
+              <Link href="/teach-with-drivebook" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                For Instructors
+              </Link>
+              <Link href="/login" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                Login
+              </Link>
+              <Link href="/register" className="block bg-purple-600 text-white px-5 py-2 rounded-lg no-underline font-medium hover:bg-purple-700 text-center">
+                Sign Up
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* Header */}
-      <header className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-16 px-5 text-center">
-        <h1 className="text-5xl font-bold mb-4">Your Driving Licence Journey Made Simple</h1>
-        <p className="text-2xl mb-6 opacity-95">Connect with qualified instructors near you. Book lessons instantly. Pass your test with confidence.</p>
+      {/* Hero Section - Learner Focused */}
+      <header className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-20 px-4 text-center">
+        <h1 className="text-5xl font-bold mb-4">Pass Your Driving Test with Confidence</h1>
+        <p className="text-2xl mb-6 opacity-95">Book verified local instructors in seconds. Flexible lessons, transparent pricing, guaranteed safety.</p>
         <ul className="list-none p-0 my-6 text-left inline-block max-w-2xl text-lg">
           <li className="my-2">🎯 Smart booking with real-time availability—no waiting, no phone tag</li>
           <li className="my-2">📍 Location-based matching to find instructors who service your area</li>
           <li className="my-2">💰 Save up to 12% with bulk hour packages and test preparation bundles</li>
+          <li className="my-2">🛡️ Every instructor is background-checked and fully verified</li>
           <li className="my-2">📱 Manage everything 24/7 from your personal dashboard</li>
-          <li className="my-2">🤖 AI voice receptionist available to help you book or reschedule anytime</li>
         </ul>
-        <div className="mt-8 space-x-2">
-          <Link href="/book" className="inline-block bg-white text-purple-600 px-7 py-4 rounded-lg no-underline font-semibold hover:-translate-y-0.5 transition-transform">
-            Find Instructors Near You
-          </Link>
-          <Link href="/register" className="inline-block bg-green-500 text-white px-7 py-4 rounded-lg no-underline font-semibold hover:-translate-y-0.5 transition-transform">
-            Join as an Instructor
-          </Link>
-          <Link href="/register" className="inline-block bg-amber-500 text-white px-7 py-4 rounded-lg no-underline font-semibold hover:-translate-y-0.5 transition-transform">
-            Start Free Trial
+        <div className="mt-8">
+          <Link href="/book" className="inline-block bg-white text-purple-600 px-10 py-5 rounded-lg no-underline font-bold text-xl hover:-translate-y-1 hover:shadow-2xl transition-all">
+            Find Your Perfect Instructor →
           </Link>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-5">
-        {/* AI Voice Receptionist CTA */}
-        <section className="my-10">
-          <div className="bg-white border border-purple-200 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8">
-            <div className="flex-1 text-left">
-              <h2 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-2">Book by Phone with our AI Voice Receptionist</h2>
-              <p className="text-gray-700">
-                Prefer to talk to someone? Our AI voice receptionist can answer calls 24/7, find your instructor, and start a real booking that is confirmed by SMS.
-              </p>
+      <main className="max-w-7xl mx-auto px-4">
+        {/* Trust & Safety Section */}
+        <section className="my-16 pt-8">
+          <h2 className="text-4xl text-center mb-4 text-gray-800">Your Safety is Guaranteed</h2>
+          <p className="text-center text-gray-600 mb-10 text-lg">Every instructor undergoes rigorous verification</p>
+          <TrustSafetyShowcase />
+        </section>
+
+        {/* Why Choose DriveBook - Learner Focused */}
+        <section className="my-16">
+          <h2 className="text-4xl text-center mb-10 text-gray-800">Why Choose DriveBook?</h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
+              <div className="text-4xl mb-4">✓</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">Verified Instructors</h3>
+              <p className="text-gray-700">Every instructor is background-checked, qualified, and reviewed by real students. Your safety is guaranteed.</p>
             </div>
-            {VOICE_NUMBER ? (
-              <div className="flex flex-col items-start md:items-end gap-2">
-                <p className="text-sm uppercase tracking-wide text-purple-100 bg-purple-700 px-3 py-1 rounded-full">
-                  Call to try it now
-                </p>
-                <a
-                  href={`tel:${VOICE_NUMBER}`}
-                  className="inline-block bg-purple-600 text-white px-5 py-3 rounded-lg no-underline font-semibold hover:bg-purple-700 transition-colors"
-                >
-                  {VOICE_NUMBER}
-                </a>
-                <p className="text-xs text-gray-200 md:text-right">
-                  This number is powered by the DriveBook voice service and Twilio.
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-200">
-                To show your AI receptionist phone number here, set <code className="font-mono">NEXT_PUBLIC_VOICE_PHONE_NUMBER</code> in your environment.
-              </p>
-            )}
+            
+            <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
+              <div className="text-4xl mb-4">⚡</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">Book in Seconds</h3>
+              <p className="text-gray-700">See real-time availability and reserve your lesson instantly—no phone calls, no waiting, no hassle.</p>
+            </div>
+            
+            <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
+              <div className="text-4xl mb-4">💰</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">Flexible Packages</h3>
+              <p className="text-gray-700">Pay-as-you-go or save up to 12% with bulk packages. Cancel or reschedule easily through your dashboard.</p>
+            </div>
+            
+            <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
+              <div className="text-4xl mb-4">📱</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">Smart Reminders</h3>
+              <p className="text-gray-700">Get SMS notifications before your lesson so you never miss a session. Stay on track with your learning.</p>
+            </div>
+            
+            <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
+              <div className="text-4xl mb-4">📊</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">Track Your Progress</h3>
+              <p className="text-gray-700">View lesson notes and track your improvement over time. See exactly what you need to work on.</p>
+            </div>
+            
+            <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
+              <div className="text-4xl mb-4">🎯</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">Test Preparation</h3>
+              <p className="text-gray-700">Book mock tests and test-day packages to boost your confidence and pass on your first try.</p>
+            </div>
           </div>
         </section>
 
-        {/* Why Choose DriveBook */}
+        {/* AI Voice Receptionist Showcase */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-6 text-gray-800">Why Choose DriveBook?</h2>
-          <div className="grid md:grid-cols-2 gap-10">
-            <div id="learners">
-              <h3 className="text-2xl mb-3 text-gray-700">For Learners</h3>
-              <ul className="list-none p-0 space-y-4">
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Verified Instructors</strong>: Every instructor is background-checked, qualified, and reviewed by real students
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Book in Seconds</strong>: See real-time availability and reserve your lesson instantly—no phone calls, no waiting
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Flexible Packages</strong>: Pay-as-you-go or save with bulk packages. Cancel or reschedule easily
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Smart Reminders</strong>: Get SMS notifications before your lesson so you never miss a session
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>AI Support</strong>: Call our voice receptionist 24/7 to book, reschedule, or ask questions
-                </li>
-              </ul>
-            </div>
-            <div id="instructors">
-              <h3 className="text-2xl mb-3 text-gray-700">For Instructors</h3>
-              <ul className="list-none p-0 space-y-4">
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Grow Your Business</strong>: Get discovered by learners in your area searching for lessons right now
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Save Time</strong>: Automated booking system handles scheduling, payments, and reminders for you
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Get Paid Faster</strong>: Transparent pricing with weekly payouts directly to your account
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Reduce No-Shows</strong>: Automated SMS reminders mean students show up prepared
-                </li>
-                <li className="pl-7 relative before:content-['✓'] before:absolute before:left-0 before:text-green-500 before:font-bold before:text-xl">
-                  <strong>Professional Tools</strong>: Manage your calendar, track earnings, and view student notes all in one place
-                </li>
-              </ul>
-            </div>
-          </div>
+          <h2 className="text-4xl text-center mb-4 text-gray-800">Book by Phone - AI Answers 24/7</h2>
+          <p className="text-center text-gray-600 mb-10 text-lg">Prefer to call? Our AI receptionist handles everything</p>
+          <AIReceptionistShowcase />
+        </section>
+
+        {/* Progress Tracking Showcase */}
+        <section className="my-16">
+          <h2 className="text-4xl text-center mb-4 text-gray-800">Track Your Progress</h2>
+          <p className="text-center text-gray-600 mb-10 text-lg">See exactly where you stand and what to improve</p>
+          <ProgressTrackingShowcase />
         </section>
 
         {/* How it works */}
+        <section className="my-16">
+          <h2 className="text-4xl text-center mb-4 text-gray-800">How It Works</h2>
+          <p className="text-center text-gray-600 mb-10 text-lg">Book your driving lesson in 3 simple steps</p>
+          <BookingFlowShowcase />
+        </section>
+
+        {/* Simple Steps Summary */}
         <section className="bg-amber-50 p-8 rounded-xl border-l-4 border-amber-500 my-16">
-          <h2 className="text-3xl mb-4">How it works — 3 simple steps</h2>
+          <h3 className="text-2xl mb-4 font-semibold">Quick Summary</h3>
           <ol className="text-lg my-4 space-y-3">
             <li>Search or enter your postcode</li>
             <li>Choose an instructor and a timeslot</li>
@@ -136,51 +187,25 @@ export default function HomePage() {
           </ol>
         </section>
 
-        {/* What You Get */}
+        {/* What You Get - Learner Focused */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-6 text-gray-800">What You Get</h2>
-          <div className="grid md:grid-cols-2 gap-10">
-            <div>
-              <h3 className="text-2xl mb-4 text-gray-700">Learners</h3>
-              <div className="grid gap-5">
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">💳 Flexible Payment</h3>
-                  <p>Pay per lesson or save with 5, 10, or 20-hour packages</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">📝 Test Preparation</h3>
-                  <p>Book mock tests and test-day packages to boost your confidence</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">📊 Progress Tracking</h3>
-                  <p>View lesson notes and track your improvement over time</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">✅ Instant Confirmation</h3>
-                  <p>Get booking confirmation via SMS immediately</p>
-                </div>
-              </div>
+          <h2 className="text-4xl text-center mb-10 text-gray-800">What You Get</h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 p-6 rounded-xl">
+              <h3 className="text-xl mb-2 font-semibold text-gray-900">💳 Flexible Payment</h3>
+              <p className="text-gray-700">Pay per lesson or save with 5, 10, or 20-hour packages</p>
             </div>
-            <div>
-              <h3 className="text-2xl mb-4 text-gray-700">Instructors</h3>
-              <div className="grid gap-5">
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">💼 Zero Setup Fees</h3>
-                  <p>Start with a free trial—no credit card required</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">📈 More Students</h3>
-                  <p>Appear in local searches when learners are actively looking</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">⚡ Automated Admin</h3>
-                  <p>Stop chasing payments and managing spreadsheets</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl">
-                  <h3 className="text-xl mb-2">💰 Weekly Payouts</h3>
-                  <p>Get paid every week with transparent fee structure</p>
-                </div>
-              </div>
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 p-6 rounded-xl">
+              <h3 className="text-xl mb-2 font-semibold text-gray-900">📝 Test Preparation</h3>
+              <p className="text-gray-700">Book mock tests and test-day packages to boost your confidence</p>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 p-6 rounded-xl">
+              <h3 className="text-xl mb-2 font-semibold text-gray-900">📊 Progress Tracking</h3>
+              <p className="text-gray-700">View lesson notes and track your improvement over time</p>
+            </div>
+            <div className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 p-6 rounded-xl">
+              <h3 className="text-xl mb-2 font-semibold text-gray-900">✅ Instant Confirmation</h3>
+              <p className="text-gray-700">Get booking confirmation via SMS immediately</p>
             </div>
           </div>
         </section>
@@ -202,60 +227,65 @@ export default function HomePage() {
           </blockquote>
         </section>
 
-        {/* FAQ */}
+        {/* FAQ - Learner Focused */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-6 text-gray-800">Frequently Asked Questions</h2>
+          <h2 className="text-4xl text-center mb-10 text-gray-800">Frequently Asked Questions</h2>
           
-          <h3 className="text-2xl mb-4 text-gray-700">For Learners</h3>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: How do I know an instructor is qualified?</strong></p>
-            <p>A: All instructors must provide valid credentials and undergo background checks. You can also read reviews from real students before booking.</p>
-          </div>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: Can I cancel or reschedule my lesson?</strong></p>
-            <p>A: Yes! You can cancel or reschedule through your dashboard. Each instructor&apos;s cancellation policy is clearly shown on their profile.</p>
-          </div>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: What payment methods do you accept?</strong></p>
-            <p>A: We accept all major credit/debit cards and process payments securely through Stripe.</p>
-          </div>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: How do bulk packages work?</strong></p>
-            <p>A: Purchase 5, 10, or 20-hour packages at a discounted rate. Hours are added to your account and you can book lessons as needed.</p>
-          </div>
-
-          <h3 className="text-2xl mb-4 mt-10 text-gray-700">For Instructors</h3>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: How much does it cost to join?</strong></p>
-            <p>A: Start with a free trial. After that, we charge a small platform fee per completed lesson—no monthly fees or hidden costs.</p>
-          </div>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: How do I get paid?</strong></p>
-            <p>A: Payments are processed weekly via direct deposit. You can track all earnings in your instructor dashboard.</p>
-          </div>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: Can I set my own availability?</strong></p>
-            <p>A: Absolutely! You control your schedule completely. Set your working hours, block off time, and update availability in real-time.</p>
-          </div>
-          <div className="bg-white border border-gray-200 p-5 rounded-lg my-4">
-            <p className="mb-2"><strong className="text-purple-600">Q: What if a student doesn&apos;t show up?</strong></p>
-            <p>A: Our automated SMS reminders reduce no-shows significantly. You can also set your own cancellation policy.</p>
+          <div className="max-w-4xl mx-auto space-y-4">
+            <div className="bg-white border border-gray-200 p-6 rounded-lg hover:shadow-md transition-shadow">
+              <p className="mb-2"><strong className="text-purple-600 text-lg">Q: How do I know an instructor is qualified?</strong></p>
+              <p className="text-gray-700">A: All instructors must provide valid credentials and undergo background checks. You can also read reviews from real students before booking.</p>
+            </div>
+            
+            <div className="bg-white border border-gray-200 p-6 rounded-lg hover:shadow-md transition-shadow">
+              <p className="mb-2"><strong className="text-purple-600 text-lg">Q: Can I cancel or reschedule my lesson?</strong></p>
+              <p className="text-gray-700">A: Yes! You can cancel or reschedule through your dashboard. Each instructor&apos;s cancellation policy is clearly shown on their profile.</p>
+            </div>
+            
+            <div className="bg-white border border-gray-200 p-6 rounded-lg hover:shadow-md transition-shadow">
+              <p className="mb-2"><strong className="text-purple-600 text-lg">Q: What payment methods do you accept?</strong></p>
+              <p className="text-gray-700">A: We accept all major credit/debit cards and process payments securely through Stripe.</p>
+            </div>
+            
+            <div className="bg-white border border-gray-200 p-6 rounded-lg hover:shadow-md transition-shadow">
+              <p className="mb-2"><strong className="text-purple-600 text-lg">Q: How do bulk packages work?</strong></p>
+              <p className="text-gray-700">A: Purchase 5, 10, or 20-hour packages at a discounted rate. Hours are added to your account and you can book lessons as needed.</p>
+            </div>
+            
+            <div className="bg-white border border-gray-200 p-6 rounded-lg hover:shadow-md transition-shadow">
+              <p className="mb-2"><strong className="text-purple-600 text-lg">Q: Can I choose my own instructor?</strong></p>
+              <p className="text-gray-700">A: Absolutely! Browse instructor profiles, read reviews, check their availability, and choose the one that&apos;s right for you.</p>
+            </div>
+            
+            <div className="bg-white border border-gray-200 p-6 rounded-lg hover:shadow-md transition-shadow">
+              <p className="mb-2"><strong className="text-purple-600 text-lg">Q: What if I need to contact my instructor?</strong></p>
+              <p className="text-gray-700">A: You can message your instructor directly through the platform, or call our AI receptionist 24/7 for immediate assistance.</p>
+            </div>
           </div>
         </section>
 
-        {/* CTA */}
-        <section id="trial" className="bg-purple-600 text-white p-12 rounded-2xl text-center my-16">
-          <h2 className="text-4xl mb-4 mt-0">Ready to get started?</h2>
-          <p className="text-xl mb-8"><strong>For Learners:</strong> Find an instructor near you and book your first lesson today.</p>
-          <p className="text-xl mb-8"><strong>For Instructors:</strong> Join DriveBook and start growing your business with zero setup fees.</p>
-          <Link href="/register" className="inline-block bg-white text-purple-600 px-7 py-4 rounded-lg no-underline font-semibold hover:-translate-y-0.5 transition-transform">
-            Get Started Now
-          </Link>
+        {/* CTA - Learner Focused */}
+        <section id="get-started" className="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-12 rounded-2xl text-center my-16 shadow-2xl">
+          <h2 className="text-4xl font-bold mb-4 mt-0">Ready to Start Your Driving Journey?</h2>
+          <p className="text-xl mb-8">Find a verified instructor near you and book your first lesson today. Pass your test with confidence.</p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Link href="/book" className="inline-block bg-white text-purple-600 px-10 py-5 rounded-lg no-underline font-bold text-lg hover:-translate-y-1 hover:shadow-2xl transition-all">
+              Find Your Instructor →
+            </Link>
+            {VOICE_NUMBER && (
+              <a href={`tel:${VOICE_NUMBER}`} className="inline-block bg-purple-500 text-white px-10 py-5 rounded-lg no-underline font-bold text-lg hover:-translate-y-1 hover:shadow-2xl transition-all border-2 border-white">
+                Or Call {VOICE_NUMBER}
+              </a>
+            )}
+          </div>
+          <p className="mt-6 text-purple-100">
+            Are you a driving instructor? <Link href="/teach-with-drivebook" className="text-white underline font-semibold hover:text-purple-200">Learn how DriveBook can grow your business →</Link>
+          </p>
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-800 text-white py-10 px-5 text-center mt-16">
+      <footer className="bg-gray-800 text-white py-10 px-4 text-center mt-16">
         <p>DriveBook - Connecting learners with professional driving instructors</p>
         <p className="mt-4 text-sm">Last updated: Feb 28, 2026</p>
       </footer>
