@@ -17,6 +17,10 @@ interface Client {
   name: string;
   phone: string;
   email: string;
+  addressText?: string;
+  defaultPickupAddress?: string; // for backwards compatibility if returned from API
+  addressLatitude?: number;
+  addressLongitude?: number;
 }
 
 interface TimeSlot {
@@ -40,6 +44,18 @@ export default function NewBookingScreen({ onBack }: { onBack: () => void }) {
   const [showBookingTypePicker, setShowBookingTypePicker] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
+
+  // when a client is picked we automatically prefill the pickup address from their profile
+  useEffect(() => {
+    if (selectedClientId) {
+      const client = clients.find(c => c.id === selectedClientId);
+      if (client) {
+        setPickupAddress(client.addressText || (client as any).defaultPickupAddress || '');
+      }
+    } else {
+      setPickupAddress('');
+    }
+  }, [selectedClientId, clients]);
   const [dateInput, setDateInput] = useState(''); // DD/MM/YY format
   const [date, setDate] = useState(''); // YYYY-MM-DD for API
   const [showDatePicker, setShowDatePicker] = useState(false);

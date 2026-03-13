@@ -41,7 +41,7 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           role: user.role,
-          instructorId: user.instructor?.id,
+          instructorId: user.instructorId,
           clientId: user.clients?.[0]?.id
         }
       }

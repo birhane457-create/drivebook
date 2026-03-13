@@ -24,6 +24,13 @@ export async function PUT(
     const body = await req.json()
     const data = updateTestSchema.parse(body)
 
+    // TODO: PDATest model not yet implemented in schema
+    // Return 501 Not Implemented until model is added
+    return NextResponse.json({ 
+      error: 'PDA Test feature not yet implemented' 
+    }, { status: 501 })
+
+    /* Uncomment when PDATest model is added to schema:
     // Verify test belongs to instructor
     const existingTest = await prisma.pDATest.findUnique({
       where: { id: params.id },
@@ -41,6 +48,7 @@ export async function PUT(
     })
 
     return NextResponse.json(test)
+    */
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })

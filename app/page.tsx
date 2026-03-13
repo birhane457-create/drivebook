@@ -17,7 +17,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen">
       {/* Navigation */}
-      <nav className="bg-white shadow-sm py-4 px-4">
+      <nav className="bg-white shadow-sm py-4 px-2 md:px-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold text-purple-600 no-underline">
             DriveBook
@@ -89,7 +89,7 @@ export default function HomePage() {
       </nav>
 
       {/* Hero Section - Learner Focused */}
-      <header className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-20 px-4 text-center">
+      <header className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-12 md:py-20 px-4 text-center">
         <h1 className="text-5xl font-bold mb-4">Pass Your Driving Test with Confidence</h1>
         <p className="text-2xl mb-6 opacity-95">Book verified local instructors in seconds. Flexible lessons, transparent pricing, guaranteed safety.</p>
         <ul className="list-none p-0 my-6 text-left inline-block max-w-2xl text-lg">
@@ -106,16 +106,16 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4">
+      <main className="max-w-7xl mx-auto px-2 md:px-4">
         {/* Trust & Safety Section */}
-        <section className="my-16 pt-8">
+        <section className="my-8 md:my-16 pt-8">
           <h2 className="text-4xl text-center mb-4 text-gray-800">Your Safety is Guaranteed</h2>
           <p className="text-center text-gray-600 mb-10 text-lg">Every instructor undergoes rigorous verification</p>
           <TrustSafetyShowcase />
         </section>
 
         {/* Why Choose DriveBook - Learner Focused */}
-        <section className="my-16">
+        <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-10 text-gray-800">Why Choose DriveBook?</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
@@ -157,28 +157,28 @@ export default function HomePage() {
         </section>
 
         {/* AI Voice Receptionist Showcase */}
-        <section className="my-16">
+        <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-4 text-gray-800">Book by Phone - AI Answers 24/7</h2>
           <p className="text-center text-gray-600 mb-10 text-lg">Prefer to call? Our AI receptionist handles everything</p>
           <AIReceptionistShowcase />
         </section>
 
         {/* Progress Tracking Showcase */}
-        <section className="my-16">
+        <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-4 text-gray-800">Track Your Progress</h2>
           <p className="text-center text-gray-600 mb-10 text-lg">See exactly where you stand and what to improve</p>
           <ProgressTrackingShowcase />
         </section>
 
         {/* How it works */}
-        <section className="my-16">
+        <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-4 text-gray-800">How It Works</h2>
           <p className="text-center text-gray-600 mb-10 text-lg">Book your driving lesson in 3 simple steps</p>
           <BookingFlowShowcase />
         </section>
 
         {/* Simple Steps Summary */}
-        <section className="bg-amber-50 p-8 rounded-xl border-l-4 border-amber-500 my-16">
+        <section className="bg-amber-50 p-4 md:p-8 rounded-xl border-l-4 border-amber-500 my-8 md:my-16">
           <h3 className="text-2xl mb-4 font-semibold">Quick Summary</h3>
           <ol className="text-lg my-4 space-y-3">
             <li>Search or enter your postcode</li>
@@ -188,7 +188,7 @@ export default function HomePage() {
         </section>
 
         {/* What You Get - Learner Focused */}
-        <section className="my-16">
+        <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-10 text-gray-800">What You Get</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 p-6 rounded-xl">
@@ -211,7 +211,7 @@ export default function HomePage() {
         </section>
 
         {/* Testimonials */}
-        <section className="my-16">
+        <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-6 text-gray-800">What Our Community Says</h2>
           <blockquote className="border-l-4 border-purple-600 my-6 p-6 bg-gray-50 italic text-gray-700">
             <span className="text-5xl text-purple-600 leading-none">&ldquo;</span>
@@ -228,7 +228,7 @@ export default function HomePage() {
         </section>
 
         {/* FAQ - Learner Focused */}
-        <section className="my-16">
+        <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-10 text-gray-800">Frequently Asked Questions</h2>
           
           <div className="max-w-4xl mx-auto space-y-4">
@@ -265,7 +265,7 @@ export default function HomePage() {
         </section>
 
         {/* CTA - Learner Focused */}
-        <section id="get-started" className="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-12 rounded-2xl text-center my-16 shadow-2xl">
+        <section id="get-started" className="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-6 md:p-12 rounded-2xl text-center my-8 md:my-16 shadow-2xl">
           <h2 className="text-4xl font-bold mb-4 mt-0">Ready to Start Your Driving Journey?</h2>
           <p className="text-xl mb-8">Find a verified instructor near you and book your first lesson today. Pass your test with confidence.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -285,7 +285,7 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-800 text-white py-10 px-4 text-center mt-16">
+      <footer className="bg-gray-800 text-white py-10 px-2 md:px-4 text-center mt-8 md:mt-16">
         <p>DriveBook - Connecting learners with professional driving instructors</p>
         <p className="mt-4 text-sm">Last updated: Feb 28, 2026</p>
       </footer>

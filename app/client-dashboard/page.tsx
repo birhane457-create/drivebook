@@ -248,7 +248,7 @@ export default function ClientDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-20">
       {/* Header */}
       <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Welcome back, {profile.user.name}!</h1>
@@ -259,7 +259,7 @@ export default function ClientDashboard() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8">
         {/* Success Banner */}
         {showSuccessBanner && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
@@ -282,7 +282,7 @@ export default function ClientDashboard() {
         {/* Current Instructor Card */}
         {currentInstructor?.currentInstructor && (
           <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-600 rounded-lg shadow-md overflow-hidden">
-            <div className="p-6">
+            <div className="p-4 md:p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">👨‍🏫 Your Current Instructor</h2>
               
               <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
@@ -362,11 +362,11 @@ export default function ClientDashboard() {
         )}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           {/* Total Credits Added */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-500">
+          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border-t-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm font-semibold">Total Credits Added</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
                   ${profile.wallet.totalPaid?.toFixed(2) || '0.00'}
                 </p>
               </div>
@@ -375,11 +375,11 @@ export default function ClientDashboard() {
           </div>
 
           {/* Net Booking Costs */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-purple-500">
+          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border-t-4 border-purple-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm font-semibold">Net Booking Costs</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
                   ${profile.wallet.totalSpent?.toFixed(2) || '0.00'}
                 </p>
               </div>
@@ -388,7 +388,7 @@ export default function ClientDashboard() {
           </div>
 
           {/* Current Balance */}
-          <div className={`rounded-xl shadow-md p-6 border-t-4 ${
+          <div className={`rounded-xl shadow-md p-4 md:p-6 border-t-4 ${
             profile.wallet.creditsRemaining > 0 
               ? 'bg-white border-green-500' 
               : 'bg-red-50 border-red-500'
@@ -396,7 +396,7 @@ export default function ClientDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm font-semibold">Current Balance</p>
-                <p className={`text-3xl font-bold mt-2 ${
+                <p className={`text-2xl md:text-3xl font-bold mt-2 ${
                   profile.wallet.creditsRemaining > 0 
                     ? 'text-gray-900' 
                     : 'text-red-600'
@@ -409,11 +409,11 @@ export default function ClientDashboard() {
           </div>
 
           {/* Total Hours Booked */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-orange-500">
+          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border-t-4 border-orange-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm font-semibold">Total Hours Booked</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-2xl font-bold text-gray-900 mt-2">
                   {profile.wallet.totalBookedHours || 0}h
                 </p>
               </div>
@@ -467,7 +467,7 @@ export default function ClientDashboard() {
           </div>
 
           {/* Tab Content */}
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             {/* Bookings Tab */}
             {activeTab === 'bookings' && (
               <div className="space-y-6">
@@ -482,7 +482,7 @@ export default function ClientDashboard() {
                       {upcomingBookings.map((booking) => (
                         <div
                           key={booking.id}
-                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition"
+                          className="flex items-center justify-between p-3 md:p-4 border border-gray-200 rounded-lg hover:shadow-md transition"
                         >
                           <div className="flex-1">
                             <h4 className="font-semibold text-gray-900">
@@ -519,7 +519,7 @@ export default function ClientDashboard() {
                                 instructor: booking.instructor.name,
                                 hourlyRate: booking.instructor.hourlyRate
                               })}
-                              className="px-3 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-1"
+                              className="px-2 py-1 md:px-3 md:py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-1"
                             >
                               <Edit2 className="w-4 h-4" />
                               Reschedule
@@ -532,7 +532,7 @@ export default function ClientDashboard() {
                                 instructor: booking.instructor.name,
                                 price: booking.price
                               })}
-                              className="px-3 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold"
+                              className="px-2 py-1 md:px-3 md:py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold"
                             >
                               Cancel
                             </button>
@@ -556,7 +556,7 @@ export default function ClientDashboard() {
                       {pastBookings.map((booking) => (
                         <div
                           key={booking.id}
-                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50"
+                          className="flex items-center justify-between p-3 md:p-4 border border-gray-200 rounded-lg bg-gray-50"
                         >
                           <div className="flex-1">
                             <h4 className="font-semibold text-gray-900">
@@ -578,7 +578,7 @@ export default function ClientDashboard() {
                               bookingId: booking.id,
                               instructorName: booking.instructor.name
                             })}
-                            className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition font-semibold flex items-center gap-1"
+                            className="px-3 py-1 md:px-4 md:py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition font-semibold flex items-center gap-1"
                           >
                             <Star className="w-4 h-4" />
                             Leave Review
@@ -597,7 +597,7 @@ export default function ClientDashboard() {
             {activeTab === 'wallet' && (
               <div className="space-y-6">
                 {/* Usage Overview */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 sm:p-6 border border-blue-200">
                   <h3 className="text-lg font-bold text-gray-900 mb-4">Credit Usage</h3>
                   
                   <div className="space-y-3">

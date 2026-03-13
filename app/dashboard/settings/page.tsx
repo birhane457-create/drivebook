@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, DollarSign, Clock, MapPin, Plus, X } from 'lucide-react'
+import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, Package } from 'lucide-react'
 import GoogleCalendarSettings from '@/components/GoogleCalendarSettings'
 
 interface TimeSlot {
@@ -19,9 +19,19 @@ interface WorkingHours {
   sunday: TimeSlot[]
 }
 
+interface LessonPackage {
+  id: string
+  name: string
+  durationMinutes: number
+  price: number
+  description: string
+  isActive: boolean
+}
+
 export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [workingHoursExpanded, setWorkingHoursExpanded] = useState(false)
   const [formData, setFormData] = useState<{
     hourlyRate: number
     serviceRadiusKm: number
@@ -31,6 +41,7 @@ export default function SettingsPage() {
     bookingBufferMinutes: number
     enableTravelTime: boolean
     travelTimeMinutes: number
+    lessonPackages: LessonPackage[]
   }>({
     hourlyRate: 60,
     serviceRadiusKm: 20,
@@ -47,7 +58,8 @@ export default function SettingsPage() {
     allowedDurations: [60, 120],
     bookingBufferMinutes: 15,
     enableTravelTime: false,
-    travelTimeMinutes: 10
+    travelTimeMinutes: 10,
+    lessonPackages: []
   })
 
   // Load settings on mount
@@ -73,7 +85,8 @@ export default function SettingsPage() {
             allowedDurations: data.allowedDurations || [60, 120],
             bookingBufferMinutes: data.bookingBufferMinutes || 15,
             enableTravelTime: data.enableTravelTime || false,
-            travelTimeMinutes: data.travelTimeMinutes || 10
+            travelTimeMinutes: data.travelTimeMinutes || 10,
+            lessonPackages: data.lessonPackages || []
           })
         }
       } catch (error) {
@@ -84,6 +97,37 @@ export default function SettingsPage() {
     }
     fetchSettings()
   }, [])
+
+  const addLessonPackage = () => {
+    const newPackage: LessonPackage = {
+      id: `pkg_${Date.now()}`,
+      name: '',
+      durationMinutes: 165, // 2:45 hours default
+      price: 0,
+      description: '',
+      isActive: true
+    }
+    setFormData(prev => ({
+      ...prev,
+      lessonPackages: [...prev.lessonPackages, newPackage]
+    }))
+  }
+
+  const updateLessonPackage = (id: string, updates: Partial<LessonPackage>) => {
+    setFormData(prev => ({
+      ...prev,
+      lessonPackages: prev.lessonPackages.map(pkg => 
+        pkg.id === id ? { ...pkg, ...updates } : pkg
+      )
+    }))
+  }
+
+  const removeLessonPackage = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      lessonPackages: prev.lessonPackages.filter(pkg => pkg.id !== id)
+    }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -183,12 +227,13 @@ export default function SettingsPage() {
               {/* Allowed Durations */}
               <div>
                 <label className="block text-sm font-medium mb-3">Lesson Durations You Offer</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   {[
-                    { value: 30, label: '30 minutes' },
+                    { value: 30, label: '30 min' },
                     { value: 60, label: '1 hour' },
                     { value: 90, label: '1.5 hours' },
-                    { value: 120, label: '2 hours' }
+                    { value: 120, label: '2 hours' },
+                    { value: 180, label: '3 hours' }
                   ].map((duration) => (
                     <label key={duration.value} className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -320,83 +365,218 @@ export default function SettingsPage() {
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Working Hours
-            </h2>
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setWorkingHoursExpanded(!workingHoursExpanded)}
+            >
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Working Hours
+              </h2>
+              {workingHoursExpanded ? (
+                <ChevronUp className="h-5 w-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-500" />
+              )}
+            </div>
+            
+            {workingHoursExpanded && (
+              <>
+                <p className="text-sm text-gray-600 mb-4 mt-4">
+                  Set your availability for each day. You can add multiple time slots per day (e.g., 8:00-12:00 and 14:00-18:00 for split shifts).
+                </p>
+                
+                <div className="space-y-4">
+                  {days.map((day) => (
+                    <div key={day} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="font-medium capitalize">{day}</div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newHours = { ...formData.workingHours }
+                            const dayKey = day as keyof typeof formData.workingHours
+                            newHours[dayKey] = [...(newHours[dayKey] || []), { start: '09:00', end: '17:00' }]
+                            setFormData(prev => ({ ...prev, workingHours: newHours }))
+                          }}
+                          className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add Time Slot
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {(formData.workingHours[day as keyof typeof formData.workingHours] || []).length === 0 ? (
+                          <div className="text-sm text-gray-500 italic">Not working this day</div>
+                        ) : (
+                          formData.workingHours[day as keyof typeof formData.workingHours].map((slot, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <input
+                                type="time"
+                                value={slot.start}
+                                onChange={(e) => {
+                                  const newHours = { ...formData.workingHours }
+                                  const dayKey = day as keyof typeof newHours
+                                  newHours[dayKey][index].start = e.target.value
+                                  setFormData(prev => ({ ...prev, workingHours: newHours }))
+                                }}
+                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                              />
+                              <span className="text-gray-500">to</span>
+                              <input
+                                type="time"
+                                value={slot.end}
+                                onChange={(e) => {
+                                  const newHours = { ...formData.workingHours }
+                                  const dayKey = day as keyof typeof newHours
+                                  newHours[dayKey][index].end = e.target.value
+                                  setFormData(prev => ({ ...prev, workingHours: newHours }))
+                                }}
+                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newHours = { ...formData.workingHours }
+                                  const dayKey = day as keyof typeof newHours
+                                  newHours[dayKey] = newHours[dayKey].filter((_, i) => i !== index)
+                                  setFormData(prev => ({ ...prev, workingHours: newHours }))
+                                }}
+                                className="text-red-600 hover:text-red-700 p-2"
+                                title="Remove time slot"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            
+            {!workingHoursExpanded && (
+              <p className="text-sm text-gray-500 mt-2">Click to expand and edit your working hours</p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Custom Lesson Packages
+              </h2>
+              <button
+                type="button"
+                onClick={addLessonPackage}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                Add Package
+              </button>
+            </div>
             
             <p className="text-sm text-gray-600 mb-4">
-              Set your availability for each day. You can add multiple time slots per day (e.g., 8:00-12:00 and 14:00-18:00 for split shifts).
+              Create custom packages for PDA tests, special lessons, or bundled services with custom durations and pricing.
             </p>
             
-            <div className="space-y-4">
-              {days.map((day) => (
-                <div key={day} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="font-medium capitalize">{day}</div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newHours = { ...formData.workingHours }
-                        const dayKey = day as keyof typeof formData.workingHours
-                        newHours[dayKey] = [...(newHours[dayKey] || []), { start: '09:00', end: '17:00' }]
-                        setFormData(prev => ({ ...prev, workingHours: newHours }))
-                      }}
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Time Slot
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {(formData.workingHours[day as keyof typeof formData.workingHours] || []).length === 0 ? (
-                      <div className="text-sm text-gray-500 italic">Not working this day</div>
-                    ) : (
-                      formData.workingHours[day as keyof typeof formData.workingHours].map((slot, index) => (
-                        <div key={index} className="flex items-center gap-2">
+            {formData.lessonPackages.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No custom packages yet</p>
+                <p className="text-sm">Add packages like "PDA Test Package" or "First Lesson Special"</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {formData.lessonPackages.map((pkg) => (
+                  <div key={pkg.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Package Name</label>
                           <input
-                            type="time"
-                            value={slot.start}
-                            onChange={(e) => {
-                              const newHours = { ...formData.workingHours }
-                              const dayKey = day as keyof typeof newHours
-                              newHours[dayKey][index].start = e.target.value
-                              setFormData(prev => ({ ...prev, workingHours: newHours }))
-                            }}
-                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                            type="text"
+                            value={pkg.name}
+                            onChange={(e) => updateLessonPackage(pkg.id, { name: e.target.value })}
+                            placeholder="e.g., PDA Test Package"
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
                           />
-                          <span className="text-gray-500">to</span>
-                          <input
-                            type="time"
-                            value={slot.end}
-                            onChange={(e) => {
-                              const newHours = { ...formData.workingHours }
-                              const dayKey = day as keyof typeof newHours
-                              newHours[dayKey][index].end = e.target.value
-                              setFormData(prev => ({ ...prev, workingHours: newHours }))
-                            }}
-                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newHours = { ...formData.workingHours }
-                              const dayKey = day as keyof typeof newHours
-                              newHours[dayKey] = newHours[dayKey].filter((_, i) => i !== index)
-                              setFormData(prev => ({ ...prev, workingHours: newHours }))
-                            }}
-                            className="text-red-600 hover:text-red-700 p-2"
-                            title="Remove time slot"
-                          >
-                            <X className="h-5 w-5" />
-                          </button>
                         </div>
-                      ))
-                    )}
+                        
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Duration (minutes)</label>
+                            <input
+                              type="number"
+                              value={pkg.durationMinutes}
+                              onChange={(e) => updateLessonPackage(pkg.id, { durationMinutes: parseInt(e.target.value) || 0 })}
+                              min="30"
+                              step="15"
+                              placeholder="165"
+                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              {Math.floor(pkg.durationMinutes / 60)}h {pkg.durationMinutes % 60}m
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Price ($)</label>
+                            <input
+                              type="number"
+                              value={pkg.price}
+                              onChange={(e) => updateLessonPackage(pkg.id, { price: parseFloat(e.target.value) || 0 })}
+                              min="0"
+                              step="0.01"
+                              placeholder="150.00"
+                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Description</label>
+                          <textarea
+                            value={pkg.description}
+                            onChange={(e) => updateLessonPackage(pkg.id, { description: e.target.value })}
+                            placeholder="e.g., Includes pickup, car warmup, 2-hour test prep, and drop-off at test center"
+                            rows={2}
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                          />
+                        </div>
+                        
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={pkg.isActive}
+                            onChange={(e) => updateLessonPackage(pkg.id, { isActive: e.target.checked })}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-600"
+                          />
+                          <span className="text-sm">Active (visible to students)</span>
+                        </label>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => removeLessonPackage(pkg.id)}
+                        className="text-red-600 hover:text-red-700 p-2"
+                        title="Remove package"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+            
+            <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-sm text-amber-800">
+                <strong>Examples:</strong> "PDA Test - 2:45h ($165)" • "First Lesson Special - 1h ($45)" • "Highway Practice - 2h ($110)"
+              </p>
             </div>
           </div>
 

@@ -40,7 +40,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // Get all PDA tests for this instructor
+    // TODO: PDATest model not yet implemented in schema
+    // Return empty array until model is added
+    console.log('[PDA Tests Mobile API] Returning empty array (PDATest model not implemented)');
+    return NextResponse.json([]);
+
+    /* Uncomment when PDATest model is added to schema:
     const tests = await prisma.pDATest.findMany({
       where: {
         instructorId: decoded.instructorId,
@@ -60,6 +65,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json(tests);
+    */
   } catch (error) {
     console.error('PDA tests GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -20,6 +20,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // ServiceArea model not implemented yet - return empty array
+    // TODO: Add ServiceArea model to schema when implementing this feature
+    return NextResponse.json([])
+
+    /* When ServiceArea model is added, use this:
     const serviceAreas = await prisma.serviceArea.findMany({
       where: {
         instructorId: session.user.instructorId,
@@ -31,6 +36,7 @@ export async function GET(req: NextRequest) {
     })
 
     return NextResponse.json(serviceAreas)
+    */
   } catch (error) {
     console.error('Fetch service areas error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -45,6 +51,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // ServiceArea model not implemented yet - return 501 Not Implemented
+    // TODO: Add ServiceArea model to schema when implementing this feature
+    return NextResponse.json(
+      { error: 'Service area management not yet implemented' }, 
+      { status: 501 }
+    )
+
+    /* When ServiceArea model is added, use this:
     const body = await req.json()
     const { postcode } = body
 
@@ -71,6 +85,7 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json(serviceArea, { status: 201 })
+    */
   } catch (error) {
     console.error('Create service area error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -12,8 +12,6 @@ const registerSchema = z.object({
   name: z.string().min(2),
   phone: z.string(),
   baseAddress: z.string(),
-  baseLatitude: z.number(),
-  baseLongitude: z.number(),
   hourlyRate: z.number(),
   vehicleTypes: z.array(z.enum(['AUTO', 'MANUAL'])),
   serviceRadiusKm: z.number(),
@@ -52,32 +50,29 @@ export async function POST(req: NextRequest) {
             name: data.name,
             phone: data.phone,
             baseAddress: data.baseAddress,
-            baseLatitude: data.baseLatitude,
-            baseLongitude: data.baseLongitude,
             hourlyRate: data.hourlyRate,
-            vehicleTypes: data.vehicleTypes,
+            vehicleTypes: data.vehicleTypes.join(','),
             serviceRadiusKm: data.serviceRadiusKm,
-            languages: ['English'],
+            languages: 'English',
             ...(data.licenseNumber && { licenseNumber: data.licenseNumber }),
             ...(data.insuranceNumber && { insuranceNumber: data.insuranceNumber }),
-            approvalStatus: 'PENDING', // Requires admin approval
-            isActive: false, // Inactive until approved
-            workingHours: {
-              monday: [{ start: '09:00', end: '17:00' }],
-              tuesday: [{ start: '09:00', end: '17:00' }],
-              wednesday: [{ start: '09:00', end: '17:00' }],
-              thursday: [{ start: '09:00', end: '17:00' }],
-              friday: [{ start: '09:00', end: '17:00' }],
-              saturday: [{ start: '09:00', end: '13:00' }],
-              sunday: []
-            }
-          } as any // Temporary: Remove after running 'npx prisma generate'
+            approvalStatus: 'PENDING',
+            isActive: false
+          }
         }
       },
       include: {
         instructor: true
       }
     })
+
+    // Update user with instructorId
+    if (user.instructor) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { instructorId: user.instructor.id }
+      })
+    }
 
     // Send welcome email to instructor
     try {
@@ -201,7 +196,7 @@ export async function POST(req: NextRequest) {
                     <span class="label">Hourly Rate:</span> $${instructorData.hourlyRate}
                   </div>
                   <div class="info-row">
-                    <span class="label">Vehicle Types:</span> ${instructorData.vehicleTypes.join(', ')}
+                    <span class="label">Vehicle Types:</span> ${instructorData.vehicleTypes || 'N/A'}
                   </div>
                   <div class="info-row">
                     <span class="label">Registered:</span> ${new Date().toLocaleString()}

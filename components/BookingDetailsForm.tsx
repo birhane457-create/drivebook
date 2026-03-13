@@ -263,7 +263,7 @@ export default function BookingDetailsForm() {
   return (
     <div className="space-y-8">
       {/* Progress Bar */}
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm font-medium text-gray-700">Hours Scheduled</span>
           <span className="text-sm font-semibold text-blue-600">
@@ -285,7 +285,7 @@ export default function BookingDetailsForm() {
 
       {/* Scheduled Bookings List */}
       {scheduledBookings.length > 0 && (
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Scheduled Lessons ({scheduledBookings.length})
           </h3>
@@ -333,7 +333,7 @@ export default function BookingDetailsForm() {
 
       {/* Add New Booking Form */}
       {remainingHours > 0 && (
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             {scheduledBookings.length === 0 ? 'Schedule Your First Lesson' : 'Add Another Lesson'}
           </h3>
@@ -451,7 +451,7 @@ export default function BookingDetailsForm() {
       )}
 
       {/* Info Box */}
-      <div className="bg-blue-50 rounded-lg p-4">
+      <div className="bg-blue-50 rounded-lg p-3 sm:p-4">
         <div className="flex gap-3">
           <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />

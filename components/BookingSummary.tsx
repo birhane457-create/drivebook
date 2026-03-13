@@ -32,7 +32,7 @@ export default function BookingSummary({
 
   if (!instructor) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 sticky top-4">
         <h3 className="text-lg font-semibold mb-4">Booking Summary</h3>
         <p className="text-gray-500 text-sm">Select an instructor to begin</p>
       </div>
@@ -45,7 +45,7 @@ export default function BookingSummary({
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 sticky top-4">
         <h3 className="text-lg font-semibold mb-4">Booking Summary</h3>
 
         {/* Instructor Info */}
@@ -182,7 +182,7 @@ export default function BookingSummary({
       {/* Package Details Modal */}
       {showPackageInfo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 animate-in fade-in">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-4 sm:p-6 animate-in fade-in">
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Package Details</h3>
               <button

@@ -81,6 +81,11 @@ export async function GET(req: NextRequest) {
 
 async function getUserReviews(userId: string) {
   try {
+    // TODO: Review model not yet implemented in schema
+    // Return empty array until model is added
+    return NextResponse.json([]);
+
+    /* Uncomment when Review model is added to schema:
     const userReviews = await (prisma as any).review.findMany({
       where: {
         clientId: userId
@@ -107,6 +112,7 @@ async function getUserReviews(userId: string) {
     }));
 
     return NextResponse.json(reviews);
+    */
   } catch (error) {
     console.error('Error fetching user reviews:', error);
     return NextResponse.json({ error: 'Failed to fetch reviews' }, { status: 500 });

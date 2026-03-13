@@ -2,7 +2,8 @@
 // IMPORTANT: Change this based on where you're testing
 
 // For phone hotspot (computer connected to phone's hotspot):
-export const API_URL = 'http://192.168.229.108:3000'; // ✅ UPDATED IP ADDRESS!
+// TODO: Update this IP with your current computer IP from 'ipconfig'
+export const API_URL = 'http://192.168.148.108:3000'; // ⚠️ Verify this IP is current!
 
 // For Android Emulator:
 // export const API_URL = 'http://10.0.2.2:3001';

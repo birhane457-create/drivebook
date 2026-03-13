@@ -151,7 +151,7 @@ export default function BookingFormOptimized({ instructorId, hourlyRate, instruc
 
   if (success) {
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8">
         <div className="text-center">
           <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
             <CheckCircle2 className="h-6 w-6 text-green-600" />
@@ -189,7 +189,7 @@ export default function BookingFormOptimized({ instructorId, hourlyRate, instruc
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
+    <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8">
       {/* Progress Steps */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">

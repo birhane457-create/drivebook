@@ -118,7 +118,7 @@ export default function BookingCalendar({
               key={day.toISOString()}
               onClick={() => !isPast && handleDateSelect(day)}
               disabled={isPast}
-              className={`p-2 sm:p-4 rounded-lg text-center transition ${
+              className={`p-1 sm:p-2 md:p-4 rounded-lg text-center transition ${
                 isSelected
                   ? 'bg-blue-600 text-white'
                   : isPast

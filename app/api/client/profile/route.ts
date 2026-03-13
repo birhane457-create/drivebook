@@ -38,16 +38,11 @@ export async function GET(req: NextRequest) {
     // Collect all client IDs linked to this user
     const clientIds = user.clients.map((c) => c.id);
 
-    // Get user's bookings primarily via clientId, but also fall back to clientEmail
+    // Get user's bookings via clientId only
     const bookingsRaw = await prisma.booking.findMany({
-      where: {
-        OR: [
-          clientIds.length > 0
-            ? { clientId: { in: clientIds } }
-            : undefined,
-          { clientEmail: user.email }
-        ].filter(Boolean) as any
-      },
+      where: clientIds.length > 0
+        ? { clientId: { in: clientIds } }
+        : { clientId: null }, // Return empty if no client IDs
       include: {
         instructor: {
           select: {
@@ -86,7 +81,8 @@ export async function GET(req: NextRequest) {
       user: {
         name: clientRecord?.name || user.name || user.email.split('@')[0],
         email: user.email,
-        phone: clientRecord?.phone || ''
+        phone: clientRecord?.phone || '',
+        address: clientRecord?.defaultPickupAddress || ''
       },
       bookings: activeBookings.map(b => {
         // Map database status to frontend status
@@ -140,7 +136,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, phone, pickupLocation } = body;
+    const { name, phone, address } = body;
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
@@ -162,7 +158,8 @@ export async function PUT(req: NextRequest) {
         where: { userId: user.id },
         data: {
             name,
-            phone
+            phone,
+            defaultPickupAddress: address || null
           }
       });
     }
@@ -173,7 +170,7 @@ export async function PUT(req: NextRequest) {
           name,
           email: user.email,
           phone,
-          pickupLocation: pickupLocation || ''
+          address: address || ''
       }
     });
 

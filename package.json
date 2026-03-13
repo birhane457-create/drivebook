@@ -5,10 +5,16 @@
   "scripts": {
     "dev": "set NODE_OPTIONS=--max-old-space-size=8192 && next dev -H 0.0.0.0",
     "build": "prisma generate && set NODE_OPTIONS=--max-old-space-size=8192 && next build",
+    "build:mobile": "prisma generate && set NODE_OPTIONS=--max-old-space-size=8192 && next build",
+    "export:mobile": "next export",
     "vercel-build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "cap:sync": "npx cap sync",
+    "cap:ios": "npx cap open ios",
+    "cap:android": "npx cap open android",
+    "mobile:build": "npm run build:mobile && npm run export:mobile && npm run cap:sync"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^1.16.6",

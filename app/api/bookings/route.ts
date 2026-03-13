@@ -137,6 +137,11 @@ export async function POST(req: NextRequest) {
 
     // FIXED: Use transaction wrapper for atomic operations + LEDGER
     const booking = await prisma.$transaction(async (tx) => {
+      // determine pickup location: use provided value or fallback to the client's default address
+      const pickupLocation = data.pickupAddress || client.defaultPickupAddress || null;
+      const pickupLat = data.pickupLatitude ?? client.defaultPickupLat;
+      const pickupLng = data.pickupLongitude ?? client.defaultPickupLng;
+
       // Create booking
       const newBooking = await tx.booking.create({
         data: {
@@ -145,9 +150,9 @@ export async function POST(req: NextRequest) {
           bookingType: data.bookingType || 'LESSON',
           startTime,
           endTime,
-          pickupAddress: data.pickupAddress,
-          pickupLatitude: data.pickupLatitude,
-          pickupLongitude: data.pickupLongitude,
+          pickupAddress: pickupLocation,
+          pickupLatitude: pickupLat,
+          pickupLongitude: pickupLng,
           dropoffAddress: data.dropoffAddress,
           price,
           platformFee: commission.platformFee,

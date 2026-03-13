@@ -11,10 +11,11 @@ const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   phone: z.string().min(1, 'Phone is required'),
   email: z.string().email('Valid email address is required'),
+  // frontend uses "addressText" field so accept both names here
   addressText: z.string().optional(),
-  addressLatitude: z.number().optional(),
-  addressLongitude: z.number().optional(),
-  notes: z.string().optional()
+  defaultPickupAddress: z.string().optional(),
+  defaultPickupLat: z.number().optional(),
+  defaultPickupLng: z.number().optional()
 })
 
 export async function POST(req: NextRequest) {
@@ -28,16 +29,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = clientSchema.parse(body)
 
+    // pick whichever address field is present (UI sends addressText)
+    const pickupAddress = data.addressText ?? data.defaultPickupAddress
+    const pickupLat = data.defaultPickupLat
+    const pickupLng = data.defaultPickupLng
+
     const client = await prisma.client.create({
       data: {
         instructorId: session.user.instructorId,
         name: data.name,
         phone: data.phone,
         email: data.email,
-        addressText: data.addressText,
-        addressLatitude: data.addressLatitude,
-        addressLongitude: data.addressLongitude,
-        notes: data.notes
+        defaultPickupAddress: pickupAddress,
+        defaultPickupLat: pickupLat,
+        defaultPickupLng: pickupLng
       }
     })
 

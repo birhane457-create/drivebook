@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = pdaTestSchema.parse(body)
 
+    // TODO: PDATest model not yet implemented in schema
+    // Return 501 Not Implemented until model is added
+    return NextResponse.json({ 
+      error: 'PDA Test feature not yet implemented' 
+    }, { status: 501 })
+
+    /* Uncomment when PDATest model is added to schema:
     const pdaTest = await pdaService.createPDATest({
       instructorId: session.user.instructorId,
       clientId: data.clientId,
@@ -40,6 +47,7 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json(pdaTest, { status: 201 })
+    */
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 })
@@ -57,6 +65,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: PDATest model not yet implemented in schema
+    // Return empty array until model is added
+    return NextResponse.json([])
+
+    /* Uncomment when PDATest model is added to schema:
     const tests = await prisma.pDATest.findMany({
       where: {
         instructorId: session.user.instructorId
@@ -70,6 +83,7 @@ export async function GET(req: NextRequest) {
     })
 
     return NextResponse.json(tests)
+    */
   } catch (error) {
     console.error('Fetch PDA tests error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -48,6 +48,11 @@ export async function GET(req: NextRequest) {
 
 async function getClientPendingReviews(userId: string) {
   try {
+    // TODO: Review model not yet implemented in schema
+    // Return empty array until model is added
+    return NextResponse.json([]);
+
+    /* Uncomment when Review model is added to schema:
     // First, find all clients associated with this user
     const clients = await prisma.client.findMany({
       where: { userId: userId },
@@ -80,6 +85,7 @@ async function getClientPendingReviews(userId: string) {
     }));
 
     return NextResponse.json(pendingReviews);
+    */
   } catch (error) {
     console.error('Error fetching pending reviews:', error);
     return NextResponse.json(

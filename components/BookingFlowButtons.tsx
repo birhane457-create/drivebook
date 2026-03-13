@@ -28,7 +28,7 @@ export default function BookingFlowButtons({
           onClick={onBack}
           type="button"
           disabled={loading}
-          className="flex-1 bg-white text-gray-700 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors border-2 border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 bg-white text-gray-700 px-4 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors border-2 border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {backLabel}
         </button>
@@ -38,7 +38,7 @@ export default function BookingFlowButtons({
           onClick={onContinue}
           type="button"
           disabled={continueDisabled || loading}
-          className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="flex-1 bg-blue-600 text-white px-4 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
             <>

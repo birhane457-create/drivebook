@@ -8,7 +8,10 @@ interface Client {
   name: string
   phone: string
   email: string
+  // aliased field from the backend for display and booking defaults
   addressText?: string
+  addressLatitude?: number
+  addressLongitude?: number
   notes?: string
   createdAt: string
 }
@@ -37,9 +40,20 @@ export default function ClientsPage() {
     try {
       const res = await fetch('/api/clients')
       const data = await res.json()
-      setClients(data)
+      
+      // Check if data is an array
+      if (Array.isArray(data)) {
+        setClients(data)
+      } else if (data.error) {
+        console.error('API error:', data.error)
+        setClients([])
+      } else {
+        console.error('Unexpected response format:', data)
+        setClients([])
+      }
     } catch (error) {
       console.error('Failed to fetch clients:', error)
+      setClients([])
     } finally {
       setLoading(false)
     }
@@ -111,11 +125,11 @@ export default function ClientsPage() {
     setExpandedId(expandedId === id ? null : id)
   }
 
-  const filteredClients = clients.filter(client =>
+  const filteredClients = Array.isArray(clients) ? clients.filter(client =>
     client.name.toLowerCase().includes(search.toLowerCase()) ||
     client.email.toLowerCase().includes(search.toLowerCase()) ||
     client.phone.includes(search)
-  )
+  ) : []
 
   return (
     <div className="min-h-screen bg-gray-50">

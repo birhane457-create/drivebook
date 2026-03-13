@@ -22,10 +22,19 @@ const settingsSchema = z.object({
   licenseNumber: z.string().optional(),
   insuranceNumber: z.string().optional(),
   // New booking slot configuration fields
-  allowedDurations: z.array(z.number().min(30).max(120)).min(1).optional(),
+  allowedDurations: z.array(z.number().min(30).max(180)).min(1).optional(),
   bookingBufferMinutes: z.number().min(10).max(20).optional(),
   enableTravelTime: z.boolean().optional(),
-  travelTimeMinutes: z.number().min(5).max(60).optional()
+  travelTimeMinutes: z.number().min(5).max(60).optional(),
+  // Custom lesson packages
+  lessonPackages: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    durationMinutes: z.number().min(30),
+    price: z.number().min(0),
+    description: z.string(),
+    isActive: z.boolean()
+  })).optional()
 })
 
 export async function PUT(req: NextRequest) {
@@ -67,6 +76,7 @@ export async function PUT(req: NextRequest) {
     if (data.bookingBufferMinutes !== undefined) updateData.bookingBufferMinutes = data.bookingBufferMinutes
     if (data.enableTravelTime !== undefined) updateData.enableTravelTime = data.enableTravelTime
     if (data.travelTimeMinutes !== undefined) updateData.travelTimeMinutes = data.travelTimeMinutes
+    if (data.lessonPackages !== undefined) updateData.lessonPackages = data.lessonPackages
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
@@ -130,9 +140,10 @@ export async function GET(req: NextRequest) {
         allowedDurations: true,
         bookingBufferMinutes: true,
         enableTravelTime: true,
-        travelTimeMinutes: true
+        travelTimeMinutes: true,
+        lessonPackages: true
       }
-    } as any) // Temporary type assertion
+    })
 
     return NextResponse.json(instructor)
   } catch (error) {

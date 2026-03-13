@@ -1,13 +1,14 @@
 // Subscription Pricing and Features Configuration
+// Commission rates and pricing can be overridden via environment variables
 
 export const SUBSCRIPTION_PLANS = {
   BASIC: {
     name: 'Basic',
-    monthlyPrice: 29,
-    annualPrice: 290, // ~17% discount
-    commissionRate: 15, // 15% per booking
-    newStudentBonus: 8, // 8% extra for first booking
-    trialDays: 14,
+    monthlyPrice: Number(process.env.BASIC_MONTHLY_PRICE) || 29,
+    annualPrice: Number(process.env.BASIC_ANNUAL_PRICE) || 290,
+    commissionRate: Number(process.env.BASIC_COMMISSION_RATE) || 15,
+    newStudentBonus: Number(process.env.BASIC_NEW_STUDENT_BONUS) || 8,
+    trialDays: Number(process.env.BASIC_TRIAL_DAYS) || 14,
     features: [
       'Single instructor account',
       'Unlimited bookings',
@@ -16,8 +17,8 @@ export const SUBSCRIPTION_PLANS = {
       'Basic analytics',
       'Student reviews',
       'Mobile app access',
-      '15% commission per booking',
-      '8% bonus for new students',
+      `${Number(process.env.BASIC_COMMISSION_RATE) || 15}% commission per booking`,
+      `${Number(process.env.BASIC_NEW_STUDENT_BONUS) || 8}% bonus for new students`,
     ],
     limits: {
       instructors: 1,
@@ -30,11 +31,11 @@ export const SUBSCRIPTION_PLANS = {
   
   PRO: {
     name: 'Pro',
-    monthlyPrice: 79,
-    annualPrice: 790, // ~17% discount
-    commissionRate: 12, // 12% per booking
-    newStudentBonus: 10, // 10% extra for first booking
-    trialDays: 14,
+    monthlyPrice: Number(process.env.PRO_MONTHLY_PRICE) || 79,
+    annualPrice: Number(process.env.PRO_ANNUAL_PRICE) || 790,
+    commissionRate: Number(process.env.PRO_COMMISSION_RATE) || 12,
+    newStudentBonus: Number(process.env.PRO_NEW_STUDENT_BONUS) || 10,
+    trialDays: Number(process.env.PRO_TRIAL_DAYS) || 14,
     features: [
       'Everything in Basic',
       'Advanced analytics & insights',
@@ -44,8 +45,8 @@ export const SUBSCRIPTION_PLANS = {
       'Document management',
       'Check-in/Check-out system',
       'Custom service areas',
-      '12% commission per booking',
-      '10% bonus for new students',
+      `${Number(process.env.PRO_COMMISSION_RATE) || 12}% commission per booking`,
+      `${Number(process.env.PRO_NEW_STUDENT_BONUS) || 10}% bonus for new students`,
       'Priority email support',
     ],
     limits: {
@@ -59,11 +60,11 @@ export const SUBSCRIPTION_PLANS = {
   
   BUSINESS: {
     name: 'Business',
-    monthlyPrice: 199,
-    annualPrice: 1990, // ~17% discount
-    commissionRate: 10, // 10% per booking
-    newStudentBonus: 12, // 12% extra for first booking
-    trialDays: 30, // Extended trial for Business
+    monthlyPrice: Number(process.env.BUSINESS_MONTHLY_PRICE) || 199,
+    annualPrice: Number(process.env.BUSINESS_ANNUAL_PRICE) || 1990,
+    commissionRate: Number(process.env.BUSINESS_COMMISSION_RATE) || 10,
+    newStudentBonus: Number(process.env.BUSINESS_NEW_STUDENT_BONUS) || 12,
+    trialDays: Number(process.env.BUSINESS_TRIAL_DAYS) || 30,
     features: [
       'Everything in Pro',
       'Multiple instructor accounts',
@@ -74,8 +75,8 @@ export const SUBSCRIPTION_PLANS = {
       'Advanced reporting',
       'Dedicated account manager',
       'Priority phone support',
-      '10% commission per booking',
-      '12% bonus for new students',
+      `${Number(process.env.BUSINESS_COMMISSION_RATE) || 10}% commission per booking`,
+      `${Number(process.env.BUSINESS_NEW_STUDENT_BONUS) || 12}% bonus for new students`,
       'Custom integrations',
       'Training & onboarding',
     ],

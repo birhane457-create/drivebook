@@ -175,7 +175,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
   return (
     <div className="bg-white shadow rounded-lg overflow-hidden">
       {/* Search Bar */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 sm:p-6 border-b border-gray-200">
         <input
           type="text"
           placeholder="Search by name, email, or phone..."
@@ -185,21 +185,22 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
         />
       </div>
 
-      {/* Compact Table */}
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8"></th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">License</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Insurance</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Police</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">WWC</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stats</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-          </tr>
-        </thead>
+      {/* Responsive Table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8"></th>
+              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
+              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">License</th>
+              <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Insurance</th>
+              <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Police</th>
+              <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">WWC</th>
+              <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stats</th>
+              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {filteredInstructors.map((instructor) => {
             const isExpanded = expandedRows.has(instructor.id);
@@ -209,7 +210,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
             return (
               <React.Fragment key={instructor.id}>
                 <tr className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
+                  <td className="px-2 sm:px-4 py-3">
                     <button
                       onClick={() => toggleRow(instructor.id)}
                       className="text-gray-600 hover:text-gray-900"
@@ -217,7 +218,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                       {isExpanded ? '▼' : '▶'}
                     </button>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-2 sm:px-4 py-3">
                     <div className="flex items-center">
                       {instructor.profileImage ? (
                         <img
@@ -238,7 +239,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap">
                     <span
                       className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         instructor.approvalStatus === 'APPROVED'
@@ -253,30 +254,30 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                       {instructor.approvalStatus}
                     </span>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-center">
                     <div className="text-lg">{indicator.icon}</div>
                     <div className="text-xs text-gray-500">{formatDate(compliance?.licenseExpiry || null)}</div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-center">
                     <div className="text-lg">{indicator.icon}</div>
                     <div className="text-xs text-gray-500">{formatDate(compliance?.insuranceExpiry || null)}</div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                  <td className="hidden md:table-cell px-4 py-3 whitespace-nowrap text-center">
                     <div className="text-lg">{indicator.icon}</div>
                     <div className="text-xs text-gray-500">{formatDate(compliance?.policeCheckExpiry || null)}</div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                  <td className="hidden md:table-cell px-4 py-3 whitespace-nowrap text-center">
                     <div className="text-lg">{indicator.icon}</div>
                     <div className="text-xs text-gray-500">{formatDate(compliance?.wwcCheckExpiry || null)}</div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                  <td className="hidden lg:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                     <div>{instructor._count.bookings} bookings</div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex gap-2">
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap">
+                    <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
                       <button
                         onClick={() => window.location.href = `/admin/instructors/${instructor.id}`}
-                        className="text-sm text-blue-600 hover:text-blue-900"
+                        className="text-xs sm:text-sm text-blue-600 hover:text-blue-900"
                       >
                         View Profile
                       </button>
@@ -285,14 +286,14 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                           <button
                             onClick={() => handleApprove(instructor.id)}
                             disabled={loading}
-                            className="text-sm text-green-600 hover:text-green-900 disabled:opacity-50"
+                            className="text-xs sm:text-sm text-green-600 hover:text-green-900 disabled:opacity-50"
                           >
                             Approve
                           </button>
                           <button
                             onClick={() => handleReject(instructor.id)}
                             disabled={loading}
-                            className="text-sm text-red-600 hover:text-red-900 disabled:opacity-50"
+                            className="text-xs sm:text-sm text-red-600 hover:text-red-900 disabled:opacity-50"
                           >
                             Reject
                           </button>
@@ -302,7 +303,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                         <button
                           onClick={() => handleSuspend(instructor.id)}
                           disabled={loading}
-                          className="text-sm text-orange-600 hover:text-orange-900 disabled:opacity-50"
+                          className="text-xs sm:text-sm text-orange-600 hover:text-orange-900 disabled:opacity-50"
                         >
                           Suspend
                         </button>
@@ -312,8 +313,8 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                 </tr>
                 {isExpanded && (
                   <tr className="bg-gray-50">
-                    <td colSpan={9} className="px-4 py-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <td colSpan={9} className="px-2 sm:px-4 py-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 text-sm">
                         <div>
                           <p className="font-semibold text-gray-700 mb-2">Contact</p>
                           <p className="text-gray-600">Phone: {instructor.phone}</p>
@@ -328,13 +329,13 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                             Status: {instructor.documentsVerified ? '✓ Verified' : 'Not verified'}
                           </p>
                         </div>
-                        <div>
+                        <div className="sm:col-span-2 lg:col-span-1">
                           <p className="font-semibold text-gray-700 mb-2">Statistics</p>
                           <p className="text-gray-600">Bookings: {instructor._count.bookings}</p>
                           <p className="text-gray-600">Reviews: {instructor._count.reviews}</p>
                         </div>
                         {compliance && compliance.issues.length > 0 && (
-                          <div className="md:col-span-3">
+                          <div className="col-span-1 sm:col-span-2 lg:col-span-3">
                             <p className="font-semibold text-gray-700 mb-2">Compliance Issues</p>
                             <ul className="list-disc list-inside text-red-600 text-sm">
                               {compliance.issues.map((issue, idx) => (
@@ -344,7 +345,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                           </div>
                         )}
                         {instructor.bio && (
-                          <div className="md:col-span-3">
+                          <div className="col-span-1 sm:col-span-2 lg:col-span-3">
                             <p className="font-semibold text-gray-700 mb-2">Bio</p>
                             <p className="text-gray-600">{instructor.bio}</p>
                           </div>
@@ -364,6 +365,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
           <p className="text-gray-500">No instructors found</p>
         </div>
       )}
+      </div>
     </div>
   );
 }

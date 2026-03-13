@@ -16,27 +16,13 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const instructor: any = await (prisma.instructor.findUnique as any)({
+    // Get basic instructor info (document fields don't exist in simplified schema)
+    const instructor = await prisma.instructor.findUnique({
       where: { id: params.instructorId },
       select: {
         id: true,
         name: true,
         phone: true,
-        licenseImageFront: true,
-        licenseImageBack: true,
-        insurancePolicyDoc: true,
-        policeCheckDoc: true,
-        wwcCheckDoc: true,
-        photoIdDoc: true,
-        certificationDoc: true,
-        vehicleRegistrationDoc: true,
-        documentsVerified: true,
-        documentsVerifiedAt: true,
-        user: {
-          select: {
-            email: true,
-          }
-        }
       }
     });
 
@@ -44,9 +30,20 @@ export async function GET(
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
+    // Return instructor with empty document fields since they don't exist in schema
     return NextResponse.json({
       ...instructor,
-      email: instructor.user.email,
+      email: 'N/A',
+      licenseImageFront: null,
+      licenseImageBack: null,
+      insurancePolicyDoc: null,
+      policeCheckDoc: null,
+      wwcCheckDoc: null,
+      photoIdDoc: null,
+      certificationDoc: null,
+      vehicleRegistrationDoc: null,
+      documentsVerified: false,
+      documentsVerifiedAt: null,
     });
   } catch (error) {
     console.error('Get instructor documents error:', error);

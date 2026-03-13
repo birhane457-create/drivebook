@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         isActive: true,
         isVerified: true,
       }
-    } as any) // Temporary: Remove after running 'npx prisma generate'
+    })
 
     return NextResponse.json(instructor)
   } catch (error) {

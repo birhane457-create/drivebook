@@ -15,7 +15,7 @@ export default function PackagePricingShowcase() {
             <div className="text-5xl font-bold text-purple-600 mb-2">$45</div>
             <div className="text-gray-600">per hour</div>
           </div>
-          <ul className="space-y-3 mb-6">
+          <ul className="space-y-2 md:space-y-3 mb-6">
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
               <span className="text-gray-700">No commitment required</span>
@@ -52,7 +52,7 @@ export default function PackagePricingShowcase() {
             <div className="text-5xl font-bold text-blue-600 mb-2">$214</div>
             <div className="text-gray-600">$42.80 per hour</div>
           </div>
-          <ul className="space-y-3 mb-6">
+          <ul className="space-y-2 md:space-y-3 mb-6">
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
               <span className="text-gray-700">Save $11 compared to single lessons</span>
@@ -89,7 +89,7 @@ export default function PackagePricingShowcase() {
             <div className="text-5xl font-bold text-green-600 mb-2">$414</div>
             <div className="text-gray-600">$41.40 per hour</div>
           </div>
-          <ul className="space-y-3 mb-6">
+          <ul className="space-y-2 md:space-y-3 mb-6">
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
               <span className="text-gray-700">Save $36 compared to single lessons</span>
@@ -126,7 +126,7 @@ export default function PackagePricingShowcase() {
             <div className="text-5xl font-bold text-amber-600 mb-2">$792</div>
             <div className="text-gray-600">$39.60 per hour</div>
           </div>
-          <ul className="space-y-3 mb-6">
+          <ul className="space-y-2 md:space-y-3 mb-6">
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
               <span className="text-gray-700">Save $108 compared to single lessons</span>

@@ -5,19 +5,21 @@
 
 /**
  * Safe client data selector for instructor access
- * Instructors need email and address to contact and pick up their clients
+ * Instructors need email and phone to contact their clients
  */
 export const safeClientSelect = {
   id: true,
   name: true,
   email: true, // Instructors need this to contact clients
   phone: true,
-  addressText: true, // Instructors need this for pickups
-  notes: true,
+  defaultPickupAddress: true,
+  defaultPickupLat: true,
+  defaultPickupLng: true,
   createdAt: true,
   updatedAt: true,
   // EXCLUDED for privacy:
   // - userId (internal)
+  // - instructorId (internal)
 };
 
 /**
@@ -104,10 +106,20 @@ export function sanitizeAddress(address: string | null | undefined): string {
  * Instructors can see full contact info for their own clients
  */
 export function sanitizeClientForInstructor(client: any) {
+  // convert database field names to the ones expected by the UI
+  const addressText = client.addressText || client.defaultPickupAddress || null;
+  const addressLatitude = client.addressLatitude || client.defaultPickupLat || null;
+  const addressLongitude = client.addressLongitude || client.defaultPickupLng || null;
+
   return {
     ...client,
-    // Keep email and addressText - instructors need these
-    // Remove internal fields only
+    addressText,
+    addressLatitude,
+    addressLongitude,
+    // don't expose the raw DB columns since we've aliased them
+    defaultPickupAddress: undefined,
+    defaultPickupLat: undefined,
+    defaultPickupLng: undefined,
     userId: undefined,
   };
 }

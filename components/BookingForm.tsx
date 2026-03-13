@@ -102,9 +102,9 @@ export default function BookingForm({ instructorId, hourlyRate }: BookingFormPro
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
       {/* Personal Info */}
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-3 md:gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">
             <User className="inline h-4 w-4 mr-1" />
@@ -164,7 +164,7 @@ export default function BookingForm({ instructorId, hourlyRate }: BookingFormPro
       </div>
 
       {/* Date & Time */}
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-3 md:gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">
             <Calendar className="inline h-4 w-4 mr-1" />
@@ -221,10 +221,10 @@ export default function BookingForm({ instructorId, hourlyRate }: BookingFormPro
       </div>
 
       {/* Price */}
-      <div className="bg-blue-50 p-4 rounded-lg">
+      <div className="bg-blue-50 p-3 md:p-4 rounded-lg">
         <div className="flex justify-between items-center">
           <span className="text-lg font-semibold">Total Price:</span>
-          <span className="text-3xl font-bold text-blue-600">
+          <span className="text-2xl md:text-3xl font-bold text-blue-600">
             <DollarSign className="inline h-6 w-6" />
             {calculatePrice()}
           </span>
@@ -234,7 +234,7 @@ export default function BookingForm({ instructorId, hourlyRate }: BookingFormPro
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
+        className="w-full bg-blue-600 text-white py-2 md:py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
       >
         {loading ? 'Sending Request...' : 'Request Booking'}
       </button>

@@ -113,8 +113,6 @@ export async function POST(req: NextRequest) {
           where: { id: user.instructor.id },
           data: {
             subscriptionTier: newTier as any,
-            commissionRate: newPlan.commissionRate,
-            newStudentBonus: newPlan.newStudentBonus,
             maxInstructors: newPlan.limits.instructors
           }
         });
@@ -127,8 +125,6 @@ export async function POST(req: NextRequest) {
           metadata: {
             oldTier: user.instructor.subscriptionTier,
             newTier,
-            oldCommissionRate: user.instructor.commissionRate,
-            newCommissionRate: newPlan.commissionRate,
             billingCycle,
             changeType: getChangeType(user.instructor.subscriptionTier || 'BASIC', newTier),
             isTrial: true
@@ -194,8 +190,6 @@ export async function POST(req: NextRequest) {
         where: { id: user.instructor.id },
         data: {
           subscriptionTier: newTier as any,
-          commissionRate: newPlan.commissionRate,
-          newStudentBonus: newPlan.newStudentBonus,
           maxInstructors: newPlan.limits.instructors
         }
       });
@@ -208,8 +202,6 @@ export async function POST(req: NextRequest) {
         metadata: {
           oldTier: user.instructor.subscriptionTier,
           newTier,
-          oldCommissionRate: user.instructor.commissionRate,
-          newCommissionRate: newPlan.commissionRate,
           billingCycle,
           changeType: getChangeType(user.instructor.subscriptionTier || 'BASIC', newTier)
         }

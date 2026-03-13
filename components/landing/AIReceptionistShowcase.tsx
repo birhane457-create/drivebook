@@ -85,7 +85,7 @@ function CallStep() {
       <div className="grid md:grid-cols-2 gap-8 items-center">
         <div>
           <h4 className="text-2xl font-bold text-gray-900 mb-4">Prefer to Call?</h4>
-          <ul className="space-y-3 mb-6">
+          <ul className="space-y-2 md:space-y-3 mb-6">
             <li className="flex items-start gap-3">
               <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0 mt-0.5" />
               <span className="text-gray-700"><strong>Instant answers</strong> to your questions about lessons and pricing</span>

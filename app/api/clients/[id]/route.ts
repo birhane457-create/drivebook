@@ -64,7 +64,8 @@ export async function PUT(
         name: data.name,
         phone: data.phone,
         email: data.email,
-        addressText: data.addressText,
+        // store under defaultPickupAddress column
+        defaultPickupAddress: data.addressText,
         notes: data.notes
       }
     })

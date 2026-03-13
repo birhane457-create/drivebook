@@ -64,37 +64,37 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm">Credits Remaining</p>
-                <p className="text-3xl font-bold">${user.wallet.creditsRemaining?.toFixed(2) || '0.00'}</p>
+                <p className="text-2xl md:text-3xl font-bold">${user.wallet.creditsRemaining?.toFixed(2) || '0.00'}</p>
               </div>
               <Wallet className="h-12 w-12 text-blue-600" />
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+          <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm">Total Spent</p>
-                <p className="text-3xl font-bold">${user.wallet.totalSpent?.toFixed(2) || '0.00'}</p>
+                <p className="text-2xl md:text-3xl font-bold">${user.wallet.totalSpent?.toFixed(2) || '0.00'}</p>
               </div>
               <DollarSign className="h-12 w-12 text-red-600" />
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+          <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm">Upcoming Lessons</p>
-                <p className="text-3xl font-bold">{upcomingBookings.length}</p>
+                <p className="text-2xl md:text-3xl font-bold">{upcomingBookings.length}</p>
               </div>
               <Calendar className="h-12 w-12 text-green-600" />
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+          <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm">Completed</p>
-                <p className="text-3xl font-bold">{completedBookings}</p>
+                <p className="text-2xl md:text-3xl font-bold">{completedBookings}</p>
               </div>
               <TrendingUp className="h-12 w-12 text-yellow-600" />
             </div>
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+          <div className="bg-white rounded-lg shadow p-4 md:p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Upcoming Lessons</h2>
               <Link href="/my-bookings" className="text-blue-600 hover:text-blue-800 text-sm">
@@ -138,7 +138,7 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white rounded-lg shadow p-4 md:p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Quick Stats</h2>
             </div>
@@ -159,7 +159,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="mt-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow p-4 sm:p-6 text-white">
+        <div className="mt-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow p-4 md:p-6 text-white">
           <h3 className="text-lg sm:text-xl font-bold mb-2">Quick Actions</h3>
           <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4">
             <Link 
@@ -328,31 +328,31 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Upcoming Lessons</p>
-              <p className="text-3xl font-bold">{instructor.bookings.length}</p>
+              <p className="text-2xl md:text-3xl font-bold">{instructor.bookings.length}</p>
             </div>
             <Calendar className="h-12 w-12 text-blue-600" />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Total Clients</p>
-              <p className="text-3xl font-bold">{instructor.clients.length}</p>
+              <p className="text-2xl md:text-3xl font-bold">{instructor.clients.length}</p>
             </div>
             <Users className="h-12 w-12 text-green-600" />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
           <div className="flex items-center justify-between mb-2">
             <div className="flex-1">
               <p className="text-gray-500 text-sm">This Month (MTD)</p>
-              <p className="text-3xl font-bold">${thisMonthRevenue.toFixed(0)}</p>
+              <p className="text-2xl md:text-3xl font-bold">${thisMonthRevenue.toFixed(0)}</p>
               <div className="mt-2 space-y-1">
                 <p className="text-xs text-gray-600">
                   ${dailyAverageThisMonth.toFixed(0)}/day avg ({daysElapsedThisMonth} days)
@@ -371,7 +371,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Hourly Rate</p>
@@ -383,7 +383,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
-        <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Upcoming Lessons</h2>
             <Link href="/dashboard/bookings" className="text-blue-600 hover:text-blue-800 text-sm">
@@ -421,7 +421,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Clients Needing Attention</h2>
             <Link href="/dashboard/packages" className="text-blue-600 hover:text-blue-800 text-sm">
@@ -471,7 +471,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow p-4 sm:p-6 text-white">
+      <div className="mt-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow p-4 md:p-6 text-white">
         <h3 className="text-lg sm:text-xl font-bold mb-2">Quick Actions</h3>
         <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4">
           <Link 

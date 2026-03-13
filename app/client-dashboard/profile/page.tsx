@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { User, Mail, Phone, Edit2, Save, X } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X } from 'lucide-react';
 
 interface ProfileData {
   name: string;
   email: string;
   phone: string;
+  address?: string;
 }
 
 export default function ClientProfilePage() {
@@ -16,7 +17,7 @@ export default function ClientProfilePage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({ name: '', phone: '' });
+  const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
 
   useEffect(() => {
     loadProfile();
@@ -29,7 +30,7 @@ export default function ClientProfilePage() {
       if (res.ok) {
         const data = await res.json();
         setProfile(data.user);
-        setFormData({ name: data.user.name, phone: data.user.phone || '' });
+        setFormData({ name: data.user.name, phone: data.user.phone || '', address: data.user.address || '' });
       }
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -44,7 +45,11 @@ export default function ClientProfilePage() {
       const res = await fetch('/api/client/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: formData.name,
+          phone: formData.phone,
+          address: formData.address
+        }),
       });
 
       if (res.ok) {
@@ -101,7 +106,7 @@ export default function ClientProfilePage() {
             <button
               onClick={() => {
                 setEditing(false);
-                setFormData({ name: profile?.name || '', phone: profile?.phone || '' });
+                setFormData({ name: profile?.name || '', phone: profile?.phone || '', address: profile?.address || '' });
               }}
               className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
             >
@@ -157,6 +162,25 @@ export default function ClientProfilePage() {
             />
           ) : (
             <p className="text-lg text-gray-900">{profile?.phone || 'Not provided'}</p>
+          )}
+        </div>
+
+        {/* Address */}
+        <div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+            <MapPin className="w-4 h-4" />
+            Default Pickup Address
+          </label>
+          {editing ? (
+            <input
+              type="text"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter your default pickup address"
+            />
+          ) : (
+            <p className="text-lg text-gray-900">{profile?.address || 'Not provided'}</p>
           )}
         </div>
       </div>

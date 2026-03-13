@@ -6,17 +6,17 @@ import AdminNav from '@/components/admin/AdminNav';
 
 interface ComplianceRecord {
   instructorId: string;
-  userId: string;
+  userId?: string;
   name: string;
   email: string;
   phone: string;
-  status: 'valid' | 'expiring' | 'expired';
+  status: 'valid' | 'expiring' | 'expired' | 'review';
   issues: string[];
   isActive: boolean;
-  licenseExpiry: string | null;
-  insuranceExpiry: string | null;
-  policeCheckExpiry: string | null;
-  wwcCheckExpiry: string | null;
+  licenseExpiry?: string | null;
+  insuranceExpiry?: string | null;
+  policeCheckExpiry?: string | null;
+  wwcCheckExpiry?: string | null;
 }
 
 export default function DocumentCompliancePage() {
@@ -24,7 +24,7 @@ export default function DocumentCompliancePage() {
   const [records, setRecords] = useState<ComplianceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'valid' | 'expiring' | 'expired'>('all');
+  const [filter, setFilter] = useState<'all' | 'valid' | 'expiring' | 'expired' | 'review'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -171,6 +171,7 @@ export default function DocumentCompliancePage() {
     valid: records.filter(r => r.status === 'valid').length,
     expiring: records.filter(r => r.status === 'expiring').length,
     expired: records.filter(r => r.status === 'expired').length,
+    review: records.filter(r => r.status === 'review').length,
   };
 
   if (loading) {
@@ -197,7 +198,7 @@ export default function DocumentCompliancePage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white p-6 rounded-lg shadow">
             <div className="text-2xl font-bold">{records.length}</div>
             <div className="text-gray-600">Total Instructors</div>
@@ -213,6 +214,10 @@ export default function DocumentCompliancePage() {
           <div className="bg-red-50 p-6 rounded-lg shadow border-2 border-red-200">
             <div className="text-2xl font-bold text-red-700">🔴 {stats.expired}</div>
             <div className="text-gray-600">Expired/Invalid</div>
+          </div>
+          <div className="bg-gray-50 p-6 rounded-lg shadow border-2 border-gray-200">
+            <div className="text-2xl font-bold text-gray-700">⚪ {stats.review}</div>
+            <div className="text-gray-600">In Review</div>
           </div>
         </div>
 
@@ -251,6 +256,12 @@ export default function DocumentCompliancePage() {
               >
                 🔴 Expired
               </button>
+              <button
+                onClick={() => setFilter('review')}
+                className={`px-4 py-2 rounded ${filter === 'review' ? 'bg-gray-600 text-white' : 'bg-gray-200'}`}
+              >
+                ⚪ In Review
+              </button>
             </div>
             
             {/* Search */}
@@ -286,6 +297,7 @@ export default function DocumentCompliancePage() {
                     <tr key={record.instructorId} className={
                       record.status === 'expired' ? 'bg-red-50' :
                       record.status === 'expiring' ? 'bg-yellow-50' :
+                      record.status === 'review' ? 'bg-gray-50' :
                       'bg-white'
                     }>
                       <td className="px-4 py-3">
@@ -346,6 +358,7 @@ export default function DocumentCompliancePage() {
                       <tr className={
                         record.status === 'expired' ? 'bg-red-50' :
                         record.status === 'expiring' ? 'bg-yellow-50' :
+                        record.status === 'review' ? 'bg-gray-50' :
                         'bg-gray-50'
                       }>
                         <td colSpan={5} className="px-4 py-4">

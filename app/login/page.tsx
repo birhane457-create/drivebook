@@ -2,11 +2,9 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -16,29 +14,44 @@ export default function LoginPage() {
     setError('')
 
     const formData = new FormData(e.currentTarget)
+    const email = formData.get('email') as string
+    const password = formData.get('password') as string
     
-    const result = await signIn('credentials', {
-      email: formData.get('email'),
-      password: formData.get('password'),
-      redirect: false
-    })
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false
+      })
 
-    if (result?.error) {
-      setError('Invalid email or password')
-      setLoading(false)
-    } else {
-      // Fetch user session to check role
-      const response = await fetch('/api/auth/session')
-      const session = await response.json()
-      
-      // Redirect based on role
-      if (session?.user?.role === 'SUPER_ADMIN' || session?.user?.role === 'ADMIN') {
-        router.push('/admin')
-      } else if (session?.user?.role === 'CLIENT') {
-        router.push('/client-dashboard')
-      } else {
-        router.push('/dashboard')
+      if (result?.error) {
+        setError('Invalid email or password')
+        setLoading(false)
+      } else if (result?.ok) {
+        // Successful login - fetch session and redirect
+        const sessionRes = await fetch('/api/auth/session')
+        const session = await sessionRes.json()
+        
+        if (session?.user?.role) {
+          const role = session.user.role
+          // Use window.location for full page reload to ensure session is loaded
+          if (role === 'SUPER_ADMIN' || role === 'ADMIN') {
+            window.location.href = '/admin'
+          } else if (role === 'INSTRUCTOR') {
+            window.location.href = '/dashboard'
+          } else if (role === 'CLIENT') {
+            window.location.href = '/client-dashboard'
+          } else {
+            window.location.href = '/dashboard'
+          }
+        } else {
+          setError('Session error. Please try again.')
+          setLoading(false)
+        }
       }
+    } catch (err) {
+      setError('An error occurred. Please try again.')
+      setLoading(false)
     }
   }
 

@@ -43,6 +43,16 @@ export default function ProfilePage() {
       const res = await fetch('/api/instructor/profile')
       if (res.ok) {
         const data = await res.json()
+        
+        // Convert comma-separated strings to arrays
+        const vehicleTypesArray = data.vehicleTypes 
+          ? (typeof data.vehicleTypes === 'string' ? data.vehicleTypes.split(',').map((t: string) => t.trim()) : data.vehicleTypes)
+          : []
+        
+        const languagesArray = data.languages
+          ? (typeof data.languages === 'string' ? data.languages.split(',').map((l: string) => l.trim()) : data.languages)
+          : []
+        
         setFormData({
           name: data.name || '',
           phone: data.phone || '',
@@ -51,12 +61,12 @@ export default function ProfilePage() {
           carModel: data.carModel || '',
           carYear: data.carYear || '',
           hourlyRate: data.hourlyRate || '',
-          vehicleTypes: data.vehicleTypes || [],
+          vehicleTypes: vehicleTypesArray,
           serviceRadiusKm: data.serviceRadiusKm || '',
           baseAddress: data.baseAddress || '',
           licenseNumber: data.licenseNumber || '',
           insuranceNumber: data.insuranceNumber || '',
-          languages: data.languages || [],
+          languages: languagesArray,
         })
         setProfileImage(data.profileImage || '')
         setCarImage(data.carImage || '')

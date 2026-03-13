@@ -97,7 +97,7 @@ export default function BookingLandingPage() {
         <LocationSearchBooking />
 
         {/* Features */}
-        <div className="mt-16 grid md:grid-cols-3 gap-8">
+        <div className="mt-8 md:mt-16 grid md:grid-cols-3 gap-8">
           <div className="bg-white rounded-lg shadow-lg p-6 text-center">
             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -421,7 +421,7 @@ export default function BookLessonPage() {
           <div className="lg:col-span-2">
             {/* Location Search */}
             {step === 'location' && (
-              <div className="bg-white rounded-xl shadow-lg p-8">
+              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 lg:p-8">
                 <h2 className="text-2xl font-bold mb-6">Find Instructors Near You</h2>
                 <div className="space-y-4">
                   <div>
@@ -466,7 +466,7 @@ export default function BookLessonPage() {
 
             {/* Instructor Selection */}
             {step === 'instructors' && (
-              <div className="bg-white rounded-xl shadow-lg p-8">
+              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 lg:p-8">
                 <div className="flex items-center gap-2 mb-6">
                   <button
                     onClick={() => setStep('location')}
@@ -507,7 +507,7 @@ export default function BookLessonPage() {
 
             {/* Service Selection */}
             {step === 'services' && selectedInstructor && (
-              <div className="bg-white rounded-xl shadow-lg p-8">
+              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 lg:p-8">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <button
@@ -552,7 +552,7 @@ export default function BookLessonPage() {
 
             {/* Booking Details */}
             {step === 'details' && selectedInstructor && (
-              <div className="bg-white rounded-xl shadow-lg p-8 space-y-6">
+              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 lg:p-8 space-y-6">
                 {/* Instructor Profile Card */}
                 <div className="border-b pb-6">
                   <div className="flex items-start justify-between mb-4">
@@ -650,7 +650,7 @@ export default function BookLessonPage() {
 
             {/* Booking Details Form (when service selected) */}
             {step === 'details' && selectedInstructor && selectedService && (
-              <div className="bg-white rounded-xl shadow-lg p-8 space-y-6">
+              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 lg:p-8 space-y-6">
                 <div className="flex items-center gap-2 mb-4">
                   <button
                     onClick={() => setSelectedService(null)}
