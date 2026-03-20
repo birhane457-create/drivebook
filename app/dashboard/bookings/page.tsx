@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X } from 'lucide-react'
+import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 
 interface Booking {
@@ -56,14 +56,35 @@ export default function BookingsPage() {
     }
   }
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('Remove this booking from your list? The record will be retained for audit purposes.')) return
+    
+    try {
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (res.ok) {
+        showToast('success', 'Booking removed.')
+        fetchBookings()
+      } else {
+        const error = await res.json()
+        showToast('error', error.error || 'Failed to remove booking.')
+      }
+    } catch (error) {
+      console.error('Failed to delete booking:', error)
+      showToast('error', 'Failed to remove booking. Please try again.')
+    }
+  }
+
   const handleCancel = async (id: string) => {
-    if (!confirm('Are you sure you want to permanently delete this booking? This action cannot be undone.')) return
+    if (!confirm('Cancel this booking? The client will be notified and any applicable refund will be processed.')) return
     
     try {
       const res = await fetch(`/api/bookings/${id}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Deleted by instructor' })
+        body: JSON.stringify({ reason: 'Cancelled by instructor' })
       })
 
       if (res.ok) {
@@ -74,7 +95,7 @@ export default function BookingsPage() {
         showToast('error', error.error || 'Failed to cancel booking.')
       }
     } catch (error) {
-      console.error('Failed to delete booking:', error)
+      console.error('Failed to cancel booking:', error)
       showToast('error', 'Failed to cancel booking. Please try again.')
     }
   }
@@ -168,9 +189,13 @@ export default function BookingsPage() {
     setSaving(true)
     try {
       const res = await fetch(`/api/bookings/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm)
+        body: JSON.stringify({
+          pickupAddress: editForm.pickupAddress,
+          dropoffAddress: editForm.dropoffAddress,
+          notes: editForm.notes,
+        })
       })
 
       if (res.ok) {
@@ -516,13 +541,13 @@ export default function BookingsPage() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleCancel(booking.id)
+                                  handleDelete(booking.id)
                                 }}
                                 disabled={saving}
                                 className="flex-1 min-w-[120px] bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
                               >
                                 <X className="h-4 w-4" />
-                                Delete Booking
+                                Cancel Booking
                               </button>
                             </>
                           ) : (
@@ -562,15 +587,48 @@ export default function BookingsPage() {
                                 </button>
                               )}
                               {booking.status !== 'CANCELLED' && booking.status !== 'COMPLETED' && (
+                                <>
+                                  <Link
+                                    href={`/dashboard/bookings/${booking.id}/reschedule`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex-1 min-w-[120px] bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 flex items-center justify-center gap-2"
+                                  >
+                                    <RefreshCw className="h-4 w-4" />
+                                    Reschedule
+                                  </Link>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      startEdit(booking)
+                                    }}
+                                    className="flex-1 min-w-[120px] bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleCancel(booking.id)
+                                    }}
+                                    className="flex-1 min-w-[120px] bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+                                  >
+                                    <X className="h-4 w-4" />
+                                    Cancel
+                                  </button>
+                                </>
+                              )}
+                              {/* Remove from view (soft delete) — for cancelled/past bookings */}
+                              {(booking.status === 'CANCELLED' || booking.status === 'COMPLETED') && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    startEdit(booking)
+                                    handleDelete(booking.id)
                                   }}
-                                  className="flex-1 min-w-[120px] bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                                  className="flex-1 min-w-[120px] border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-100 flex items-center justify-center gap-2"
                                 >
-                                  <Edit2 className="h-4 w-4" />
-                                  Edit
+                                  <X className="h-4 w-4" />
+                                  Remove from List
                                 </button>
                               )}
                             </>

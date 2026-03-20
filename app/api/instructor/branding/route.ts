@@ -9,12 +9,14 @@ export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user || session.user.role !== 'INSTRUCTOR') {
+    if (!session?.user || (session.user.role !== 'INSTRUCTOR' && session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const instructor = await prisma.instructor.findUnique({
-      where: { userId: session.user.id },
+    const instructor = await prisma.instructor.findFirst({
+      where: session.user.instructorId
+        ? { id: session.user.instructorId }
+        : { userId: session.user.id },
       select: {
         brandLogo: true,
         brandColorPrimary: true,
@@ -46,12 +48,14 @@ export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user || session.user.role !== 'INSTRUCTOR') {
+    if (!session?.user || (session.user.role !== 'INSTRUCTOR' && session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const instructor = await prisma.instructor.findUnique({
-      where: { userId: session.user.id },
+    const instructor = await prisma.instructor.findFirst({
+      where: session.user.instructorId
+        ? { id: session.user.instructorId }
+        : { userId: session.user.id },
       select: {
         id: true,
         subscriptionTier: true,

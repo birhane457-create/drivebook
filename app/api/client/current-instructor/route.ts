@@ -63,18 +63,28 @@ export async function GET(req: NextRequest) {
     // Get instructor details
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
-      include: {
-        user: { select: { email: true } }
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        bio: true,
+        profileImage: true,
+        carImage: true,
+        carMake: true,
+        carModel: true,
+        carYear: true,
+        hourlyRate: true,
+        averageRating: true,
+        totalReviews: true,
+        baseAddress: true,
+        lessonPackages: true,
+        userId: true,
       }
     })
 
     if (!instructor) {
       return NextResponse.json({ currentInstructor: null })
     }
-
-    // Use default rating for now (Review model may not exist)
-    const avgRating = 4.5
-    const totalReviews = 0
 
     // Get package info if this booking is a package
     let packageInfo = null
@@ -88,10 +98,34 @@ export async function GET(req: NextRequest) {
     })
 
     if (latestPackageBooking && latestPackageBooking.isPackageBooking) {
+      // Calculate used hours from completed child bookings linked to this package
+      const childBookings = await prisma.booking.findMany({
+        where: {
+          OR: [
+            { parentBookingId: latestPackageBooking.id },
+            // Also count the first booking itself if completed
+            { id: latestPackageBooking.id, status: 'COMPLETED' }
+          ],
+          status: { in: ['COMPLETED', 'CONFIRMED'] }
+        },
+        select: { duration: true, startTime: true, endTime: true }
+      });
+
+      const usedHours = childBookings.reduce((sum, b) => {
+        if (b.duration) return sum + b.duration;
+        if (b.startTime && b.endTime) {
+          return sum + (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / (1000 * 60 * 60);
+        }
+        return sum;
+      }, 0);
+
+      const totalHours = latestPackageBooking.packageHours || 0;
+      const remaining = Math.max(0, totalHours - usedHours);
+
       packageInfo = {
-        totalHours: latestPackageBooking.packageHours || 0,
-        usedHours: latestPackageBooking.packageHoursUsed || 0,
-        remainingHours: (latestPackageBooking.packageHours || 0) - (latestPackageBooking.packageHoursUsed || 0),
+        totalHours,
+        usedHours: Math.round(usedHours * 10) / 10,
+        remainingHours: Math.round(remaining * 10) / 10,
         expiryDate: latestPackageBooking.packageExpiryDate,
         status: latestPackageBooking.packageStatus
       }
@@ -104,19 +138,31 @@ export async function GET(req: NextRequest) {
       'Mock Test'
     ]
 
+    // Parse lesson packages for service pricing
+    const packages = (instructor.lessonPackages as any[]) || []
+    const activePackages = packages.filter((p: any) => p.isActive !== false)
+
     return NextResponse.json({
       currentInstructor: {
         id: instructor.id,
         name: instructor.name,
         profileImage: instructor.profileImage,
+        carImage: instructor.carImage,
+        carMake: instructor.carMake,
+        carModel: instructor.carModel,
+        carYear: instructor.carYear,
         phone: instructor.phone,
-        email: instructor.user?.email || instructor.email,
+        email: instructor.userId
+          ? (await prisma.user.findUnique({ where: { id: instructor.userId }, select: { email: true } }))?.email || ''
+          : '',
         baseAddress: instructor.baseAddress,
         hourlyRate: instructor.hourlyRate,
-        averageRating: avgRating,
-        totalReviews: totalReviews,
+        bio: instructor.bio,
+        averageRating: instructor.averageRating || 4.5,
+        totalReviews: instructor.totalReviews || 0,
         offersTestPackage: true,
-        services: services
+        services,
+        lessonPackages: activePackages,
       },
       packageInfo,
       latestBookingId: latestPackageBooking?.id,

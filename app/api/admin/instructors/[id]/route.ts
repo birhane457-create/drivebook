@@ -24,11 +24,13 @@ export async function GET(
         _count: {
           select: {
             bookings: true,
-            reviews: true,
+            clients: true,
+            subscriptions: true,
           },
         },
         bookings: {
           orderBy: { startTime: 'desc' },
+          take: 10,
           include: {
             client: {
               select: {
@@ -39,16 +41,6 @@ export async function GET(
             }
           }
         },
-        reviews: {
-          orderBy: { createdAt: 'desc' },
-          include: {
-            client: {
-              select: {
-                name: true,
-              }
-            }
-          }
-        }
       },
     });
 

@@ -7,6 +7,7 @@ import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/
 import { recordBookingPayment } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { paymentService } from '@/lib/services/payment';
+import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 
 
 export const dynamic = 'force-dynamic';
@@ -96,7 +97,9 @@ export async function POST(request: NextRequest) {
       const wallet = await tx.clientWallet.findUnique({ 
         where: { userId: user.id },
         include: {
-          transactions: true
+          transactions: {
+            where: { status: 'CONFIRMED' }
+          }
         }
       });
       if (!wallet) throw new Error('Wallet not found');
@@ -136,10 +139,11 @@ export async function POST(request: NextRequest) {
         endTime.setHours(endTime.getHours() + item.duration);
 
         // Check for existing conflicts for this instructor
+        // PENDING_PAYMENT included — those slots are reserved during active payment flows
         const existingConflict = await tx.booking.findFirst({
           where: {
             instructorId: item.instructorId,
-            status: { in: ['PENDING', 'CONFIRMED'] },
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
             OR: [
               { startTime: { lte: startTime }, endTime: { gt: startTime } },
               { startTime: { lt: endTime }, endTime: { gte: endTime } },
@@ -166,8 +170,8 @@ export async function POST(request: NextRequest) {
 
         const booking = await tx.booking.create({
           data: {
-            instructorId: item.instructorId,
-            clientId: client.id,
+            instructor: { connect: { id: item.instructorId } },
+            client: { connect: { id: client.id } },
             bookingType: 'LESSON',
             status: 'CONFIRMED',
             startTime,
@@ -181,7 +185,8 @@ export async function POST(request: NextRequest) {
             isFirstBooking: commission.isFirstBooking,
             notes: item.service || null,
             createdBy: 'client',
-            isPaid: true, // Paid from wallet
+            originalStartTime: startTime,
+            isPaid: true,
             paidAt: new Date()
           } as any
         });
@@ -222,47 +227,28 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        created.push({ booking, instructorName: item.instructorName });
+        created.push({ booking, instructorName: item.instructorName, instructorUserId: instructor.userId, clientUserId: user.id });
       }
 
-      // All bookings created successfully, update wallet with optimistic locking
-      const updatedWallet = await tx.clientWallet.updateMany({
-        where: { 
-          userId: user.id,
-          version: wallet.version,  // ✅ Optimistic lock - only update if version matches
-          creditsRemaining: { gte: totalCost }  // ✅ Double-check balance
-        },
-        data: {
-          creditsRemaining: { decrement: totalCost },
-          totalSpent: { increment: totalCost },
-          version: { increment: 1 }  // ✅ Increment version
-        }
-      });
-
-      // Check if update succeeded
-      if (updatedWallet.count === 0) {
-        throw new Error('Concurrent modification detected or insufficient credits. Please try again.');
-      }
-
-      // Create a wallet transaction with idempotency
-      const idempotencyKey = `booking_${user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // All bookings created - debit wallet
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
-          type: 'debit',  // lowercase for consistency
-          amount: -totalCost,  // negative for debit
+          type: 'DEBIT',
+          amount: totalCost,
           description: `Booked ${cartItems.length} lesson${cartItems.length > 1 ? 's' : ''}`,
-          status: 'completed',
-          idempotencyKey  // ✅ Prevents duplicate transactions
+          status: 'CONFIRMED',
         }
       });
 
-      // Get updated wallet for response
-      const finalWallet = await tx.clientWallet.findUnique({
-        where: { userId: user.id }
-      });
+      // Get updated balance for response
+      const allTx = await tx.walletTransaction.findMany({ where: { walletId: wallet.id } });
+      const newBalance = allTx
+        .filter(t => t.type.toUpperCase() === 'CREDIT')
+        .reduce((s, t) => s + t.amount, 0)
+        - allTx.filter(t => t.type.toUpperCase() === 'DEBIT').reduce((s, t) => s + Math.abs(t.amount), 0);
 
-      return { created, totalCost, remaining: finalWallet!.creditsRemaining, ledgerEntries };
+      return { created, totalCost, remaining: newBalance, ledgerEntries };
     });
 
     // Verify ledger balance matches old system
@@ -294,6 +280,36 @@ export async function POST(request: NextRequest) {
       }
     } catch (verifyError) {
       console.error('[Ledger] Balance verification failed:', verifyError);
+    }
+
+    // Fire notifications for each booking (outside transaction - non-critical)
+    // Get client name for notification message
+    const clientUser = await prisma.user.findUnique({ where: { email: session.user.email }, select: { name: true } });
+    const clientDisplayName = clientUser?.name || session.user.email;
+
+    for (const c of result.created) {
+      try {
+        // Notify instructor of new booking
+        if (c.instructorUserId && c.booking.startTime) {
+          await notifyBookingRequest(
+            c.instructorUserId,
+            clientDisplayName,
+            c.booking.id,
+            new Date(c.booking.startTime)
+          );
+        }
+        // Notify client their booking is confirmed (wallet payment = instant confirm)
+        if (c.clientUserId && c.booking.startTime) {
+          await notifyClientBookingConfirmed(
+            c.clientUserId,
+            c.instructorName,
+            c.booking.id,
+            new Date(c.booking.startTime)
+          );
+        }
+      } catch (notifError) {
+        console.error('Failed to send booking notification:', notifError);
+      }
     }
 
     // Build response

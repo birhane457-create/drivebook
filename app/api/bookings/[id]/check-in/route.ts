@@ -159,6 +159,12 @@ export async function POST(
       smsCheckInSent: true,
     };
 
+    // Auto-complete: if the lesson end time has already passed, mark COMPLETED
+    const bookingEndTime = booking.endTime ? new Date(booking.endTime) : null;
+    if (bookingEndTime && now >= bookingEndTime) {
+      updateData.status = 'COMPLETED';
+    }
+
     // Add late check-in metadata if applicable
     if (isLateCheckIn) {
       updateData.notes = booking.notes 
@@ -170,7 +176,7 @@ export async function POST(
       where: {
         id: bookingId,
         checkInTime: null // ✅ Only update if not already checked in
-      },
+      } as any,
       data: updateData,
     });
 

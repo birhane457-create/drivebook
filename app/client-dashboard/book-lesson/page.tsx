@@ -108,13 +108,18 @@ export default function BookLessonPage() {
     const instructorId = searchParams?.get('instructorId');
     const newInstructor = searchParams?.get('newInstructor');
     
-    if (newInstructor === 'true' && clientLocation) {
+    if (newInstructor === 'true') {
       // User wants to search for new instructor, start from location with pre-filled address
-      setUserLocation(clientLocation);
-      setPickupLocation(clientLocation);
+      if (clientLocation) {
+        setUserLocation(clientLocation);
+        setPickupLocation(clientLocation);
+      }
       setStep('location');
     } else if (instructorId && session?.user?.email) {
       loadPreSelectedInstructor(instructorId);
+    } else if (!instructorId && !newInstructor && clientLocation) {
+      // No params — auto-detect current instructor and skip to services
+      autoLoadCurrentInstructor();
     }
   }, [searchParams, session, clientLocation]);
 
@@ -133,6 +138,21 @@ export default function BookLessonPage() {
       }
     } catch (error) {
       console.error('Failed to load instructor:', error);
+    }
+  };
+
+  const autoLoadCurrentInstructor = async () => {
+    try {
+      const res = await fetch('/api/client/current-instructor');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.currentInstructor) {
+          loadPreSelectedInstructor(data.currentInstructor.id);
+        }
+        // If no current instructor, stay on step 1 (location)
+      }
+    } catch (error) {
+      console.error('Failed to auto-load current instructor:', error);
     }
   };
 
@@ -413,7 +433,13 @@ export default function BookLessonPage() {
             Back to Dashboard
           </Link>
           <h1 className="text-3xl font-bold text-gray-900">Book a Lesson</h1>
-          <p className="text-gray-600 mt-2">Step {step === 'location' ? 1 : step === 'instructors' ? 2 : step === 'services' ? 3 : step === 'details' ? 4 : 5}</p>
+          <p className="text-gray-600 mt-2">
+            {step === 'location' ? 'Step 1 of 5' :
+             step === 'instructors' ? 'Step 2 of 5' :
+             step === 'services' ? (instructors.length > 0 ? 'Step 3 of 5' : 'Step 1 of 3') :
+             step === 'details' ? (instructors.length > 0 ? 'Step 4 of 5' : 'Step 2 of 3') :
+             (instructors.length > 0 ? 'Step 5 of 5' : 'Step 3 of 3')}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -481,23 +507,39 @@ export default function BookLessonPage() {
                     <button
                       key={instructor.id}
                       onClick={() => selectInstructor(instructor)}
-                      className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition text-left"
+                      className="w-full p-3 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition text-left"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        {/* Profile image */}
+                        {instructor.profileImage ? (
+                          <img
+                            src={instructor.profileImage}
+                            alt={instructor.name}
+                            className="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-gray-100"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center shrink-0 border-2 border-gray-100">
+                            <span className="text-xl font-bold text-blue-600">
+                              {instructor.name.charAt(0)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-gray-900">{instructor.name}</h3>
-                          <p className="text-sm text-gray-600 flex items-center gap-1">
-                            <MapPin className="w-4 h-4" />
-                            {(instructor.distance || 0).toFixed(1)}km away • {instructor.serviceRadiusKm || 5}km radius
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {(instructor.distance || 0).toFixed(1)}km away
                           </p>
-                          <p className="text-sm text-gray-600">
-                            ⭐ {(instructor.averageRating || 0).toFixed(1)} ({instructor.totalReviews || 0} reviews)
-                          </p>
-                          <p className="text-sm text-blue-600 font-semibold mt-2">
-                            ${(instructor.hourlyRate || 0).toFixed(2)}/hour
-                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-gray-500">
+                              ⭐ {(instructor.averageRating || 0).toFixed(1)}
+                            </span>
+                            <span className="text-sm font-bold text-blue-600">
+                              ${(instructor.hourlyRate || 0).toFixed(2)}/hr
+                            </span>
+                          </div>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                        <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
                       </div>
                     </button>
                   ))}
@@ -511,7 +553,14 @@ export default function BookLessonPage() {
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => { setStep('instructors'); setSelectedInstructor(null); }}
+                      onClick={() => {
+                        if (instructors.length > 0) {
+                          setStep('instructors');
+                          setSelectedInstructor(null);
+                        } else {
+                          router.push('/client-dashboard');
+                        }
+                      }}
                       className="text-blue-600 hover:text-blue-700"
                     >
                       <ArrowLeft className="w-5 h-5" />

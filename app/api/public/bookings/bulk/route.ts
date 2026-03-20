@@ -7,7 +7,7 @@ import { bulkBookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } fr
 const bulkBookingSchema = z.object({
   instructorId: z.string(),
   packageType: z.enum(['CUSTOM', 'PACKAGE_6', 'PACKAGE_10', 'PACKAGE_15']),
-  hours: z.number(),
+  hours: z.coerce.number(),
   includeTestPackage: z.boolean(),
   bookingType: z.enum(['now', 'later']),
   scheduledBookings: z.array(z.object({
@@ -22,24 +22,26 @@ const bulkBookingSchema = z.object({
   accountHolderName: z.string(),
   accountHolderEmail: z.string().email(),
   accountHolderPhone: z.string(),
-  accountHolderPassword: z.string(),
+  accountHolderPassword: z.string().optional().default(''),
   // Learner (only if someone-else)
   learnerName: z.string().optional(),
   learnerPhone: z.string().optional(),
   learnerRelationship: z.string().optional(),
   pricing: z.object({
-    subtotal: z.number(),
-    discount: z.number(),
-    discountPercentage: z.number(),
-    testPackage: z.number(),
-    platformFee: z.number(),
-    total: z.number()
-  })
+    subtotal: z.coerce.number(),
+    discount: z.coerce.number(),
+    discountPercentage: z.coerce.number(),
+    testPackage: z.coerce.number(),
+    platformFee: z.coerce.number(),
+    total: z.coerce.number(),
+    installments: z.coerce.number().optional()
+  }).passthrough()
 });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log('Bulk booking body:', JSON.stringify(body, null, 2));
     const data = bulkBookingSchema.parse(body);
 
     // Rate limiting: limit bulk bookings per client/email/IP
@@ -66,15 +68,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Create user account (always required now)
+    // Create user account or link to existing
     let userId: string | undefined;
-    const hashedPassword = await bcrypt.hash(data.accountHolderPassword, 10);
     
     const existingUser = await prisma.user.findUnique({
       where: { email: data.accountHolderEmail }
     });
 
     if (!existingUser) {
+      // New user — require a password
+      if (!data.accountHolderPassword || data.accountHolderPassword.length < 6) {
+        return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+      }
+      // New user — create account with provided password
+      const hashedPassword = await bcrypt.hash(data.accountHolderPassword, 10);
       const newUser = await prisma.user.create({
         data: {
           email: data.accountHolderEmail,
@@ -84,6 +91,7 @@ export async function POST(req: NextRequest) {
       });
       userId = newUser.id;
     } else {
+      // Existing user — just link booking to their account, no password change
       userId = existingUser.id;
     }
 
@@ -95,43 +103,118 @@ export async function POST(req: NextRequest) {
     const clientPhone = data.registrationType === 'myself'
       ? data.accountHolderPhone
       : data.learnerPhone || data.accountHolderPhone;
-    
-    const clientEmail = data.accountHolderEmail;
 
-    // (Drivebook schema doesn't track clients by instructor/email, so skip client lookup)
-    // we still compute name/phone above and could persist a client record if needed.
-
-    // Choose date/time from first scheduled slot or default to today
-    let dateValue = new Date().toISOString().split('T')[0];
-    let timeValue = '00:00';
-    if (data.scheduledBookings && data.scheduledBookings.length > 0) {
-      dateValue = data.scheduledBookings[0].date;
-      timeValue = data.scheduledBookings[0].time;
+    // Find or create a Client record linked to this instructor
+    let clientId: string | undefined;
+    const existingClient = await prisma.client.findFirst({
+      where: { instructorId: data.instructorId, email: data.accountHolderEmail }
+    });
+    if (existingClient) {
+      clientId = existingClient.id;
+    } else {
+      const newClient = await prisma.client.create({
+        data: {
+          instructorId: data.instructorId,
+          userId: userId,
+          name: clientName,
+          email: data.accountHolderEmail,
+          phone: clientPhone,
+        }
+      });
+      clientId = newClient.id;
     }
 
-    // Create booking record with minimal schema fields
-    const booking = await prisma.booking.create({
-      data: {
-        instructorId: data.instructorId,
-        clientName,
-        clientPhone,
-        date: dateValue,
-        time: timeValue,
-        duration: data.hours * 60 // store minutes
-      }
-    });
+    // ── Pricing ──────────────────────────────────────────────────────────────
+    // The Stripe charge is for the FULL package (data.pricing.total).
+    // The booking record stores the FIRST LESSON price only (1hr × hourlyRate).
+    // After payment, the webhook will:
+    //   CREDIT wallet = full package total
+    //   DEBIT  wallet = first lesson price
+    // Remaining hours sit as wallet balance for future lessons.
+    const firstLessonDurationHours = 1;
+    const firstLessonPrice = parseFloat((instructor.hourlyRate * firstLessonDurationHours).toFixed(2));
+    const PLATFORM_FEE_RATE = 0.036;
+    const firstLessonPlatformFee = parseFloat((firstLessonPrice * PLATFORM_FEE_RATE).toFixed(2));
+    const firstLessonPayout = parseFloat((firstLessonPrice - firstLessonPlatformFee).toFixed(2));
 
-    console.log('Booking created with id', booking.id);
+    // Choose date/time from first scheduled slot or default to tomorrow 9am
+    let startTime = new Date();
+    startTime.setDate(startTime.getDate() + 1);
+    startTime.setHours(9, 0, 0, 0);
+
+    if (data.scheduledBookings && data.scheduledBookings.length > 0) {
+      const slot = data.scheduledBookings[0];
+      const [h, m] = slot.time.split(':').map(Number);
+      startTime = new Date(slot.date);
+      startTime.setHours(h, m, 0, 0);
+    }
+
+    const endTime = new Date(startTime.getTime() + firstLessonDurationHours * 60 * 60 * 1000);
+
+    // ── Atomic slot claim ─────────────────────────────────────────────────────
+    // On MongoDB we can't use SELECT FOR UPDATE, so we do the conflict check
+    // AND the booking create inside a single transaction. If two requests race,
+    // one will see the other's PENDING_PAYMENT row and throw SLOT_TAKEN.
+    let booking: any;
+    try {
+      booking = await prisma.$transaction(async (tx) => {
+        // Re-check for conflicts inside the transaction
+        const conflict = await tx.booking.findFirst({
+          where: {
+            instructorId: data.instructorId,
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+            OR: [
+              { startTime: { lte: startTime }, endTime: { gt: startTime } },
+              { startTime: { lt: endTime }, endTime: { gte: endTime } },
+              { startTime: { gte: startTime }, endTime: { lte: endTime } },
+            ],
+          },
+        });
+        if (conflict) throw new Error('SLOT_TAKEN');
+
+        return tx.booking.create({
+          data: {
+            instructorId: data.instructorId,
+            clientId: clientId,
+            clientName,
+            clientPhone,
+            status: 'PENDING_PAYMENT', // Holds the slot for up to 10 min while payment completes
+            startTime,
+            endTime,
+            duration: firstLessonDurationHours,
+            price: firstLessonPrice,
+            platformFee: firstLessonPlatformFee,
+            instructorPayout: firstLessonPayout,
+            pickupAddress: data.scheduledBookings?.[0]?.pickupLocation || null,
+            notes: data.scheduledBookings?.[0]?.notes || null,
+            isPackageBooking: data.hours > 1,
+            packageHours: data.hours,
+            packageHoursRemaining: data.hours - firstLessonDurationHours,
+            // Store full package total so the webhook knows what Stripe charged
+            packageTotalPaid: data.pricing.total,
+          } as any,
+        });
+      });
+    } catch (err: any) {
+      if (err.message === 'SLOT_TAKEN') {
+        return NextResponse.json({ error: 'This time slot is no longer available. Please choose another.' }, { status: 409 });
+      }
+      throw err;
+    }
+
+    console.log('Booking created with id', booking.id, '| first lesson price:', firstLessonPrice, '| package total:', data.pricing.total);
     return NextResponse.json({
       success: true,
       bookingId: booking.id,
+      // Tell the payment page to charge the FULL package amount via Stripe
       total: data.pricing.total
     }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues }, { status: 400 });
+      console.error('Bulk booking Zod error:', JSON.stringify(error.issues, null, 2));
+      return NextResponse.json({ error: 'Validation failed', issues: error.issues }, { status: 400 });
     }
     console.error('Bulk booking error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

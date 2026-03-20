@@ -56,11 +56,37 @@ export async function GET(req: NextRequest) {
         status: 'EXPIRED'
       }
     });
+
+    // Auto-complete CONFIRMED bookings whose end time has passed and check-in was recorded
+    // (check-in already sets COMPLETED when endTime < now, this catches any that slipped through)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const autoCompleted = await (prisma as any).booking.updateMany({
+      where: {
+        status: 'CONFIRMED',
+        endTime: { lt: twoHoursAgo },
+        checkInTime: { not: null },
+      },
+      data: { status: 'COMPLETED' },
+    });
+
+    // Auto no-show: CONFIRMED bookings that ended 3+ hours ago with NO check-in
+    // Admin can review and override. Refund policy: no check-in = no refund.
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const autoNoShow = await (prisma as any).booking.updateMany({
+      where: {
+        status: 'CONFIRMED',
+        endTime: { lt: threeHoursAgo },
+        checkInTime: null,
+      },
+      data: { status: 'NO_SHOW' },
+    });
     
     const result = {
       success: true,
       expiredBookings: expiredBookings.count,
       expiredTransactions: expiredTransactions.count,
+      autoCompleted: autoCompleted.count,
+      autoNoShow: autoNoShow.count,
       timestamp: new Date().toISOString(),
       cutoffTime: tenMinutesAgo.toISOString()
     };

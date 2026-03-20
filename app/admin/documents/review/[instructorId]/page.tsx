@@ -1,14 +1,17 @@
-'use client';
+﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminNav from '@/components/admin/AdminNav';
+import { CheckCircle, ExternalLink, ArrowLeft, Save, Calendar, Upload, X } from 'lucide-react';
 
 interface InstructorDocuments {
   id: string;
   name: string;
   email: string;
   phone: string;
+  licenseNumber?: string;
+  insuranceNumber?: string;
   licenseImageFront?: string;
   licenseImageBack?: string;
   insurancePolicyDoc?: string;
@@ -25,16 +28,16 @@ interface InstructorDocuments {
   documentsVerifiedAt?: string;
 }
 
-interface DocumentField {
-  key: string;
+interface DocField {
+  key: keyof InstructorDocuments;
   label: string;
-  expiryKey?: string;
+  expiryKey?: 'licenseExpiry' | 'insuranceExpiry' | 'policeCheckExpiry' | 'wwcCheckExpiry';
   required: boolean;
 }
 
-const documentFields: DocumentField[] = [
-  { key: 'licenseImageFront', label: "Driver's License (Front)", expiryKey: 'licenseExpiry', required: true },
-  { key: 'licenseImageBack', label: "Driver's License (Back)", required: true },
+const DOC_FIELDS: DocField[] = [
+  { key: 'licenseImageFront', label: 'Driver License (Front)', expiryKey: 'licenseExpiry', required: true },
+  { key: 'licenseImageBack', label: 'Driver License (Back)', required: true },
   { key: 'insurancePolicyDoc', label: 'Insurance Policy', expiryKey: 'insuranceExpiry', required: true },
   { key: 'policeCheckDoc', label: 'Police Check', expiryKey: 'policeCheckExpiry', required: true },
   { key: 'wwcCheckDoc', label: 'Working with Children Check', expiryKey: 'wwcCheckExpiry', required: true },
@@ -42,6 +45,24 @@ const documentFields: DocumentField[] = [
   { key: 'certificationDoc', label: 'Instructor Certification', required: false },
   { key: 'vehicleRegistrationDoc', label: 'Vehicle Registration', required: true },
 ];
+
+function trafficLight(expiry: string | undefined, hasDoc: boolean): 'green' | 'yellow' | 'red' {
+  if (!hasDoc) return 'red';
+  if (!expiry) return 'yellow';
+  const days = (new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+  if (days < 0) return 'red';
+  if (days < 30) return 'yellow';
+  return 'green';
+}
+
+function TrafficDot({ color }: { color: 'green' | 'yellow' | 'red' }) {
+  const cls = color === 'green' ? 'bg-green-500' : color === 'yellow' ? 'bg-yellow-400' : 'bg-red-500';
+  return (
+    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold shrink-0 ${cls}`}>
+      {color === 'green' ? '\u2713' : color === 'yellow' ? '!' : '\u2717'}
+    </span>
+  );
+}
 
 export default function DocumentReviewPage() {
   const params = useParams();
@@ -51,299 +72,265 @@ export default function DocumentReviewPage() {
   const [instructor, setInstructor] = useState<InstructorDocuments | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [expiryDates, setExpiryDates] = useState<{ [key: string]: string }>({});
-  const [rejectionReasons, setRejectionReasons] = useState<{ [key: string]: string }>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [expiry, setExpiry] = useState<Record<string, string>>({});
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [toast, setToast] = useState('');
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  useEffect(() => {
-    fetchInstructorDocuments();
-  }, [instructorId]);
+  useEffect(() => { fetchDocs(); }, [instructorId]);
 
-  const showToast = (type: 'success' | 'error', message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
-  };
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500); };
 
-  const fetchInstructorDocuments = async () => {
+  const fetchDocs = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`/api/admin/documents/instructor/${instructorId}`);
       if (res.ok) {
         const data = await res.json();
         setInstructor(data);
-        
-        // Initialize expiry dates
-        setExpiryDates({
+        setExpiry({
           licenseExpiry: data.licenseExpiry ? new Date(data.licenseExpiry).toISOString().split('T')[0] : '',
           insuranceExpiry: data.insuranceExpiry ? new Date(data.insuranceExpiry).toISOString().split('T')[0] : '',
           policeCheckExpiry: data.policeCheckExpiry ? new Date(data.policeCheckExpiry).toISOString().split('T')[0] : '',
           wwcCheckExpiry: data.wwcCheckExpiry ? new Date(data.wwcCheckExpiry).toISOString().split('T')[0] : '',
         });
-      } else {
-        showToast('error', 'Failed to load instructor documents.');
       }
-    } catch (error) {
-      console.error('Failed to fetch documents:', error);
-      showToast('error', 'Failed to load instructor documents. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveExpiryDates = async () => {
+  const saveExpiry = async () => {
     setSaving(true);
-    try {
-      const res = await fetch(`/api/admin/documents/instructor/${instructorId}/expiry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(expiryDates),
-      });
-
-      if (res.ok) {
-        showToast('success', 'Expiry dates saved successfully.');
-        fetchInstructorDocuments();
-      } else {
-        showToast('error', 'Failed to save expiry dates.');
-      }
-    } catch (error) {
-      console.error('Failed to save expiry dates:', error);
-      showToast('error', 'Failed to save expiry dates. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+    const res = await fetch(`/api/admin/documents/instructor/${instructorId}/expiry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(expiry),
+    });
+    setSaving(false);
+    if (res.ok) { showToast('Expiry dates saved'); fetchDocs(); }
+    else showToast('Failed to save');
   };
 
-  const handleApproveDocuments = async () => {
-    if (!confirm('Approve all documents for this instructor?')) return;
-
-    try {
-      const res = await fetch(`/api/admin/documents/instructor/${instructorId}/approve`, {
-        method: 'POST',
-      });
-
-      if (res.ok) {
-        showToast('success', 'Documents approved successfully.');
-        fetchInstructorDocuments();
-      } else {
-        showToast('error', 'Failed to approve documents.');
-      }
-    } catch (error) {
-      console.error('Failed to approve documents:', error);
-      showToast('error', 'Failed to approve documents. Please try again.');
-    }
+  const approveAll = async () => {
+    setApproving(true);
+    const res = await fetch(`/api/admin/documents/instructor/${instructorId}/approve`, { method: 'POST' });
+    setApproving(false);
+    if (res.ok) { showToast('Documents approved'); fetchDocs(); }
+    else showToast('Failed to approve');
   };
 
-  const handleRejectDocument = async (documentKey: string, reason?: string) => {
-    const rejectionReason = reason || prompt(`Enter rejection reason for this document:`);
-    if (!rejectionReason) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/admin/documents/instructor/${instructorId}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentKey, reason: rejectionReason }),
-      });
-
-      if (res.ok) {
-        showToast('success', 'Document rejected. Instructor will be notified.');
-        fetchInstructorDocuments();
-      } else {
-        showToast('error', 'Failed to reject document.');
-      }
-    } catch (error) {
-      console.error('Failed to reject document:', error);
-      showToast('error', 'Failed to reject document. Please try again.');
-    }
+  const handleUpload = async (field: string, file: File) => {
+    setUploading(field);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('field', field);
+    const res = await fetch(`/api/admin/documents/instructor/${instructorId}/upload`, {
+      method: 'POST',
+      body: fd,
+    });
+    setUploading(null);
+    if (res.ok) { showToast('Document uploaded'); fetchDocs(); }
+    else showToast('Upload failed');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <AdminNav />
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <p>Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  const removeDoc = async (field: string) => {
+    if (!confirm('Remove this document?')) return;
+    const res = await fetch(`/api/admin/documents/instructor/${instructorId}/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field, remove: true }),
+    });
+    if (res.ok) { showToast('Document removed'); fetchDocs(); }
+    else showToast('Failed to remove');
+  };
 
-  if (!instructor) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <AdminNav />
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <p>Instructor not found</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50"><AdminNav />
+      <div className="flex items-center justify-center h-64 text-gray-400">Loading...</div>
+    </div>
+  );
+
+  if (!instructor) return (
+    <div className="min-h-screen bg-gray-50"><AdminNav />
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center text-gray-500">Instructor not found</div>
+    </div>
+  );
+
+  const lights = DOC_FIELDS.filter(f => f.expiryKey).map(f =>
+    trafficLight(expiry[f.expiryKey!], !!instructor[f.key])
+  );
+  const overall = lights.includes('red') ? 'red' : lights.includes('yellow') ? 'yellow' : 'green';
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
-      
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <button
-            onClick={() => router.back()}
-            className="text-blue-600 hover:text-blue-800 mb-4"
-          >
-            ← Back to Compliance Dashboard
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">Review Documents</h1>
-          <div className="mt-2">
-            <p className="text-lg font-semibold">{instructor.name}</p>
-            <p className="text-gray-600">{instructor.email}</p>
-            <p className="text-gray-600">{instructor.phone}</p>
+
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">{toast}</div>
+      )}
+
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mb-5">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+
+        {/* Header */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{instructor.name}</h1>
+              <p className="text-sm text-gray-500">{instructor.email} &middot; {instructor.phone}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <TrafficDot color={overall} />
+              <span className={`text-sm font-semibold ${overall === 'green' ? 'text-green-700' : overall === 'yellow' ? 'text-yellow-600' : 'text-red-600'}`}>
+                {overall === 'green' ? 'All valid' : overall === 'yellow' ? 'Attention needed' : 'Action required'}
+              </span>
+            </div>
+          </div>
+          {instructor.documentsVerified && (
+            <p className="mt-2 text-xs text-green-600">
+              Verified{instructor.documentsVerifiedAt ? ` on ${new Date(instructor.documentsVerifiedAt).toLocaleDateString('en-AU')}` : ''}
+            </p>
+          )}
+        </div>
+
+        {/* Document rows */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-5">
+          <div className="grid grid-cols-[1.5rem_1fr_9rem_auto_auto] gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide items-center">
+            <div></div>
+            <div>Document</div>
+            <div className="flex items-center gap-1"><Calendar className="w-3 h-3" />Expiry</div>
+            <div>File</div>
+            <div>Upload</div>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {DOC_FIELDS.map(field => {
+              const docUrl = instructor[field.key] as string | undefined;
+              const hasDoc = !!docUrl;
+              const light = field.expiryKey
+                ? trafficLight(expiry[field.expiryKey], hasDoc)
+                : hasDoc ? 'green' : 'red';
+              const isUploading = uploading === field.key;
+
+              return (
+                <div key={field.key} className="grid grid-cols-[1.5rem_1fr_9rem_auto_auto] gap-2 items-center px-4 py-3">
+                  <TrafficDot color={light} />
+
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800">
+                      {field.label}
+                      {field.required && <span className="text-red-400 ml-1 text-xs">*</span>}
+                    </p>
+                    <p className="text-xs text-gray-400">{!hasDoc ? 'Not uploaded' : !field.expiryKey ? 'Uploaded' : ''}</p>
+                  </div>
+
+                  {/* Expiry input */}
+                  <div>
+                    {field.expiryKey ? (
+                      <div className="flex flex-col gap-0.5">
+                        <input
+                          type="date"
+                          value={expiry[field.expiryKey] || ''}
+                          onChange={e => setExpiry(prev => ({ ...prev, [field.expiryKey!]: e.target.value }))}
+                          className={`text-xs border rounded-lg px-2 py-1.5 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none
+                            ${light === 'red' ? 'border-red-300 bg-red-50' : light === 'yellow' ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}
+                        />
+                        <span className={`text-xs font-medium ${light === 'red' ? 'text-red-500' : light === 'yellow' ? 'text-yellow-600' : 'text-green-600'}`}>
+                          {expiry[field.expiryKey] ? (light === 'red' ? 'Expired' : light === 'yellow' ? 'Expiring soon' : 'Valid') : 'No date set'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-300">N/A</span>
+                    )}
+                  </div>
+
+                  {/* View / Remove */}
+                  <div className="flex items-center gap-1">
+                    {hasDoc ? (
+                      <>
+                        <a href={docUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
+                          <ExternalLink className="w-3.5 h-3.5" />View
+                        </a>
+                        <button onClick={() => removeDoc(field.key as string)}
+                          className="text-gray-300 hover:text-red-400 ml-1" title="Remove">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-gray-300">None</span>
+                    )}
+                  </div>
+
+                  {/* Upload button */}
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      className="hidden"
+                      ref={el => { fileInputRefs.current[field.key as string] = el; }}
+                      onChange={e => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUpload(field.key as string, f);
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      onClick={() => fileInputRefs.current[field.key as string]?.click()}
+                      disabled={isUploading}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-lg border border-gray-200 hover:border-blue-300 disabled:opacity-40 transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      {isUploading ? 'Uploading...' : hasDoc ? 'Replace' : 'Upload'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Verification Status */}
-        <div className={`mb-6 p-4 rounded-lg ${
-          instructor.documentsVerified 
-            ? 'bg-green-50 border border-green-200' 
-            : 'bg-yellow-50 border border-yellow-200'
-        }`}>
-          <p className="font-semibold">
-            {instructor.documentsVerified 
-              ? `✅ Documents Verified on ${new Date(instructor.documentsVerifiedAt!).toLocaleDateString()}`
-              : '⏳ Documents Pending Verification'}
-          </p>
+        {/* Expiry summary */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Expiry Summary</p>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Driver License', key: 'licenseExpiry' },
+              { label: 'Insurance', key: 'insuranceExpiry' },
+              { label: 'Police Check', key: 'policeCheckExpiry' },
+              { label: 'WWC Check', key: 'wwcCheckExpiry' },
+            ].map(({ label, key }) => {
+              const val = expiry[key];
+              const light = val ? trafficLight(val, true) : 'yellow';
+              return (
+                <div key={key} className={`flex items-center justify-between rounded-lg px-3 py-2 border
+                  ${light === 'red' ? 'bg-red-50 border-red-200' : light === 'yellow' ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+                  <span className="text-xs font-medium text-gray-700">{label}</span>
+                  <span className={`text-xs font-semibold ${light === 'red' ? 'text-red-600' : light === 'yellow' ? 'text-yellow-600' : 'text-green-700'}`}>
+                    {val ? new Date(val).toLocaleDateString('en-AU') : 'Not set'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Documents Review */}
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Search documents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Compact Table View */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Document</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expiry Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {documentFields
-                .filter(field => {
-                  if (!searchQuery) return true;
-                  return field.label.toLowerCase().includes(searchQuery.toLowerCase());
-                })
-                .map((field) => {
-                  const docUrl = instructor[field.key as keyof InstructorDocuments] as string | undefined;
-                  const hasDoc = !!docUrl;
-
-                  return (
-                    <tr key={field.key} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        {hasDoc ? (
-                          <span className="text-green-600 text-xl">✓</span>
-                        ) : (
-                          <span className="text-red-600 text-xl">✗</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {field.label}
-                            {field.required && <span className="text-red-500 ml-1">*</span>}
-                          </p>
-                          {!hasDoc && (
-                            <p className="text-xs text-gray-500">Waiting for upload</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {field.expiryKey && hasDoc ? (
-                          <input
-                            type="date"
-                            value={expiryDates[field.expiryKey] || ''}
-                            onChange={(e) => setExpiryDates({
-                              ...expiryDates,
-                              [field.expiryKey!]: e.target.value
-                            })}
-                            className="border border-gray-300 rounded px-2 py-1 text-sm"
-                          />
-                        ) : (
-                          <span className="text-sm text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {hasDoc ? (
-                          <div className="flex gap-2">
-                            <a
-                              href={docUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                            >
-                              View
-                            </a>
-                            <button
-                              onClick={() => {
-                                const reason = prompt(`Rejection reason for ${field.label}:`);
-                                if (reason) {
-                                  handleRejectDocument(field.key);
-                                }
-                              }}
-                              className="text-sm px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">No document</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="mt-8 flex gap-4">
-          <button
-            onClick={handleSaveExpiryDates}
-            disabled={saving}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-          >
-            {saving ? 'Saving...' : 'Save Expiry Dates'}
+        {/* Actions */}
+        <div className="flex gap-3 flex-wrap">
+          <button onClick={saveExpiry} disabled={saving}
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-40">
+            <Save className="w-4 h-4" />{saving ? 'Saving...' : 'Save Expiry Dates'}
           </button>
-          <button
-            onClick={handleApproveDocuments}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            ✓ Approve All Documents
+          <button onClick={approveAll} disabled={approving}
+            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm rounded-xl hover:bg-green-700 disabled:opacity-40">
+            <CheckCircle className="w-4 h-4" />{approving ? 'Approving...' : 'Approve All Documents'}
           </button>
         </div>
       </div>
-
-      {/* Toast notifications */}
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <div
-            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
-              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-            }`}
-          >
-            {toast.message}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { DollarSign, Package, TrendingUp, AlertCircle, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { DollarSign, Package, TrendingUp, Shield, Wallet, Percent, Zap, Save, CheckCircle, XCircle } from 'lucide-react';
 
-interface PricingSettings {
+interface Settings {
   platformFeePercentage: number;
   package6Discount: number;
   package10Discount: number;
@@ -17,450 +16,317 @@ interface PricingSettings {
   businessNewStudentBonus: number;
   drivingTestPackagePrice: number;
   discountPaidBy: 'platform' | 'shared' | 'instructor';
+  cancellationFee: number;
+  lateCancellationWindowHours: number;
+  noShowPenaltyAmount: number;
+  walletTopUpMin: number;
+  walletTopUpMax: number;
+  gstEnabled: boolean;
+  gstRate: number;
+  peakSurchargeEnabled: boolean;
+  peakSurchargePercent: number;
 }
 
-interface PricingSettingsFormProps {
-  platform: {
-    id: string;
-    settings?: any;
-  };
+type Toast = { type: 'success' | 'error'; message: string } | null;
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      {children}
+      {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
+    </div>
+  );
 }
 
-export default function PricingSettingsForm({ platform }: PricingSettingsFormProps) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+function NumInput({ value, onChange, step = 1, min = 0, max = 9999, prefix }: {
+  value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number; prefix?: string;
+}) {
+  return (
+    <div className="relative">
+      {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">{prefix}</span>}
+      <input
+        type="number" step={step} min={min} max={max} value={value}
+        onChange={e => onChange(parseFloat(e.target.value) || 0)}
+        className={`w-full border border-gray-300 rounded-lg py-2 pr-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${prefix ? 'pl-7' : 'pl-3'}`}
+      />
+    </div>
+  );
+}
 
-  // Parse existing settings or use defaults
-  const existingSettings = platform.settings?.pricing || {};
-  
-  const [settings, setSettings] = useState<PricingSettings>({
-    platformFeePercentage: existingSettings.platformFeePercentage || 3.6,
-    package6Discount: existingSettings.package6Discount || 5,
-    package10Discount: existingSettings.package10Discount || 10,
-    package15Discount: existingSettings.package15Discount || 12,
-    basicCommissionRate: existingSettings.basicCommissionRate || 15,
-    proCommissionRate: existingSettings.proCommissionRate || 12,
-    businessCommissionRate: existingSettings.businessCommissionRate || 10,
-    basicNewStudentBonus: existingSettings.basicNewStudentBonus || 8,
-    proNewStudentBonus: existingSettings.proNewStudentBonus || 10,
-    businessNewStudentBonus: existingSettings.businessNewStudentBonus || 12,
-    drivingTestPackagePrice: existingSettings.drivingTestPackagePrice || 225,
-    discountPaidBy: existingSettings.discountPaidBy || 'shared'
-  });
+function Section({ icon, title, color, children }: { icon: React.ReactNode; title: string; color: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <h2 className={`text-base font-semibold flex items-center gap-2 mb-5 ${color}`}>
+        {icon}{title}
+      </h2>
+      {children}
+    </div>
+  );
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
+export default function PricingSettingsForm() {
+  const [s, setS] = useState<Settings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<Toast>(null);
+  const [previewRate, setPreviewRate] = useState(75);
+
+  useEffect(() => {
+    fetch('/api/admin/pricing')
+      .then(r => r.json())
+      .then(data => { setS(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  function set(patch: Partial<Settings>) {
+    setS(prev => prev ? { ...prev, ...patch } : prev);
+  }
+
+  function showToast(type: 'success' | 'error', message: string) {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-
+    if (!s) return;
+    setSaving(true);
     try {
-      const response = await fetch('/api/admin/pricing', {
+      const res = await fetch('/api/admin/pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
+        body: JSON.stringify(s),
       });
-
-      if (response.ok) {
-        alert('Pricing settings updated successfully!');
-        // Force a hard refresh to reload data from server
-        window.location.reload();
+      if (res.ok) {
+        showToast('success', 'Pricing settings saved successfully');
       } else {
-        const data = await response.json();
-        alert(data.error || 'Failed to update settings');
+        const data = await res.json();
+        showToast('error', data.error || 'Failed to save settings');
       }
-    } catch (error) {
-      console.error('Update error:', error);
-      alert('Failed to update settings');
+    } catch {
+      showToast('error', 'Network error — settings not saved');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  };
+  }
 
-  // Calculate revenue impact preview
-  const calculatePreview = () => {
-    const hourlyRate = 75; // Example rate
-    const hours = 10;
-    const subtotal = hourlyRate * hours; // $750
-    const discount = (subtotal * settings.package10Discount) / 100;
-    const afterDiscount = subtotal - discount;
-    const platformFee = (afterDiscount * settings.platformFeePercentage) / 100;
-    const total = afterDiscount + platformFee;
-    
-    // Commission calculation
-    const instructorAmount = afterDiscount;
-    const commission = (instructorAmount * settings.proCommissionRate) / 100;
-    const newStudentBonus = (instructorAmount * settings.proNewStudentBonus) / 100;
-    const totalPlatformRevenue = platformFee + commission + newStudentBonus;
-    const instructorPayout = instructorAmount - commission - newStudentBonus;
+  if (loading || !s) {
+    return <div className="flex items-center justify-center h-64 text-gray-400">Loading settings...</div>;
+  }
 
-    return {
-      subtotal,
-      discount,
-      afterDiscount,
-      platformFee,
-      total,
-      commission,
-      newStudentBonus,
-      totalPlatformRevenue,
-      instructorPayout
-    };
-  };
-
-  const preview = calculatePreview();
+  // Live preview calc (10-lesson package, PRO tier)
+  const subtotal = previewRate * 10;
+  const discountAmt = (subtotal * s.package10Discount) / 100;
+  const afterDiscount = subtotal - discountAmt;
+  const gstAmt = s.gstEnabled ? (afterDiscount * s.gstRate) / 100 : 0;
+  const platformFeeAmt = (afterDiscount * s.platformFeePercentage) / 100;
+  const clientTotal = afterDiscount + gstAmt + platformFeeAmt;
+  const commissionAmt = (afterDiscount * s.proCommissionRate) / 100;
+  const bonusAmt = (afterDiscount * s.proNewStudentBonus) / 100;
+  const instructorPayout = afterDiscount - commissionAmt - bonusAmt;
+  const platformRevenue = platformFeeAmt + commissionAmt + bonusAmt;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Platform Fee Settings */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <DollarSign className="h-6 w-6 text-blue-600" />
-          Platform Fee
-        </h2>
-        
-        <div className="max-w-md">
-          <label className="block text-sm font-medium mb-2">
-            Platform Processing Fee (%)
-          </label>
-          <input
-            type="number"
-            step="0.1"
-            min="0"
-            max="10"
-            value={settings.platformFeePercentage}
-            onChange={(e) => setSettings({ ...settings, platformFeePercentage: parseFloat(e.target.value) })}
-            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-          />
-          <p className="text-sm text-gray-600 mt-1">
-            Fee charged to clients on top of booking amount. Current: {settings.platformFeePercentage}%
-          </p>
+    <form onSubmit={handleSave} className="space-y-5">
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+          {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+          {toast.message}
         </div>
-      </div>
+      )}
+
+      {/* Platform Fee */}
+      <Section icon={<DollarSign className="h-5 w-5" />} title="Platform Fee" color="text-blue-700">
+        <div className="max-w-xs">
+          <Field label="Processing fee charged to clients (%)" hint="Added on top of the booking amount at checkout">
+            <NumInput value={s.platformFeePercentage} onChange={v => set({ platformFeePercentage: v })} step={0.1} min={0} max={10} />
+          </Field>
+        </div>
+      </Section>
 
       {/* Package Discounts */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Package className="h-6 w-6 text-green-600" />
-          Package Discounts
-        </h2>
-
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              6 Hour Package Discount (%)
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              max="20"
-              value={settings.package6Discount}
-              onChange={(e) => setSettings({ ...settings, package6Discount: parseInt(e.target.value) })}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              10 Hour Package Discount (%)
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              max="20"
-              value={settings.package10Discount}
-              onChange={(e) => setSettings({ ...settings, package10Discount: parseInt(e.target.value) })}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              15 Hour Package Discount (%)
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              max="20"
-              value={settings.package15Discount}
-              onChange={(e) => setSettings({ ...settings, package15Discount: parseInt(e.target.value) })}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
+      <Section icon={<Package className="h-5 w-5" />} title="Package Discounts" color="text-green-700">
+        <div className="grid sm:grid-cols-3 gap-4 mb-4">
+          <Field label="6-lesson package (%)">
+            <NumInput value={s.package6Discount} onChange={v => set({ package6Discount: v })} min={0} max={30} />
+          </Field>
+          <Field label="10-lesson package (%)">
+            <NumInput value={s.package10Discount} onChange={v => set({ package10Discount: v })} min={0} max={30} />
+          </Field>
+          <Field label="15-lesson package (%)">
+            <NumInput value={s.package15Discount} onChange={v => set({ package15Discount: v })} min={0} max={30} />
+          </Field>
         </div>
-
-        <div className="mt-4">
-          <label className="block text-sm font-medium mb-2">
-            Who Pays for Discounts?
-          </label>
+        <Field label="Who absorbs the discount cost?">
           <select
-            value={settings.discountPaidBy}
-            onChange={(e) => setSettings({ ...settings, discountPaidBy: e.target.value as any })}
-            className="w-full max-w-md px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+            value={s.discountPaidBy}
+            onChange={e => set({ discountPaidBy: e.target.value as Settings['discountPaidBy'] })}
+            className="w-full max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
           >
-            <option value="platform">Platform absorbs discount (marketing investment)</option>
-            <option value="shared">Shared between client savings and instructor revenue</option>
-            <option value="instructor">Instructor absorbs discount (lower payout)</option>
+            <option value="platform">Platform — lower commission to cover it</option>
+            <option value="shared">Shared — client saves, instructor gets slightly less</option>
+            <option value="instructor">Instructor — full discount from their payout</option>
           </select>
-          <p className="text-sm text-gray-600 mt-1">
-            {settings.discountPaidBy === 'platform' && 'Platform takes lower commission to cover discount'}
-            {settings.discountPaidBy === 'shared' && 'Client saves money, instructor gets slightly less'}
-            {settings.discountPaidBy === 'instructor' && 'Client saves full amount, instructor revenue reduced'}
-          </p>
+        </Field>
+      </Section>
+
+      {/* Commission by Tier */}
+      <Section icon={<TrendingUp className="h-5 w-5" />} title="Commission Rates by Subscription Tier" color="text-purple-700">
+        <div className="grid sm:grid-cols-3 gap-5">
+          {([
+            { key: 'basic', label: 'Basic', border: 'border-gray-200', bg: '' },
+            { key: 'pro', label: 'Pro', border: 'border-blue-200', bg: 'bg-blue-50' },
+            { key: 'business', label: 'Business', border: 'border-purple-200', bg: 'bg-purple-50' },
+          ] as const).map(({ key, label, border, bg }) => (
+            <div key={key} className={`border-2 ${border} ${bg} rounded-xl p-4 space-y-3`}>
+              <p className="font-semibold text-sm text-gray-800">{label}</p>
+              <Field label="Commission (%)">
+                <NumInput
+                  value={s[`${key}CommissionRate`]}
+                  onChange={v => set({ [`${key}CommissionRate`]: v } as any)}
+                  step={0.5} min={0} max={50}
+                />
+              </Field>
+              <Field label="New student bonus (%)">
+                <NumInput
+                  value={s[`${key}NewStudentBonus`]}
+                  onChange={v => set({ [`${key}NewStudentBonus`]: v } as any)}
+                  step={0.5} min={0} max={30}
+                />
+              </Field>
+            </div>
+          ))}
         </div>
-      </div>
+      </Section>
 
-      {/* Commission Rates by Tier */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <TrendingUp className="h-6 w-6 text-purple-600" />
-          Commission Rates by Subscription Tier
-        </h2>
+      {/* Cancellation & No-Show */}
+      <Section icon={<Shield className="h-5 w-5" />} title="Cancellation & No-Show Policy" color="text-red-700">
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Cancellation fee ($)" hint="Flat fee for cancellations within the late window">
+            <NumInput value={s.cancellationFee} onChange={v => set({ cancellationFee: v })} min={0} max={200} prefix="$" />
+          </Field>
+          <Field label="Late cancellation window (hours)" hint="Cancellations within this window incur the fee">
+            <NumInput value={s.lateCancellationWindowHours} onChange={v => set({ lateCancellationWindowHours: v })} min={0} max={168} />
+          </Field>
+          <Field label="No-show penalty ($)" hint="Charged to the party who didn't show">
+            <NumInput value={s.noShowPenaltyAmount} onChange={v => set({ noShowPenaltyAmount: v })} min={0} max={200} prefix="$" />
+          </Field>
+        </div>
+      </Section>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Basic Tier */}
-          <div className="border-2 border-gray-200 rounded-lg p-4">
-            <h3 className="font-bold text-lg mb-3 text-gray-900">BASIC Tier</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Commission Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="30"
-                  value={settings.basicCommissionRate}
-                  onChange={(e) => setSettings({ ...settings, basicCommissionRate: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  New Student Bonus (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="20"
-                  value={settings.basicNewStudentBonus}
-                  onChange={(e) => setSettings({ ...settings, basicNewStudentBonus: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
+      {/* Wallet Limits */}
+      <Section icon={<Wallet className="h-5 w-5" />} title="Wallet Top-Up Limits" color="text-yellow-700">
+        <div className="grid sm:grid-cols-2 gap-4 max-w-sm">
+          <Field label="Minimum top-up ($)">
+            <NumInput value={s.walletTopUpMin} onChange={v => set({ walletTopUpMin: v })} min={1} max={500} prefix="$" />
+          </Field>
+          <Field label="Maximum top-up ($)">
+            <NumInput value={s.walletTopUpMax} onChange={v => set({ walletTopUpMax: v })} min={10} max={5000} prefix="$" />
+          </Field>
+        </div>
+      </Section>
+
+      {/* GST & Peak Surcharge */}
+      <Section icon={<Percent className="h-5 w-5" />} title="Tax & Surcharges" color="text-orange-700">
+        <div className="grid sm:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => set({ gstEnabled: !s.gstEnabled })}
+                className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${s.gstEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+              >
+                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${s.gstEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-sm font-medium text-gray-700">GST / Tax enabled</span>
             </div>
+            {s.gstEnabled && (
+              <Field label="GST rate (%)" hint="Applied to the booking subtotal">
+                <NumInput value={s.gstRate} onChange={v => set({ gstRate: v })} step={0.5} min={0} max={30} />
+              </Field>
+            )}
           </div>
-
-          {/* Pro Tier */}
-          <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
-            <h3 className="font-bold text-lg mb-3 text-blue-900">PRO Tier</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Commission Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="30"
-                  value={settings.proCommissionRate}
-                  onChange={(e) => setSettings({ ...settings, proCommissionRate: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  New Student Bonus (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="20"
-                  value={settings.proNewStudentBonus}
-                  onChange={(e) => setSettings({ ...settings, proNewStudentBonus: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => set({ peakSurchargeEnabled: !s.peakSurchargeEnabled })}
+                className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${s.peakSurchargeEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+              >
+                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${s.peakSurchargeEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-sm font-medium text-gray-700">Peak hour surcharge enabled</span>
             </div>
-          </div>
-
-          {/* Business Tier */}
-          <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
-            <h3 className="font-bold text-lg mb-3 text-purple-900">BUSINESS Tier</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Commission Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="30"
-                  value={settings.businessCommissionRate}
-                  onChange={(e) => setSettings({ ...settings, businessCommissionRate: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  New Student Bonus (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="20"
-                  value={settings.businessNewStudentBonus}
-                  onChange={(e) => setSettings({ ...settings, businessNewStudentBonus: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
-            </div>
+            {s.peakSurchargeEnabled && (
+              <Field label="Peak surcharge (%)" hint="Applied during peak hours (weekday evenings, weekends)">
+                <NumInput value={s.peakSurchargePercent} onChange={v => set({ peakSurchargePercent: v })} step={1} min={0} max={50} />
+              </Field>
+            )}
           </div>
         </div>
-      </div>
+      </Section>
 
       {/* Driving Test Package */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold mb-4">Driving Test Package Price</h2>
-        
-        <div className="max-w-md">
-          <label className="block text-sm font-medium mb-2">
-            Test Package Price ($)
-          </label>
-          <input
-            type="number"
-            step="5"
-            min="0"
-            max="500"
-            value={settings.drivingTestPackagePrice}
-            onChange={(e) => setSettings({ ...settings, drivingTestPackagePrice: parseInt(e.target.value) })}
-            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-          />
-          <p className="text-sm text-gray-600 mt-1">
-            Includes: vehicle, pickup/dropoff, 45min warm-up lesson
-          </p>
+      <Section icon={<Zap className="h-5 w-5" />} title="Driving Test Package" color="text-teal-700">
+        <div className="max-w-xs">
+          <Field label="Package price ($)" hint="Includes vehicle, pickup/dropoff, 45-min warm-up lesson">
+            <NumInput value={s.drivingTestPackagePrice} onChange={v => set({ drivingTestPackagePrice: v })} step={5} min={0} max={1000} prefix="$" />
+          </Field>
         </div>
-      </div>
+      </Section>
 
-      {/* Revenue Impact Preview */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg shadow-md p-6 border-2 border-blue-200">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <AlertCircle className="h-6 w-6 text-blue-600" />
-            Revenue Impact Preview
-          </h2>
-          <button
-            type="button"
-            onClick={() => setShowPreview(!showPreview)}
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            {showPreview ? 'Hide' : 'Show'} Preview
-          </button>
-        </div>
-
-        {showPreview && (
-          <div className="bg-white rounded-lg p-4 space-y-3">
-            <p className="text-sm text-gray-600 mb-3">
-              Example: 10-hour package at $75/hr with PRO tier instructor (first booking)
-            </p>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="font-semibold mb-2 text-gray-900">Client Pays:</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span>Subtotal (10hrs × $75):</span>
-                    <span className="font-medium">${preview.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-green-600">
-                    <span>Discount ({settings.package10Discount}%):</span>
-                    <span className="font-medium">-${preview.discount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After discount:</span>
-                    <span className="font-medium">${preview.afterDiscount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Platform fee ({settings.platformFeePercentage}%):</span>
-                    <span className="font-medium">${preview.platformFee.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between border-t pt-1 font-bold text-lg">
-                    <span>Total:</span>
-                    <span className="text-blue-600">${preview.total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-2 text-gray-900">Revenue Split:</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span>Platform fee (from client):</span>
-                    <span className="font-medium">${preview.platformFee.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Commission ({settings.proCommissionRate}%):</span>
-                    <span className="font-medium">${preview.commission.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>New student bonus ({settings.proNewStudentBonus}%):</span>
-                    <span className="font-medium">${preview.newStudentBonus.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between border-t pt-1 font-bold text-green-600">
-                    <span>Platform Revenue:</span>
-                    <span>${preview.totalPlatformRevenue.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between border-t pt-1 font-bold text-purple-600">
-                    <span>Instructor Payout:</span>
-                    <span>${preview.instructorPayout.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                <strong>Note:</strong> Platform makes ${preview.totalPlatformRevenue.toFixed(2)} per booking 
-                ({((preview.totalPlatformRevenue / preview.total) * 100).toFixed(1)}% of total). 
-                Instructor receives ${preview.instructorPayout.toFixed(2)} 
-                ({((preview.instructorPayout / preview.afterDiscount) * 100).toFixed(1)}% of discounted amount).
-              </p>
-            </div>
+      {/* Live Preview */}
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 text-white">
+        <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-blue-400" />
+          Live Revenue Preview
+          <span className="text-xs font-normal text-slate-400 ml-1">— 10-lesson package, PRO tier, first booking</span>
+        </h2>
+        <div className="mb-4 flex items-center gap-3">
+          <label className="text-sm text-slate-300">Instructor hourly rate:</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input
+              type="number" min={20} max={300} value={previewRate}
+              onChange={e => setPreviewRate(parseFloat(e.target.value) || 0)}
+              className="w-24 bg-slate-700 border border-slate-600 rounded-lg pl-7 pr-2 py-1.5 text-sm text-white focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-        )}
+          <span className="text-slate-400 text-sm">/hr</span>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-6 text-sm">
+          <div className="space-y-2">
+            <p className="text-slate-400 font-medium uppercase text-xs tracking-wide mb-2">Client pays</p>
+            <div className="flex justify-between"><span className="text-slate-300">Subtotal (10 × ${previewRate})</span><span>${subtotal.toFixed(2)}</span></div>
+            <div className="flex justify-between text-green-400"><span>Package discount ({s.package10Discount}%)</span><span>−${discountAmt.toFixed(2)}</span></div>
+            {s.gstEnabled && <div className="flex justify-between text-yellow-400"><span>GST ({s.gstRate}%)</span><span>+${gstAmt.toFixed(2)}</span></div>}
+            <div className="flex justify-between text-slate-300"><span>Platform fee ({s.platformFeePercentage}%)</span><span>+${platformFeeAmt.toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold text-white border-t border-slate-600 pt-2 text-base"><span>Total</span><span className="text-blue-400">${clientTotal.toFixed(2)}</span></div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-slate-400 font-medium uppercase text-xs tracking-wide mb-2">Revenue split</p>
+            <div className="flex justify-between text-slate-300"><span>Platform fee</span><span>${platformFeeAmt.toFixed(2)}</span></div>
+            <div className="flex justify-between text-slate-300"><span>Commission ({s.proCommissionRate}%)</span><span>${commissionAmt.toFixed(2)}</span></div>
+            <div className="flex justify-between text-slate-300"><span>New student bonus ({s.proNewStudentBonus}%)</span><span>${bonusAmt.toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold text-green-400 border-t border-slate-600 pt-2"><span>Platform revenue</span><span>${platformRevenue.toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold text-purple-400"><span>Instructor payout</span><span>${instructorPayout.toFixed(2)}</span></div>
+          </div>
+        </div>
       </div>
 
-      {/* Save Button */}
-      <div className="flex gap-4">
+      {/* Save */}
+      <div className="flex items-center gap-3 pt-2">
         <button
-          type="submit"
-          disabled={loading}
-          className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          type="submit" disabled={saving}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-medium text-sm transition-colors"
         >
-          <Save className="h-5 w-5" />
-          {loading ? 'Saving...' : 'Save Pricing Settings'}
+          <Save className="h-4 w-4" />
+          {saving ? 'Saving...' : 'Save Settings'}
         </button>
-
-        <button
-          type="button"
-          onClick={() => router.push('/admin')}
-          className="bg-gray-200 text-gray-700 px-8 py-3 rounded-lg font-semibold hover:bg-gray-300"
-        >
-          Cancel
-        </button>
-      </div>
-
-      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
-        <p className="text-sm text-yellow-800">
-          <strong>Warning:</strong> Changes will affect all new bookings immediately. Existing bookings will not be affected.
-        </p>
+        <p className="text-xs text-gray-500">Changes apply to new bookings only. Existing bookings are unaffected.</p>
       </div>
     </form>
   );

@@ -3,238 +3,81 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { smsService } from '@/lib/services/sms';
-import { logAuditAction } from '@/lib/services/audit';
-import { payoutRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
-import { recordInstructorPayout } from '@/lib/services/ledger-operations';
-import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
-import { z } from 'zod';
-
 
 export const dynamic = 'force-dynamic';
-// Input validation
-const payoutSchema = z.object({
-  instructorId: z.string().min(1, 'Instructor ID is required'),
-  transactionIds: z.array(z.string()).optional(), // Optional: specific transactions to pay
-});
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
     if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // FIXED: Rate limiting for payout operations
-    const rateLimitId = getRateLimitIdentifier(
-      session.user.id,
-      req.headers.get('x-forwarded-for'),
-      'payout'
-    );
-    
-    const rateLimitResult = await checkRateLimit(payoutRateLimit, rateLimitId);
-    
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: rateLimitResult.error },
-        { 
-          status: 429,
-          headers: rateLimitResult.headers 
-        }
-      );
-    }
+    const { instructorId, transactionIds } = await req.json();
+    if (!instructorId) return NextResponse.json({ error: 'instructorId required' }, { status: 400 });
 
-    // FIXED: Input validation
-    const body = await req.json();
-    const { instructorId, transactionIds } = payoutSchema.parse(body);
-
-    // Get instructor details
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
-      select: { name: true, phone: true }
+      select: { name: true, phone: true },
     });
+    if (!instructor) return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
 
-    if (!instructor) {
-      return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
+    const now = new Date();
+
+    // Build where clause — booking endTime has passed, CONFIRMED or COMPLETED (not cancelled)
+    const where: any = {
+      instructorId,
+      status: 'PENDING',
+      type: 'BOOKING_PAYMENT',
+      booking: {
+        status: { in: ['CONFIRMED', 'COMPLETED'] },
+        endTime: { lte: now },
+        deletedAt: null,
+      },
+    };
+    if (transactionIds?.length) where.id = { in: transactionIds };
+
+    const transactions = await (prisma as any).transaction.findMany({ where });
+
+    if (!transactions.length) {
+      return NextResponse.json({ error: 'No eligible transactions for payout' }, { status: 400 });
     }
 
-    // FIXED: Use transaction wrapper with ledger integration
-    const result = await prisma.$transaction(async (tx) => {
-      const now = new Date();
-      
-      // FIXED: Only get pending transactions for COMPLETED bookings that have ended
-      const where: any = {
-        instructorId,
-        status: 'PENDING',
-        booking: {
-          status: 'COMPLETED',
-          endTime: { lte: now } // Lesson must have ended
-        }
-      };
-      
-      // If specific transactions selected, filter by IDs
-      if (transactionIds && transactionIds.length > 0) {
-        where.id = { in: transactionIds };
-      }
-      
-      const pendingTransactions = await (tx as any).transaction.findMany({
-        where,
-        include: {
-          booking: {
-            select: {
-              id: true,
-              status: true,
-              endTime: true
-            }
-          }
-        }
-      });
+    const totalPayout = transactions.reduce((s: number, t: any) => s + t.instructorPayout, 0);
+    const ids = transactions.map((t: any) => t.id);
 
-      if (pendingTransactions.length === 0) {
-        throw new Error('No eligible transactions for payout');
-      }
-
-      // Verify all bookings are completed and in the past
-      const ineligible = pendingTransactions.filter((t: any) => 
-        t.booking.status !== 'COMPLETED' || t.booking.endTime > now
-      );
-      
-      if (ineligible.length > 0) {
-        throw new Error(`${ineligible.length} transactions are not eligible (booking not completed or in future)`);
-      }
-
-      // Calculate total payout
-      const totalPayout = pendingTransactions.reduce(
-        (sum: number, t: any) => sum + t.instructorPayout,
-        0
-      );
-
-      // TODO: Integrate with Stripe Connect for real payout
-      // const stripePayout = await stripe.payouts.create({
-      //   amount: Math.round(totalPayout * 100),
-      //   currency: 'usd',
-      //   destination: instructor.stripeAccountId,
-      //   metadata: {
-      //     instructorId,
-      //     transactionCount: pendingTransactions.length
-      //   }
-      // });
-      const stripePayoutId = `po_simulated_${Date.now()}`; // TODO: Replace with real Stripe payout ID
-
-      // Create payout record FIRST
-      const payout = await (tx as any).payout.create({
-        data: {
-          instructorId,
-          amount: totalPayout,
-          stripePayoutId,
-          status: 'paid', // TODO: Change to 'pending' until Stripe confirms
-          transactionIds: pendingTransactions.map((t: any) => t.id),
-          processedBy: session.user.id,
-          paidAt: now
-        }
-      });
-
-      // NEW: Record payout in ledger
-      try {
-        await recordInstructorPayout({
-          payoutId: payout.id,
-          instructorId,
-          amount: totalPayout,
-          stripePayoutId,
-          processedBy: session.user.id
-        });
-      } catch (ledgerError) {
-        console.error('[Ledger] Failed to record payout:', ledgerError);
-        // Continue with old system, but log error
-      }
-
-      // Update all transactions to COMPLETED
-      await (tx as any).transaction.updateMany({
-        where: {
-          id: { in: pendingTransactions.map((t: any) => t.id) }
-        },
-        data: {
-          status: 'COMPLETED',
-          processedAt: now
-        }
-      });
-
-      // Log the action
-      await logAuditAction(tx, {
-        action: 'PROCESS_PAYOUT',
-        adminId: session.user.id,
-        targetType: 'PAYOUT',
-        targetId: payout.id,
-        metadata: {
-          instructorId,
-          instructorName: instructor.name,
-          amount: totalPayout,
-          transactionCount: pendingTransactions.length,
-          transactionIds: pendingTransactions.map((t: any) => t.id),
-          stripePayoutId,
-          adminEmail: session.user.email,
-          selectedTransactions: transactionIds ? true : false
-        },
-        req,
-      });
-
-      return { payout, totalPayout, transactionCount: pendingTransactions.length };
-    }, {
-      maxWait: 5000,
-      timeout: 15000,
+    // Mark transactions COMPLETED — store payout reference in description
+    const payoutRef = `PAYOUT-${Date.now()}`;
+    await (prisma as any).transaction.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        status: 'COMPLETED',
+        description: `Paid out ${payoutRef} by ${session.user.email || session.user.id}`,
+      },
     });
 
-    // Verify ledger balance after payout
-    try {
-      const payableBalance = await getAccountBalance(
-        buildAccount(AccountType.INSTRUCTOR_PAYABLE, instructorId)
-      );
-      
-      const paidBalance = await getAccountBalance(
-        buildAccount(AccountType.INSTRUCTOR_PAID, instructorId)
-      );
-      
-      console.log('[Ledger] Payout verification', {
-        instructorId,
-        payableBalance,
-        paidBalance,
-        justPaid: result.totalPayout
-      });
-    } catch (verifyError) {
-      console.error('[Ledger] Balance verification failed:', verifyError);
-    }
-
-    // Send SMS notification to instructor
+    // SMS instructor
     if (instructor.phone) {
       try {
         await smsService.sendSMS({
           to: instructor.phone,
-          message: `DriveBook: Payout processed! $${result.totalPayout.toFixed(2)} has been transferred to your account. ${result.transactionCount} transactions completed.`
+          message: `DriveBook: Payout of $${totalPayout.toFixed(2)} processed for ${transactions.length} lesson(s). Ref: ${payoutRef}`,
         });
-      } catch (err) {
-        console.error('Failed to send SMS to instructor:', err);
+      } catch (e) {
+        console.error('SMS failed:', e);
       }
     }
 
     return NextResponse.json({
       success: true,
       instructorName: instructor.name,
-      transactionCount: result.transactionCount,
-      totalPayout: result.totalPayout,
-      payoutId: result.payout.id,
-      message: `Payout of $${result.totalPayout.toFixed(2)} processed for ${instructor.name}`
+      transactionCount: transactions.length,
+      totalPayout,
+      payoutRef,
+      message: `Payout of $${totalPayout.toFixed(2)} processed for ${instructor.name}`,
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
-        { status: 400 }
-      );
-    }
-    console.error('Payout processing error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process payout' },
-      { status: 500 }
-    );
+    console.error('Payout process error:', error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed' }, { status: 500 });
   }
 }

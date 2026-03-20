@@ -99,7 +99,7 @@ export async function logAuditEvent(params: AuditLogParams): Promise<void> {
     console.log('🔍 AUDIT:', JSON.stringify(auditEntry, null, 2));
 
     // Store in database
-    await prisma.auditLog.create({
+    await (prisma as any).auditLog.create({
       data: auditEntry
     });
 
@@ -219,7 +219,7 @@ export async function getAuditTrail(
   limit: number = 100
 ): Promise<any[]> {
   try {
-    return await prisma.auditLog.findMany({
+    return await (prisma as any).auditLog.findMany({
       where: {
         targetType: resourceType,
         targetId: resourceId

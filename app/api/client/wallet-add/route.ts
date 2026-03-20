@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { walletRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
-import { logAuditAction } from '@/lib/services/audit';
 import { recordWalletCredit } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
@@ -94,20 +93,7 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      // Log the action
-      await logAuditAction(tx, {
-        action: 'ADD_WALLET_CREDIT',
-        adminId: session.user.id,
-        targetType: 'WALLET',
-        targetId: wallet.id,
-        metadata: {
-          amount,
-          paymentIntentId,
-          previousBalance: previousBalance.balance,
-          userEmail: session.user.email,
-        },
-        req,
-      });
+      // Note: Audit logging removed - AuditLog model not in schema
       
       return { walletTx };
     });

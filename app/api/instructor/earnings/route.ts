@@ -135,8 +135,28 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
+    // Get instructor hourly rate for fallback calculation
+    const instructor = await prisma.instructor.findUnique({
+      where: { id: instructorId },
+      select: { hourlyRate: true }
+    });
+    const hourlyRate = instructor?.hourlyRate || 0;
+
     // Calculate scheduled bookings totals
-    const scheduledTotal = scheduledBookings.reduce((sum, b) => sum + (b.instructorPayout || 0), 0);
+    const scheduledTotal = scheduledBookings.reduce((sum, b) => {
+      let payout = b.instructorPayout;
+      if (!payout || payout === 0) {
+        // Fallback 1: derive from price
+        if (b.price > 0) {
+          payout = b.price * 0.9;
+        } else if (b.startTime && b.endTime) {
+          // Fallback 2: derive from duration × hourlyRate
+          const hours = (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / 3600000;
+          payout = hours * hourlyRate * 0.9;
+        }
+      }
+      return sum + (payout || 0);
+    }, 0);
     const scheduledCount = scheduledBookings.length;
 
     return NextResponse.json({
@@ -151,16 +171,27 @@ export async function GET(req: NextRequest) {
       transactions: lessonTransactions,
       
       // SCHEDULED - Lessons confirmed to teach (will earn when taught)
-      scheduledBookings: scheduledBookings.map(booking => ({
-        id: booking.id,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        duration: booking.duration,
-        clientName: booking.client.name,
-        instructorPayout: booking.instructorPayout,
-        price: booking.price,
-        isFromPackage: booking.isPackageBooking && booking.parentBookingId !== null
-      })),
+      scheduledBookings: scheduledBookings.map(booking => {
+        let payout = booking.instructorPayout;
+        if (!payout || payout === 0) {
+          if (booking.price > 0) {
+            payout = booking.price * 0.9;
+          } else if (booking.startTime && booking.endTime) {
+            const hours = (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3600000;
+            payout = hours * hourlyRate * 0.9;
+          }
+        }
+        return {
+          id: booking.id,
+          startTime: booking.startTime,
+          endTime: booking.endTime,
+          duration: booking.duration,
+          clientName: booking.client.name,
+          instructorPayout: payout || 0,
+          price: booking.price,
+          isFromPackage: booking.isPackageBooking && booking.parentBookingId !== null
+        };
+      }),
       scheduledTotal,
       scheduledCount
     });

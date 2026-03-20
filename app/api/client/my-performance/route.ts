@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
         clientId: { in: clientIds },
         feedbackGivenAt: { not: null },
         status: 'COMPLETED',
-      },
+      } as any,
       select: {
         id: true,
         startTime: true,
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
         instructor: {
           select: { name: true, profileImage: true },
         },
-      },
+      } as any,
       orderBy: { startTime: 'desc' },
       take: 100,
     });

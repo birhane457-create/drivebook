@@ -5,71 +5,44 @@ import { useRouter } from 'next/navigation';
 import { Search, MapPin, Loader2 } from 'lucide-react';
 import CompactInstructorCard from './CompactInstructorCard';
 import { useBooking } from '@/lib/contexts/BookingContext';
-
-interface Instructor {
-  id: string;
-  name: string;
-  profileImage: string | null;
-  carImage: string | null;
-  carMake: string | null;
-  carModel: string | null;
-  carYear: number | null;
-  hourlyRate: number;
-  vehicleTypes: string[];
-  languages: string[];
-  averageRating: number | null;
-  totalReviews: number;
-  totalBookings: number;
-  bio: string | null;
-  distance: number;
-  offersTestPackage: boolean;
-  testPackagePrice: number | null;
-  testPackageDuration: number | null;
-  testPackageIncludes: string[];
-}
+import { useInstructorSearch } from '@/lib/hooks/useInstructorSearch';
 
 export default function LocationSearchBooking() {
   const router = useRouter();
   const { setInstructor } = useBooking();
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [searched, setSearched] = useState(false);
+
+  const { results: instructors, loading, error, geocodeFailed, search } = useInstructorSearch();
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!searchQuery.trim()) {
-      alert('Please enter a location');
-      return;
-    }
-
-    setLoading(true);
+    if (!searchQuery.trim()) { alert('Please enter a location'); return; }
     setSearched(true);
-
-    try {
-      const response = await fetch(`/api/instructors/search?location=${encodeURIComponent(searchQuery)}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setInstructors(data.instructors);
-      } else {
-        alert('Failed to search instructors');
-      }
-    } catch (error) {
-      console.error('Search error:', error);
-      alert('Failed to search instructors');
-    } finally {
-      setLoading(false);
-    }
+    await search(searchQuery, 'location');
   };
 
-  const handleSelectInstructor = (instructor: Instructor) => {
-    // Set instructor in booking context
+  const handleSelectInstructor = (instructor: any) => {
     setInstructor(instructor);
-    // Navigate to package selection page
     router.push(`/book/${instructor.id}/package`);
   };
+
+  // Shape results to match CompactInstructorCard's expected props
+  const cards = instructors.map(i => ({
+    ...i,
+    carImage: (i as any).carImage ?? null,
+    carMake: (i as any).carMake ?? null,
+    carModel: (i as any).carModel ?? null,
+    carYear: (i as any).carYear ?? null,
+    vehicleTypes: (i as any).vehicleTypes ?? ['Manual', 'Automatic'],
+    languages: (i as any).languages ?? ['English'],
+    totalBookings: (i as any).totalBookings ?? 0,
+    offersTestPackage: (i as any).offersTestPackage ?? false,
+    testPackagePrice: (i as any).testPackagePrice ?? null,
+    testPackageDuration: (i as any).testPackageDuration ?? null,
+    testPackageIncludes: (i as any).testPackageIncludes ?? [],
+    distance: i.distance ?? 0,
+  }));
 
   return (
     <div>
@@ -92,22 +65,11 @@ export default function LocationSearchBooking() {
               disabled={loading}
               className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Searching...
-                </>
-              ) : (
-                <>
-                  <Search className="h-5 w-5" />
-                  Search
-                </>
-              )}
+              {loading ? <><Loader2 className="h-5 w-5 animate-spin" />Searching...</> : <><Search className="h-5 w-5" />Search</>}
             </button>
           </div>
-          
           <p className="text-sm text-gray-500 mt-3">
-            Example: "6/226 Whatley Cr Maylands WA 6051", "Maylands WA", "6051"
+            Example: "Maylands WA", "6051", "226 Whatley Cr Maylands"
           </p>
         </form>
       </div>
@@ -118,29 +80,19 @@ export default function LocationSearchBooking() {
           {loading ? (
             <div className="text-center py-12">
               <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-              <p className="text-gray-600">Searching for instructors in your area...</p>
+              <p className="text-gray-600">Finding instructors near you...</p>
             </div>
+          ) : error ? (
+            <div className="text-center py-12 text-red-500">{error}</div>
           ) : instructors.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-lg shadow">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <MapPin className="h-8 w-8 text-gray-400" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                No instructors found in this area
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Try searching for a different location or nearby suburb
-              </p>
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSearched(false);
-                  setInstructors([]);
-                }}
-                className="text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Clear search
-              </button>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No instructors found in this area</h3>
+              <p className="text-gray-600 mb-4">Try a different suburb or postcode</p>
+              <button onClick={() => { setSearchQuery(''); setSearched(false); }}
+                className="text-blue-600 hover:text-blue-700 font-medium">Clear search</button>
             </div>
           ) : (
             <>
@@ -149,14 +101,15 @@ export default function LocationSearchBooking() {
                   {instructors.length} Instructor{instructors.length !== 1 ? 's' : ''} Found
                 </h2>
                 <p className="text-gray-600">
-                  Showing instructors who service: <span className="font-semibold">{searchQuery}</span>
+                  {geocodeFailed
+                    ? `Showing approximate matches for: ${searchQuery}`
+                    : `Instructors who service: ${searchQuery} · sorted by distance`}
                 </p>
               </div>
-
               <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {instructors.map((instructor) => (
-                  <CompactInstructorCard 
-                    key={instructor.id} 
+                {cards.map((instructor) => (
+                  <CompactInstructorCard
+                    key={instructor.id}
                     instructor={instructor}
                     onSelect={() => handleSelectInstructor(instructor)}
                   />

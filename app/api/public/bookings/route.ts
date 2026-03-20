@@ -189,6 +189,7 @@ export async function POST(req: NextRequest) {
         isFirstBooking: commission.isFirstBooking,
         notes: data.notes,
         createdBy: 'client',
+        originalStartTime: startTime,
         travelTimeMinutes: travelTime
       } as any // Type assertion for new payment fields
     })

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers'
+import { emailService } from '@/lib/services/email'
 import { z } from 'zod'
 
 
@@ -15,6 +16,7 @@ const updateSchema = z.object({
   startTime: z.string().optional(),
   endTime: z.string().optional(),
   pickupAddress: z.string().optional(),
+  dropoffAddress: z.string().optional(),
   price: z.number().optional(),
 })
 
@@ -188,23 +190,22 @@ export async function PATCH(
     })
 
     // Update Google Calendar event if exists and calendar is connected
-    if (updated.googleCalendarEventId && updated.instructor.syncGoogleCalendar) {
+    if ((updated as any).googleCalendarEventId && updated.instructor.syncGoogleCalendar) {
       try {
         await googleCalendarService.updateCalendarEvent(
           updated.instructorId,
-          updated.googleCalendarEventId,
+          (updated as any).googleCalendarEventId,
           {
-            startTime: updated.startTime,
-            endTime: updated.endTime,
-            clientName: updated.client.name,
-            clientPhone: updated.client.phone,
+            startTime: updated.startTime as Date,
+            endTime: updated.endTime as Date,
+            clientName: updated.client?.name || '',
+            clientPhone: updated.client?.phone || '',
             pickupAddress: updated.pickupAddress || undefined,
             notes: updated.notes || undefined
           }
         )
       } catch (calendarError) {
         console.error('Failed to update calendar event:', calendarError)
-        // Don't fail the booking update if calendar update fails
       }
     }
 
@@ -269,70 +270,153 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if user is admin or instructor
     const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
     const instructorId = session.user.instructorId
 
-    // Only admins and instructors can delete bookings
     if (!isAdmin && !instructorId) {
-      return NextResponse.json({ error: 'Unauthorized - must be admin or instructor' }, { status: 403 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    // Verify booking exists and user has permission
     const bookingWhere: any = { id: params.id }
-    if (!isAdmin) {
-      // Non-admins (instructors) can only delete their own bookings
-      bookingWhere.instructorId = instructorId
-    }
+    if (!isAdmin) bookingWhere.instructorId = instructorId
 
     const booking = await prisma.booking.findFirst({
       where: bookingWhere,
-      include: {
-        instructor: true
-      }
+      include: { instructor: { include: { user: true } }, client: true }
     })
 
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found or access denied' }, { status: 404 })
     }
 
-    // FIXED: Prevent deleting completed bookings (financial records)
     if (booking.status === 'COMPLETED') {
       return NextResponse.json(
-        { error: 'Cannot delete completed bookings. Use cancel instead.' },
+        { error: 'Cannot delete completed bookings. Financial records must be retained.' },
         { status: 403 }
       )
     }
 
-    // FIXED: Use soft delete (mark as cancelled) instead of hard delete
+    const now = new Date()
+
+    // Soft delete — data is NEVER hard deleted
     await prisma.booking.update({
       where: { id: params.id },
       data: {
         status: 'CANCELLED',
-        cancelledAt: new Date(),
-        cancelledBy: 'instructor'
+        deletedAt: now,
+        deletedBy: session.user.id,
       } as any
     })
 
-    // Delete Google Calendar event if exists and calendar is connected
-    if (booking.googleCalendarEventId && booking.instructor.syncGoogleCalendar) {
+    // Write immutable audit log entry with full booking snapshot
+    try {
+      await (prisma as any).auditLog.create({
+        data: {
+          action: 'BOOKING_DELETED',
+          actorId: session.user.id!,
+          actorRole: isAdmin ? 'ADMIN' : 'INSTRUCTOR',
+          targetType: 'BOOKING',
+          targetId: params.id,
+          ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
+          userAgent: req.headers.get('user-agent') || 'unknown',
+          metadata: {
+            // Full snapshot before deletion — court-ready evidence
+            bookingSnapshot: {
+              id: booking.id,
+              clientId: booking.clientId,
+              clientName: booking.client?.name,
+              instructorId: booking.instructorId,
+              instructorName: booking.instructor?.name,
+              startTime: booking.startTime,
+              endTime: booking.endTime,
+              price: booking.price,
+              status: booking.status,
+              isPaid: booking.isPaid,
+              createdAt: booking.createdAt,
+            },
+            deletedAt: now.toISOString(),
+            deletedBy: session.user.id,
+            deletedByRole: isAdmin ? 'ADMIN' : 'INSTRUCTOR',
+          }
+        }
+      })
+    } catch (auditError) {
+      console.error('Audit log failed for booking deletion:', auditError)
+    }
+
+    // Email client when booking is removed from list
+    if (booking.client?.email) {
+      const isPastBooking = booking.startTime && booking.startTime < now
+      const bookingDateStr = booking.startTime
+        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        : 'N/A'
+      const bookingTimeStr = booking.startTime
+        ? new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+        : 'N/A'
+      const cancelNote = isPastBooking
+        ? 'No refund applies — this lesson had already passed at the time of cancellation.'
+        : 'If a refund applies, it will be credited to your DriveBook wallet.'
+
       try {
-        await googleCalendarService.deleteCalendarEvent(
-          booking.instructorId,
-          booking.googleCalendarEventId
-        )
-      } catch (calendarError) {
-        console.error('Failed to delete calendar event:', calendarError)
-        // Don't fail the booking cancellation if calendar deletion fails
+        await emailService.sendGenericEmail({
+          to: booking.client.email,
+          subject: `Booking Cancelled — ${bookingDateStr}`,
+          html: `
+            <h2>Booking Cancelled</h2>
+            <p>Hi ${booking.client.name},</p>
+            <p>Your driving lesson with <strong>${booking.instructor?.name}</strong> has been cancelled.</p>
+            <table style="border-collapse:collapse;width:100%;margin:16px 0">
+              <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:600">Date</td>
+                  <td style="padding:8px;border:1px solid #e5e7eb">${bookingDateStr}</td></tr>
+              <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:600">Time</td>
+                  <td style="padding:8px;border:1px solid #e5e7eb">${bookingTimeStr}</td></tr>
+              <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:600">Reference</td>
+                  <td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace">${booking.id}</td></tr>
+            </table>
+            <p>${cancelNote}</p>
+            <p style="color:#6b7280;font-size:12px">If you believe this was an error, please contact support with your booking reference above.</p>
+          `
+        })
+      } catch (emailError) {
+        console.error('Failed to send deletion email to client:', emailError)
       }
     }
 
-    return NextResponse.json({ success: true, message: 'Booking cancelled' })
+    // In-app notification to client
+    try {
+      if (booking.client?.userId) {
+        const { notifyClientBookingCancelled } = await import('@/lib/services/notifications')
+        await notifyClientBookingCancelled(
+          booking.client.userId,
+          booking.instructor?.name || 'Your instructor',
+          params.id
+        )
+      }
+    } catch (notifError) {
+      console.error('Failed to send client notification:', notifError)
+    }
+
+    // Delete from Google Calendar if connected
+    if ((booking as any).googleCalendarEventId && booking.instructor?.syncGoogleCalendar) {
+      try {
+        await googleCalendarService.deleteCalendarEvent(
+          booking.instructorId,
+          (booking as any).googleCalendarEventId
+        )
+      } catch (calendarError) {
+        console.error('Failed to delete calendar event:', calendarError)
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Booking cancelled. Record retained for audit purposes.',
+      auditId: params.id
+    })
   } catch (error) {
     console.error('Delete booking error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

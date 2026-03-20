@@ -6,33 +6,28 @@ import { getToken } from 'next-auth/jwt'
 export async function middleware(req: NextRequest) {
   const hostname = req.headers.get('host') || ''
   const url = req.nextUrl.clone()
-  
-  // Skip middleware for public routes
-  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/api/auth']
-  const isPublicPath = publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path))
-  
-  if (isPublicPath && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
-    return NextResponse.next()
-  }
-  
-  // Extract subdomain
+
+  // Extract subdomain FIRST — before any public path short-circuits
   const subdomain = extractSubdomain(hostname)
-  
-  // If subdomain exists and not on a protected route, pass subdomain as header
-  // The actual routing will be handled by the page component
+
+  // If subdomain exists, rewrite to /subdomain/[slug] (skip API/_next/static)
   if (subdomain && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
-    // Check if this is an API route, static file, or already on a booking page
-    if (url.pathname.startsWith('/api') || url.pathname.startsWith('/_next') || url.pathname.startsWith('/static') || url.pathname.startsWith('/book')) {
-      return NextResponse.next()
-    }
-    
-    // If on root path, rewrite to subdomain handler page
-    if (url.pathname === '/' || url.pathname === '') {
-      url.pathname = '/subdomain'
+    if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/_next') && !url.pathname.startsWith('/static') && !url.pathname.startsWith('/booking') && !url.pathname.startsWith('/login') && !url.pathname.startsWith('/register')) {
+      const rest = url.pathname === '/' ? '' : url.pathname
+      url.pathname = `/subdomain/${subdomain}${rest}`
       const response = NextResponse.rewrite(url)
       response.headers.set('x-subdomain', subdomain)
       return response
     }
+    return NextResponse.next()
+  }
+
+  // Skip middleware for public routes (non-subdomain)
+  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/api/auth']
+  const isPublicPath = publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path))
+
+  if (isPublicPath && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
+    return NextResponse.next()
   }
   
   // For protected routes, check authentication

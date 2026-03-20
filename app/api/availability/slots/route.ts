@@ -48,7 +48,9 @@ export async function GET(req: NextRequest) {
     const travelTimeMinutes = (instructor as any).travelTimeMinutes || 10
 
     // Validate that requested duration is allowed by instructor
-    if (!allowedDurations.includes(duration)) {
+    // Skip this check when rescheduling (bypassDurationCheck=true) since we keep the same duration
+    const bypassDurationCheck = searchParams.get('bypassDurationCheck') === 'true'
+    if (!bypassDurationCheck && !allowedDurations.includes(duration)) {
       return NextResponse.json({ 
         slots: [], 
         message: `This instructor does not offer ${duration}-minute lessons. Available durations: ${allowedDurations.join(', ')} minutes` 
@@ -95,21 +97,23 @@ export async function GET(req: NextRequest) {
     // Get PDA tests for this day (if model exists)
     let pdaTests: any[] = []
     try {
-      pdaTests = await prisma.pDATest.findMany({
-        where: {
-          instructorId,
-          testDate: {
-            gte: startOfDay(selectedDate),
-            lte: endOfDay(selectedDate)
+      if ((prisma as any).pDATest) {
+        pdaTests = await (prisma as any).pDATest.findMany({
+          where: {
+            instructorId,
+            testDate: {
+              gte: startOfDay(selectedDate),
+              lte: endOfDay(selectedDate)
+            }
+          },
+          select: {
+            testDate: true,
+            testTime: true
           }
-        },
-        select: {
-          testDate: true,
-          testTime: true
-        }
-      })
+        })
+      }
     } catch (error) {
-      console.log('PDATest model not available or error fetching:', error)
+      // PDATest model not available, skip
     }
 
     // Get availability exceptions (if model exists)
@@ -210,17 +214,19 @@ export async function GET(req: NextRequest) {
         const slotEnd = addMinutes(currentTime, duration)
         const bufferEnd = addMinutes(slotEnd, totalBufferMinutes)
         
-        // Check if slot + buffer fits within working hours
-        if (bufferEnd > workEnd) {
+        // Check if the lesson itself fits within working hours
+        // Buffer can extend slightly past end of day (instructor can rest after last lesson)
+        if (slotEnd > workEnd) {
           break
         }
         
         // Check if slot conflicts with any blocked ranges
+        // Use slotEnd (not bufferEnd) as the lesson boundary for conflict detection
         const hasConflict = blockedRanges.some(blocked => 
-          // Check if there's any overlap between [currentTime, bufferEnd] and [blocked.start, blocked.end]
+          // Check if there's any overlap between [currentTime, slotEnd] and [blocked.start, blocked.end]
           (currentTime >= blocked.start && currentTime < blocked.end) ||
-          (bufferEnd > blocked.start && bufferEnd <= blocked.end) ||
-          (currentTime <= blocked.start && bufferEnd >= blocked.end)
+          (slotEnd > blocked.start && slotEnd <= blocked.end) ||
+          (currentTime <= blocked.start && slotEnd >= blocked.end)
         )
         
         if (!hasConflict) {

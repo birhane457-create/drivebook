@@ -1,6 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import {
+  CheckCircle, XCircle, AlertTriangle, MoreVertical,
+  Phone, Mail, MapPin, Star, Calendar, Users, ChevronDown, ChevronUp, X
+} from 'lucide-react';
 
 interface Instructor {
   id: string;
@@ -14,12 +19,13 @@ interface Instructor {
   insuranceNumber: string | null;
   insuranceExpiry: Date | null;
   documentsVerified: boolean;
-  createdAt: Date;
-  user: { email: string };
-  _count: {
-    bookings: number;
-    reviews: number;
-  };
+  hourlyRate: number;
+  serviceAreas: string | null;
+  baseAddress: string | null;
+  averageRating: number | null;
+  isActive: boolean;
+  user: { email: string } | null;
+  _count: { bookings: number; reviews?: number };
 }
 
 interface ComplianceStatus {
@@ -32,340 +38,296 @@ interface ComplianceStatus {
   wwcCheckExpiry: Date | null;
 }
 
-export default function InstructorApprovalList({ instructors }: { instructors: Instructor[] }) {
-  const [selectedInstructor, setSelectedInstructor] = useState<Instructor | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [complianceData, setComplianceData] = useState<Map<string, ComplianceStatus>>(new Map());
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    APPROVED: 'bg-green-100 text-green-800',
+    PENDING: 'bg-yellow-100 text-yellow-800',
+    REJECTED: 'bg-red-100 text-red-800',
+    SUSPENDED: 'bg-orange-100 text-orange-800',
+  };
+  return (
+    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${map[status] || 'bg-gray-100 text-gray-700'}`}>
+      {status}
+    </span>
+  );
+}
 
-  // Fetch compliance data
+function ComplianceDot({ status }: { status?: string }) {
+  if (!status) return <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />;
+  if (status === 'valid') return <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />;
+  if (status === 'expiring') return <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />;
+  return <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />;
+}
+
+function ReasonModal({ title, onConfirm, onClose }: {
+  title: string;
+  onConfirm: (reason: string) => void;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900">{title}</h3>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Enter reason (min 10 characters)..."
+          rows={3}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 resize-none"
+        />
+        <div className="flex gap-2 mt-4">
+          <button onClick={() => reason.length >= 10 && onConfirm(reason)}
+            disabled={reason.length < 10}
+            className="flex-1 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-40">
+            Confirm
+          </button>
+          <button onClick={onClose} className="flex-1 py-2 border border-gray-200 text-sm rounded-lg hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function InstructorApprovalList({ instructors }: { instructors: Instructor[] }) {
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [compliance, setCompliance] = useState<Map<string, ComplianceStatus>>(new Map());
+  const [loading, setLoading] = useState<string | null>(null);
+  const [modal, setModal] = useState<{ type: 'reject' | 'suspend'; id: string } | null>(null);
+  const [flash, setFlash] = useState('');
+
   useEffect(() => {
-    const fetchCompliance = async () => {
-      try {
-        const res = await fetch('/api/admin/documents/compliance');
-        if (res.ok) {
-          const data = await res.json();
-          const map = new Map<string, ComplianceStatus>();
-          data.forEach((item: ComplianceStatus) => {
-            map.set(item.instructorId, item);
-          });
-          setComplianceData(map);
-        }
-      } catch (error) {
-        console.error('Failed to fetch compliance data:', error);
-      }
-    };
-    fetchCompliance();
+    fetch('/api/admin/documents/compliance').then(r => r.ok ? r.json() : []).then((data: ComplianceStatus[]) => {
+      const map = new Map<string, ComplianceStatus>();
+      data.forEach(d => map.set(d.instructorId, d));
+      setCompliance(map);
+    }).catch(() => {});
   }, []);
 
-  const toggleRow = (instructorId: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(instructorId)) {
-      newExpanded.delete(instructorId);
-    } else {
-      newExpanded.add(instructorId);
-    }
-    setExpandedRows(newExpanded);
+  const showFlash = (msg: string) => { setFlash(msg); setTimeout(() => setFlash(''), 3000); };
+
+  const doApprove = async (id: string) => {
+    setLoading(id);
+    const res = await fetch(`/api/admin/instructors/${id}/approve`, { method: 'POST' });
+    setLoading(null);
+    if (res.ok) { showFlash('Instructor approved'); setTimeout(() => window.location.reload(), 800); }
+    else { const d = await res.json(); showFlash(d.error || 'Failed'); }
   };
 
-  const getComplianceIndicator = (instructorId: string) => {
-    const compliance = complianceData.get(instructorId);
-    if (!compliance) return { icon: '⚪', color: 'text-gray-400', label: 'Unknown' };
-    
-    if (compliance.status === 'valid') {
-      return { icon: '🟢', color: 'text-green-600', label: 'Valid' };
-    } else if (compliance.status === 'expiring') {
-      return { icon: '🟡', color: 'text-yellow-600', label: 'Expiring Soon' };
-    } else {
-      return { icon: '🔴', color: 'text-red-600', label: 'Expired/Missing' };
-    }
+  const doReject = async (id: string, reason: string) => {
+    setModal(null); setLoading(id);
+    const res = await fetch(`/api/admin/instructors/${id}/reject`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    setLoading(null);
+    if (res.ok) { showFlash('Instructor rejected'); setTimeout(() => window.location.reload(), 800); }
+    else { const d = await res.json(); showFlash(d.error || 'Failed'); }
   };
 
-  const formatDate = (date: Date | null) => {
-    if (!date) return 'Not set';
-    return new Date(date).toLocaleDateString();
+  const doSuspend = async (id: string, reason: string) => {
+    setModal(null); setLoading(id);
+    const res = await fetch(`/api/admin/instructors/${id}/suspend`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    setLoading(null);
+    if (res.ok) { showFlash('Instructor suspended'); setTimeout(() => window.location.reload(), 800); }
+    else { const d = await res.json(); showFlash(d.error || 'Failed'); }
   };
 
-  const filteredInstructors = instructors.filter(instructor => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      instructor.name.toLowerCase().includes(query) ||
-      instructor.user.email.toLowerCase().includes(query) ||
-      instructor.phone.toLowerCase().includes(query)
-    );
+  const doReactivate = async (id: string) => {
+    setLoading(id);
+    const res = await fetch(`/api/admin/instructors/${id}/approve`, { method: 'POST' });
+    setLoading(null);
+    if (res.ok) { showFlash('Instructor reactivated'); setTimeout(() => window.location.reload(), 800); }
+  };
+
+  const filtered = instructors.filter(i => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return i.name.toLowerCase().includes(q) ||
+      (i.user?.email || '').toLowerCase().includes(q) ||
+      (i.phone || '').includes(q) ||
+      (i.serviceAreas || '').toLowerCase().includes(q);
   });
 
-  const handleApprove = async (instructorId: string) => {
-    if (!confirm('Are you sure you want to approve this instructor?')) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/instructors/${instructorId}/approve`, {
-        method: 'POST',
-      });
-
-      if (res.ok) {
-        alert('Instructor approved successfully!');
-        window.location.reload();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to approve instructor');
-      }
-    } catch (error) {
-      alert('An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReject = async (instructorId: string) => {
-    const reason = prompt('Please provide a reason for rejection:');
-    if (!reason) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/instructors/${instructorId}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      });
-
-      if (res.ok) {
-        alert('Instructor rejected');
-        window.location.reload();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to reject instructor');
-      }
-    } catch (error) {
-      alert('An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSuspend = async (instructorId: string) => {
-    const reason = prompt('Please provide a reason for suspension:');
-    if (!reason) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/instructors/${instructorId}/suspend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      });
-
-      if (res.ok) {
-        alert('Instructor suspended');
-        window.location.reload();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to suspend instructor');
-      }
-    } catch (error) {
-      alert('An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
-      {/* Search Bar */}
-      <div className="p-4 sm:p-6 border-b border-gray-200">
-        <input
-          type="text"
-          placeholder="Search by name, email, or phone..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-      </div>
-
-      {/* Responsive Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8"></th>
-              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
-              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">License</th>
-              <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Insurance</th>
-              <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Police</th>
-              <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">WWC</th>
-              <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stats</th>
-              <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {filteredInstructors.map((instructor) => {
-            const isExpanded = expandedRows.has(instructor.id);
-            const compliance = complianceData.get(instructor.id);
-            const indicator = getComplianceIndicator(instructor.id);
-            
-            return (
-              <React.Fragment key={instructor.id}>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-2 sm:px-4 py-3">
-                    <button
-                      onClick={() => toggleRow(instructor.id)}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      {isExpanded ? '▼' : '▶'}
-                    </button>
-                  </td>
-                  <td className="px-2 sm:px-4 py-3">
-                    <div className="flex items-center">
-                      {instructor.profileImage ? (
-                        <img
-                          src={instructor.profileImage}
-                          alt={instructor.name}
-                          className="h-8 w-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-gray-500 text-xs font-medium">
-                            {instructor.name.charAt(0)}
-                          </span>
-                        </div>
-                      )}
-                      <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900">{instructor.name}</div>
-                        <div className="text-xs text-gray-500">{instructor.user?.email || instructor.email || 'No email'}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        instructor.approvalStatus === 'APPROVED'
-                          ? 'bg-green-100 text-green-800'
-                          : instructor.approvalStatus === 'PENDING'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : instructor.approvalStatus === 'REJECTED'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {instructor.approvalStatus}
-                    </span>
-                  </td>
-                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-center">
-                    <div className="text-lg">{indicator.icon}</div>
-                    <div className="text-xs text-gray-500">{formatDate(compliance?.licenseExpiry || null)}</div>
-                  </td>
-                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-center">
-                    <div className="text-lg">{indicator.icon}</div>
-                    <div className="text-xs text-gray-500">{formatDate(compliance?.insuranceExpiry || null)}</div>
-                  </td>
-                  <td className="hidden md:table-cell px-4 py-3 whitespace-nowrap text-center">
-                    <div className="text-lg">{indicator.icon}</div>
-                    <div className="text-xs text-gray-500">{formatDate(compliance?.policeCheckExpiry || null)}</div>
-                  </td>
-                  <td className="hidden md:table-cell px-4 py-3 whitespace-nowrap text-center">
-                    <div className="text-lg">{indicator.icon}</div>
-                    <div className="text-xs text-gray-500">{formatDate(compliance?.wwcCheckExpiry || null)}</div>
-                  </td>
-                  <td className="hidden lg:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                    <div>{instructor._count.bookings} bookings</div>
-                  </td>
-                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap">
-                    <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
-                      <button
-                        onClick={() => window.location.href = `/admin/instructors/${instructor.id}`}
-                        className="text-xs sm:text-sm text-blue-600 hover:text-blue-900"
-                      >
-                        View Profile
-                      </button>
-                      {instructor.approvalStatus === 'PENDING' && (
-                        <>
-                          <button
-                            onClick={() => handleApprove(instructor.id)}
-                            disabled={loading}
-                            className="text-xs sm:text-sm text-green-600 hover:text-green-900 disabled:opacity-50"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => handleReject(instructor.id)}
-                            disabled={loading}
-                            className="text-xs sm:text-sm text-red-600 hover:text-red-900 disabled:opacity-50"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
-                      {instructor.approvalStatus === 'APPROVED' && (
-                        <button
-                          onClick={() => handleSuspend(instructor.id)}
-                          disabled={loading}
-                          className="text-xs sm:text-sm text-orange-600 hover:text-orange-900 disabled:opacity-50"
-                        >
-                          Suspend
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                {isExpanded && (
-                  <tr className="bg-gray-50">
-                    <td colSpan={9} className="px-2 sm:px-4 py-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 text-sm">
-                        <div>
-                          <p className="font-semibold text-gray-700 mb-2">Contact</p>
-                          <p className="text-gray-600">Phone: {instructor.phone}</p>
-                          <p className="text-gray-600">Email: {instructor.user?.email || instructor.email || 'No email'}</p>
-                          <p className="text-gray-600">Joined: {new Date(instructor.createdAt).toLocaleDateString()}</p>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-700 mb-2">Documents</p>
-                          <p className="text-gray-600">License: {instructor.licenseNumber || 'Not provided'}</p>
-                          <p className="text-gray-600">Insurance: {instructor.insuranceNumber || 'Not provided'}</p>
-                          <p className="text-gray-600">
-                            Status: {instructor.documentsVerified ? '✓ Verified' : 'Not verified'}
-                          </p>
-                        </div>
-                        <div className="sm:col-span-2 lg:col-span-1">
-                          <p className="font-semibold text-gray-700 mb-2">Statistics</p>
-                          <p className="text-gray-600">Bookings: {instructor._count.bookings}</p>
-                          <p className="text-gray-600">Reviews: {instructor._count.reviews}</p>
-                        </div>
-                        {compliance && compliance.issues.length > 0 && (
-                          <div className="col-span-1 sm:col-span-2 lg:col-span-3">
-                            <p className="font-semibold text-gray-700 mb-2">Compliance Issues</p>
-                            <ul className="list-disc list-inside text-red-600 text-sm">
-                              {compliance.issues.map((issue, idx) => (
-                                <li key={idx}>{issue}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {instructor.bio && (
-                          <div className="col-span-1 sm:col-span-2 lg:col-span-3">
-                            <p className="font-semibold text-gray-700 mb-2">Bio</p>
-                            <p className="text-gray-600">{instructor.bio}</p>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </tbody>
-      </table>
-
-      {filteredInstructors.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No instructors found</p>
+    <div className="space-y-3">
+      {/* Flash */}
+      {flash && (
+        <div className="fixed top-4 right-4 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
+          {flash}
         </div>
       )}
-      </div>
+
+      {/* Modals */}
+      {modal?.type === 'reject' && (
+        <ReasonModal title="Reason for Rejection" onConfirm={r => doReject(modal.id, r)} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'suspend' && (
+        <ReasonModal title="Reason for Suspension" onConfirm={r => doSuspend(modal.id, r)} onClose={() => setModal(null)} />
+      )}
+
+      {/* Search */}
+      <input value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="Search by name, email, suburb..."
+        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500" />
+
+      {filtered.length === 0 && (
+        <div className="text-center py-16 text-gray-400 text-sm">No instructors found</div>
+      )}
+
+      {filtered.map(instructor => {
+        const comp = compliance.get(instructor.id);
+        const isExpanded = expanded.has(instructor.id);
+        const email = instructor.user?.email || null;
+        const joined = '—';
+        const rating = instructor.averageRating ? instructor.averageRating.toFixed(1) : null;
+
+        return (
+          <div key={instructor.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Main row */}
+            <div className="flex items-center gap-3 px-4 py-3">
+              {/* Avatar */}
+              <div className="shrink-0">
+                {instructor.profileImage
+                  ? <img src={instructor.profileImage} alt={instructor.name} className="w-10 h-10 rounded-full object-cover" />
+                  : <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+                      {instructor.name.charAt(0)}
+                    </div>
+                }
+              </div>
+
+              {/* Name + meta */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-gray-900 text-sm">{instructor.name}</span>
+                  <StatusBadge status={instructor.approvalStatus} />
+                  <ComplianceDot status={comp?.status} />
+                </div>
+                <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
+                  {email
+                    ? <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{email}</span>
+                    : <span className="text-orange-400">No email linked</span>
+                  }
+                  {instructor.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{instructor.phone}</span>}
+                  {instructor.serviceAreas && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{instructor.serviceAreas.split(',')[0].trim()}</span>}
+                </div>
+              </div>
+
+              {/* Stats chips */}
+              <div className="hidden sm:flex items-center gap-3 text-xs text-gray-500 shrink-0">
+                <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{instructor._count.bookings}</span>
+                {rating && <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-yellow-400" />{rating}</span>}
+                <span className="font-semibold text-gray-700">${instructor.hourlyRate}/hr</span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                {instructor.approvalStatus === 'PENDING' && (
+                  <>
+                    <button onClick={() => doApprove(instructor.id)} disabled={loading === instructor.id}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-40">
+                      <CheckCircle className="w-3.5 h-3.5" />Approve
+                    </button>
+                    <button onClick={() => setModal({ type: 'reject', id: instructor.id })}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 text-red-600 text-xs rounded-lg hover:bg-red-100 border border-red-200">
+                      <XCircle className="w-3.5 h-3.5" />Reject
+                    </button>
+                  </>
+                )}
+                {instructor.approvalStatus === 'APPROVED' && (
+                  <button onClick={() => setModal({ type: 'suspend', id: instructor.id })}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 text-xs rounded-lg hover:bg-orange-100 border border-orange-200">
+                    <AlertTriangle className="w-3.5 h-3.5" />Suspend
+                  </button>
+                )}
+                {(instructor.approvalStatus === 'SUSPENDED' || instructor.approvalStatus === 'REJECTED') && (
+                  <button onClick={() => doReactivate(instructor.id)} disabled={loading === instructor.id}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-600 text-xs rounded-lg hover:bg-blue-100 border border-blue-200">
+                    <CheckCircle className="w-3.5 h-3.5" />Reactivate
+                  </button>
+                )}
+                <Link href={`/admin/instructors/${instructor.id}`}
+                  className="px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200">
+                  Profile
+                </Link>
+                <Link href={`/admin/documents/review/${instructor.id}`}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-purple-600 hover:bg-purple-50 rounded-lg border border-purple-200">
+                  Docs
+                </Link>
+                <button onClick={() => setExpanded(prev => {
+                  const s = new Set(prev);
+                  s.has(instructor.id) ? s.delete(instructor.id) : s.add(instructor.id);
+                  return s;
+                })} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                  {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Expanded detail */}
+            {isExpanded && (
+              <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide mb-1">Contact</p>
+                  <p className="text-gray-700">{email || <span className="text-orange-400">No email</span>}</p>
+                  <p className="text-gray-700">{instructor.phone || '—'}</p>
+                  <p className="text-gray-500">Joined {joined}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide mb-1">Documents</p>
+                  <p className="text-gray-700">License: {instructor.licenseNumber || 'Not provided'}</p>
+                  <p className="text-gray-700">Insurance: {instructor.insuranceNumber || 'Not provided'}</p>
+                  <p className={instructor.documentsVerified ? 'text-green-600' : 'text-orange-500'}>
+                    {instructor.documentsVerified ? '✓ Verified' : 'Not verified'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide mb-1">Compliance</p>
+                  {comp ? (
+                    <>
+                      <p>License: {comp.licenseExpiry ? new Date(comp.licenseExpiry).toLocaleDateString('en-AU') : '—'}</p>
+                      <p>Insurance: {comp.insuranceExpiry ? new Date(comp.insuranceExpiry).toLocaleDateString('en-AU') : '—'}</p>
+                      <p>Police: {comp.policeCheckExpiry ? new Date(comp.policeCheckExpiry).toLocaleDateString('en-AU') : '—'}</p>
+                      <p>WWC: {comp.wwcCheckExpiry ? new Date(comp.wwcCheckExpiry).toLocaleDateString('en-AU') : '—'}</p>
+                    </>
+                  ) : <p className="text-gray-400">No data</p>}
+                </div>
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide mb-1">Stats</p>
+                  <p>{instructor._count.bookings} bookings</p>
+                  <p>{instructor._count.reviews} reviews</p>
+                  {rating && <p>⭐ {rating} avg</p>}
+                  <p>${instructor.hourlyRate}/hr</p>
+                  {instructor.serviceAreas && <p className="text-gray-500 truncate">{instructor.serviceAreas}</p>}
+                </div>
+                {comp && comp.issues.length > 0 && (
+                  <div className="col-span-2 sm:col-span-4">
+                    <p className="text-red-600 font-medium mb-1">Compliance Issues</p>
+                    <ul className="list-disc list-inside text-red-500 space-y-0.5">
+                      {comp.issues.map((issue, i) => <li key={i}>{issue}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {instructor.bio && (
+                  <div className="col-span-2 sm:col-span-4">
+                    <p className="text-gray-400 uppercase tracking-wide mb-1">Bio</p>
+                    <p className="text-gray-600 line-clamp-3">{instructor.bio}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

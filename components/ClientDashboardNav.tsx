@@ -16,11 +16,13 @@ import {
   Menu,
   X
 } from 'lucide-react'
+import { useBookLessonHref } from '@/lib/hooks/useBookLessonHref'
 
 export default function ClientDashboardNav() {
   const pathname = usePathname()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const bookLessonHref = useBookLessonHref()
 
   const navItems = [
     { href: '/client-dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -67,7 +69,7 @@ export default function ClientDashboardNav() {
           </div>
           <div className="flex items-center space-x-4">
             <Link
-              href="/client-dashboard/book-lesson"
+              href={bookLessonHref}
               className="hidden sm:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
             >
               <BookOpen className="w-4 h-4 mr-2" />
@@ -122,7 +124,7 @@ export default function ClientDashboardNav() {
               )
             })}
             <Link
-              href="/client-dashboard/book-lesson"
+              href={bookLessonHref}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center px-3 py-2 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
             >

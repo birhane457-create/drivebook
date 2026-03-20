@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
+import { notifyBookingRescheduled, notifyClientBookingRescheduled } from '@/lib/services/notifications';
+import { getNotifChannels } from '@/lib/config/platform-settings';
 
 
 export const dynamic = 'force-dynamic';
@@ -199,6 +201,27 @@ export async function PUT(
       priceDifference,
       newPrice,
     });
+
+    // Notifications
+    try {
+      const reschedChannels = getNotifChannels('BOOKING_RESCHEDULED');
+      if (reschedChannels.inApp) {
+        if (booking.instructor?.userId) {
+          await notifyBookingRescheduled(
+            booking.instructor.userId,
+            booking.client?.name || booking.clientName || 'Client',
+            bookingId,
+            newStartTime
+          );
+        }
+        await notifyClientBookingRescheduled(
+          user.id,
+          booking.instructor.name,
+          bookingId,
+          newStartTime
+        );
+      }
+    } catch (e) { console.error('Reschedule notification failed:', e); }
 
     return NextResponse.json({
       success: true,

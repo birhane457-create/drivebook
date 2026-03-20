@@ -1,19 +1,25 @@
-import React, { useState } from 'react';
-import { CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import React, { useState, useEffect } from 'react';
+import { CardNumberElement, CardExpiryElement, CardCvcElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { Loader2, X } from 'lucide-react';
 
 interface AddCreditsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialAmount?: string;
 }
 
-export default function AddCreditsModal({ isOpen, onClose, onSuccess }: AddCreditsModalProps) {
+export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmount }: AddCreditsModalProps) {
   const stripe = useStripe();
   const elements = useElements();
-  const [amount, setAmount] = useState('100');
+  const [amount, setAmount] = useState(initialAmount ?? '100');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Sync if initialAmount changes (e.g. opened from payment link)
+  useEffect(() => {
+    if (initialAmount) setAmount(initialAmount);
+  }, [initialAmount]);
 
   const presets = [50, 100, 200, 500];
 
@@ -32,34 +38,40 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess }: AddCredi
         return;
       }
 
-      // Call Stripe payment endpoint similar to booking
-      const response = await fetch('/api/create-payment-intent', {
+      // Step 1: Create Stripe payment intent for wallet top-up
+      const intentRes = await fetch('/api/client/wallet-topup-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: numAmount * 100,
-          description: `Add ${numAmount} credits to wallet`,
-          type: 'wallet-credit'
-        })
+        body: JSON.stringify({ amount: numAmount }),
       });
 
-      const { clientSecret } = await response.json();
+      if (!intentRes.ok) {
+        const { error } = await intentRes.json();
+        setError(error || 'Failed to initialise payment');
+        setLoading(false);
+        return;
+      }
 
-      // Confirm payment
+      const { clientSecret } = await intentRes.json();
+
+      // Step 2: Confirm card payment with Stripe
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
-          card: elements.getElement(CardElement)!,
-        }
+          card: elements.getElement(CardNumberElement)!,
+        },
       });
 
       if (result.error) {
         setError(result.error.message || 'Payment failed');
       } else if (result.paymentIntent?.status === 'succeeded') {
-        // Add credits to wallet
+        // Step 3: Credit the wallet, passing the confirmed paymentIntentId
         await fetch('/api/client/wallet-add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: numAmount })
+          body: JSON.stringify({
+            amount: numAmount,
+            paymentIntentId: result.paymentIntent.id,
+          }),
         });
 
         onSuccess();
@@ -131,27 +143,81 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess }: AddCredi
           </div>
 
           {/* Card Details */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Card Details
-            </label>
-            <div className="p-3 border border-gray-300 rounded-lg">
-              <CardElement
-                options={{
-                  style: {
-                    base: {
-                      fontSize: '16px',
-                      color: '#424770',
-                      '::placeholder': {
-                        color: '#aab7c4',
+          <div className="space-y-4">
+            {/* Card Number */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Card Number
+              </label>
+              <div className="p-3 border border-gray-300 rounded-lg">
+                <CardNumberElement
+                  options={{
+                    style: {
+                      base: {
+                        fontSize: '16px',
+                        color: '#424770',
+                        '::placeholder': {
+                          color: '#aab7c4',
+                        },
+                      },
+                      invalid: {
+                        color: '#9e2146',
                       },
                     },
-                    invalid: {
-                      color: '#9e2146',
-                    },
-                  },
-                }}
-              />
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Expiry and CVC */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Expiry Date
+                </label>
+                <div className="p-3 border border-gray-300 rounded-lg">
+                  <CardExpiryElement
+                    options={{
+                      style: {
+                        base: {
+                          fontSize: '16px',
+                          color: '#424770',
+                          '::placeholder': {
+                            color: '#aab7c4',
+                          },
+                        },
+                        invalid: {
+                          color: '#9e2146',
+                        },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  CVC
+                </label>
+                <div className="p-3 border border-gray-300 rounded-lg">
+                  <CardCvcElement
+                    options={{
+                      style: {
+                        base: {
+                          fontSize: '16px',
+                          color: '#424770',
+                          '::placeholder': {
+                            color: '#aab7c4',
+                          },
+                        },
+                        invalid: {
+                          color: '#9e2146',
+                        },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 

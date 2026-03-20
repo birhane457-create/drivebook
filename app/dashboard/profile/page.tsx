@@ -31,6 +31,10 @@ export default function ProfilePage() {
     licenseNumber: '',
     insuranceNumber: '',
     languages: [] as string[],
+    whatsapp: '',
+    instagram: '',
+    facebook: '',
+    yearsExperience: '',
   })
 
   useEffect(() => {
@@ -67,6 +71,10 @@ export default function ProfilePage() {
           licenseNumber: data.licenseNumber || '',
           insuranceNumber: data.insuranceNumber || '',
           languages: languagesArray,
+          whatsapp: data.whatsapp || '',
+          instagram: data.instagram || '',
+          facebook: data.facebook || '',
+          yearsExperience: data.yearsExperience || '',
         })
         setProfileImage(data.profileImage || '')
         setCarImage(data.carImage || '')
@@ -129,6 +137,10 @@ export default function ProfilePage() {
           profileImage,
           carImage,
           carYear: formData.carYear ? parseInt(formData.carYear) : null,
+          yearsExperience: formData.yearsExperience ? parseInt(formData.yearsExperience) : null,
+          whatsapp: formData.whatsapp || null,
+          instagram: formData.instagram || null,
+          facebook: formData.facebook || null,
         }),
       })
 
@@ -499,6 +511,59 @@ export default function ProfilePage() {
               {serviceAreas.length === 0 && (
                 <p className="text-gray-500 text-sm">No service areas added yet</p>
               )}
+            </div>
+          </div>
+
+          {/* Social Links & Public Profile */}
+          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-1">Social Links</h2>
+            <p className="text-sm text-gray-500 mb-4">These appear on your public booking page</p>
+            <div className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Years of Experience</label>
+                  <input
+                    type="number"
+                    value={formData.yearsExperience}
+                    onChange={(e) => setFormData({ ...formData, yearsExperience: e.target.value })}
+                    placeholder="e.g. 5"
+                    min="0"
+                    max="50"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">WhatsApp Number</label>
+                <input
+                  type="text"
+                  value={formData.whatsapp}
+                  onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                  placeholder="e.g. 61412345678"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                />
+                <p className="text-xs text-gray-500 mt-1">Include country code, no spaces (e.g. 61412345678)</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Instagram Handle</label>
+                <input
+                  type="text"
+                  value={formData.instagram}
+                  onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                  placeholder="e.g. yourhandle (without @)"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Facebook Page URL or Username</label>
+                <input
+                  type="text"
+                  value={formData.facebook}
+                  onChange={(e) => setFormData({ ...formData, facebook: e.target.value })}
+                  placeholder="e.g. yourpage or https://facebook.com/yourpage"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
             </div>
           </div>
 

@@ -8,152 +8,203 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
     if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get all transactions
-    const transactions = await (prisma as any).transaction.findMany({
-      include: {
-        booking: {
-          select: {
-            instructor: {
-              select: {
-                id: true,
-                name: true,
-              }
-            },
-            client: {
-              select: {
-                name: true,
-              }
-            }
-          }
-        }
+    const { searchParams } = new URL(req.url);
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+
+    const now = new Date();
+    const from = fromParam ? new Date(fromParam) : new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const to = toParam ? new Date(toParam) : now;
+    // Ensure 'to' covers the full day
+    to.setHours(23, 59, 59, 999);
+
+    const dateFilter = { gte: from, lte: to };
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+    /**
+     * COMMISSION = platformFee on BOOKING_PAYMENT transactions with status COMPLETED.
+     * Bookings stay CONFIRMED after payment (not marked COMPLETED separately),
+     * so we filter on transaction status only — not booking status.
+     * This excludes wallet top-ups (no bookingId / different type) and PENDING/REFUNDED/CANCELLED txns.
+     */
+    const commissionWhere = {
+      type: 'BOOKING_PAYMENT',
+      status: 'COMPLETED',
+      createdAt: dateFilter,
+    };
+
+    const commissionWhereAllTime = {
+      type: 'BOOKING_PAYMENT',
+      status: 'COMPLETED',
+    };
+
+    const commissionWhereThisMonth = { ...commissionWhereAllTime, createdAt: { gte: startOfMonth, lte: now } };
+    const commissionWhereLastMonth = { ...commissionWhereAllTime, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } };
+
+    const [
+      commissionAgg,          // filtered range — for stats cards
+      commissionAllTime,      // all time totals
+      commissionThisMonth,
+      commissionLastMonth,
+      pendingAgg,
+      completedPayoutsAgg,
+      refundedAgg,
+      totalCompletedLessons,
+      pendingRefundCount,
+    ] = await Promise.all([
+      (prisma as any).transaction.aggregate({ where: commissionWhere, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
+      (prisma as any).transaction.aggregate({ where: commissionWhereAllTime, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
+      (prisma as any).transaction.aggregate({ where: commissionWhereThisMonth, _sum: { platformFee: true, amount: true } }),
+      (prisma as any).transaction.aggregate({ where: commissionWhereLastMonth, _sum: { platformFee: true, amount: true } }),
+      (prisma as any).transaction.aggregate({ where: { status: 'PENDING', type: 'BOOKING_PAYMENT' }, _sum: { instructorPayout: true } }),
+      (prisma as any).transaction.aggregate({ where: { status: 'COMPLETED', type: 'BOOKING_PAYMENT' }, _sum: { instructorPayout: true } }),
+      (prisma as any).transaction.aggregate({ where: { status: 'REFUNDED', createdAt: dateFilter }, _sum: { amount: true }, _count: { id: true } }),
+      (prisma as any).transaction.count({ where: commissionWhere }),
+      (prisma as any).transaction.count({ where: { status: 'PENDING', type: 'REFUND' } }),
+    ]);
+
+    // --- Top instructors by payout (within date range) ---
+    // MongoDB doesn't support groupBy with nested relation filters, so fetch and aggregate in JS
+    const eligibleTxns = await (prisma as any).transaction.findMany({
+      where: commissionWhere,
+      select: {
+        instructorId: true,
+        instructorPayout: true,
+        platformFee: true,
+        amount: true,
       },
-      orderBy: { createdAt: 'desc' }
     });
 
-    // Calculate total platform revenue (all platform fees)
-    const totalRevenue = transactions
-      .filter((t: any) => t.status === 'COMPLETED')
-      .reduce((sum: number, t: any) => sum + t.platformFee, 0);
+    const instrAgg = new Map<string, { payout: number; fee: number; gross: number; count: number }>();
+    for (const t of eligibleTxns) {
+      if (!t.instructorId) continue;
+      const e = instrAgg.get(t.instructorId) || { payout: 0, fee: 0, gross: 0, count: 0 };
+      e.payout += t.instructorPayout || 0;
+      e.fee += t.platformFee || 0;
+      e.gross += t.amount || 0;
+      e.count += 1;
+      instrAgg.set(t.instructorId, e);
+    }
 
-    // Calculate this month and last month revenue
-    const now = new Date();
-    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const instructorIds = Array.from(instrAgg.keys());
+    const instructors = await prisma.instructor.findMany({
+      where: { id: { in: instructorIds } },
+      select: { id: true, name: true },
+    });
+    const instrMap = new Map(instructors.map(i => [i.id, i.name]));
 
-    const thisMonthRevenue = transactions
-      .filter((t: any) => 
-        t.status === 'COMPLETED' && 
-        new Date(t.createdAt) >= startOfThisMonth
-      )
-      .reduce((sum: number, t: any) => sum + t.platformFee, 0);
-
-    const lastMonthRevenue = transactions
-      .filter((t: any) => 
-        t.status === 'COMPLETED' && 
-        new Date(t.createdAt) >= startOfLastMonth &&
-        new Date(t.createdAt) <= endOfLastMonth
-      )
-      .reduce((sum: number, t: any) => sum + t.platformFee, 0);
-
-    // Calculate pending and completed payouts
-    const pendingPayouts = transactions
-      .filter((t: any) => t.status === 'PENDING')
-      .reduce((sum: number, t: any) => sum + t.instructorPayout, 0);
-
-    const completedPayouts = transactions
-      .filter((t: any) => t.status === 'COMPLETED')
-      .reduce((sum: number, t: any) => sum + t.instructorPayout, 0);
-
-    // Calculate refund statistics
-    const totalRefunds = transactions
-      .filter((t: any) => t.status === 'REFUNDED')
-      .reduce((sum: number, t: any) => sum + t.amount, 0);
-
-    const pendingRefunds = transactions
-      .filter((t: any) => t.status === 'PENDING' && t.type === 'REFUND')
-      .length;
-
-    // Get top earning instructors
-    const instructorEarnings = new Map<string, { name: string; earnings: number; count: number }>();
-    
-    transactions
-      .filter((t: any) => t.status === 'COMPLETED' && t.booking?.instructor)
-      .forEach((t: any) => {
-        const existing = instructorEarnings.get(t.instructorId) || { 
-          name: t.booking.instructor.name, 
-          earnings: 0, 
-          count: 0 
-        };
-        existing.earnings += t.instructorPayout;
-        existing.count += 1;
-        instructorEarnings.set(t.instructorId, existing);
-      });
-
-    const topInstructors = Array.from(instructorEarnings.entries())
-      .map(([id, data]) => ({
+    const topInstructors = Array.from(instrAgg.entries())
+      .map(([id, e]) => ({
         id,
-        name: data.name,
-        totalEarnings: data.earnings,
-        transactionCount: data.count,
+        name: instrMap.get(id) || 'Unknown',
+        totalEarnings: e.payout,
+        platformFee: e.fee,
+        grossAmount: e.gross,
+        transactionCount: e.count,
       }))
       .sort((a, b) => b.totalEarnings - a.totalEarnings)
       .slice(0, 10);
 
-    // Revenue by month (last 6 months)
+    // --- Revenue by month (last 6 months, always fixed range for chart) ---
     const revenueByMonth = [];
     for (let i = 5; i >= 0; i--) {
-      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-      
-      const monthRevenue = transactions
-        .filter((t: any) => 
-          t.status === 'COMPLETED' &&
-          new Date(t.createdAt) >= monthStart &&
-          new Date(t.createdAt) <= monthEnd
-        )
-        .reduce((sum: number, t: any) => sum + t.platformFee, 0);
-
-      const monthTransactions = transactions
-        .filter((t: any) => 
-          t.status === 'COMPLETED' &&
-          new Date(t.createdAt) >= monthStart &&
-          new Date(t.createdAt) <= monthEnd
-        ).length;
-
+      const mStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
+      const agg = await (prisma as any).transaction.aggregate({
+        where: { type: 'BOOKING_PAYMENT', status: 'COMPLETED', createdAt: { gte: mStart, lte: mEnd } },
+        _sum: { platformFee: true, amount: true, instructorPayout: true },
+        _count: { id: true },
+      });
       revenueByMonth.push({
-        month: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        revenue: monthRevenue,
-        transactions: monthTransactions,
+        month: mStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' }),
+        commission: agg._sum.platformFee || 0,
+        gross: agg._sum.amount || 0,
+        instructorPayout: agg._sum.instructorPayout || 0,
+        transactions: agg._count?.id || 0,
       });
     }
 
-    // Recent transactions (last 20)
-    const recentTransactions = transactions.slice(0, 20);
+    // --- Recent transactions (filtered range, BOOKING_PAYMENT only) ---
+    const recentTransactions = await (prisma as any).transaction.findMany({
+      where: { type: 'BOOKING_PAYMENT', createdAt: dateFilter },
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        booking: {
+          select: {
+            clientName: true, startTime: true, status: true,
+            instructor: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    // --- Refunded transactions (filtered range) ---
+    const refundedTransactions = await (prisma as any).transaction.findMany({
+      where: { status: 'REFUNDED', createdAt: dateFilter },
+      take: 50,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        booking: {
+          select: {
+            clientName: true, startTime: true,
+            instructor: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const thisMonthCommission = commissionThisMonth._sum.platformFee || 0;
+    const lastMonthCommission = commissionLastMonth._sum.platformFee || 0;
 
     return NextResponse.json({
-      totalRevenue,
-      thisMonthRevenue,
-      lastMonthRevenue,
-      pendingPayouts,
-      completedPayouts,
-      totalRefunds,
-      pendingRefunds,
-      totalTransactions: transactions.filter((t: any) => t.status === 'COMPLETED').length,
+      // Filtered range stats (for date-filtered view)
+      rangeCommission: commissionAgg._sum.platformFee || 0,
+      rangeGross: commissionAgg._sum.amount || 0,
+      rangeInstructorPayout: commissionAgg._sum.instructorPayout || 0,
+      rangeLessons: commissionAgg._count?.id || 0,
+      rangeRefunds: refundedAgg._sum.amount || 0,
+      rangeRefundCount: refundedAgg._count?.id || 0,
+
+      // All-time totals (always shown in header cards)
+      totalCommission: commissionAllTime._sum.platformFee || 0,
+      totalGross: commissionAllTime._sum.amount || 0,
+      totalInstructorPayouts: commissionAllTime._sum.instructorPayout || 0,
+      totalCompletedLessons: commissionAllTime._count?.id || 0,
+
+      // Month-over-month
+      thisMonthCommission,
+      lastMonthCommission,
+      thisMonthGross: commissionThisMonth._sum.amount || 0,
+
+      // Payouts
+      pendingPayouts: pendingAgg._sum.instructorPayout || 0,
+      completedPayouts: completedPayoutsAgg._sum.instructorPayout || 0,
+
+      // Refunds (all time)
+      totalRefunds: refundedAgg._sum.amount || 0,
+      refundCount: refundedAgg._count?.id || 0,
+      pendingRefunds: pendingRefundCount,
+
+      totalTransactions: totalCompletedLessons,
       topInstructors,
       revenueByMonth,
       recentTransactions,
+      refundedTransactions,
+
+      // Date range echoed back
+      from: from.toISOString(),
+      to: to.toISOString(),
     });
   } catch (error) {
-    console.error('Admin revenue fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch revenue data' },
-      { status: 500 }
-    );
+    console.error('Revenue fetch error:', error);
+    return NextResponse.json({ error: 'Failed to fetch revenue data' }, { status: 500 });
   }
 }

@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
-import { logAuditAction } from '@/lib/services/audit';
 import { z } from 'zod';
 
 
@@ -31,7 +30,7 @@ export async function POST(
     const body = await req.json();
     const { reason } = rejectSchema.parse(body);
 
-    // FIXED: Use transaction wrapper with audit logging
+    // FIXED: Use transaction wrapper
     const instructor = await prisma.$transaction(async (tx) => {
       // Get current state
       const currentInstructor = await tx.instructor.findUnique({
@@ -43,7 +42,7 @@ export async function POST(
         throw new Error('Instructor not found');
       }
 
-      // Update instructor - store rejection reason in audit log only
+      // Update instructor
       const updatedInstructor = await tx.instructor.update({
         where: { id: params.id },
         data: {
@@ -55,20 +54,8 @@ export async function POST(
         },
       }) as any;
 
-      // Log the action
-      await logAuditAction(tx, {
-        action: 'REJECT_INSTRUCTOR',
-        adminId: session.user.id,
-        targetType: 'INSTRUCTOR',
-        targetId: params.id,
-        metadata: {
-          instructorName: currentInstructor.name,
-          previousStatus: currentInstructor.approvalStatus,
-          rejectionReason: reason,
-          adminEmail: session.user.email,
-        },
-        req,
-      });
+      // Note: Audit logging removed - AuditLog model not in schema
+      // Consider adding AuditLog model if audit trail is needed
 
       return updatedInstructor;
     });

@@ -31,10 +31,10 @@ interface InstructorData {
   user: { email: string } | null;
   _count: {
     bookings: number;
-    reviews: number;
+    clients?: number;
+    subscriptions?: number;
   };
   bookings: any[];
-  reviews: any[];
 }
 
 export default function AdminInstructorProfilePage() {
@@ -44,7 +44,7 @@ export default function AdminInstructorProfilePage() {
   
   const [instructor, setInstructor] = useState<InstructorData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'bookings' | 'reviews' | 'documents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'bookings' | 'documents'>('overview');
 
   useEffect(() => {
     fetchInstructor();
@@ -177,7 +177,7 @@ export default function AdminInstructorProfilePage() {
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-600">Reviews</p>
-            <p className="text-2xl font-bold text-gray-900">{instructor._count.reviews}</p>
+            <p className="text-2xl font-bold text-gray-900">{instructor.totalReviews || 0}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-600">Average Rating</p>
@@ -215,17 +215,7 @@ export default function AdminInstructorProfilePage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Bookings ({instructor.bookings.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('reviews')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                  activeTab === 'reviews'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Reviews ({instructor.reviews.length})
+                Bookings ({instructor.bookings?.length || 0})
               </button>
               <button
                 onClick={() => setActiveTab('documents')}
@@ -341,7 +331,7 @@ export default function AdminInstructorProfilePage() {
             {/* Bookings Tab */}
             {activeTab === 'bookings' && (
               <div>
-                {instructor.bookings.length > 0 ? (
+                {instructor.bookings && instructor.bookings.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
@@ -398,35 +388,6 @@ export default function AdminInstructorProfilePage() {
                   </div>
                 ) : (
                   <p className="text-gray-500 text-center py-8">No bookings yet</p>
-                )}
-              </div>
-            )}
-
-            {/* Reviews Tab */}
-            {activeTab === 'reviews' && (
-              <div>
-                {instructor.reviews.length > 0 ? (
-                  <div className="space-y-4">
-                    {instructor.reviews.map((review: any) => (
-                      <div key={review.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="font-medium text-gray-900">{review.client.name}</p>
-                          <div className="flex items-center">
-                            <span className="text-yellow-500 text-lg">★</span>
-                            <span className="ml-1 font-bold text-lg">{review.rating}</span>
-                          </div>
-                        </div>
-                        {review.comment && (
-                          <p className="text-gray-600 mb-2">{review.comment}</p>
-                        )}
-                        <p className="text-xs text-gray-500">
-                          {new Date(review.createdAt).toLocaleDateString()} at {new Date(review.createdAt).toLocaleTimeString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-8">No reviews yet</p>
                 )}
               </div>
             )}

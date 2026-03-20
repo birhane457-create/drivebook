@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import AdminMobileBottomNav from '@/components/admin/MobileBottomNav'
 
 export default async function AdminLayout({
   children,
@@ -26,6 +27,13 @@ export default async function AdminLayout({
     }
   }
 
-  // Admin has access - render the page
-  return <>{children}</>
+  // Admin has access - render the page with mobile bottom nav
+  return (
+    <>
+      <div className="pb-20 md:pb-0">
+        {children}
+      </div>
+      <AdminMobileBottomNav />
+    </>
+  )
 }

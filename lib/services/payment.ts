@@ -29,13 +29,10 @@ export class PaymentService {
     // Check if this is the first booking with this client
     const isFirstBooking = await this.isFirstBookingWithClient(instructorId, clientId);
 
-    // Calculate commission rate (fields exist in schema)
-    let commissionRate = (instructor as any).commissionRate;
-    
-    // Add new student bonus if first booking
-    if (isFirstBooking) {
-      commissionRate += (instructor as any).newStudentBonus;
-    }
+    // Use fixed commission rates since commissionRate/newStudentBonus aren't in schema
+    // Base rate: 10%, first booking bonus: +5%
+    const baseRate = 10;
+    const commissionRate = isFirstBooking ? baseRate + 5 : baseRate;
 
     // Calculate fees
     const platformFee = bookingAmount * (commissionRate / 100);

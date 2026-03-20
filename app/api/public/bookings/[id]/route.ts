@@ -39,6 +39,7 @@ export async function GET(
         name: booking.instructor.name,
         phone: booking.instructor.phone,
         profileImage: booking.instructor.profileImage,
+        hourlyRate: booking.instructor.hourlyRate,
       },
       client: {
         name: clientName,

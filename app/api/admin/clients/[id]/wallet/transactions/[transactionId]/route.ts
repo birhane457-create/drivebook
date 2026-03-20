@@ -1,127 +1,78 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+﻿import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
 
-export const dynamic = 'force-dynamic';
-// PATCH - Edit transaction
+async function checkAdmin() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return false;
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    select: { role: true },
+  });
+  return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+}
+
+// PATCH - Edit a wallet transaction (description only  for manual admin credits/debits)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string; transactionId: string } }
 ) {
+  if (!(await checkAdmin())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { description } = await req.json();
 
-    const { amount, description } = await req.json();
-
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
-    }
-
-    // Get the transaction
-    const transaction = await prisma.walletTransaction.findUnique({
-      where: { id: params.transactionId }
-    });
-
-    if (!transaction) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
-    }
-
-    // Calculate the difference
-    const amountDiff = amount - transaction.amount;
-
-    // Update transaction
-    await prisma.walletTransaction.update({
+    const tx = await prisma.walletTransaction.findUnique({
       where: { id: params.transactionId },
-      data: {
-        amount,
-        description: description || transaction.description
-      }
     });
 
-    // Adjust wallet balance based on transaction type
-    if (amountDiff !== 0) {
-      const wallet = await prisma.clientWallet.findUnique({
-        where: { id: transaction.walletId }
-      });
-
-      if (wallet) {
-        const balanceAdjustment = transaction.type === 'CREDIT' || transaction.type === 'REFUND'
-          ? amountDiff
-          : -amountDiff;
-
-        await prisma.clientWallet.update({
-          where: { id: wallet.id },
-          data: {
-            balance: { increment: balanceAdjustment }
-          }
-        });
-      }
+    if (!tx) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true });
+    // Only allow editing description  never change amounts on system transactions
+    const updated = await prisma.walletTransaction.update({
+      where: { id: params.transactionId },
+      data: { description },
+    });
+
+    return NextResponse.json({ success: true, transaction: updated });
   } catch (error) {
-    console.error('Edit transaction error:', error);
-    return NextResponse.json(
-      { error: 'Failed to edit transaction' },
-      { status: 500 }
-    );
+    console.error("Edit transaction error:", error);
+    return NextResponse.json({ error: "Failed to update transaction" }, { status: 500 });
   }
 }
 
-// DELETE - Delete transaction
+// DELETE - Remove a wallet transaction
 export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string; transactionId: string } }
 ) {
+  if (!(await checkAdmin())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Get the transaction
-    const transaction = await prisma.walletTransaction.findUnique({
-      where: { id: params.transactionId }
+    const tx = await prisma.walletTransaction.findUnique({
+      where: { id: params.transactionId },
     });
 
-    if (!transaction) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    if (!tx) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
-    // Delete transaction
     await prisma.walletTransaction.delete({
-      where: { id: params.transactionId }
+      where: { id: params.transactionId },
     });
-
-    // Adjust wallet balance
-    const wallet = await prisma.clientWallet.findUnique({
-      where: { id: transaction.walletId }
-    });
-
-    if (wallet) {
-      const balanceAdjustment = transaction.type === 'CREDIT' || transaction.type === 'REFUND'
-        ? -transaction.amount
-        : transaction.amount;
-
-      await prisma.clientWallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: { increment: balanceAdjustment }
-        }
-      });
-    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete transaction error:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete transaction' },
-      { status: 500 }
-    );
+    console.error("Delete transaction error:", error);
+    return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });
   }
 }

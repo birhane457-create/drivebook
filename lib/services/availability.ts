@@ -44,7 +44,7 @@ export class AvailabilityService {
           lte: endOfDay
         },
         status: {
-          in: ['PENDING', 'CONFIRMED']
+          in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED']
         }
       },
       select: {
@@ -156,7 +156,7 @@ export class AvailabilityService {
         instructorId,
         id: excludeBookingId ? { not: excludeBookingId } : undefined,
         status: {
-          in: ['PENDING', 'CONFIRMED']
+          in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED']
         },
         OR: [
           {

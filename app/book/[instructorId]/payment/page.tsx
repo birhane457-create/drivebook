@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import MultiStepBookingLayout from '@/components/MultiStepBookingLayout';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements, CardNumberElement, CardExpiryElement, CardCvcElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 // Initialize Stripe
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -157,7 +157,7 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
       console.log('Payment intent created, confirming with Stripe...');
 
       // Step 3: Confirm payment with Stripe
-      const cardElement = elements.getElement(CardElement);
+      const cardElement = elements.getElement(CardNumberElement);
       if (!cardElement) {
         throw new Error('Card element not found');
       }
@@ -230,12 +230,14 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
       {/* Card Payment Form */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Information</h3>
-        <div>
+        
+        {/* Card Number */}
+        <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Card Details
+            Card Number
           </label>
           <div className="border border-gray-300 rounded-lg p-4 bg-white">
-            <CardElement
+            <CardNumberElement
               options={{
                 style: {
                   base: {
@@ -251,6 +253,57 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
                 },
               }}
             />
+          </div>
+        </div>
+
+        {/* Expiry and CVC - Side by side on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Expiry Date
+            </label>
+            <div className="border border-gray-300 rounded-lg p-4 bg-white">
+              <CardExpiryElement
+                options={{
+                  style: {
+                    base: {
+                      fontSize: '16px',
+                      color: '#424770',
+                      '::placeholder': {
+                        color: '#aab7c4',
+                      },
+                    },
+                    invalid: {
+                      color: '#9e2146',
+                    },
+                  },
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              CVC
+            </label>
+            <div className="border border-gray-300 rounded-lg p-4 bg-white">
+              <CardCvcElement
+                options={{
+                  style: {
+                    base: {
+                      fontSize: '16px',
+                      color: '#424770',
+                      '::placeholder': {
+                        color: '#aab7c4',
+                      },
+                    },
+                    invalid: {
+                      color: '#9e2146',
+                    },
+                  },
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

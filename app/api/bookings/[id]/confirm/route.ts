@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { smsService } from '@/lib/services/sms';
+import { notifyBookingConfirmed, notifyClientBookingConfirmed } from '@/lib/services/notifications';
+import { getNotifChannels } from '@/lib/config/platform-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,43 +56,33 @@ export async function POST(
       return NextResponse.json({ error: 'Not authorized to confirm this booking' }, { status: 403 });
     }
 
-    // Check if booking is in PENDING status
-    if (booking.status !== 'PENDING') {
+    // Check if booking is in PENDING or PENDING_PAYMENT status
+    if (booking.status !== 'PENDING' && booking.status !== 'PENDING_PAYMENT') {
       return NextResponse.json({ 
-        error: `Cannot confirm booking with status: ${booking.status}. Only PENDING bookings can be confirmed.` 
+        error: `Cannot confirm booking with status: ${booking.status}. Only PENDING or PENDING_PAYMENT bookings can be confirmed.` 
       }, { status: 400 });
     }
 
     // Check if slot is still available
-    const conflictingBooking = await prisma.booking.findFirst({
-      where: {
-        id: { not: bookingId },
-        instructorId: booking.instructorId,
-        status: { in: ['CONFIRMED', 'COMPLETED'] },
-        OR: [
-          // New booking starts during existing booking
-          { 
-            startTime: { lte: booking.startTime }, 
-            endTime: { gt: booking.startTime } 
-          },
-          // New booking ends during existing booking
-          { 
-            startTime: { lt: booking.endTime }, 
-            endTime: { gte: booking.endTime } 
-          },
-          // New booking completely contains existing booking
-          { 
-            startTime: { gte: booking.startTime }, 
-            endTime: { lte: booking.endTime } 
-          }
-        ]
-      }
-    });
+    if (booking.startTime && booking.endTime) {
+      const conflictingBooking = await prisma.booking.findFirst({
+        where: {
+          id: { not: bookingId },
+          instructorId: booking.instructorId,
+          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          OR: [
+            { startTime: { lte: booking.startTime }, endTime: { gt: booking.startTime } },
+            { startTime: { lt: booking.endTime }, endTime: { gte: booking.endTime } },
+            { startTime: { gte: booking.startTime }, endTime: { lte: booking.endTime } }
+          ]
+        }
+      });
 
-    if (conflictingBooking) {
-      return NextResponse.json({ 
-        error: 'Time slot is no longer available. Another booking has been confirmed for this time.' 
-      }, { status: 409 });
+      if (conflictingBooking) {
+        return NextResponse.json({ 
+          error: 'Time slot is no longer available. Another booking has been confirmed for this time.' 
+        }, { status: 409 });
+      }
     }
 
     // Confirm the booking
@@ -102,21 +94,50 @@ export async function POST(
       }
     });
 
+    const notifChannels = getNotifChannels('BOOKING_CONFIRMED');
+
     // Send SMS notification to client
     try {
-      if (booking.client?.phone) {
+      if (notifChannels.sms && booking.client?.phone && booking.startTime) {
         await smsService.sendBookingConfirmation({
           clientPhone: booking.client.phone,
           clientName: booking.client.name,
           instructorName: booking.instructor.name,
           startTime: booking.startTime,
-          endTime: booking.endTime,
+          price: booking.price,
           pickupAddress: booking.pickupAddress || 'TBD'
-        });
+        } as any);
       }
     } catch (smsError) {
       console.error('Failed to send SMS notification:', smsError);
-      // Don't fail the confirmation if SMS fails
+    }
+
+    // Send in-app notification to instructor
+    try {
+      if (notifChannels.inApp && booking.instructor?.userId && booking.startTime) {
+        await notifyBookingConfirmed(
+          booking.instructor.userId,
+          booking.client?.name || booking.clientName || 'Client',
+          bookingId,
+          new Date(booking.startTime)
+        );
+      }
+    } catch (notifError) {
+      console.error('Failed to create notification:', notifError);
+    }
+
+    // Send in-app notification to client
+    try {
+      if (notifChannels.inApp && booking.client?.userId && booking.startTime) {
+        await notifyClientBookingConfirmed(
+          booking.client.userId,
+          booking.instructor.name,
+          bookingId,
+          new Date(booking.startTime)
+        );
+      }
+    } catch (notifError) {
+      console.error('Failed to create client notification:', notifError);
     }
 
     return NextResponse.json({

@@ -2,152 +2,167 @@ import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import AdminNav from '@/components/admin/AdminNav';
+import Link from 'next/link';
+import { CheckCircle, XCircle, ExternalLink } from 'lucide-react';
+import PlatformSettingsForm from '@/components/admin/PlatformSettingsForm';
+
+export const dynamic = 'force-dynamic';
+
+function StatusDot({ ok }: { ok: boolean }) {
+  return ok
+    ? <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+    : <XCircle className="h-4 w-4 text-red-400 shrink-0" />;
+}
+
+function ConfigRow({ label, value, masked }: { label: string; value?: string; masked?: boolean }) {
+  const display = masked ? '••••••••' : (value || '—');
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
+      <span className="text-sm text-gray-600">{label}</span>
+      <span className={`text-sm font-mono ${value ? 'text-gray-900' : 'text-gray-400'}`}>{display}</span>
+    </div>
+  );
+}
 
 export default async function AdminSettingsPage() {
   const session = await getServerSession(authOptions);
-
   if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
     redirect('/login');
   }
 
+  const basicMonthly = process.env.BASIC_MONTHLY_PRICE || '29';
+  const proMonthly = process.env.PRO_MONTHLY_PRICE || '79';
+  const businessMonthly = process.env.BUSINESS_MONTHLY_PRICE || '199';
+  const basicAnnual = process.env.BASIC_ANNUAL_PRICE || '290';
+  const proAnnual = process.env.PRO_ANNUAL_PRICE || '790';
+  const businessAnnual = process.env.BUSINESS_ANNUAL_PRICE || '1990';
+  const basicCommission = process.env.BASIC_COMMISSION_RATE || '15';
+  const proCommission = process.env.PRO_COMMISSION_RATE || '12';
+  const businessCommission = process.env.BUSINESS_COMMISSION_RATE || '10';
+  const basicBonus = process.env.BASIC_NEW_STUDENT_BONUS || '8';
+  const proBonus = process.env.PRO_NEW_STUDENT_BONUS || '10';
+  const businessBonus = process.env.BUSINESS_NEW_STUDENT_BONUS || '12';
+  const basicTrial = process.env.BASIC_TRIAL_DAYS || '14';
+  const proTrial = process.env.PRO_TRIAL_DAYS || '14';
+  const businessTrial = process.env.BUSINESS_TRIAL_DAYS || '30';
+
+  const hasStripe = !!process.env.STRIPE_SECRET_KEY;
+  const hasStripeWebhook = !!(process.env.STRIPE_WEBHOOK_SECRET && !process.env.STRIPE_WEBHOOK_SECRET.includes('your_webhook'));
+  const hasSmtp = !!process.env.SMTP_HOST;
+  const hasTwilio = !!process.env.TWILIO_ACCOUNT_SID;
+  const hasCloudinary = !!process.env.CLOUDINARY_API_KEY;
+  const hasGoogleMaps = !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const hasGoogleOAuth = !!process.env.GOOGLE_CLIENT_ID;
+  const hasRedis = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_URL.length > 0);
+
+  const tiers = [
+    { name: 'Basic', color: 'text-gray-700', border: 'border-gray-200', monthly: basicMonthly, annual: basicAnnual, commission: basicCommission, bonus: basicBonus, trial: basicTrial },
+    { name: 'Pro', color: 'text-blue-700', border: 'border-blue-200 bg-blue-50', monthly: proMonthly, annual: proAnnual, commission: proCommission, bonus: proBonus, trial: proTrial },
+    { name: 'Business', color: 'text-purple-700', border: 'border-purple-200 bg-purple-50', monthly: businessMonthly, annual: businessAnnual, commission: businessCommission, bonus: businessBonus, trial: businessTrial },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-5">
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">Platform Settings</h1>
-
-        {/* Subscription Pricing */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Subscription Pricing</h2>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Platform Settings</h1>
+            <p className="text-sm text-gray-500 mt-1">Booking rules, notification channels, integrations</p>
           </div>
-          <div className="p-4 sm:p-6 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="border rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 mb-2">PRO Tier</h3>
-                <p className="text-2xl font-bold text-blue-600 mb-2">$29/month</p>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• 12% commission per booking</li>
-                  <li>• 8% bonus for new clients</li>
-                  <li>• Google Calendar sync</li>
-                  <li>• Basic analytics</li>
-                </ul>
-              </div>
-              <div className="border rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 mb-2">BUSINESS Tier</h3>
-                <p className="text-2xl font-bold text-purple-600 mb-2">$59/month</p>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• 7% commission per booking</li>
-                  <li>• 8% bonus for new clients</li>
-                  <li>• Priority support</li>
-                  <li>• Advanced analytics</li>
-                </ul>
-              </div>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                <span className="font-semibold">Trial Period:</span> 14 days free for all new instructors
-              </p>
+          <Link href="/admin/pricing" className="flex items-center gap-1.5 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+            Edit Pricing <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        {/* Editable: Booking Rules + Notification Matrix */}
+        <PlatformSettingsForm />
+
+        {/* Subscription Tiers — read-only reference */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">Subscription Tiers</h2>
+            <span className="text-xs text-gray-400">Prices from env · commissions editable on Pricing page</span>
+          </div>
+          <div className="p-6">
+            <div className="grid sm:grid-cols-3 gap-4">
+              {tiers.map(t => (
+                <div key={t.name} className={`border-2 ${t.border} rounded-xl p-4`}>
+                  <p className={`font-bold text-sm mb-2 ${t.color}`}>{t.name}</p>
+                  <p className="text-2xl font-bold text-gray-900">${t.monthly}<span className="text-sm font-normal text-gray-500">/mo</span></p>
+                  <p className="text-xs text-gray-400 mb-3">${t.annual}/yr · {t.trial}-day trial</p>
+                  <div className="space-y-1 text-xs text-gray-600">
+                    <div className="flex justify-between"><span>Commission</span><span className="font-medium">{t.commission}%</span></div>
+                    <div className="flex justify-between"><span>New student bonus</span><span className="font-medium">{t.bonus}%</span></div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Platform Configuration */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Platform Configuration</h2>
+        {/* Integration Status */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Integration Status</h2>
           </div>
-          <div className="p-4 sm:p-6 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Platform Name</label>
-                <input
-                  type="text"
-                  defaultValue="DriveBook"
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50"
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
-                <input
-                  type="text"
-                  defaultValue={process.env.NEXTAUTH_URL || 'Not configured'}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50"
-                  disabled
-                />
-              </div>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-sm text-yellow-800">
-                <span className="font-semibold">Note:</span> Platform settings are configured via environment variables. 
-                Contact your system administrator to modify these values.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Email Configuration */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Email Configuration</h2>
-          </div>
-          <div className="p-4 sm:p-6 space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Host</label>
-                <input
-                  type="text"
-                  defaultValue={process.env.SMTP_HOST || 'Not configured'}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50"
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Email</label>
-                <input
-                  type="text"
-                  defaultValue={process.env.SMTP_FROM || 'Not configured'}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50"
-                  disabled
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${process.env.SMTP_HOST ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-sm text-gray-600">
-                {process.env.SMTP_HOST ? 'Email service configured' : 'Email service not configured'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Payment Configuration */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Payment Configuration</h2>
-          </div>
-          <div className="p-4 sm:p-6 space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Stripe Status</label>
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${process.env.STRIPE_SECRET_KEY ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className="text-sm text-gray-600">
-                    {process.env.STRIPE_SECRET_KEY ? 'Stripe configured' : 'Stripe not configured'}
+          <div className="p-6">
+            <div className="grid sm:grid-cols-2 gap-x-8">
+              {[
+                { label: 'Stripe payments', ok: hasStripe },
+                { label: 'Stripe webhook', ok: hasStripeWebhook },
+                { label: 'Email (SMTP)', ok: hasSmtp },
+                { label: 'SMS (Twilio)', ok: hasTwilio },
+                { label: 'File uploads (Cloudinary)', ok: hasCloudinary },
+                { label: 'Google Maps', ok: hasGoogleMaps },
+                { label: 'Google Calendar OAuth', ok: hasGoogleOAuth },
+                { label: 'Redis (rate limiting)', ok: hasRedis },
+              ].map(({ label, ok }) => (
+                <div key={label} className="flex items-center gap-2.5 py-2.5 border-b border-gray-50 last:border-0">
+                  <StatusDot ok={ok} />
+                  <span className="text-sm text-gray-700">{label}</span>
+                  <span className={`ml-auto text-xs font-medium ${ok ? 'text-green-600' : 'text-red-400'}`}>
+                    {ok ? 'Configured' : 'Missing'}
                   </span>
                 </div>
-              </div>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                <span className="font-semibold">Security:</span> Payment credentials are stored securely in environment variables 
-                and are not displayed here for security reasons.
-              </p>
+              ))}
             </div>
           </div>
         </div>
+
+        {/* Email Config */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Email</h2></div>
+          <div className="px-6 py-2">
+            <ConfigRow label="SMTP host" value={process.env.SMTP_HOST} />
+            <ConfigRow label="SMTP port" value={process.env.SMTP_PORT} />
+            <ConfigRow label="From address" value={process.env.EMAIL_FROM} />
+            <ConfigRow label="SMTP password" masked />
+          </div>
+        </div>
+
+        {/* SMS Config */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">SMS (Twilio)</h2></div>
+          <div className="px-6 py-2">
+            <ConfigRow label="Account SID" value={process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.slice(0, 8) + '••••••••' : undefined} />
+            <ConfigRow label="Phone number" value={process.env.TWILIO_PHONE_NUMBER} />
+            <ConfigRow label="Auth token" masked />
+          </div>
+        </div>
+
+        {/* Platform */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Platform</h2></div>
+          <div className="px-6 py-2">
+            <ConfigRow label="Platform name" value={process.env.PLATFORM_NAME} />
+            <ConfigRow label="Admin email" value={process.env.ADMIN_EMAIL} />
+            <ConfigRow label="App URL" value={process.env.NEXTAUTH_URL} />
+            <ConfigRow label="Redis" value={hasRedis ? 'Upstash connected' : 'Not configured (in-memory fallback)'} />
+          </div>
+        </div>
+
       </div>
     </div>
   );

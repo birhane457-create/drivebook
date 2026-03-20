@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { prisma } from '@/lib/prisma';
 
@@ -28,7 +28,7 @@ export async function GET(
     
     const client = await prisma.client.findUnique({
       where: { id: params.id },
-      select: { userId: true, name: true }
+      select: { id: true, userId: true, name: true, phone: true, notes: true, preferredInstructorId: true }
     });
     
     if (client) {
@@ -73,8 +73,11 @@ export async function GET(
               select: {
                 id: true,
                 startTime: true,
+                endTime: true,
+                notes: true,
                 status: true,
                 price: true,
+                instructorId: true,
                 instructor: { select: { name: true } }
               },
               orderBy: { startTime: 'desc' }
@@ -91,27 +94,35 @@ export async function GET(
     // Flatten bookings from all client records
     const allBookings = user.clients?.flatMap(c => c.bookings) || [];
 
+    // Find current instructor (preferred or latest booking)
+    let currentInstructor: { id: string; name: string; hourlyRate: number } | null = null;
+    if (client) {
+      let instructorId = client.preferredInstructorId || null;
+      if (!instructorId && allBookings.length > 0) {
+        const latest = allBookings.find(b => b.status === 'CONFIRMED' || b.status === 'COMPLETED');
+        instructorId = (latest as any)?.instructorId || null;
+      }
+      if (instructorId) {
+        const instr = await prisma.instructor.findUnique({
+          where: { id: instructorId },
+          select: { id: true, name: true, hourlyRate: true },
+        });
+        currentInstructor = instr;
+      }
+    }
+
     // Calculate totals from wallet transactions
     const transactions = user.wallet?.transactions || [];
     
-    // Count all CREDIT transactions to wallet (manual adds, initial credits, etc)
-    const walletCredits = transactions
-      .filter(t => 
-        t.type.toUpperCase() === 'CREDIT' && 
-        !t.description?.toLowerCase().includes('duration reduction') &&
-        !t.description?.toLowerCase().includes('refund') &&
-        !t.description?.toLowerCase().includes('cancel')
+    // Total paid = money actually deposited (exclude refunds/cancellations)
+    const totalPaid = transactions
+      .filter(t =>
+        t.type.toUpperCase() === "CREDIT" &&
+        !t.description?.toLowerCase().includes("refund") &&
+        !t.description?.toLowerCase().includes("cancel")
       )
       .reduce((sum, t) => sum + t.amount, 0);
-    
-    // Count booking payments (money paid for bookings)
-    const bookingPayments = allBookings
-      .filter(b => b.status === 'CONFIRMED' || b.status === 'COMPLETED')
-      .reduce((sum, b) => sum + (b.price || 0), 0);
-    
-    // Total paid = wallet credits + booking payments
-    const totalPaid = walletCredits + bookingPayments;
-    
+
     // Net Booking Costs = booking charges minus cancellation refunds
     const bookingCharges = transactions
       .filter(t => 
@@ -133,10 +144,13 @@ export async function GET(
     const balance = user.wallet?.balance || 0;
 
     return NextResponse.json({
+      clientId: client?.id || params.id,
       user: {
         id: user.id,
         name: clientName,
         email: user.email,
+        phone: client?.phone || '',
+        notes: client?.notes || '',
         createdAt: user.createdAt
       },
       wallet: {
@@ -150,10 +164,13 @@ export async function GET(
       bookings: allBookings.map((b: any) => ({
         id: b.id,
         startTime: b.startTime,
+        endTime: b.endTime,
+        notes: b.notes,
         status: b.status,
         price: b.price,
         instructor: b.instructor
-      }))
+      })),
+      currentInstructor,
     });
   } catch (error) {
     console.error('Get client wallet error:', error);
@@ -163,3 +180,8 @@ export async function GET(
     );
   }
 }
+
+
+
+
+

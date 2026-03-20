@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, AlertCircle, CreditCard, Plus } from 'lucide-react';
 import AddCreditsModal from '@/components/AddCreditsModal';
@@ -18,15 +18,26 @@ interface Wallet {
 export default function WalletPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddCredits, setShowAddCredits] = useState(false);
+  const [initialTopUp, setInitialTopUp] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login');
     }
   }, [status, router]);
+
+  useEffect(() => {
+    // Auto-open modal if ?topup= param is present
+    const topup = searchParams.get('topup');
+    if (topup && parseFloat(topup) > 0) {
+      setInitialTopUp(topup);
+      setShowAddCredits(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -190,7 +201,7 @@ export default function WalletPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
-              onClick={() => setShowAddCredits(true)}
+              onClick={() => { setInitialTopUp(undefined); setShowAddCredits(true); }}
               className="flex items-center justify-center gap-3 p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transition font-semibold"
             >
               <Plus className="w-5 h-5" />
@@ -278,10 +289,11 @@ export default function WalletPage() {
         <StripeProvider>
           <AddCreditsModal
             isOpen={showAddCredits}
-            onClose={() => setShowAddCredits(false)}
+            onClose={() => { setShowAddCredits(false); setInitialTopUp(undefined); }}
             onSuccess={() => {
               loadData();
             }}
+            initialAmount={initialTopUp}
           />
         </StripeProvider>
       )}

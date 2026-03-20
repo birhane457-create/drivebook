@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import DashboardNav from '@/components/DashboardNav'
 import ClientDashboardNav from '@/components/ClientDashboardNav'
+import MobileBottomNav from '@/components/instructor/MobileBottomNav'
 
 export default async function DashboardLayout({
   children,
@@ -25,7 +26,10 @@ export default async function DashboardLayout({
     return (
       <div className="min-h-screen bg-gray-50">
         <DashboardNav />
-        {children}
+        <div className="pb-20 md:pb-0">
+          {children}
+        </div>
+        <MobileBottomNav />
       </div>
     )
   }

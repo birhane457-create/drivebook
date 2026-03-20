@@ -67,14 +67,20 @@ interface InstructorData {
   id: string;
   name: string;
   profileImage?: string;
+  carImage?: string;
+  carMake?: string;
+  carModel?: string;
+  carYear?: string;
   phone: string;
   email: string;
   baseAddress: string;
   hourlyRate: number;
+  bio?: string;
   averageRating: number;
   totalReviews: number;
   offersTestPackage: boolean;
   services: string[];
+  lessonPackages?: Array<{ id: string; name: string; durationMinutes: number; price: number; description: string; isActive: boolean }>;
 }
 
 interface CurrentInstructorData {
@@ -281,81 +287,149 @@ export default function ClientDashboard() {
 
         {/* Current Instructor Card */}
         {currentInstructor?.currentInstructor && (
-          <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-600 rounded-lg shadow-md overflow-hidden">
-            <div className="p-4 md:p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">👨‍🏫 Your Current Instructor</h2>
-              
-              <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
-                {/* Instructor Info */}
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold text-gray-900">{currentInstructor.currentInstructor.name}</h3>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                    <span className="text-sm text-gray-700">
-                      {currentInstructor.currentInstructor.averageRating.toFixed(1)} ({currentInstructor.currentInstructor.totalReviews} reviews)
-                    </span>
-                  </div>
-                  
-                  <div className="mt-4 space-y-2 text-sm text-gray-700">
-                    <p><strong>💲 Rate:</strong> ${currentInstructor.currentInstructor.hourlyRate}/hour</p>
-                  </div>
+          <div className="mb-8 bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden">
+            {/* Card header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-5 py-3">
+              <p className="text-white text-sm font-semibold">👨‍🏫 Your Current Instructor</p>
+            </div>
 
-                  {/* Services */}
-                  <div className="mt-4">
-                    <p className="text-sm font-semibold text-gray-900 mb-2">Services Offered:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {currentInstructor.currentInstructor.services.map((service) => (
-                        <span key={service} className="inline-block bg-blue-600 text-white text-xs px-3 py-1 rounded-full">
-                          {service}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Package Info */}
-                  {currentInstructor.packageInfo && (
-                    <div className="mt-4 bg-white p-4 rounded-lg border border-gray-200">
-                      <p className="text-sm font-semibold text-gray-900 mb-2">📦 Package Status:</p>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <p className="text-xs text-gray-600">Total Hours</p>
-                          <p className="text-lg font-bold text-gray-900">{currentInstructor.packageInfo.totalHours}h</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600">Used Hours</p>
-                          <p className="text-lg font-bold text-orange-600">{currentInstructor.packageInfo.usedHours}h</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600">Remaining Hours</p>
-                          <p className="text-lg font-bold text-green-600">{currentInstructor.packageInfo.remainingHours}h</p>
-                        </div>
-                      </div>
-                      {currentInstructor.packageInfo.expiryDate && (
-                        <p className="text-xs text-gray-600 mt-2">
-                          Expires: {new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString()}
-                        </p>
-                      )}
+            <div className="p-5">
+              <div className="flex gap-4 items-start">
+                {/* Profile image */}
+                <div className="shrink-0">
+                  {currentInstructor.currentInstructor.profileImage ? (
+                    <img
+                      src={currentInstructor.currentInstructor.profileImage}
+                      alt={currentInstructor.currentInstructor.name}
+                      className="w-20 h-20 rounded-full object-cover border-2 border-blue-200"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center border-2 border-blue-200">
+                      <span className="text-3xl font-bold text-blue-600">
+                        {currentInstructor.currentInstructor.name.charAt(0)}
+                      </span>
                     </div>
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-col gap-3 md:w-48">
-                  <button
-                    onClick={() => router.push(`/client-dashboard/book-lesson?instructorId=${currentInstructor.currentInstructor!.id}`)}
-                    className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
-                  >
-                    <Calendar className="w-5 h-5" />
-                    Book Now
-                  </button>
-                  
-                  <button
-                    onClick={() => router.push('/client-dashboard/book-lesson?newInstructor=true')}
-                    className="w-full px-6 py-3 bg-gray-200 text-gray-900 font-semibold rounded-lg hover:bg-gray-300 transition"
-                  >
-                    Switch Instructor
-                  </button>
+                {/* Name + rating + bio */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl font-bold text-gray-900 leading-tight">
+                    {currentInstructor.currentInstructor.name}
+                  </h3>
+                  <div className="flex items-center gap-1 mt-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className={`w-3.5 h-3.5 ${i < Math.round(currentInstructor.currentInstructor!.averageRating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
+                    ))}
+                    <span className="text-xs text-gray-500 ml-1">
+                      {currentInstructor.currentInstructor.averageRating.toFixed(1)}
+                      {currentInstructor.currentInstructor.totalReviews > 0 && ` (${currentInstructor.currentInstructor.totalReviews})`}
+                    </span>
+                  </div>
+                  {currentInstructor.currentInstructor.bio && (
+                    <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                      {currentInstructor.currentInstructor.bio}
+                    </p>
+                  )}
                 </div>
+
+                {/* Car image */}
+                {currentInstructor.currentInstructor.carImage && (
+                  <div className="shrink-0 hidden sm:block">
+                    <img
+                      src={currentInstructor.currentInstructor.carImage}
+                      alt="Training vehicle"
+                      className="w-28 h-20 object-cover rounded-lg border border-gray-200"
+                    />
+                    {(currentInstructor.currentInstructor.carMake || currentInstructor.currentInstructor.carModel) && (
+                      <p className="text-xs text-gray-400 text-center mt-1">
+                        {[currentInstructor.currentInstructor.carMake, currentInstructor.currentInstructor.carModel, currentInstructor.currentInstructor.carYear].filter(Boolean).join(' ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Pricing section */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Standard lesson */}
+                <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700">Standard Lesson</p>
+                    <p className="text-xs text-gray-500">per hour</p>
+                  </div>
+                  <p className="text-base font-bold text-blue-700">${currentInstructor.currentInstructor.hourlyRate.toFixed(2)}</p>
+                </div>
+
+                {/* Lesson packages (PDA, mock test, etc.) */}
+                {currentInstructor.currentInstructor.lessonPackages?.map(pkg => (
+                  <div key={pkg.id} className="flex items-center justify-between bg-indigo-50 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">{pkg.name}</p>
+                      <p className="text-xs text-gray-500">{pkg.durationMinutes}min</p>
+                    </div>
+                    <p className="text-base font-bold text-indigo-700">${pkg.price.toFixed(2)}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Car info on mobile (below pricing) */}
+              {currentInstructor.currentInstructor.carImage && (
+                <div className="mt-3 sm:hidden">
+                  <img
+                    src={currentInstructor.currentInstructor.carImage}
+                    alt="Training vehicle"
+                    className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                  />
+                  {(currentInstructor.currentInstructor.carMake || currentInstructor.currentInstructor.carModel) && (
+                    <p className="text-xs text-gray-400 text-center mt-1">
+                      {[currentInstructor.currentInstructor.carMake, currentInstructor.currentInstructor.carModel, currentInstructor.currentInstructor.carYear].filter(Boolean).join(' ')}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Package Info */}
+              {currentInstructor.packageInfo && (
+                <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-purple-900 mb-2">📦 Package Status</p>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-base font-bold text-gray-900">{currentInstructor.packageInfo.totalHours}h</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Used</p>
+                      <p className="text-base font-bold text-orange-600">{currentInstructor.packageInfo.usedHours}h</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Remaining</p>
+                      <p className="text-base font-bold text-green-600">{currentInstructor.packageInfo.remainingHours}h</p>
+                    </div>
+                  </div>
+                  {currentInstructor.packageInfo.expiryDate && (
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Expires {new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU')}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => router.push(`/client-dashboard/book-lesson?instructorId=${currentInstructor.currentInstructor!.id}`)}
+                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Book a Lesson
+                </button>
+                <button
+                  onClick={() => router.push('/client-dashboard/book-lesson?newInstructor=true')}
+                  className="px-4 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition text-sm"
+                >
+                  Switch
+                </button>
               </div>
             </div>
           </div>
@@ -422,8 +496,8 @@ export default function ClientDashboard() {
           </div>
         </div>
 
-        {/* Credit Exhaustion Warning */}
-        {profile.wallet.creditsRemaining <= 0 && (
+        {/* Credit Exhaustion Warning — only show if no active bookings */}
+        {profile.wallet.creditsRemaining <= 0 && upcomingBookings.length === 0 && (
           <div className="mb-8 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-lg">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import { calculatePackagePrice, getPackageByHours } from '@/lib/config/packages'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -18,6 +19,7 @@ interface BookingDetails {
   instructor: {
     name: string
     profileImage?: string
+    hourlyRate?: number
   }
   client: {
     name: string
@@ -25,23 +27,19 @@ interface BookingDetails {
   }
 }
 
-function PaymentForm({ bookingId, clientSecret, booking }: { 
+function PaymentForm({ bookingId, clientSecret, payAmount }: {
   bookingId: string
   clientSecret: string
-  booking: BookingDetails 
+  payAmount: number
 }) {
   const stripe = useStripe()
   const elements = useElements()
-  const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!stripe || !elements) {
-      return
-    }
+    if (!stripe || !elements) return
 
     setProcessing(true)
     setError(null)
@@ -62,7 +60,7 @@ function PaymentForm({ bookingId, clientSecret, booking }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <PaymentElement />
-      
+
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}
@@ -74,7 +72,7 @@ function PaymentForm({ bookingId, clientSecret, booking }: {
         disabled={!stripe || processing}
         className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
       >
-        {processing ? 'Processing...' : `Pay $${booking.price.toFixed(2)}`}
+        {processing ? 'Processing...' : `Pay $${payAmount.toFixed(2)}`}
       </button>
 
       <p className="text-sm text-gray-500 text-center">
@@ -88,7 +86,7 @@ export default function PaymentPage() {
   const params = useParams()
   const router = useRouter()
   const bookingId = params.id as string
-  
+
   const [booking, setBooking] = useState<BookingDetails | null>(null)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -97,40 +95,35 @@ export default function PaymentPage() {
   useEffect(() => {
     async function loadBookingAndPayment() {
       try {
-        // Fetch booking details
         const bookingRes = await fetch(`/api/public/bookings/${bookingId}`)
         if (!bookingRes.ok) throw new Error('Booking not found')
-        
+
         const bookingData = await bookingRes.json()
         setBooking(bookingData)
 
-        // Check if already paid
         if (bookingData.isPaid) {
           router.push(`/booking/${bookingId}`)
           return
         }
 
-        // Slot expired — cron released it before payment completed
         if (bookingData.status === 'EXPIRED') {
           setError('EXPIRED')
           setLoading(false)
           return
         }
 
-        // Create payment intent — pass the full package amount explicitly
         const paymentRes = await fetch('/api/payments/create-intent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             bookingId,
             clientEmail: bookingData.client.email,
-            // Use packageTotalPaid if this is a package booking, otherwise booking.price
             amount: bookingData.price,
           }),
         })
 
         if (!paymentRes.ok) throw new Error('Failed to create payment')
-        
+
         const paymentData = await paymentRes.json()
         setClientSecret(paymentData.clientSecret)
       } catch (err: any) {
@@ -200,6 +193,18 @@ export default function PaymentPage() {
   const duration = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60))
   const isPackage = booking.isPackageBooking && (booking.packageHours || 0) > 1
 
+  // Compute pricing breakdown for package bookings
+  const pricing = isPackage && booking.instructor.hourlyRate && booking.packageHours
+    ? calculatePackagePrice(
+        booking.instructor.hourlyRate,
+        booking.packageHours,
+        getPackageByHours(booking.packageHours)
+      )
+    : null
+
+  // The amount to charge: use reconstructed pricing.total for packages, booking.price for singles
+  const payAmount = pricing ? pricing.total : booking.price
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
@@ -215,7 +220,7 @@ export default function PaymentPage() {
               {/* Booking Summary */}
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Booking Summary</h2>
-                
+
                 <div className="space-y-4">
                   {/* Instructor */}
                   <div className="flex items-center space-x-3">
@@ -256,11 +261,11 @@ export default function PaymentPage() {
                         ) : (
                           <>
                             <p className="font-medium text-gray-900">
-                              {startDate.toLocaleDateString('en-AU', { 
-                                weekday: 'long', 
-                                year: 'numeric', 
-                                month: 'long', 
-                                day: 'numeric' 
+                              {startDate.toLocaleDateString('en-AU', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
                               })}
                             </p>
                             <p className="text-sm text-gray-600">
@@ -286,16 +291,39 @@ export default function PaymentPage() {
 
                   {/* Price Breakdown */}
                   <div className="border-t pt-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-gray-600">
-                        <span>{isPackage ? `${booking.packageHours}-hour package` : `Lesson (${duration} min)`}</span>
-                        <span>${booking.price.toFixed(2)}</span>
+                    {pricing ? (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between text-gray-600">
+                          <span>{booking.packageHours}-hour package (${booking.instructor.hourlyRate}/hr)</span>
+                          <span>${pricing.subtotal.toFixed(2)}</span>
+                        </div>
+                        {pricing.discount > 0 && (
+                          <div className="flex justify-between text-green-600">
+                            <span>Discount ({pricing.discountPercentage}% off)</span>
+                            <span>-${pricing.discount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-gray-400">
+                          <span>Platform fee (3.6%)</span>
+                          <span>${pricing.platformFee.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-gray-900 text-base pt-2 border-t">
+                          <span>Total</span>
+                          <span>${pricing.total.toFixed(2)}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between font-bold text-gray-900 text-lg pt-2 border-t">
-                        <span>Total</span>
-                        <span>${booking.price.toFixed(2)}</span>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-gray-600">
+                          <span>Lesson ({duration} min)</span>
+                          <span>${booking.price.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-gray-900 text-lg pt-2 border-t">
+                          <span>Total</span>
+                          <span>${booking.price.toFixed(2)}</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -303,18 +331,18 @@ export default function PaymentPage() {
               {/* Payment Form */}
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment Details</h2>
-                
+
                 <Elements stripe={stripePromise} options={{ clientSecret }}>
-                  <PaymentForm 
-                    bookingId={bookingId} 
+                  <PaymentForm
+                    bookingId={bookingId}
                     clientSecret={clientSecret}
-                    booking={booking}
+                    payAmount={payAmount}
                   />
                 </Elements>
 
                 <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-600">
-                    <strong>Cancellation Policy:</strong> Free cancellation up to 24 hours before the lesson. 
+                    <strong>Cancellation Policy:</strong> Free cancellation up to 24 hours before the lesson.
                     Cancellations within 24 hours may incur a fee.
                   </p>
                 </div>

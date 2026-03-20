@@ -4,43 +4,464 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminNav from '@/components/admin/AdminNav';
 import { formatBookingId } from '@/lib/utils';
+import {
+  RefreshCw, AlertTriangle, Pencil, X, CheckCircle,
+  XCircle, Ban, ExternalLink, Clock, Info, Package, User, UserX
+} from 'lucide-react';
 
 interface Booking {
-  id: string;
-  startTime: string;
-  endTime: string;
-  status: string;
-  bookingType: string;
-  price: number;
-  pickupAddress?: string;
-  dropoffAddress?: string;
-  notes?: string;
-  checkInTime?: string;
-  checkOutTime?: string;
-  client: {
-    name: string;
-    email: string;
-    phone: string;
-  };
-  instructor: {
-    id: string;
-    name: string;
-    phone: string;
+  id: string; startTime: string; endTime: string; status: string;
+  bookingType?: string; price: number; platformFee: number; instructorPayout: number;
+  pickupAddress?: string; dropoffAddress?: string; notes?: string;
+  isPaid: boolean; duration: number;
+  isPackageBooking?: boolean; parentBookingId?: string;
+  clientName?: string; clientPhone?: string;
+  client?: { id: string; name: string; email: string; phone: string };
+  instructor: { id: string; name: string; phone: string };
+}
+
+interface Stats {
+  total: number; confirmed: number; pending: number;
+  completed: number; cancelled: number; noShow: number; endedConfirmed: number;
+}
+
+const STATUS_STYLE: Record<string, string> = {
+  CONFIRMED: 'bg-green-100 text-green-800',
+  PENDING: 'bg-yellow-100 text-yellow-800',
+  COMPLETED: 'bg-blue-100 text-blue-800',
+  CANCELLED: 'bg-red-100 text-red-800',
+  NO_SHOW: 'bg-orange-100 text-orange-800',
+};
+
+function getActionRules(b: Booking, now: Date) {
+  const started = b.startTime ? new Date(b.startTime) <= now : false;
+  const ended = b.endTime ? new Date(b.endTime) <= now : false;
+  const isFinal = b.status === 'COMPLETED' || b.status === 'CANCELLED' || b.status === 'NO_SHOW';
+  return {
+    canComplete: (b.status === 'CONFIRMED' || b.status === 'PENDING') && ended,
+    completeBlockReason: !ended && b.endTime
+      ? `Lesson ends ${new Date(b.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })} on ${new Date(b.endTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`
+      : null,
+    canNoShow: b.status === 'CONFIRMED' && started,
+    noShowBlockReason: !started ? `Lesson hasn't started yet` : null,
+    canCancel: !isFinal,
+    canConfirm: b.status === 'PENDING',
+    isFinal, ended, started,
   };
 }
 
-export default function AdminBookingsPage() {
+// ─── No-show party picker step ───────────────────────────────────────────────
+function NoShowPartyStep({
+  booking,
+  onSelect,
+  onBack,
+}: {
+  booking: Booking;
+  onSelect: (party: 'instructor' | 'client' | 'both') => void;
+  onBack: () => void;
+}) {
+  const clientName = booking.clientName || booking.client?.name || 'Client';
+  const isPackage = booking.isPackageBooking;
+
+  const options: { party: 'instructor' | 'client' | 'both'; label: string; sub: string; icon: React.ReactNode; resolution: string }[] = [
+    {
+      party: 'instructor',
+      label: `${booking.instructor?.name || 'Instructor'} didn't show`,
+      sub: 'Instructor failed to attend',
+      icon: <UserX className="h-5 w-5 text-red-500" />,
+      resolution: isPackage
+        ? 'Lesson credit returned to package · Instructor charged penalty'
+        : 'Client wallet refunded · Instructor charged penalty',
+    },
+    {
+      party: 'client',
+      label: `${clientName} didn't show`,
+      sub: 'Client failed to attend',
+      icon: <User className="h-5 w-5 text-orange-500" />,
+      resolution: 'Instructor gets paid · Client forfeits lesson',
+    },
+    {
+      party: 'both',
+      label: 'Both / Disputed',
+      sub: 'Unclear or contested — needs review',
+      icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
+      resolution: 'Moves to Disputes tab for manual resolution',
+    },
+  ];
+
+  return (
+    <div className="px-5 py-4 space-y-3">
+      <div className="flex items-center gap-2 mb-1">
+        <button onClick={onBack} className="text-xs text-gray-400 hover:text-gray-600">← Back</button>
+        <p className="text-sm font-semibold text-gray-800">Who didn't show up?</p>
+      </div>
+      <p className="text-xs text-gray-500 -mt-1">This determines the resolution path in Payouts.</p>
+      {options.map(o => (
+        <button
+          key={o.party}
+          onClick={() => onSelect(o.party)}
+          className="w-full text-left rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5">{o.icon}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800">{o.label}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{o.sub}</p>
+              <p className="text-xs text-blue-600 mt-1 font-medium">→ {o.resolution}</p>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Completed confirmation screen ───────────────────────────────────────────
+function CompletedScreen({ booking, onClose }: { booking: Booking; onClose: () => void }) {
   const router = useRouter();
+  const clientName = booking.clientName || booking.client?.name || 'Client';
+  return (
+    <div className="px-5 py-6 flex flex-col items-center text-center gap-4">
+      <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
+        <CheckCircle className="h-7 w-7 text-blue-600" />
+      </div>
+      <div>
+        <p className="text-lg font-semibold text-gray-900">Marked Complete</p>
+        <p className="text-sm text-gray-500 mt-1">
+          {clientName}'s lesson with {booking.instructor?.name} is complete.
+        </p>
+      </div>
+      <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
+        <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+          <Info className="h-4 w-4 shrink-0" />
+          Instructor payout now eligible
+        </p>
+        <p className="text-xs text-blue-700 mt-1">
+          ${(booking.instructorPayout || 0).toFixed(2)} for {booking.instructor?.name} is ready to process.
+        </p>
+        {booking.isPackageBooking && (
+          <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+            <Package className="h-3 w-3" /> Package lesson — drawn from client's package balance.
+          </p>
+        )}
+        <button onClick={() => router.push('/admin/payouts')}
+          className="mt-3 flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:text-blue-900 underline">
+          Go to Payout Management <ExternalLink className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="flex gap-3 w-full">
+        <button onClick={onClose} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Close</button>
+        <button onClick={() => router.push('/admin/payouts')} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">View Payouts</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── No-show confirmation screen ─────────────────────────────────────────────
+function NoShowScreen({
+  booking, party, onClose,
+}: { booking: Booking; party: 'instructor' | 'client' | 'both'; onClose: () => void }) {
+  const router = useRouter();
+  const isPackage = booking.isPackageBooking;
+
+  const info = {
+    instructor: {
+      title: 'Instructor No-Show Recorded',
+      color: 'red',
+      steps: isPackage
+        ? ['Lesson marked NO_SHOW', 'Goes to Withheld in Payouts', 'Resolve → "Refund Client" returns credit to package', 'Resolve → "Charge Instructor" applies penalty']
+        : ['Lesson marked NO_SHOW', 'Goes to Withheld in Payouts', 'Resolve → "Refund Client" credits wallet back', 'Resolve → "Charge Instructor" applies penalty'],
+    },
+    client: {
+      title: 'Client No-Show Recorded',
+      color: 'orange',
+      steps: ['Lesson marked NO_SHOW', 'Goes to Withheld in Payouts', 'Resolve → "Pay Instructor" releases their payout', 'Client forfeits the lesson (no refund)'],
+    },
+    both: {
+      title: 'Dispute Flagged',
+      color: 'yellow',
+      steps: ['Lesson marked NO_SHOW', 'Goes to Disputes tab in Payouts', 'Admin reviews and resolves manually', 'Choose: refund client, pay instructor, charge penalty, or void'],
+    },
+  }[party];
+
+  const colorMap: Record<string, string> = {
+    red: 'bg-red-50 border-red-200 text-red-800',
+    orange: 'bg-orange-50 border-orange-200 text-orange-800',
+    yellow: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+  };
+
+  return (
+    <div className="px-5 py-6 flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${party === 'instructor' ? 'bg-red-100' : party === 'client' ? 'bg-orange-100' : 'bg-yellow-100'}`}>
+          <XCircle className={`h-5 w-5 ${party === 'instructor' ? 'text-red-600' : party === 'client' ? 'text-orange-600' : 'text-yellow-600'}`} />
+        </div>
+        <p className="font-semibold text-gray-900">{info.title}</p>
+      </div>
+      <div className={`rounded-lg border p-4 ${colorMap[info.color]}`}>
+        <p className="text-xs font-semibold mb-2 uppercase tracking-wide opacity-70">Resolution steps</p>
+        <ol className="space-y-1">
+          {info.steps.map((s, i) => (
+            <li key={i} className="text-xs flex items-start gap-2">
+              <span className="font-bold shrink-0">{i + 1}.</span> {s}
+            </li>
+          ))}
+        </ol>
+      </div>
+      {isPackage && (
+        <div className="flex items-center gap-2 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+          <Package className="h-3.5 w-3.5 shrink-0" />
+          Package lesson — refund returns credit to wallet, not a card refund.
+        </div>
+      )}
+      <div className="flex gap-3">
+        <button onClick={onClose} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Close</button>
+        <button onClick={() => router.push('/admin/payouts')} className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">
+          Go to Payouts
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main edit drawer ─────────────────────────────────────────────────────────
+function BookingEditDrawer({
+  booking, onClose, onUpdated,
+}: { booking: Booking; onClose: () => void; onUpdated: () => void }) {
+  const [step, setStep] = useState<'actions' | 'noshow-party' | 'done-complete' | 'done-noshow'>('actions');
+  const [noShowParty, setNoShowParty] = useState<'instructor' | 'client' | 'both' | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const now = new Date();
+  const rules = getActionRules(booking, now);
+  const clientName = booking.clientName || booking.client?.name || 'Unknown';
+  const isPackage = booking.isPackageBooking;
+
+  const updateStatus = async (status: string, noShowPartyValue?: string) => {
+    setUpdating(status);
+    try {
+      const res = await fetch('/api/admin/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, status, noShowParty: noShowPartyValue }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        onUpdated();
+        if (status === 'COMPLETED') setStep('done-complete');
+        else if (status === 'NO_SHOW') setStep('done-noshow');
+        else onClose();
+      } else {
+        setToast(d.error || 'Failed to update.');
+      }
+    } catch { setToast('Failed to update booking.'); }
+    finally { setUpdating(null); }
+  };
+
+  const handleNoShowPartySelect = (party: 'instructor' | 'client' | 'both') => {
+    setNoShowParty(party);
+    updateStatus('NO_SHOW', party);
+  };
+
+  const cancelBooking = async () => {
+    setUpdating('CANCELLED');
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Cancelled by admin' }),
+      });
+      if (res.ok) { onUpdated(); onClose(); }
+      else { const d = await res.json(); setToast(d.error || 'Failed.'); }
+    } catch { setToast('Failed to cancel.'); }
+    finally { setUpdating(null); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div>
+              <p className="font-semibold text-gray-900 flex items-center gap-2">
+                {clientName}
+                {isPackage && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
+                    <Package className="h-3 w-3" /> Package
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-gray-400">
+                #{formatBookingId(booking.id)} · {new Date(booking.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Booking summary strip */}
+        {step === 'actions' && (
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 grid grid-cols-3 gap-3 text-xs">
+            <div>
+              <p className="text-gray-400">Instructor</p>
+              <p className="font-medium text-gray-700">{booking.instructor?.name || '—'}</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Time</p>
+              <p className="font-medium text-gray-700">
+                {new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                {' – '}
+                {booking.endTime ? new Date(booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '?'}
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-400">Price</p>
+              <p className="font-medium text-gray-700">${booking.price.toFixed(2)}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Package info banner */}
+        {step === 'actions' && isPackage && (
+          <div className="px-5 py-2 bg-purple-50 border-b border-purple-100 flex items-center gap-2 text-xs text-purple-700">
+            <Package className="h-3.5 w-3.5 shrink-0" />
+            Package lesson — refunds return as wallet credit, not a card refund.
+          </div>
+        )}
+
+        {/* Status strip */}
+        {step === 'actions' && (
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+            <span className="text-xs text-gray-500">Status:</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[booking.status] || 'bg-gray-100 text-gray-600'}`}>
+              {booking.status}
+            </span>
+            {rules.ended && booking.status === 'CONFIRMED' && (
+              <span className="text-xs text-purple-600 font-medium flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Lesson ended
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Step content */}
+        {step === 'actions' && (
+          <div className="px-5 py-4 space-y-2">
+            {rules.isFinal ? (
+              <p className="text-sm text-gray-400 text-center py-4">
+                This booking is <span className="font-medium text-gray-600">{booking.status}</span> — no further actions available.
+              </p>
+            ) : (
+              <>
+                {/* Complete */}
+                <div className="rounded-lg border border-gray-200 overflow-hidden">
+                  <button
+                    disabled={!rules.canComplete || !!updating}
+                    onClick={() => rules.canComplete && updateStatus('COMPLETED')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${rules.canComplete ? 'hover:bg-blue-50 cursor-pointer' : 'opacity-50 cursor-not-allowed bg-gray-50'}`}
+                  >
+                    <CheckCircle className={`h-5 w-5 shrink-0 ${rules.canComplete ? 'text-blue-600' : 'text-gray-400'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${rules.canComplete ? 'text-blue-700' : 'text-gray-500'}`}>Mark as Completed</p>
+                      {rules.completeBlockReason
+                        ? <p className="text-xs text-amber-600 flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3 shrink-0" /> {rules.completeBlockReason}</p>
+                        : <p className="text-xs text-gray-400 mt-0.5">Releases instructor payout of ${(booking.instructorPayout || 0).toFixed(2)}</p>
+                      }
+                    </div>
+                    {updating === 'COMPLETED' && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />}
+                  </button>
+                </div>
+
+                {/* No-Show */}
+                {booking.status === 'CONFIRMED' && (
+                  <div className="rounded-lg border border-gray-200 overflow-hidden">
+                    <button
+                      disabled={!rules.canNoShow || !!updating}
+                      onClick={() => rules.canNoShow && setStep('noshow-party')}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${rules.canNoShow ? 'hover:bg-orange-50 cursor-pointer' : 'opacity-50 cursor-not-allowed bg-gray-50'}`}
+                    >
+                      <XCircle className={`h-5 w-5 shrink-0 ${rules.canNoShow ? 'text-orange-500' : 'text-gray-400'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${rules.canNoShow ? 'text-orange-700' : 'text-gray-500'}`}>Mark as No-Show</p>
+                        {rules.noShowBlockReason
+                          ? <p className="text-xs text-amber-600 flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3 shrink-0" /> {rules.noShowBlockReason}</p>
+                          : <p className="text-xs text-gray-400 mt-0.5">You'll be asked who didn't show — determines resolution</p>
+                        }
+                      </div>
+                    </button>
+                  </div>
+                )}
+
+                {/* Confirm pending */}
+                {booking.status === 'PENDING' && (
+                  <div className="rounded-lg border border-gray-200 overflow-hidden">
+                    <button disabled={!!updating} onClick={() => updateStatus('CONFIRMED')}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-green-50 transition-colors">
+                      <CheckCircle className="h-5 w-5 shrink-0 text-green-600" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-700">Confirm Booking</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Approve this pending booking</p>
+                      </div>
+                      {updating === 'CONFIRMED' && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600" />}
+                    </button>
+                  </div>
+                )}
+
+                {/* Cancel */}
+                <div className="rounded-lg border border-red-100 overflow-hidden">
+                  <button disabled={!!updating} onClick={cancelBooking}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-red-50 transition-colors">
+                    <Ban className="h-5 w-5 shrink-0 text-red-500" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-700">Cancel Booking</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {isPackage ? 'Lesson credit returned to package · Notifies both parties' : 'Notifies client and instructor'}
+                      </p>
+                    </div>
+                    {updating === 'CANCELLED' && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500" />}
+                  </button>
+                </div>
+              </>
+            )}
+            {toast && <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{toast}</div>}
+          </div>
+        )}
+
+        {step === 'noshow-party' && (
+          <NoShowPartyStep
+            booking={booking}
+            onSelect={handleNoShowPartySelect}
+            onBack={() => setStep('actions')}
+          />
+        )}
+
+        {step === 'done-complete' && (
+          <CompletedScreen booking={booking} onClose={onClose} />
+        )}
+
+        {step === 'done-noshow' && noShowParty && (
+          <NoShowScreen booking={booking} party={noShowParty} onClose={onClose} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [editBooking, setEditBooking] = useState<Booking | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  useEffect(() => {
-    fetchBookings();
-  }, []);
+  useEffect(() => { fetchBookings(); }, []);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -48,376 +469,183 @@ export default function AdminBookingsPage() {
   };
 
   const fetchBookings = async () => {
+    setLoading(true);
     try {
       const res = await fetch('/api/admin/bookings');
       if (res.ok) {
         const data = await res.json();
-        setBookings(data);
-      } else {
-        showToast('error', 'Failed to load bookings. Please try again.');
-      }
-    } catch (error) {
-      console.error('Failed to fetch bookings:', error);
-      showToast('error', 'Failed to load bookings. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+        setBookings(data.bookings || data);
+        setStats(data.stats || null);
+      } else showToast('error', 'Failed to load bookings.');
+    } catch { showToast('error', 'Failed to load bookings.'); }
+    finally { setLoading(false); }
   };
 
-  const toggleRow = (bookingId: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(bookingId)) {
-      newExpanded.delete(bookingId);
-    } else {
-      newExpanded.add(bookingId);
-    }
-    setExpandedRows(newExpanded);
-  };
-
-  const handleEditBooking = (bookingId: string) => {
-    router.push(`/admin/bookings/${bookingId}/edit`);
-  };
-
-  const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('Are you sure you want to cancel this booking? The client and instructor will be notified.')) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/bookings/${bookingId}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Cancelled by admin' })
-      });
-
-      if (res.ok) {
-        showToast('success', 'Booking cancelled successfully.');
-        fetchBookings(); // Refresh the list
-      } else {
-        const data = await res.json();
-        showToast('error', data.error || 'Failed to cancel booking.');
-      }
-    } catch (error) {
-      console.error('Cancel error:', error);
-      showToast('error', 'Failed to cancel booking. Please try again.');
-    }
-  };
-
-  const handleConfirmBooking = async (bookingId: string) => {
-    if (!confirm('Confirm this PENDING booking? The client will be notified.')) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/bookings/${bookingId}/confirm`, {
-        method: 'POST'
-      });
-
-      if (res.ok) {
-        showToast('success', 'Booking confirmed successfully! Client has been notified.');
-        fetchBookings(); // Refresh the list
-      } else {
-        const data = await res.json();
-        showToast('error', data.error || 'Failed to confirm booking.');
-      }
-    } catch (error) {
-      console.error('Confirm error:', error);
-      showToast('error', 'Failed to confirm booking. Please try again.');
-    }
-  };
-
-  const handleViewDetails = (bookingId: string) => {
-    router.push(`/booking/${bookingId}`);
-  };
-
-  const handleViewInstructorProfile = (instructorId: string) => {
-    router.push(`/admin/instructors/${instructorId}`);
-  };
-
-  const filteredBookings = bookings.filter(booking => {
-    // Filter by status
-    if (statusFilter !== 'all' && booking.status !== statusFilter) return false;
-    
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const clientName = booking.client?.name || (booking as any).clientName || '';
-      const clientEmail = booking.client?.email || (booking as any).clientEmail || '';
-      const instructorName = booking.instructor?.name || '';
+  const now = new Date();
+  const filtered = bookings.filter(b => {
+    if (statusFilter !== 'all' && b.status !== statusFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
       return (
-        clientName.toLowerCase().includes(query) ||
-        clientEmail.toLowerCase().includes(query) ||
-        instructorName.toLowerCase().includes(query) ||
-        booking.id.toLowerCase().includes(query)
+        (b.clientName || b.client?.name || '').toLowerCase().includes(q) ||
+        (b.client?.email || '').toLowerCase().includes(q) ||
+        (b.instructor?.name || '').toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q)
       );
     }
-    
     return true;
   });
 
-  const stats = {
-    total: bookings.length,
-    confirmed: bookings.filter(b => b.status === 'CONFIRMED').length,
-    pending: bookings.filter(b => b.status === 'PENDING').length,
-    cancelled: bookings.filter(b => b.status === 'CANCELLED').length,
-    completed: bookings.filter(b => b.status === 'COMPLETED').length,
-  };
+  const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  const fmtTime = (s: string) => new Date(s).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <AdminNav />
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <p>Loading bookings...</p>
-        </div>
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50"><AdminNav />
+      <div className="max-w-7xl mx-auto px-4 py-8 flex items-center gap-3 text-gray-500">
+        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" /> Loading bookings...
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
-
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">All Bookings</h1>
+
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">All Bookings</h1>
+            <p className="text-sm text-gray-500 mt-1">Click Manage to update a booking's status</p>
+          </div>
+          <button onClick={fetchBookings} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <p className="text-sm text-gray-600">Total</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+        {stats && (
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-3 mb-6">
+            {[
+              { label: 'Total', value: stats.total, color: 'text-gray-900' },
+              { label: 'Confirmed', value: stats.confirmed, color: 'text-green-600' },
+              { label: 'Pending', value: stats.pending, color: 'text-yellow-600' },
+              { label: 'Completed', value: stats.completed, color: 'text-blue-600' },
+              { label: 'Cancelled', value: stats.cancelled, color: 'text-red-600' },
+              { label: 'No-Show', value: stats.noShow, color: 'text-orange-600' },
+              { label: 'Ended (unpaid)', value: stats.endedConfirmed, color: 'text-purple-600' },
+            ].map(s => (
+              <div key={s.label} className="bg-white rounded-lg shadow p-3 text-center">
+                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+              </div>
+            ))}
           </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <p className="text-sm text-gray-600">Confirmed</p>
-            <p className="text-2xl font-bold text-green-600">{stats.confirmed}</p>
+        )}
+
+        {stats && stats.endedConfirmed > 0 && (
+          <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg px-4 py-3 flex items-center gap-3 text-sm text-purple-800">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              {stats.endedConfirmed} lesson{stats.endedConfirmed !== 1 ? 's have' : ' has'} ended but {stats.endedConfirmed !== 1 ? 'are' : 'is'} still <strong>CONFIRMED</strong> — click Manage to mark complete and release payouts.
+            </span>
           </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <p className="text-sm text-gray-600">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <p className="text-sm text-gray-600">Completed</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.completed}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <p className="text-sm text-gray-600">Cancelled</p>
-            <p className="text-2xl font-bold text-red-600">{stats.cancelled}</p>
+        )}
+
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow p-4 mb-4 flex flex-col md:flex-row gap-3">
+          <input type="text" placeholder="Search client, instructor, booking ID..." value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <div className="flex gap-2 flex-wrap">
+            {['all', 'CONFIRMED', 'PENDING', 'COMPLETED', 'CANCELLED', 'NO_SHOW'].map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {s === 'all' ? 'All' : s.replace('_', '-')}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="bg-white p-4 rounded-lg shadow mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <input
-              type="text"
-              placeholder="Search by client, instructor, or booking ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => setStatusFilter('all')}
-                className={`px-4 py-2 rounded ${statusFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-200'}`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setStatusFilter('CONFIRMED')}
-                className={`px-4 py-2 rounded ${statusFilter === 'CONFIRMED' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
-              >
-                Confirmed
-              </button>
-              <button
-                onClick={() => setStatusFilter('PENDING')}
-                className={`px-4 py-2 rounded ${statusFilter === 'PENDING' ? 'bg-yellow-600 text-white' : 'bg-gray-200'}`}
-              >
-                Pending
-              </button>
-              <button
-                onClick={() => setStatusFilter('COMPLETED')}
-                className={`px-4 py-2 rounded ${statusFilter === 'COMPLETED' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-              >
-                Completed
-              </button>
-              <button
-                onClick={() => setStatusFilter('CANCELLED')}
-                className={`px-4 py-2 rounded ${statusFilter === 'CANCELLED' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
-              >
-                Cancelled
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Compact Table */}
+        {/* Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8"></th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Time</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                <th className="px-4 py-3 text-left">Client</th>
+                <th className="px-4 py-3 text-left">Instructor</th>
+                <th className="px-4 py-3 text-left">Date / Time</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-right">Price</th>
+                <th className="px-4 py-3 text-center">Manage</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredBookings.map((booking) => {
-                const isExpanded = expandedRows.has(booking.id);
+            <tbody className="divide-y divide-gray-100">
+              {filtered.map(b => {
+                const rules = getActionRules(b, now);
+                const clientName = b.clientName || b.client?.name || 'Unknown';
+                const hasAlert = rules.ended && b.status === 'CONFIRMED';
                 return (
-                  <>
-                    <tr key={booking.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => toggleRow(booking.id)}
-                          className="text-gray-600 hover:text-gray-900"
-                        >
-                          {isExpanded ? '▼' : '▶'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-gray-900">
-                          {booking.client?.name || (booking as any).clientName || 'Unknown'}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {booking.client?.email || (booking as any).clientEmail || 'No email'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm text-gray-900">{booking.instructor?.name || 'Unknown'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {new Date(booking.startTime).toLocaleDateString()}
-                        <div className="text-xs">{new Date(booking.startTime).toLocaleTimeString()}</div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {booking.bookingType}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          booking.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                          booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                          booking.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
-                          booking.status === 'COMPLETED' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {booking.status}
+                  <tr key={b.id} className={`hover:bg-gray-50 ${hasAlert ? 'bg-purple-50 hover:bg-purple-100' : ''}`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-medium text-gray-900">{clientName}</p>
+                        {b.isPackageBooking && (
+                          <span title="Package lesson" className="inline-flex items-center px-1.5 py-0.5 bg-purple-100 text-purple-600 text-xs rounded-full">
+                            <Package className="h-3 w-3" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400">{b.client?.email || b.clientPhone || ''}</p>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700">{b.instructor?.name || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      <p>{fmtDate(b.startTime)}</p>
+                      <p className="text-xs">{fmtTime(b.startTime)} – {b.endTime ? fmtTime(b.endTime) : '?'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[b.status] || 'bg-gray-100 text-gray-600'}`}>
+                        {b.status}
+                      </span>
+                      {hasAlert && (
+                        <span className="ml-1.5 text-xs text-purple-600 font-medium flex items-center gap-0.5 mt-0.5">
+                          <Clock className="h-3 w-3" /> ended
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        ${booking.price.toFixed(2)}
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr className="bg-gray-50">
-                        <td colSpan={7} className="px-4 py-4">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
-                            <div>
-                              <p className="font-semibold text-gray-700 mb-2">Client Details</p>
-                              <p className="text-gray-600">Name: {booking.client?.name || (booking as any).clientName || 'Unknown'}</p>
-                              <p className="text-gray-600">Email: {booking.client?.email || (booking as any).clientEmail || 'No email'}</p>
-                              <p className="text-gray-600">Phone: {booking.client?.phone || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-700 mb-2">Instructor Details</p>
-                              <p className="text-gray-600">Name: {booking.instructor.name}</p>
-                              <p className="text-gray-600">Phone: {booking.instructor.phone}</p>
-                              <button
-                                onClick={() => handleViewInstructorProfile(booking.instructor.id)}
-                                className="mt-2 text-sm text-blue-600 hover:text-blue-800 underline"
-                              >
-                                View Instructor Profile →
-                              </button>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-700 mb-2">Booking Details</p>
-                              <p className="text-gray-600">ID: #{formatBookingId(booking.id)}</p>
-                              <p className="text-gray-600">Type: {booking.bookingType}</p>
-                              <p className="text-gray-600">Duration: {Math.round((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60000)} mins</p>
-                              {booking.checkInTime && (
-                                <p className="text-gray-600">Check-in: {new Date(booking.checkInTime).toLocaleTimeString()}</p>
-                              )}
-                              {booking.checkOutTime && (
-                                <p className="text-gray-600">Check-out: {new Date(booking.checkOutTime).toLocaleTimeString()}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
-                            <div>
-                              <p className="font-semibold text-gray-700 mb-2">Addresses</p>
-                              {booking.pickupAddress && (
-                                <p className="text-gray-600">Pickup: {booking.pickupAddress}</p>
-                              )}
-                              {booking.dropoffAddress && (
-                                <p className="text-gray-600">Dropoff: {booking.dropoffAddress}</p>
-                              )}
-                            </div>
-                            {booking.notes && (
-                              <div>
-                                <p className="font-semibold text-gray-700 mb-2">Notes:</p>
-                                <p className="text-gray-600">{booking.notes}</p>
-                              </div>
-                            )}
-                          </div>
-                          {/* Admin Actions */}
-                          <div className="flex gap-3 pt-3 border-t border-gray-200">
-                            {booking.status === 'PENDING' && (
-                              <button
-                                onClick={() => handleConfirmBooking(booking.id)}
-                                className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm font-medium"
-                              >
-                                ⚠️ Confirm Pending Booking
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleEditBooking(booking.id)}
-                              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                            >
-                              Edit Booking
-                            </button>
-                            {booking.status !== 'CANCELLED' && booking.status !== 'COMPLETED' && (
-                              <button
-                                onClick={() => handleCancelBooking(booking.id)}
-                                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                              >
-                                Cancel Booking
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleViewDetails(booking.id)}
-                              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
-                            >
-                              View Full Details
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900">${b.price.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-center">
+                      {!rules.isFinal ? (
+                        <button onClick={() => setEditBooking(b)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            hasAlert ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}>
+                          <Pencil className="h-3 w-3" />
+                          {hasAlert ? 'Action needed' : 'Manage'}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-300 italic">—</span>
+                      )}
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>
           </table>
-
-          {filteredBookings.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No bookings found</p>
-            </div>
-          )}
+          {filtered.length === 0 && <div className="text-center py-12 text-gray-400">No bookings found.</div>}
         </div>
       </div>
 
-      {/* Toast notifications */}
+      {editBooking && (
+        <BookingEditDrawer
+          booking={editBooking}
+          onClose={() => setEditBooking(null)}
+          onUpdated={() => { fetchBookings(); }}
+        />
+      )}
+
       {toast && (
         <div className="fixed bottom-4 right-4 z-50">
-          <div
-            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
-              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-            }`}
-          >
+          <div className={`rounded-lg shadow-lg px-4 py-3 text-sm text-white ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
             {toast.message}
           </div>
         </div>

@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, Phone, Mail, MapPin, Plus, Search, Edit2, ChevronDown, ChevronUp, Save, X } from 'lucide-react'
+import { User, Phone, Mail, MapPin, Plus, Search, Edit2, ChevronDown, ChevronUp, Save, X, CalendarPlus } from 'lucide-react'
+import Link from 'next/link'
 
 interface Client {
   id: string
   name: string
   phone: string
   email: string
+  userId?: string
   // aliased field from the backend for display and booking defaults
   addressText?: string
   addressLatitude?: number
@@ -279,6 +281,16 @@ export default function ClientsPage() {
                       
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {!isEditing && (
+                          <Link
+                            href={`/dashboard/bookings/new?clientId=${client.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-2 hover:bg-green-50 rounded-lg text-green-600"
+                            title="Book Now"
+                          >
+                            <CalendarPlus className="h-4 w-4" />
+                          </Link>
+                        )}
+                        {!isEditing && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -403,6 +415,15 @@ export default function ClientsPage() {
                             )}
                             <div className="pt-2 border-t text-xs text-gray-500">
                               Added {new Date(displayClient.createdAt).toLocaleDateString()}
+                            </div>
+                            <div className="pt-2">
+                              <Link
+                                href={`/dashboard/bookings/new?clientId=${client.id}`}
+                                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 text-sm font-medium"
+                              >
+                                <CalendarPlus className="h-4 w-4" />
+                                Book Now
+                              </Link>
                             </div>
                           </div>
                         )}

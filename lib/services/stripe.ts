@@ -61,9 +61,9 @@ export class StripeService {
     try {
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
-        currency: 'aud', // Australian dollars
-        capture_method: 'automatic', // Immediate capture
-        receipt_email: clientEmail,
+        currency: 'aud',
+        capture_method: 'automatic',
+        ...(clientEmail && clientEmail !== 'customer@example.com' ? { receipt_email: clientEmail } : {}),
         description,
         metadata,
       });

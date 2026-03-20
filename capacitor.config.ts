@@ -3,12 +3,12 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.drivebook.app',
   appName: 'DriveBook',
-  webDir: 'out',
+  webDir: 'www',
   server: {
     androidScheme: 'https',
-    // For development, you can use your local server
-    // url: 'http://192.168.148.108:3000',
-    // cleartext: true,
+    // Your computer's IP on phone hotspot network
+    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.148.108:3000',
+    cleartext: true, // Allow HTTP for local development
   },
   plugins: {
     SplashScreen: {

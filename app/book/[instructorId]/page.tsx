@@ -2,9 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Calendar, MapPin, Car, Star, Clock, DollarSign, ArrowLeft } from 'lucide-react'
+import { Calendar, MapPin, Car, Star, ArrowLeft } from 'lucide-react'
 import BulkBookingForm from '@/components/BulkBookingForm'
-import CarImageModal from '@/components/CarImageModal'
 
 export default async function PublicBookingPage({ 
   params,
@@ -15,14 +14,7 @@ export default async function PublicBookingPage({
 }) {
   const instructor = await prisma.instructor.findUnique({
     where: { id: params.instructorId },
-    include: {
-      serviceAreas: {
-        where: { isActive: true },
-        orderBy: { postcode: 'asc' }
-      }
-    }
   })
-
   if (!instructor) {
     notFound()
   }
@@ -37,6 +29,8 @@ export default async function PublicBookingPage({
   const secondaryColor = hasBranding && (instructor as any).brandColorSecondary ? (instructor as any).brandColorSecondary : '#10B981';
 
   const searchedLocation = searchParams.location || null;
+
+  const activePackages = ((instructor.lessonPackages as any[]) || []).filter((p: any) => p.isActive !== false);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -75,102 +69,75 @@ export default async function PublicBookingPage({
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Instructor Profile */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow p-6 sticky top-24">
-              {/* Profile Image */}
-              <div className="text-center mb-6">
-                {instructor.profileImage ? (
-                  <Image
-                    src={instructor.profileImage}
-                    alt={instructor.name}
-                    width={150}
-                    height={150}
-                    className="rounded-full mx-auto object-cover"
-                  />
-                ) : (
-                  <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto flex items-center justify-center">
-                    <span className="text-4xl font-bold text-gray-400">
+            <div className="bg-white rounded-xl shadow-md overflow-hidden sticky top-24">
+              {/* Photos: profile + car side by side */}
+              <div className="flex">
+                <div className="relative w-1/2 h-40 bg-gray-100">
+                  {instructor.profileImage ? (
+                    <Image src={instructor.profileImage} alt={instructor.name} fill className="object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-5xl font-bold text-gray-300">
                       {instructor.name.charAt(0)}
-                    </span>
-                  </div>
-                )}
-                <h1 className="text-2xl font-bold mt-4">{instructor.name}</h1>
-                <div className="flex items-center justify-center gap-1 mt-2">
+                    </div>
+                  )}
+                </div>
+                <div className="relative w-1/2 h-40 bg-gray-50">
+                  {instructor.carImage ? (
+                    <Image src={instructor.carImage} alt="Training vehicle" fill className="object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                      <Car className="h-12 w-12" />
+                    </div>
+                  )}
+                  {(instructor.carMake || instructor.carModel) && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-xs px-2 py-1 truncate">
+                      {[instructor.carYear, instructor.carMake, instructor.carModel].filter(Boolean).join(' ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-5">
+                {/* Name + rating */}
+                <h1 className="text-xl font-bold text-gray-900">{instructor.name}</h1>
+                <div className="flex items-center gap-1 mt-1 mb-3">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                    <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                   ))}
-                  <span className="ml-2 text-gray-600">(4.9)</span>
-                </div>
-              </div>
-
-              {/* Bio */}
-              {instructor.bio && (
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">About</h3>
-                  <p className="text-gray-600 text-sm">{instructor.bio}</p>
-                </div>
-              )}
-
-              {/* Details and Car Image Side by Side */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                {/* Left Column: Details */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <DollarSign className="h-5 w-5 text-gray-400" />
-                    <span className="font-semibold" style={{ color: secondaryColor }}>
-                      ${instructor.hourlyRate}/hour
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Car className="h-5 w-5 text-gray-400" />
-                    <span className="text-xs">{instructor.vehicleTypes.join(', ')}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-5 w-5 text-gray-400" />
-                    <span className="text-xs">Flexible hours</span>
-                  </div>
+                  <span className="ml-1 text-sm text-gray-500">(4.9)</span>
                 </div>
 
-                {/* Right Column: Car Image */}
-                {instructor.carImage && (
+                {/* Bio */}
+                {instructor.bio && (
+                  <p className="text-sm text-gray-600 mb-4">{instructor.bio}</p>
+                )}
+
+                {/* Pricing tiles */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                    <p className="text-xs text-gray-500">Standard</p>
+                    <p className="text-base font-bold text-blue-700" style={{ color: secondaryColor }}>
+                      ${instructor.hourlyRate}/hr
+                    </p>
+                  </div>
+                  {activePackages.map((pkg: any) => (
+                    <div key={pkg.id} className="bg-indigo-50 rounded-lg px-3 py-2">
+                      <p className="text-xs text-gray-500 truncate">{pkg.name}</p>
+                      <p className="text-base font-bold text-indigo-700">${pkg.price.toFixed(2)}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Service Areas */}
+                {instructor.serviceAreas && (
                   <div>
-                    <h3 className="font-semibold mb-2 text-sm">Training Vehicle</h3>
-                    <CarImageModal
-                      carImage={instructor.carImage}
-                      carMake={instructor.carMake}
-                      carModel={instructor.carModel}
-                      carYear={instructor.carYear}
-                    />
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                      <MapPin className="h-4 w-4" /> Service Areas
+                    </h3>
+                    <p className="text-xs text-gray-500">{instructor.serviceAreas}</p>
                   </div>
                 )}
               </div>
-
-              {/* Car Details Below */}
-              {instructor.carImage && (instructor.carMake || instructor.carModel) && (
-                <p className="text-sm text-gray-600 mb-6">
-                  {instructor.carMake} {instructor.carModel} {instructor.carYear}
-                </p>
-              )}
-
-              {/* Service Areas */}
-              {instructor.serviceAreas.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
-                    Service Areas
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {instructor.serviceAreas.map((area) => (
-                      <span
-                        key={area.id}
-                        className="px-3 py-1 rounded-full text-sm text-white"
-                        style={{ backgroundColor: secondaryColor }}
-                      >
-                        {area.postcode}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -210,6 +177,10 @@ export default async function PublicBookingPage({
                 searchedLocation={searchedLocation}
                 brandColorPrimary={primaryColor}
                 brandColorSecondary={secondaryColor}
+                lessonPackages={activePackages}
+                serviceAreas={instructor.serviceAreas}
+                baseAddress={instructor.baseAddress}
+                serviceRadiusKm={instructor.serviceRadiusKm}
               />
             </div>
           </div>

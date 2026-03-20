@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Calendar, MapPin } from 'lucide-react'
 import BookingFormNew from '@/components/BookingFormNew'
 
@@ -17,6 +17,9 @@ interface Client {
 
 export default function NewBookingPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const preselectedClientId = searchParams.get('clientId')
+
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [showCalendar, setShowCalendar] = useState(false)
@@ -26,6 +29,17 @@ export default function NewBookingPage() {
     fetchClients()
     fetchInstructorData()
   }, [])
+
+  // Auto-select client when clients load and clientId is in URL
+  useEffect(() => {
+    if (preselectedClientId && clients.length > 0) {
+      const client = clients.find(c => c.id === preselectedClientId)
+      if (client) {
+        setSelectedClient(client)
+        setShowCalendar(true)
+      }
+    }
+  }, [preselectedClientId, clients])
 
   const fetchClients = async () => {
     try {

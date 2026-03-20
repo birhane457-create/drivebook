@@ -2,12 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Calendar, Clock, User, Mail, Phone, MapPin, DollarSign, AlertCircle, CheckCircle2 } from 'lucide-react'
-
-interface TimeSlot {
-  time: string
-  available: boolean
-  reason?: string
-}
+import SlotPicker from '@/components/SlotPicker'
 
 interface BookingFormProps {
   instructorId?: string
@@ -45,9 +40,18 @@ export default function BookingForm({
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [bookingId, setBookingId] = useState('')
-  const [loadingSlots, setLoadingSlots] = useState(false)
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [instructorData, setInstructorData] = useState<{ id: string; hourlyRate: number } | null>(null)
+  const [insufficientBalance, setInsufficientBalance] = useState<{
+    clientName: string
+    clientEmail: string
+    clientId: string
+    currentBalance: number
+    required: number
+    shortfall: number
+    topUpAmount: number
+  } | null>(null)
+  const [sendingLink, setSendingLink] = useState(false)
+  const [linkSent, setLinkSent] = useState(false)
   
   // Initialize form data with existing booking if editing
   const [formData, setFormData] = useState(() => {
@@ -60,7 +64,9 @@ export default function BookingForm({
         name: preselectedClient?.name || '',
         email: preselectedClient?.email || '',
         phone: preselectedClient?.phone || '',
-        address: existingBooking.pickupAddress || preselectedClient?.addressText || preselectedClient?.defaultPickupAddress || '',
+        address: existingBooking.pickupAddress || preselectedClient?.addressText || '',
+        dropoffAddress: (existingBooking as any).dropoffAddress || '',
+        sameAsPickup: !(existingBooking as any).dropoffAddress,
         date: start.toISOString().split('T')[0],
         time: start.toTimeString().slice(0, 5),
         duration,
@@ -73,7 +79,9 @@ export default function BookingForm({
       name: preselectedClient?.name || '',
       email: preselectedClient?.email || '',
       phone: preselectedClient?.phone || '',
-      address: preselectedClient?.addressText || preselectedClient?.defaultPickupAddress || '',
+      address: preselectedClient?.addressText || '',
+      dropoffAddress: '',
+      sameAsPickup: true,
       date: '',
       time: '',
       duration: 60,
@@ -103,38 +111,42 @@ export default function BookingForm({
     }
   }
 
-  // Fetch available time slots when date or duration changes
-  useEffect(() => {
-    if (formData.date && formData.duration && instructorData) {
-      fetchTimeSlots()
-    }
-  }, [formData.date, formData.duration])
-
-  const fetchTimeSlots = async () => {
-    if (!instructorData) return
-    
-    setLoadingSlots(true)
-    try {
-      // Exclude current booking from availability check when editing
-      const excludeParam = existingBooking ? `&excludeBookingId=${existingBooking.id}` : ''
-      const response = await fetch(
-        `/api/availability/slots?instructorId=${instructorData.id}&date=${formData.date}&duration=${formData.duration}${excludeParam}`
-      )
-      if (response.ok) {
-        const data = await response.json()
-        setTimeSlots(data.slots || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch time slots:', error)
-    } finally {
-      setLoadingSlots(false)
-    }
-  }
-
   const calculatePrice = () => {
     if (!instructorData) return '0.00'
     const hours = formData.duration / 60
     return (instructorData.hourlyRate * hours).toFixed(2)
+  }
+
+  const sendPaymentLink = async () => {
+    if (!insufficientBalance) return
+    setSendingLink(true)
+    try {
+      const lessonDate = formData.date
+        ? new Date(formData.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
+        : undefined
+      const res = await fetch('/api/bookings/send-payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: insufficientBalance.clientId,
+          topUpAmount: insufficientBalance.topUpAmount,
+          lessonPrice: insufficientBalance.required,
+          shortfall: insufficientBalance.shortfall,
+          platformFeeRate: 0.036,
+          lessonDate,
+        })
+      })
+      if (res.ok) {
+        setLinkSent(true)
+      } else {
+        const err = await res.json()
+        alert(err.error || 'Failed to send payment link')
+      }
+    } catch {
+      alert('Failed to send payment link')
+    } finally {
+      setSendingLink(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -160,6 +172,7 @@ export default function BookingForm({
             startTime: startTime.toISOString(),
             endTime: endTime.toISOString(),
             pickupAddress: formData.address,
+            dropoffAddress: formData.sameAsPickup ? undefined : formData.dropoffAddress || undefined,
             notes: formData.notes,
             price: parseFloat(calculatePrice())
           })
@@ -183,6 +196,7 @@ export default function BookingForm({
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         pickupAddress: formData.address,
+        dropoffAddress: formData.sameAsPickup ? undefined : formData.dropoffAddress || undefined,
         notes: formData.notes,
         price: parseFloat(calculatePrice()),
         bookingType: 'LESSON',
@@ -193,6 +207,7 @@ export default function BookingForm({
         clientEmail: formData.email,
         clientPhone: formData.phone,
         pickupAddress: formData.address,
+        dropoffAddress: formData.sameAsPickup ? undefined : formData.dropoffAddress || undefined,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         notes: formData.notes,
@@ -245,7 +260,19 @@ export default function BookingForm({
         }
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to create booking')
+        if (error.insufficientBalance) {
+          setInsufficientBalance({
+            clientName: error.clientName,
+            clientEmail: error.clientEmail,
+            clientId: error.clientId,
+            currentBalance: error.currentBalance,
+            required: error.required,
+            shortfall: error.shortfall,
+            topUpAmount: error.topUpAmount,
+          })
+        } else {
+          alert(error.error || 'Failed to create booking')
+        }
       }
     } catch (error) {
       console.error('Booking error:', error)
@@ -306,6 +333,8 @@ export default function BookingForm({
                   email: '',
                   phone: '',
                   address: '',
+                  dropoffAddress: '',
+                  sameAsPickup: true,
                   date: '',
                   time: '',
                   duration: 60,
@@ -396,84 +425,65 @@ export default function BookingForm({
         />
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            <Calendar className="inline h-4 w-4 mr-1" />
-            Date
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium">
+            <MapPin className="inline h-4 w-4 mr-1 text-red-500" />
+            Dropoff Address
           </label>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={formData.sameAsPickup}
+              onChange={(e) => setFormData({ ...formData, sameAsPickup: e.target.checked, dropoffAddress: '' })}
+              className="rounded"
+            />
+            Same as pickup
+          </label>
+        </div>
+        {!formData.sameAsPickup && (
           <input
-            type="date"
-            required
-            value={formData.date}
-            onChange={(e) => setFormData({ ...formData, date: e.target.value, time: '' })}
-            min={new Date().toISOString().split('T')[0]}
+            type="text"
+            value={formData.dropoffAddress}
+            onChange={(e) => setFormData({ ...formData, dropoffAddress: e.target.value })}
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+            placeholder="456 End St, Perth WA 6000"
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            <Clock className="inline h-4 w-4 mr-1" />
-            Duration
-          </label>
-          <select
-            value={formData.duration}
-            onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value), time: '' })}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-          >
-            <option value="30">30 minutes</option>
-            <option value="60">1 hour</option>
-            <option value="90">1.5 hours</option>
-            <option value="120">2 hours</option>
-          </select>
-        </div>
+        )}
+        {formData.sameAsPickup && (
+          <p className="text-sm text-gray-400 italic">Dropoff at same location as pickup</p>
+        )}
       </div>
 
-      {formData.date && (
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            <Clock className="inline h-4 w-4 mr-1" />
-            Select Time
-          </label>
-          
-          {loadingSlots ? (
-            <div className="text-center py-4 text-gray-500">Loading available times...</div>
-          ) : timeSlots.length === 0 ? (
-            <div className="text-center py-4 text-gray-500">No available times for this date</div>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-64 overflow-y-auto p-2 border rounded-lg">
-              {timeSlots.map((slot) => (
-                <button
-                  key={slot.time}
-                  type="button"
-                  disabled={!slot.available}
-                  onClick={() => setFormData({ ...formData, time: slot.time })}
-                  className={`
-                    px-3 py-2 rounded text-sm font-medium transition-colors
-                    ${formData.time === slot.time
-                      ? 'bg-blue-600 text-white ring-2 ring-blue-600'
-                      : slot.available
-                      ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }
-                  `}
-                  title={slot.reason || (slot.available ? 'Available' : 'Unavailable')}
-                >
-                  {slot.time}
-                  {!slot.available && <span className="block text-xs">✗</span>}
-                </button>
-              ))}
-            </div>
-          )}
-          
-          {formData.time && (
-            <p className="text-sm text-green-600 mt-2">
-              ✓ Selected: {formData.time}
-            </p>
-          )}
-        </div>
-      )}
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          <Clock className="inline h-4 w-4 mr-1" />
+          Duration
+        </label>
+        <select
+          value={formData.duration}
+          onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value), time: '' })}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+        >
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="90">1.5 hours</option>
+          <option value="120">2 hours</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          <Calendar className="inline h-4 w-4 mr-1" />
+          Date &amp; Time
+        </label>
+        <SlotPicker
+          instructorId={instructorData?.id || instructorId || ''}
+          duration={formData.duration}
+          selected={formData.date && formData.time ? { date: formData.date, time: formData.time } : null}
+          onSelect={(date, time) => setFormData({ ...formData, date, time })}
+        />
+      </div>
 
       <div>
         <label className="block text-sm font-medium mb-2">Notes (Optional)</label>
@@ -524,6 +534,51 @@ export default function BookingForm({
             <AlertCircle className="inline h-3 w-3 mr-1" />
             Cancellation Policy: 48+ hours (100% refund) • 24-48 hours (50% refund) • Less than 24 hours (No refund)
           </p>
+        </div>
+      )}
+
+      {/* Insufficient balance panel */}
+      {insufficientBalance && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-800">Insufficient wallet balance</p>
+              <p className="text-sm text-red-700 mt-1">
+                {insufficientBalance.clientName} has <strong>${insufficientBalance.currentBalance.toFixed(2)}</strong> but needs <strong>${insufficientBalance.required.toFixed(2)}</strong> for this lesson.
+              </p>
+              <p className="text-sm text-red-700">
+                They need to top up <strong>${insufficientBalance.topUpAmount.toFixed(2)}</strong> (includes 3.6% platform fee).
+              </p>
+            </div>
+          </div>
+          {linkSent ? (
+            <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
+              <CheckCircle2 className="h-4 w-4" />
+              Payment link sent to {insufficientBalance.clientEmail}
+            </div>
+          ) : (
+            <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={sendPaymentLink}
+                disabled={sendingLink}
+                className="flex-1 min-w-[200px] bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+              >
+                {sendingLink ? 'Sending...' : `Send Payment Link — $${insufficientBalance.topUpAmount.toFixed(2)}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setInsufficientBalance(null); setLinkSent(false) }}
+                className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+          {linkSent && (
+            <p className="text-xs text-gray-500">Once the client tops up, retry the booking.</p>
+          )}
         </div>
       )}
 

@@ -1,76 +1,146 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { geocode, distanceKm } from '@/lib/services/geocode';
 
 export const dynamic = 'force-dynamic';
+
+const DEFAULT_RADIUS_KM = 20; // fallback if instructor hasn't set their radius
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const location = searchParams.get('location');
+    const location = searchParams.get('location') || '';
+    const nameQuery = searchParams.get('name') || '';
+    // ?admin=true — skip approved-only filter, return extra fields
+    const isAdmin = searchParams.get('admin') === 'true';
 
-    if (!location) {
-      return NextResponse.json({ error: 'Location is required' }, { status: 400 });
+    if (!location && !nameQuery) {
+      return NextResponse.json({ error: 'Provide location or name' }, { status: 400 });
     }
 
-    console.log('Searching for instructors with location:', location);
-
-    // Get all instructors for now (location filtering needs serviceAreas to be populated)
+    // Fetch all approved instructors with location fields
     const instructors = await prisma.instructor.findMany({
-      include: {
-        bookings: true
-      }
+      where: isAdmin ? {} : { approvalStatus: 'APPROVED', isActive: true },
+      select: {
+        id: true,
+        name: true,
+        profileImage: true,
+        carImage: true,
+        carMake: true,
+        carModel: true,
+        carYear: true,
+        hourlyRate: true,
+        vehicleTypes: true,
+        languages: true,
+        averageRating: true,
+        totalReviews: true,
+        bio: true,
+        serviceAreas: true,
+        baseAddress: true,
+        serviceRadiusKm: true,
+        lessonPackages: true,
+        _count: { select: { bookings: true } },
+      },
     });
 
-    console.log(`Found ${instructors.length} instructors`);
+    // --- Name-only search (no geocoding needed) ---
+    if (nameQuery && !location) {
+      const nl = nameQuery.toLowerCase();
+      const matched = instructors.filter(i => i.name.toLowerCase().includes(nl));
+      return NextResponse.json({ instructors: format(matched, null), count: matched.length });
+    }
 
-    if (!instructors || instructors.length === 0) {
-      return NextResponse.json({ 
-        instructors: [],
-        count: 0,
-        message: location 
-          ? `No instructors found in ${location}. Try searching for a different location or nearby suburb.`
-          : 'No instructors found.'
+    // --- Location / radius search ---
+    // 1. Geocode the searched location
+    const searchPoint = await geocode(location);
+
+    if (!searchPoint) {
+      // Nominatim couldn't resolve — fall back to text match on serviceAreas/baseAddress
+      const tokens = location.toLowerCase().split(/[\s,]+/).filter(t => t.length >= 3);
+      const fallback = instructors.filter(i => {
+        const hay = `${i.serviceAreas || ''} ${i.baseAddress || ''}`.toLowerCase();
+        return tokens.some(t => hay.includes(t));
+      });
+      return NextResponse.json({
+        instructors: format(fallback, null),
+        count: fallback.length,
+        geocodeFailed: true,
+        message: `Could not resolve "${location}" to coordinates — showing text matches`,
       });
     }
 
-    // Format instructors for the frontend
-    const formattedInstructors = instructors.map(instructor => ({
-      id: instructor.id,
-      name: instructor.name,
-      profileImage: instructor.profileImage,
-      carImage: instructor.carImage,
-      carMake: instructor.carMake,
-      carModel: instructor.carModel,
-      carYear: instructor.carYear,
-      hourlyRate: instructor.hourlyRate,
-      vehicleTypes: ['Manual', 'Automatic'], // Default values
-      languages: ['English'], // Default values
-      averageRating: 4.8, // Default rating
-      totalReviews: 0, // TODO: implement reviews
-      totalBookings: instructor.bookings?.length || 0,
-      bio: instructor.bio || 'Experienced driving instructor',
-      distance: 5.2, // Default distance
-      offersTestPackage: false, // TODO: implement test packages
-      testPackagePrice: null,
-      testPackageDuration: null,
-      testPackageIncludes: []
-    }));
+    // 2. For each instructor geocode their base address, then check radius
+    const results: { instructor: typeof instructors[0]; distKm: number }[] = [];
 
-    return NextResponse.json({ 
-      instructors: formattedInstructors,
-      count: formattedInstructors.length,
+    await Promise.all(
+      instructors.map(async (i) => {
+        if (!i.baseAddress) return; // can't do radius check without a base
+
+        const base = await geocode(i.baseAddress);
+        if (!base) return;
+
+        const radius = i.serviceRadiusKm ?? DEFAULT_RADIUS_KM;
+        const dist = distanceKm(searchPoint, base);
+
+        if (dist <= radius) {
+          results.push({ instructor: i, distKm: Math.round(dist * 10) / 10 });
+        }
+      })
+    );
+
+    // Sort closest first
+    results.sort((a, b) => a.distKm - b.distKm);
+
+    return NextResponse.json({
+      instructors: results.map(({ instructor: i, distKm }) => ({
+        ...format([i], searchPoint)[0],
+        distance: distKm,
+      })),
+      count: results.length,
       searchQuery: location,
-      note: 'Location filtering not yet implemented - showing all available instructors'
+      searchPoint,
     });
   } catch (error) {
     console.error('Instructor search error:', error);
-    return NextResponse.json(
-      { 
-        error: 'Failed to search instructors',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        message: 'Check that your Prisma schema includes all required Instructor fields'
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to search instructors' }, { status: 500 });
   }
+}
+
+/** Shape instructors for the frontend */
+function format(
+  instructors: {
+    id: string; name: string; profileImage: string | null; carImage: string | null;
+    carMake: string | null; carModel: string | null; carYear: number | null;
+    hourlyRate: number; vehicleTypes: string | null; languages: string | null;
+    averageRating: number | null; totalReviews: number; bio: string | null;
+    serviceAreas: string | null; baseAddress: string | null; serviceRadiusKm: number | null;
+    lessonPackages: unknown; _count: { bookings: number };
+  }[],
+  _searchPoint: unknown
+) {
+  return instructors.map(i => ({
+    id: i.id,
+    name: i.name,
+    profileImage: i.profileImage,
+    carImage: i.carImage,
+    carMake: i.carMake,
+    carModel: i.carModel,
+    carYear: i.carYear,
+    hourlyRate: i.hourlyRate,
+    serviceAreas: i.serviceAreas,
+    baseAddress: i.baseAddress,
+    serviceRadiusKm: i.serviceRadiusKm ?? DEFAULT_RADIUS_KM,
+    vehicleTypes: i.vehicleTypes ? i.vehicleTypes.split(',').map((v: string) => v.trim()) : ['Manual', 'Automatic'],
+    languages: i.languages ? i.languages.split(',').map((l: string) => l.trim()) : ['English'],
+    averageRating: i.averageRating ?? 4.8,
+    totalReviews: i.totalReviews ?? 0,
+    totalBookings: i._count.bookings,
+    bio: i.bio || 'Experienced driving instructor',
+    distance: null as number | null,
+    offersTestPackage: !!(i.lessonPackages as any[])?.some((p: any) => p.isActive !== false),
+    testPackagePrice: null,
+    testPackageDuration: null,
+    testPackageIncludes: [],
+    lessonPackages: ((i.lessonPackages as any[]) || []).filter((p: any) => p.isActive !== false),
+  }));
 }
