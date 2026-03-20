@@ -65,17 +65,23 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const upcomingBookings = bookings.filter(b => {
       if (!b.startTime) return false;
-      // Only count CONFIRMED bookings as upcoming
-      return b.startTime > now && (b.status === 'CONFIRMED' || b.status === 'PENDING');
+      return b.startTime > now && b.status === 'CONFIRMED';
     });
     const pastBookings = bookings.filter(b => {
       if (!b.startTime) return false;
       return b.startTime <= now && b.status === 'COMPLETED';
     });
 
-    const activeBookings = bookings.filter(b => 
-      b.status !== 'CANCELLED' && b.status !== 'EXPIRED'
-    );
+    const activeBookings = bookings.filter(b => {
+      // Exclude cancelled/expired
+      if (b.status === 'CANCELLED' || b.status === 'EXPIRED') return false;
+      // Exclude PENDING_PAYMENT bookings that were never paid — these are
+      // abandoned slot reservations, not real bookings the client should see
+      if (b.status === 'PENDING_PAYMENT' && !b.isPaid) return false;
+      // Exclude PENDING bookings that were never paid — old test data / failed payments
+      if (b.status === 'PENDING' && !b.isPaid) return false;
+      return true;
+    });
 
     return NextResponse.json({
       user: {
@@ -85,25 +91,45 @@ export async function GET(req: NextRequest) {
         address: clientRecord?.defaultPickupAddress || ''
       },
       bookings: activeBookings.map(b => {
-        // Map database status to frontend status
-        let displayStatus = 'upcoming';
-        if (b.status === 'COMPLETED') {
-          displayStatus = 'completed';
-        } else if (b.status === 'PENDING_PAYMENT') {
-          displayStatus = 'pending_payment';
-        } else if (b.startTime && b.startTime <= now) {
-          displayStatus = 'completed';
+        // Map database status to frontend display status
+        // Rule: only use time-based fallback for CONFIRMED bookings that the
+        // cron hasn't processed yet (endTime passed but still CONFIRMED).
+        // Never override an explicit terminal status (COMPLETED, NO_SHOW, etc.)
+        let displayStatus: string;
+        switch (b.status) {
+          case 'CONFIRMED':
+            // If the lesson end time has passed, treat as completed for display
+            // (cron will catch up and set COMPLETED shortly)
+            displayStatus = b.endTime && b.endTime <= now ? 'completed' : 'upcoming';
+            break;
+          case 'COMPLETED':
+          case 'NO_SHOW':
+            displayStatus = 'completed';
+            break;
+          default:
+            displayStatus = 'upcoming';
         }
-        
+
         return {
           id: b.id,
           date: b.startTime ? b.startTime.toISOString().split('T')[0] : null,
           time: b.startTime ? b.startTime.toISOString().split('T')[1].substring(0, 5) : null,
           duration: b.duration || null,
           status: displayStatus,
-          dbStatus: b.status, // Include raw status for debugging
-          price: b.price,
+          dbStatus: b.status,
+          // For package bookings: price should always be the per-lesson rate (1hr × hourlyRate).
+          // Guard against old-bug bookings where price was incorrectly set to packageTotalPaid.
+          price: (() => {
+            const raw = b as any;
+            if (raw.isPackageBooking && raw.packageTotalPaid && b.price === raw.packageTotalPaid) {
+              // Old bug: price was set to package total — use hourlyRate as the lesson price
+              return b.instructor.hourlyRate;
+            }
+            return b.price;
+          })(),
           isPaid: b.isPaid,
+          isPackageBooking: (b as any).isPackageBooking || false,
+          packageHours: (b as any).packageHours || null,
           instructor: {
             id: b.instructor.id,
             name: b.instructor.name,
@@ -111,8 +137,14 @@ export async function GET(req: NextRequest) {
           }
         };
       }),
-      upcomingCount: upcomingBookings.length,
-      pastCount: pastBookings.length
+      upcomingCount: activeBookings.filter(b => {
+        if (!b.startTime) return false;
+        return (b.status === 'CONFIRMED') && (!b.endTime || b.endTime > now);
+      }).length,
+      pastCount: activeBookings.filter(b => {
+        return b.status === 'COMPLETED' || b.status === 'NO_SHOW' ||
+          (b.status === 'CONFIRMED' && b.endTime != null && b.endTime <= now);
+      }).length
     });
 
   } catch (error) {

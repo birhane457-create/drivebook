@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-
 export const dynamic = 'force-dynamic';
 export async function GET(
   req: NextRequest,
@@ -11,7 +10,7 @@ export async function GET(
     const booking = await prisma.booking.findUnique({
       where: { id: params.id },
       include: {
-        client: true,
+        client: { include: { user: true } },
         instructor: true
       }
     })
@@ -20,21 +19,30 @@ export async function GET(
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
     }
 
-    // Return booking details for client to view/manage
+    const clientEmail = booking.client?.user?.email || ''
+    const clientName = booking.clientName || booking.client?.name || ''
+
     return NextResponse.json({
       id: booking.id,
       startTime: booking.startTime,
       endTime: booking.endTime,
       pickupAddress: booking.pickupAddress,
-      price: booking.price,
+      // For package bookings, charge the full package total (stored in packageTotalPaid).
+      // For single lessons, charge the booking price.
+      price: (booking as any).packageTotalPaid || booking.price,
       status: booking.status,
+      isPaid: booking.isPaid,
       notes: booking.notes,
-      clientName: booking.clientName,
-      clientEmail: booking.clientEmail,
-      clientPhone: booking.clientPhone,
+      isPackageBooking: booking.isPackageBooking,
+      packageHours: booking.packageHours,
       instructor: {
         name: booking.instructor.name,
-        phone: booking.instructor.phone
+        phone: booking.instructor.phone,
+        profileImage: booking.instructor.profileImage,
+      },
+      client: {
+        name: clientName,
+        email: clientEmail,
       },
       createdAt: booking.createdAt
     })

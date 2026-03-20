@@ -31,8 +31,9 @@ export async function GET(req: NextRequest) {
     let wallet = await prisma.clientWallet.findUnique({
       where: { userId: user.id },
       include: {
+        // Fetch ALL confirmed transactions — no take limit, balance must be exact
         transactions: {
-          take: 10,
+          where: { status: 'CONFIRMED' },
           orderBy: { createdAt: 'desc' }
         }
       }
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
         },
         include: {
           transactions: {
-            take: 10,
+            where: { status: 'CONFIRMED' },
             orderBy: { createdAt: 'desc' }
           }
         }
@@ -96,7 +97,7 @@ export async function GET(req: NextRequest) {
       totalSpent: Number(totalSpent),
       creditsRemaining: creditsRemaining,
       totalBookedHours,
-      transactions: wallet.transactions,
+      transactions: wallet.transactions.slice(0, 10), // last 10 for display only
       bookingsCount: bookings.length
     },
     {

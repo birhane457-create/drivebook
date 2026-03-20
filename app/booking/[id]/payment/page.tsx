@@ -13,6 +13,8 @@ interface BookingDetails {
   endTime: string
   price: number
   pickupAddress: string
+  isPackageBooking?: boolean
+  packageHours?: number
   instructor: {
     name: string
     profileImage?: string
@@ -108,13 +110,22 @@ export default function PaymentPage() {
           return
         }
 
-        // Create payment intent
+        // Slot expired — cron released it before payment completed
+        if (bookingData.status === 'EXPIRED') {
+          setError('EXPIRED')
+          setLoading(false)
+          return
+        }
+
+        // Create payment intent — pass the full package amount explicitly
         const paymentRes = await fetch('/api/payments/create-intent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             bookingId,
             clientEmail: bookingData.client.email,
+            // Use packageTotalPaid if this is a package booking, otherwise booking.price
+            amount: bookingData.price,
           }),
         })
 
@@ -143,6 +154,29 @@ export default function PaymentPage() {
     )
   }
 
+  if (error === 'EXPIRED') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+          <div className="text-yellow-500 text-5xl mb-4">⏱️</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Slot Expired</h1>
+          <p className="text-gray-600 mb-2">
+            Your reserved time slot expired before payment was completed.
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            Slots are held for 10 minutes. Please rebook to secure a new slot.
+          </p>
+          <button
+            onClick={() => router.back()}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+          >
+            Go Back &amp; Rebook
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (error || !booking || !clientSecret) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -164,6 +198,7 @@ export default function PaymentPage() {
   const startDate = new Date(booking.startTime)
   const endDate = new Date(booking.endTime)
   const duration = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60))
+  const isPackage = booking.isPackageBooking && (booking.packageHours || 0) > 1
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -208,24 +243,32 @@ export default function PaymentPage() {
                     <div className="flex items-start space-x-3">
                       <span className="text-2xl">📅</span>
                       <div>
-                        <p className="font-medium text-gray-900">
-                          {startDate.toLocaleDateString('en-AU', { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                          })}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {startDate.toLocaleTimeString('en-AU', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })} - {endDate.toLocaleTimeString('en-AU', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </p>
-                        <p className="text-sm text-gray-500">{duration} minutes</p>
+                        {isPackage ? (
+                          <>
+                            <p className="font-medium text-gray-900">
+                              {booking.packageHours}-Hour Package
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              First lesson: {startDate.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} at {startDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="text-xs text-blue-600 mt-1">Remaining lessons scheduled after payment</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-medium text-gray-900">
+                              {startDate.toLocaleDateString('en-AU', { 
+                                weekday: 'long', 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric' 
+                              })}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {startDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })} - {endDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="text-sm text-gray-500">{duration} minutes</p>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -245,7 +288,7 @@ export default function PaymentPage() {
                   <div className="border-t pt-4">
                     <div className="space-y-2">
                       <div className="flex justify-between text-gray-600">
-                        <span>Lesson ({duration} min)</span>
+                        <span>{isPackage ? `${booking.packageHours}-hour package` : `Lesson (${duration} min)`}</span>
                         <span>${booking.price.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between font-bold text-gray-900 text-lg pt-2 border-t">

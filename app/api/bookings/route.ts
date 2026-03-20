@@ -6,19 +6,22 @@ import { availabilityService } from '@/lib/services/availability'
 import { emailService } from '@/lib/services/email'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { paymentService } from '@/lib/services/payment'
-import { recordBookingPayment } from '@/lib/services/ledger-operations'
-import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger'
+import { getWalletBalance } from '@/lib/services/wallet-helpers'
+import { notifyBookingRequest } from '@/lib/services/notifications'
+import { getNotifChannels, getBookingSettings } from '@/lib/config/platform-settings'
 import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation'
-import { z } from 'zod'
 import { bookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
+import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
 
-export const dynamic = 'force-dynamic';
+const PLATFORM_FEE_RATE = 0.036 // 3.6% — stored on booking for reporting
+
 const bookingSchema = z.object({
   clientId: z.string(),
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
-  bookingType: z.enum(['LESSON', 'PDA_TEST', 'MOCK_TEST']).optional(),
+  bookingType: z.enum(['LESSON', 'PDA_TEST', 'MOCK_TEST']).optional().default('LESSON'),
   pickupAddress: z.string().optional(),
   pickupLatitude: z.number().optional(),
   pickupLongitude: z.number().optional(),
@@ -33,244 +36,277 @@ const bookingSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
     if (!session?.user?.instructorId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // CRITICAL: Validate subscription before allowing booking creation
-    const subscriptionCheck = await requireActiveSubscription(session.user.id);
+    // Subscription check
+    const subscriptionCheck = await requireActiveSubscription(session.user.id)
     if (!subscriptionCheck.valid) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: subscriptionCheck.message,
-        status: subscriptionCheck.status,
         requiresSubscription: true
-      }, { status: 403 });
+      }, { status: 403 })
     }
 
-    // FIXED: Rate limiting to prevent spam
+    // Rate limiting
     const rateLimitId = getRateLimitIdentifier(
       session.user.instructorId,
       req.headers.get('x-forwarded-for'),
       'booking'
-    );
-    
-    const rateLimitResult = await checkRateLimit(bookingRateLimit, rateLimitId);
-    
+    )
+    const rateLimitResult = await checkRateLimit(bookingRateLimit, rateLimitId)
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: rateLimitResult.error },
-        { 
-          status: 429,
-          headers: rateLimitResult.headers 
-        }
-      );
+        { status: 429, headers: rateLimitResult.headers }
+      )
     }
 
     const body = await req.json()
     const data = bookingSchema.parse(body)
 
-    const startTime = new Date(data.startTime)
-    const endTime = new Date(data.endTime)
-    
-    // FIXED: Validate booking time is not in the past
-    if (startTime < new Date()) {
-      return NextResponse.json({ 
-        error: 'Cannot create bookings in the past' 
+    const newStart = new Date(data.startTime)
+    const newEnd = new Date(data.endTime)
+    const now = new Date()
+
+    // Past booking guard
+    if (newStart < now) {
+      return NextResponse.json({ error: 'Cannot create bookings in the past' }, { status: 400 })
+    }
+
+    // Admin-configured booking window
+    const bookingSettings = getBookingSettings()
+    const isPackageBooking = !!(body.packageId || body.isPackage)
+    const minAdvanceMs = bookingSettings.minAdvanceHours * 60 * 60 * 1000
+    if (!isPackageBooking || !bookingSettings.packageBypassMinAdvance) {
+      if (newStart.getTime() - now.getTime() < minAdvanceMs) {
+        return NextResponse.json({
+          error: `Bookings must be made at least ${bookingSettings.minAdvanceHours} hour${bookingSettings.minAdvanceHours !== 1 ? 's' : ''} in advance`
+        }, { status: 400 })
+      }
+    }
+    const maxAdvanceMs = bookingSettings.maxAdvanceDays * 24 * 60 * 60 * 1000
+    if (newStart.getTime() - now.getTime() > maxAdvanceMs) {
+      return NextResponse.json({
+        error: `Bookings cannot be made more than ${bookingSettings.maxAdvanceDays} days in advance`
       }, { status: 400 })
     }
-    
-    // Get instructor to calculate price if not provided
-    const instructor = await prisma.instructor.findUnique({
-      where: { id: session.user.instructorId }
+
+    // Verify client belongs to this instructor
+    const client = await prisma.client.findFirst({
+      where: { id: data.clientId, instructorId: session.user.instructorId },
+      include: { user: true }
     })
-    
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found or does not belong to you' }, { status: 404 })
+    }
+
+    // Suspended client guard
+    if ((client as any).status === 'SUSPENDED') {
+      return NextResponse.json({ error: 'Cannot book with suspended client' }, { status: 403 })
+    }
+
+    // Get instructor for pricing + calendar check
+    const instructor = await prisma.instructor.findUnique({
+      where: { id: session.user.instructorId },
+      include: { user: true }
+    })
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
 
-    // FIXED: Validate client belongs to instructor and is active
-    const client = await prisma.client.findFirst({
-      where: {
-        id: data.clientId,
-        instructorId: session.user.instructorId
-      }
-    })
+    // Calculate price
+    const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60)
+    const lessonPrice = data.price ?? parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
+    const platformFee = parseFloat((lessonPrice * PLATFORM_FEE_RATE).toFixed(2))
+    const commissionRate = 0.15
+    const instructorPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2))
 
-    if (!client) {
-      return NextResponse.json({ 
-        error: 'Client not found or does not belong to you' 
-      }, { status: 404 })
-    }
-
-    // FIXED: Check if client is suspended
-    if ((client as any).status === 'SUSPENDED') {
-      return NextResponse.json({ 
-        error: 'Cannot book with suspended client' 
-      }, { status: 403 })
-    }
-    
-    // Calculate price if not provided
-    const durationMinutes = (endTime.getTime() - startTime.getTime()) / (1000 * 60)
-    const price = data.price || (instructor.hourlyRate * (durationMinutes / 60))
-
-    // Calculate commission for this booking
-    const commission = await paymentService.calculateCommission(
+    // isFirstBooking check (real DB query via paymentService)
+    const isFirstBooking = await paymentService.isFirstBookingWithClient(
       session.user.instructorId,
-      data.clientId,
-      price
+      data.clientId
     )
 
-    // Check for double booking
+    // ── WALLET CHECK ──────────────────────────────────────────────────────────
+    if (!client.userId) {
+      return NextResponse.json({
+        error: 'Client does not have a DriveBook account. They must register before bookings can be made.',
+        noAccount: true,
+        clientEmail: client.email,
+        clientName: client.name,
+      }, { status: 422 })
+    }
+
+    const { balance } = await getWalletBalance(client.userId)
+    if (balance < lessonPrice) {
+      const shortfall = parseFloat((lessonPrice - balance).toFixed(2))
+      const topUpAmount = parseFloat((shortfall / (1 - PLATFORM_FEE_RATE)).toFixed(2))
+      return NextResponse.json({
+        error: 'Insufficient wallet balance',
+        insufficientBalance: true,
+        clientName: client.name,
+        clientEmail: client.email,
+        clientId: client.id,
+        currentBalance: parseFloat(balance.toFixed(2)),
+        required: lessonPrice,
+        shortfall,
+        topUpAmount,
+        platformFeeRate: PLATFORM_FEE_RATE,
+      }, { status: 422 })
+    }
+
+    // ── AVAILABILITY CHECK ────────────────────────────────────────────────────
     const hasConflict = await availabilityService.checkDoubleBooking(
       session.user.instructorId,
-      startTime,
-      endTime
+      newStart,
+      newEnd
     )
-
     if (hasConflict) {
-      return NextResponse.json(
-        { error: 'Time slot already booked' },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: 'Time slot already booked' }, { status: 409 })
     }
 
-    // FIXED: Use transaction wrapper for atomic operations + LEDGER
+    // ── CREATE BOOKING + DEDUCT WALLET (atomic) ───────────────────────────────
     const booking = await prisma.$transaction(async (tx) => {
-      // determine pickup location: use provided value or fallback to the client's default address
-      const pickupLocation = data.pickupAddress || client.defaultPickupAddress || null;
-      const pickupLat = data.pickupLatitude ?? client.defaultPickupLat;
-      const pickupLng = data.pickupLongitude ?? client.defaultPickupLng;
+      // Pickup location: use provided value or fall back to client's default
+      const pickupLocation = data.pickupAddress || client.defaultPickupAddress || null
+      const pickupLat = data.pickupLatitude ?? client.defaultPickupLat
+      const pickupLng = data.pickupLongitude ?? client.defaultPickupLng
+
+      // Re-check wallet balance inside transaction to prevent race conditions
+      const wallet = await tx.clientWallet.findUnique({ where: { userId: client.userId! } })
+      if (!wallet) throw new Error('Wallet not found')
+
+      const txns = await tx.walletTransaction.findMany({
+        where: { walletId: wallet.id, status: 'CONFIRMED' }
+      })
+      const txBalance = txns.reduce((sum, t) => t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
+      if (txBalance < lessonPrice) throw new Error('INSUFFICIENT_BALANCE')
+
+      // Deduct from wallet
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'DEBIT',
+          amount: lessonPrice,
+          description: `Lesson booking — ${newStart.toLocaleDateString('en-AU')} ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`,
+          status: 'CONFIRMED',
+        }
+      })
 
       // Create booking
       const newBooking = await tx.booking.create({
         data: {
           instructorId: session.user.instructorId,
           clientId: data.clientId,
-          bookingType: data.bookingType || 'LESSON',
-          startTime,
-          endTime,
+          clientName: client.name,
+          clientPhone: client.phone,
+          bookingType: data.bookingType,
+          startTime: newStart,
+          endTime: newEnd,
+          duration: durationHours * 60,
+          price: lessonPrice,
+          platformFee,
+          instructorPayout,
+          commissionRate,
+          isFirstBooking,
+          isPaid: true,
+          paidAt: now,
           pickupAddress: pickupLocation,
           pickupLatitude: pickupLat,
           pickupLongitude: pickupLng,
           dropoffAddress: data.dropoffAddress,
-          price,
-          platformFee: commission.platformFee,
-          instructorPayout: commission.instructorPayout,
-          commissionRate: commission.commissionRate,
-          isFirstBooking: commission.isFirstBooking,
           notes: data.notes,
           status: 'CONFIRMED',
           createdBy: 'instructor',
-          isPaid: false // Will be marked paid when payment captured
+          originalStartTime: newStart,
         } as any,
         include: {
           client: true,
-          instructor: {
-            include: {
-              user: true
-            }
-          }
+          instructor: { include: { user: true } }
         }
       })
-      
-      // If booking type is PDA_TEST, create a PDA test entry
-      if (data.bookingType === 'PDA_TEST' && data.testCenterName && data.testCenterAddress && session.user.instructorId) {
-        await tx.pDATest.create({
-          data: {
-            instructorId: session.user.instructorId,
-            clientId: data.clientId,
-            testCenterName: data.testCenterName,
-            testCenterAddress: data.testCenterAddress,
-            testCenterLatitude: data.pickupLatitude || 0,
-            testCenterLongitude: data.pickupLongitude || 0,
-            testDate: startTime,
-            testTime: startTime.toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              hour12: false 
-            }),
-            result: 'PENDING',
-            notes: data.notes,
-          }
-        })
-      }
 
-      // ✅ CRITICAL FIX: Create transaction immediately when booking is created
-      // This ensures instructor gets paid even if check-out fails
+      // Create transaction record
       await (tx as any).transaction.create({
         data: {
           bookingId: newBooking.id,
           instructorId: session.user.instructorId,
           type: 'BOOKING_PAYMENT',
-          amount: commission.totalAmount,
-          platformFee: commission.platformFee,
-          instructorPayout: commission.instructorPayout,
-          commissionRate: commission.commissionRate,
-          status: 'PENDING', // Will be COMPLETED when booking completes
-          description: `Booking payment - ${commission.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
-          metadata: {
-            isFirstBooking: commission.isFirstBooking,
-          },
-        },
+          amount: lessonPrice,
+          platformFee,
+          instructorPayout,
+          commissionRate,
+          status: 'COMPLETED',
+          description: `Booking payment — ${isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
+          metadata: { isFirstBooking },
+        }
       })
 
       return newBooking
-    }, {
-      maxWait: 5000, // Wait max 5s to start transaction
-      timeout: 10000, // Max 10s for transaction
-    })
+    }, { maxWait: 5000, timeout: 10000 })
 
-    // Create Google Calendar event if instructor has calendar connected
-    if (booking.instructor.syncGoogleCalendar) {
-      try {
+    // Google Calendar sync (non-critical)
+    try {
+      if (instructor.syncGoogleCalendar) {
         const result = await googleCalendarService.createCalendarEvent(
-          booking.instructorId,
+          session.user.instructorId,
           {
             id: booking.id,
-            startTime: booking.startTime,
-            endTime: booking.endTime,
-            clientName: booking.client.name,
-            clientPhone: booking.client.phone,
-            pickupAddress: booking.pickupAddress || undefined,
-            notes: booking.notes || undefined
+            startTime: newStart,
+            endTime: newEnd,
+            clientName: client.name,
+            clientPhone: client.phone,
+            pickupAddress: data.pickupAddress,
+            notes: data.notes,
           }
         )
-
-        // Update booking with calendar event ID
         if (result.success && result.eventId) {
           await prisma.booking.update({
             where: { id: booking.id },
-            data: { googleCalendarEventId: result.eventId }
+            data: { googleCalendarEventId: result.eventId } as any
           })
         }
-      } catch (calendarError) {
-        console.error('Failed to create calendar event:', calendarError)
-        // Don't fail the booking if calendar creation fails
       }
+    } catch (e) {
+      console.error('Calendar sync failed:', e)
     }
 
-    // Send confirmation emails
-    await emailService.sendBookingConfirmation({
-      clientName: booking.client.name,
-      clientEmail: booking.client.email,
-      instructorName: booking.instructor.name,
-      instructorEmail: booking.instructor.user.email,
-      startTime: booking.startTime,
-      endTime: booking.endTime,
-      pickupAddress: booking.pickupAddress || undefined
-    })
+    // Email confirmation (non-critical)
+    try {
+      await emailService.sendBookingConfirmation({
+        clientName: booking.client!.name,
+        clientEmail: booking.client!.email,
+        instructorName: booking.instructor.name,
+        instructorEmail: booking.instructor.user!.email,
+        startTime: booking.startTime!,
+        endTime: booking.endTime!,
+        pickupAddress: booking.pickupAddress || undefined,
+      })
+    } catch (e) {
+      console.error('Email confirmation failed:', e)
+    }
 
-    return NextResponse.json({ 
-      booking,
-      requiresPayment: true,
-      redirectTo: `/booking/${booking.id}/payment` // Redirect to payment page
-    }, { status: 201 })
-  } catch (error) {
+    // In-app notification (non-critical)
+    try {
+      const reqChannels = getNotifChannels('BOOKING_REQUEST')
+      if (reqChannels.inApp && session.user.id) {
+        await notifyBookingRequest(session.user.id, client.name, booking.id, newStart)
+      }
+    } catch (e) {
+      console.error('Notification failed:', e)
+    }
+
+    return NextResponse.json({ success: true, booking }, { status: 201 })
+  } catch (error: any) {
+    if (error?.message === 'INSUFFICIENT_BALANCE') {
+      return NextResponse.json({ error: 'Insufficient wallet balance', insufficientBalance: true }, { status: 422 })
+    }
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })
     }
-    console.error('Booking creation error:', error)
+    console.error('Create booking error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -278,7 +314,6 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
     if (!session?.user?.instructorId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -286,14 +321,11 @@ export async function GET(req: NextRequest) {
     const bookings = await prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
-        status: { in: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] } // ✅ Include PENDING for manual confirmation
-      },
-      include: {
-        client: true
-      },
-      orderBy: {
-        startTime: 'asc'
-      }
+        status: { in: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] },
+        deletedAt: null,
+      } as any,
+      include: { client: true },
+      orderBy: { startTime: 'asc' }
     })
 
     return NextResponse.json(bookings)

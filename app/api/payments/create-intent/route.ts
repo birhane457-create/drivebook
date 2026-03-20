@@ -117,23 +117,35 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number) {
     // Check if payment intent already exists for this booking
     if (booking.paymentIntentId) {
       try {
-        // Retrieve existing payment intent from Stripe
         const existingIntent = await stripeService.retrievePaymentIntent(booking.paymentIntentId);
-        
-        // If it's still valid (not succeeded or canceled), reuse it
-        if (existingIntent.status !== 'succeeded' && existingIntent.status !== 'canceled') {
+        // Only reuse if it's in a state where the client can still complete payment.
+        // 'requires_action' and 'processing' are also safe to reuse.
+        // Do NOT reuse 'succeeded', 'canceled', or 'requires_payment_method' with an
+        // expired card — create a fresh intent instead.
+        const reusableStatuses = ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing'];
+        if (reusableStatuses.includes(existingIntent.status)) {
           return NextResponse.json({
             clientSecret: existingIntent.client_secret,
             amount: existingIntent.amount / 100,
           });
         }
+        // Otherwise fall through and create a new intent
+        console.log(`Payment intent ${booking.paymentIntentId} in status '${existingIntent.status}' — creating new one`);
       } catch (error) {
         console.log('Existing payment intent not found or invalid, creating new one');
       }
     }
 
-    // Use clientEmail from booking
-    const clientEmail = booking.clientEmail || 'customer@example.com';
+    // Get clientEmail — look up linked client's user email
+    let clientEmail = 'customer@example.com';
+    if (booking.clientId) {
+      const client = await prisma.client.findUnique({
+        where: { id: booking.clientId },
+        include: { user: true }
+      });
+      if (client?.user?.email) clientEmail = client.user.email;
+      else if (client?.email) clientEmail = client.email;
+    }
 
     // Create payment intent
     const paymentIntent = await stripeService.createPaymentIntent({

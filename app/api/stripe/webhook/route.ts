@@ -4,6 +4,8 @@ import { emailService } from '@/lib/services/email';
 import { SUBSCRIPTION_PLANS } from '@/lib/config/subscriptions';
 import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
 import { webhookRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
+import { notifyPaymentReceived } from '@/lib/services/notifications';
+import { getNotifChannels } from '@/lib/config/platform-settings';
 import Stripe from 'stripe';
 
 
@@ -331,8 +333,26 @@ async function handleBookingPaymentSuccess(
       throw new Error(`Booking not found: ${bookingId}`);
     }
 
-    // ✅ P0 FIX #3: Validate payment amount matches booking price
-    const expectedAmount = Math.round(booking.price * 100); // Convert to cents
+    // ── Handle EXPIRED booking recovery ──────────────────────────────────────
+    // Race: cron expired the booking at 10:00, webhook arrived at 10:01.
+    // Stripe already charged the client — we MUST honour the payment.
+    // Revive the booking to CONFIRMED so the client gets their lesson.
+    if (booking.status === 'EXPIRED') {
+      console.warn(`⚠️ Booking ${bookingId} was EXPIRED — reviving to CONFIRMED (payment received)`);
+      // Fall through — the update below will set it to CONFIRMED
+    } else if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
+      // Already processed (idempotent replay) — skip wallet ops but don't error
+      console.log(`ℹ️ Booking ${bookingId} already ${booking.status} — skipping wallet ops`);
+      await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
+        bookingId, note: 'already_confirmed'
+      });
+      return;
+    }
+
+    // ✅ Validate payment amount matches what was charged
+    // For packages: Stripe charged packageTotalPaid. For single lessons: booking.price.
+    const chargedAmount = (booking as any).packageTotalPaid || booking.price;
+    const expectedAmount = Math.round(chargedAmount * 100); // Convert to cents
     const receivedAmount = paymentIntent.amount_received;
     
     if (receivedAmount !== expectedAmount) {
@@ -346,16 +366,24 @@ async function handleBookingPaymentSuccess(
       );
     }
 
-    // Get userId from client relation or lookup by phone via Client
+    // Get userId from client relation — try multiple fallbacks
     let userId = booking.client?.userId;
     
+    if (!userId && booking.clientId) {
+      // Direct lookup by clientId (most reliable)
+      const client = await tx.client.findUnique({ where: { id: booking.clientId } });
+      userId = client?.userId ?? undefined;
+    }
+
     if (!userId && booking.clientPhone) {
       const client = await tx.client.findFirst({
-        where: { 
-          phone: booking.clientPhone
-        }
+        where: { phone: booking.clientPhone }
       });
-      userId = client?.userId;
+      userId = client?.userId ?? undefined;
+    }
+
+    if (!userId) {
+      console.warn(`⚠️ Could not resolve userId for booking ${bookingId} — wallet ops skipped`);
     }
 
     // ✅ P0 FIX #5: Verify payment customer matches instructor
@@ -396,20 +424,52 @@ async function handleBookingPaymentSuccess(
       }
     });
 
-    // ✅ P0 FIX #2: Update wallet transactions (PENDING → CONFIRMED)
-    // Do NOT update stored balance fields - let them be calculated
+    // ── Wallet: credit full package amount, debit first lesson ──────────────
+    // Per financial doctrine (PATH 2: STRIPE BOOKING):
+    //   CREDIT wallet = full package amount paid via Stripe (packageTotalPaid)
+    //   DEBIT  wallet = first lesson price (booking.price = 1hr × hourlyRate)
+    // Remaining balance = credits available for future lessons from this package.
+    // For single lessons: just confirm any pending wallet transactions.
     if (userId) {
-      const wallet = await tx.clientWallet.findUnique({
-        where: { userId }
-      });
+      let wallet = await tx.clientWallet.findUnique({ where: { userId } });
+      if (!wallet) {
+        wallet = await tx.clientWallet.create({ data: { userId } });
+      }
 
-      if (wallet) {
-        // Update existing PENDING wallet transactions to CONFIRMED
+      const packageTotalPaid = (booking as any).packageTotalPaid as number | null;
+      const isPackage = (booking as any).isPackageBooking && (booking as any).packageHours > 1;
+
+      if (isPackage && packageTotalPaid) {
+        // CREDIT: full package amount the client paid via Stripe
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'CREDIT',
+            amount: packageTotalPaid,
+            description: `Package purchase — ${(booking as any).packageHours} hours (Stripe)`,
+            status: 'CONFIRMED',
+          }
+        });
+
+        // DEBIT: first lesson already scheduled (booking.price = 1hr × hourlyRate)
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'DEBIT',
+            amount: booking.price,
+            description: `First lesson — ${new Date(booking.startTime!).toLocaleDateString('en-AU')} (booking #${bookingId})`,
+            status: 'CONFIRMED',
+          }
+        });
+
+        const remaining = packageTotalPaid - booking.price;
+        console.log(`✅ Package wallet: +${packageTotalPaid} CREDIT / -${booking.price} DEBIT = ${remaining.toFixed(2)} remaining for userId=${userId}`);
+      } else {
+        // Single lesson — confirm any pending wallet transactions
         await tx.walletTransaction.updateMany({
           where: {
             walletId: wallet.id,
             status: 'PENDING',
-            // Match transactions created around the same time as booking
             createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
           },
           data: { status: 'CONFIRMED' }
@@ -419,6 +479,25 @@ async function handleBookingPaymentSuccess(
   });
 
   console.log(`✅ Booking payment processed with validations: ${bookingId}`);
+
+  // Notify instructor of payment received (outside transaction - non-critical)
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { instructor: true, client: true }
+    });
+    const payChannels = getNotifChannels('PAYMENT_RECEIVED');
+    if (payChannels.inApp && booking?.instructor?.userId) {
+      await notifyPaymentReceived(
+        booking.instructor.userId,
+        booking.price,
+        booking.client?.name || booking.clientName || 'Client',
+        bookingId
+      );
+    }
+  } catch (notifError) {
+    console.error('Failed to create payment notification:', notifError);
+  }
 }
 
 async function handleBookingPaymentFailed(

@@ -15,132 +15,147 @@ datasource db {
 
 // User model for authentication
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  email     String   @unique
-  password  String?
-  name      String?
-  role      String   @default("CLIENT")
-  instructorId String? @db.ObjectId
-  resetToken String?
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  email            String    @unique
+  password         String?
+  name             String?
+  role             String    @default("CLIENT")
+  instructorId     String?   @db.ObjectId
+  resetToken       String?
   resetTokenExpiry DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  clients   Client[]
-  wallet    ClientWallet?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  clients    Client[]
+  wallet     ClientWallet?
   instructor Instructor?
 }
 
 // Client model for booking clients
 model Client {
-  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId                String?  @db.ObjectId
-  user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  instructorId          String   @db.ObjectId
+  id                    String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String?    @db.ObjectId
+  user                  User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  instructorId          String     @db.ObjectId
   instructor            Instructor @relation(fields: [instructorId], references: [id])
   name                  String
   email                 String
   phone                 String
-  preferredInstructorId String?  @db.ObjectId
+  preferredInstructorId String?    @db.ObjectId
   defaultPickupAddress  String?
   defaultPickupLat      Float?
   defaultPickupLng      Float?
   notes                 String?
   bookings              Booking[]
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 }
 
 model Instructor {
-  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId                String?  @unique @db.ObjectId
-  user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  name                  String
-  phone                 String
-  hourlyRate            Float
-  serviceAreas          String?
-  copilotAgentEndpoint  String?
-  
+  id                   String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId               String? @unique @db.ObjectId
+  user                 User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name                 String
+  phone                String
+  hourlyRate           Float
+  serviceAreas         String?
+  copilotAgentEndpoint String?
+
   // Profile & vehicle info
-  bio                   String?
-  carMake               String?
-  carModel              String?
-  carYear               String?
-  vehicleTypes          String?
-  languages             String?
-  baseAddress           String?
-  serviceRadiusKm       Float?
-  isActive              Boolean   @default(true)
-  isVerified            Boolean   @default(false)
-  isFeatured            Boolean   @default(false)
-  averageRating         Float?
-  totalReviews          Int       @default(0)
-  
+  bio             String?
+  carMake         String?
+  carModel        String?
+  carYear         String?
+  vehicleTypes    String?
+  languages       String?
+  baseAddress     String?
+  serviceRadiusKm Float?
+  isActive        Boolean @default(true)
+  isVerified      Boolean @default(false)
+  isFeatured      Boolean @default(false)
+  averageRating   Float?
+  totalReviews    Int     @default(0)
+
   // Subscription fields
-  subscriptionTier      String    @default("BASIC")
-  subscriptionStatus    String    @default("TRIAL")
-  trialEndsAt           DateTime?
-  customDomain          String?
-  brandedBookingPage    Boolean   @default(false)
-  maxInstructors        Int       @default(1)
-  stripeCustomerId      String?
-  stripeAccountId       String?
-  
+  subscriptionTier   String    @default("BASIC")
+  subscriptionStatus String    @default("TRIAL")
+  trialEndsAt        DateTime?
+  customDomain            String?
+  brandedBookingPage      Boolean @default(false)
+  brandLogo               String?
+  brandColorPrimary       String?
+  brandColorSecondary     String?
+  showBrandingOnBookingPage Boolean @default(false)
+  maxInstructors          Int     @default(1)
+  stripeCustomerId   String?
+  stripeAccountId    String?
+
   // Document fields
-  licenseNumber         String?
-  insuranceNumber       String?
-  licenseImageFront     String?
-  licenseImageBack      String?
-  insurancePolicyDoc    String?
-  policeCheckDoc        String?
-  wwcCheckDoc           String?
-  photoIdDoc            String?
-  certificationDoc      String?
+  licenseNumber          String?
+  insuranceNumber        String?
+  licenseImageFront      String?
+  licenseImageBack       String?
+  insurancePolicyDoc     String?
+  policeCheckDoc         String?
+  wwcCheckDoc            String?
+  photoIdDoc             String?
+  certificationDoc       String?
   vehicleRegistrationDoc String?
-  profileImage          String?
-  carImage              String?
-  documentsVerified     Boolean   @default(false)
-  documentsVerifiedAt   DateTime?
-  approvalStatus        String    @default("PENDING")
-  
+  profileImage           String?
+  carImage               String?
+  documentsVerified      Boolean   @default(false)
+  documentsVerifiedAt    DateTime?
+  licenseExpiry          DateTime?
+  insuranceExpiry        DateTime?
+  policeCheckExpiry      DateTime?
+  wwcCheckExpiry         DateTime?
+  approvalStatus         String    @default("PENDING")
+
   // Booking configuration fields
-  workingHours          Json?
-  allowedDurations      Json?
-  bookingBufferMinutes  Int?
-  enableTravelTime      Boolean   @default(false)
-  travelTimeMinutes     Int?
-  lessonPackages        Json?
-  
+  workingHours         Json?
+  policyExceptionCount Int     @default(0) // increments when instructor reschedules inside 24h window
+  allowedDurations     Json?
+  bookingBufferMinutes Int?
+  enableTravelTime     Boolean @default(false)
+  travelTimeMinutes    Int?
+  lessonPackages       Json?
+
   // Google Calendar integration fields
-  syncGoogleCalendar    Boolean   @default(false)
-  googleTokenExpiry     DateTime?
-  calendarBufferMode    String?
-  
-  bookings              Booking[]
-  clients               Client[]
-  subscriptions         Subscription[]
+  syncGoogleCalendar Boolean   @default(false)
+  googleTokenExpiry  DateTime?
+  calendarBufferMode String?
+
+  // Public profile / social links
+  whatsapp         String?
+  instagram        String?
+  facebook         String?
+  yearsExperience  Int?
+
+  bookings      Booking[]
+  clients       Client[]
+  subscriptions Subscription[]
 }
 
 model Booking {
-  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                    String     @id @default(auto()) @map("_id") @db.ObjectId
   instructor            Instructor @relation(fields: [instructorId], references: [id])
-  instructorId          String   @db.ObjectId
-  client                Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId              String?  @db.ObjectId
+  instructorId          String     @db.ObjectId
+  client                Client?    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId              String?    @db.ObjectId
   clientName            String?
   clientPhone           String?
   bookingType           String?
-  status                String   @default("PENDING")
+  status                String     @default("PENDING")
   startTime             DateTime?
   endTime               DateTime?
   duration              Float?
-  price                 Float    @default(0)
-  platformFee           Float    @default(0)
-  instructorPayout      Float    @default(0)
-  commissionRate        Float    @default(0)
-  isPaid                Boolean  @default(false)
+  price                 Float      @default(0)
+  platformFee           Float      @default(0)
+  instructorPayout      Float      @default(0)
+  commissionRate        Float      @default(0)
+  isPaid                Boolean    @default(false)
   paidAt                DateTime?
-  paymentCaptured       Boolean  @default(false)
+  paymentCaptured       Boolean    @default(false)
   paymentCapturedAt     DateTime?
   paymentIntentId       String?
   pickupAddress         String?
@@ -150,19 +165,37 @@ model Booking {
   dropoffLatitude       Float?
   dropoffLongitude      Float?
   notes                 String?
-  isFirstBooking        Boolean  @default(false)
-  isPackageBooking      Boolean  @default(false)
-  parentBookingId       String?  @db.ObjectId
+  isFirstBooking        Boolean    @default(false)
+  isPackageBooking      Boolean    @default(false)
+  parentBookingId       String?    @db.ObjectId
   packageHours          Float?
-  packageHoursUsed      Float    @default(0)
+  packageHoursUsed      Float      @default(0)
   packageHoursRemaining Float?
+  packageTotalPaid      Float?     // Full Stripe charge for the package (used for wallet credit on payment)
   packageExpiryDate     DateTime?
   packageStatus         String?
   createdBy             String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
-  transactions          Transaction[]
+  originalStartTime     DateTime?
+  isNonRefundable       Boolean    @default(false)
+  rescheduledFrom       Json?
+  rescheduleCount       Int        @default(0)
+  deletedAt             DateTime? // soft delete timestamp
+  deletedBy             String? // userId who deleted it
+  // Lesson feedback fields
+  lessonFeedback        Int[]      @default([])
+  instructorNotes       String?
+  feedbackGivenAt       DateTime?
+  studentStrengths      Int[]      @default([])
+  focusAreas            Int[]      @default([])
+  performanceScore      Int?
+  // Client review fields
+  clientRating          Int?       // 1-5 stars
+  clientReview          String?
+  reviewGivenAt         DateTime?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  transactions Transaction[]
 }
 
 model Transaction {
@@ -185,26 +218,26 @@ model Transaction {
 }
 
 model ClientWallet {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @unique @db.ObjectId
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balance     Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   transactions WalletTransaction[]
 }
 
 model WalletTransaction {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  walletId    String   @db.ObjectId
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  walletId    String       @db.ObjectId
   wallet      ClientWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
   amount      Float
   type        String
   description String?
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String       @default("PENDING")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model Message {
@@ -217,18 +250,55 @@ model Message {
 }
 
 model Subscription {
-  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
-  instructorId        String   @db.ObjectId
-  instructor          Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
-  tier                String
-  status              String   @default("ACTIVE")
-  billingCycle        String   @default("monthly")
-  monthlyAmount       Float
+  id                   String     @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId         String     @db.ObjectId
+  instructor           Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  tier                 String
+  status               String     @default("ACTIVE")
+  billingCycle         String     @default("monthly")
+  monthlyAmount        Float
   stripeSubscriptionId String?
-  stripeCustomerId    String?
-  currentPeriodStart  DateTime
-  currentPeriodEnd    DateTime
-  cancelAtPeriodEnd   Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  stripeCustomerId     String?
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean    @default(false)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 }
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  type      String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  action       String // BOOKING_CREATED, BOOKING_CANCELLED, BOOKING_DELETED, BOOKING_RESCHEDULED, etc.
+  actorId      String // userId who performed the action
+  actorRole    String // CLIENT, INSTRUCTOR, ADMIN, SYSTEM
+  targetType   String // BOOKING, TRANSACTION, WALLET, USER
+  targetId     String // ID of the affected record
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json? // snapshot of data before change, reason, etc.
+  success      Boolean  @default(true)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+}
+
+model WebhookEvent {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  idempotencyKey String   @unique
+  eventType      String
+  stripeEventId  String
+  metadata       Json?
+  processedAt    DateTime @default(now())
+}
+
