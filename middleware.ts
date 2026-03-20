@@ -86,16 +86,23 @@ function extractSubdomain(hostname: string): string | null {
     return null
   }
   
-  // For production: john.drivebook.com → "john"
-  if (parts.length > 2) {
+  // Known two-part TLDs (e.g. com.au, co.uk, co.nz, org.au)
+  const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
+  const tld2 = parts.slice(-2).join('.')
+  const isCompoundTLD = twoPartTLDs.includes(tld2)
+
+  // For compound TLD: need 4+ parts for a subdomain (sub.domain.com.au)
+  // For simple TLD: need 3+ parts (sub.domain.com)
+  const minParts = isCompoundTLD ? 4 : 3
+
+  if (parts.length >= minParts) {
     const subdomain = parts[0]
-    // Ignore www
     if (subdomain === 'www') {
       return null
     }
     return subdomain
   }
-  
+
   return null
 }
 
