@@ -1,211 +1,184 @@
 # DriveBook - Driving Instructor Platform
 
-> **A controlled booking marketplace with a protected financial ledger**
+A comprehensive platform for driving instructors and students to manage bookings, payments, and lessons.
 
-A comprehensive marketplace platform connecting driving instructors with students, featuring AI voice booking, payment processing, and complete business management tools.
+## 🌟 Features
 
----
+### For Instructors
+- Dashboard with earnings and analytics
+- Booking management
+- GPS-verified check-in
+- Custom branding (white label)
+- Availability management
+- Client management
+- Document upload
 
-## 📚 DOCUMENTATION (NEW!)
+### For Students
+- Find and book instructors
+- Wallet system with credits
+- Booking history
+- Reschedule lessons
+- Progress tracking
+- Review instructors
 
-**Complete foundation documentation now available!**
-
-### 🎯 Quick Links
-- 👉 **[INDEX.md](INDEX.md)** - Master index of all documentation
-- 👉 **[docs/START_HERE.md](docs/START_HERE.md)** - Your entry point (60-minute learning path)
-- 📋 **[CLEANUP_COMPLETE.md](CLEANUP_COMPLETE.md)** - Documentation cleanup summary
-
-### 🏛️ Foundation (Read First)
-- [CORE_ESSENCE.md](docs/00-foundation/CORE_ESSENCE.md) - What DriveBook is
-- [SYSTEM_PRINCIPLES.md](docs/00-foundation/SYSTEM_PRINCIPLES.md) - 5 non-negotiable principles
-- [FINANCIAL_DOCTRINE.md](docs/00-foundation/FINANCIAL_DOCTRINE.md) - Money flow rules
-- [STATE_MACHINE.md](docs/00-foundation/STATE_MACHINE.md) - Booking states
-
-### 📖 Quick Reference
-- [What We Built Today](WHAT_WE_BUILT_TODAY.md) - Foundation summary
-- [Foundation Complete](docs/FOUNDATION_COMPLETE.md) - Detailed overview
-- [Production Hardening](PRODUCTION_HARDENING_FINAL.md) - Production readiness
-
----
-
-## 🔴 THE 8 NON-NEGOTIABLES
-
-1. No transaction updates - Only adjustments
-2. No state skipping - Must follow progression
-3. No payout without completion
-4. Audit log required for money movements
-5. Role-based access only
-6. Daily wallet reconciliation
-7. Refund after payout blocked (except admin override)
-8. Atomic financial operations
-
----
-
-## 💡 THE 5 PRINCIPLES
-
-1. Financial History Is Immutable
-2. Money Cannot Be Created or Destroyed
-3. State Machine Control
-4. After Start Time = Frozen
-5. Every Financial Action Must Be Logged
-
----
+### For Admins
+- Instructor approval system
+- Revenue tracking
+- Transaction management
+- Support tickets
+- Compliance monitoring
 
 ## 🚀 Quick Start
 
-**New to the project?** Follow this order:
-
-1. **[START_HERE.md](START_HERE.md)** - 10-minute quick setup
-2. **[DEV_GUIDE.md](DEV_GUIDE.md)** - Development workflow  
-3. **[DEPLOYMENT.md](DEPLOYMENT.md)** - Production deployment
-4. **[PLATFORM_RULES.md](PLATFORM_RULES.md)** - ⚠️ MANDATORY operational requirements
-
-**Setup Guides:**
-- [docs/STRIPE_SETUP_GUIDE.md](docs/STRIPE_SETUP_GUIDE.md) - Payment configuration
-- [docs/TWILIO_SETUP_GUIDE.md](docs/TWILIO_SETUP_GUIDE.md) - SMS/Voice setup
-
----
-
-## 📁 Project Structure
-
-```
-drivebook/
-├── app/                          # Next.js 14 app (main platform)
-├── drivebook-hybrid/             # Voice service microservice
-│   ├── server.js                 # Express server
-│   ├── routes/                   # Voice webhooks
-│   ├── services/                 # Business logic
-│   └── docs/                     # 📚 MAIN DOCUMENTATION
-│       ├── ESSENTIAL_DOCS_INDEX.md
-│       ├── ARCHITECTURE.md
-│       ├── QUICK_REFERENCE.md
-│       ├── financial/            # Financial system docs
-│       ├── operations/           # Admin & ops guides
-│       └── systems/              # System specifications
-├── docs-archive/                 # Historical docs (reference only)
-└── README.md                     # This file
-```
-
----
-
-## 📚 Essential Documentation
-
-### Core Guides
-- **[drivebook-hybrid/docs/ESSENTIAL_DOCS_INDEX.md](drivebook-hybrid/docs/ESSENTIAL_DOCS_INDEX.md)** - Documentation structure
-- **[drivebook-hybrid/docs/ARCHITECTURE.md](drivebook-hybrid/docs/ARCHITECTURE.md)** - System architecture
-- **[drivebook-hybrid/docs/QUICK_REFERENCE.md](drivebook-hybrid/docs/QUICK_REFERENCE.md)** - Developer quick reference
-
-### Financial System
-- **[drivebook-hybrid/docs/financial/FINANCIAL_LEDGER_DESIGN.md](drivebook-hybrid/docs/financial/FINANCIAL_LEDGER_DESIGN.md)** - Ledger architecture
-- **[drivebook-hybrid/docs/financial/LEDGER_QUICK_REFERENCE.md](drivebook-hybrid/docs/financial/LEDGER_QUICK_REFERENCE.md)** - Developer reference
-- **[drivebook-hybrid/docs/financial/MARKETPLACE_PLATFORM_ROADMAP.md](drivebook-hybrid/docs/financial/MARKETPLACE_PLATFORM_ROADMAP.md)** - Business rules
-
-### Operations
-- **[drivebook-hybrid/docs/operations/ADMIN_QUICK_REFERENCE.md](drivebook-hybrid/docs/operations/ADMIN_QUICK_REFERENCE.md)** - Admin daily operations
-- **[drivebook-hybrid/docs/operations/PLATFORM_OWNER_GUIDE.md](drivebook-hybrid/docs/operations/PLATFORM_OWNER_GUIDE.md)** - Platform management
-
-### System Specifications
-- **[drivebook-hybrid/docs/systems/PAYMENT_SYSTEM_GUIDE.md](drivebook-hybrid/docs/systems/PAYMENT_SYSTEM_GUIDE.md)** - Payment & subscriptions
-- **[drivebook-hybrid/docs/systems/COMPLETE_BOOKING_FLOW_SPECIFICATION.md](drivebook-hybrid/docs/systems/COMPLETE_BOOKING_FLOW_SPECIFICATION.md)** - Booking flow
-- **[drivebook-hybrid/docs/systems/COMPLIANCE_SYSTEM.md](drivebook-hybrid/docs/systems/COMPLIANCE_SYSTEM.md)** - Document compliance
-
-### Setup Guides
-- **[docs/STRIPE_SETUP_GUIDE.md](docs/STRIPE_SETUP_GUIDE.md)** - Payment configuration
-- **[docs/TWILIO_SETUP_GUIDE.md](docs/TWILIO_SETUP_GUIDE.md)** - SMS/Voice setup
-- **[drivebook-hybrid/docs/AI_VOICE_RECEPTIONIST_GUIDE.md](drivebook-hybrid/docs/AI_VOICE_RECEPTIONIST_GUIDE.md)** - Voice AI setup
-
----
-
-## 🎯 Key Features
-
-- 📱 Customer booking portal
-- 👨‍🏫 Instructor dashboard & management
-- 💳 Stripe payment processing & subscriptions
-- 📞 AI voice receptionist (Twilio + Copilot)
-- � Email & SMS notifications
-- 📊 Financial ledger & analytics
-- 🔐 Secure authentication (NextAuth)
-- 💰 Wallet system & package management
-
----
-
-## 🛠️ Tech Stack
-
-- **Frontend**: Next.js 14, React 18, TypeScript, TailwindCSS
-- **Backend**: Next.js API Routes, Express.js (voice service)
-- **Database**: MongoDB (main), SQLite (voice cache)
-- **Payments**: Stripe
-- **Communications**: Twilio (SMS/Voice), Resend (Email)
-- **AI**: Microsoft Copilot Studio
-- **Auth**: NextAuth.js
-- **ORM**: Prisma
-
----
-
-## 🔧 Development
+### Web Application
 
 ```bash
 # Install dependencies
 npm install
 
-# Setup environment
-cp .env.example .env
-# Edit .env with your credentials
+# Set up database
+npx prisma migrate dev
 
-# Generate Prisma client
-npx prisma generate
-
-# Start development server
+# Run development server
 npm run dev
 ```
 
-Visit http://localhost:3000
+Visit `http://localhost:3000`
 
-**For detailed setup:** See [DEV_GUIDE.md](DEV_GUIDE.md)
+### Mobile Application
 
----
+See [docs/mobile/START_HERE.md](./docs/mobile/START_HERE.md) to get started with the mobile app.
 
-## 🚀 Deployment
+```bash
+# Install Capacitor
+install-capacitor.bat
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions.
+# Build for mobile
+npm run mobile:build
 
-**Quick Deploy:**
-- Main App → Vercel
-- Voice Service → Railway/Heroku
+# Open in Android Studio
+npm run cap:android
+```
 
----
+## 📱 Mobile App Architecture
 
-## 📖 Documentation Philosophy
+The mobile app uses **Capacitor** to wrap the Next.js web app into a native iOS/Android app.
 
-**What We Keep:**
-- Standards we follow
-- System architecture we implement
-- Business rules we enforce
-- Operational procedures we execute
-- Technical specifications we build to
+**Key Features:**
+- Single codebase for web + mobile
+- Role-based navigation (Instructor/Client/Admin)
+- Dynamic white-label branding per instructor
+- Native features: GPS check-in, push notifications, camera
 
-**What We Archive:**
-- Historical "fix" documents → `docs-archive/`
-- Session summaries → `docs-archive/`
-- Investigation reports → `docs-archive/`
-- Audit reports → `docs-archive/`
+See [MOBILE_APP_GUIDE.md](./MOBILE_APP_GUIDE.md) for complete documentation.
 
-**Why:** The system IS the documentation. Code reflects current state. Standards guide future work.
+## 🛠️ Tech Stack
 
----
+- **Frontend**: Next.js 14, React, TailwindCSS
+- **Backend**: Next.js API Routes
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: NextAuth.js
+- **Payments**: Stripe
+- **Mobile**: Capacitor
+- **Maps**: Google Maps API
+- **Storage**: Cloudinary
+- **Email**: Resend/Nodemailer
 
-## 📞 Support
+## 📂 Project Structure
 
-**For Development Questions:**
-1. Check [drivebook-hybrid/docs/QUICK_REFERENCE.md](drivebook-hybrid/docs/QUICK_REFERENCE.md)
-2. Review [drivebook-hybrid/docs/ESSENTIAL_DOCS_INDEX.md](drivebook-hybrid/docs/ESSENTIAL_DOCS_INDEX.md)
-3. Search `docs-archive/` for historical context
+```
+drivebook/
+├── app/                    # Next.js app directory
+│   ├── api/               # API routes
+│   ├── admin/             # Admin dashboard
+│   ├── dashboard/         # Instructor dashboard
+│   └── client/            # Client pages
+├── components/            # React components
+│   ├── mobile/           # Mobile-specific components
+│   └── ...
+├── lib/                   # Utilities and helpers
+│   ├── capacitor/        # Native features wrapper
+│   └── ...
+├── prisma/               # Database schema
+├── public/               # Static assets
+└── styles/               # CSS files
+```
 
-**For Operations:**
-1. Use [drivebook-hybrid/docs/operations/ADMIN_QUICK_REFERENCE.md](drivebook-hybrid/docs/operations/ADMIN_QUICK_REFERENCE.md)
-2. Refer to [PLATFORM_RULES.md](PLATFORM_RULES.md)
+## 🔧 Configuration
 
----
+### Environment Variables
 
-**Current Status:** Active Development  
-**Last Updated:** March 3, 2026
+Create `.env` file:
+
+```env
+DATABASE_URL="postgresql://..."
+NEXTAUTH_SECRET="..."
+NEXTAUTH_URL="http://localhost:3000"
+STRIPE_SECRET_KEY="sk_test_..."
+GOOGLE_MAPS_API_KEY="..."
+CLOUDINARY_URL="cloudinary://..."
+```
+
+### Mobile Configuration
+
+Update `capacitor.config.ts` for development:
+
+```typescript
+server: {
+  url: 'http://YOUR_IP:3000',
+  cleartext: true,
+}
+```
+
+## 📚 Documentation
+
+### Mobile App Documentation
+- [Start Here](./docs/mobile/START_HERE.md) - Begin here for mobile setup
+- [Quick Start](./docs/mobile/QUICK_START.md) - 5-minute setup guide
+- [Complete Guide](./docs/mobile/COMPLETE_GUIDE.md) - Full documentation
+- [Architecture](./docs/mobile/ARCHITECTURE.md) - System architecture
+- [Implementation Checklist](./docs/mobile/IMPLEMENTATION_CHECKLIST.md) - Step-by-step guide
+- [Why One App](./docs/mobile/WHY_ONE_APP.md) - Architecture decision
+- [All Mobile Docs](./docs/mobile/) - Browse all mobile documentation
+
+## 🧪 Testing
+
+```bash
+# Run tests
+npm test
+
+# Check types
+npm run type-check
+
+# Lint code
+npm run lint
+```
+
+## 🚢 Deployment
+
+### Web (Vercel)
+```bash
+npm run vercel-build
+```
+
+### Mobile (App Stores)
+
+**Android:**
+1. Build: `npm run mobile:build`
+2. Open: `npm run cap:android`
+3. Generate signed APK in Android Studio
+4. Upload to Google Play Console
+
+**iOS:**
+1. Add iOS: `npx cap add ios`
+2. Open: `npm run cap:ios`
+3. Archive in Xcode
+4. Upload to App Store Connect
+
+## 📄 License
+
+Proprietary - All rights reserved
+
+## 🤝 Support
+
+For support, email support@drivebook.com

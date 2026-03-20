@@ -58,3 +58,9 @@ docs/archive/
 # temporary files
 cleanupEnv.js
 updateEnv.js
+
+# Pricing config (admin-editable, not committed)
+pricing-config.json
+
+# Platform settings config (admin-editable, not committed)
+settings-config.json

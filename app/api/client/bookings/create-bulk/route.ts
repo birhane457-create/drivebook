@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { recordBookingPayment } from '@/lib/services/ledger-operations';
-import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { paymentService } from '@/lib/services/payment';
 import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 
@@ -250,37 +249,6 @@ export async function POST(request: NextRequest) {
 
       return { created, totalCost, remaining: newBalance, ledgerEntries };
     });
-
-    // Verify ledger balance matches old system
-    try {
-      const ledgerBalance = await getAccountBalance(
-        buildAccount(AccountType.CLIENT_WALLET, result.created[0].booking.userId)
-      );
-      
-      const user = await prisma.user.findUnique({ 
-        where: { email: session.user.email },
-        include: { wallet: true }
-      });
-      
-      const oldBalance = user?.wallet?.balance || 0;
-      
-      if (Math.abs(ledgerBalance - oldBalance) > 0.01) {
-        console.error('[Ledger] BALANCE MISMATCH DETECTED', {
-          ledgerBalance,
-          oldBalance,
-          difference: ledgerBalance - oldBalance,
-          userId: user?.id
-        });
-      } else {
-        console.log('[Ledger] Balance verification passed', {
-          ledgerBalance,
-          oldBalance,
-          userId: user?.id
-        });
-      }
-    } catch (verifyError) {
-      console.error('[Ledger] Balance verification failed:', verifyError);
-    }
 
     // Fire notifications for each booking (outside transaction - non-critical)
     // Get client name for notification message

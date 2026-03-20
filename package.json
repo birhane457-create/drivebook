@@ -5,8 +5,6 @@
   "scripts": {
     "dev": "set NODE_OPTIONS=--max-old-space-size=8192 && next dev -H 0.0.0.0",
     "build": "prisma generate && set NODE_OPTIONS=--max-old-space-size=8192 && next build",
-    "build:mobile": "prisma generate && set NODE_OPTIONS=--max-old-space-size=8192 && next build",
-    "export:mobile": "next export",
     "vercel-build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
@@ -14,9 +12,16 @@
     "cap:sync": "npx cap sync",
     "cap:ios": "npx cap open ios",
     "cap:android": "npx cap open android",
-    "mobile:build": "npm run build:mobile && npm run export:mobile && npm run cap:sync"
+    "mobile:dev": "npm run dev",
+    "mobile:build": "npm run build && npm run cap:sync",
+    "mobile:test:emulator": "echo Testing on emulator - Server at localhost:3000 && npm run dev",
+    "mobile:test:device": "echo Testing on device - Update capacitor.config.ts with your IP && npm run dev"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^7.6.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0",
     "@googlemaps/js-api-loader": "^1.16.6",
     "@hookform/resolvers": "^3.3.4",
     "@prisma/client": "^5.14.0",
@@ -42,8 +47,8 @@
     "resend": "^3.2.0",
     "stripe": "^20.3.1",
     "tailwind-merge": "^2.3.0",
-    "typescript": "^5.4.5",
     "twilio": "^5.12.2",
+    "typescript": "^5.4.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -57,5 +62,20 @@
     "postcss": "^8.4.38",
     "prisma": "^5.14.0",
     "tailwindcss": "^3.4.3"
+  },
+  "capacitor": {
+    "note": "Run install-capacitor.bat to install Capacitor dependencies",
+    "dependencies": [
+      "@capacitor/core",
+      "@capacitor/cli",
+      "@capacitor/ios",
+      "@capacitor/android",
+      "@capacitor/push-notifications",
+      "@capacitor/geolocation",
+      "@capacitor/camera",
+      "@capacitor/local-notifications",
+      "@capacitor/haptics",
+      "@capacitor/splash-screen"
+    ]
   }
 }
