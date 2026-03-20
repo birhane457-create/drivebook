@@ -2,8 +2,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import DashboardNav from '@/components/DashboardNav'
-import ClientDashboardNav from '@/components/ClientDashboardNav'
 import MobileBottomNav from '@/components/instructor/MobileBottomNav'
+
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardLayout({
   children,
@@ -16,36 +17,25 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // ✅ SECURITY: Only INSTRUCTOR role can access instructor dashboard
-  // Admins should use /admin routes, not /dashboard routes
-  if (session.user.role === 'INSTRUCTOR') {
-    // instructorId may not be set yet for newly created instructors — don't loop to /login
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <DashboardNav />
-        <div className="pb-20 md:pb-0">
-          {children}
-        </div>
-        <MobileBottomNav />
-      </div>
-    )
+  const role = session.user.role
+
+  if (role === 'CLIENT') {
+    redirect('/client-dashboard')
   }
 
-  // Client dashboard
-  if (session.user.role === 'CLIENT') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <ClientDashboardNav />
-        {children}
-      </div>
-    )
-  }
-
-  // ✅ SECURITY: Redirect admins to admin area, not instructor dashboard
-  if (session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN') {
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
     redirect('/admin')
   }
 
-  redirect('/login')
+  // INSTRUCTOR (and any future roles) — render dashboard
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <DashboardNav />
+      <div className="pb-20 md:pb-0">
+        {children}
+      </div>
+      <MobileBottomNav />
+    </div>
+  )
 }
 
