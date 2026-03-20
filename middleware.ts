@@ -30,46 +30,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
   
-  // For protected routes, check authentication
+  // For protected routes, check authentication only — layouts handle role-based access
   if (url.pathname.startsWith('/dashboard') || url.pathname.startsWith('/admin') || url.pathname.startsWith('/client-dashboard')) {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
     
     if (!token) {
-      // Not authenticated, redirect to login
-      // Guard: if we're already going to /login, don't redirect again (prevents loop)
       const loginUrl = new URL('/login', req.url)
       loginUrl.searchParams.set('callbackUrl', url.pathname)
       return NextResponse.redirect(loginUrl)
     }
-    
-    // Check role-based access
-    const path = url.pathname
-    const role = token.role as string
-    
-    // Admin routes - only for ADMIN and SUPER_ADMIN
-    if (path.startsWith('/admin')) {
-      if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
-        // Non-admin: send to their correct dashboard
-        const dest = role === 'CLIENT' ? '/client-dashboard' : '/dashboard'
-        return NextResponse.redirect(new URL(dest, req.url))
-      }
-    }
-
-    // Instructor dashboard routes - for INSTRUCTOR, ADMIN, and SUPER_ADMIN only
-    if (path.startsWith('/dashboard')) {
-      if (role === 'CLIENT') {
-        return NextResponse.redirect(new URL('/client-dashboard', req.url))
-      }
-    }
-
-    // Client dashboard routes - for CLIENT role only
-    if (path.startsWith('/client-dashboard')) {
-      if (role !== 'CLIENT') {
-        // Admins and instructors go to their own dashboard
-        const dest = role === 'ADMIN' || role === 'SUPER_ADMIN' ? '/admin' : '/dashboard'
-        return NextResponse.redirect(new URL(dest, req.url))
-      }
-    }
+    // Token exists — let the layout handle role-based access control
   }
   
   return NextResponse.next()

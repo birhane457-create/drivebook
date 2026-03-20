@@ -19,10 +19,7 @@ export default async function DashboardLayout({
   // ✅ SECURITY: Only INSTRUCTOR role can access instructor dashboard
   // Admins should use /admin routes, not /dashboard routes
   if (session.user.role === 'INSTRUCTOR') {
-    if (!session.user.instructorId) {
-      redirect('/login')
-    }
-    
+    // instructorId may not be set yet for newly created instructors — don't loop to /login
     return (
       <div className="min-h-screen bg-gray-50">
         <DashboardNav />
