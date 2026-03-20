@@ -2,7 +2,7 @@
 
 **Purpose**: Define API routes and endpoints  
 **Owner**: Technical Team  
-**Last Updated**: March 4, 2026  
+**Last Updated**: March 20, 2026  
 **Scope**: Next.js API routes  
 
 ---
@@ -14,10 +14,16 @@ app/api/
 ├── auth/                    # Authentication
 ├── bookings/                # Booking management
 ├── client/                  # Client operations
+├── instructor/              # Instructor operations
 ├── admin/                   # Admin operations
+├── analytics/               # Analytics
+├── branding/                # Subdomain branding
 ├── stripe/                  # Payment webhooks
-└── cron/                    # Scheduled tasks
+├── cron/                    # Scheduled tasks
+└── test-email/              # Email diagnostics (admin only)
 ```
+
+> All dynamic API routes must export `export const dynamic = 'force-dynamic'` to prevent Next.js from attempting static pre-rendering at build time.
 
 ---
 
@@ -52,6 +58,17 @@ app/api/
 - **Purpose**: Cancel with refund policy
 - **Refund**: 100%/50%/0% based on notice
 
+### Reschedule Booking
+**POST** `/api/bookings/[id]/reschedule`
+- **Auth**: Instructor/Admin
+- **Purpose**: Move booking to a new time slot
+- **Rule**: Frozen after startTime
+
+### Check-In
+**POST** `/api/bookings/[id]/check-in`
+- **Auth**: Instructor
+- **Purpose**: Record lesson start
+
 ### Check-Out
 **POST** `/api/bookings/[id]/check-out`
 - **Auth**: Instructor/Client
@@ -65,24 +82,46 @@ app/api/
 ### Create Wallet Booking
 **POST** `/api/client/bookings/create-bulk`
 - **Auth**: Client only
-- **Purpose**: Book with wallet credits
+- **Purpose**: Book one or more lessons with wallet credits
 - **Status**: CONFIRMED (immediate)
-- **Payment**: Deducted from wallet
+- **Payment**: Deducted from wallet per booking
+- **Note**: `booking.price` = 1hr × hourlyRate (never package total)
 
 ### Get Wallet
 **GET** `/api/client/wallet`
 - **Auth**: Client only
-- **Purpose**: View wallet balance
+- **Purpose**: View wallet balance and transactions
+
+### Wallet Summary
+**GET** `/api/client/wallet/summary`
+- **Auth**: Client only
+- **Purpose**: Aggregated balance across all CONFIRMED transactions
+
+### Add Wallet Funds (Stripe)
+**POST** `/api/client/wallet-add`
+- **Auth**: Client only
+- **Purpose**: Top up wallet via Stripe PaymentIntent
+
+### Wallet Top-Up Intent
+**POST** `/api/client/wallet-topup-intent`
+- **Auth**: Client only
+- **Purpose**: Create Stripe PaymentIntent for wallet top-up
+
+### Client Reschedule
+**POST** `/api/client/bookings/[id]/reschedule`
+- **Auth**: Client only
+- **Purpose**: Client-initiated reschedule request
 
 ---
 
 ## PUBLIC APIS
 
-### Create Public Booking
-**POST** `/api/public/bookings`
+### Create Public Booking (Bulk)
+**POST** `/api/public/bookings/bulk`
 - **Auth**: None (public)
-- **Purpose**: Book with Stripe payment
-- **Status**: PENDING → CONFIRMED (via webhook)
+- **Purpose**: Book package with Stripe payment (guest or logged-in)
+- **Status**: PENDING_PAYMENT → CONFIRMED (via webhook)
+- **Note**: Slot reserved with PENDING_PAYMENT status; expires after 10 min if payment not completed
 
 ---
 
@@ -97,6 +136,10 @@ app/api/
 - **Auth**: Admin only
 - **Purpose**: Deduct credits from wallet
 
+**GET** `/api/admin/clients/[id]/wallet`
+- **Auth**: Admin only
+- **Purpose**: View client wallet transactions
+
 ### Payout Management
 **GET** `/api/admin/payouts`
 - **Auth**: Admin only
@@ -104,7 +147,53 @@ app/api/
 
 **POST** `/api/admin/payouts/process`
 - **Auth**: Admin only
-- **Purpose**: Process instructor payouts
+- **Purpose**: Process single instructor payout
+
+**POST** `/api/admin/payouts/process-all`
+- **Auth**: Admin only
+- **Purpose**: Batch process all eligible payouts
+
+**POST** `/api/admin/payouts/resolve`
+- **Auth**: Admin only
+- **Purpose**: Manually resolve a disputed payout
+
+### Instructor Management
+**GET/POST** `/api/admin/instructors`
+- **Auth**: Admin only
+- **Purpose**: List and manage instructors
+
+**POST** `/api/admin/instructors/[id]/approve`
+- **Auth**: Admin only
+- **Purpose**: Approve instructor application
+
+**POST** `/api/admin/instructors/[id]/reject`
+- **Auth**: Admin only
+- **Purpose**: Reject instructor application
+
+**POST** `/api/admin/instructors/[id]/suspend`
+- **Auth**: Admin only
+- **Purpose**: Suspend active instructor
+
+### Pricing
+**GET/POST** `/api/admin/pricing`
+- **Auth**: Admin only
+- **Purpose**: View and update platform pricing settings
+
+### Settings
+**GET/POST** `/api/admin/settings`
+- **Auth**: Admin only
+- **Purpose**: Platform-wide settings
+
+---
+
+## EMAIL APIS
+
+### Test Email (Diagnostics)
+**POST** `/api/test-email`
+- **Auth**: ADMIN or SUPER_ADMIN only
+- **Purpose**: Send a test email to verify SMTP configuration
+- **Note**: POST only — not callable by GET, not triggered at build time
+- **Security**: Returns 401 for non-admin sessions
 
 ---
 
@@ -120,11 +209,12 @@ app/api/
 
 ## CRON APIS
 
-### Auto-Cancel PENDING
-**GET** `/api/cron/cleanup-pending`
-- **Auth**: Cron secret
-- **Purpose**: Cancel expired PENDING bookings
-- **Schedule**: Every 5 minutes
+### Cleanup Expired Bookings
+**GET** `/api/cron/cleanup-expired-bookings`
+- **Auth**: `Authorization: Bearer <CRON_SECRET>` header
+- **Purpose**: Expire PENDING_PAYMENT bookings and PENDING wallet transactions older than 10 min; auto-complete checked-in lessons; mark no-shows
+- **Schedule**: Every 5 minutes (configured in `vercel.json`)
+- **Dynamic**: `export const dynamic = 'force-dynamic'`
 
 ---
 

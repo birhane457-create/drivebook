@@ -1,6 +1,6 @@
 # DriveBook Documentation
 
-**Last Updated**: March 4, 2026  
+**Last Updated**: March 20, 2026  
 **Status**: Foundation Complete
 
 ---
@@ -161,10 +161,11 @@ Old documentation is moved to `archive/` when:
 | Category | Status | Last Review |
 |----------|--------|-------------|
 | Foundation | ✅ Complete | 2026-03-04 |
-| Architecture | 🟡 In Progress | - |
+| Architecture | ✅ Updated | 2026-03-20 |
 | Finance | 🟡 In Progress | - |
 | Operations | 🟡 In Progress | - |
 | Legal | 🟡 In Progress | - |
+| Integrations | ✅ Updated | 2026-03-20 |
 
 ---
 

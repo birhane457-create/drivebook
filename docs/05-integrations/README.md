@@ -8,6 +8,7 @@ DriveBook integrates with several external services to provide a complete drivin
 |------------|---------|--------|---------------|
 | Stripe | Payment processing, subscriptions | ✅ Active | [STRIPE_PAYMENTS.md](./STRIPE_PAYMENTS.md) |
 | Twilio | SMS notifications, voice calls | ✅ Active | [SMS_NOTIFICATIONS.md](./SMS_NOTIFICATIONS.md) |
+| SMTP (Nodemailer) | Transactional email | ✅ Active | See below |
 | Microsoft Copilot | AI voice receptionist | ✅ Active | [AI_VOICE_RECEPTIONIST.md](./AI_VOICE_RECEPTIONIST.md) |
 | Google Calendar | Instructor calendar sync | ✅ Active | [GOOGLE_CALENDAR.md](./GOOGLE_CALENDAR.md) |
 | Google OAuth | Sign in with Google | ✅ Active | [GOOGLE_OAUTH.md](./GOOGLE_OAUTH.md) |
@@ -28,6 +29,14 @@ These are essential for the platform to function:
    - Required for: Check-in/check-out, booking confirmations
    - Setup time: 15 minutes
    - [Setup Guide](./SMS_NOTIFICATIONS.md)
+
+3. **SMTP Email** - Transactional email
+   - Required for: Booking confirmations, password reset, welcome emails, PDA test reminders
+   - Setup time: 10 minutes
+   - Provider: Any SMTP server (Gmail, SendGrid, Mailgun, etc.)
+   - Config: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`
+   - Note: `secure` is auto-derived from port — port 465 = TLS, all others = STARTTLS
+   - Test endpoint: `POST /api/test-email` (admin session required)
 
 ### Optional Integrations
 
@@ -93,6 +102,13 @@ STRIPE_WEBHOOK_SECRET="whsec_..."
 TWILIO_ACCOUNT_SID="AC..."
 TWILIO_AUTH_TOKEN="..."
 TWILIO_PHONE_NUMBER="+1234567890"
+
+# SMTP Email
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="587"           # 465 for TLS, 587 for STARTTLS
+SMTP_USER="noreply@example.com"
+SMTP_PASS="your-smtp-password"
+EMAIL_FROM="noreply@example.com"
 
 # Google
 GOOGLE_CLIENT_ID="...apps.googleusercontent.com"

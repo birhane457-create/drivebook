@@ -1,6 +1,6 @@
 # DriveBook Subdomain / White-Label Booking System
 
-**Last Updated:** March 2026 (revised — SEO meta, trust badges, FAQ accordion added)  
+**Last Updated:** March 20, 2026 (middleware fix: compound TLD support for `.com.au`)  
 **Scope:** Instructor public booking pages — how they work today, how they should work, and how to set one up
 
 ---
@@ -396,95 +396,55 @@ The chevron rotates 180° on open via `group-open:rotate-180` (Tailwind). No cli
 
 | Gap | Impact | Notes |
 |---|---|---|
-| URL is path-based, not true subdomain | Branding dashboard shows wrong URL format | See Section 12 for fix |
 | Service area check is client-side only | Students can bypass it | Advisory only by design |
-| No SEO meta tags on subdomain page | Poor Google discoverability | Add `generateMetadata()` |
 | `brandLogo` / `brandColorPrimary` etc. not in Prisma select types | TypeScript errors in branding route | Schema needs updating |
 | `SubdomainClientFeatures` import error | Build warning | File exists, likely a path resolution issue |
-| Branding dashboard copies `slug.drivebook.com.au` | Link doesn't work until middleware is live | Cosmetic until Section 12 is implemented |
+| Branding dashboard copies `slug.drivebook.com.au` | Link doesn't work until DNS wildcard is added | Cosmetic until DNS is configured |
+
+**Resolved:**
+- ~~URL is path-based, not true subdomain~~ — Middleware is live. `john-smith.drivebook.com.au` rewrites to `/subdomain/john-smith`.
+- ~~`drivebook.com.au` returning 404~~ — Fixed March 20, 2026. Root cause: `extractSubdomain()` was treating `drivebook` as a subdomain because `.com.au` splits into 3 parts. Fixed by adding compound TLD awareness: `.com.au`, `.co.uk`, `.co.nz`, `.org.au`, `.net.au`, `.id.au` require 4+ parts to be considered a subdomain.
 
 ---
 
-## 13. True Subdomain Routing (As It Should Be)
+## 13. True Subdomain Routing (Live as of March 20, 2026)
 
-To serve `john-smith.drivebook.com.au` instead of `drivebook.com.au/subdomain/john-smith`, two things are needed:
+Subdomain routing is **live**. `john-smith.drivebook.com.au` rewrites transparently to `/subdomain/john-smith`.
 
-### 13a. DNS — Wildcard record
+### How it works
 
-Add a wildcard `A` or `CNAME` record in your DNS provider:
-
-```
-*.drivebook.com.au  →  your Vercel deployment
-```
-
-In Vercel: add `*.drivebook.com.au` as a custom domain on the project.
-
-### 13b. Next.js Middleware
-
-Create `drivebook/middleware.ts`:
+`middleware.ts` → `extractSubdomain()` detects the subdomain and rewrites the request:
 
 ```typescript
-import { NextRequest, NextResponse } from 'next/server';
+// Compound TLD awareness — .com.au needs 4+ parts for a subdomain
+const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
+const isCompoundTLD = twoPartTLDs.includes(parts.slice(-2).join('.'))
+const minParts = isCompoundTLD ? 4 : 3
 
-export function middleware(req: NextRequest) {
-  const host = req.headers.get('host') || '';
-  const mainDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'drivebook.com.au';
-
-  // Strip port for local dev
-  const hostname = host.replace(':3000', '').replace(':3001', '');
-
-  // Not a subdomain — pass through
-  if (hostname === mainDomain || hostname === `www.${mainDomain}`) {
-    return NextResponse.next();
-  }
-
-  // Extract subdomain slug
-  const slug = hostname.replace(`.${mainDomain}`, '');
-  if (!slug || slug === hostname) return NextResponse.next();
-
-  // Rewrite to /subdomain/[slug] — transparent to the user
-  const url = req.nextUrl.clone();
-  url.pathname = `/subdomain/${slug}${url.pathname}`;
-  return NextResponse.rewrite(url);
+if (parts.length >= minParts && parts[0] !== 'www') {
+  // rewrite /  →  /subdomain/john-smith
 }
-
-export const config = {
-  matcher: [
-    // Run on all paths except Next.js internals and static files
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
-};
 ```
 
-### 13c. Environment variable
+### DNS requirement
 
-Add to `.env`:
+A wildcard DNS record must point to Vercel:
+
+```
+*.drivebook.com.au  →  Vercel deployment
+```
+
+Add `*.drivebook.com.au` as a custom domain in the Vercel project settings.
+
+### Environment variable
 
 ```
 NEXT_PUBLIC_ROOT_DOMAIN=drivebook.com.au
 ```
 
-### 13d. Update `next.config.js`
+### Local development
 
-Add the wildcard to `images.domains` and `allowedDevOrigins`:
-
-```javascript
-const nextConfig = {
-  images: {
-    domains: ['localhost', 'drivebook.com.au'],
-  },
-  allowedDevOrigins: ['*.localhost', 'localhost'],
-  // ...
-};
-```
-
-### 13e. Local development
-
-For local testing, use a tool like `localcan` or edit `/etc/hosts` to map `john-smith.localhost` → `127.0.0.1`, then visit `http://john-smith.localhost:3000`.
-
-### 13f. Update the redirect in BulkBookingForm
-
-Once true subdomains are live, the redirect logic in `BulkBookingForm.tsx` already handles it correctly — it strips the subdomain from `window.location.host` to build the payment URL on the main domain.
+Edit `/etc/hosts` to map `john-smith.localhost` → `127.0.0.1`, then visit `http://john-smith.localhost:3000`. Or use `localcan`.
 
 ---
 
