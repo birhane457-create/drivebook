@@ -572,11 +572,9 @@ async function handleSubscriptionUpdate(
       data: {
         subscriptionTier: tier as any,
         subscriptionStatus: status.toUpperCase() as any,
-        commissionRate: plan.commissionRate,
-        newStudentBonus: plan.newStudentBonus,
         trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
         stripeCustomerId: subscription.customer as string,
-      }
+      } as any
     });
 
     // Update or create subscription record
@@ -590,7 +588,6 @@ async function handleSubscriptionUpdate(
         data: {
           status: status.toUpperCase() as any,
           currentPeriodEnd: new Date(current_period_end * 1000),
-          trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
         }
       });
     } else {
@@ -604,7 +601,6 @@ async function handleSubscriptionUpdate(
           billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
           currentPeriodStart: new Date(current_period_start * 1000),
           currentPeriodEnd: new Date(current_period_end * 1000),
-          trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
           stripeCustomerId: subscription.customer as string,
           stripeSubscriptionId: subscription.id,
         }
@@ -681,7 +677,6 @@ async function handleSubscriptionCancelled(
       where: { stripeSubscriptionId: subscription.id },
       data: {
         status: 'CANCELLED',
-        cancelledAt: new Date()
       }
     });
 

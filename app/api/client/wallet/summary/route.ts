@@ -21,10 +21,11 @@ export async function GET(req: NextRequest) {
       include: {
         wallet: {
           include: {
+            // Fetch ALL confirmed transactions for accurate balance calculation.
+            // No take limit — a capped query would produce a wrong balance.
             transactions: {
               where: { status: 'CONFIRMED' },
-              orderBy: { createdAt: 'desc' },
-              take: 10
+              orderBy: { createdAt: 'desc' }
             }
           }
         },
@@ -98,7 +99,7 @@ export async function GET(req: NextRequest) {
         lastUpdated: wallet.updatedAt,
         accountStatus: creditsRemaining > 0 ? 'active' : creditsRemaining === 0 ? 'zero-balance' : 'negative'
       },
-      recentTransactions: transactions.map((t: any) => ({
+      recentTransactions: transactions.slice(0, 10).map((t: any) => ({
         id: t.id,
         date: t.createdAt,
         description: t.description,
