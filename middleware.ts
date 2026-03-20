@@ -36,6 +36,7 @@ export async function middleware(req: NextRequest) {
     
     if (!token) {
       // Not authenticated, redirect to login
+      // Guard: if we're already going to /login, don't redirect again (prevents loop)
       const loginUrl = new URL('/login', req.url)
       loginUrl.searchParams.set('callbackUrl', url.pathname)
       return NextResponse.redirect(loginUrl)
@@ -48,7 +49,9 @@ export async function middleware(req: NextRequest) {
     // Admin routes - only for ADMIN and SUPER_ADMIN
     if (path.startsWith('/admin')) {
       if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
-        return NextResponse.redirect(new URL('/client-dashboard', req.url))
+        // Non-admin: send to their correct dashboard
+        const dest = role === 'CLIENT' ? '/client-dashboard' : '/dashboard'
+        return NextResponse.redirect(new URL(dest, req.url))
       }
     }
 
@@ -62,7 +65,9 @@ export async function middleware(req: NextRequest) {
     // Client dashboard routes - for CLIENT role only
     if (path.startsWith('/client-dashboard')) {
       if (role !== 'CLIENT') {
-        return NextResponse.redirect(new URL('/dashboard', req.url))
+        // Admins and instructors go to their own dashboard
+        const dest = role === 'ADMIN' || role === 'SUPER_ADMIN' ? '/admin' : '/dashboard'
+        return NextResponse.redirect(new URL(dest, req.url))
       }
     }
   }
