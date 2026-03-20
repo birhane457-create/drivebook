@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -13,7 +15,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch instructor branding settings
     const instructor = await prisma.user.findUnique({
       where: {
         id: instructorId,
@@ -23,11 +24,6 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         email: true,
-        image: true,
-        // Add branding fields when you add them to schema
-        // brandingColor: true,
-        // brandingLogo: true,
-        // businessName: true,
       },
     });
 
@@ -38,17 +34,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Return branding configuration
-    // TODO: Add actual branding fields to User model
     return NextResponse.json({
       instructorId: instructor.id,
       businessName: instructor.name || 'DriveBook',
-      logo: instructor.image || '/logo.png',
-      primaryColor: '#4F46E5', // Default indigo
-      // When you add branding fields:
-      // primaryColor: instructor.brandingColor || '#4F46E5',
-      // logo: instructor.brandingLogo || instructor.image || '/logo.png',
-      // businessName: instructor.businessName || instructor.name || 'DriveBook',
+      logo: '/logo.png',
+      primaryColor: '#4F46E5',
     });
   } catch (error) {
     console.error('Error fetching branding:', error);

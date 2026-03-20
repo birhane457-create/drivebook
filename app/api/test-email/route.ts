@@ -1,28 +1,24 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { emailService } from '@/lib/services/email'
 
-export async function GET() {
+export const dynamic = 'force-dynamic'
+
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const result = await emailService.sendTestEmail()
-    
     if (result.success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Test email sent successfully! Check your inbox.' 
-      })
-    } else {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Failed to send test email',
-        error: result.error 
-      }, { status: 500 })
+      return NextResponse.json({ success: true, message: 'Test email sent.' })
     }
+    return NextResponse.json({ success: false, error: result.error }, { status: 500 })
   } catch (error) {
-    console.error('Test email error:', error)
-    return NextResponse.json({ 
-      success: false, 
-      message: 'Internal server error',
-      error: String(error)
-    }, { status: 500 })
+    return NextResponse.json({ success: false, error: String(error) }, { status: 500 })
   }
 }

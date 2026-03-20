@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { SignJWT } from 'jose';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Email Verification with Magic Link Auto-Login
  * 
