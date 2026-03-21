@@ -6,7 +6,7 @@ const nextConfig = {
   experimental: {
     missingSuspenseWithCSRBailout: false,
   },
-  allowedDevOrigins: ['*.localhost', 'localhost'],
+  allowedDevOrigins: ['*.localhost', 'localhost', '*.localhost:3000'],
   eslint: {
     ignoreDuringBuilds: true,
   },
