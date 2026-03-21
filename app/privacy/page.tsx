@@ -37,17 +37,17 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-bold text-gray-900 mb-3">2. Information We Collect</h2>
             <h3 className="font-semibold text-gray-800 mb-2">Information you provide (Learners):</h3>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Name, date of birth, email address, and phone number</li>
+              <li>Name, email address, and phone number</li>
               <li>Pickup address and lesson preferences</li>
               <li>Payment information (processed by Stripe — we do not store card numbers)</li>
               <li>Reviews and feedback you submit</li>
             </ul>
             <h3 className="font-semibold text-gray-800 mb-2 mt-4">Information you provide (Instructors):</h3>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Name, date of birth, gender, email address, and phone number</li>
-              <li>Driver's licence and Driving Instructor licence details</li>
-              <li>Working With Children Check (WWCC) number</li>
-              <li>Vehicle registration number and vehicle details</li>
+              <li>Name, email address, and phone number</li>
+              <li>Base address, service radius, hourly rate, and vehicle type</li>
+              <li>Driver's licence number and insurance number</li>
+              <li>Compliance documents (WWCC, police check, vehicle registration, certifications) uploaded during onboarding</li>
               <li>Service areas, availability, and pricing</li>
               <li>Profile photo and vehicle images</li>
             </ul>

@@ -71,7 +71,9 @@ export default function BookingForm({
         time: start.toTimeString().slice(0, 5),
         duration,
         notes: existingBooking.notes || '',
-        joinWaitingList: false
+        joinWaitingList: false,
+        ageDeclaration: false,
+        termsAccepted: false,
       }
     }
     
@@ -86,7 +88,9 @@ export default function BookingForm({
       time: '',
       duration: 60,
       notes: '',
-      joinWaitingList: false
+      joinWaitingList: false,
+      ageDeclaration: false,
+      termsAccepted: false,
     }
   })
 
@@ -339,7 +343,9 @@ export default function BookingForm({
                   time: '',
                   duration: 60,
                   notes: '',
-                  joinWaitingList: false
+                  joinWaitingList: false,
+                  ageDeclaration: false,
+                  termsAccepted: false,
                 })
               }}
               className="block w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
@@ -537,6 +543,43 @@ export default function BookingForm({
         </div>
       )}
 
+      {/* Age + Terms declarations — only for public (learner) bookings */}
+      {!isInstructorBooking && !existingBooking && (
+        <div className="space-y-3">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              required
+              checked={formData.ageDeclaration}
+              onChange={(e) => setFormData({ ...formData, ageDeclaration: e.target.checked })}
+              className="mt-0.5 rounded"
+            />
+            <span className="text-sm text-gray-700">
+              I confirm that I am at least 16 years old and hold a valid learner's permit or driver's licence that allows me to undertake driving lessons.
+            </span>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              required
+              checked={formData.termsAccepted}
+              onChange={(e) => setFormData({ ...formData, termsAccepted: e.target.checked })}
+              className="mt-0.5 rounded"
+            />
+            <span className="text-sm text-gray-700">
+              I have read and agree to the{' '}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                Terms and Conditions
+              </a>{' '}
+              and{' '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                Privacy Policy
+              </a>.
+            </span>
+          </label>
+        </div>
+      )}
+
       {/* Insufficient balance panel */}
       {insufficientBalance && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
@@ -584,7 +627,7 @@ export default function BookingForm({
 
       <button
         type="submit"
-        disabled={loading || !formData.time || !instructorData}
+        disabled={loading || !formData.time || !instructorData || (!isInstructorBooking && !existingBooking && (!formData.ageDeclaration || !formData.termsAccepted))}
         className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? 'Processing...' : existingBooking ? 'Update Booking' : 'Confirm Booking'}
