@@ -34,15 +34,22 @@ export default function LoginPage() {
         
         if (session?.user?.role) {
           const role = session.user.role
-          // Use window.location for full page reload to ensure session is loaded
+
+          // If on a subdomain, redirect to the main domain so dashboards work correctly
+          const hostname = window.location.hostname
+          const isSubdomain = hostname.split('.').length > 2 && !hostname.startsWith('www.')
+          const mainDomain = isSubdomain
+            ? window.location.origin.replace(/^https?:\/\/[^.]+\./, 'https://')
+            : ''
+
           if (role === 'SUPER_ADMIN' || role === 'ADMIN') {
-            window.location.href = '/admin'
+            window.location.href = `${mainDomain}/admin`
           } else if (role === 'INSTRUCTOR') {
-            window.location.href = '/dashboard'
+            window.location.href = `${mainDomain}/dashboard`
           } else if (role === 'CLIENT') {
-            window.location.href = '/client-dashboard'
+            window.location.href = `${mainDomain}/client-dashboard`
           } else {
-            window.location.href = '/dashboard'
+            window.location.href = `${mainDomain}/dashboard`
           }
         } else {
           setError('Session error. Please try again.')
