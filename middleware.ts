@@ -32,7 +32,13 @@ export async function middleware(req: NextRequest) {
   
   // For protected routes, check authentication only — layouts handle role-based access
   if (url.pathname.startsWith('/dashboard') || url.pathname.startsWith('/admin') || url.pathname.startsWith('/client-dashboard')) {
-    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+    // On production (https), NextAuth uses __Secure- prefixed cookie name
+    const isSecure = req.headers.get('x-forwarded-proto') === 'https' || process.env.NODE_ENV === 'production'
+    const cookieName = isSecure
+      ? '__Secure-next-auth.session-token'
+      : 'next-auth.session-token'
+
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName })
     
     if (!token) {
       const loginUrl = new URL('/login', req.url)
