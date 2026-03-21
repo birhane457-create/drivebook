@@ -24,10 +24,12 @@ const publicBookingSchema = z.object({
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
   notes: z.string().optional(),
-  // price field is accepted from client but will be recomputed server-side
   price: z.number().optional(),
   createAccount: z.boolean().optional(),
-  password: z.string().optional()
+  password: z.string().optional(),
+  termsAccepted: z.boolean().optional(),
+  ageDeclaration: z.boolean().optional(),
+  termsVersion: z.string().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -91,8 +93,13 @@ export async function POST(req: NextRequest) {
           data: {
             email: data.clientEmail,
             password: hashedPassword,
-            role: 'CLIENT'
-          }
+            role: 'CLIENT',
+            ...(data.termsAccepted && {
+              termsAcceptedAt: new Date(),
+              termsVersion: data.termsVersion || '1.0',
+              ageDeclaration: data.ageDeclaration ?? false,
+            }),
+          } as any
         });
         userId = newUser.id;
 
@@ -103,6 +110,17 @@ export async function POST(req: NextRequest) {
         });
       } else {
         userId = existingUser.id;
+        // Update terms acceptance if not yet recorded
+        if (data.termsAccepted && !(existingUser as any).termsAcceptedAt) {
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: {
+              termsAcceptedAt: new Date(),
+              termsVersion: data.termsVersion || '1.0',
+              ageDeclaration: data.ageDeclaration ?? false,
+            } as any
+          })
+        }
       }
     }
 
@@ -228,7 +246,7 @@ export async function POST(req: NextRequest) {
       clientEmail: data.clientEmail,
       clientPhone: data.clientPhone,
       instructorName: instructor.name,
-      instructorEmail: instructor.user?.email || instructor.email || '',
+      instructorEmail: instructor.user?.email || '',
       instructorPhone: instructor.phone,
       startTime,
       endTime,

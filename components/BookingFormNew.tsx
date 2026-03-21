@@ -215,7 +215,10 @@ export default function BookingForm({
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         notes: formData.notes,
-        price: parseFloat(calculatePrice())
+        price: parseFloat(calculatePrice()),
+        termsAccepted: formData.termsAccepted,
+        ageDeclaration: formData.ageDeclaration,
+        termsVersion: '1.0',
       }
 
       const response = await fetch(apiEndpoint, {

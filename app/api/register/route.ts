@@ -17,6 +17,9 @@ const registerSchema = z.object({
   serviceRadiusKm: z.number(),
   licenseNumber: z.string().optional(),
   insuranceNumber: z.string().optional(),
+  termsAccepted: z.boolean().optional(),
+  ageDeclaration: z.boolean().optional(),
+  termsVersion: z.string().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -45,6 +48,11 @@ export async function POST(req: NextRequest) {
         email: data.email,
         password: hashedPassword,
         role: 'INSTRUCTOR',
+        ...(data.termsAccepted && {
+          termsAcceptedAt: new Date(),
+          termsVersion: data.termsVersion || '1.0',
+          ageDeclaration: data.ageDeclaration ?? false,
+        }),
         instructor: {
           create: {
             name: data.name,

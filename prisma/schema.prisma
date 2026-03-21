@@ -23,6 +23,10 @@ model User {
   instructorId     String?   @db.ObjectId
   resetToken       String?
   resetTokenExpiry DateTime?
+  // Terms acceptance tracking
+  termsAcceptedAt  DateTime?
+  termsVersion     String?   // e.g. "1.0" — matches Terms page version
+  ageDeclaration   Boolean   @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
