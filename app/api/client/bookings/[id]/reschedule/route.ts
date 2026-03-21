@@ -183,8 +183,22 @@ export async function PUT(
       updateData.price = newPrice;
     }
 
-    // Note: originalBookingTime and rescheduledCount fields don't exist in schema
-    // Remove these lines or add fields to schema if needed
+    // Track original start time on first reschedule
+    if (!booking.originalStartTime && booking.startTime) {
+      updateData.originalStartTime = booking.startTime
+    }
+
+    // Append to reschedule history
+    const historyEntry = {
+      previousStart: booking.startTime,
+      previousEnd: booking.endTime,
+      rescheduledAt: now.toISOString(),
+      rescheduledBy: user.id,
+      role: 'client',
+    }
+    const existingHistory = ((booking as any).rescheduledFrom as any[]) || []
+    updateData.rescheduledFrom = [...existingHistory, historyEntry]
+    updateData.rescheduleCount = (booking.rescheduleCount || 0) + 1
 
     // Update the booking
     const updatedBooking = await prisma.booking.update({

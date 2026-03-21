@@ -135,6 +135,17 @@ export default function TermsPage() {
             <p className="mb-2">18. No-shows are treated as same-day cancellations. The Instructor receives full payment.</p>
             <p className="mb-4">19. If a Driving Instructor cancels a lesson, the Learner receives a 100% refund to their wallet regardless of notice period.</p>
 
+            <h3 className="font-semibold text-gray-900 mb-2">Rescheduling Policy</h3>
+            <p className="mb-2">19A. A Learner may request to reschedule a confirmed booking subject to the following conditions:</p>
+            <ul className="list-none pl-6 space-y-2 mb-4">
+              <li>19A.1. Rescheduling requests must be made at least 12 hours before the original lesson start time. Requests made within 12 hours of the lesson are not permitted — the Learner must cancel instead, subject to the Cancellation and Refund Policy above.</li>
+              <li>19A.2. Rescheduling is subject to the Driving Instructor's availability and must be confirmed through the DriveBook platform.</li>
+              <li>19A.3. The original booking time is recorded and retained by DriveBook for audit and dispute resolution purposes. The cancellation refund tier (clause 16) is calculated against the <strong>original</strong> booking time, not the rescheduled time.</li>
+              <li>19A.4. If a Learner reschedules and subsequently cancels, the refund entitlement is assessed from the original lesson time, not the rescheduled time.</li>
+              <li>19A.5. If a Driving Instructor reschedules a booking within 24 hours of the original lesson time, the booking is marked non-refundable. If the Learner then cancels, no refund is issued regardless of the new lesson date.</li>
+              <li>19A.6. DriveBook records a full reschedule history for every booking, including who initiated each change and when.</li>
+            </ul>
+
             <h3 className="font-semibold text-gray-900 mb-2">DriveBook Wallet</h3>
             <p className="mb-2">20. The DriveBook Wallet is a prepaid credit system. It is not a bank account and is not covered by the Financial Claims Scheme.</p>
             <p className="mb-2">21. Wallet credits expire after 12 months of account inactivity. DriveBook will notify you by email 30 days and 7 days before expiry.</p>
@@ -184,6 +195,38 @@ export default function TermsPage() {
 
             <h3 className="font-semibold text-gray-900 mb-2">Entire Agreement</h3>
             <p className="mb-4">35. This Agreement, together with the Privacy Policy and any other documents referred to herein, represents the entire agreement between the parties and supersedes any previous understandings or agreements.</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">Limitation of Liability</h3>
+            <p className="mb-2">36. To the maximum extent permitted by law, DriveBook's total aggregate liability to the Learner arising out of or in connection with this Agreement (whether in contract, tort, statute, or otherwise) is limited to the total amount paid by the Learner to DriveBook in the three (3) months immediately preceding the event giving rise to the claim.</p>
+            <p className="mb-4">36.1. This limitation applies regardless of the form of action and whether DriveBook has been advised of the possibility of such damages.</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">Content</h3>
+            <p className="mb-4">37. DriveBook reserves the right to remove, edit, or refuse any content submitted by a Learner (including reviews, messages, or profile information) at its sole discretion, without notice and without liability.</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">No Agency</h3>
+            <p className="mb-4">38. Nothing in this Agreement creates a partnership, employment relationship, joint venture, or agency between the Learner and DriveBook. The Learner has no authority to bind DriveBook in any way.</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">Waiver</h3>
+            <p className="mb-4">39. A failure or delay by DriveBook to exercise any right or remedy under this Agreement does not constitute a waiver of that right or remedy. A waiver of any breach does not constitute a waiver of any subsequent breach.</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">Severability</h3>
+            <p className="mb-4">40. If any provision of this Agreement is found to be invalid, unlawful, or unenforceable, that provision will be severed from the Agreement. The remaining provisions will continue in full force and effect.</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">Assignment</h3>
+            <p className="mb-2">41. DriveBook may assign, transfer, or novate its rights and obligations under this Agreement to any related body corporate or successor entity without the Learner's consent.</p>
+            <p className="mb-4">41.1. The Learner may not assign, transfer, or novate any of their rights or obligations under this Agreement without DriveBook's prior written consent.</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">Data Retention</h3>
+            <p className="mb-4">42. Upon account closure, DriveBook will retain the Learner's personal data for 30 days, after which it will be deleted or anonymised, unless retention is required by applicable law or regulation (including for tax, fraud prevention, or dispute resolution purposes).</p>
+
+            <h3 className="font-semibold text-gray-900 mb-2">SMS Communications</h3>
+            <p className="mb-2">43. By providing a mobile phone number and creating an account, the Learner consents to receive SMS messages from DriveBook relating to bookings, account activity, and platform updates.</p>
+            <ul className="list-none pl-6 space-y-1 mb-4">
+              <li>43.1. To opt out of SMS communications, reply <strong>STOP</strong> to any message. To request assistance, reply <strong>HELP</strong>.</li>
+              <li>43.2. Message and data rates may apply depending on your mobile carrier.</li>
+              <li>43.3. DriveBook's SMS communications comply with the <em>Spam Act 2003</em> (Cth).</li>
+              <li>43.4. Opting out of SMS may affect your ability to receive time-sensitive booking notifications.</li>
+            </ul>
           </section>
 
           {/* Definitions */}

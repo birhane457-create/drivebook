@@ -113,6 +113,11 @@ export async function PATCH(
       rescheduleCount: { increment: 1 },
     }
 
+    // Track original start time on first reschedule
+    if (!booking.originalStartTime && booking.startTime) {
+      updateData.originalStartTime = booking.startTime
+    }
+
     if (isInsidePenaltyWindow) {
       updateData.isNonRefundable = true
     }
