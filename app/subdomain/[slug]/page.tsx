@@ -68,14 +68,13 @@ export default async function SubdomainBookingPage({
 
   if (!instructor) notFound();
 
-  // Branding — PRO/BUSINESS only
+  // Branding — colors apply for all tiers; logo/name white-labelling is PRO/BUSINESS only
   const isPro = instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'BUSINESS';
   const hasBranding = isPro && (instructor as any).showBrandingOnBookingPage;
   const brandLogo = hasBranding ? (instructor as any).brandLogo : null;
-  const primary = hasBranding && (instructor as any).brandColorPrimary
-    ? (instructor as any).brandColorPrimary : '#3B82F6';
-  const secondary = hasBranding && (instructor as any).brandColorSecondary
-    ? (instructor as any).brandColorSecondary : '#10B981';
+  // Colors apply regardless of tier — fall back to defaults if not set
+  const primary = (instructor as any).brandColorPrimary || '#3B82F6';
+  const secondary = (instructor as any).brandColorSecondary || '#10B981';
 
   // Recent reviews from completed bookings
   const recentReviews = await (prisma.booking as any).findMany({
