@@ -1,6 +1,6 @@
 # DriveBook Subdomain / White-Label Booking System
 
-**Last Updated:** March 20, 2026 (middleware fix: compound TLD support for `.com.au`)  
+**Last Updated:** March 21, 2026 (DNS wildcard live; login redirect fix; allowedDevOrigins; doc sync)  
 **Scope:** Instructor public booking pages — how they work today, how they should work, and how to set one up
 
 ---
@@ -13,36 +13,27 @@ This is the "white-label" or "subdomain" feature. The goal is to give instructor
 
 ---
 
-## 2. How It Works Today (Path-Based, Not True Subdomain)
+## 2. How It Works Today (True Subdomain Routing — Live)
 
 ### Current URL structure
 
 ```
-https://drivebook.com.au/subdomain/john-smith
+https://john-smith.drivebook.com.au
 ```
 
-This is a **path-based** route, not a true subdomain. The instructor sets a `customDomain` slug (e.g. `john-smith`) and the page is served at `/subdomain/[slug]`.
+This is **true subdomain routing**. The instructor sets a `customDomain` slug (e.g. `john-smith`) and the page is served at `john-smith.drivebook.com.au`. The middleware transparently rewrites the request to `/subdomain/john-smith` internally.
 
 ### Routing
 
 ```
-next.config.js
-  └── No middleware-based subdomain routing (see Section 12)
+middleware.ts
+  └── extractSubdomain() detects subdomain
+  └── NextResponse.rewrite(url/subdomain/[slug])
 
 app/subdomain/[slug]/page.tsx
   └── Looks up instructor by: prisma.instructor.findFirst({ where: { customDomain: slug } })
   └── 404 if no instructor has that slug
 ```
-
-### What the branding dashboard shows vs. reality
-
-The branding dashboard (`/dashboard/branding`) displays the URL as:
-
-```
-john-smith.drivebook.com.au
-```
-
-This is **aspirational** — the actual live URL is `/subdomain/john-smith`. True subdomain routing requires DNS wildcard + Next.js middleware (see Section 12). The copy/share button in the dashboard copies the subdomain URL format, which will not work until middleware is implemented.
 
 ---
 
@@ -204,7 +195,7 @@ const mainHost = parts.length > 1 && !parts[0].includes(':')
 window.location.href = `${window.location.protocol}//${mainHost}/booking/${data.bookingId}/payment`;
 ```
 
-This is designed for when true subdomain routing is live. Currently (path-based), `window.location.host` is the same for all pages so the redirect works correctly as-is.
+This is designed for true subdomain routing (which is now live). `window.location.host` on `john-smith.drivebook.com.au` correctly strips to `drivebook.com.au` for the payment redirect.
 
 ---
 
@@ -398,12 +389,13 @@ The chevron rotates 180° on open via `group-open:rotate-180` (Tailwind). No cli
 |---|---|---|
 | Service area check is client-side only | Students can bypass it | Advisory only by design |
 | `brandLogo` / `brandColorPrimary` etc. not in Prisma select types | TypeScript errors in branding route | Schema needs updating |
-| `SubdomainClientFeatures` import error | Build warning | File exists, likely a path resolution issue |
-| Branding dashboard copies `slug.drivebook.com.au` | Link doesn't work until DNS wildcard is added | Cosmetic until DNS is configured |
 
 **Resolved:**
 - ~~URL is path-based, not true subdomain~~ — Middleware is live. `john-smith.drivebook.com.au` rewrites to `/subdomain/john-smith`.
-- ~~`drivebook.com.au` returning 404~~ — Fixed March 20, 2026. Root cause: `extractSubdomain()` was treating `drivebook` as a subdomain because `.com.au` splits into 3 parts. Fixed by adding compound TLD awareness: `.com.au`, `.co.uk`, `.co.nz`, `.org.au`, `.net.au`, `.id.au` require 4+ parts to be considered a subdomain.
+- ~~`drivebook.com.au` returning 404~~ — Fixed March 20, 2026. Root cause: `extractSubdomain()` was treating `drivebook` as a subdomain because `.com.au` splits into 3 parts. Fixed by adding compound TLD awareness.
+- ~~Branding dashboard copies `slug.drivebook.com.au` — link doesn't work~~ — DNS wildcard is live, links work.
+- ~~Cross-origin warning for `_next/*` assets on subdomains~~ — Fixed by adding `'*.localhost:3000'` to `allowedDevOrigins` in `next.config.js` (commit `c0b39bc`).
+- ~~Login from subdomain redirects back to subdomain dashboard~~ — Fixed. Login page detects subdomain via `hostname.split('.').length > 2`, strips the subdomain prefix, and redirects to the main domain post-login (commit `fca8e27`).
 
 ---
 
@@ -426,15 +418,40 @@ if (parts.length >= minParts && parts[0] !== 'www') {
 }
 ```
 
-### DNS requirement
+### DNS setup (completed)
 
-A wildcard DNS record must point to Vercel:
+The domain `drivebook.com.au` was transferred from Crazy Domains to **Vercel nameservers**:
 
 ```
-*.drivebook.com.au  →  Vercel deployment
+ns1.vercel-dns.com
+ns2.vercel-dns.com
 ```
 
-Add `*.drivebook.com.au` as a custom domain in the Vercel project settings.
+The following DNS records are configured in the Vercel DNS panel:
+
+| Name | Type | Value |
+|---|---|---|
+| `*` | CNAME | `cname.vercel-dns.com` |
+| `@` | A | Vercel IP (auto-managed) |
+| `www` | CNAME | `cname.vercel-dns.com` |
+
+> The wildcard `*` CNAME must be added **manually** in the Vercel DNS Records panel — it is not created automatically when you add the domain.
+
+### Vercel project domains (all showing "Valid Configuration")
+
+| Domain | Environment |
+|---|---|
+| `*.drivebook.com.au` | Production |
+| `drivebook.com.au` | Production |
+| `www.drivebook.com.au` | Production |
+| `drivebook-delta.vercel.app` | Production |
+
+### SSL certificates (auto-managed by Vercel)
+
+| Certificate | Covers | Renewal |
+|---|---|---|
+| `cert_HedkLia...` | `*.drivebook.com.au` | Auto — expires Jun 19 2026 |
+| `cert_HmWFMz...` | `drivebook.com.au` | Auto — expires Jun 04 2026 |
 
 ### Environment variable
 
@@ -442,9 +459,43 @@ Add `*.drivebook.com.au` as a custom domain in the Vercel project settings.
 NEXT_PUBLIC_ROOT_DOMAIN=drivebook.com.au
 ```
 
+Set in both `.env` and the Vercel dashboard (Vercel dashboard takes precedence).
+
 ### Local development
 
-Edit `/etc/hosts` to map `john-smith.localhost` → `127.0.0.1`, then visit `http://john-smith.localhost:3000`. Or use `localcan`.
+Add `allowedDevOrigins` in `next.config.js` to suppress cross-origin warnings for `_next/*` assets:
+
+```js
+// next.config.js
+allowedDevOrigins: ['*.localhost:3000']
+```
+
+Then edit your hosts file to map a test subdomain:
+
+```
+# Windows: C:\Windows\System32\drivers\etc\hosts
+# Mac/Linux: /etc/hosts
+127.0.0.1  sssssss.localhost
+```
+
+Visit `http://sssssss.localhost:3000` — the middleware will rewrite to `/subdomain/sssssss`.
+
+> Note: `http://` only on localhost — no SSL. The `ERR_SSL_PROTOCOL_ERROR` you'd see on `https://sssssss.localhost` is expected and normal.
+
+### Post-login redirect from subdomain
+
+If a user visits `john-smith.drivebook.com.au/login` and logs in, they are redirected to the **main domain** (`drivebook.com.au/client-dashboard`), not back to the subdomain. This prevents the middleware from treating `/client-dashboard` as a subdomain page.
+
+Logic in `app/login/page.tsx`:
+
+```typescript
+const hostname = window.location.hostname
+if (hostname.split('.').length > 2) {
+  // on a subdomain — strip it and redirect to main domain
+  const mainDomain = hostname.split('.').slice(1).join('.')
+  window.location.href = `${protocol}//${mainDomain}/client-dashboard`
+}
+```
 
 ---
 
@@ -465,4 +516,4 @@ Edit `/etc/hosts` to map `john-smith.localhost` → `127.0.0.1`, then visit `htt
 | `app/booking/[id]/payment/page.tsx` | Stripe payment page |
 | `app/dashboard/branding/page.tsx` | Instructor branding settings UI |
 | `lib/config/packages.ts` | Package pricing logic |
-| `next.config.js` | Next.js config (no middleware yet) |
+| `next.config.js` | Next.js config (`allowedDevOrigins: ['*.localhost:3000']`) |
