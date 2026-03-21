@@ -137,7 +137,12 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-xl font-bold text-gray-900 mb-3">11. Complaints</h2>
-            <p>If you have a complaint about how we handle your personal information, contact us first at <a href="mailto:privacy@drivebook.com.au" className="text-purple-600 hover:underline">privacy@drivebook.com.au</a>. If we cannot resolve your complaint, you may contact the <a href="https://www.oaic.gov.au" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">Office of the Australian Information Commissioner (OAIC)</a>.</p>
+            <p>If you have a complaint about how we handle your personal information, contact us first at <a href="mailto:privacy@drivebook.com.au" className="text-purple-600 hover:underline">privacy@drivebook.com.au</a>. We will respond within 30 days. If we cannot resolve your complaint, you may contact the <a href="https://www.oaic.gov.au" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">Office of the Australian Information Commissioner (OAIC)</a>.</p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-bold text-gray-900 mb-3">12. Governing Law</h2>
+            <p>This Privacy Policy is governed by the laws of Western Australia. Any disputes are subject to the non-exclusive jurisdiction of the courts of Western Australia.</p>
           </section>
 
           <section>
