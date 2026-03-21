@@ -285,9 +285,41 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-800 text-white py-10 px-2 md:px-4 text-center mt-8 md:mt-16">
-        <p>DriveBook - Connecting learners with professional driving instructors</p>
-        <p className="mt-4 text-sm">Last updated: Feb 28, 2026</p>
+      <footer className="bg-gray-800 text-white py-10 px-2 md:px-4 mt-8 md:mt-16">
+        <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-8 mb-8 text-left">
+          <div>
+            <h3 className="font-bold text-lg mb-3">DriveBook</h3>
+            <p className="text-gray-400 text-sm">Connecting learners with professional driving instructors across Australia.</p>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3">Company</h3>
+            <ul className="space-y-2 text-sm text-gray-400">
+              <li><Link href="/about" className="hover:text-white">About Us</Link></li>
+              <li><Link href="/contact" className="hover:text-white">Contact</Link></li>
+              <li><Link href="/teach-with-drivebook" className="hover:text-white">For Instructors</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3">Legal</h3>
+            <ul className="space-y-2 text-sm text-gray-400">
+              <li><Link href="/terms" className="hover:text-white">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="hover:text-white">Privacy Policy</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3">Get Started</h3>
+            <ul className="space-y-2 text-sm text-gray-400">
+              <li><Link href="/book" className="hover:text-white">Find an Instructor</Link></li>
+              <li><Link href="/register" className="hover:text-white">Create Account</Link></li>
+              <li><Link href="/login" className="hover:text-white">Login</Link></li>
+            </ul>
+          </div>
+        </div>
+        <div className="border-t border-gray-700 pt-6 text-center text-sm text-gray-400">
+          © {new Date().getFullYear()} DriveBook. All rights reserved. ·{' '}
+          <Link href="/terms" className="hover:text-white">Terms</Link> ·{' '}
+          <Link href="/privacy" className="hover:text-white">Privacy</Link>
+        </div>
       </footer>
     </div>
   )
