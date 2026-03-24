@@ -119,13 +119,10 @@ No payment (free/testing) → No transaction → No payout
 ```typescript
 {
   userId: string,
-  balance: number,              // Current available credits
-  creditsRemaining: number,     // Same as balance (legacy)
-  totalPaid: number,            // Sum of all CREDIT transactions
-  totalSpent: number,           // Sum of all DEBIT transactions
-  version: number               // Optimistic locking
+  balance: number,  // Current available credits — the only stored field
 }
 ```
+// Note: totalPaid, totalSpent, creditsRemaining, version do NOT exist on the schema.
 
 ### Wallet Transaction Types
 
@@ -190,40 +187,46 @@ No payment (free/testing) → No transaction → No payout
 
 ## COMMISSION STRUCTURE
 
-### Standard Commission
-- **Platform Fee**: 15%
-- **Instructor Payout**: 85%
+### Per-Tier Commission (DB-driven)
 
-### First Booking Bonus
-- **Platform Fee**: 10%
-- **Instructor Payout**: 90%
-- **Applies**: First booking between client and instructor
+Commission rates are stored in the `PlatformSettings` DB record and managed via the admin pricing page (`/admin/pricing`). They are applied per the instructor's `subscriptionTier` at payment intent creation time.
+
+| Tier     | Default Commission | Default New Student Bonus |
+|----------|--------------------|---------------------------|
+| BASIC    | 15%                | 8%                        |
+| PRO      | 12%                | 10%                       |
+| BUSINESS | 10%                | 12%                       |
+
+Rates are fetched via `lib/services/platform-pricing.ts` → `getCommissionRate(tier)`. If no `PlatformSettings` record exists in DB, hardcoded defaults are used as fallback.
+
+The actual rate used for each payment is stored in the Stripe payment intent metadata (`commissionRate` field) for auditability.
 
 ### Calculation Example
 
-**Standard Booking ($140)**:
+**BASIC instructor booking ($140, 15% commission)**:
 ```
 Booking Price:      $140.00
 Platform Fee (15%): $ 21.00
 Instructor Payout:  $119.00
 ```
 
-**First Booking ($140)**:
+**PRO instructor booking ($140, 12% commission)**:
 ```
 Booking Price:      $140.00
-Platform Fee (10%): $ 14.00
-Instructor Payout:  $126.00
+Platform Fee (12%): $ 16.80
+Instructor Payout:  $123.20
 ```
 
 ### Commission Rules
 
-1. **Determined at Booking Creation**
-   - Check if first booking between client/instructor
-   - Store `commissionRate` on booking
+1. **Determined at Payment Intent Creation**
+   - Instructor's `subscriptionTier` looked up from DB
+   - Rate fetched from `PlatformSettings` via `getCommissionRate(tier)`
+   - Stored in Stripe metadata and on the `Booking` record (`commissionRate` field)
    - Never changes after creation
 
 2. **Applied to All Adjustments**
-   - Price increase uses same commission rate
+   - Price increase uses same commission rate as original booking
    - Maintains consistency
 
 3. **Not Applied to Refunds**

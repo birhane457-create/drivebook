@@ -5,7 +5,7 @@ import AdminNav from '@/components/admin/AdminNav';
 import {
   DollarSign, CheckCircle, AlertCircle, ChevronDown, ChevronUp,
   Flag, RefreshCw, UserX, User, Package, Clock, Phone, Mail,
-  MapPin, FileText, AlertTriangle, Info
+  MapPin, FileText, AlertTriangle, Info, Send, BadgeCheck, Banknote,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -18,6 +18,13 @@ interface Transaction {
 interface InstructorPayout {
   instructorId: string; instructorName: string; instructorPhone: string;
   totalAmount: number; transactionCount: number; transactions: Transaction[];
+}
+interface ManualPayout {
+  id: string; payoutRef: string; instructorId: string; instructorName: string;
+  instructorPhone: string | null; bankBsb: string | null; bankAccount: string | null;
+  bankAccountName: string | null; grossAmount: number; taxWithheld: number;
+  netAmount: number; payoutMethod: string; transactionCount: number; createdAt: string;
+  bankReference?: string; sentAt?: string; sentBy?: string;
 }
 interface WithheldTxn {
   id: string; bookingId: string; bookingStatus: string;
@@ -42,11 +49,16 @@ interface Dispute {
 }
 interface PayoutData {
   pendingPayouts: InstructorPayout[]; totalPending: number; completedThisMonth: number;
+  pendingTransferPayouts: ManualPayout[]; sentPayouts: ManualPayout[];
   withheld: WithheldGroup[]; totalWithheld: number; disputes: Dispute[];
-  stats: { noShowCount: number; cancelledCount: number; eligibleCount: number; withheldCount: number; disputeCount: number };
+  stats: {
+    noShowCount: number; cancelledCount: number; eligibleCount: number;
+    withheldCount: number; disputeCount: number;
+    pendingTransferCount: number; sentCount: number;
+  };
 }
-type Tab = 'eligible' | 'withheld' | 'disputes';
-type ResolveAction = 'refund_client' | 'pay_instructor' | 'charge_instructor' | 'void';
+type Tab = 'eligible' | 'manual' | 'withheld' | 'disputes';
+type ResolveAction = 'refund_client' | 'approve_for_payout' | 'charge_instructor' | 'void' | 'split';
 type NoShowParty = 'instructor' | 'client' | 'both';
 
 function parseNoShowParty(description?: string): NoShowParty | null {
@@ -59,30 +71,23 @@ function parseNoShowParty(description?: string): NoShowParty | null {
 
 const PARTY_CONFIG: Record<NoShowParty, {
   label: string; color: string; bgColor: string; borderColor: string;
-  icon: React.ReactNode; suggested: ResolveAction; tip: string;
-  consequence: string;
+  icon: React.ReactNode; suggested: ResolveAction; tip: string; consequence: string;
 }> = {
   instructor: {
-    label: 'Instructor no-show',
-    color: 'text-red-700', bgColor: 'bg-red-50', borderColor: 'border-red-200',
-    icon: <UserX className="h-4 w-4 text-red-600" />,
-    suggested: 'refund_client',
+    label: 'Instructor no-show', color: 'text-red-700', bgColor: 'bg-red-50', borderColor: 'border-red-200',
+    icon: <UserX className="h-4 w-4 text-red-600" />, suggested: 'refund_client',
     tip: 'Instructor failed to attend. Client is owed a refund.',
     consequence: 'Refund client wallet · Consider charging instructor penalty',
   },
   client: {
-    label: 'Client no-show',
-    color: 'text-orange-700', bgColor: 'bg-orange-50', borderColor: 'border-orange-200',
-    icon: <User className="h-4 w-4 text-orange-600" />,
-    suggested: 'pay_instructor',
+    label: 'Client no-show', color: 'text-orange-700', bgColor: 'bg-orange-50', borderColor: 'border-orange-200',
+    icon: <User className="h-4 w-4 text-orange-600" />, suggested: 'approve_for_payout',
     tip: 'Client failed to attend. Instructor showed up and should be paid.',
     consequence: 'Pay instructor · Client forfeits lesson (no refund)',
   },
   both: {
-    label: 'Disputed — both parties',
-    color: 'text-yellow-700', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200',
-    icon: <AlertTriangle className="h-4 w-4 text-yellow-600" />,
-    suggested: 'void',
+    label: 'Disputed — both parties', color: 'text-yellow-700', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200',
+    icon: <AlertTriangle className="h-4 w-4 text-yellow-600" />, suggested: 'void',
     tip: 'Unclear or contested. Review before resolving.',
     consequence: 'Review evidence · Choose resolution manually',
   },
@@ -95,13 +100,131 @@ interface ResolveTarget {
   bookingDate: string; bookingEndDate?: string; duration?: number;
   clientPhone?: string; clientEmail?: string; instructorPhone?: string;
   pickupAddress?: string; notes?: string; isPackageBooking?: boolean;
-  bookingStatus: string; description?: string;
-  noShowParty?: NoShowParty | null;
+  bookingStatus: string; description?: string; noShowParty?: NoShowParty | null;
 }
 
-// ─── Resolve Modal ────────────────────────────────────────────────────────────
+// Mark Sent Modal
+function MarkSentModal({ payout, onClose, onDone }: {
+  payout: ManualPayout; onClose: () => void; onDone: (msg: string) => void;
+}) {
+  const [bankReference, setBankReference] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
+
+  const submit = async () => {
+    if (!bankReference.trim()) { setError('Bank reference is required'); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`/api/admin/payouts/${payout.id}/mark-sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sent', bankReference: bankReference.trim() }),
+      });
+      const d = await res.json();
+      if (res.ok) onDone(d.message || 'Marked as sent');
+      else setError(d.error || 'Failed');
+    } catch { setError('Network error'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="p-5 border-b">
+          <h2 className="text-lg font-bold text-gray-900">Mark Transfer Sent</h2>
+          <p className="text-sm text-gray-500 mt-0.5">{payout.payoutRef}</p>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+            <p className="font-semibold mb-1">Before marking sent, confirm you have:</p>
+            <ul className="list-disc list-inside space-y-0.5 text-xs">
+              <li>Transferred {fmt(payout.netAmount)} to {payout.bankAccountName || 'instructor'}</li>
+              <li>BSB: {payout.bankBsb || 'N/A'} · Account: {payout.bankAccount || 'N/A'}</li>
+            </ul>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bank transaction reference</label>
+            <input
+              type="text"
+              value={bankReference}
+              onChange={e => setBankReference(e.target.value)}
+              placeholder="e.g. NAB ref 123456789"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">This is stored as evidence of the transfer.</p>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+        <div className="p-5 border-t flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+          <button onClick={submit} disabled={loading}
+            className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {loading ? 'Saving...' : 'Confirm Sent'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Confirm Received Modal
+function ConfirmReceivedModal({ payout, onClose, onDone }: {
+  payout: ManualPayout; onClose: () => void; onDone: (msg: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
+
+  const submit = async () => {
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`/api/admin/payouts/${payout.id}/mark-sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'confirm' }),
+      });
+      const d = await res.json();
+      if (res.ok) onDone(d.message || 'Payout confirmed — ledger updated');
+      else setError(d.error || 'Failed');
+    } catch { setError('Network error'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="p-5 border-b">
+          <h2 className="text-lg font-bold text-gray-900">Confirm Payment Received</h2>
+          <p className="text-sm text-gray-500 mt-0.5">{payout.payoutRef}</p>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+            <p className="font-semibold">This will mark the payout as PAID and update the ledger.</p>
+            <p className="text-xs mt-1">Only confirm if the instructor has received {fmt(payout.netAmount)}.</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1">
+            <div className="flex justify-between"><span className="text-gray-500">Bank ref</span><span className="font-medium">{payout.bankReference || 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Net amount</span><span className="font-semibold text-green-700">{fmt(payout.netAmount)}</span></div>
+            {payout.taxWithheld > 0 && <div className="flex justify-between"><span className="text-gray-500">Tax withheld</span><span className="text-orange-600">{fmt(payout.taxWithheld)}</span></div>}
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+        <div className="p-5 border-t flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+          <button onClick={submit} disabled={loading}
+            className="px-5 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50">
+            {loading ? 'Confirming...' : 'Confirm Received'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Resolve Modal
 function ResolveModal({ target, onClose, onDone }: {
-  target: ResolveTarget; onClose: () => void; onDone: (msg: string) => void;
+  target: ResolveTarget; onClose: () => void; onDone: (msg: string, pendingPayout?: boolean) => void;
 }) {
   const party = target.noShowParty;
   const partyConfig = party ? PARTY_CONFIG[party] : null;
@@ -109,54 +232,45 @@ function ResolveModal({ target, onClose, onDone }: {
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [splitRefund, setSplitRefund] = useState(parseFloat((target.amount / 2).toFixed(2)));
+  const [splitPayout, setSplitPayout] = useState(parseFloat((target.instructorPayout / 2).toFixed(2)));
 
   const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   const fmtTime = (s?: string) => s ? new Date(s).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—';
   const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
 
   const actions: { key: ResolveAction; label: string; desc: string; who: string; consequence: string; style: string }[] = [
-    {
-      key: 'refund_client', label: 'Refund Client',
-      desc: `${fmt(target.amount)} returned to client wallet`,
-      who: target.clientName,
-      consequence: target.isPackageBooking ? 'Credit added back to package balance' : 'Wallet balance restored',
-      style: 'border-blue-300 bg-blue-50',
-    },
-    {
-      key: 'pay_instructor', label: 'Pay Instructor',
-      desc: `${fmt(target.instructorPayout)} released to instructor`,
-      who: target.instructorName,
-      consequence: 'Instructor receives payout. Client forfeits lesson.',
-      style: 'border-green-300 bg-green-50',
-    },
-    {
-      key: 'charge_instructor', label: 'Charge Instructor Penalty',
-      desc: `${fmt(target.instructorPayout)} deducted from next payout`,
-      who: target.instructorName,
-      consequence: 'Penalty applied. Deducted from instructor\'s future earnings.',
-      style: 'border-orange-300 bg-orange-50',
-    },
-    {
-      key: 'void', label: 'Void Transaction',
-      desc: 'No money moves — write off',
-      who: 'Neither party',
-      consequence: 'Transaction closed. No refund, no payout.',
-      style: 'border-gray-300 bg-gray-50',
-    },
+    { key: 'refund_client', label: 'Refund Client', desc: `${fmt(target.amount)} returned to client wallet`, who: target.clientName, consequence: target.isPackageBooking ? 'Credit added back to package balance' : 'Wallet balance restored', style: 'border-blue-300 bg-blue-50' },
+    { key: 'approve_for_payout', label: 'Approve for Payout', desc: `${fmt(target.instructorPayout)} approved — sent during next payout run`, who: target.instructorName, consequence: 'Marks instructor as payable. Funds sent during payout processing.', style: 'border-green-300 bg-green-50' },
+    { key: 'split', label: 'Split Resolution', desc: 'Partial refund to client + partial payout to instructor', who: 'Both parties', consequence: 'Atomic — both legs commit together or neither does.', style: 'border-purple-300 bg-purple-50' },
+    { key: 'charge_instructor', label: 'Charge Instructor Penalty', desc: `${fmt(target.instructorPayout)} deducted from next payout`, who: target.instructorName, consequence: "Penalty applied. Deducted from instructor's future earnings.", style: 'border-orange-300 bg-orange-50' },
+    { key: 'void', label: 'Void Transaction', desc: 'No money moves — write off', who: 'Neither party', consequence: 'Transaction closed. No refund, no payout.', style: 'border-gray-300 bg-gray-50' },
   ];
 
   const submit = async () => {
     if (!action) { setError('Select an action'); return; }
     setLoading(true); setError('');
     try {
-      const res = await fetch('/api/admin/payouts/resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: target.transactionId, action, reason }),
-      });
-      const d = await res.json();
-      if (res.ok) onDone(d.message || 'Resolved');
-      else setError(d.error || 'Failed');
+      if (action === 'split') {
+        if (splitRefund <= 0 && splitPayout <= 0) { setError('Enter at least one amount > 0'); setLoading(false); return; }
+        if (splitRefund > target.amount + 0.001) { setError(`Refund cannot exceed ${fmt(target.amount)}`); setLoading(false); return; }
+        if (splitPayout > target.instructorPayout + 0.001) { setError(`Payout cannot exceed ${fmt(target.instructorPayout)}`); setLoading(false); return; }
+        const res = await fetch('/api/admin/payouts/resolve-split', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionId: target.transactionId, refundAmount: splitRefund, payoutAmount: splitPayout, reason }),
+        });
+        const d = await res.json();
+        if (res.ok) onDone(d.message || 'Split resolved', d.pendingPayout === true);
+        else setError(d.error || 'Failed');
+      } else {
+        const res = await fetch('/api/admin/payouts/resolve', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionId: target.transactionId, action, reason }),
+        });
+        const d = await res.json();
+        if (res.ok) onDone(d.message || 'Resolved', d.pendingPayout === true);
+        else setError(d.error || 'Failed');
+      }
     } catch { setError('Network error'); }
     finally { setLoading(false); }
   };
@@ -164,17 +278,11 @@ function ResolveModal({ target, onClose, onDone }: {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg my-4">
-
-        {/* Header */}
         <div className="p-5 border-b">
           <h2 className="text-lg font-bold text-gray-900">Resolve Transaction</h2>
           <p className="text-sm text-gray-500 mt-0.5">Booking #{target.bookingId?.slice(-6)} · {fmtDate(target.bookingDate)}</p>
         </div>
-
-        {/* Case summary */}
         <div className="p-5 border-b space-y-3">
-
-          {/* Who */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-50 rounded-lg p-3">
               <p className="text-xs text-gray-400 mb-1">Client</p>
@@ -188,75 +296,37 @@ function ResolveModal({ target, onClose, onDone }: {
               {target.instructorPhone && <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Phone className="h-3 w-3" />{target.instructorPhone}</p>}
             </div>
           </div>
-
-          {/* What / When */}
           <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-xs text-gray-600">
-            <div className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-              <span>{fmtDate(target.bookingDate)} · {fmtTime(target.bookingDate)} – {fmtTime(target.bookingEndDate)}</span>
-              {target.duration && <span className="text-gray-400">({Math.round(target.duration)} min)</span>}
-            </div>
-            {target.pickupAddress && (
-              <div className="flex items-center gap-2">
-                <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <span>{target.pickupAddress}</span>
-              </div>
-            )}
-            {target.notes && (
-              <div className="flex items-start gap-2">
-                <FileText className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-0.5" />
-                <span className="italic">{target.notes}</span>
-              </div>
-            )}
-            {target.isPackageBooking && (
-              <div className="flex items-center gap-2 text-purple-600">
-                <Package className="h-3.5 w-3.5 shrink-0" />
-                <span>Package lesson — refund returns as wallet credit</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" /><span>{fmtDate(target.bookingDate)} · {fmtTime(target.bookingDate)} – {fmtTime(target.bookingEndDate)}</span>{target.duration && <span className="text-gray-400">({Math.round(target.duration)} min)</span>}</div>
+            {target.pickupAddress && <div className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" /><span>{target.pickupAddress}</span></div>}
+            {target.notes && <div className="flex items-start gap-2"><FileText className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-0.5" /><span className="italic">{target.notes}</span></div>}
+            {target.isPackageBooking && <div className="flex items-center gap-2 text-purple-600"><Package className="h-3.5 w-3.5 shrink-0" /><span>Package lesson — refund returns as wallet credit</span></div>}
           </div>
-
-          {/* Money breakdown */}
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-400 mb-2">Money breakdown</p>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-gray-600">Lesson price (paid by client)</span><span className="font-semibold text-gray-800">{fmt(target.amount)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Lesson price</span><span className="font-semibold text-gray-800">{fmt(target.amount)}</span></div>
               <div className="flex justify-between"><span className="text-gray-600">Platform fee</span><span className="text-red-500">-{fmt(target.platformFee)}</span></div>
               <div className="flex justify-between border-t border-gray-200 pt-1 mt-1"><span className="text-gray-600">Instructor payout</span><span className="font-semibold text-green-700">{fmt(target.instructorPayout)}</span></div>
             </div>
           </div>
-
-          {/* Why — no-show party */}
           {partyConfig && (
             <div className={`rounded-lg border p-3 ${partyConfig.bgColor} ${partyConfig.borderColor}`}>
-              <div className="flex items-center gap-2 mb-1">
-                {partyConfig.icon}
-                <span className={`text-sm font-semibold ${partyConfig.color}`}>{partyConfig.label}</span>
-              </div>
+              <div className="flex items-center gap-2 mb-1">{partyConfig.icon}<span className={`text-sm font-semibold ${partyConfig.color}`}>{partyConfig.label}</span></div>
               <p className={`text-xs ${partyConfig.color}`}>{partyConfig.tip}</p>
               <p className={`text-xs font-medium mt-1 ${partyConfig.color}`}>→ {partyConfig.consequence}</p>
             </div>
           )}
-
-          {/* Booking status */}
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>Booking status:</span>
-            <span className={`px-2 py-0.5 rounded-full font-medium ${
-              target.bookingStatus === 'NO_SHOW' ? 'bg-orange-100 text-orange-700' :
-              target.bookingStatus === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-              'bg-gray-100 text-gray-600'
-            }`}>{target.bookingStatus}</span>
+            <span className={`px-2 py-0.5 rounded-full font-medium ${target.bookingStatus === 'NO_SHOW' ? 'bg-orange-100 text-orange-700' : target.bookingStatus === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{target.bookingStatus}</span>
           </div>
         </div>
-
-        {/* Actions */}
         <div className="p-5 space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Choose resolution</p>
           {actions.map(a => (
             <button key={a.key} onClick={() => setAction(a.key)}
-              className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                action === a.key ? `${a.style} border-opacity-100` : 'border-gray-200 hover:border-gray-300 bg-white'
-              }`}>
+              className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${action === a.key ? `${a.style} border-opacity-100` : 'border-gray-200 hover:border-gray-300 bg-white'}`}>
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold text-gray-900 text-sm">{a.label}</p>
@@ -267,8 +337,22 @@ function ResolveModal({ target, onClose, onDone }: {
               </div>
             </button>
           ))}
-
           <div className="pt-1">
+            {action === 'split' && (
+              <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                <p className="text-xs font-semibold text-purple-700 mb-2">Split amounts</p>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-600 w-32 shrink-0">Refund to client ($)</label>
+                  <input type="number" min={0} max={target.amount} step={0.01} value={splitRefund} onChange={e => setSplitRefund(parseFloat(e.target.value) || 0)} className="flex-1 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                  <span className="text-xs text-gray-400">max {fmt(target.amount)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-600 w-32 shrink-0">Payout to instructor ($)</label>
+                  <input type="number" min={0} max={target.instructorPayout} step={0.01} value={splitPayout} onChange={e => setSplitPayout(parseFloat(e.target.value) || 0)} className="flex-1 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                  <span className="text-xs text-gray-400">max {fmt(target.instructorPayout)}</span>
+                </div>
+              </div>
+            )}
             <label className="block text-xs font-medium text-gray-600 mb-1">Admin note (optional)</label>
             <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -276,7 +360,6 @@ function ResolveModal({ target, onClose, onDone }: {
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
-
         <div className="p-5 border-t flex gap-3 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
           <button onClick={submit} disabled={!action || loading}
@@ -289,14 +372,8 @@ function ResolveModal({ target, onClose, onDone }: {
   );
 }
 
-// ─── Withheld / Dispute detail card ──────────────────────────────────────────
-function CaseCard({
-  txn, instructorName, onResolve,
-}: {
-  txn: WithheldTxn | Dispute;
-  instructorName: string;
-  onResolve: () => void;
-}) {
+// Case Card (withheld / disputes)
+function CaseCard({ txn, instructorName, onResolve }: { txn: WithheldTxn | Dispute; instructorName: string; onResolve: () => void; }) {
   const [open, setOpen] = useState(false);
   const party = parseNoShowParty(txn.description);
   const partyConfig = party ? PARTY_CONFIG[party] : null;
@@ -307,65 +384,28 @@ function CaseCard({
   const isDispute = txn.description?.includes('DISPUTED');
 
   return (
-    <div className={`rounded-xl border-2 overflow-hidden ${
-      isDispute ? 'border-red-200' : isNoShow ? 'border-orange-200' : 'border-yellow-200'
-    }`}>
-      {/* Card header — always visible */}
-      <div className={`px-4 py-3 flex items-start justify-between gap-3 ${
-        isDispute ? 'bg-red-50' : isNoShow ? 'bg-orange-50' : 'bg-yellow-50'
-      }`}>
+    <div className={`rounded-xl border-2 overflow-hidden ${isDispute ? 'border-red-200' : isNoShow ? 'border-orange-200' : 'border-yellow-200'}`}>
+      <div className={`px-4 py-3 flex items-start justify-between gap-3 ${isDispute ? 'bg-red-50' : isNoShow ? 'bg-orange-50' : 'bg-yellow-50'}`}>
         <div className="flex-1 min-w-0">
-          {/* What happened */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            {isDispute ? <Flag className="h-4 w-4 text-red-500 shrink-0" /> :
-             isNoShow ? <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" /> :
-             <Info className="h-4 w-4 text-yellow-600 shrink-0" />}
-            <span className={`text-sm font-bold ${isDispute ? 'text-red-700' : isNoShow ? 'text-orange-700' : 'text-yellow-700'}`}>
-              {isDispute ? 'Dispute' : isNoShow ? 'No-Show' : 'Cancelled'}
-            </span>
-            {partyConfig && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${partyConfig.bgColor} ${partyConfig.borderColor} ${partyConfig.color}`}>
-                {partyConfig.icon} {partyConfig.label}
-              </span>
-            )}
-            {txn.isPackageBooking && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
-                <Package className="h-3 w-3" /> Package
-              </span>
-            )}
+            {isDispute ? <Flag className="h-4 w-4 text-red-500 shrink-0" /> : isNoShow ? <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" /> : <Info className="h-4 w-4 text-yellow-600 shrink-0" />}
+            <span className={`text-sm font-bold ${isDispute ? 'text-red-700' : isNoShow ? 'text-orange-700' : 'text-yellow-700'}`}>{isDispute ? 'Dispute' : isNoShow ? 'No-Show' : 'Cancelled'}</span>
+            {partyConfig && <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${partyConfig.bgColor} ${partyConfig.borderColor} ${partyConfig.color}`}>{partyConfig.icon} {partyConfig.label}</span>}
+            {txn.isPackageBooking && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200"><Package className="h-3 w-3" /> Package</span>}
           </div>
-
-          {/* Who + when */}
-          <p className="text-sm text-gray-700">
-            <span className="font-medium">{txn.clientName || '—'}</span>
-            <span className="text-gray-400 mx-1">→</span>
-            <span className="font-medium">{instructorName}</span>
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {fmtDate(txn.bookingDate)} · {fmtTime(txn.bookingDate)} – {fmtTime(txn.bookingEndDate)}
-            {txn.duration && <span className="text-gray-400">({Math.round(txn.duration)} min)</span>}
-          </p>
+          <p className="text-sm text-gray-700"><span className="font-medium">{txn.clientName || '—'}</span><span className="text-gray-400 mx-1">→</span><span className="font-medium">{instructorName}</span></p>
+          <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1"><Clock className="h-3 w-3" />{fmtDate(txn.bookingDate)} · {fmtTime(txn.bookingDate)} – {fmtTime(txn.bookingEndDate)}{txn.duration && <span className="text-gray-400">({Math.round(txn.duration)} min)</span>}</p>
         </div>
-
-        {/* Money + actions */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right">
             <p className="text-sm font-bold text-gray-800">{fmt(txn.amount)}</p>
             <p className="text-xs text-gray-400">→ {fmt(txn.instructorPayout)} instructor</p>
           </div>
-          <button onClick={() => setOpen(v => !v)}
-            className="p-1.5 rounded-lg hover:bg-white/60 text-gray-500">
-            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          <button onClick={() => setOpen(v => !v)} className="p-1.5 rounded-lg hover:bg-white/60 text-gray-500">{open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
         </div>
       </div>
-
-      {/* Expanded detail */}
       {open && (
         <div className="px-4 py-4 bg-white border-t border-gray-100 space-y-3">
-
-          {/* Why / guidance */}
           {partyConfig && (
             <div className={`rounded-lg border p-3 ${partyConfig.bgColor} ${partyConfig.borderColor}`}>
               <p className={`text-xs font-semibold ${partyConfig.color} mb-0.5`}>What this means</p>
@@ -373,8 +413,6 @@ function CaseCard({
               <p className={`text-xs font-medium mt-1 ${partyConfig.color}`}>Recommended: {partyConfig.consequence}</p>
             </div>
           )}
-
-          {/* Contact details */}
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div>
               <p className="text-gray-400 font-medium mb-1">Client</p>
@@ -388,37 +426,26 @@ function CaseCard({
               {txn.instructorPhone && <p className="text-gray-500 flex items-center gap-1 mt-0.5"><Phone className="h-3 w-3" />{txn.instructorPhone}</p>}
             </div>
           </div>
-
-          {/* Location / notes */}
           {(txn.pickupAddress || txn.notes) && (
             <div className="text-xs space-y-1 text-gray-500">
               {txn.pickupAddress && <p className="flex items-center gap-1.5"><MapPin className="h-3 w-3 shrink-0 text-gray-400" />{txn.pickupAddress}</p>}
               {txn.notes && <p className="flex items-start gap-1.5"><FileText className="h-3 w-3 shrink-0 text-gray-400 mt-0.5" /><span className="italic">{txn.notes}</span></p>}
             </div>
           )}
-
-          {/* Money breakdown */}
           <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1">
             <p className="text-gray-400 font-medium mb-1.5">Money breakdown</p>
             <div className="flex justify-between"><span className="text-gray-600">Paid by client</span><span className="font-semibold">{fmt(txn.amount)}</span></div>
             <div className="flex justify-between"><span className="text-gray-600">Platform fee</span><span className="text-red-500">-{fmt(txn.platformFee)}</span></div>
             <div className="flex justify-between border-t border-gray-200 pt-1 mt-1"><span className="text-gray-600">Instructor payout</span><span className="font-semibold text-green-700">{fmt(txn.instructorPayout)}</span></div>
-            {txn.isPackageBooking && <p className="text-purple-600 flex items-center gap-1 pt-1"><Package className="h-3 w-3" />Refund returns as wallet credit (package)</p>}
           </div>
-
-          <button onClick={onResolve}
-            className={`w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-colors ${
-              isDispute ? 'bg-red-600 hover:bg-red-700' : isNoShow ? 'bg-orange-600 hover:bg-orange-700' : 'bg-yellow-600 hover:bg-yellow-700'
-            }`}>
-            Resolve this case
-          </button>
+          <button onClick={onResolve} className={`w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-colors ${isDispute ? 'bg-red-600 hover:bg-red-700' : isNoShow ? 'bg-orange-600 hover:bg-orange-700' : 'bg-yellow-600 hover:bg-yellow-700'}`}>Resolve this case</button>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// Page
 export default function AdminPayoutsPage() {
   const [data, setData] = useState<PayoutData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -426,6 +453,8 @@ export default function AdminPayoutsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [processing, setProcessing] = useState<string | null>(null);
   const [resolveTarget, setResolveTarget] = useState<ResolveTarget | null>(null);
+  const [markSentTarget, setMarkSentTarget] = useState<ManualPayout | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<ManualPayout | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => { fetchPayouts(); }, []);
@@ -460,8 +489,14 @@ export default function AdminPayoutsPage() {
         body: JSON.stringify({ instructorId }),
       });
       const d = await res.json();
-      if (res.ok) { showToast('success', d.message || 'Payout processed.'); fetchPayouts(); }
-      else showToast('error', d.error || 'Failed.');
+      if (res.ok) {
+        const msg = d.status === 'PENDING_TRANSFER'
+          ? `Payout queued for manual bank transfer — go to Manual Transfers tab.`
+          : d.message || 'Payout processed.';
+        showToast('success', msg);
+        fetchPayouts();
+        if (d.status === 'PENDING_TRANSFER') setTab('manual');
+      } else showToast('error', d.error || 'Failed.');
     } catch { showToast('error', 'Failed to process payout.'); }
     finally { setProcessing(null); }
   };
@@ -472,37 +507,30 @@ export default function AdminPayoutsPage() {
     try {
       const res = await fetch('/api/admin/payouts/process-all', { method: 'POST' });
       const d = await res.json();
-      if (res.ok) { showToast('success', `${d.count} payouts processed.`); fetchPayouts(); }
-      else showToast('error', d.error || 'Failed.');
+      if (res.ok) {
+        showToast('success', d.message || `${d.count} payouts processed.`);
+        fetchPayouts();
+      } else showToast('error', d.error || 'Failed.');
     } catch { showToast('error', 'Failed to process all payouts.'); }
     finally { setProcessing(null); }
   };
 
   const openResolve = (t: WithheldTxn | Dispute, instructorId: string, instructorName: string) =>
     setResolveTarget({
-      transactionId: t.id,
-      bookingId: t.bookingId,
-      amount: t.amount,
-      platformFee: t.platformFee,
-      instructorPayout: t.instructorPayout,
-      clientName: t.clientName || '—',
-      instructorName,
-      bookingDate: t.bookingDate,
-      bookingEndDate: t.bookingEndDate,
-      duration: t.duration,
-      clientPhone: t.clientPhone,
-      clientEmail: t.clientEmail,
-      instructorPhone: t.instructorPhone,
-      pickupAddress: t.pickupAddress,
-      notes: t.notes,
-      isPackageBooking: t.isPackageBooking,
-      bookingStatus: t.bookingStatus,
-      description: t.description,
+      transactionId: t.id, bookingId: t.bookingId,
+      amount: t.amount, platformFee: t.platformFee, instructorPayout: t.instructorPayout,
+      clientName: t.clientName || '—', instructorName,
+      bookingDate: t.bookingDate, bookingEndDate: t.bookingEndDate, duration: t.duration,
+      clientPhone: t.clientPhone, clientEmail: t.clientEmail, instructorPhone: t.instructorPhone,
+      pickupAddress: t.pickupAddress, notes: t.notes, isPackageBooking: t.isPackageBooking,
+      bookingStatus: t.bookingStatus, description: t.description,
       noShowParty: parseNoShowParty(t.description),
     });
 
   const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
   const fmtDate = (s: string) => s ? new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+  const manualCount = (data?.stats.pendingTransferCount ?? 0) + (data?.stats.sentCount ?? 0);
 
   if (loading) return <div className="min-h-screen bg-gray-50"><AdminNav /><div className="max-w-7xl mx-auto px-4 py-8 text-gray-500">Loading payout data...</div></div>;
   if (!data) return <div className="min-h-screen bg-gray-50"><AdminNav /><div className="max-w-7xl mx-auto px-4 py-8 text-red-500">Failed to load payout data.</div></div>;
@@ -513,7 +541,19 @@ export default function AdminPayoutsPage() {
 
       {resolveTarget && (
         <ResolveModal target={resolveTarget} onClose={() => setResolveTarget(null)}
-          onDone={msg => { setResolveTarget(null); showToast('success', msg); fetchPayouts(); }} />
+          onDone={(msg, pendingPayout) => {
+            setResolveTarget(null);
+            showToast('success', pendingPayout ? `${msg} — go to Eligible tab to process the payout.` : msg);
+            fetchPayouts();
+          }} />
+      )}
+      {markSentTarget && (
+        <MarkSentModal payout={markSentTarget} onClose={() => setMarkSentTarget(null)}
+          onDone={(msg) => { setMarkSentTarget(null); showToast('success', msg); fetchPayouts(); }} />
+      )}
+      {confirmTarget && (
+        <ConfirmReceivedModal payout={confirmTarget} onClose={() => setConfirmTarget(null)}
+          onDone={(msg) => { setConfirmTarget(null); showToast('success', msg); fetchPayouts(); }} />
       )}
 
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -525,7 +565,7 @@ export default function AdminPayoutsPage() {
           <div className="flex items-center gap-3">
             <button onClick={fetchPayouts} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><RefreshCw className="h-4 w-4" /></button>
             <button onClick={processAll} disabled={processing !== null || data.pendingPayouts.length === 0}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 text-sm">
               <DollarSign className="h-4 w-4" /> Process All Eligible ({fmt(data.totalPending)})
             </button>
           </div>
@@ -536,7 +576,7 @@ export default function AdminPayoutsPage() {
           {[
             { label: 'Pending Payout', value: fmt(data.totalPending), sub: `${data.stats.eligibleCount} txns`, color: 'text-blue-600' },
             { label: 'Paid This Month', value: fmt(data.completedThisMonth), sub: 'completed', color: 'text-green-600' },
-            { label: 'Withheld', value: fmt(data.totalWithheld), sub: `${data.stats.withheldCount} txns`, color: 'text-yellow-600' },
+            { label: 'Manual Queue', value: String(manualCount), sub: `${data.stats.pendingTransferCount} pending · ${data.stats.sentCount} sent`, color: 'text-yellow-600' },
             { label: 'No-Shows', value: String(data.stats.noShowCount), sub: 'total', color: 'text-orange-600' },
             { label: 'Disputes', value: String(data.stats.disputeCount), sub: 'flagged', color: 'text-red-600' },
           ].map(s => (
@@ -549,15 +589,17 @@ export default function AdminPayoutsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-4 bg-white rounded-lg shadow p-1 w-fit">
+        <div className="flex gap-1 mb-4 bg-white rounded-lg shadow p-1 w-fit flex-wrap">
           {([
             { key: 'eligible' as Tab, label: `Eligible (${data.pendingPayouts.length})` },
+            { key: 'manual' as Tab, label: `Manual Transfers (${manualCount})`, alert: manualCount > 0 },
             { key: 'withheld' as Tab, label: `Withheld (${data.withheld.reduce((s, w) => s + w.transactions.length, 0)})` },
             { key: 'disputes' as Tab, label: `Disputes (${data.disputes.length})` },
           ]).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === t.key ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${tab === t.key ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
               {t.label}
+              {t.alert && tab !== t.key && <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />}
             </button>
           ))}
         </div>
@@ -589,11 +631,7 @@ export default function AdminPayoutsPage() {
                   <div className="mt-4 bg-gray-50 rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-100 text-gray-600 text-left">
-                        <tr>
-                          <th className="px-4 py-2">Client</th><th className="px-4 py-2">Date</th>
-                          <th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-right">Fee</th>
-                          <th className="px-4 py-2 text-right">Instructor</th>
-                        </tr>
+                        <tr><th className="px-4 py-2">Client</th><th className="px-4 py-2">Date</th><th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-right">Fee</th><th className="px-4 py-2 text-right">Instructor</th></tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {p.transactions.map(t => (
@@ -607,16 +645,107 @@ export default function AdminPayoutsPage() {
                         ))}
                       </tbody>
                       <tfoot className="bg-gray-100 font-semibold">
-                        <tr>
-                          <td colSpan={4} className="px-4 py-2 text-gray-700">Total</td>
-                          <td className="px-4 py-2 text-right text-green-600">{fmt(p.totalAmount)}</td>
-                        </tr>
+                        <tr><td colSpan={4} className="px-4 py-2 text-gray-700">Total</td><td className="px-4 py-2 text-right text-green-600">{fmt(p.totalAmount)}</td></tr>
                       </tfoot>
                     </table>
                   </div>
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* MANUAL TRANSFERS */}
+        {tab === 'manual' && (
+          <div className="space-y-6">
+            {/* Pending Transfer */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Banknote className="h-5 w-5 text-yellow-600" />
+                <h2 className="text-base font-semibold text-gray-800">Pending Transfer ({data.pendingTransferPayouts.length})</h2>
+                <span className="text-xs text-gray-400">— approved, awaiting bank transfer</span>
+              </div>
+              {data.pendingTransferPayouts.length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-8 text-center text-gray-400 text-sm">No payouts awaiting transfer</div>
+              ) : (
+                <div className="bg-white rounded-lg shadow divide-y divide-gray-100">
+                  {data.pendingTransferPayouts.map(p => (
+                    <div key={p.id} className="p-5 flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">Pending Transfer</span>
+                          <span className="text-xs text-gray-400">{p.payoutRef}</span>
+                        </div>
+                        <Link href={`/admin/instructors/${p.instructorId}`} className="text-sm font-semibold text-gray-900 hover:text-blue-600">{p.instructorName}</Link>
+                        <p className="text-xs text-gray-500 mt-0.5">{p.transactionCount} lesson{p.transactionCount !== 1 ? 's' : ''} · {p.instructorPhone || 'no phone'}</p>
+                        <div className="mt-2 text-xs text-gray-500 space-y-0.5">
+                          <p>BSB: <span className="font-mono font-medium text-gray-700">{p.bankBsb || 'N/A'}</span> · Account: <span className="font-mono font-medium text-gray-700">{p.bankAccount || 'N/A'}</span></p>
+                          <p>Account name: <span className="font-medium text-gray-700">{p.bankAccountName || 'N/A'}</span></p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xl font-bold text-green-600">{fmt(p.netAmount)}</p>
+                        {p.taxWithheld > 0 && <p className="text-xs text-orange-500">withheld {fmt(p.taxWithheld)}</p>}
+                        <button onClick={() => setMarkSentTarget(p)}
+                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">
+                          <Send className="h-3.5 w-3.5" /> Mark Sent
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Sent — awaiting confirmation */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Send className="h-5 w-5 text-blue-600" />
+                <h2 className="text-base font-semibold text-gray-800">Sent — Awaiting Confirmation ({data.sentPayouts.length})</h2>
+                <span className="text-xs text-gray-400">— bank ref recorded, confirm when instructor receives</span>
+              </div>
+              {data.sentPayouts.length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-8 text-center text-gray-400 text-sm">No payouts awaiting confirmation</div>
+              ) : (
+                <div className="bg-white rounded-lg shadow divide-y divide-gray-100">
+                  {data.sentPayouts.map(p => (
+                    <div key={p.id} className="p-5 flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">Sent</span>
+                          <span className="text-xs text-gray-400">{p.payoutRef}</span>
+                        </div>
+                        <Link href={`/admin/instructors/${p.instructorId}`} className="text-sm font-semibold text-gray-900 hover:text-blue-600">{p.instructorName}</Link>
+                        <p className="text-xs text-gray-500 mt-0.5">{p.transactionCount} lesson{p.transactionCount !== 1 ? 's' : ''}</p>
+                        <div className="mt-2 text-xs text-gray-500 space-y-0.5">
+                          <p>Bank ref: <span className="font-mono font-medium text-gray-700">{p.bankReference || 'N/A'}</span></p>
+                          {p.sentAt && <p>Sent: <span className="font-medium text-gray-700">{fmtDate(p.sentAt)}</span></p>}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xl font-bold text-green-600">{fmt(p.netAmount)}</p>
+                        {p.taxWithheld > 0 && <p className="text-xs text-orange-500">withheld {fmt(p.taxWithheld)}</p>}
+                        <button onClick={() => setConfirmTarget(p)}
+                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700">
+                          <BadgeCheck className="h-3.5 w-3.5" /> Confirm Received
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+              <div className="text-sm text-yellow-800 space-y-1">
+                <p className="font-semibold text-yellow-900">Manual Transfer Guide</p>
+                <p>1. Log into your bank and transfer the exact net amount to the instructor's BSB/account.</p>
+                <p>2. Click "Mark Sent" and enter the bank transaction reference number.</p>
+                <p>3. Once the instructor confirms receipt, click "Confirm Received" — this updates the ledger and marks the payout as PAID.</p>
+                <p className="font-medium">Never mark as confirmed unless money has actually moved.</p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -658,7 +787,8 @@ export default function AdminPayoutsPage() {
           <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
           <div className="text-sm text-blue-800 space-y-1">
             <p className="font-semibold text-blue-900">Resolution Guide</p>
-            <p>Eligible: lesson ended, booking confirmed/completed — safe to pay out.</p>
+            <p>Eligible: lesson ended, booking confirmed/completed — safe to pay out. Stripe Connect pays immediately; bank transfer queues in Manual Transfers tab.</p>
+            <p>Manual Transfers: admin must physically transfer funds, then mark sent + confirm received before ledger updates.</p>
             <p>Withheld: cancelled or no-show — expand each case to see who, what, why, and the recommended action.</p>
             <p>Disputes: both parties contested — review carefully. "Charge Instructor" deducts from their next payout.</p>
           </div>

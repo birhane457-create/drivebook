@@ -2,7 +2,7 @@
 
 **Purpose**: Define data models and relationships  
 **Owner**: Technical Team  
-**Last Updated**: March 4, 2026  
+**Last Updated**: March 22, 2026  
 **Scope**: MongoDB schema via Prisma ORM  
 
 ---
@@ -14,26 +14,147 @@
 
 ```prisma
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  email     String   @unique
-  password  String?
-  name      String?
-  role      String   @default("CLIENT")  // CLIENT, INSTRUCTOR, ADMIN, SUPER_ADMIN
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relations
-  clients      Client[]
-  wallet       ClientWallet?
-  instructor   Instructor?
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  email            String    @unique
+  password         String?
+  name             String?
+  role             String    @default("CLIENT")  // CLIENT, INSTRUCTOR, ADMIN, SUPER_ADMIN
+  instructorId     String?   @db.ObjectId
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  termsAcceptedAt  DateTime?
+  termsVersion     String?   // e.g. "1.0"
+  ageDeclaration   Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  clients    Client[]
+  wallet     ClientWallet?
+  instructor Instructor?
 }
 ```
 
-**Roles**:
-- CLIENT - Learner booking lessons
-- INSTRUCTOR - Teacher providing lessons
-- ADMIN - Platform administrator
-- SUPER_ADMIN - Full platform access
+---
+
+### Instructor
+**Purpose**: Instructor profile, subscription, branding, and configuration
+
+```prisma
+model Instructor {
+  id                   String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId               String? @unique @db.ObjectId
+  user                 User?   @relation(...)
+  name                 String
+  phone                String
+  hourlyRate           Float
+  serviceAreas         String?
+  copilotAgentEndpoint String?
+
+  // Profile & vehicle
+  bio             String?
+  carMake         String?
+  carModel        String?
+  carYear         String?
+  vehicleTypes    String?
+  languages       String?
+  baseAddress     String?
+  serviceRadiusKm Float?
+  isActive        Boolean @default(true)
+  isVerified      Boolean @default(false)
+  isFeatured      Boolean @default(false)
+  averageRating   Float?
+  totalReviews    Int     @default(0)
+
+  // Subscription
+  subscriptionTier   String    @default("BASIC")   // BASIC | PRO | BUSINESS
+  subscriptionStatus String    @default("TRIAL")   // TRIAL | ACTIVE | PAST_DUE | CANCELLED
+  trialEndsAt        DateTime?
+  stripeCustomerId   String?
+  stripeAccountId    String?
+  maxInstructors     Int       @default(1)
+
+  // Branding
+  customDomain              String?
+  brandedBookingPage        Boolean @default(false)
+  brandLogo                 String?
+  brandColorPrimary         String?
+  brandColorSecondary       String?
+  showBrandingOnBookingPage Boolean @default(false)
+
+  // Documents
+  licenseNumber          String?
+  insuranceNumber        String?
+  licenseImageFront      String?
+  licenseImageBack       String?
+  insurancePolicyDoc     String?
+  policeCheckDoc         String?
+  wwcCheckDoc            String?
+  photoIdDoc             String?
+  certificationDoc       String?
+  vehicleRegistrationDoc String?
+  profileImage           String?
+  carImage               String?
+  documentsVerified      Boolean   @default(false)
+  documentsVerifiedAt    DateTime?
+  licenseExpiry          DateTime?
+  insuranceExpiry        DateTime?
+  policeCheckExpiry      DateTime?
+  wwcCheckExpiry         DateTime?
+  approvalStatus         String    @default("PENDING")  // PENDING | APPROVED | REJECTED | SUSPENDED
+
+  // Booking configuration
+  workingHours         Json?
+  policyExceptionCount Int     @default(0)
+  allowedDurations     Json?
+  bookingBufferMinutes Int?
+  enableTravelTime     Boolean @default(false)
+  travelTimeMinutes    Int?
+  lessonPackages       Json?
+
+  // Google Calendar
+  syncGoogleCalendar Boolean   @default(false)
+  googleTokenExpiry  DateTime?
+  calendarBufferMode String?
+
+  // Social / public profile
+  whatsapp        String?
+  instagram       String?
+  facebook        String?
+  yearsExperience Int?
+
+  bookings      Booking[]
+  clients       Client[]
+  subscriptions Subscription[]
+}
+```
+
+**Note**: `commissionRate` and `newStudentBonus` are NOT stored on the Instructor model. They are derived at runtime from `SUBSCRIPTION_PLANS[subscriptionTier]` in `lib/config/subscriptions.ts`.
+
+---
+
+### Client
+**Purpose**: Booking clients (may or may not have a User account)
+
+```prisma
+model Client {
+  id                    String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String?    @db.ObjectId
+  user                  User?      @relation(...)
+  instructorId          String     @db.ObjectId
+  instructor            Instructor @relation(...)
+  name                  String
+  email                 String
+  phone                 String
+  preferredInstructorId String?    @db.ObjectId
+  defaultPickupAddress  String?
+  defaultPickupLat      Float?
+  defaultPickupLng      Float?
+  notes                 String?
+  bookings              Booking[]
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+}
+```
 
 ---
 
@@ -42,42 +163,82 @@ model User {
 
 ```prisma
 model Booking {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  instructorId      String   @db.ObjectId
-  clientId          String?  @db.ObjectId
-  clientName        String?
-  clientEmail       String?
-  clientPhone       String?
-  
-  status            String   @default("PENDING")  // PENDING, CONFIRMED, COMPLETED, CANCELLED
-  startTime         DateTime?
-  endTime           DateTime?
-  duration          Float?
-  price             Float    @default(0)
-  
-  platformFee       Float    @default(0)
-  instructorPayout  Float    @default(0)
-  commissionRate    Float    @default(0)
-  
-  isPaid            Boolean  @default(false)
-  paidAt            DateTime?
-  paymentIntentId   String?
-  
-  pickupAddress     String?
-  notes             String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relations
-  instructor        Instructor @relation(fields: [instructorId], references: [id])
-  client            Client?    @relation(fields: [clientId], references: [id])
-  transactions      Transaction[]
-  reviews           Review[]
+  id                    String     @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId          String     @db.ObjectId
+  instructor            Instructor @relation(...)
+  clientId              String?    @db.ObjectId
+  client                Client?    @relation(...)
+  clientName            String?
+  clientPhone           String?
+  bookingType           String?
+
+  status                String     @default("PENDING")
+  // Valid statuses: PENDING | PENDING_PAYMENT | CONFIRMED | COMPLETED | CANCELLED | EXPIRED | NO_SHOW
+
+  startTime             DateTime?
+  endTime               DateTime?
+  duration              Float?
+  price                 Float      @default(0)
+  platformFee           Float      @default(0)
+  instructorPayout      Float      @default(0)
+  commissionRate        Float      @default(0)
+
+  isPaid                Boolean    @default(false)
+  paidAt                DateTime?
+  paymentCaptured       Boolean    @default(false)
+  paymentCapturedAt     DateTime?
+  paymentIntentId       String?
+
+  pickupAddress         String?
+  pickupLatitude        Float?
+  pickupLongitude       Float?
+  dropoffAddress        String?
+  dropoffLatitude       Float?
+  dropoffLongitude      Float?
+  notes                 String?
+
+  isFirstBooking        Boolean    @default(false)
+  isPackageBooking      Boolean    @default(false)
+  parentBookingId       String?    @db.ObjectId
+  packageHours          Float?
+  packageHoursUsed      Float      @default(0)
+  packageHoursRemaining Float?
+  packageTotalPaid      Float?
+  packageExpiryDate     DateTime?
+  packageStatus         String?
+
+  createdBy             String?
+  originalStartTime     DateTime?
+  isNonRefundable       Boolean    @default(false)
+  rescheduledFrom       Json?
+  rescheduleCount       Int        @default(0)
+
+  deletedAt             DateTime?  // soft delete
+  deletedBy             String?
+
+  // Lesson feedback
+  lessonFeedback        Int[]      @default([])
+  instructorNotes       String?
+  feedbackGivenAt       DateTime?
+  studentStrengths      Int[]      @default([])
+  focusAreas            Int[]      @default([])
+  performanceScore      Int?
+
+  // Client review
+  clientRating          Int?       // 1-5 stars
+  clientReview          String?
+  reviewGivenAt         DateTime?
+
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  transactions          Transaction[]
 }
 ```
 
-**States**: PENDING → CONFIRMED → COMPLETED → CANCELLED
+**Note**: `googleCalendarEventId` is referenced in several API routes using `as any` casts but is NOT defined in the schema. It should be added as `googleCalendarEventId String?` when Google Calendar sync is fully implemented.
+
+**States**: PENDING → PENDING_PAYMENT → CONFIRMED → COMPLETED → CANCELLED / EXPIRED / NO_SHOW
 
 ---
 
@@ -88,36 +249,28 @@ model Booking {
 model Transaction {
   id                    String   @id @default(auto()) @map("_id") @db.ObjectId
   bookingId             String?  @db.ObjectId
+  booking               Booking? @relation(...)
   instructorId          String   @db.ObjectId
-  
-  type                  String   // BOOKING_PAYMENT, BOOKING_ADJUSTMENT, REFUND, MANUAL_ADJUSTMENT
+
+  type                  String   // BOOKING_PAYMENT | BOOKING_ADJUSTMENT | REFUND | MANUAL_ADJUSTMENT
   amount                Float
   platformFee           Float    @default(0)
   instructorPayout      Float    @default(0)
   commissionRate        Float    @default(0)
-  
-  status                String   @default("PENDING")  // PENDING, COMPLETED, PAID, CANCELLED
+
+  status                String   @default("PENDING")  // PENDING | COMPLETED | CANCELLED
   description           String?
-  
+
   stripePaymentIntentId String?
   stripeChargeId        String?
   metadata              Json?
-  
+
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
-  
-  // Relations
-  booking               Booking? @relation(fields: [bookingId], references: [id])
 }
 ```
 
-**Types**:
-- BOOKING_PAYMENT - Original payment
-- BOOKING_ADJUSTMENT - Price change
-- REFUND - Cancellation refund
-- MANUAL_ADJUSTMENT - Admin adjustment
-
-**Rule**: NEVER update transactions, only create new ones
+**Rule**: NEVER update transactions, only create new ones. (Note: `updatedAt` exists in schema for technical reasons but the doctrine is append-only.)
 
 ---
 
@@ -126,25 +279,18 @@ model Transaction {
 
 ```prisma
 model ClientWallet {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId            String   @unique @db.ObjectId
-  
-  balance           Float    @default(0)
-  creditsRemaining  Float    @default(0)
-  totalPaid         Float    @default(0)
-  totalSpent        Float    @default(0)
-  version           Int      @default(0)  // Optimistic locking
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relations
-  user              User     @relation(fields: [userId], references: [id])
-  transactions      WalletTransaction[]
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  user      User     @relation(...)
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
 }
 ```
 
-**Formula**: `balance = totalPaid - totalSpent`
+**Note**: Only `balance` is stored. There are no `creditsRemaining`, `totalPaid`, `totalSpent`, or `version` fields. Balance is updated directly on credit/debit operations.
 
 ---
 
@@ -153,57 +299,41 @@ model ClientWallet {
 
 ```prisma
 model WalletTransaction {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  walletId    String   @db.ObjectId
-  
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  walletId    String       @db.ObjectId
+  wallet      ClientWallet @relation(...)
   amount      Float
-  type        String   // CREDIT, DEBIT
+  type        String       // CREDIT | DEBIT
   description String?
-  status      String   @default("PENDING")
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relations
-  wallet      ClientWallet @relation(fields: [walletId], references: [id])
+  status      String       @default("PENDING")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 ```
 
-**Types**:
-- CREDIT - Money added to wallet
-- DEBIT - Money deducted from wallet
-
 ---
 
-### Instructor
-**Purpose**: Instructor profile and settings
+### Subscription
+**Purpose**: Instructor subscription record (Stripe-linked)
 
 ```prisma
-model Instructor {
-  id                     String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId                 String?  @unique @db.ObjectId
-  name                   String
-  phone                  String
-  email                  String?
-  
-  hourlyRate             Float
-  commissionRate         Float    @default(0.15)
-  newStudentBonus        Float    @default(0.05)
-  
-  approvalStatus         String   @default("PENDING")  // PENDING, APPROVED, REJECTED
-  isActive               Boolean  @default(false)
-  isVerified             Boolean  @default(false)
-  
-  workingHours           Json?
-  
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  
-  // Relations
-  user                   User?    @relation(fields: [userId], references: [id])
-  bookings               Booking[]
-  clients                Client[]
-  reviews                Review[]
+model Subscription {
+  id                   String     @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId         String     @db.ObjectId
+  instructor           Instructor @relation(...)
+  tier                 String     // BASIC | PRO | BUSINESS
+  status               String     @default("ACTIVE")  // TRIAL | ACTIVE | PAST_DUE | CANCELLED
+  billingCycle         String     @default("monthly")
+  monthlyAmount        Float
+  stripeSubscriptionId String?
+  stripeCustomerId     String?
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean    @default(false)
+  trialEndsAt          DateTime?
+  cancelledAt          DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 }
 ```
 
@@ -214,33 +344,93 @@ model Instructor {
 
 ```prisma
 model AuditLog {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  action      String   // BOOKING_CREATED, WALLET_CREDIT_ADDED, etc.
-  actorId     String   @db.ObjectId
-  actorRole   String   // INSTRUCTOR, CLIENT, ADMIN, SYSTEM
-  targetType  String   // BOOKING, TRANSACTION, WALLET, etc.
-  targetId    String   @db.ObjectId
-  
-  ipAddress   String?
-  userAgent   String?
-  metadata    Json?
-  success     Boolean  @default(true)
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  action       String   // BOOKING_CREATED, BOOKING_CANCELLED, BOOKING_DELETED, etc.
+  actorId      String
+  actorRole    String   // CLIENT | INSTRUCTOR | ADMIN | SYSTEM
+  targetType   String   // BOOKING | TRANSACTION | WALLET | USER
+  targetId     String
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  success      Boolean  @default(true)
   errorMessage String?
-  
-  createdAt   DateTime @default(now())
-  
-  @@index([actorId])
-  @@index([targetId])
-  @@index([action])
-  @@index([createdAt])
+  createdAt    DateTime @default(now())
 }
 ```
 
-**Rule**: Never delete audit logs
+**Rule**: Never delete audit logs.
 
 ---
 
-## RELATIONSHIPS
+### Other Models
+
+```prisma
+model Message        // AI receptionist call messages
+model Notification   // In-app notifications (userId, type, title, message, isRead)
+model WebhookEvent   // Stripe webhook idempotency (idempotencyKey unique)
+```
+
+---
+
+### PlatformSettings
+**Purpose**: Admin-configurable platform rates and fees — singleton record (key = `"default"`)
+
+```prisma
+model PlatformSettings {
+  id                          String   @id @default(auto()) @map("_id") @db.ObjectId
+  key                         String   @unique @default("default")
+
+  // Commission rates per subscription tier (%)
+  basicCommissionRate         Float    @default(15)
+  proCommissionRate           Float    @default(12)
+  businessCommissionRate      Float    @default(10)
+
+  // New student bonus per tier (%)
+  basicNewStudentBonus        Float    @default(8)
+  proNewStudentBonus          Float    @default(10)
+  businessNewStudentBonus     Float    @default(12)
+
+  // Platform fee on top of commission (%)
+  platformFeePercentage       Float    @default(3.6)
+
+  // Package discounts (%)
+  package6Discount            Float    @default(5)
+  package10Discount           Float    @default(10)
+  package15Discount           Float    @default(12)
+  discountPaidBy              String   @default("shared")  // platform | shared | instructor
+
+  // Driving test package
+  drivingTestPackagePrice     Float    @default(225)
+
+  // Cancellation / no-show
+  cancellationFee             Float    @default(0)
+  lateCancellationWindowHours Float    @default(24)
+  noShowPenaltyAmount         Float    @default(0)
+
+  // Wallet limits
+  walletTopUpMin              Float    @default(10)
+  walletTopUpMax              Float    @default(500)
+
+  // GST
+  gstEnabled                  Boolean  @default(true)
+  gstRate                     Float    @default(10)
+
+  // Peak surcharge
+  peakSurchargeEnabled        Boolean  @default(false)
+  peakSurchargePercent        Float    @default(0)
+
+  updatedAt                   DateTime @updatedAt
+  updatedBy                   String?  // admin userId who last changed it
+}
+```
+
+**Access pattern**:
+- Admin UI → `POST /api/admin/pricing` → upserts singleton
+- Payment intent creation → `lib/services/platform-pricing.ts` → `getCommissionRate(tier)` → reads from DB
+- Falls back to hardcoded defaults if no DB record exists yet
+
+---
 
 ```
 User (1) ──→ (0..1) ClientWallet
@@ -248,6 +438,9 @@ User (1) ──→ (0..1) Instructor
 User (1) ──→ (0..*) Client
 
 Instructor (1) ──→ (0..*) Booking
+Instructor (1) ──→ (0..*) Client
+Instructor (1) ──→ (0..*) Subscription
+
 Client (1) ──→ (0..*) Booking
 Booking (1) ──→ (0..*) Transaction
 
@@ -256,36 +449,19 @@ ClientWallet (1) ──→ (0..*) WalletTransaction
 
 ---
 
-## INDEXES
-
-**Performance Critical**:
-- User.email (unique)
-- Booking.instructorId
-- Booking.clientId
-- Booking.status
-- Booking.startTime
-- Transaction.bookingId
-- Transaction.instructorId
-- Transaction.status
-- AuditLog.actorId
-- AuditLog.targetId
-- AuditLog.createdAt
-
----
-
 ## DATA INTEGRITY RULES
 
-1. **Transactions are immutable** - Never update
-2. **Wallet balance must reconcile** - Daily check
-3. **Bookings follow state machine** - No skipping
-4. **Audit logs are append-only** - Never delete
-5. **Soft deletes for financial records** - Mark as CANCELLED
+1. Transactions are append-only — never update financial records
+2. Wallet balance updated atomically on each credit/debit
+3. Bookings follow the state machine — no skipping states
+4. Audit logs are append-only — never delete
+5. Soft deletes for bookings — use `deletedAt` / `deletedBy`
+6. `commissionRate` / `newStudentBonus` derived from config, never stored on Instructor
 
 ---
 
 ## RELATED DOCUMENTS
 
-- `../00-foundation/CORE_ESSENCE.md` - Core entities
 - `../00-foundation/FINANCIAL_DOCTRINE.md` - Transaction types
 - `../00-foundation/STATE_MACHINE.md` - Booking states
-
+- `../SUBSCRIPTION_SYSTEM.md` - Subscription tiers and config

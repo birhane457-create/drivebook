@@ -21,12 +21,19 @@
 
 ```
 ┌─────────┐
-│ PENDING │ (Payment not confirmed)
+│ PENDING │ (Booking created, payment not confirmed)
 └────┬────┘
      │
      ├──→ CANCELLED (Payment timeout/failure)
      │
      ↓
+┌─────────────────┐
+│ PENDING_PAYMENT │ (Awaiting manual payment / payment link sent)
+└────────┬────────┘
+         │
+         ├──→ CANCELLED
+         │
+         ↓
 ┌───────────┐
 │ CONFIRMED │ (Payment received, lesson scheduled)
 └─────┬─────┘
@@ -38,30 +45,25 @@
 │ COMPLETED │ (Lesson finished, check-out done)
 └─────┬─────┘
       │
-      ├──→ CANCELLED (Rare: admin override only)
-      │
-      ↓
-┌────────────────────┐
-│ ELIGIBLE_FOR_PAYOUT│ (24h buffer passed)
-└─────────┬──────────┘
-          │
-          ↓
-     ┌────────┐
-     │  PAID  │ (Instructor paid)
-     └────┬───┘
-          │
-          ↓
-     ┌────────┐
-     │ LOCKED │ (Final state, immutable)
-     └────────┘
+      └──→ CANCELLED (Admin override only)
+
+┌─────────┐
+│ EXPIRED │ (Booking passed without completion)
+└─────────┘
+
+┌──────────┐
+│ NO_SHOW  │ (Client did not attend)
+└──────────┘
 ```
+
+**Note**: `ELIGIBLE_FOR_PAYOUT`, `PAID`, and `LOCKED` are NOT implemented states. Payout tracking is handled via the `Transaction` model and admin payout routes, not via booking status.
 
 ---
 
 ## STATE DEFINITIONS
 
 ### PENDING
-**Meaning**: Booking created but payment not confirmed
+**Meaning**: Booking created but payment not confirmed (Stripe payment initiated)
 
 **Entry Conditions**:
 - Public booking form submitted
@@ -127,6 +129,35 @@
 
 ---
 
+### PENDING_PAYMENT
+**Meaning**: Booking created by instructor, awaiting manual payment or payment link
+
+**Entry Conditions**:
+- Instructor creates booking manually
+- Payment link sent to client
+
+**Allowed Actions**:
+- Confirm (when payment received)
+- Cancel
+
+**Blocked Actions**:
+- Complete booking
+
+**Transition To**:
+- CONFIRMED (payment received)
+- CANCELLED
+
+**Example**:
+```typescript
+{
+  status: 'PENDING_PAYMENT',
+  isPaid: false,
+  createdBy: 'instructor'
+}
+```
+
+---
+
 ### COMPLETED
 **Meaning**: Lesson finished, check-out done
 
@@ -136,7 +167,6 @@
 - Actual duration recorded
 
 **Allowed Actions**:
-- Process payout (after 24h buffer)
 - Admin override cancel (rare)
 
 **Blocked Actions**:
@@ -145,7 +175,6 @@
 - Instructor cancel
 
 **Transition To**:
-- ELIGIBLE_FOR_PAYOUT (after 24h)
 - CANCELLED (admin override only)
 
 **Example**:
@@ -160,90 +189,49 @@
 
 ---
 
-### ELIGIBLE_FOR_PAYOUT
-**Meaning**: Ready for instructor payout
+### EXPIRED
+**Meaning**: Booking passed its scheduled time without being completed or cancelled
 
 **Entry Conditions**:
-- Status = COMPLETED
-- 24 hours passed since completion
-- Transaction status = COMPLETED
-
-**Allowed Actions**:
-- Process payout (admin approval)
-
-**Blocked Actions**:
-- Edit booking
-- Cancel booking
-- Refund (blocked)
-
-**Transition To**:
-- PAID (after payout processed)
-
-**Example**:
-```typescript
-{
-  status: 'ELIGIBLE_FOR_PAYOUT',
-  completedAt: '2026-03-10T15:00:00Z',
-  eligibleForPayoutAt: '2026-03-11T15:00:00Z'
-}
-```
-
----
-
-### PAID
-**Meaning**: Instructor has been paid
-
-**Entry Conditions**:
-- Payout processed
-- Transaction status = PAID
-- Money transferred to instructor
-
-**Allowed Actions**:
-- Lock booking (final state)
-- Admin override refund (with reason)
-
-**Blocked Actions**:
-- Edit booking
-- Cancel booking
-- Regular refund
-
-**Transition To**:
-- LOCKED (automatic after 30 days)
-
-**Example**:
-```typescript
-{
-  status: 'PAID',
-  paidAt: '2026-03-12T10:00:00Z',
-  payoutAmount: 119.00
-}
-```
-
----
-
-### LOCKED
-**Meaning**: Final immutable state
-
-**Entry Conditions**:
-- Status = PAID
-- 30 days passed since payout
+- Booking startTime passed
+- Status was CONFIRMED but no check-in/check-out occurred
 
 **Allowed Actions**:
 - View only
-- Audit review
-
-**Blocked Actions**:
-- Any modifications
-- Any state changes
+- Admin review
 
 **Transition To**:
-- None (final state)
+- None (terminal state)
 
 **Example**:
 ```typescript
 {
-  status: 'LOCKED',
-  lockedAt: '2026-04-11T10:00:00Z'
+  status: 'EXPIRED',
+  startTime: '2026-03-10T14:00:00Z'
+}
+```
+
+---
+
+### NO_SHOW
+**Meaning**: Client did not attend the scheduled lesson
+
+**Entry Conditions**:
+- Instructor marks client as no-show
+- Lesson time passed
+
+**Allowed Actions**:
+- View only
+- Admin review
+
+**Transition To**:
+- None (terminal state)
+
+**Example**:
+```typescript
+{
+  status: 'NO_SHOW',
+  startTime: '2026-03-10T14:00:00Z'
 }
 ```
 
@@ -291,12 +279,13 @@
 |------|----|---------| ----------|
 | PENDING | CONFIRMED | Payment received | Webhook success OR wallet deducted |
 | PENDING | CANCELLED | Timeout/failure | 30 min passed OR payment failed |
+| PENDING_PAYMENT | CONFIRMED | Payment received | Manual payment confirmed |
+| PENDING_PAYMENT | CANCELLED | Cancel request | Before startTime |
 | CONFIRMED | COMPLETED | Check-out | Check-in done first |
 | CONFIRMED | CANCELLED | Cancel request | Before startTime OR admin override |
-| COMPLETED | ELIGIBLE_FOR_PAYOUT | Time passed | 24h since completion |
+| CONFIRMED | EXPIRED | Time passed | startTime passed, no check-in |
+| CONFIRMED | NO_SHOW | Instructor marks | Client did not attend |
 | COMPLETED | CANCELLED | Admin override | Rare, requires reason |
-| ELIGIBLE_FOR_PAYOUT | PAID | Payout processed | Admin approved |
-| PAID | LOCKED | Time passed | 30 days since payout |
 | Any | CANCELLED | Cancel request | Policy-dependent |
 
 ### Invalid Transitions
@@ -304,10 +293,9 @@
 | From | To | Why Invalid |
 |------|----| ------------|
 | PENDING | COMPLETED | Must confirm first |
-| CONFIRMED | PAID | Must complete first |
-| PAID | CANCELLED | Refund blocked (except admin) |
 | CANCELLED | CONFIRMED | Cannot reactivate |
-| LOCKED | Any | Final state |
+| EXPIRED | Any | Terminal state |
+| NO_SHOW | Any | Terminal state |
 
 ---
 
@@ -325,11 +313,11 @@ function validateTransition(
   // Define valid transitions
   const validTransitions = {
     PENDING: ['CONFIRMED', 'CANCELLED'],
-    CONFIRMED: ['COMPLETED', 'CANCELLED'],
-    COMPLETED: ['ELIGIBLE_FOR_PAYOUT', 'CANCELLED'],
-    ELIGIBLE_FOR_PAYOUT: ['PAID'],
-    PAID: ['LOCKED', 'CANCELLED'],  // CANCELLED only with admin override
-    LOCKED: [],  // No transitions allowed
+    PENDING_PAYMENT: ['CONFIRMED', 'CANCELLED'],
+    CONFIRMED: ['COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_SHOW'],
+    COMPLETED: ['CANCELLED'],  // CANCELLED only with admin override
+    EXPIRED: [],   // Terminal state
+    NO_SHOW: [],   // Terminal state
     CANCELLED: []  // Terminal state
   };
   
@@ -448,48 +436,27 @@ await prisma.booking.updateMany({
 });
 ```
 
-### 2. COMPLETED → ELIGIBLE_FOR_PAYOUT (Buffer)
+### 2. CONFIRMED → EXPIRED (Timeout)
 
-**Trigger**: Payout processing script
+**Trigger**: Cron job (not yet implemented)
 
 **Logic**:
 ```typescript
-const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-const eligibleBookings = await prisma.booking.findMany({
+// Bookings that passed their start time without check-in
+const expiredBookings = await prisma.booking.findMany({
   where: {
-    status: 'COMPLETED',
-    checkOutTime: { lt: twentyFourHoursAgo }
+    status: 'CONFIRMED',
+    startTime: { lt: new Date() },
+    // no check-in recorded
   }
 });
 
-// Update to ELIGIBLE_FOR_PAYOUT
-for (const booking of eligibleBookings) {
+for (const booking of expiredBookings) {
   await prisma.booking.update({
     where: { id: booking.id },
-    data: { status: 'ELIGIBLE_FOR_PAYOUT' }
+    data: { status: 'EXPIRED' }
   });
 }
-```
-
-### 3. PAID → LOCKED (Finalization)
-
-**Trigger**: Monthly cleanup script
-
-**Logic**:
-```typescript
-const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-
-await prisma.booking.updateMany({
-  where: {
-    status: 'PAID',
-    paidAt: { lt: thirtyDaysAgo }
-  },
-  data: {
-    status: 'LOCKED',
-    lockedAt: new Date()
-  }
-});
 ```
 
 ---
@@ -515,16 +482,16 @@ if (completedWithoutTx.length > 0) {
 
 **2. No Invalid Combinations**
 ```typescript
-// PAID bookings must be COMPLETED
-const paidNotCompleted = await prisma.booking.findMany({
+// COMPLETED bookings should have transactions
+const completedWithoutTx = await prisma.booking.findMany({
   where: {
-    status: 'PAID',
-    checkOutTime: null
+    status: 'COMPLETED',
+    transactions: { none: {} }
   }
 });
 
-if (paidNotCompleted.length > 0) {
-  ALERT('PAID bookings that are not COMPLETED');
+if (completedWithoutTx.length > 0) {
+  ALERT('COMPLETED bookings without transactions');
 }
 ```
 

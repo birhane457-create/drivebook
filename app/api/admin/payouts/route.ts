@@ -14,17 +14,23 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const bufferCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // --- ELIGIBLE: lesson has ended, booking is CONFIRMED/COMPLETED (paid, delivered), transaction PENDING ---
-    // Note: bookings stay CONFIRMED after payment — they are not separately marked COMPLETED.
-    // Eligible = endTime has passed + booking not cancelled/no-show.
-    const eligibleTransactions = await (prisma as any).transaction.findMany({
+    // Transactions already covered by an active or paid payout
+    const coveredTxIds = await prisma.payoutTransaction.findMany({
+      where: { payout: { status: { in: ['PAID', 'PROCESSING', 'PENDING_TRANSFER', 'SENT', 'ON_HOLD'] } } },
+      select: { transactionId: true },
+    });
+    const excludeIds = coveredTxIds.map((p) => p.transactionId);
+
+    const eligibleTransactions = await prisma.transaction.findMany({
       where: {
-        status: 'PENDING',
+        status: 'SETTLED',
         type: 'BOOKING_PAYMENT',
+        id: excludeIds.length ? { notIn: excludeIds } : undefined,
         booking: {
           status: { in: ['CONFIRMED', 'COMPLETED'] },
-          endTime: { lte: now },
+          endTime: { lte: bufferCutoff },
           deletedAt: null,
         },
       },
@@ -41,10 +47,10 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // --- WITHHELD: cancelled bookings with partial/no refund (instructor still owed something) ---
-    const cancelledTransactions = await (prisma as any).transaction.findMany({
+    // WITHHELD: cancelled/no-show bookings with SETTLED transactions
+    const cancelledTransactions = await prisma.transaction.findMany({
       where: {
-        status: 'PENDING',
+        status: 'SETTLED',
         type: 'BOOKING_PAYMENT',
         booking: {
           status: { in: ['CANCELLED', 'NO_SHOW'] },
@@ -65,10 +71,10 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // --- DISPUTES: transactions flagged in description ---
-    const disputedTransactions = await (prisma as any).transaction.findMany({
+    // DISPUTES: transactions flagged in description
+    const disputedTransactions = await prisma.transaction.findMany({
       where: {
-        status: 'PENDING',
+        status: 'SETTLED',
         description: { contains: 'dispute', mode: 'insensitive' },
       },
       include: {
@@ -84,6 +90,37 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // PENDING_TRANSFER payouts (bank/manual — approved, awaiting admin to send)
+    const pendingTransferPayouts = await prisma.payout.findMany({
+      where: { status: 'PENDING_TRANSFER' },
+      orderBy: { updatedAt: 'asc' },
+      include: {
+        transactions: { select: { transactionId: true } },
+      },
+    });
+
+    // SENT payouts (admin recorded bank ref, awaiting confirmation)
+    const sentPayouts = await prisma.payout.findMany({
+      where: { status: 'SENT' },
+      orderBy: { sentAt: 'asc' },
+      include: {
+        transactions: { select: { transactionId: true } },
+      },
+    });
+
+    // Enrich pending/sent with instructor name
+    const manualPayoutInstructorIds = [
+      ...pendingTransferPayouts.map((p) => p.instructorId),
+      ...sentPayouts.map((p) => p.instructorId),
+    ];
+    const manualInstructors = manualPayoutInstructorIds.length
+      ? await prisma.instructor.findMany({
+          where: { id: { in: manualPayoutInstructorIds } },
+          select: { id: true, name: true, phone: true, bankBsb: true, bankAccount: true, bankAccountName: true },
+        })
+      : [];
+    const manualInstructorMap = new Map(manualInstructors.map((i) => [i.id, i]));
 
     // Group eligible by instructor
     const byInstructor = new Map<string, any>();
@@ -126,25 +163,30 @@ export async function GET(req: NextRequest) {
     const totalPending = pendingPayouts.reduce((s, p) => s + p.totalAmount, 0);
 
     // Completed this month
-    const completedAgg = await (prisma as any).transaction.aggregate({
-      where: {
-        status: 'COMPLETED',
-        updatedAt: { gte: startOfMonth },
-        type: 'BOOKING_PAYMENT',
-      },
-      _sum: { instructorPayout: true },
+    const completedAgg = await prisma.payout.aggregate({
+      where: { status: 'PAID', paidAt: { gte: startOfMonth } },
+      _sum: { netAmount: true },
     });
 
-    // No-show stats
+    // Failed payouts
+    const failedPayouts = await prisma.payout.findMany({
+      where: { status: 'FAILED' },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+      select: {
+        id: true, payoutRef: true, instructorId: true, netAmount: true,
+        failureReason: true, retryCount: true, updatedAt: true,
+      },
+    });
+
     const noShowCount = await prisma.booking.count({
       where: { status: 'NO_SHOW', deletedAt: null } as any,
     });
-
     const cancelledCount = await prisma.booking.count({
       where: { status: 'CANCELLED', deletedAt: null } as any,
     });
 
-    // Withheld amounts grouped by instructor
+    // Withheld grouped by instructor
     const withheldByInstructor = new Map<string, any>();
     for (const t of cancelledTransactions) {
       const iid = t.instructorId;
@@ -182,7 +224,50 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       pendingPayouts,
       totalPending,
-      completedThisMonth: completedAgg._sum.instructorPayout || 0,
+      completedThisMonth: completedAgg._sum.netAmount || 0,
+      failedPayouts,
+      // Manual transfer queues
+      pendingTransferPayouts: pendingTransferPayouts.map((p) => {
+        const inst = manualInstructorMap.get(p.instructorId);
+        return {
+          id: p.id,
+          payoutRef: p.payoutRef,
+          instructorId: p.instructorId,
+          instructorName: inst?.name ?? 'Unknown',
+          instructorPhone: inst?.phone ?? null,
+          bankBsb: inst?.bankBsb ?? null,
+          bankAccount: inst?.bankAccount ?? null,
+          bankAccountName: inst?.bankAccountName ?? null,
+          grossAmount: p.grossAmount,
+          taxWithheld: p.taxWithheld,
+          netAmount: p.netAmount,
+          payoutMethod: p.payoutMethod,
+          transactionCount: p.transactions.length,
+          createdAt: p.createdAt,
+        };
+      }),
+      sentPayouts: sentPayouts.map((p) => {
+        const inst = manualInstructorMap.get(p.instructorId);
+        return {
+          id: p.id,
+          payoutRef: p.payoutRef,
+          instructorId: p.instructorId,
+          instructorName: inst?.name ?? 'Unknown',
+          instructorPhone: inst?.phone ?? null,
+          bankBsb: inst?.bankBsb ?? null,
+          bankAccount: inst?.bankAccount ?? null,
+          bankAccountName: inst?.bankAccountName ?? null,
+          grossAmount: p.grossAmount,
+          taxWithheld: p.taxWithheld,
+          netAmount: p.netAmount,
+          payoutMethod: p.payoutMethod,
+          bankReference: p.bankReference,
+          sentAt: p.sentAt,
+          sentBy: p.sentBy,
+          transactionCount: p.transactions.length,
+          createdAt: p.createdAt,
+        };
+      }),
       withheld: Array.from(withheldByInstructor.values()),
       totalWithheld: cancelledTransactions.reduce((s: number, t: any) => s + t.instructorPayout, 0),
       disputes: disputedTransactions.map((t: any) => ({
@@ -212,6 +297,8 @@ export async function GET(req: NextRequest) {
         eligibleCount: eligibleTransactions.length,
         withheldCount: cancelledTransactions.length,
         disputeCount: disputedTransactions.length,
+        pendingTransferCount: pendingTransferPayouts.length,
+        sentCount: sentPayouts.length,
       },
     });
   } catch (error) {

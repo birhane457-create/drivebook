@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { smsService } from '@/lib/services/sms';
+import { buildPayout, executePayout } from '@/lib/services/payout-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,66 +16,36 @@ export async function POST(req: NextRequest) {
     const { instructorId, transactionIds } = await req.json();
     if (!instructorId) return NextResponse.json({ error: 'instructorId required' }, { status: 400 });
 
+    // Layer 4: ABN verification gate
+    // Payout blocked if instructor has an ABN on file but it hasn't been verified yet.
+    // Instructors with no ABN proceed (47% withholding applies).
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
-      select: { name: true, phone: true },
+      select: { abn: true, abnVerified: true, abnStatus: true },
     });
-    if (!instructor) return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
 
-    const now = new Date();
-
-    // Build where clause — booking endTime has passed, CONFIRMED or COMPLETED (not cancelled)
-    const where: any = {
-      instructorId,
-      status: 'PENDING',
-      type: 'BOOKING_PAYMENT',
-      booking: {
-        status: { in: ['CONFIRMED', 'COMPLETED'] },
-        endTime: { lte: now },
-        deletedAt: null,
-      },
-    };
-    if (transactionIds?.length) where.id = { in: transactionIds };
-
-    const transactions = await (prisma as any).transaction.findMany({ where });
-
-    if (!transactions.length) {
-      return NextResponse.json({ error: 'No eligible transactions for payout' }, { status: 400 });
+    if (instructor?.abn && !instructor.abnVerified) {
+      return NextResponse.json({
+        error: 'ABN not verified — payout blocked until admin verifies the ABN',
+        code: 'ABN_NOT_VERIFIED',
+        abnStatus: instructor.abnStatus,
+      }, { status: 403 });
     }
 
-    const totalPayout = transactions.reduce((s: number, t: any) => s + t.instructorPayout, 0);
-    const ids = transactions.map((t: any) => t.id);
-
-    // Mark transactions COMPLETED — store payout reference in description
-    const payoutRef = `PAYOUT-${Date.now()}`;
-    await (prisma as any).transaction.updateMany({
-      where: { id: { in: ids } },
-      data: {
-        status: 'COMPLETED',
-        description: `Paid out ${payoutRef} by ${session.user.email || session.user.id}`,
-      },
-    });
-
-    // SMS instructor
-    if (instructor.phone) {
-      try {
-        await smsService.sendSMS({
-          to: instructor.phone,
-          message: `DriveBook: Payout of $${totalPayout.toFixed(2)} processed for ${transactions.length} lesson(s). Ref: ${payoutRef}`,
-        });
-      } catch (e) {
-        console.error('SMS failed:', e);
-      }
+    // Phase 1: validate + create payout record (no Stripe)
+    const { payoutId, alreadyPaid } = await buildPayout(instructorId, session.user.id, transactionIds);
+    if (alreadyPaid) {
+      return NextResponse.json({ success: true, status: 'PAID', payoutId, message: 'Already paid' });
     }
 
-    return NextResponse.json({
-      success: true,
-      instructorName: instructor.name,
-      transactionCount: transactions.length,
-      totalPayout,
-      payoutRef,
-      message: `Payout of $${totalPayout.toFixed(2)} processed for ${instructor.name}`,
-    });
+    // Phase 2: acquire lock + execute Stripe transfer
+    const result = await executePayout(payoutId, session.user.id);
+
+    if (result.status === 'FAILED') {
+      return NextResponse.json({ error: result.failureReason ?? 'Payout failed', ...result }, { status: 502 });
+    }
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error('Payout process error:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed' }, { status: 500 });

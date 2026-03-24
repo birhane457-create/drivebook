@@ -124,6 +124,21 @@ model Instructor {
   travelTimeMinutes    Int?
   lessonPackages       Json?
 
+  // Payout / tax details
+  payoutMethod       String    @default("stripe_connect") // stripe_connect | bank_transfer | manual
+  bankBsb            String?   // BSB for bank transfer payouts (AU format: XXX-XXX)
+  bankAccount        String?   // Bank account number
+  bankAccountName    String?   // Account holder name
+  abn                String?   // Australian Business Number (11 digits)
+  abnVerified        Boolean   @default(false) // true after ABR API confirms active + name match
+  abnStatus          String?   // ACTIVE | CANCELLED | REVIEW_REQUIRED (from ABR)
+  abnEntityName      String?   // Entity name returned by ABR (for name-match audit)
+  abnVerifiedAt      DateTime? // when verification was last confirmed
+  abnVerifiedBy      String?   // admin userId or 'SYSTEM'
+  // taxFileNumber   String?   // TFN — commented out: highly sensitive, not collected until legally required
+  gstRegistered      Boolean   @default(false) // whether instructor is GST-registered
+  withholdingTaxRate Float     @default(47)    // % withheld if no verified ABN (ATO default: 47%)
+
   // Google Calendar integration fields
   syncGoogleCalendar Boolean   @default(false)
   googleTokenExpiry  DateTime?
@@ -185,6 +200,8 @@ model Booking {
   rescheduleCount       Int        @default(0)
   deletedAt             DateTime? // soft delete timestamp
   deletedBy             String? // userId who deleted it
+  // Google Calendar
+  googleCalendarEventId String?   // used by calendar sync routes
   // Lesson feedback fields
   lessonFeedback        Int[]      @default([])
   instructorNotes       String?
@@ -216,7 +233,13 @@ model Transaction {
   description           String?
   stripePaymentIntentId String?
   stripeChargeId        String?
+  stripeTransferId      String?  // Stripe transfer ID when payout is via Stripe Connect
+  taxWithheld           Float    @default(0) // ATO withholding tax deducted from payout
+  gstAmount             Float    @default(0) // GST component if instructor is GST-registered
   metadata              Json?
+  // Split resolution tracking — links refund + approve_for_payout into one logical operation
+  resolutionGroupId     String?  // shared ID across both legs of a split resolution
+  resolutionStatus      String?  // PENDING | PARTIAL | COMPLETED | FAILED
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
@@ -266,6 +289,8 @@ model Subscription {
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
   cancelAtPeriodEnd    Boolean    @default(false)
+  trialEndsAt          DateTime?
+  cancelledAt          DateTime?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 }
@@ -297,6 +322,105 @@ model AuditLog {
   createdAt    DateTime @default(now())
 }
 
+// Payout — separate entity per instructor payout batch
+// State machine:
+//   Stripe Connect:  ELIGIBLE → PROCESSING → PAID
+//   Bank/Manual:     ELIGIBLE → PROCESSING → PENDING_TRANSFER → SENT → PAID
+//                                          ↘ FAILED
+//                                          ↘ ON_HOLD
+model Payout {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  instructorId      String    @db.ObjectId
+
+  // State machine:
+  // PENDING | ELIGIBLE | PROCESSING | PENDING_TRANSFER | SENT | PAID | FAILED | ON_HOLD
+  // PENDING_TRANSFER = approved, awaiting admin to do manual bank transfer
+  // SENT             = admin recorded bank reference, awaiting confirmation
+  // PAID             = money confirmed moved (Stripe transfer OR admin confirmed)
+  status            String    @default("PENDING")
+
+  // Amounts (locked at build time — never mutated after creation)
+  grossAmount       Float     // sum of instructorPayout across linked transactions
+  taxWithheld       Float     @default(0)
+  gstAmount         Float     @default(0)
+  netAmount         Float     // grossAmount − taxWithheld
+
+  // Payout method snapshot (at time of payout)
+  payoutMethod      String    // stripe_connect | bank_transfer | manual
+  stripeAccountId   String?
+  stripeTransferId  String?   // set once Stripe transfer succeeds
+
+  // Manual transfer evidence (bank_transfer / manual only)
+  bankReference     String?   // BSB/account or bank transaction ref entered by admin
+  sentAt            DateTime? // when admin clicked "Mark Sent"
+  sentBy            String?   // admin userId who marked sent
+  confirmedAt       DateTime? // when admin confirmed receipt (optional)
+  confirmedBy       String?   // admin userId who confirmed
+
+  // SHA-256 of sorted transaction IDs — collision-free, used as Stripe idempotency key
+  idempotencyKey    String    @unique
+
+  // Failure / hold tracking
+  failureReason     String?
+  holdReason        String?   // reason for ON_HOLD (e.g. "dispute", "admin hold")
+  retryCount        Int       @default(0)
+
+  // Admin who approved
+  approvedBy        String?   // admin userId
+  approvedAt        DateTime?
+  paidAt            DateTime?
+
+  // Human-readable reference
+  payoutRef         String    @unique
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  transactions      PayoutTransaction[]
+}
+
+// Join table — which transactions are included in a payout
+model PayoutTransaction {
+  id            String  @id @default(auto()) @map("_id") @db.ObjectId
+  payoutId      String  @db.ObjectId
+  payout        Payout  @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  transactionId String  @db.ObjectId
+}
+
+// Platform Ledger — singleton, updated atomically on every financial event.
+// Provides real-time balance visibility and prevents overpayment.
+// key = "default" (one record only)
+model PlatformLedger {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  key              String   @unique @default("default")
+
+  totalCollected   Float    @default(0) // sum of all captured booking payments (amount)
+  totalReserved    Float    @default(0) // sum of instructorPayout on SETTLED transactions not yet paid out
+  totalPaidOut     Float    @default(0) // sum of netAmount on PAID payouts
+  totalRefunded    Float    @default(0) // sum of refunded amounts
+  totalTaxWithheld Float    @default(0) // cumulative ATO withholding across all paid payouts
+
+  // availableBalance = totalCollected − totalPaidOut − totalRefunded
+  // Computed on read — not stored (avoids drift)
+
+  updatedAt        DateTime @updatedAt
+}
+
+// Ledger of Truth — append-only financial event log.
+// Every money movement creates one entry. Never updated after creation.
+model LedgerEntry {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  type          String   // PAYMENT_COLLECTED | PAYOUT_PAID | REFUND_ISSUED | TAX_WITHHELD | ADJUSTMENT
+  amount        Float    // positive = money in, negative = money out
+  currency      String   @default("AUD")
+  referenceId   String   // bookingId, payoutId, transactionId, etc.
+  referenceType String   // BOOKING | PAYOUT | TRANSACTION | ADJUSTMENT
+  instructorId  String?  @db.ObjectId
+  description   String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+}
+
 model WebhookEvent {
   id             String   @id @default(auto()) @map("_id") @db.ObjectId
   idempotencyKey String   @unique
@@ -306,3 +430,79 @@ model WebhookEvent {
   processedAt    DateTime @default(now())
 }
 
+// Singleton — only one record (key = "default")
+model PlatformSettings {
+  id                        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key                       String   @unique @default("default")
+
+  // Commission rates per subscription tier (%)
+  basicCommissionRate       Float    @default(15)
+  proCommissionRate         Float    @default(12)
+  businessCommissionRate    Float    @default(10)
+
+  // New student bonus per tier (%)
+  basicNewStudentBonus      Float    @default(8)
+  proNewStudentBonus        Float    @default(10)
+  businessNewStudentBonus   Float    @default(12)
+
+  // Platform fee on top of commission (%)
+  platformFeePercentage     Float    @default(3.6)
+
+  // Package discounts (%)
+  package6Discount          Float    @default(5)
+  package10Discount         Float    @default(10)
+  package15Discount         Float    @default(12)
+
+  // Discount absorbed by
+  discountPaidBy            String   @default("shared") // platform | shared | instructor
+
+  // Driving test package
+  drivingTestPackagePrice   Float    @default(225)
+
+  // Cancellation / no-show
+  cancellationFee           Float    @default(0)
+  lateCancellationWindowHours Float  @default(24)
+  noShowPenaltyAmount       Float    @default(0)
+
+  // Wallet
+  walletTopUpMin            Float    @default(10)
+  walletTopUpMax            Float    @default(500)
+
+  // GST
+  gstEnabled                Boolean  @default(true)
+  gstRate                   Float    @default(10)
+
+  // Withholding tax (no TFN/ABN supplied)
+  withholdingTaxRate        Float    @default(47) // ATO default: 47% if no verified ABN
+
+  // Peak surcharge
+  peakSurchargeEnabled      Boolean  @default(false)
+  peakSurchargePercent      Float    @default(0)
+
+  updatedAt                 DateTime @updatedAt
+  updatedBy                 String?  // admin userId who last changed it
+}
+
+
+// Reconciliation report — one record per daily cron run.
+// Detection only — never auto-fixes. Admin must act on flagged issues.
+model ReconciliationReport {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  startedAt           DateTime @default(now())
+  completedAt         DateTime?
+  status              String   // RUNNING | SUCCESS | WARNING | FAILED
+  windowStart         DateTime // start of the Stripe data window checked
+  windowEnd           DateTime // end of the Stripe data window checked
+
+  // Counts
+  paymentsChecked     Int      @default(0)
+  missingPayments     Int      @default(0) // Stripe payment_intent.succeeded with no LedgerEntry
+  transfersChecked    Int      @default(0)
+  missingTransfers    Int      @default(0) // PAID payout with stripeTransferId not found in Stripe
+  stuckPayouts        Int      @default(0) // PROCESSING > 10 min
+
+  // Full detail for admin drill-down
+  metadata            Json?    // arrays of flagged IDs + descriptions
+
+  createdAt           DateTime @default(now())
+}
