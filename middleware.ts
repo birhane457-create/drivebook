@@ -23,7 +23,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Skip middleware for public routes (non-subdomain)
-  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/api/auth']
+  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/api/auth', '/about', '/contact', '/blog', '/privacy', '/terms', '/teach-with-drivebook', '/book']
   const isPublicPath = publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path))
 
   if (isPublicPath && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
