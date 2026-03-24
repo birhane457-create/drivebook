@@ -74,6 +74,7 @@ export default function BrandingPage() {
     if (file.size > 2 * 1024 * 1024) { setError('Logo must be less than 2MB'); return; }
     setLogoFile(file);
     setError('');
+    setShowBrandingOnBookingPage(true); // auto-enable when logo is uploaded
     const reader = new FileReader();
     reader.onloadend = () => setLogoPreview(reader.result as string);
     reader.readAsDataURL(file);
@@ -117,7 +118,7 @@ export default function BrandingPage() {
       if (logoFile) {
         const fd = new FormData();
         fd.append('file', logoFile);
-        fd.append('folder', 'brand-logos');
+        fd.append('type', 'brand-logo');
         const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd });
         if (!uploadRes.ok) throw new Error('Failed to upload logo');
         logoUrl = (await uploadRes.json()).url;

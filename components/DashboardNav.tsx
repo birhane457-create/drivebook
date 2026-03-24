@@ -6,7 +6,7 @@ import { signOut } from 'next-auth/react';
 import {
   Home, Calendar, Users, DollarSign, Settings, LogOut,
   Menu, X, Bell, FileText, Palette, CreditCard, BarChart2,
-  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, Star, TrendingUp,
+  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, Star, TrendingUp, Landmark,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '@/lib/hooks/useNotifications';
@@ -105,6 +105,7 @@ const moreNav = [
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart2 },
   { href: '/dashboard/packages', label: 'Packages', icon: Package },
   { href: '/dashboard/wallet', label: 'Payout Wallet', icon: Wallet },
+  { href: '/dashboard/settings/payout', label: 'Tax & Payout', icon: Landmark },
   { href: '/dashboard/documents', label: 'Documents', icon: FileText },
   { href: '/dashboard/branding', label: 'Branding', icon: Palette },
   { href: '/dashboard/subscription', label: 'Subscription', icon: CreditCard },

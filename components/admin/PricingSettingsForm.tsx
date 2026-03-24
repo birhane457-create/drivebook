@@ -23,6 +23,7 @@ interface Settings {
   walletTopUpMax: number;
   gstEnabled: boolean;
   gstRate: number;
+  withholdingTaxRate: number;
   peakSurchargeEnabled: boolean;
   peakSurchargePercent: number;
 }
@@ -248,6 +249,9 @@ export default function PricingSettingsForm() {
                 <NumInput value={s.gstRate} onChange={v => set({ gstRate: v })} step={0.5} min={0} max={30} />
               </Field>
             )}
+            <Field label="ATO withholding tax rate (%)" hint="Applied to instructor payouts when no ABN or TFN is on file. ATO default is 47%.">
+              <NumInput value={s.withholdingTaxRate} onChange={v => set({ withholdingTaxRate: v })} step={1} min={0} max={47} />
+            </Field>
           </div>
           <div className="space-y-3">
             <div className="flex items-center gap-3">

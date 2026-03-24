@@ -22,8 +22,6 @@ export async function GET(req: NextRequest) {
             id: true,
             subscriptionTier: true,
             subscriptionStatus: true,
-            commissionRate: true,
-            newStudentBonus: true,
             trialEndsAt: true,
             customDomain: true,
             brandedBookingPage: true,
@@ -36,6 +34,9 @@ export async function GET(req: NextRequest) {
     if (!user?.instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
+
+    // Derive commission/bonus from config — not stored in DB
+    const plan = SUBSCRIPTION_PLANS[user.instructor.subscriptionTier as keyof typeof SUBSCRIPTION_PLANS];
 
     // Get active subscription
     const subscription = await prisma.subscription.findFirst({
@@ -50,8 +51,8 @@ export async function GET(req: NextRequest) {
       current: {
         tier: user.instructor.subscriptionTier,
         status: user.instructor.subscriptionStatus,
-        commissionRate: user.instructor.commissionRate,
-        newStudentBonus: user.instructor.newStudentBonus,
+        commissionRate: plan.commissionRate,
+        newStudentBonus: plan.newStudentBonus,
         trialEndsAt: user.instructor.trialEndsAt,
         customDomain: user.instructor.customDomain,
         brandedBookingPage: user.instructor.brandedBookingPage,
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
           monthlyAmount: subscription.monthlyAmount,
           currentPeriodStart: subscription.currentPeriodStart,
           currentPeriodEnd: subscription.currentPeriodEnd,
-          trialEndsAt: subscription.trialEndsAt,
+          trialEndsAt: subscription.trialEndsAt ?? null,
           cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         } : null,
       },
@@ -183,7 +184,7 @@ export async function POST(req: NextRequest) {
       subscription = await prisma.subscription.create({
         data: {
           instructorId: user.instructor.id,
-          tier: tier as any,
+          tier,
           status: 'TRIAL',
           monthlyAmount: amount,
           billingCycle,
@@ -194,14 +195,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Update instructor with new tier and rates
+    // Update instructor with new tier
     await prisma.instructor.update({
       where: { id: user.instructor.id },
       data: {
         subscriptionTier: tier as any,
         subscriptionStatus: subscription.status as any,
-        commissionRate: plan.commissionRate,
-        newStudentBonus: plan.newStudentBonus,
         trialEndsAt: trialEnd,
         maxInstructors: plan.limits.instructors,
       },

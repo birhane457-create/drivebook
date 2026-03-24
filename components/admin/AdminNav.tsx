@@ -143,6 +143,7 @@ export default function AdminNav() {
       items: [
         { name: 'Documents', href: '/admin/documents', icon: '📄' },
         { name: 'Bookings', href: '/admin/bookings', icon: '📅' },
+        { name: 'Audit Log', href: '/admin/audit-log', icon: '🔍' },
       ]
     },
     {

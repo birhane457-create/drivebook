@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getPlatformLedger } from '@/lib/services/ledger-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +50,8 @@ export async function GET(req: NextRequest) {
     const commissionWhereLastMonth = { ...commissionWhereAllTime, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } };
 
     const [
-      commissionAgg,          // filtered range — for stats cards
-      commissionAllTime,      // all time totals
+      commissionAgg,
+      commissionAllTime,
       commissionThisMonth,
       commissionLastMonth,
       pendingAgg,
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest) {
       refundedAgg,
       totalCompletedLessons,
       pendingRefundCount,
+      platformLedger,
     ] = await Promise.all([
       (prisma as any).transaction.aggregate({ where: commissionWhere, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
       (prisma as any).transaction.aggregate({ where: commissionWhereAllTime, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
@@ -68,6 +70,7 @@ export async function GET(req: NextRequest) {
       (prisma as any).transaction.aggregate({ where: { status: 'REFUNDED', createdAt: dateFilter }, _sum: { amount: true }, _count: { id: true } }),
       (prisma as any).transaction.count({ where: commissionWhere }),
       (prisma as any).transaction.count({ where: { status: 'PENDING', type: 'REFUND' } }),
+      getPlatformLedger(),
     ]);
 
     // --- Top instructors by payout (within date range) ---
@@ -202,6 +205,9 @@ export async function GET(req: NextRequest) {
       // Date range echoed back
       from: from.toISOString(),
       to: to.toISOString(),
+
+      // Platform ledger — real-time balance
+      ledger: platformLedger,
     });
   } catch (error) {
     console.error('Revenue fetch error:', error);

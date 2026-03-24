@@ -6,6 +6,7 @@ import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
 import { webhookRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { notifyPaymentReceived } from '@/lib/services/notifications';
 import { getNotifChannels } from '@/lib/config/platform-settings';
+import { recordPaymentCollected } from '@/lib/services/payout-service';
 import Stripe from 'stripe';
 
 
@@ -414,11 +415,11 @@ async function handleBookingPaymentSuccess(
       } as any
     });
 
-    // Update transaction
+    // Update transaction — SETTLED means eligible for payout
     await (tx as any).transaction.updateMany({
       where: { stripePaymentIntentId: paymentIntentId },
       data: {
-        status: 'COMPLETED',
+        status: 'SETTLED',
         processedAt: new Date(),
         stripeChargeId: (paymentIntent as any).charges?.data[0]?.id,
       }
@@ -479,6 +480,22 @@ async function handleBookingPaymentSuccess(
   });
 
   console.log(`✅ Booking payment processed with validations: ${bookingId}`);
+
+  // ── Ledger: record payment collected (non-critical, outside transaction) ──
+  // This populates totalCollected + totalReserved so payout balance checks work.
+  try {
+    const ledgerBooking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { price: true, instructorPayout: true, commissionRate: true },
+    });
+    if (ledgerBooking) {
+      const instructorPayout = (ledgerBooking as any).instructorPayout
+        ?? ledgerBooking.price * (1 - ((ledgerBooking as any).commissionRate ?? 15) / 100);
+      await recordPaymentCollected(bookingId, ledgerBooking.price, instructorPayout);
+    }
+  } catch (ledgerErr) {
+    console.error('⚠️ Ledger update failed (non-critical):', ledgerErr);
+  }
 
   // Notify instructor of payment received (outside transaction - non-critical)
   try {

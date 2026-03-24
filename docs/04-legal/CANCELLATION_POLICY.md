@@ -49,11 +49,10 @@ Client must check box: "I agree to the cancellation policy"
 
 ### 3. Store Agreement
 ```typescript
-{
-  cancellationPolicyVersion: "v1.0",
-  cancellationPolicyAgreedAt: "2026-03-04T10:00:00Z",
-  cancellationPolicyTimezone: "America/New_York"
-}
+// Note: cancellationPolicyVersion and cancellationPolicyAgreedAt are NOT fields
+// on the Booking model in schema.prisma. Agreement is currently tracked via
+// AuditLog or booking notes. If formal policy versioning is needed, these fields
+// should be added to the Booking model.
 ```
 
 ### 4. Provide Proof
@@ -115,12 +114,20 @@ Store agreement for dispute resolution.
 
 ### Store Agreement
 ```typescript
-await prisma.booking.create({
+// cancellationPolicyVersion and cancellationPolicyAgreedAt do NOT exist on the
+// Booking model. Use AuditLog to record policy agreement at booking creation time.
+await prisma.auditLog.create({
   data: {
-    // ... booking data
-    cancellationPolicyVersion: "v1.0",
-    cancellationPolicyAgreedAt: new Date(),
-    cancellationPolicyTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    action: 'CANCELLATION_POLICY_AGREED',
+    actorId: userId,
+    actorRole: 'CLIENT',
+    targetType: 'BOOKING',
+    targetId: bookingId,
+    metadata: {
+      policyVersion: 'v1.0',
+      agreedAt: new Date().toISOString(),
+      timezone: 'Australia/Perth'  // App operates in Western Australia
+    }
   }
 });
 ```

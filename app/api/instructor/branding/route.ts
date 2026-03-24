@@ -128,7 +128,7 @@ export async function PUT(req: NextRequest) {
         brandLogo: brandLogo || null,
         brandColorPrimary: brandColorPrimary || null,
         brandColorSecondary: brandColorSecondary || null,
-        showBrandingOnBookingPage: showBrandingOnBookingPage || false,
+        showBrandingOnBookingPage: showBrandingOnBookingPage === true,
         customDomain: customDomain || null,
       },
       select: {

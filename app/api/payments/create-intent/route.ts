@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
+import { getCommissionRate } from '@/lib/services/platform-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,7 +97,7 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number) {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        instructor: { select: { name: true } }
+        instructor: { select: { name: true, subscriptionTier: true } }
       },
     }) as any;
 
@@ -147,11 +148,15 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number) {
       else if (client?.email) clientEmail = client.email;
     }
 
+    // Get tier-aware commission rate from DB settings
+    const commissionRate = await getCommissionRate(booking.instructor.subscriptionTier ?? 'BASIC');
+
     // Create payment intent
     const paymentIntent = await stripeService.createPaymentIntent({
       amount: paymentAmount,
       instructorId: booking.instructorId,
       bookingId: booking.id,
+      commissionRate,
       clientEmail,
       description: `Driving lesson with ${booking.instructor.name}`,
     });

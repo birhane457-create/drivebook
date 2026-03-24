@@ -64,17 +64,50 @@ export default async function SubdomainBookingPage({
 }) {
   const instructor = await prisma.instructor.findFirst({
     where: { customDomain: params.slug },
+    select: {
+      id: true,
+      name: true,
+      bio: true,
+      phone: true,
+      profileImage: true,
+      carImage: true,
+      carMake: true,
+      carModel: true,
+      carYear: true,
+      serviceAreas: true,
+      baseAddress: true,
+      serviceRadiusKm: true,
+      hourlyRate: true,
+      isVerified: true,
+      averageRating: true,
+      totalReviews: true,
+      subscriptionTier: true,
+      workingHours: true,
+      lessonPackages: true,
+      bookingBufferMinutes: true,
+      languages: true,
+      vehicleTypes: true,
+      customDomain: true,
+      brandLogo: true,
+      brandColorPrimary: true,
+      brandColorSecondary: true,
+      showBrandingOnBookingPage: true,
+      whatsapp: true,
+      instagram: true,
+      facebook: true,
+      yearsExperience: true,
+    },
   });
 
   if (!instructor) notFound();
 
   // Branding — colors apply for all tiers; logo/name white-labelling is PRO/BUSINESS only
   const isPro = instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'BUSINESS';
-  const hasBranding = isPro && (instructor as any).showBrandingOnBookingPage;
-  const brandLogo = hasBranding ? (instructor as any).brandLogo : null;
+  const hasBranding = isPro && instructor.showBrandingOnBookingPage;
+  const brandLogo = hasBranding ? instructor.brandLogo : null;
   // Colors apply regardless of tier — fall back to defaults if not set
-  const primary = (instructor as any).brandColorPrimary || '#3B82F6';
-  const secondary = (instructor as any).brandColorSecondary || '#10B981';
+  const primary = instructor.brandColorPrimary || '#3B82F6';
+  const secondary = instructor.brandColorSecondary || '#10B981';
 
   // Recent reviews from completed bookings
   const recentReviews = await (prisma.booking as any).findMany({
@@ -151,10 +184,10 @@ export default async function SubdomainBookingPage({
   const languages = instructor.languages ? instructor.languages.split(',').map(l => l.trim()) : [];
   const vehicleTypes = instructor.vehicleTypes ? instructor.vehicleTypes.split(',').map(v => v.trim()) : [];
 
-  const whatsapp = (instructor as any).whatsapp;
-  const instagram = (instructor as any).instagram;
-  const facebook = (instructor as any).facebook;
-  const yearsExperience = (instructor as any).yearsExperience;
+  const whatsapp = instructor.whatsapp;
+  const instagram = instructor.instagram;
+  const facebook = instructor.facebook;
+  const yearsExperience = instructor.yearsExperience;
 
   // Trust badges — only show what we actually know is true
   const trustBadges = [

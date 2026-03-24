@@ -12,6 +12,7 @@ interface CreatePaymentIntentParams {
   walletId?: string; // For wallet purchases
   clientEmail: string;
   description: string;
+  commissionRate?: number; // Per-tier rate from DB — falls back to env if not provided
 }
 
 interface CreateConnectAccountParams {
@@ -33,10 +34,13 @@ export class StripeService {
    * Uses automatic capture for immediate payment
    */
   async createPaymentIntent(params: CreatePaymentIntentParams) {
-    const { amount, instructorId, bookingId, transactionId, walletId, clientEmail, description } = params;
+    const { amount, instructorId, bookingId, transactionId, walletId, clientEmail, description, commissionRate } = params;
+
+    // Use passed rate (from DB) or fall back to env default
+    const rate = commissionRate ?? this.commissionRate;
 
     // Calculate platform fee (only for bookings with instructorId)
-    const platformFee = instructorId ? (amount * this.commissionRate) / 100 : 0;
+    const platformFee = instructorId ? (amount * rate) / 100 : 0;
     const instructorPayout = instructorId ? amount - platformFee : 0;
 
     // Convert to cents for Stripe
@@ -51,6 +55,7 @@ export class StripeService {
       metadata.instructorId = instructorId;
       metadata.platformFee = platformFee.toFixed(2);
       metadata.instructorPayout = instructorPayout.toFixed(2);
+      metadata.commissionRate = rate.toFixed(2);
     } else if (transactionId || walletId) {
       // Wallet/package purchase
       if (transactionId) metadata.transactionId = transactionId;

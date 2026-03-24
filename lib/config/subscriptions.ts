@@ -52,7 +52,7 @@ export const SUBSCRIPTION_PLANS = {
     limits: {
       instructors: 1,
       customDomain: false,
-      brandedPages: false,
+      brandedPages: true,
       prioritySupport: true,
       apiAccess: false,
     },

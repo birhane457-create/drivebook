@@ -29,9 +29,12 @@ export default async function SubscriptionPage() {
 
   const currentSubscription = instructor.subscriptions[0];
   const trialExpired = instructor.trialEndsAt ? isTrialExpired(instructor.trialEndsAt) : false;
-  const daysLeftInTrial = instructor.trialEndsAt 
+  const daysLeftInTrial = instructor.trialEndsAt
     ? Math.max(0, Math.ceil((new Date(instructor.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
+
+  // Derive from config — not stored in DB
+  const plan = SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,7 +102,7 @@ export default async function SubscriptionPage() {
                   <p>
                     ${currentSubscription.monthlyAmount}/month • 
                     Renews on {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()} •
-                    {instructor.commissionRate}% commission per booking
+                    {plan.commissionRate}% commission per booking
                   </p>
                 </div>
               </div>
@@ -141,12 +144,12 @@ export default async function SubscriptionPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Commission Rate</h3>
-                <p className="text-2xl font-bold text-gray-900">{instructor.commissionRate}%</p>
+                <p className="text-2xl font-bold text-gray-900">{plan.commissionRate}%</p>
                 <p className="text-sm text-gray-500">Per booking</p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-2">New Student Bonus</h3>
-                <p className="text-2xl font-bold text-gray-900">{instructor.newStudentBonus}%</p>
+                <p className="text-2xl font-bold text-gray-900">{plan.newStudentBonus}%</p>
                 <p className="text-sm text-gray-500">Extra for first booking with new students</p>
               </div>
               {instructor.subscriptionTier === 'BUSINESS' && (
