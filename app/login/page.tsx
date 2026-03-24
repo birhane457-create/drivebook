@@ -37,7 +37,11 @@ export default function LoginPage() {
 
           // If on a subdomain, redirect to the main domain so dashboards work correctly
           const hostname = window.location.hostname
-          const isSubdomain = hostname.split('.').length > 2 && !hostname.startsWith('www.')
+          // Known compound TLDs — need 4+ parts to be a subdomain (sub.domain.com.au)
+          const compoundTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
+          const tld2 = hostname.split('.').slice(-2).join('.')
+          const minParts = compoundTLDs.includes(tld2) ? 4 : 3
+          const isSubdomain = hostname.split('.').length >= minParts && !hostname.startsWith('www.')
           const mainDomain = isSubdomain
             ? window.location.origin.replace(/^https?:\/\/[^.]+\./, 'https://')
             : ''
