@@ -8,7 +8,7 @@ export default function MaintenancePage() {
           We&apos;re putting the finishing touches on something great.
         </p>
         <p className="text-purple-300 text-sm">
-          DriveBook is coming soon — connecting learner drivers with verified local instructors across Australia.
+          DriveBook is coming soon — connecting learner drivers with verified local instructors across Australia!.
         </p>
         <div className="mt-8 text-purple-400 text-xs">
           For enquiries: <a href="mailto:debesay304@gmail.com" className="underline hover:text-white">debesay304@gmail.com</a>
