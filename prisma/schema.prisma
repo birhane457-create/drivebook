@@ -141,7 +141,10 @@ model Instructor {
 
   // Google Calendar integration fields
   syncGoogleCalendar Boolean   @default(false)
+  googleAccessToken  String?
+  googleRefreshToken String?
   googleTokenExpiry  DateTime?
+  googleCalendarId   String?
   calendarBufferMode String?
 
   // Public profile / social links

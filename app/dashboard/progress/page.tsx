@@ -104,8 +104,30 @@ export default function ProgressPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Your Progress</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">Your Progress</h1>
 
+        {/* How this works — transparency notice */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8 text-sm text-blue-800">
+  <p className="font-semibold mb-1">How your progress score works</p>
+
+  <p className="mb-2">
+    After each lesson, your instructor records observations using standardised driving assessment codes based on WA Practical Driving Assessment (PDA) criteria.
+    Your score is calculated from these observations — each issue reduces your score depending on its severity.
+  </p>
+
+  <p className="mb-2">
+    This dashboard is designed to help you understand what to focus on between lessons and track your improvement over time.
+    A score of <strong>85 or above</strong> is shown as “Test Ready” — however, this is a guide only.
+  </p>
+
+  <p className="mb-2 font-medium">
+    Always follow your instructor’s advice on when you are ready to take your driving test.
+  </p>
+
+  <p className="text-blue-600 text-xs">
+    Scores depend on instructor input and may not reflect every aspect of your driving ability. DriveBook does not certify test readiness.
+  </p>
+</div>
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-6">

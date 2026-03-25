@@ -172,7 +172,8 @@ export default function HomePage() {
         <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-2 text-gray-800">Track Your Progress</h2>
           <p className="text-center text-gray-600 mb-2 text-lg">See exactly where you stand and what to improve</p>
-          <p className="text-center text-gray-500 mb-10 text-sm">After every lesson, your instructor logs your performance directly into DriveBook — giving you personalised feedback on exactly what to work on next.</p>
+          <p className="text-center text-gray-500 mb-4 text-sm">After every lesson, your instructor logs your performance directly into DriveBook — giving you personalised feedback on exactly what to work on next.</p>
+          <p className="text-center text-xs text-gray-400 mb-10">Scores are based on your instructor&apos;s observations and are a learning guide only. Always follow your instructor&apos;s advice on test readiness — DriveBook does not certify when you are ready to sit your test.</p>
           <ProgressTrackingShowcase />
         </section>
 
