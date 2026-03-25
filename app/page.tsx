@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import BookingFlowShowcase from '@/components/landing/BookingFlowShowcase'
-import TrustSafetyShowcase from '@/components/landing/TrustSafetyShowcase'
 import AIReceptionistShowcase from '@/components/landing/AIReceptionistShowcase'
 import ProgressTrackingShowcase from '@/components/landing/ProgressTrackingShowcase'
 import PackagePricingShowcase from '@/components/landing/PackagePricingShowcase'
@@ -107,11 +106,23 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-2 md:px-4">
-        {/* Trust & Safety Section */}
-        <section className="my-8 md:my-16 pt-8">
-          <h2 className="text-4xl text-center mb-4 text-gray-800">Your Safety is Guaranteed</h2>
-          <p className="text-center text-gray-600 mb-10 text-lg">Every instructor undergoes rigorous verification</p>
-          <TrustSafetyShowcase />
+        {/* Trust Badge — single authoritative statement, no repetition */}
+        <section className="my-8 md:my-10 pt-8">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 bg-green-50 border border-green-200 rounded-2xl px-6 py-5 max-w-3xl mx-auto">
+            <span className="text-3xl">🛡️</span>
+            <div className="text-center sm:text-left">
+              <p className="font-bold text-green-900 text-lg">Every instructor is background-checked, licensed &amp; approved</p>
+              <p className="text-green-700 text-sm mt-0.5">Credentials verified by DriveBook before they can accept a single booking.</p>
+            </div>
+          </div>
+        </section>
+
+        {/* AI Voice Receptionist — primary differentiator, above the fold */}
+        <section className="my-8 md:my-16">
+          <h2 className="text-4xl text-center mb-2 text-gray-800">Book by Phone — AI Answers 24/7</h2>
+          <p className="text-center text-purple-600 font-semibold mb-2 text-lg">No app download required. Just call and book.</p>
+          <p className="text-center text-gray-500 mb-10 text-sm">Our AI receptionist handles availability, booking, and SMS confirmation — any time of day.</p>
+          <AIReceptionistShowcase />
         </section>
 
         {/* Why Choose DriveBook - Learner Focused */}
@@ -156,24 +167,20 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* AI Voice Receptionist Showcase */}
-        <section className="my-8 md:my-16">
-          <h2 className="text-4xl text-center mb-4 text-gray-800">Book by Phone - AI Answers 24/7</h2>
-          <p className="text-center text-gray-600 mb-10 text-lg">Prefer to call? Our AI receptionist handles everything</p>
-          <AIReceptionistShowcase />
-        </section>
+        {/* AI Voice Receptionist Showcase — already shown above */}
 
         {/* Progress Tracking Showcase */}
         <section className="my-8 md:my-16">
-          <h2 className="text-4xl text-center mb-4 text-gray-800">Track Your Progress</h2>
-          <p className="text-center text-gray-600 mb-10 text-lg">See exactly where you stand and what to improve</p>
+          <h2 className="text-4xl text-center mb-2 text-gray-800">Track Your Progress</h2>
+          <p className="text-center text-gray-600 mb-2 text-lg">See exactly where you stand and what to improve</p>
+          <p className="text-center text-gray-500 mb-10 text-sm">After every lesson, your instructor logs your performance directly into DriveBook — giving you personalised feedback on exactly what to work on next.</p>
           <ProgressTrackingShowcase />
         </section>
 
         {/* How it works */}
         <section className="my-8 md:my-16">
           <h2 className="text-4xl text-center mb-4 text-gray-800">How It Works</h2>
-          <p className="text-center text-gray-600 mb-10 text-lg">Book your driving lesson in 3 simple steps</p>
+          <p className="text-center text-gray-600 mb-10 text-lg">From search to test-ready in 4 simple steps</p>
           <BookingFlowShowcase />
         </section>
 
@@ -183,7 +190,8 @@ export default function HomePage() {
           <ol className="text-lg my-4 space-y-3">
             <li>Search or enter your postcode</li>
             <li>Choose an instructor and a timeslot</li>
-            <li>Book and pay securely—get confirmation by SMS</li>
+            <li>Book and pay securely — get confirmation by SMS</li>
+            <li>After each lesson, review your personalised feedback and track your progress to test day</li>
           </ol>
         </section>
 
@@ -219,7 +227,7 @@ export default function HomePage() {
           </blockquote>
           <blockquote className="border-l-4 border-purple-600 my-6 p-6 bg-gray-50 italic text-gray-700">
             <span className="text-5xl text-purple-600 leading-none">&ldquo;</span>
-            Since joining DriveBook, my bookings have doubled. The AI receptionist handles calls while I'm teaching, and I get paid on time every week. Game changer! <strong>— James T., Driving Instructor</strong>
+            As a parent I was nervous about putting my daughter in a car with a stranger. DriveBook made it easy — I could see the instructor&apos;s credentials, read real reviews, and track her progress after every lesson. I felt completely at ease. <strong>— Linda R., Parent, Perth</strong>
           </blockquote>
           <blockquote className="border-l-4 border-purple-600 my-6 p-6 bg-gray-50 italic text-gray-700">
             <span className="text-5xl text-purple-600 leading-none">&ldquo;</span>
