@@ -96,7 +96,7 @@ export default function HomePage() {
           <li className="my-2">🎯 Smart booking with real-time availability—no waiting, no phone tag</li>
           <li className="my-2">📍 Location-based matching to find instructors who service your area</li>
           <li className="my-2">💰 Save up to 12% with bulk hour packages and test preparation bundles</li>
-          <li className="my-2">🛡️ Every instructor is background-checked and fully verified</li>
+          <li className="my-2">🛡️ ABN-checked, licensed, and approved before their first lesson</li>
           <li className="my-2">📱 Manage everything 24/7 from your personal dashboard</li>
         </ul>
         <div className="mt-8">
@@ -120,8 +120,8 @@ export default function HomePage() {
           <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
               <div className="text-4xl mb-4">✓</div>
-              <h3 className="text-xl font-semibold mb-3 text-gray-900">Verified Instructors</h3>
-              <p className="text-gray-700">Every instructor is background-checked, qualified, and reviewed by real students. Your safety is guaranteed.</p>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">Trusted & Approved</h3>
+              <p className="text-gray-700">Background-checked, licensed, and reviewed by real students before they can take a booking. Your safety comes first.</p>
             </div>
             
             <div className="bg-white border-2 border-purple-100 p-6 rounded-xl hover:shadow-lg transition-shadow">
@@ -267,7 +267,7 @@ export default function HomePage() {
         {/* CTA - Learner Focused */}
         <section id="get-started" className="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-6 md:p-12 rounded-2xl text-center my-8 md:my-16 shadow-2xl">
           <h2 className="text-4xl font-bold mb-4 mt-0">Ready to Start Your Driving Journey?</h2>
-          <p className="text-xl mb-8">Find a verified instructor near you and book your first lesson today. Pass your test with confidence.</p>
+          <p className="text-xl mb-8">Book your first lesson today and pass your test with confidence.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link href="/book" className="inline-block bg-white text-purple-600 px-10 py-5 rounded-lg no-underline font-bold text-lg hover:-translate-y-1 hover:shadow-2xl transition-all">
               Find Your Instructor →
