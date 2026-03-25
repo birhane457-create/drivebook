@@ -25,7 +25,7 @@ interface BulkBookingFormProps {
   serviceAreas?: string | null;
   baseAddress?: string | null;
   serviceRadiusKm?: number | null;
-}
+}}
 
 const STEP_LABELS_BASE = ['Package', 'Time Slot', 'Your Details', 'Confirm'];
 const STEP_LABELS_WITH_AREA = ['Package', 'Service Area', 'Time Slot', 'Your Details', 'Confirm'];
