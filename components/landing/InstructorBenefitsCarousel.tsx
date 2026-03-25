@@ -8,7 +8,7 @@ export default function InstructorBenefitsCarousel() {
       id: 'never-miss',
       image: '/images/landing/instructor-never-miss.jpg', // Replace with actual image path
       title: 'Never Miss a Booking',
-      description: 'AI receptionist handles calls while you teach - recover £1,500-£2,500 per week in missed bookings',
+      description: 'AI receptionist handles calls while you teach - recover $1,500-$2,500 per week in missed bookings',
       category: 'For Instructors'
     },
     {

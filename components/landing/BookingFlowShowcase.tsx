@@ -191,7 +191,7 @@ function ResultsStep() {
     <div>
       <div className="text-center mb-4 md:mb-6">
         <h3 className="text-lg md:text-2xl font-bold text-gray-900 mb-1 md:mb-2">
-          {instructors.length} Instructors Found
+          Instructors Near You
         </h3>
         <p className="text-xs md:text-base text-gray-600">
           Showing instructors who service: <span className="font-semibold">Maylands WA</span>

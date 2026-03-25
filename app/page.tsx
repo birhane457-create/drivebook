@@ -6,7 +6,6 @@ import { Menu, X } from 'lucide-react'
 import BookingFlowShowcase from '@/components/landing/BookingFlowShowcase'
 import AIReceptionistShowcase from '@/components/landing/AIReceptionistShowcase'
 import ProgressTrackingShowcase from '@/components/landing/ProgressTrackingShowcase'
-import PackagePricingShowcase from '@/components/landing/PackagePricingShowcase'
 
 const VOICE_NUMBER = process.env.NEXT_PUBLIC_VOICE_PHONE_NUMBER
 
@@ -100,7 +99,7 @@ export default function HomePage() {
         </ul>
         <div className="mt-8">
           <Link href="/book" className="inline-block bg-white text-purple-600 px-10 py-5 rounded-lg no-underline font-bold text-xl hover:-translate-y-1 hover:shadow-2xl transition-all">
-            Find Your Perfect Instructor →
+            Book Your First Lesson →
           </Link>
         </div>
       </header>

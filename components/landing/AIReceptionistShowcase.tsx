@@ -107,7 +107,7 @@ function CallStep() {
 
         <div className="bg-white rounded-2xl shadow-2xl p-8 text-center border-2 border-purple-200">
           <p className="text-sm uppercase tracking-wide text-purple-600 font-semibold mb-3">
-            Try it now - Call us!
+            Prefer to call? Available 24/7
           </p>
           <div className="w-24 h-24 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <Phone className="w-12 h-12 text-white" />

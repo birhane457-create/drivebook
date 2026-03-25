@@ -92,7 +92,7 @@ export default function ProgressTrackingShowcase() {
             <ChevronLeft className="w-5 h-5 text-gray-600" />
           </button>
           <div className="text-center text-gray-600 text-xs md:text-sm whitespace-nowrap">
-            {currentIndex + 1} of {slides.length}
+            {currentIndex + 1} / {slides.length}
           </div>
           <button onClick={nextSlide} className="p-2 hover:bg-gray-100 rounded-lg transition-colors md:hidden" aria-label="Next slide">
             <ChevronRight className="w-5 h-5 text-gray-600" />
