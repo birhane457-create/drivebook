@@ -94,7 +94,7 @@ export default function HomePage() {
           <li className="my-2">🎯 Smart booking with real-time availability—no waiting, no phone tag</li>
           <li className="my-2">📍 Location-based matching to find instructors who service your area</li>
           <li className="my-2">💰 Save up to 12% with bulk hour packages and test preparation bundles</li>
-          <li className="my-2">🛡️ ABN-checked, licensed, and approved before their first lesson</li>
+          <li className="my-2">📞 Book by phone — AI answers 24/7, no app download needed</li>
           <li className="my-2">📱 Manage everything 24/7 from your personal dashboard</li>
         </ul>
         <div className="mt-8">
