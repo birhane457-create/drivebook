@@ -64,3 +64,33 @@ pricing-config.json
 
 # Platform settings config (admin-editable, not committed)
 settings-config.json
+
+# Dev/debug/test scripts — local only, never commit
+check-*.js
+fix-*.js
+backfill-*.js
+seed-*.js
+set-default-*.js
+create-test-*.js
+test-login.js
+debug.log
+commit.bat
+
+# Dev-only markdown notes — not needed on production
+ALL_ISSUES_FIXED.md
+BOOK_LATER_FIX.md
+DEPLOY_NOW.md
+FINAL_IMPLEMENTATION_STATUS.md
+FINAL_STATUS_SUMMARY.md
+IMPLEMENTATION_GUIDE.md
+LANDING_PAGE_*.md
+MIGRATION_SCRIPTS.md
+MOBILE_HOTSPOT_TESTING.md
+MOBILE_QUICK_START.md
+MOBILE_SETUP_COMPLETE.md
+MOBILE_TESTING_GUIDE.md
+P0_*.md
+PERFORMANCE_TRACKING_GUIDE.md
+REMAINING_WORK.md
+VERIFICATION_COMPLETE.md
+feedback-critiqe.md
