@@ -27,14 +27,10 @@ Each gap is classified:
 
 ---
 
-### 1.2 DOC_WRONG — Commission rate is hardcoded, not from PlatformSettings
+### 1.2 ~~DOC_WRONG~~ RESOLVED — Commission rate now dynamic from PlatformSettings
 
-**Docs say:** Commission is always derived from `PlatformSettings` via `getCommissionRate(tier)`  
-**Code does:** `app/api/bookings/route.ts` line: `const commissionRate = 0.15` — hardcoded 15% regardless of instructor tier or PlatformSettings.
-
-Admin booking (`app/api/admin/bookings/route.ts`) also hardcodes: `commissionRate: 0.15` and `instructorPayout: lessonPrice * 0.85`.
-
-**Impact:** `SYSTEM_OVERVIEW.md`, `FINANCIAL_DOCTRINE.md`, and `COMMISSIONS.md` all claim commission is DB-driven. For instructor-created and admin-created bookings, it is not.
+**Was:** Both booking routes hardcoded `commissionRate: 0.15` (15%) regardless of instructor tier.  
+**Fixed (March 2026):** Both `app/api/bookings/route.ts` and `app/api/admin/bookings/route.ts` now call `getCommissionRate(instructor.subscriptionTier)` from `lib/services/platform-pricing.ts`. PRO = 12%, BUSINESS = 10%, BASIC = 15% (DB-configurable).
 
 ---
 
@@ -232,15 +228,10 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ## 8. Schema Gaps
 
-### 8.1 SCHEMA_GAP — ClientWallet.balance field usage is inconsistent
+### 8.1 ~~SCHEMA_GAP~~ RESOLVED — wallet.balance now updated on instructor booking path
 
-**Code does:** 
-- `app/api/bookings/route.ts` (instructor path): does NOT use `wallet.balance` — recomputes from transaction sum
-- `app/api/admin/bookings/route.ts` (admin path): uses `wallet.balance` directly
-- `app/api/bookings/[id]/cancel/route.ts`: uses `wallet.balance: { increment: refundAmount }` — updates stored field
-- `FINANCIAL_DOCTRINE.md` says `balance` is the only stored field and `totalPaid`, `totalSpent` do not exist
-
-The stored `balance` field is updated on cancel/refund but NOT updated on instructor-created booking debit (which only creates a `WalletTransaction` record). This means `wallet.balance` can drift from the transaction sum.
+**Was:** Instructor booking path created a `WalletTransaction` DEBIT but never updated `ClientWallet.balance`. Admin booking path updated `balance` correctly. After an instructor-created booking, the stored balance was wrong.  
+**Fixed (March 2026):** `app/api/bookings/route.ts` now calls `tx.clientWallet.update({ data: { balance: { decrement: lessonPrice } } })` inside the atomic transaction, keeping stored balance in sync with transaction log.
 
 ---
 
@@ -288,11 +279,11 @@ The stored `balance` field is updated on cancel/refund but NOT updated on instru
 
 ## Priority Actions
 
-1. ~~Run `prisma generate`~~ — **DONE** (March 2026) — payout service is now functional
-2. ~~Set `STRIPE_WEBHOOK_SECRET`~~ — **DONE** — webhook signature verification active (test mode)
-3. Fix `wallet.balance` drift — instructor booking path does not update stored balance
-4. Update `STATE_MACHINES.md` transaction states to match actual status values
-5. Update `SYSTEM_FLOWS.md` to distinguish instructor-created vs Stripe booking paths
+1. ~~Run `prisma generate`~~ — **DONE** (March 2026)
+2. ~~Set `STRIPE_WEBHOOK_SECRET`~~ — **DONE**
+3. ~~Fix `wallet.balance` drift~~ — **DONE** (March 2026) — instructor booking path now updates stored balance atomically
+4. ~~Commission hardcoded at 15%~~ — **DONE** (March 2026) — both booking routes now use `getCommissionRate(tier)`
+5. Update `STATE_MACHINES.md` transaction states to match actual status values (`SETTLED` not `COMPLETED`)
 6. Add AuditLog to admin booking PATCH (BOOKING_COMPLETED, NO_SHOW_MARKED)
 7. Fix no-show tagging from description string to a proper field or status
 8. When going live: replace test-mode Stripe webhook secret with production secret

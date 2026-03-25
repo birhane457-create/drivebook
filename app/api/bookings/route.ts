@@ -11,6 +11,7 @@ import { notifyBookingRequest } from '@/lib/services/notifications'
 import { getNotifChannels, getBookingSettings } from '@/lib/config/platform-settings'
 import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation'
 import { bookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
+import { getCommissionRate } from '@/lib/services/platform-pricing'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -116,11 +117,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
 
-    // Calculate price
+    // Calculate price — commission from PlatformSettings based on instructor tier
     const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60)
     const lessonPrice = data.price ?? parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
     const platformFee = parseFloat((lessonPrice * PLATFORM_FEE_RATE).toFixed(2))
-    const commissionRate = 0.15
+    const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC')
+    const commissionRate = commissionRatePct / 100
     const instructorPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2))
 
     // isFirstBooking check (real DB query via paymentService)
@@ -184,7 +186,11 @@ export async function POST(req: NextRequest) {
       const txBalance = txns.reduce((sum, t) => t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
       if (txBalance < lessonPrice) throw new Error('INSUFFICIENT_BALANCE')
 
-      // Deduct from wallet
+      // Deduct from wallet (update both stored balance and transaction log)
+      await tx.clientWallet.update({
+        where: { id: wallet.id },
+        data: { balance: { decrement: lessonPrice } },
+      })
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getCommissionRate } from '@/lib/services/platform-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,7 +141,7 @@ export async function POST(req: NextRequest) {
 
     const [client, instructor] = await Promise.all([
       prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true, phone: true, userId: true, email: true } }),
-      prisma.instructor.findUnique({ where: { id: instructorId }, select: { id: true, name: true, hourlyRate: true } }),
+      prisma.instructor.findUnique({ where: { id: instructorId }, select: { id: true, name: true, hourlyRate: true, subscriptionTier: true } }),
     ]);
 
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
@@ -150,7 +151,9 @@ export async function POST(req: NextRequest) {
     const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60);
     const lessonPrice = price ?? parseFloat((instructor.hourlyRate * durationHours).toFixed(2));
     const platformFee = parseFloat((lessonPrice * 0.036).toFixed(2));
-    const instructorPayout = parseFloat((lessonPrice * 0.85).toFixed(2));
+    const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC');
+    const commissionRate = commissionRatePct / 100;
+    const instructorPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2));
 
     // Wallet check — use stored balance field (source of truth for display)
     const wallet = await prisma.clientWallet.findUnique({
@@ -199,7 +202,7 @@ export async function POST(req: NextRequest) {
           price: lessonPrice,
           platformFee,
           instructorPayout,
-          commissionRate: 0.15,
+          commissionRate,
           isPaid: true,
           paidAt: new Date(),
           notes: notes || `Booked by admin`,

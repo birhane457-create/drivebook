@@ -1,7 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trophy, Target, TrendingUp, Book } from 'lucide-react';
+import { Trophy, Target, TrendingUp, Book, PlayCircle, Lightbulb } from 'lucide-react';
+
+interface Recommendation {
+  id: string;
+  title: string;
+  description: string;
+  tipText: string;
+  videoUrl: string | null;
+  thumbnailUrl: string | null;
+  category: string;
+  durationSec: number | null;
+  matchedCodes: number[];
+}
 
 interface PerformanceData {
   totalLessons: number;
@@ -29,22 +41,26 @@ export default function ProgressPage() {
   const [data, setData] = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
 
   useEffect(() => {
-    async function fetchPerformance() {
+    async function fetchAll() {
       try {
-        const response = await fetch('/api/client/my-performance');
-        if (!response.ok) throw new Error('Failed to fetch performance data');
-        const result = await response.json();
-        setData(result);
+        const [perfRes, recRes] = await Promise.all([
+          fetch('/api/client/my-performance'),
+          fetch('/api/client/recommendations'),
+        ]);
+        if (!perfRes.ok) throw new Error('Failed to fetch performance data');
+        const [perfData, recData] = await Promise.all([perfRes.json(), recRes.json()]);
+        setData(perfData);
+        setRecommendations(recData.recommendations ?? []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
       }
     }
-
-    fetchPerformance();
+    fetchAll();
   }, []);
 
   if (loading) {
@@ -196,6 +212,46 @@ export default function ProgressPage() {
             )}
           </div>
         </div>
+
+        {/* Watch Before Your Next Lesson */}
+        {recommendations.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <PlayCircle className="h-6 w-6 text-purple-600" />
+              <h2 className="text-xl font-bold text-gray-900">Watch Before Your Next Lesson</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Based on your instructor&apos;s feedback — personalised to your weak areas.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {recommendations.map((rec) => (
+                <div key={rec.id} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                  {rec.videoUrl ? (
+                    <video
+                      src={rec.videoUrl}
+                      poster={rec.thumbnailUrl ?? undefined}
+                      controls
+                      className="w-full h-40 object-cover bg-gray-900"
+                    />
+                  ) : (
+                    <div className="w-full h-40 bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center">
+                      <PlayCircle className="h-12 w-12 text-purple-400" />
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <p className="font-semibold text-gray-900 mb-1">{rec.title}</p>
+                    <p className="text-sm text-gray-600 mb-2">{rec.description}</p>
+                    <div className="flex items-start gap-2 bg-amber-50 border-l-4 border-amber-400 p-2 rounded text-xs text-amber-800">
+                      <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
+                      <span>{rec.tipText}</span>
+                    </div>
+                    {rec.durationSec && (
+                      <p className="text-xs text-gray-400 mt-2">{rec.durationSec}s video</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recent Feedback */}
         {data.recentFeedback.length > 0 && (

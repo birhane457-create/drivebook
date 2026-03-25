@@ -90,7 +90,25 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     officialCriteria: 'Signal: Must indicate lane changes',
     improvementTip: 'Always signal before changing lanes, even if no traffic is visible'
   },
-
+ // ========== SIGNAL (15-16) additional ==========
+  15: {
+    code: 15,
+    category: PDACategory.SIGNAL,
+    severity: PDASeverity.MINOR,
+    shortText: 'Signal flicker/inconsistent',
+    fullText: 'Indicator flickered or was inconsistent during maneuver',
+    officialCriteria: 'Signal: Steady and clear use of indicators',
+    improvementTip: 'Keep a steady, consistent signal throughout the maneuver'
+  },
+  16: {
+    code: 16,
+    category: PDACategory.SIGNAL,
+    severity: PDASeverity.MODERATE,
+    shortText: 'Missed hazard signal to other road users',
+    fullText: 'Did not signal to alert others of intended maneuver in a shared environment',
+    officialCriteria: 'Signal: Must communicate intentions clearly to other road users',
+    improvementTip: 'Use your indicators to clearly show intentions, especially in traffic'
+  },
   // ========== LOOK BEHIND (20-29) ==========
   20: {
     code: 20,
@@ -136,6 +154,25 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     fullText: 'Stared at mirrors too long, losing forward vision',
     officialCriteria: 'Look Behind: Quick glances, maintain forward awareness',
     improvementTip: 'Quick glances at mirrors (1 second max), keep eyes on the road ahead'
+  },
+  // ========== LOOK BEHIND (25-26) additional ==========
+  25: {
+    code: 25,
+    category: PDACategory.LOOK_BEHIND,
+    severity: PDASeverity.MINOR,
+    shortText: 'Mirror not checked before lane exit',
+    fullText: 'Failed to check mirrors when leaving lane or turning',
+    officialCriteria: 'Look Behind: Always check mirrors before leaving a lane',
+    improvementTip: 'Glance in mirrors before moving out of a lane or lane change'
+  },
+  26: {
+    code: 26,
+    category: PDACategory.LOOK_BEHIND,
+    severity: PDASeverity.MODERATE,
+    shortText: 'Blind spot missed while reversing',
+    fullText: 'Did not check blind spot properly during reverse maneuver',
+    officialCriteria: 'Look Behind: Use mirrors and head check when reversing',
+    improvementTip: "Turn head to check blind spot, don't rely solely on mirrors"
   },
 
   // ========== MOVEMENT & SPEED (30-39) ==========
@@ -194,6 +231,27 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     improvementTip: 'Maintain steady speed using cruise control or gentle throttle'
   },
 
+
+  // ========== MOVEMENT & SPEED (36-37) additional ==========
+  36: {
+    code: 36,
+    category: PDACategory.MOVEMENT,
+    severity: PDASeverity.MINOR,
+    shortText: 'Vehicle creeping at stop',
+    fullText: 'Vehicle moved slightly forward when it should have been stationary',
+    officialCriteria: 'Movement: Vehicle must remain stationary at stops',
+    improvementTip: 'Keep foot steady on brake or clutch to prevent creeping'
+  },
+  37: {
+    code: 37,
+    category: PDACategory.MOVEMENT,
+    severity: PDASeverity.MINOR,
+    shortText: 'Slow start on hill',
+    fullText: 'Took too long to move off from a hill start',
+    officialCriteria: 'Movement: Smooth and timely hill start',
+    improvementTip: 'Practice hill starts with clutch control to move smoothly'
+  },
+
   // ========== PATH & POSITIONING (40-49) ==========
   40: {
     code: 40,
@@ -249,6 +307,25 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     officialCriteria: 'Path: Tight, controlled turns',
     improvementTip: 'Turn the wheel more to stay within your lane'
   },
+ // ========== PATH & POSITIONING (46-47) additional ==========
+  46: {
+    code: 46,
+    category: PDACategory.PATH,
+    severity: PDASeverity.MINOR,
+    shortText: 'Drifting within lane',
+    fullText: 'Vehicle drifted within lane without touching lines',
+    officialCriteria: 'Path: Maintain steady lane position',
+    improvementTip: 'Keep steering steady and watch lane markings to avoid drifting'
+  },
+  47: {
+    code: 47,
+    category: PDACategory.PATH,
+    severity: PDASeverity.MODERATE,
+    shortText: 'Improper lane usage at merge',
+    fullText: 'Chose incorrect lane during merge or multi-lane transition',
+    officialCriteria: 'Path: Select correct lane for merge/transition',
+    improvementTip: 'Check traffic and lane markings before merging into traffic'
+  },
 
   // ========== VEHICLE MANAGEMENT (50-59) ==========
   50: {
@@ -295,6 +372,34 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     fullText: 'Failed to use handbrake when appropriate',
     officialCriteria: 'Vehicle Management: Handbrake use on hills',
     improvementTip: 'Use handbrake when stopped on hills or for more than a few seconds'
+  },
+ // ========== VEHICLE MANAGEMENT (55-57) additional ==========
+  55: {
+    code: 55,
+    category: PDACategory.VEHICLE_MANAGEMENT,
+    severity: PDASeverity.MINOR,
+    shortText: 'Delayed gear shift',
+    fullText: 'Shifted gear later than appropriate, affecting control',
+    officialCriteria: 'Vehicle Management: Timely gear changes',
+    improvementTip: 'Plan gear changes ahead to maintain smooth control'
+  },
+  56: {
+    code: 56,
+    category: PDACategory.VEHICLE_MANAGEMENT,
+    severity: PDASeverity.MINOR,
+    shortText: 'Clutch riding',
+    fullText: 'Foot remained on clutch unnecessarily while driving',
+    officialCriteria: 'Vehicle Management: Use clutch only when needed',
+    improvementTip: 'Keep foot off clutch except when changing gears'
+  },
+  57: {
+    code: 57,
+    category: PDACategory.VEHICLE_MANAGEMENT,
+    severity: PDASeverity.MINOR,
+    shortText: 'Overcorrecting steering',
+    fullText: 'Steering corrections were exaggerated, affecting smoothness',
+    officialCriteria: 'Vehicle Management: Smooth, controlled steering',
+    improvementTip: 'Make small, smooth steering adjustments for control'
   },
 
   // ========== RESPONSIVENESS & HAZARDS (60-69) ==========
@@ -344,6 +449,27 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     improvementTip: 'Watch traffic lights ahead and be ready to move when green'
   },
 
+ 
+  // ========== RESPONSIVENESS & HAZARDS (65-66) additional ==========
+  65: {
+    code: 65,
+    category: PDACategory.RESPONSIVENESS,
+    severity: PDASeverity.MODERATE,
+    shortText: 'Missed pedestrian approaching',
+    fullText: 'Did not notice a pedestrian about to cross',
+    officialCriteria: 'Responsiveness: Continuous observation of surroundings',
+    improvementTip: 'Scan intersections and pedestrian paths frequently'
+  },
+  66: {
+    code: 66,
+    category: PDACategory.RESPONSIVENESS,
+    severity: PDASeverity.MODERATE,
+    shortText: 'Slow lane merge',
+    fullText: 'Took too long to safely merge into traffic',
+    officialCriteria: 'Responsiveness: Merge promptly and safely',
+    improvementTip: 'Check mirrors, signal, and merge smoothly without hesitation'
+  },
+
   // ========== FLOW (70-79) ==========
   70: {
     code: 70,
@@ -371,6 +497,25 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     fullText: 'Overthinking simple maneuvers, affecting confidence',
     officialCriteria: 'Flow: Confident execution',
     improvementTip: 'Trust your training and act decisively when you know what to do'
+  },
+  // ========== FLOW (73-74) additional ==========
+  73: {
+    code: 73,
+    category: PDACategory.FLOW,
+    severity: PDASeverity.MINOR,
+    shortText: 'Hesitant at roundabout entry',
+    fullText: 'Entered roundabout too slowly or uncertainly',
+    officialCriteria: 'Flow: Confident and timely entry into roundabouts',
+    improvementTip: 'Check traffic and enter confidently at safe speed'
+  },
+  74: {
+    code: 74,
+    category: PDACategory.FLOW,
+    severity: PDASeverity.MINOR,
+    shortText: 'Over-correcting steering mid-turn',
+    fullText: 'Steering corrections were too large during turn, breaking flow',
+    officialCriteria: 'Flow: Smooth, continuous steering',
+    improvementTip: 'Practice turns to maintain steady, small steering adjustments'
   },
 
   // ========== CRITICAL / INSTANT FAIL (80-89) ==========
@@ -409,6 +554,35 @@ export const PDA_FEEDBACK_CODES: Record<number, PDAFeedbackCode> = {
     fullText: 'Proceeded through a red traffic light',
     officialCriteria: 'Critical: Red light violation = Instant Fail',
     improvementTip: 'Always stop at red lights - amber means stop if safe to do so'
+  },
+
+  // ========== CRITICAL / INSTANT FAIL (84-86) additional ==========
+  84: {
+    code: 84,
+    category: PDACategory.CRITICAL,
+    severity: PDASeverity.CRITICAL,
+    shortText: 'Dangerous overtaking',
+    fullText: 'Overtook unsafely causing immediate risk',
+    officialCriteria: 'Critical: Unsafe overtaking = Instant Fail',
+    improvementTip: 'Only overtake when it is fully safe and legal'
+  },
+  85: {
+    code: 85,
+    category: PDACategory.CRITICAL,
+    severity: PDASeverity.CRITICAL,
+    shortText: 'Near collision',
+    fullText: 'Vehicle nearly collided with another road user',
+    officialCriteria: 'Critical: Risk of collision = Instant Fail',
+    improvementTip: 'Maintain awareness and safe distance at all times'
+  },
+  86: {
+    code: 86,
+    category: PDACategory.CRITICAL,
+    severity: PDASeverity.CRITICAL,
+    shortText: 'Ignored stop sign',
+    fullText: 'Completely failed to stop at a stop sign',
+    officialCriteria: 'Critical: Stop sign disobedience = Instant Fail',
+    improvementTip: 'Always make a full stop at stop signs'
   },
 }
 

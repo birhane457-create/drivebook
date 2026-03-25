@@ -89,7 +89,7 @@ export default function HomePage() {
       {/* Hero Section - Learner Focused */}
       <header className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-12 md:py-20 px-4 text-center">
         <h1 className="text-5xl font-bold mb-4">Pass Your Driving Test with Confidence</h1>
-        <p className="text-2xl mb-6 opacity-95">Book verified local instructors in seconds. Flexible lessons, transparent pricing, guaranteed safety.</p>
+        <p className="text-2xl mb-6 opacity-95">Book local instructors in seconds. Flexible lessons, transparent pricing, approved instructors.</p>
         <ul className="list-none p-0 my-6 text-left inline-block max-w-2xl text-lg">
           <li className="my-2">🎯 Smart booking with real-time availability—no waiting, no phone tag</li>
           <li className="my-2">📍 Location-based matching to find instructors who service your area</li>

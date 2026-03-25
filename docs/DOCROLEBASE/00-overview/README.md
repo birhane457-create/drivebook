@@ -17,6 +17,7 @@ DriveBook is a platform connecting driving instructors with learner drivers in A
 ### 01-public — No login required
 | File | Covers |
 |------|--------|
+| [LANDING_PAGE.md](../01-public/LANDING_PAGE.md) | `/` homepage — structure, copy decisions, component map |
 | [BOOKING_FLOW.md](../01-public/BOOKING_FLOW.md) | `/book` search page + `/book/[instructorId]` profile & booking form |
 | [PAYMENT_PAGE.md](../01-public/PAYMENT_PAGE.md) | `/booking/[id]/payment` — Stripe payment |
 | [SUBDOMAIN_PAGE.md](../01-public/SUBDOMAIN_PAGE.md) | `/subdomain/[slug]` — instructor white-label page |
@@ -92,6 +93,7 @@ DriveBook is a platform connecting driving instructors with learner drivers in A
 ### 08-technical — API & Database
 | File | Covers |
 |------|--------|
+| [CODEBASE_MAP.md](../08-technical/CODEBASE_MAP.md) | Feature-grouped map of every file — where to find anything |
 | [DATABASE_SCHEMA.md](../01-architecture/DATABASE_SCHEMA.md) | Full Prisma schema reference |
 | [API_REFERENCE.md](../08-technical/API_REFERENCE.md) | All API routes by domain |
 | [WEBHOOKS.md](../08-technical/WEBHOOKS.md) | Stripe webhook handling |

@@ -506,3 +506,21 @@ model ReconciliationReport {
 
   createdAt           DateTime @default(now())
 }
+
+// Learning content mapped to PDA feedback codes.
+// Admin creates content; system auto-recommends based on student's recent feedback.
+model LearningContent {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String
+  tipText     String
+  videoUrl    String?  // null until video is uploaded/generated
+  thumbnailUrl String?
+  category    String   // PDACategory enum value
+  difficulty  String   @default("basic") // basic | intermediate | advanced
+  pdaCodes    Int[]    // PDA error codes this content addresses
+  durationSec Int?     // video length in seconds
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
