@@ -250,14 +250,17 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 | Feature | Documented | Status |
 |---------|-----------|--------|
-| `sendReminder` in compliance route | Logs intent only | No email sent |
+| `sendReminder` in compliance route | Logs intent only | No email sent — `console.log` only |
 | Staff governance stats API `/api/admin/staff-governance/stats` | Documented in STAFF_GOVERNANCE.md | Endpoint does not exist |
-| `STRIPE_WEBHOOK_SECRET` | ~~Placeholder~~ | **RESOLVED** — `whsec_Y1LremsxnEOw39xSuUor4dx0fEDCkRJo` set (test mode) |
-| ABR_GUID | ~~Pending~~ | **RESOLVED** — `a3a72990-08b2-4ed8-b7f1-8b385339c9b7` set; recheck-abn cron is now active |
-| Prisma client stale | ~~Not generated~~ | **RESOLVED** — `prisma generate` run March 2026; payout service functional |
-| Stripe Connect automated transfer | Documented as "not yet configured" | Manual bank transfer only |
-| AuditLog on booking creation | Documented in SYSTEM_FLOWS.md | Not implemented |
-| AuditLog on admin booking status change | Documented in SYSTEM_FLOWS.md | Not implemented |
+| `STRIPE_WEBHOOK_SECRET` | ~~Placeholder~~ | **RESOLVED** — set in .env (test mode) |
+| ABR_GUID | ~~Pending~~ | **RESOLVED** — set in .env; recheck-abn cron active (weekly, Mondays 2am) |
+| Prisma client stale | ~~Not generated~~ | **RESOLVED** — `prisma generate` run March 2026 |
+| Stripe Connect automated transfer | ~~Documented as "not yet configured"~~ | **RESOLVED** — `payout-service.ts` fully implements Stripe Connect path (`payoutMethod === 'stripe_connect'`). Instructors need `stripeAccountId` set to use it. |
+| AuditLog on booking creation | Documented in SYSTEM_FLOWS.md | Not implemented — `POST /api/bookings` creates no AuditLog |
+| AuditLog on admin booking status change | Documented in SYSTEM_FLOWS.md | Not implemented — `PATCH /api/admin/bookings` creates no AuditLog |
+| Google Calendar fields missing from schema | Was causing crash on every booking | **RESOLVED** — `googleAccessToken`, `googleRefreshToken`, `googleCalendarId` added to schema March 2026 |
+| Commission hardcoded | Was 15% regardless of tier | **RESOLVED** — both booking routes now use `getCommissionRate(tier)` |
+| Wallet balance drift | Instructor path didn't update stored balance | **RESOLVED** — atomic decrement added March 2026 |
 
 ---
 
@@ -277,13 +280,23 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-## Priority Actions
+## Priority Actions — Remaining Open Gaps
 
-1. ~~Run `prisma generate`~~ — **DONE** (March 2026)
-2. ~~Set `STRIPE_WEBHOOK_SECRET`~~ — **DONE**
-3. ~~Fix `wallet.balance` drift~~ — **DONE** (March 2026) — instructor booking path now updates stored balance atomically
-4. ~~Commission hardcoded at 15%~~ — **DONE** (March 2026) — both booking routes now use `getCommissionRate(tier)`
-5. Update `STATE_MACHINES.md` transaction states to match actual status values (`SETTLED` not `COMPLETED`)
-6. Add AuditLog to admin booking PATCH (BOOKING_COMPLETED, NO_SHOW_MARKED)
-7. Fix no-show tagging from description string to a proper field or status
-8. When going live: replace test-mode Stripe webhook secret with production secret
+### Production-blocking (fix before go-live)
+1. **Replace test Stripe webhook secret** — `STRIPE_WEBHOOK_SECRET` in Vercel env vars must be the production webhook secret, not the test one
+2. **Rotate all secrets** — DB password, Stripe keys, Twilio token were in git history — rotate before launch
+
+### High priority (affects data integrity)
+3. **Cancellation split-transaction risk** (gap 3.3) — wallet credited before booking status update; if second transaction fails, wallet is over-credited. Wrap both in a single `$transaction`.
+4. **Ledger can silently miss payments** (gap 2.4) — `recordPaymentCollected()` is outside the main transaction. If it throws, booking is confirmed but ledger is wrong.
+
+### Medium priority (audit trail)
+5. **Add AuditLog to admin booking PATCH** — BOOKING_COMPLETED and NO_SHOW_MARKED events are missing
+6. **Add AuditLog to booking creation** — BOOKING_CREATED event missing from instructor path
+7. **Fix no-show tagging** — currently a string prefix in `description` field; fragile for dispute detection
+
+### Low priority (docs only)
+8. Update `STATE_MACHINES.md` — transaction states: `SETTLED` not `COMPLETED`, `CANCELLED` not `REFUNDED`
+9. Update `SYSTEM_FLOWS.md` — distinguish instructor-created vs Stripe booking paths
+10. Document `sendReminder` as not yet implemented (currently a no-op `console.log`)
+11. Document staff governance stats endpoint as missing
