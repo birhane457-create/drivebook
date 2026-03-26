@@ -6,7 +6,7 @@ async function initSubscriptionData() {
   try {
     console.log('Initializing subscription data for existing instructors...\n');
     
-    // Set trial end date to 14 days from now for all instructors
+    // //Set trial end date to 14 days from now for all instructors
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + 14);
     
