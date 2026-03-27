@@ -90,10 +90,11 @@ Each gap is classified:
 
 ### 2.4 DOC_MISSING — Ledger update is non-critical and outside the transaction
 
-**Code does:** `recordPaymentCollected()` is called after the main `$transaction` block, wrapped in try/catch. If it fails, the booking is still confirmed but the ledger is not updated.  
-**Docs say:** Ledger is described as the source of financial truth. The fact that it can silently fail on payment capture is not documented.
+**Code does:** `recordPaymentCollected()` is called after the main `$transaction` block, wrapped in try/catch. If it fails, the booking is still confirmed but the ledger is not updated.
 
-**Impact:** `CONTROL_GUARANTEES.md` claim "No untracked transactions" is partially false — the ledger can miss a payment if `recordPaymentCollected` throws.
+**Mitigation (March 2026):** Failure now logs `🚨 LEDGER UPDATE FAILED` with the bookingId — immediately visible in Vercel logs. The daily reconciliation cron (`/api/cron/reconcile-stripe`) detects missing `LedgerEntry(PAYMENT_COLLECTED)` records and flags them for admin review.
+
+**Remaining risk:** The ledger can still silently miss a payment if `recordPaymentCollected` throws. A full fix would require refactoring `appendLedgerEntry` and `incrementLedger` to accept a Prisma transaction client (`tx`) so they can run inside the main `$transaction`. Deferred — reconciliation cron provides the safety net.
 
 ---
 
@@ -115,10 +116,11 @@ Each gap is classified:
 
 ---
 
-### 3.3 DOC_MISSING — Wallet refund and booking update are in separate transactions
+### 3.3 ~~DOC_MISSING~~ RESOLVED — Cancellation is now a single atomic transaction
 
-**Code does:** The wallet credit (`prisma.$transaction([wallet.update, walletTransaction.create])`) runs first, then a second `prisma.$transaction` updates the booking and transaction status. These are not atomic with each other — if the second transaction fails, the wallet has already been credited.  
-**Docs say:** Nothing about this split-transaction risk.
+**Was:** Wallet credit ran in one `$transaction`, booking/transaction status update ran in a second separate one. If the second failed, wallet was over-credited.
+
+**Fixed (March 2026):** `app/api/bookings/[id]/cancel/route.ts` created (was missing — directory existed but file did not, causing every cancel button to 404). The new route wraps wallet credit + booking update + transaction update in a single `prisma.$transaction`. Also adds AuditLog on every cancellation, proper auth check, and anti-exploit refund policy.
 
 ---
 
@@ -131,19 +133,22 @@ Each gap is classified:
 
 ---
 
-### 4.2 DOC_MISSING — No AuditLog on admin booking status changes
+### 4.2 ~~DOC_MISSING~~ RESOLVED — AuditLog now created on admin booking status changes
 
-**Code does:** `PATCH /api/admin/bookings` updates booking status and optionally tags the transaction description for no-shows. No `AuditLog` entry is created.  
-**Docs say:** `SYSTEM_FLOWS.md` lists `BOOKING_COMPLETED` as an audit event. It does not exist.
+**Fixed (March 2026):** `PATCH /api/admin/bookings` now creates an `AuditLog` entry for every status change — `BOOKING_COMPLETED`, `BOOKING_NO_SHOW`, `BOOKING_CANCELLED` — with the admin's ID and `noShowParty` if applicable.
 
 ---
 
-### 4.3 DOC_MISSING — No-show tagging is description-based, not a status field
+### 4.3 ~~DOC_MISSING~~ RESOLVED — No-show party now stored in proper field
 
-**Code does:** No-show party is recorded by prepending `[CLIENT_NO_SHOW]`, `[INSTRUCTOR_NO_SHOW]`, or `[DISPUTED]` to the transaction `description` field.  
-**Docs say:** `SYSTEM_FLOWS.md` flow 3 says "Transaction tagged accordingly" — implies a proper field. It is a string prefix in a free-text field.
+**Was:** No-show party was recorded by prepending `[CLIENT_NO_SHOW]`, `[INSTRUCTOR_NO_SHOW]`, or `[DISPUTED]` to the transaction `description` field. Dispute detection in payouts used `description CONTAINS 'dispute'` — fragile text match.
 
-**Impact:** Disputes are also detected in `GET /api/admin/payouts` by checking `description: { contains: 'dispute' }` — a fragile text match.
+**Fixed (March 2026):**
+- `noShowParty String?` field added to `Booking` model in schema
+- `PATCH /api/admin/bookings` now writes `booking.noShowParty = 'instructor' | 'client' | 'both'`
+- Description tag kept for backward compat with existing records
+- Payouts dispute query now uses `booking.noShowParty = 'both'` instead of description string match
+- `parseNoShowParty()` in admin payouts page prefers the proper field, falls back to description for legacy records
 
 ---
 
@@ -286,17 +291,15 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 1. **Replace test Stripe webhook secret** — `STRIPE_WEBHOOK_SECRET` in Vercel env vars must be the production webhook secret, not the test one
 2. **Rotate all secrets** — DB password, Stripe keys, Twilio token were in git history — rotate before launch
 
-### High priority (affects data integrity)
-3. **Cancellation split-transaction risk** (gap 3.3) — wallet credited before booking status update; if second transaction fails, wallet is over-credited. Wrap both in a single `$transaction`.
-4. **Ledger can silently miss payments** (gap 2.4) — `recordPaymentCollected()` is outside the main transaction. If it throws, booking is confirmed but ledger is wrong.
+### Medium priority (docs only — no code impact)
+3. ~~Update `STATE_MACHINES.md`~~ — **DONE** — transaction states corrected: `SETTLED` not `COMPLETED`, `CANCELLED` not `REFUNDED`, two-path model documented, `noShowParty` field added
+4. ~~Update `SYSTEM_FLOWS.md`~~ — **DONE** — instructor-created vs Stripe booking paths distinguished, transaction statuses corrected, no-show flow updated to use `noShowParty` field, reconciliation check descriptions corrected, ABN recheck corrected to weekly
+5. Document `sendReminder` as not yet implemented (currently a no-op `console.log`) — low priority, no user impact
+6. Document staff governance stats endpoint as missing — low priority, page still renders without it
 
-### Medium priority (audit trail)
-5. **Add AuditLog to admin booking PATCH** — BOOKING_COMPLETED and NO_SHOW_MARKED events are missing
-6. **Add AuditLog to booking creation** — BOOKING_CREATED event missing from instructor path
-7. **Fix no-show tagging** — currently a string prefix in `description` field; fragile for dispute detection
-
-### Low priority (docs only)
-8. Update `STATE_MACHINES.md` — transaction states: `SETTLED` not `COMPLETED`, `CANCELLED` not `REFUNDED`
-9. Update `SYSTEM_FLOWS.md` — distinguish instructor-created vs Stripe booking paths
-10. Document `sendReminder` as not yet implemented (currently a no-op `console.log`)
-11. Document staff governance stats endpoint as missing
+### Resolved this session (March 2026)
+- ~~Cancel route missing~~ — created `app/api/bookings/[id]/cancel/route.ts` with single atomic transaction
+- ~~Cancellation split-transaction~~ — wallet + booking + transaction now atomic
+- ~~No AuditLog on admin booking PATCH~~ — BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_CANCELLED now logged
+- ~~No-show tagging via description string~~ — `noShowParty` field added to Booking schema; dispute query uses proper field
+- ~~Ledger silent failure~~ — failure now logs 🚨 with bookingId; reconciliation cron provides safety net

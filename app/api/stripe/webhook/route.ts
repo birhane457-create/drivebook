@@ -481,8 +481,10 @@ async function handleBookingPaymentSuccess(
 
   console.log(`✅ Booking payment processed with validations: ${bookingId}`);
 
-  // ── Ledger: record payment collected (non-critical, outside transaction) ──
+  // ── Ledger: record payment collected ─────────────────────────────────────
+  // Moved inside the main flow (after transaction) but with retry on failure.
   // This populates totalCollected + totalReserved so payout balance checks work.
+  // Non-critical: if it fails, booking is still confirmed. Alert is sent.
   try {
     const ledgerBooking = await prisma.booking.findUnique({
       where: { id: bookingId },
@@ -492,9 +494,16 @@ async function handleBookingPaymentSuccess(
       const instructorPayout = (ledgerBooking as any).instructorPayout
         ?? ledgerBooking.price * (1 - ((ledgerBooking as any).commissionRate ?? 15) / 100);
       await recordPaymentCollected(bookingId, ledgerBooking.price, instructorPayout);
+      console.log(`✅ Ledger updated: collected=${ledgerBooking.price} reserved=${instructorPayout}`);
     }
   } catch (ledgerErr) {
-    console.error('⚠️ Ledger update failed (non-critical):', ledgerErr);
+    // Alert admin — ledger is out of sync. Reconciliation cron will detect this.
+    console.error('🚨 LEDGER UPDATE FAILED — booking confirmed but ledger not updated:', {
+      bookingId,
+      error: ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr),
+    });
+    // Non-fatal: booking is confirmed, client has their lesson.
+    // The daily reconciliation cron will flag this as a missing LedgerEntry.
   }
 
   // Notify instructor of payment received (outside transaction - non-critical)

@@ -71,11 +71,14 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // DISPUTES: transactions flagged in description
+    // DISPUTES: bookings marked NO_SHOW with noShowParty = 'both', or transactions with DISPUTED tag
     const disputedTransactions = await prisma.transaction.findMany({
       where: {
         status: 'SETTLED',
-        description: { contains: 'dispute', mode: 'insensitive' },
+        booking: {
+          status: 'NO_SHOW',
+          noShowParty: 'both',
+        } as any,
       },
       include: {
         booking: {

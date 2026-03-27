@@ -33,6 +33,8 @@ PENDING_PAYMENT
 
 COMPLETED and CANCELLED are terminal states. No further transitions except SUPER_ADMIN override.
 
+**No-show party:** When a booking is marked `NO_SHOW`, the `noShowParty` field on the `Booking` record is set to `'instructor'`, `'client'`, or `'both'`. This determines the resolution path in the Payouts admin panel.
+
 ---
 
 ## Instructor States
@@ -64,19 +66,33 @@ Suspended instructors: cannot accept new bookings, existing confirmed bookings a
 
 ## Transaction States
 
+There are two booking creation paths with different transaction flows:
+
+**Path A — Instructor wallet booking** (instructor creates booking for client):
 ```
-PENDING
+Created as COMPLETED directly
     │
-    └─► COMPLETED        (payment confirmed)
+    └─► SETTLED      (booking confirmed, eligible for payout)
             │
-            ├─► SETTLED      (approved for payout — admin action)
-            │
-            ├─► REFUNDED     (refund issued)
-            │
-            └─► FAILED       (payment or payout failure)
+            ├─► CANCELLED    (booking cancelled — refund issued)
+            └─► REFUNDED     (dispute resolution — partial or full refund)
 ```
 
-Transactions are immutable — status is the only mutable field. All adjustments create new linked transaction records.
+**Path B — Stripe payment booking** (client books via /book):
+```
+Created in initial state
+    │
+    └─► SETTLED      (Stripe webhook: payment_intent.succeeded)
+            │
+            ├─► CANCELLED    (booking cancelled — refund issued)
+            └─► REFUNDED     (dispute resolution — partial or full refund)
+```
+
+**Key facts:**
+- `SETTLED` is the status that makes a transaction payout-eligible (not `COMPLETED`)
+- `CANCELLED` is used when a booking is cancelled (not `REFUNDED`)
+- `REFUNDED` is only used via the dispute resolve endpoint for partial/full dispute refunds
+- Transactions are immutable — status is the only mutable field. All adjustments create new linked transaction records.
 
 ---
 

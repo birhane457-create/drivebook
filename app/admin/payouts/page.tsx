@@ -61,7 +61,12 @@ type Tab = 'eligible' | 'manual' | 'withheld' | 'disputes';
 type ResolveAction = 'refund_client' | 'approve_for_payout' | 'charge_instructor' | 'void' | 'split';
 type NoShowParty = 'instructor' | 'client' | 'both';
 
-function parseNoShowParty(description?: string): NoShowParty | null {
+function parseNoShowParty(description?: string, noShowParty?: string | null): NoShowParty | null {
+  // Prefer the proper field if available
+  if (noShowParty === 'instructor') return 'instructor';
+  if (noShowParty === 'client') return 'client';
+  if (noShowParty === 'both') return 'both';
+  // Fall back to description string for legacy records
   if (!description) return null;
   if (description.includes('INSTRUCTOR_NO_SHOW')) return 'instructor';
   if (description.includes('CLIENT_NO_SHOW')) return 'client';
@@ -375,7 +380,7 @@ function ResolveModal({ target, onClose, onDone }: {
 // Case Card (withheld / disputes)
 function CaseCard({ txn, instructorName, onResolve }: { txn: WithheldTxn | Dispute; instructorName: string; onResolve: () => void; }) {
   const [open, setOpen] = useState(false);
-  const party = parseNoShowParty(txn.description);
+  const party = parseNoShowParty(txn.description, (txn as any).noShowParty);
   const partyConfig = party ? PARTY_CONFIG[party] : null;
   const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
   const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -524,7 +529,7 @@ export default function AdminPayoutsPage() {
       clientPhone: t.clientPhone, clientEmail: t.clientEmail, instructorPhone: t.instructorPhone,
       pickupAddress: t.pickupAddress, notes: t.notes, isPackageBooking: t.isPackageBooking,
       bookingStatus: t.bookingStatus, description: t.description,
-      noShowParty: parseNoShowParty(t.description),
+      noShowParty: parseNoShowParty(t.description, (t as any).noShowParty),
     });
 
   const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;

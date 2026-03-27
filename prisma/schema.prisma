@@ -202,7 +202,8 @@ model Booking {
   rescheduledFrom       Json?
   rescheduleCount       Int        @default(0)
   deletedAt             DateTime? // soft delete timestamp
-  deletedBy             String? // userId who deleted it
+  deletedBy             String?   // userId who deleted it
+  noShowParty           String?   // 'instructor' | 'client' | 'both' — set when status = NO_SHOW
   // Google Calendar
   googleCalendarEventId String?   // used by calendar sync routes
   // Lesson feedback fields

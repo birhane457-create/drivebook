@@ -6,30 +6,40 @@ All major end-to-end flows through the DriveBook platform. Each flow shows the s
 
 ## 1. Booking → Payment → Completion → Payout
 
+There are two distinct booking creation paths:
+
+**Path A — Instructor creates booking (wallet payment):**
 ```
-1. Client searches instructors (/book)
-2. Client selects slot and submits booking form
-3. POST /api/bookings → Booking created (PENDING_PAYMENT)
-   └─ Slot held for 10 minutes
-4. Client pays via Stripe or wallet
-   ├─ Stripe: POST /api/payments/create-intent → PaymentIntent created
-   │          Stripe webhook (payment_intent.succeeded) → Booking → CONFIRMED
-   │          Transaction created (BOOKING_PAYMENT, COMPLETED)
-   └─ Wallet: POST /api/bookings/[id]/confirm → Wallet debited atomically
-              Booking → CONFIRMED, Transaction created
-5. Lesson occurs
-6. Admin marks booking COMPLETED (/admin/bookings)
-   └─ POST /api/admin/bookings → status: COMPLETED
-   └─ Transaction becomes payout-eligible (after 24h buffer)
-7. Admin processes payout (/admin/payouts)
-   └─ POST /api/admin/payouts/process → Payout created
-   └─ POST /api/admin/payouts/resolve (action: approve_for_payout) → Transaction → SETTLED
-   └─ AuditLog: APPROVE_FOR_PAYOUT
-8. Stripe Connect transfer (if configured) or manual bank transfer
-   └─ AuditLog: PAYOUT_PAID
+1. Instructor opens booking form (/dashboard/bookings/new)
+2. POST /api/bookings → Booking created (CONFIRMED directly, no PENDING_PAYMENT)
+   └─ Wallet debited atomically in same transaction
+   └─ Transaction created (BOOKING_PAYMENT, COMPLETED)
+3. Lesson occurs
+4. Admin marks booking COMPLETED (/admin/bookings)
+   └─ PATCH /api/admin/bookings → status: COMPLETED
+   └─ AuditLog: BOOKING_COMPLETED
+   └─ Transaction becomes payout-eligible after 24h buffer (status stays COMPLETED until payout)
+5. Admin processes payout (/admin/payouts)
+   └─ POST /api/admin/payouts/process → Payout created, Transaction → SETTLED
+   └─ AuditLog: PAYOUT_PAID (Stripe) or PAYOUT_PENDING_TRANSFER (bank)
 ```
 
-AuditLog entries created: `BOOKING_CREATED`, `BOOKING_CONFIRMED`, `BOOKING_COMPLETED`, `APPROVE_FOR_PAYOUT`, `PAYOUT_PAID`
+**Path B — Client books via public flow (Stripe payment):**
+```
+1. Client searches instructors (/book)
+2. Client selects slot → POST /api/public/bookings → Booking created (PENDING_PAYMENT)
+   └─ Slot held for 10 minutes
+3. Client pays via Stripe
+   └─ POST /api/payments/create-intent → PaymentIntent created
+   └─ Stripe webhook (payment_intent.succeeded) → Booking → CONFIRMED
+   └─ Transaction → SETTLED (payout-eligible immediately after 24h buffer)
+4. Lesson occurs
+5. Admin marks booking COMPLETED → same as Path A steps 4–5
+```
+
+AuditLog entries created: `BOOKING_COMPLETED`, `PAYOUT_PAID`
+
+Note: `BOOKING_CREATED` is not currently logged for instructor-created bookings (known gap — low priority).
 
 ---
 
@@ -42,11 +52,14 @@ AuditLog entries created: `BOOKING_CREATED`, `BOOKING_CONFIRMED`, `BOOKING_COMPL
    ├─ ≥48h notice → 100% refund
    ├─ 24–48h notice → 50% refund
    └─ <24h notice → 0% refund
-3. Refund transaction created (type: REFUND, negative amount)
-   └─ Linked to original transaction via parentTransactionId
-4. Wallet credited (if wallet booking) or Stripe refund issued
-5. Booking → CANCELLED
-6. AuditLog: BOOKING_CANCELLED, REFUND_ISSUED
+   Note: policy applies to min(originalStartTime, currentStartTime)
+         to prevent reschedule-then-cancel exploit
+3. Single atomic transaction:
+   ├─ Wallet credited (if refund > 0)
+   ├─ Booking → CANCELLED
+   └─ Transaction → CANCELLED (not REFUNDED — REFUNDED is only for dispute resolutions)
+4. AuditLog: BOOKING_CANCELLED (includes refundPercentage, refundAmount, cancelledBy)
+5. Email sent to client and instructor
 ```
 
 Note: If instructor has already been paid, refund requires SUPER_ADMIN override and creates a `REFUND_AFTER_PAYOUT` audit entry.
@@ -57,13 +70,16 @@ Note: If instructor has already been paid, refund requires SUPER_ADMIN override 
 
 ```
 1. Admin marks booking as NO_SHOW (/admin/bookings)
-   └─ Admin selects responsible party: CLIENT / INSTRUCTOR / DISPUTED
-2. Transaction tagged accordingly:
-   ├─ CLIENT_NO_SHOW → client forfeits payment, instructor may still be paid
-   ├─ INSTRUCTOR_NO_SHOW → client refunded, instructor not paid
-   └─ DISPUTED → routed to dispute resolution
-3. Payout adjusted based on no-show party
-4. AuditLog: NO_SHOW_MARKED with metadata (party, bookingId)
+   └─ Admin selects responsible party: instructor / client / both
+2. PATCH /api/admin/bookings → status: NO_SHOW
+   └─ booking.noShowParty = 'instructor' | 'client' | 'both' (proper field)
+   └─ Transaction description tagged for backward compat: [INSTRUCTOR_NO_SHOW] etc.
+3. AuditLog: BOOKING_NO_SHOW (includes noShowParty)
+4. Booking appears in Payouts admin:
+   ├─ noShowParty = 'client' → Withheld tab (instructor may still be paid)
+   ├─ noShowParty = 'instructor' → Withheld tab (client should be refunded)
+   └─ noShowParty = 'both' → Disputes tab (manual resolution required)
+5. Admin resolves via Payouts → Withheld or Disputes tab
 ```
 
 ---
@@ -94,9 +110,9 @@ Note: If instructor has already been paid, refund requires SUPER_ADMIN override 
 1. GET /api/cron/reconcile-stripe runs at 19:00 UTC (03:00 AWST)
    └─ Concurrency lock prevents double-run
 2. Three checks performed:
-   ├─ Check 1: Completed bookings with no transaction record
-   ├─ Check 2: SETTLED transactions with no Stripe transfer
-   └─ Check 3: Payouts stuck in PROCESSING >24h
+   ├─ Check 1: Stripe payment_intent.succeeded events with no corresponding LedgerEntry(PAYMENT_COLLECTED)
+   ├─ Check 2: PAID payouts with stripeTransferId not found in Stripe
+   └─ Check 3: Payouts stuck in PROCESSING >10 minutes (not 24h — threshold is `STUCK_THRESHOLD_MINUTES = 10`)
 3. Results stored in ReconciliationReport (DB)
 4. If any issues found:
    └─ Alert email sent via alert-service
@@ -121,7 +137,7 @@ Note: If instructor has already been paid, refund requires SUPER_ADMIN override 
 4. Admin can manually verify/revoke:
    └─ POST /api/admin/instructors/[id]/verify-abn
    └─ AuditLog: ABN_VERIFIED or ABN_VERIFICATION_REVOKED
-5. Daily cron (GET /api/cron/recheck-abn) re-validates all active ABNs
+5. Weekly cron (GET /api/cron/recheck-abn, runs Mondays 02:00 AWST) re-validates all active ABNs
    └─ If previously verified ABN is now cancelled → revoke + alert
 ```
 

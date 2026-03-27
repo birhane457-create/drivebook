@@ -103,8 +103,15 @@ export async function PATCH(req: NextRequest) {
       select: { id: true, status: true, transactions: { select: { id: true } } },
     });
 
-    // If marking NO_SHOW, tag the transaction with who didn't show so Payouts can surface it
+    // If marking NO_SHOW, store party on the booking AND tag the transaction description
     if (status === 'NO_SHOW' && noShowParty) {
+      // Write to proper field
+      await (prisma as any).booking.update({
+        where: { id: bookingId },
+        data: { noShowParty },
+      });
+
+      // Also tag transaction description for backward compat with payouts dispute detection
       const txnId = (booking as any).transactions?.[0]?.id;
       if (txnId) {
         const partyLabel = noShowParty === 'instructor' ? 'INSTRUCTOR_NO_SHOW'
@@ -116,6 +123,22 @@ export async function PATCH(req: NextRequest) {
         });
       }
     }
+
+    // AuditLog — every admin booking status change is recorded
+    await prisma.auditLog.create({
+      data: {
+        action: status === 'COMPLETED' ? 'BOOKING_COMPLETED'
+          : status === 'NO_SHOW' ? 'BOOKING_NO_SHOW'
+          : status === 'CANCELLED' ? 'BOOKING_CANCELLED'
+          : `BOOKING_STATUS_${status}`,
+        actorId: admin.id,
+        actorRole: 'ADMIN',
+        targetType: 'BOOKING',
+        targetId: bookingId,
+        success: true,
+        metadata: { status, noShowParty: noShowParty ?? null } as any,
+      },
+    });
 
     return NextResponse.json({ success: true, booking });
   } catch (error) {
