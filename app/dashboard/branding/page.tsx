@@ -556,38 +556,65 @@ function CustomDomainWizard({
         <p className="text-xs font-semibold text-gray-700 mb-3">Step 1 — Add this DNS record at your registrar:</p>
 
         {customDomain ? (() => {
-          // Parse the domain to figure out what DNS record to show
-          // e.g. "bookings.myschool.com.au" → name="bookings", root="myschool.com.au"
-          // e.g. "myschool.com.au" → root domain, must use A record or subdomain
           const parts = customDomain.split('.')
           const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
           const tld2 = parts.slice(-2).join('.')
           const isCompoundTLD = twoPartTLDs.includes(tld2)
-          const rootParts = isCompoundTLD ? 3 : 2 // e.g. myschool.com.au = 3 parts
+          const rootParts = isCompoundTLD ? 3 : 2
           const isRootDomain = parts.length <= rootParts
           const cnameLabel = isRootDomain ? '@' : parts.slice(0, parts.length - rootParts).join('.')
 
           return isRootDomain ? (
-            <div>
-              <div className="overflow-x-auto mb-2">
-                <table className="w-full text-xs font-mono">
-                  <thead><tr className="text-gray-500 font-sans">
-                    <th className="text-left pr-3 pb-1">Type</th>
-                    <th className="text-left pr-3 pb-1">Name</th>
-                    <th className="text-left pb-1">Value</th>
-                  </tr></thead>
-                  <tbody><tr>
-                    <td className="pr-3 text-gray-800">CNAME</td>
-                    <td className="pr-3 text-gray-800">www</td>
-                    <td className="text-indigo-700">cname.vercel-dns.com</td>
-                  </tr></tbody>
-                </table>
-              </div>
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-                Root domains (e.g. <span className="font-mono">{customDomain}</span>) can't use CNAME. Use <span className="font-mono">www.{customDomain}</span> instead, or use a subdomain like <span className="font-mono">bookings.{customDomain}</span>.
+            // Root domain — can't CNAME apex, show all 3 options
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600">
+                <span className="font-mono font-semibold">{customDomain}</span> is a root domain. Root domains can't use a standard CNAME record. Pick one of these options:
               </p>
+
+              <details className="group">
+                <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
+                  <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option A</span>
+                  ALIAS / ANAME record <span className="text-gray-400 font-normal">(if your registrar supports it)</span>
+                </summary>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200">
+                  <table className="w-full text-xs font-mono mb-1">
+                    <thead><tr className="text-gray-500 font-sans"><th className="text-left pr-3 pb-1">Type</th><th className="text-left pr-3 pb-1">Name</th><th className="text-left pb-1">Value</th></tr></thead>
+                    <tbody><tr>
+                      <td className="pr-3 text-gray-800">ALIAS or ANAME</td>
+                      <td className="pr-3 text-gray-800">@ (root)</td>
+                      <td className="text-indigo-700">cname.vercel-dns.com</td>
+                    </tr></tbody>
+                  </table>
+                  <p className="text-xs text-gray-500">Supported by VentraIP, Cloudflare, and some others. Check your registrar's DNS panel for ALIAS or ANAME.</p>
+                </div>
+              </details>
+
+              <details className="group">
+                <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
+                  <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option B</span>
+                  Use Cloudflare DNS <span className="text-gray-400 font-normal">(free, recommended)</span>
+                </summary>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 text-xs text-gray-600 space-y-1">
+                  <p>1. Create a free Cloudflare account and add your domain</p>
+                  <p>2. Update your nameservers at your registrar to Cloudflare's</p>
+                  <p>3. In Cloudflare DNS, add: <span className="font-mono">CNAME @ → cname.vercel-dns.com</span> (Cloudflare flattens it automatically)</p>
+                </div>
+              </details>
+
+              <details className="group">
+                <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
+                  <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option C</span>
+                  Use www instead <span className="text-gray-400 font-normal">(simplest)</span>
+                </summary>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 text-xs text-gray-600 space-y-1">
+                  <p>1. Add a CNAME at your registrar: <span className="font-mono">www → cname.vercel-dns.com</span></p>
+                  <p>2. Set up a URL redirect at your registrar: <span className="font-mono">{customDomain}</span> → <span className="font-mono">www.{customDomain}</span></p>
+                  <p>3. Enter <span className="font-mono">www.{customDomain}</span> in the domain field above instead</p>
+                </div>
+              </details>
             </div>
           ) : (
+            // Subdomain — straightforward CNAME
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono">
                 <thead><tr className="text-gray-500 font-sans">
@@ -602,7 +629,7 @@ function CustomDomainWizard({
                 </tr></tbody>
               </table>
               <p className="text-xs text-gray-500 mt-2">
-                At your registrar, the "Name" or "Host" field is just <span className="font-mono font-semibold">{cnameLabel}</span> — not the full domain.
+                In your registrar's DNS panel, the "Name" or "Host" field is just <span className="font-mono font-semibold">{cnameLabel}</span> — not the full domain. The value always points to <span className="font-mono">cname.vercel-dns.com</span>.
               </p>
             </div>
           )
