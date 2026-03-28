@@ -278,6 +278,24 @@ export default function BrandingPage() {
                 </h2>
                 <p className="text-sm text-gray-500 mb-4">Share this link with students to book directly with you</p>
 
+                {/* Default URL — always works even without a custom slug */}
+                {instructor?.id && !savedSubdomain && (
+                  <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1">Your default booking URL (always active):</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <a href={`https://${instructor.id}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
+                        className="text-gray-600 text-xs hover:underline truncate font-mono">
+                        {instructor.id}.drivebook.com.au
+                      </a>
+                      <button type="button" onClick={() => copyUrl(`https://${instructor.id}.drivebook.com.au`)}
+                        className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">
+                        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Set a custom slug below to get a friendlier URL</p>
+                  </div>
+                )}
+
                 {savedSubdomain && (
                   <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between gap-2">
                     <a href={`https://${savedSubdomain}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"

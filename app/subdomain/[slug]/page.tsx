@@ -16,7 +16,12 @@ export async function generateMetadata({
   params: { slug: string };
 }): Promise<Metadata> {
   const instructor = await prisma.instructor.findFirst({
-    where: { customDomain: params.slug },
+    where: {
+      OR: [
+        { customDomain: params.slug },
+        { id: params.slug },
+      ],
+    },
     select: {
       name: true,
       bio: true,
@@ -62,8 +67,16 @@ export default async function SubdomainBookingPage({
   params: { slug: string };
   searchParams: { location?: string };
 }) {
+  // Look up by customDomain slug first, then fall back to instructor ID
+  // This means every instructor has a default URL at <id>.drivebook.com.au
+  // even before they set a custom subdomain slug
   const instructor = await prisma.instructor.findFirst({
-    where: { customDomain: params.slug },
+    where: {
+      OR: [
+        { customDomain: params.slug },
+        { id: params.slug },
+      ],
+    },
     select: {
       id: true,
       name: true,
