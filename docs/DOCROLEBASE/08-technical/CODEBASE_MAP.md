@@ -1,6 +1,6 @@
 # DriveBook — Codebase Map
 
-**Stack:** Next.js 14 (App Router) · MongoDB · Prisma · Stripe · NextAuth · Azure Copilot Studio  
+**Stack:** Next.js 14 (App Router) · PostgreSQL (Supabase) · Prisma · Stripe · NextAuth · Azure Copilot Studio  
 **Hosted:** Vercel · drivebook.com.au  
 **Last Updated:** March 2026  
 
@@ -297,6 +297,8 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 |---------|------|
 | Prisma schema | `prisma/schema.prisma` |
 | Prisma client | `lib/prisma.ts` |
+| Prisma migrations | `prisma/migrations/` |
+| Database | PostgreSQL via Supabase (project: zzntmozvppyzeaqautpi, pooler port 6543) |
 | NextAuth | `lib/auth.ts` |
 | Middleware | `middleware.ts` |
 | Next.js config | `next.config.js` |

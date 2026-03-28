@@ -9,7 +9,10 @@ export const dynamic = 'force-dynamic';
 const settingsSchema = z.object({
   hourlyRate: z.number().positive().optional(),
   serviceRadiusKm: z.number().min(1).max(100).optional(), // Changed from min(5) to min(1)
-  vehicleTypes: z.array(z.enum(['AUTO', 'MANUAL'])).optional(),
+  vehicleTypes: z.union([
+    z.array(z.enum(['AUTO', 'MANUAL'])),
+    z.enum(['AUTO', 'MANUAL']).transform(v => [v]),
+  ]).optional(),
   workingHours: z.object({
     monday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
     tuesday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),

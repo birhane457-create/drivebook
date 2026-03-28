@@ -3,7 +3,7 @@
 **Platform:** drivebook.com.au  
 **Governing Law:** Western Australia  
 **Timezone:** Australia/Perth (AWST, UTC+8)  
-**Stack:** Next.js 14, MongoDB, Prisma, Stripe, Vercel
+**Stack:** Next.js 14, PostgreSQL (Supabase), Prisma, Stripe, Vercel
 
 ---
 

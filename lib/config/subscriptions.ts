@@ -57,7 +57,33 @@ export const SUBSCRIPTION_PLANS = {
       apiAccess: false,
     },
   },
-  
+
+  STUDIO: {
+    name: 'Studio',
+    monthlyPrice: Number(process.env.STUDIO_MONTHLY_PRICE) || 129,
+    annualPrice: Number(process.env.STUDIO_ANNUAL_PRICE) || 1290,
+    commissionRate: Number(process.env.STUDIO_COMMISSION_RATE) || 11,
+    newStudentBonus: Number(process.env.STUDIO_NEW_STUDENT_BONUS) || 10,
+    trialDays: Number(process.env.STUDIO_TRIAL_DAYS) || 14,
+    features: [
+      'Everything in Pro',
+      'Custom domain (bring your own)',
+      '1 year free domain included',
+      'Branded booking page on your domain',
+      'White-label experience',
+      `${Number(process.env.STUDIO_COMMISSION_RATE) || 11}% commission per booking`,
+      `${Number(process.env.STUDIO_NEW_STUDENT_BONUS) || 10}% bonus for new students`,
+      'Priority support',
+    ],
+    limits: {
+      instructors: 1,
+      customDomain: true,
+      brandedPages: true,
+      prioritySupport: true,
+      apiAccess: false,
+    },
+  },
+
   BUSINESS: {
     name: 'Business',
     monthlyPrice: Number(process.env.BUSINESS_MONTHLY_PRICE) || 199,
@@ -98,6 +124,8 @@ export const STRIPE_PRICE_IDS = {
   BASIC_ANNUAL: process.env.STRIPE_BASIC_ANNUAL_PRICE_ID || 'price_basic_annual',
   PRO_MONTHLY: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly',
   PRO_ANNUAL: process.env.STRIPE_PRO_ANNUAL_PRICE_ID || 'price_pro_annual',
+  STUDIO_MONTHLY: process.env.STRIPE_STUDIO_MONTHLY_PRICE_ID || 'price_studio_monthly',
+  STUDIO_ANNUAL: process.env.STRIPE_STUDIO_ANNUAL_PRICE_ID || 'price_studio_annual',
   BUSINESS_MONTHLY: process.env.STRIPE_BUSINESS_MONTHLY_PRICE_ID || 'price_business_monthly',
   BUSINESS_ANNUAL: process.env.STRIPE_BUSINESS_ANNUAL_PRICE_ID || 'price_business_annual',
 } as const;
@@ -148,6 +176,7 @@ export function getStripePriceId(tier: SubscriptionTier, billingCycle: 'monthly'
 export const COMMISSION_RATES = {
   BASIC: 15,
   PRO: 12,
+  STUDIO: 11,
   BUSINESS: 10,
 } as const;
 
@@ -155,5 +184,6 @@ export const COMMISSION_RATES = {
 export const NEW_STUDENT_BONUS = {
   BASIC: 8,
   PRO: 10,
+  STUDIO: 10,
   BUSINESS: 12,
 } as const;

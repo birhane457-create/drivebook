@@ -33,6 +33,23 @@ export async function middleware(req: NextRequest) {
   }
   // ─────────────────────────────────────────────────────────────────────────
 
+  // ── CUSTOM DOMAIN (Studio tier) ──────────────────────────────────────────
+  // If the host is not our own domain, treat it as a custom domain booking page
+  const isOwnDomain = hostname.includes('drivebook.com.au') || hostname.includes('localhost') || hostname.includes('vercel.app')
+  if (!isOwnDomain) {
+    const skipPaths = ['/api', '/_next', '/static', '/booking', '/login', '/register', '/dashboard', '/admin', '/client-dashboard']
+    const shouldRewrite = !skipPaths.some(p => url.pathname.startsWith(p))
+    if (shouldRewrite) {
+      const rest = url.pathname === '/' ? '' : url.pathname
+      url.pathname = `/custom-domain${rest}`
+      const response = NextResponse.rewrite(url)
+      response.headers.set('x-custom-domain', hostname.split(':')[0])
+      return response
+    }
+    return NextResponse.next()
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Extract subdomain FIRST — before any public path short-circuits
   const subdomain = extractSubdomain(hostname)
 

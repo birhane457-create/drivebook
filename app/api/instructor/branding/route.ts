@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
         brandColorSecondary: true,
         showBrandingOnBookingPage: true,
         customDomain: true,
+        domainVerified: true,
+        domainVerifiedAt: true,
         subscriptionTier: true,
       },
     });

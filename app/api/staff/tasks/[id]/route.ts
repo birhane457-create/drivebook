@@ -13,12 +13,11 @@ export async function GET(
     // Guard invalid ids (e.g. the UI route '/staff/tasks/new')
     const id = params.id;
     if (!id || id === 'new') {
-      // Return null for "new" route (no DB call)
       return NextResponse.json(null);
     }
 
-    // Validate MongoDB ObjectId (24 hex chars)
-    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+    // Basic id validation for cuid/uuid format
+    if (id.length < 10) {
       return NextResponse.json({ error: 'Invalid task id' }, { status: 400 });
     }
 

@@ -133,6 +133,7 @@ DriveBook is a platform connecting driving instructors with learner drivers in A
 
 - **Timezone:** Australia/Perth (AWST, UTC+8)
 - **Currency:** AUD
+- **Database:** PostgreSQL via Supabase (project: zzntmozvppyzeaqautpi)
 - **GST:** 10% (included in displayed prices)
 - **Commission:** BASIC 15% / PRO 12% / BUSINESS 10% (DB-configurable via `/admin/pricing`)
 - **Trial:** BASIC/PRO 14 days, BUSINESS 30 days

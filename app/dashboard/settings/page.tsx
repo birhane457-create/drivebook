@@ -32,6 +32,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [workingHoursExpanded, setWorkingHoursExpanded] = useState(false)
+  const [bookingPrefsExpanded, setBookingPrefsExpanded] = useState(false)
+  const [packagesExpanded, setPackagesExpanded] = useState(false)
   const [formData, setFormData] = useState<{
     hourlyRate: number
     serviceRadiusKm: number
@@ -218,12 +220,23 @@ export default function SettingsPage() {
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Booking Preferences
-            </h2>
-            
-            <div className="space-y-6">
+            <div
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setBookingPrefsExpanded(!bookingPrefsExpanded)}
+            >
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Booking Preferences
+              </h2>
+              {bookingPrefsExpanded ? (
+                <ChevronUp className="h-5 w-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-500" />
+              )}
+            </div>
+
+            {bookingPrefsExpanded && (
+            <div className="space-y-6 mt-4">
               {/* Allowed Durations */}
               <div>
                 <label className="block text-sm font-medium mb-3">Lesson Durations You Offer</label>
@@ -362,6 +375,11 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+            )}
+
+            {!bookingPrefsExpanded && (
+              <p className="text-sm text-gray-500 mt-2">Click to expand and edit booking preferences</p>
+            )}
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
@@ -464,22 +482,36 @@ export default function SettingsPage() {
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setPackagesExpanded(!packagesExpanded)}
+            >
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Package className="h-5 w-5" />
                 Custom Lesson Packages
               </h2>
-              <button
-                type="button"
-                onClick={addLessonPackage}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
-              >
-                <Plus className="h-4 w-4" />
-                Add Package
-              </button>
+              <div className="flex items-center gap-2">
+                {packagesExpanded && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); addLessonPackage() }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Package
+                  </button>
+                )}
+                {packagesExpanded ? (
+                  <ChevronUp className="h-5 w-5 text-gray-500" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-gray-500" />
+                )}
+              </div>
             </div>
-            
-            <p className="text-sm text-gray-600 mb-4">
+
+            {packagesExpanded && (
+            <>
+            <p className="text-sm text-gray-600 mb-4 mt-4">
               Create custom packages for PDA tests, special lessons, or bundled services with custom durations and pricing.
             </p>
             
@@ -578,6 +610,12 @@ export default function SettingsPage() {
                 <strong>Examples:</strong> "PDA Test - 2:45h ($165)" • "First Lesson Special - 1h ($45)" • "Highway Practice - 2h ($110)"
               </p>
             </div>
+            </>
+            )}
+
+            {!packagesExpanded && (
+              <p className="text-sm text-gray-500 mt-2">Click to expand and manage lesson packages</p>
+            )}
           </div>
 
           <GoogleCalendarSettings />

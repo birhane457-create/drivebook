@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Palette, Upload, Eye, Save, Sparkles, Link2, Copy, Check, MessageCircle, Instagram, Facebook, Globe } from 'lucide-react';
+import {
+  Palette, Upload, Eye, Save, Sparkles, Link2, Copy, Check,
+  MessageCircle, Globe, ShieldCheck, AlertCircle, Loader2, ExternalLink,
+} from 'lucide-react';
 import Image from 'next/image';
 
 export default function BrandingPage() {
@@ -21,7 +24,7 @@ export default function BrandingPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
 
-  // Subdomain
+  // Subdomain (PRO)
   const [subdomain, setSubdomain] = useState('');
   const [savedSubdomain, setSavedSubdomain] = useState('');
   const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
@@ -32,6 +35,14 @@ export default function BrandingPage() {
   const [instagram, setInstagram] = useState('');
   const [facebook, setFacebook] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
+
+  // Custom domain (Studio tier)
+  const [customDomain, setCustomDomain] = useState('');
+  const [savedCustomDomain, setSavedCustomDomain] = useState('');
+  const [domainVerified, setDomainVerified] = useState(false);
+  const [domainVerifiedAt, setDomainVerifiedAt] = useState<string | null>(null);
+  const [verifyingDomain, setVerifyingDomain] = useState(false);
+  const [domainVerifyResult, setDomainVerifyResult] = useState<{ verified: boolean; message?: string } | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -56,9 +67,21 @@ export default function BrandingPage() {
         setBrandColorSecondary(d.brandColorSecondary || '#10B981');
         setShowBrandingOnBookingPage(d.showBrandingOnBookingPage || false);
         setLogoPreview(d.brandLogo || '');
-        setSubdomain(d.customDomain || '');
-        setSavedSubdomain(d.customDomain || '');
-        setInstructor((prev: any) => ({ ...prev, subscriptionTier: d.subscriptionTier }));
+        setDomainVerified(d.domainVerified || false);
+        setDomainVerifiedAt(d.domainVerifiedAt || null);
+
+        const tier = d.subscriptionTier;
+        setInstructor((prev: any) => ({ ...prev, subscriptionTier: tier }));
+
+        // Studio/Business: customDomain is a full domain (has a dot)
+        if ((tier === 'STUDIO' || tier === 'BUSINESS') && d.customDomain?.includes('.')) {
+          setCustomDomain(d.customDomain);
+          setSavedCustomDomain(d.customDomain);
+        } else {
+          // PRO: customDomain is a subdomain slug
+          setSubdomain(d.customDomain || '');
+          setSavedSubdomain(d.customDomain || '');
+        }
       }
     } catch (err) {
       console.error(err);
@@ -74,7 +97,7 @@ export default function BrandingPage() {
     if (file.size > 2 * 1024 * 1024) { setError('Logo must be less than 2MB'); return; }
     setLogoFile(file);
     setError('');
-    setShowBrandingOnBookingPage(true); // auto-enable when logo is uploaded
+    setShowBrandingOnBookingPage(true);
     const reader = new FileReader();
     reader.onloadend = () => setLogoPreview(reader.result as string);
     reader.readAsDataURL(file);
@@ -102,10 +125,35 @@ export default function BrandingPage() {
     }
   };
 
-  const copyUrl = () => {
-    navigator.clipboard.writeText(`https://${savedSubdomain}.drivebook.com.au`);
+  const copyUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleVerifyDomain = async () => {
+    if (!customDomain) return;
+    setVerifyingDomain(true);
+    setDomainVerifyResult(null);
+    try {
+      const res = await fetch('/api/instructor/domain/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: customDomain }),
+      });
+      const data = await res.json();
+      setDomainVerifyResult(data);
+      if (data.verified) {
+        setDomainVerified(true);
+        setDomainVerifiedAt(new Date().toISOString());
+        setSavedCustomDomain(customDomain);
+        await fetchData();
+      }
+    } catch {
+      setDomainVerifyResult({ verified: false, message: 'Verification request failed' });
+    } finally {
+      setVerifyingDomain(false);
+    }
   };
 
   const handleSave = async () => {
@@ -124,15 +172,23 @@ export default function BrandingPage() {
         logoUrl = (await uploadRes.json()).url;
       }
 
-      // Save branding + subdomain
+      const tier = instructor?.subscriptionTier;
+      const isStudio = tier === 'STUDIO' || tier === 'BUSINESS';
+      const domainToSave = isStudio ? (customDomain || null) : (subdomain || null);
+
       const brandRes = await fetch('/api/instructor/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brandLogo: logoUrl, brandColorPrimary, brandColorSecondary, showBrandingOnBookingPage, customDomain: subdomain || null }),
+        body: JSON.stringify({
+          brandLogo: logoUrl,
+          brandColorPrimary,
+          brandColorSecondary,
+          showBrandingOnBookingPage,
+          customDomain: domainToSave,
+        }),
       });
       if (!brandRes.ok) throw new Error((await brandRes.json()).error || 'Failed to save branding');
 
-      // Save social links via profile API
       const profileRes = await fetch('/api/instructor/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -150,7 +206,7 @@ export default function BrandingPage() {
       setMessage('All settings saved!');
       setBrandLogo(logoUrl);
       setLogoFile(null);
-      setSavedSubdomain(subdomain);
+      if (!isStudio) setSavedSubdomain(subdomain);
       await fetchData();
     } catch (err: any) {
       setError(err.message || 'Failed to save');
@@ -161,8 +217,9 @@ export default function BrandingPage() {
 
   if (loading) return <div className="min-h-screen bg-gray-50 p-6"><p>Loading...</p></div>;
 
-  const isPro = instructor?.subscriptionTier === 'PRO' || instructor?.subscriptionTier === 'BUSINESS';
-  const isBasic = instructor?.subscriptionTier === 'BASIC';
+  const tier = instructor?.subscriptionTier;
+  const isBasic = tier === 'BASIC';
+  const isStudio = tier === 'STUDIO' || tier === 'BUSINESS';
 
   if (isBasic) {
     return (
@@ -171,7 +228,7 @@ export default function BrandingPage() {
           <div className="bg-white rounded-lg shadow p-8 text-center">
             <Sparkles className="h-16 w-16 text-purple-600 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Upgrade to PRO</h2>
-            <p className="text-gray-600 mb-6">Custom branding is available for PRO and BUSINESS subscribers.</p>
+            <p className="text-gray-600 mb-6">Custom branding is available for PRO and above.</p>
             <button onClick={() => router.push('/dashboard/subscription')}
               className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold">
               Upgrade Now
@@ -190,7 +247,7 @@ export default function BrandingPage() {
             <Palette className="h-8 w-8 text-purple-600" />
             Brand & Public Page
           </h1>
-          <p className="text-gray-600 mt-1">Manage your booking page, subdomain, and social links</p>
+          <p className="text-gray-600 mt-1">Manage your booking page, domain, and social links</p>
         </div>
 
         {message && <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4"><p className="text-green-800">{message}</p></div>}
@@ -199,57 +256,70 @@ export default function BrandingPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-6">
 
-            {/* Subdomain — top of the list */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
-                <Link2 className="h-5 w-5 text-purple-600" />
-                Your Booking URL
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">Share this link with students to book directly with you</p>
+            {/* Booking URL — subdomain for PRO, custom domain for Studio */}
+            {isStudio ? (
+              <CustomDomainWizard
+                customDomain={customDomain}
+                savedCustomDomain={savedCustomDomain}
+                domainVerified={domainVerified}
+                domainVerifiedAt={domainVerifiedAt}
+                verifyingDomain={verifyingDomain}
+                domainVerifyResult={domainVerifyResult}
+                copied={copied}
+                onDomainChange={(v) => { setCustomDomain(v); setDomainVerifyResult(null); }}
+                onVerify={handleVerifyDomain}
+                onCopy={() => copyUrl(`https://${savedCustomDomain}`)}
+              />
+            ) : (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+                  <Link2 className="h-5 w-5 text-purple-600" />
+                  Your Booking URL
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">Share this link with students to book directly with you</p>
 
-              {/* Live URL display if already saved */}
-              {savedSubdomain && (
-                <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between gap-2">
-                  <a
-                    href={`https://${savedSubdomain}.drivebook.com.au`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-purple-700 font-semibold text-sm hover:underline truncate"
-                  >
-                    {savedSubdomain}.drivebook.com.au
-                  </a>
-                  <button
-                    type="button"
-                    onClick={copyUrl}
-                    className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700"
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                    {copied ? 'Copied!' : 'Copy'}
+                {savedSubdomain && (
+                  <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between gap-2">
+                    <a href={`https://${savedSubdomain}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
+                      className="text-purple-700 font-semibold text-sm hover:underline truncate">
+                      {savedSubdomain}.drivebook.com.au
+                    </a>
+                    <button type="button" onClick={() => copyUrl(`https://${savedSubdomain}.drivebook.com.au`)}
+                      className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700">
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <input type="text" value={subdomain} onChange={(e) => handleSubdomainChange(e.target.value)}
+                    placeholder="yourname"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                    maxLength={30} />
+                  <span className="text-gray-500 text-sm whitespace-nowrap">.drivebook.com.au</span>
+                </div>
+
+                {checkingSubdomain && <p className="text-xs text-gray-500 mt-1">Checking...</p>}
+                {subdomainAvailable === true && subdomain && subdomain !== savedSubdomain && (
+                  <p className="text-xs text-green-600 mt-1">✓ {subdomain}.drivebook.com.au is available</p>
+                )}
+                {subdomainAvailable === false && subdomain && (
+                  <p className="text-xs text-red-600 mt-1">✗ Already taken — try another</p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, hyphens. Min 3 characters.</p>
+
+                {/* Studio upsell */}
+                <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                  <p className="text-xs text-indigo-800 font-medium">Want your own domain?</p>
+                  <p className="text-xs text-indigo-700 mt-0.5">Upgrade to Studio to use <span className="font-semibold">yourdomain.com.au</span> — includes 1 year free domain.</p>
+                  <button onClick={() => router.push('/dashboard/subscription')}
+                    className="mt-2 text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline">
+                    See Studio plan →
                   </button>
                 </div>
-              )}
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={subdomain}
-                  onChange={(e) => handleSubdomainChange(e.target.value)}
-                  placeholder="yourname"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                  maxLength={30}
-                />
-                <span className="text-gray-500 text-sm whitespace-nowrap">.drivebook.com.au</span>
               </div>
-
-              {checkingSubdomain && <p className="text-xs text-gray-500 mt-1">Checking...</p>}
-              {subdomainAvailable === true && subdomain && subdomain !== savedSubdomain && (
-                <p className="text-xs text-green-600 mt-1">✓ {subdomain}.drivebook.com.au is available</p>
-              )}
-              {subdomainAvailable === false && subdomain && (
-                <p className="text-xs text-red-600 mt-1">✗ Already taken — try another</p>
-              )}
-              <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, hyphens. Min 3 characters.</p>
-            </div>
+            )}
 
             {/* Social Links */}
             <div className="bg-white rounded-lg shadow p-6">
@@ -260,25 +330,21 @@ export default function BrandingPage() {
               <p className="text-sm text-gray-500 mb-4">Shown on your public booking page</p>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-                    <MessageCircle className="h-3.5 w-3.5 text-green-600" /> WhatsApp Number
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5 text-green-600" /> WhatsApp Number</span>
                   </label>
                   <input type="text" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)}
                     placeholder="61412345678 (with country code, no spaces)"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-                    <Instagram className="h-3.5 w-3.5 text-pink-600" /> Instagram Handle
-                  </label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Instagram Handle</label>
                   <input type="text" value={instagram} onChange={(e) => setInstagram(e.target.value)}
                     placeholder="yourhandle (without @)"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-                    <Facebook className="h-3.5 w-3.5 text-blue-600" /> Facebook
-                  </label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Facebook</label>
                   <input type="text" value={facebook} onChange={(e) => setFacebook(e.target.value)}
                     placeholder="username or full URL"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500" />
@@ -344,7 +410,7 @@ export default function BrandingPage() {
                   className="mt-1 h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded" />
                 <label htmlFor="showBranding" className="text-sm text-gray-700">
                   <span className="font-medium">Show logo & colors on booking page</span>
-                  <p className="text-gray-500 mt-0.5 text-xs">PRO/BUSINESS feature — white-labels your page</p>
+                  <p className="text-gray-500 mt-0.5 text-xs">White-labels your booking page with your brand</p>
                 </label>
               </div>
             </div>
@@ -394,12 +460,140 @@ export default function BrandingPage() {
                 <li>• Square logo (200×200px) works best</li>
                 <li>• Share your booking URL on social media</li>
                 <li>• Add WhatsApp so students can message you directly</li>
-                <li>• Your subdomain is live immediately after saving</li>
+                {isStudio
+                  ? <li>• Domain goes live once CNAME is verified</li>
+                  : <li>• Your subdomain is live immediately after saving</li>
+                }
               </ul>
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Custom Domain Wizard (Studio tier) ────────────────────────────────────────
+interface DomainWizardProps {
+  customDomain: string;
+  savedCustomDomain: string;
+  domainVerified: boolean;
+  domainVerifiedAt: string | null;
+  verifyingDomain: boolean;
+  domainVerifyResult: { verified: boolean; message?: string } | null;
+  copied: boolean;
+  onDomainChange: (v: string) => void;
+  onVerify: () => void;
+  onCopy: () => void;
+}
+
+function CustomDomainWizard({
+  customDomain, savedCustomDomain, domainVerified, domainVerifiedAt,
+  verifyingDomain, domainVerifyResult, copied,
+  onDomainChange, onVerify, onCopy,
+}: DomainWizardProps) {
+  return (
+    <div className="bg-white rounded-lg shadow p-6">
+      <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+        <Globe className="h-5 w-5 text-indigo-600" />
+        Custom Domain
+        <span className="ml-auto text-xs font-semibold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Studio</span>
+      </h2>
+      <p className="text-sm text-gray-500 mb-4">Use your own domain for your booking page</p>
+
+      {/* Verified badge */}
+      {domainVerified && savedCustomDomain && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldCheck className="h-4 w-4 text-green-600 shrink-0" />
+            <a href={`https://${savedCustomDomain}`} target="_blank" rel="noopener noreferrer"
+              className="text-green-800 font-semibold text-sm hover:underline truncate flex items-center gap-1">
+              {savedCustomDomain}
+              <ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          </div>
+          <button type="button" onClick={onCopy}
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700">
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      )}
+
+      {/* Domain input */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-gray-600 mb-1">Your domain</label>
+        <input
+          type="text"
+          value={customDomain}
+          onChange={(e) => onDomainChange(e.target.value.toLowerCase().trim())}
+          placeholder="bookings.yourdrivingschool.com.au"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+        />
+        <p className="text-xs text-gray-400 mt-1">Enter the full domain or subdomain you want to use</p>
+      </div>
+
+      {/* DNS instructions */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+        <p className="text-xs font-semibold text-gray-700 mb-2">Step 1 — Add this DNS record at your registrar:</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500">
+                <th className="text-left pr-4 pb-1">Type</th>
+                <th className="text-left pr-4 pb-1">Name</th>
+                <th className="text-left pb-1">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="font-mono">
+                <td className="pr-4 text-gray-800">CNAME</td>
+                <td className="pr-4 text-gray-800">{customDomain ? customDomain.split('.')[0] : '@'}</td>
+                <td className="text-indigo-700">cname.vercel-dns.com</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">DNS changes can take up to 24 hours to propagate.</p>
+      </div>
+
+      {/* Verify button */}
+      <div className="mb-3">
+        <p className="text-xs font-semibold text-gray-700 mb-2">Step 2 — Verify your domain:</p>
+        <button
+          type="button"
+          onClick={onVerify}
+          disabled={verifyingDomain || !customDomain}
+          className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white py-2 px-4 rounded-lg text-sm font-semibold"
+        >
+          {verifyingDomain
+            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking DNS...</>
+            : <><ShieldCheck className="h-4 w-4" /> Verify Domain</>
+          }
+        </button>
+      </div>
+
+      {/* Verify result */}
+      {domainVerifyResult && (
+        <div className={`rounded-lg p-3 flex items-start gap-2 text-sm ${domainVerifyResult.verified ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
+          {domainVerifyResult.verified
+            ? <ShieldCheck className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+            : <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          }
+          <div>
+            {domainVerifyResult.verified
+              ? <p className="text-green-800 font-medium">Domain verified! Your booking page is live at {savedCustomDomain}.</p>
+              : <p className="text-amber-800">{domainVerifyResult.message || 'CNAME not found yet. Check your DNS settings and try again.'}</p>
+            }
+          </div>
+        </div>
+      )}
+
+      {domainVerified && domainVerifiedAt && (
+        <p className="text-xs text-gray-400 mt-2">
+          Verified {new Date(domainVerifiedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+        </p>
+      )}
     </div>
   );
 }

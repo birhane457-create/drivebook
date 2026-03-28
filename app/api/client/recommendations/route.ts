@@ -18,17 +18,21 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get last 5 lessons with feedback
+    // Get last 5 lessons with feedback (PostgreSQL: filter non-empty arrays in JS)
     const recentBookings = await prisma.booking.findMany({
       where: {
         clientId: session.user.clientId,
         status: { in: ['COMPLETED', 'CONFIRMED'] },
-        NOT: { lessonFeedback: { isEmpty: true } },
       },
       orderBy: { endTime: 'desc' },
-      take: 5,
+      take: 20,
       select: { lessonFeedback: true },
     });
+
+    // Filter to only bookings that have feedback codes
+    const bookingsWithFeedback = recentBookings.filter(
+      (b) => (b.lessonFeedback as number[]).length > 0
+    ).slice(0, 5);
 
     if (!recentBookings.length) {
       return NextResponse.json({ recommendations: [] });
@@ -36,7 +40,7 @@ export async function GET() {
 
     // Flatten all codes, count frequency
     const codeFrequency = new Map<number, number>();
-    for (const booking of recentBookings) {
+    for (const booking of bookingsWithFeedback) {
       for (const code of (booking.lessonFeedback as number[])) {
         codeFrequency.set(code, (codeFrequency.get(code) ?? 0) + 1);
       }
@@ -47,14 +51,16 @@ export async function GET() {
       return NextResponse.json({ recommendations: [] });
     }
 
-    // Find active content that covers any of these codes
-    const content = await prisma.learningContent.findMany({
-      where: {
-        active: true,
-        pdaCodes: { hasSome: uniqueCodes },
-      },
+    // Find active content — fetch all active, filter by matching codes in JS
+    // (hasSome is MongoDB-only; PostgreSQL array overlap requires raw SQL or JS filter)
+    const allContent = await prisma.learningContent.findMany({
+      where: { active: true },
       orderBy: { createdAt: 'desc' },
     });
+
+    const content = allContent.filter((item) =>
+      (item.pdaCodes as number[]).some((c) => uniqueCodes.includes(c))
+    );
 
     // Score each content item: sum of frequency for each matched code
     const scored = content.map((item: { pdaCodes: number[]; [key: string]: unknown }) => {
