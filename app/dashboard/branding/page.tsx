@@ -553,26 +553,64 @@ function CustomDomainWizard({
 
       {/* DNS instructions */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-        <p className="text-xs font-semibold text-gray-700 mb-2">Step 1 — Add this DNS record at your registrar:</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-gray-500">
-                <th className="text-left pr-4 pb-1">Type</th>
-                <th className="text-left pr-4 pb-1">Name</th>
-                <th className="text-left pb-1">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="font-mono">
-                <td className="pr-4 text-gray-800">CNAME</td>
-                <td className="pr-4 text-gray-800">{customDomain ? customDomain.split('.')[0] : '@'}</td>
-                <td className="text-indigo-700">cname.vercel-dns.com</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p className="text-xs text-gray-500 mt-2">DNS changes can take up to 24 hours to propagate.</p>
+        <p className="text-xs font-semibold text-gray-700 mb-3">Step 1 — Add this DNS record at your registrar:</p>
+
+        {customDomain ? (() => {
+          // Parse the domain to figure out what DNS record to show
+          // e.g. "bookings.myschool.com.au" → name="bookings", root="myschool.com.au"
+          // e.g. "myschool.com.au" → root domain, must use A record or subdomain
+          const parts = customDomain.split('.')
+          const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
+          const tld2 = parts.slice(-2).join('.')
+          const isCompoundTLD = twoPartTLDs.includes(tld2)
+          const rootParts = isCompoundTLD ? 3 : 2 // e.g. myschool.com.au = 3 parts
+          const isRootDomain = parts.length <= rootParts
+          const cnameLabel = isRootDomain ? '@' : parts.slice(0, parts.length - rootParts).join('.')
+
+          return isRootDomain ? (
+            <div>
+              <div className="overflow-x-auto mb-2">
+                <table className="w-full text-xs font-mono">
+                  <thead><tr className="text-gray-500 font-sans">
+                    <th className="text-left pr-3 pb-1">Type</th>
+                    <th className="text-left pr-3 pb-1">Name</th>
+                    <th className="text-left pb-1">Value</th>
+                  </tr></thead>
+                  <tbody><tr>
+                    <td className="pr-3 text-gray-800">CNAME</td>
+                    <td className="pr-3 text-gray-800">www</td>
+                    <td className="text-indigo-700">cname.vercel-dns.com</td>
+                  </tr></tbody>
+                </table>
+              </div>
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                Root domains (e.g. <span className="font-mono">{customDomain}</span>) can't use CNAME. Use <span className="font-mono">www.{customDomain}</span> instead, or use a subdomain like <span className="font-mono">bookings.{customDomain}</span>.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead><tr className="text-gray-500 font-sans">
+                  <th className="text-left pr-3 pb-1">Type</th>
+                  <th className="text-left pr-3 pb-1">Name / Host</th>
+                  <th className="text-left pb-1">Value / Points to</th>
+                </tr></thead>
+                <tbody><tr>
+                  <td className="pr-3 text-gray-800">CNAME</td>
+                  <td className="pr-3 text-indigo-800 font-semibold">{cnameLabel}</td>
+                  <td className="text-indigo-700">cname.vercel-dns.com</td>
+                </tr></tbody>
+              </table>
+              <p className="text-xs text-gray-500 mt-2">
+                At your registrar, the "Name" or "Host" field is just <span className="font-mono font-semibold">{cnameLabel}</span> — not the full domain.
+              </p>
+            </div>
+          )
+        })() : (
+          <p className="text-xs text-gray-400 italic">Enter your domain above to see the DNS record</p>
+        )}
+
+        <p className="text-xs text-gray-500 mt-3">DNS changes can take up to 24 hours to propagate.</p>
       </div>
 
       {/* Verify button */}
