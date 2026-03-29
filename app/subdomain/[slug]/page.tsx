@@ -365,30 +365,30 @@ export default async function SubdomainBookingPage({
 
             {/* About */}
             {instructor.bio && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h2 className="font-semibold text-gray-900 mb-2">About</h2>
-                <p className="text-sm text-gray-600 leading-relaxed">{instructor.bio}</p>
+              <div id="section-about" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h2 className="font-semibold text-gray-900 mb-2 text-base">About</h2>
+                <p className="text-base text-gray-600 leading-relaxed">{instructor.bio}</p>
               </div>
             )}
 
-            {/* Pricing */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              <h2 className="font-semibold text-gray-900 mb-3">Pricing</h2>
+            {/* Pricing / Services */}
+            <div id="section-services" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-semibold text-gray-900 mb-3 text-base">Services & Pricing</h2>
               <div className="space-y-2">
                 <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                  <span className="text-sm text-gray-600">Single lesson</span>
+                  <span className="text-base text-gray-600">Single lesson</span>
                   <span className="font-bold text-lg" style={{ color: primary }}>${instructor.hourlyRate}/hr</span>
                 </div>
                 {activePackages.map((pkg: any) => (
                   <div key={pkg.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{pkg.name}</p>
-                      {pkg.hours && <p className="text-xs text-gray-400">{pkg.hours} hours</p>}
+                      <p className="text-base font-medium text-gray-800">{pkg.name}</p>
+                      {pkg.hours && <p className="text-sm text-gray-400">{pkg.hours} hours</p>}
                     </div>
                     <div className="text-right">
                       <p className="font-bold" style={{ color: secondary }}>${pkg.price.toFixed(2)}</p>
                       {pkg.hours && (
-                        <p className="text-xs text-green-600">
+                        <p className="text-sm text-green-600">
                           Save ${((instructor.hourlyRate * pkg.hours) - pkg.price).toFixed(0)}
                         </p>
                       )}
@@ -399,7 +399,7 @@ export default async function SubdomainBookingPage({
             </div>
 
             {/* Details */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
+            <div id="section-contact" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
               {vehicleTypes.length > 0 && (
                 <div className="flex items-start gap-2">
                   <Car className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
@@ -407,7 +407,7 @@ export default async function SubdomainBookingPage({
                     <p className="text-xs text-gray-400 mb-1">Vehicle types</p>
                     <div className="flex flex-wrap gap-1">
                       {vehicleTypes.map(v => (
-                        <span key={v} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{v}</span>
+                        <span key={v} className="text-sm bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{v}</span>
                       ))}
                     </div>
                   </div>
@@ -418,26 +418,26 @@ export default async function SubdomainBookingPage({
                   <Globe className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Languages</p>
-                    <p className="text-sm text-gray-700">{languages.join(', ')}</p>
+                    <p className="text-base text-gray-700">{languages.join(', ')}</p>
                   </div>
                 </div>
               )}
               {instructor.bookingBufferMinutes && (
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-gray-400 shrink-0" />
-                  <p className="text-sm text-gray-600">{instructor.bookingBufferMinutes} min buffer between lessons</p>
+                  <p className="text-base text-gray-600">{instructor.bookingBufferMinutes} min buffer between lessons</p>
                 </div>
               )}
               {instructor.isVerified && (
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
-                  <p className="text-sm text-gray-600">Verified instructor</p>
+                  <p className="text-base text-gray-600">Verified instructor</p>
                 </div>
               )}
               {instructor.phone && (
                 <div className="flex items-center gap-2">
                   <Phone className="h-4 w-4 text-gray-400 shrink-0" />
-                  <a href={`tel:${instructor.phone}`} className="text-sm text-blue-600 hover:underline">{instructor.phone}</a>
+                  <a href={`tel:${instructor.phone}`} className="text-base text-blue-600 hover:underline">{instructor.phone}</a>
                 </div>
               )}
             </div>
@@ -495,11 +495,11 @@ export default async function SubdomainBookingPage({
               <div className="space-y-1">
                 {faqItems.map((item, i) => (
                   <details key={i} className="group border-b border-gray-50 last:border-0">
-                    <summary className="flex items-center justify-between py-3 cursor-pointer list-none text-sm font-medium text-gray-800 hover:text-gray-900 select-none">
+                    <summary className="flex items-center justify-between py-3 cursor-pointer list-none text-base font-medium text-gray-800 hover:text-gray-900 select-none">
                       {item.q}
                       <ChevronDown className="h-4 w-4 text-gray-400 shrink-0 ml-2 transition-transform group-open:rotate-180" />
                     </summary>
-                    <p className="pb-3 text-sm text-gray-600 leading-relaxed">{item.a}</p>
+                    <p className="pb-3 text-base text-gray-600 leading-relaxed">{item.a}</p>
                   </details>
                 ))}
               </div>
@@ -583,8 +583,24 @@ export default async function SubdomainBookingPage({
         </div>
       </footer>
 
-      {/* Sticky mobile Book Now button */}
-      <SubdomainClientFeatures primary={primary} />
+      {/* Mobile bottom nav + full-screen booking drawer */}
+      <SubdomainClientFeatures primary={primary} instructorName={instructor.name}>
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-gray-900">Book a Lesson</h2>
+          <BulkBookingForm
+            instructorId={instructor.id}
+            instructorName={instructor.name}
+            hourlyRate={instructor.hourlyRate}
+            searchedLocation={searchedLocation}
+            brandColorPrimary={primary}
+            brandColorSecondary={secondary}
+            lessonPackages={activePackages}
+            serviceAreas={instructor.serviceAreas}
+            baseAddress={instructor.baseAddress}
+            serviceRadiusKm={instructor.serviceRadiusKm}
+          />
+        </div>
+      </SubdomainClientFeatures>
     </div>
   );
 }
