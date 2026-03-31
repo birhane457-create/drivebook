@@ -33,6 +33,7 @@ interface Instructor {
   distance: number;
   baseAddress: string;
   serviceRadiusKm: number;
+  allowedDurations?: number[]; // minutes
 }
 
 interface Service {
@@ -95,6 +96,13 @@ export default function BookLessonPage() {
       router.push('/login');
     }
   }, [status, router]);
+
+  // Fetch availability when date or service changes
+  useEffect(() => {
+    if (selectedDate && selectedService && selectedInstructor) {
+      checkAvailability();
+    }
+  }, [selectedDate, selectedService?.duration]);
 
   // Load client data on mount
   useEffect(() => {
@@ -237,21 +245,20 @@ export default function BookLessonPage() {
   };
 
   const checkAvailability = async () => {
-    if (!selectedDate || !selectedInstructor) return;
+    if (!selectedDate || !selectedInstructor || !selectedService) return;
 
     try {
       setAvailabilityLoading(true);
       setError(null);
+      const durationMins = selectedService.duration * 60;
       const res = await fetch(
-        `/api/instructors/${selectedInstructor.id}/availability?date=${selectedDate}`
+        `/api/availability/slots?instructorId=${selectedInstructor.id}&date=${selectedDate}&duration=${durationMins}`
       );
       if (res.ok) {
         const data = await res.json();
-        if (data.message) {
-          setError(data.message);
-          setAvailableSlots([]);
-        } else {
-          setAvailableSlots(data.slots || []);
+        setAvailableSlots(data.slots?.map((s: any) => s.time || s) || []);
+        if ((data.slots || []).length === 0) {
+          setError('No times available for this date');
         }
       } else {
         const data = await res.json();
@@ -267,34 +274,35 @@ export default function BookLessonPage() {
     }
   };
 
-  const validatePickupLocation = (): boolean => {
+  const validatePickupLocation = async (): Promise<boolean> => {
     if (!pickupLocation.trim()) {
       setError('Please enter a pickup location');
       return false;
     }
 
-    // Check if location is outside service area (keywords)
-    if (pickupLocation.toLowerCase().includes('outside') || 
-        pickupLocation.toLowerCase().includes('remote')) {
-      setServiceAreaWarning({
-        show: true,
-        message: `${selectedInstructor?.name} operates within a ${selectedInstructor?.serviceRadiusKm}km service radius. The location you entered appears to be outside this area.`,
-        options: [
-          {
-            label: 'Search for instructors in this area',
-            action: 'search',
-          },
-          {
-            label: 'Use instructor\'s service area instead',
-            action: 'useDefault',
-          },
-          {
-            label: 'Proceed anyway',
-            action: 'proceed',
-          }
-        ]
-      });
-      return false;
+    if (!selectedInstructor) return true;
+
+    try {
+      const res = await fetch(
+        `/api/public/check-service-area?instructorId=${encodeURIComponent(selectedInstructor.id)}&address=${encodeURIComponent(pickupLocation)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.result === 'out') {
+          setServiceAreaWarning({
+            show: true,
+            message: `${selectedInstructor.name} operates within a ${data.radiusKm ?? selectedInstructor.serviceRadiusKm}km service radius. Your address is ${data.distanceKm}km away.`,
+            options: [
+              { label: 'Search for instructors in this area', action: 'search' },
+              { label: "Use instructor's base address instead", action: 'useDefault' },
+              { label: 'Proceed anyway', action: 'proceed' },
+            ],
+          });
+          return false;
+        }
+      }
+    } catch {
+      // If check fails, allow through — don't block booking
     }
 
     return true;
@@ -306,7 +314,7 @@ export default function BookLessonPage() {
       return;
     }
 
-    if (!validatePickupLocation()) {
+    if (!await validatePickupLocation()) {
       return;
     }
 
@@ -577,7 +585,10 @@ export default function BookLessonPage() {
                 <p className="text-gray-600 mb-6">Select lesson duration</p>
 
                 <div className="space-y-3 mb-6">
-                  {[1, 2, 3].map((hours) => {
+                  {(selectedInstructor.allowedDurations?.length
+                    ? selectedInstructor.allowedDurations.map(m => m / 60)
+                    : [1, 2, 3]
+                  ).map((hours) => {
                     const price = selectedInstructor.hourlyRate * hours;
                     return (
                       <button
@@ -587,7 +598,7 @@ export default function BookLessonPage() {
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="font-bold text-gray-900">{hours} Hour Lesson</h3>
+                            <h3 className="font-bold text-gray-900">{hours} Hour{hours !== 1 ? 's' : ''} Lesson</h3>
                             <p className="text-sm text-gray-600">Single lesson session</p>
                           </div>
                           <p className="font-bold text-blue-600">${price.toFixed(2)}</p>
@@ -669,7 +680,10 @@ export default function BookLessonPage() {
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-3">Select Lesson Duration</label>
                     <div className="space-y-2">
-                      {[1, 2, 3].map((hours) => {
+                      {(selectedInstructor.allowedDurations?.length
+                        ? selectedInstructor.allowedDurations.map(m => m / 60)
+                        : [1, 2, 3]
+                      ).map((hours) => {
                         const price = selectedInstructor.hourlyRate * hours;
                         return (
                           <button
@@ -721,7 +735,9 @@ export default function BookLessonPage() {
                     value={selectedDate}
                     onChange={(e) => {
                       setSelectedDate(e.target.value);
-                      checkAvailability();
+                      setSelectedTime('');
+                      setAvailableSlots([]);
+                      // checkAvailability runs via useEffect when selectedDate changes
                     }}
                     min={new Date().toISOString().split('T')[0]}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg"
