@@ -363,6 +363,7 @@ On desktop:
 | `/api/stripe/webhook` | POST | Handle payment confirmation |
 | `/api/availability/slots` | GET | Fetch available time slots for a date + duration |
 | `/api/auth/check-email` | POST | Check if email already registered |
+| `/api/public/check-service-area` | GET | Check if a lat/lng is within instructor's service radius |
 | `/api/instructor/branding` | GET/PUT | Branding + domain settings |
 | `/api/instructor/profile` | GET/PUT | Profile fields including `baseAddress` |
 | `/api/instructor/subdomain/check` | GET | Check if slug is available |

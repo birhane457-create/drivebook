@@ -80,6 +80,16 @@ On form submit, calls `POST /api/public/bookings/bulk`.
 
 ---
 
+## Step 4 — Payment
+
+After booking creation, student is redirected to `/booking/[id]/payment` which renders Stripe Elements.
+
+On payment success, the confirmation page calls `POST /api/payments/verify` to confirm the booking if the Stripe webhook hasn't fired yet (common in local dev, rare in production). This endpoint also handles wallet crediting for package bookings.
+
+**Receipt email:** `sendSingleLessonReceipt()` or `sendPackagePurchaseReceipt()` fires from the Stripe webhook after `payment_intent.succeeded` — not from the verify endpoint.
+
+---
+
 ## Slot Expiry
 
 If the client does not complete payment within 10 minutes, the cron job (`/api/cron/cleanup-expired-bookings`) sets the booking to `EXPIRED` and releases the slot.

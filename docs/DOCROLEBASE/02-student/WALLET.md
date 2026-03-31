@@ -36,6 +36,7 @@ Students can add funds directly to their wallet:
 4. On `payment_intent.succeeded` webhook:
    - Creates a `CONFIRMED` CREDIT `WalletTransaction`
    - Balance is immediately available
+   - **Receipt email sent** — `sendWalletTopUpReceipt()` fires showing credits added, previous balance, new balance with approx hours remaining
 
 **URL shortcut:** `/client-dashboard/wallet?topup=XX.XX` — pre-fills the top-up amount. Used by the "Send Payment Link" feature when an instructor books on behalf of a client with insufficient balance.
 
@@ -68,6 +69,7 @@ When a student purchases a package via the public booking form:
 2. Wallet is CREDITED with $600
 3. Wallet is DEBITED with `booking.price` (first lesson, e.g. $60)
 4. Remaining $540 is available for future lessons from the client dashboard
+5. **Receipt email sent** — `sendPackagePurchaseReceipt()` fires showing package details, payment breakdown, and wallet balance after first lesson debit
 
 ---
 

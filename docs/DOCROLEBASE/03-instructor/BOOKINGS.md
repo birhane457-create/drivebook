@@ -28,6 +28,11 @@ Instructors can create bookings on behalf of clients from `/dashboard/bookings/n
 
 If the client's wallet is insufficient, the API returns a `topUpAmount` value. The instructor can then send a payment link to the client via `POST /api/bookings/send-payment-link` — this emails the client a pre-filled wallet top-up link.
 
+On successful booking creation, a **receipt email is sent to the student** via `sendWalletLessonReceipt()` showing:
+- Lesson date, time, duration, instructor name
+- "Booked by: Your instructor" label
+- Wallet debit amount and remaining balance
+
 ---
 
 ## Reschedule
