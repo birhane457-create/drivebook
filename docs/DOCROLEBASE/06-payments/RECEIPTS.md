@@ -66,16 +66,42 @@ What it shows:
 - Wallet balance: previous, top-up added, new balance with approx hours
 - Note: "Credits never expire and can be used with any instructor on DriveBook"
 
+### E — Cancellation
+**Trigger:** `POST /api/bookings/[id]/cancel` — any party (instructor, client, admin)
+**Wired in:** `app/api/bookings/[id]/cancel/route.ts` after audit log
+**Function:** `sendCancellationReceipt()`
+
+What it shows:
+- Cancelled lesson date, time, instructor name
+- Who cancelled (you / your instructor / DriveBook support)
+- Refund summary: lesson price, refund amount (or reason for no refund)
+- Wallet balance after refund (only shown if refund > 0)
+- Support contact link
+
 ---
 
-## Trigger Map
+### F — Admin Manual Credit
+**Trigger:** Admin adds wallet credit via `POST /api/admin/clients/[id]/wallet/add-credit`
+**Wired in:** `app/api/admin/clients/[id]/wallet/add-credit/route.ts`
+**Function:** `sendAdminCreditReceipt()`
+
+What it shows:
+- Credits added (large green amount)
+- Reason for credit
+- Wallet balance: previous, credit added, new balance
+- "Issued by: DriveBook Support"
+
+---
 
 | Event | Route | Receipt |
 |---|---|---|
 | Instructor books lesson (wallet debit) | `POST /api/bookings` | B — Wallet Lesson |
+| Client books from dashboard (wallet debit, single or bulk) | `POST /api/client/bookings/create-bulk` | B — Wallet Lesson (one per booking) |
 | Student pays single lesson via Stripe | Stripe webhook | C — Single Lesson |
 | Student buys package via Stripe | Stripe webhook | A — Package Purchase |
 | Student tops up wallet via Stripe | Stripe webhook | D — Wallet Top-Up |
+| Booking cancelled (any party) | `POST /api/bookings/[id]/cancel` | E — Cancellation |
+| Admin manually adds wallet credit | `POST /api/admin/clients/[id]/wallet/add-credit` | F — Admin Credit |
 
 ---
 
@@ -94,6 +120,9 @@ What it shows:
 
 | File | Purpose |
 |---|---|
-| `lib/services/receipt-email.ts` | All 4 receipt functions |
-| `app/api/bookings/route.ts` | Wires type B after wallet debit |
+| `lib/services/receipt-email.ts` | All 6 receipt functions (A–F) |
+| `app/api/bookings/route.ts` | Wires type B after instructor wallet debit |
+| `app/api/client/bookings/create-bulk/route.ts` | Wires type B per booking after client wallet debit |
 | `app/api/stripe/webhook/route.ts` | Wires types A, C, D after Stripe confirms |
+| `app/api/bookings/[id]/cancel/route.ts` | Wires type E after cancellation |
+| `app/api/admin/clients/[id]/wallet/add-credit/route.ts` | Wires type F after admin credit |

@@ -359,3 +359,131 @@ export async function sendWalletTopUpReceipt(data: {
     html,
   });
 }
+
+// ── E: Cancellation Refund ────────────────────────────────────────────────────
+export async function sendCancellationReceipt(data: {
+  clientName: string;
+  clientEmail: string;
+  receiptId: string;
+  cancelledAt: Date;
+  instructorName: string;
+  lessonDate: Date;
+  lessonPrice: number;
+  refundAmount: number;
+  refundPercent: number;
+  walletBalanceAfter: number;
+  cancelledBy: 'instructor' | 'client' | 'admin';
+  noRefundReason?: string;
+}) {
+  const rn = receiptNumber(data.receiptId);
+  const hasRefund = data.refundAmount > 0;
+  const refundLine = hasRefund
+    ? `<tr><td>Refund (${data.refundPercent}%)</td><td style="color:#16a34a;">+${fmt(data.refundAmount)}</td></tr>`
+    : `<tr><td>Refund</td><td style="color:#dc2626;">None — ${data.noRefundReason || 'less than 24 hours notice'}</td></tr>`;
+
+  const html = `<!DOCTYPE html><html><head><style>${styles}</style></head><body>
+  <div class="wrap">
+    <div class="header" style="background:linear-gradient(135deg,#dc2626,#b91c1c);">
+      <h1>&#x1F697; DriveBook &mdash; Booking Cancelled</h1>
+      <p>Cancellation Confirmation</p>
+    </div>
+    <div class="body">
+      <div class="meta">
+        <table>
+          <tr><td>Receipt #</td><td>${rn}</td></tr>
+          <tr><td>Cancelled</td><td>${data.cancelledAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} at ${data.cancelledAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</td></tr>
+          <tr><td>Cancelled by</td><td>${data.cancelledBy === 'instructor' ? 'Your instructor' : data.cancelledBy === 'admin' ? 'DriveBook support' : 'You'}</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3>Cancelled Lesson</h3>
+        <p style="margin:0;font-size:15px;font-weight:600;">${data.lessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${data.lessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+        <p style="margin:4px 0 0;font-size:14px;color:#6b7280;">Instructor: ${data.instructorName}</p>
+      </div>
+
+      <div class="section">
+        <h3>Refund Summary</h3>
+        <table class="line-items">
+          <tr><td>Lesson price</td><td>${fmt(data.lessonPrice)}</td></tr>
+          ${refundLine}
+          <tr class="divider"><td></td><td></td></tr>
+          <tr class="total"><td>${hasRefund ? 'Refunded to wallet' : 'Amount forfeited'}</td><td>${hasRefund ? fmt(data.refundAmount) : fmt(data.lessonPrice)}</td></tr>
+        </table>
+      </div>
+
+      ${hasRefund ? `
+      <div class="wallet-box">
+        <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#1d4ed8;margin:0 0 10px;">Wallet Balance</h3>
+        <table>
+          <tr><td>Refund credited</td><td style="color:#16a34a;">+${fmt(data.refundAmount)}</td></tr>
+          <tr class="balance"><td>Current balance</td><td>${fmt(data.walletBalanceAfter)}</td></tr>
+        </table>
+      </div>` : ''}
+
+      <p style="font-size:14px;color:#6b7280;margin:0 0 16px;">
+        Questions about this cancellation? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>
+      </p>
+      ${footer(rn)}`;
+
+  await emailService.sendGenericEmail({
+    to: data.clientEmail,
+    subject: `Booking Cancelled &mdash; ${data.lessonDate.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}${hasRefund ? ` &middot; ${fmt(data.refundAmount)} refunded` : ''}`,
+    html,
+  });
+}
+
+// ── F: Admin Manual Credit ────────────────────────────────────────────────────
+export async function sendAdminCreditReceipt(data: {
+  clientName: string;
+  clientEmail: string;
+  receiptId: string;
+  creditedAt: Date;
+  amountAdded: number;
+  reason: string;
+  walletBalanceBefore: number;
+  walletBalanceAfter: number;
+}) {
+  const rn = receiptNumber(data.receiptId);
+  const html = `<!DOCTYPE html><html><head><style>${styles}</style></head><body>
+  <div class="wrap">
+    <div class="header">
+      <h1>&#x1F697; DriveBook &mdash; Wallet Credit</h1>
+      <p>Credits Added to Your Account</p>
+    </div>
+    <div class="body">
+      <div class="meta">
+        <table>
+          <tr><td>Receipt #</td><td>${rn}</td></tr>
+          <tr><td>Date</td><td>${data.creditedAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+          <tr><td>Account</td><td>${data.clientName}</td></tr>
+          <tr><td>Issued by</td><td>DriveBook Support</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3>Credit Details</h3>
+        <table class="line-items">
+          <tr><td>Credits added</td><td style="color:#16a34a;font-size:18px;font-weight:700;">+${fmt(data.amountAdded)}</td></tr>
+          <tr><td>Reason</td><td>${data.reason}</td></tr>
+        </table>
+      </div>
+
+      <div class="wallet-box">
+        <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#1d4ed8;margin:0 0 10px;">Wallet Balance</h3>
+        <table>
+          <tr><td>Previous balance</td><td>${fmt(data.walletBalanceBefore)}</td></tr>
+          <tr><td>Credit added</td><td style="color:#16a34a;">+${fmt(data.amountAdded)}</td></tr>
+          <tr class="balance"><td>New balance</td><td>${fmt(data.walletBalanceAfter)}</td></tr>
+        </table>
+      </div>
+
+      <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">Credits never expire and can be used with any instructor on DriveBook.</p>
+      ${footer(rn)}`;
+
+  await emailService.sendGenericEmail({
+    to: data.clientEmail,
+    subject: `Wallet Credit &mdash; +${fmt(data.amountAdded)} added to your account`,
+    html,
+  });
+}

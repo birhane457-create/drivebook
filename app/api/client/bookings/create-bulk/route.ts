@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { paymentService } from '@/lib/services/payment';
 import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
+import { sendWalletLessonReceipt } from '@/lib/services/receipt-email';
 
 export const dynamic = 'force-dynamic';
 
@@ -203,6 +204,29 @@ export async function POST(request: NextRequest) {
         }
       } catch (e) {
         console.error('[Notification] Failed:', e);
+      }
+
+      // Send receipt per booking
+      try {
+        const durationHours = typeof c.booking.duration === 'number' ? c.booking.duration : 1;
+        const hourlyRate = durationHours > 0 ? c.booking.price / durationHours : c.booking.price;
+        const walletAfter = result.remaining - result.created.slice(result.created.indexOf(c) + 1).reduce((s: number, x: any) => s + x.booking.price, 0);
+        await sendWalletLessonReceipt({
+          clientName: user.name || session.user.email,
+          clientEmail: session.user.email,
+          receiptId: c.booking.id,
+          bookedAt: new Date(),
+          instructorName: c.instructorName,
+          lessonDate: new Date(c.booking.startTime),
+          durationHours,
+          hourlyRate,
+          lessonCost: c.booking.price,
+          walletBalanceBefore: walletAfter + c.booking.price,
+          walletBalanceAfter: walletAfter,
+          bookedBy: 'client',
+        });
+      } catch (e) {
+        console.error('[Receipt] Failed:', e);
       }
     }
 

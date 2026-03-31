@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { prisma } from '@/lib/prisma';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
+import { sendAdminCreditReceipt } from '@/lib/services/receipt-email';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +54,7 @@ export async function POST(
     // Get user
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true }
+      select: { id: true, email: true, name: true }
     });
 
     if (!user) {
@@ -76,6 +77,23 @@ export async function POST(
 
     // Get updated balance
     const newBalance = await getWalletBalance(user.id);
+
+    // Send receipt to student
+    try {
+      const prevBalance = newBalance.balance - amount;
+      await sendAdminCreditReceipt({
+        clientName: user.name || user.email,
+        clientEmail: user.email,
+        receiptId: `admin-credit-${Date.now()}`,
+        creditedAt: new Date(),
+        amountAdded: amount,
+        reason: reason || 'Manual credit added by admin',
+        walletBalanceBefore: prevBalance,
+        walletBalanceAfter: newBalance.balance,
+      });
+    } catch (e) {
+      console.error('Admin credit receipt email failed:', e);
+    }
 
     return NextResponse.json({
       success: true,

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { emailService } from '@/lib/services/email'
+import { sendCancellationReceipt } from '@/lib/services/receipt-email'
 import { getNotifChannels } from '@/lib/config/platform-settings'
 
 export const dynamic = 'force-dynamic'
@@ -148,6 +149,32 @@ export async function POST(
         subject: `Booking Cancelled — ${bookingDateStr}`,
         html: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client.name},</p><p>Your booking with <strong>${booking.instructor.name}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
       }).catch(e => console.error('Cancel email to client failed:', e))
+
+      // Send structured cancellation receipt to student
+      try {
+        const noRefundReason = isPastBooking ? 'lesson had already passed'
+          : isNonRefundable ? 'booking was non-refundable'
+          : 'less than 24 hours notice'
+        const walletAfter = booking.client.userId
+          ? (await prisma.clientWallet.findUnique({ where: { userId: booking.client.userId } }))?.balance ?? 0
+          : 0
+        await sendCancellationReceipt({
+          clientName: booking.client.name,
+          clientEmail: booking.client.email,
+          receiptId: params.id,
+          cancelledAt: now,
+          instructorName: booking.instructor.name,
+          lessonDate: new Date(booking.startTime!),
+          lessonPrice: booking.price,
+          refundAmount,
+          refundPercent: refundPercentage,
+          walletBalanceAfter: walletAfter,
+          cancelledBy: isInstructor ? 'instructor' : isClient ? 'client' : 'admin',
+          noRefundReason: refundAmount === 0 ? noRefundReason : undefined,
+        })
+      } catch (e) {
+        console.error('Cancellation receipt email failed:', e)
+      }
     }
 
     if (cancelChannels.email && booking.instructor?.user?.email) {
