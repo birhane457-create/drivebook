@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { MapPin, Car, Star, Phone, Globe, Clock, CheckCircle, MessageCircle, Instagram, Facebook, Users, Award, Calendar, ShieldCheck, ChevronDown } from 'lucide-react';
 import BulkBookingForm from '@/components/BulkBookingForm';
 import SubdomainClientFeatures from '@/components/subdomain/SubdomainClientFeatures';
+import SubdomainDesktopNav from '@/components/subdomain/SubdomainDesktopNav';
 import type { Metadata } from 'next';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300; // cache 5 minutes — instructor profiles don't change by the second
 
 // ── SEO Meta Tags ─────────────────────────────────────────────────────────────
 export async function generateMetadata({
@@ -109,6 +110,7 @@ export default async function SubdomainBookingPage({
       instagram: true,
       facebook: true,
       yearsExperience: true,
+      allowedDurations: true,
     },
   });
 
@@ -145,16 +147,18 @@ export default async function SubdomainBookingPage({
   const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
   const now = new Date();
 
-  const twoWeeksOut = new Date(now);
-  twoWeeksOut.setDate(now.getDate() + 14);
   const upcomingBookings = await prisma.booking.findMany({
     where: {
       instructorId: instructor.id,
       status: { in: ['CONFIRMED', 'PENDING'] },
-      startTime: { gte: now, lte: twoWeeksOut },
+      startTime: {
+        gte: now,
+        lte: new Date(now.getTime() + 1000 * 60 * 60 * 24 * 14), // 14 days
+      },
     },
     select: { startTime: true, endTime: true },
     orderBy: { startTime: 'asc' },
+    take: 100,
   });
 
   let nextAvailableLabel: string | null = null;
@@ -162,40 +166,93 @@ export default async function SubdomainBookingPage({
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     const dayName = days[d.getDay()];
-    const dayConfig = workingHours[dayName];
-    if (!dayConfig?.enabled || !dayConfig?.start || !dayConfig?.end) continue;
+    const daySlots: { start: string; end: string }[] = workingHours[dayName] || [];
+    if (daySlots.length === 0) continue;
 
-    const [startH, startM] = dayConfig.start.split(':').map(Number);
-    const [endH, endM] = dayConfig.end.split(':').map(Number);
-    const dayStart = new Date(d);
-    dayStart.setHours(startH, startM, 0, 0);
-    const dayEnd = new Date(d);
-    dayEnd.setHours(endH, endM, 0, 0);
+    for (const slot of daySlots) {
+      if (nextAvailableLabel) break;
+      const [startH, startM] = slot.start.split(':').map(Number);
+      const [endH, endM] = slot.end.split(':').map(Number);
+      const dayStart = new Date(d);
+      dayStart.setHours(startH, startM, 0, 0);
+      const dayEnd = new Date(d);
+      dayEnd.setHours(endH, endM, 0, 0);
 
-    const slotStart = dayStart < now ? new Date(now.getTime() + 60 * 60 * 1000) : dayStart;
-    let cursor = new Date(slotStart);
-    cursor.setMinutes(0, 0, 0);
-    while (cursor < dayEnd) {
-      const slotEnd = new Date(cursor.getTime() + 60 * 60 * 1000);
-      const blocked = upcomingBookings.some(b => {
-        const bs = new Date(b.startTime!);
-        const be = new Date(b.endTime!);
-        return cursor < be && slotEnd > bs;
-      });
-      if (!blocked) {
-        const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-AU', { weekday: 'long' });
-        const timeStr = cursor.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
-        nextAvailableLabel = `${label} at ${timeStr}`;
-        break;
+      let cursor = dayStart < now ? new Date(now.getTime() + 60 * 60 * 1000) : new Date(dayStart);
+      cursor.setMinutes(0, 0, 0);
+      while (cursor < dayEnd) {
+        const slotEnd = new Date(cursor.getTime() + 60 * 60 * 1000);
+        const blocked = upcomingBookings.some(b => {
+          const bs = new Date(b.startTime!);
+          const be = new Date(b.endTime!);
+          return cursor < be && slotEnd > bs;
+        });
+        if (!blocked) {
+          const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-AU', { weekday: 'long' });
+          const timeStr = cursor.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
+          nextAvailableLabel = `${label} at ${timeStr}`;
+          break;
+        }
+        cursor = slotEnd;
       }
-      cursor = slotEnd;
     }
   }
+
+  // Working hours summary for display (e.g. "Mon–Fri 9am–5pm, Sat 9am–1pm")
+  const workingHoursSummary = (() => {
+    const dayAbbr = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const orderedDays = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    const lines: string[] = [];
+    for (const day of orderedDays) {
+      const slots: { start: string; end: string }[] = workingHours[day] || [];
+      if (slots.length === 0) continue;
+      const abbr = dayAbbr[orderedDays.indexOf(day) < 5 ? orderedDays.indexOf(day) + 1 : orderedDays.indexOf(day) === 5 ? 6 : 0];
+      const times = slots.map(s => {
+        const fmt = (t: string) => {
+          const [h, m] = t.split(':').map(Number);
+          const ampm = h >= 12 ? 'pm' : 'am';
+          const h12 = h % 12 || 12;
+          return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2,'0')}${ampm}`;
+        };
+        return `${fmt(s.start)}–${fmt(s.end)}`;
+      }).join(', ');
+      lines.push(`${abbr} ${times}`);
+    }
+    return lines;
+  })();
 
   const activePackages = ((instructor.lessonPackages as any[]) || []).filter((p: any) => p.isActive !== false);
   const searchedLocation = searchParams.location || null;
   const languages = instructor.languages ? instructor.languages.split(',').map(l => l.trim()) : [];
   const vehicleTypes = instructor.vehicleTypes ? instructor.vehicleTypes.split(',').map(v => v.trim()) : [];
+
+  // Extract suburb only from baseAddress — handles "Maylands WA 6051" or "12 Smith St, Maylands WA 6051"
+  const baseSuburb = (() => {
+    if (!instructor.baseAddress) return null;
+    const parts = instructor.baseAddress.split(',').map((s: string) => s.trim());
+    // Walk from the end — find the first part that contains a suburb (letters, no leading digit)
+    for (let i = parts.length - 1; i >= 0; i--) {
+      // Strip state code (2-3 uppercase letters) and postcode (4 digits)
+      const clean = parts[i]
+        .replace(/\b[A-Z]{2,3}\b/g, '')
+        .replace(/\b\d{4}\b/g, '')
+        .trim();
+      if (clean && !/^\d/.test(clean)) return clean;
+    }
+    return null;
+  })();
+
+  // Allowed lesson durations set by instructor in settings
+  const allowedDurations: number[] = Array.isArray(instructor.allowedDurations)
+    ? (instructor.allowedDurations as number[])
+    : [];
+
+  function formatDuration(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (m === 0) return h === 1 ? '1 hr' : `${h} hrs`;
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  }
 
   const whatsapp = instructor.whatsapp;
   const instagram = instructor.instagram;
@@ -208,7 +265,7 @@ export default async function SubdomainBookingPage({
     yearsExperience && { icon: '🏆', label: `${yearsExperience}+ Years Experience` },
     instructor.totalReviews > 0 && {
       icon: '⭐',
-      label: `${instructor.averageRating?.toFixed(1) || '5.0'} Rating (${instructor.totalReviews} reviews)`,
+      label: `${instructor.averageRating?.toFixed(1)} Rating (${instructor.totalReviews} ${instructor.totalReviews === 1 ? 'review' : 'reviews'})`,
     },
     { icon: '🔒', label: 'Secure Online Booking' },
   ].filter(Boolean) as { icon: string; label: string }[];
@@ -239,6 +296,35 @@ export default async function SubdomainBookingPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* JSON-LD structured data for Google rich results */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'LocalBusiness',
+            name: instructor.name,
+            image: instructor.profileImage ?? undefined,
+            description: instructor.bio ?? undefined,
+            areaServed: instructor.serviceAreas ?? undefined,
+            priceRange: 'From $' + String(instructor.hourlyRate) + '/hr',
+            ...(baseSuburb && {
+              address: {
+                '@type': 'PostalAddress',
+                addressLocality: baseSuburb,
+                addressCountry: 'AU',
+              },
+            }),
+            ...(instructor.totalReviews > 0 && {
+              aggregateRating: {
+                '@type': 'AggregateRating',
+                ratingValue: instructor.averageRating,
+                reviewCount: instructor.totalReviews,
+              },
+            }),
+          }),
+        }}
+      />
       {/* Nav */}
       <nav className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -252,6 +338,8 @@ export default async function SubdomainBookingPage({
               {hasBranding ? instructor.name : 'DriveBook'}
             </span>
           </div>
+          <SubdomainDesktopNav primary={primary} hasBio={!!instructor.bio?.trim()} />
+
           <div className="flex items-center gap-3">
             {!hasBranding && <span className="text-xs text-gray-400 hidden sm:block">Powered by DriveBook</span>}
             {whatsapp && (
@@ -294,17 +382,35 @@ export default async function SubdomainBookingPage({
             <div className="text-white">
               <h1 className="text-2xl sm:text-3xl font-bold">{instructor.name}</h1>
               <div className="flex items-center gap-1 mt-1">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className={`h-4 w-4 ${i < Math.round(instructor.averageRating || 5) ? 'fill-white text-white' : 'text-white/40'}`} />
-                ))}
-                <span className="ml-1 text-sm text-white/80">
-                  {instructor.averageRating ? instructor.averageRating.toFixed(1) : '5.0'} · {instructor.totalReviews} reviews
-                </span>
+                {instructor.totalReviews > 0 ? (
+                  <>
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className={`h-4 w-4 ${i < Math.round(instructor.averageRating ?? 5) ? 'fill-white text-white' : 'text-white/40'}`} />
+                    ))}
+                    <span className="ml-1 text-sm text-white/80">
+                      {instructor.averageRating?.toFixed(1)} · {instructor.totalReviews} {instructor.totalReviews === 1 ? 'review' : 'reviews'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-sm text-white/70 bg-white/10 px-2 py-0.5 rounded-full">New instructor</span>
+                )}
               </div>
               {instructor.serviceAreas && (
                 <div className="flex items-center gap-1 mt-1 text-white/80 text-sm">
                   <MapPin className="h-3.5 w-3.5" />
                   {instructor.serviceAreas}
+                </div>
+              )}
+              {!instructor.serviceAreas && baseSuburb && (
+                <div className="flex items-center gap-1 mt-1 text-white/80 text-sm">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {baseSuburb}{instructor.serviceRadiusKm ? ` & surrounding areas` : ''}
+                </div>
+              )}
+              {vehicleTypes.length > 0 && (
+                <div className="flex items-center gap-1 mt-1 text-white/70 text-xs">
+                  <Car className="h-3.5 w-3.5" />
+                  {vehicleTypes.join(' & ')} driving lessons
                 </div>
               )}
               <div className="flex items-center gap-4 mt-2">
@@ -363,38 +469,83 @@ export default async function SubdomainBookingPage({
               </div>
             )}
 
-            {/* About */}
-            {instructor.bio && (
+            {/* About — only render if bio has real content */}
+            {instructor.bio?.trim() && (
               <div id="section-about" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-semibold text-gray-900 mb-2 text-base">About</h2>
                 <p className="text-base text-gray-600 leading-relaxed">{instructor.bio}</p>
               </div>
             )}
 
-            {/* Pricing / Services */}
+            {/* Pricing / Services — also serves as about anchor if no bio */}
             <div id="section-services" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-3 text-base">Services & Pricing</h2>
               <div className="space-y-2">
+
+                {/* Single lesson row */}
                 <div className="flex justify-between items-center py-2 border-b border-gray-50">
                   <span className="text-base text-gray-600">Single lesson</span>
                   <span className="font-bold text-lg" style={{ color: primary }}>${instructor.hourlyRate}/hr</span>
                 </div>
-                {activePackages.map((pkg: any) => (
-                  <div key={pkg.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-                    <div>
-                      <p className="text-base font-medium text-gray-800">{pkg.name}</p>
-                      {pkg.hours && <p className="text-sm text-gray-400">{pkg.hours} hours</p>}
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold" style={{ color: secondary }}>${pkg.price.toFixed(2)}</p>
-                      {pkg.hours && (
-                        <p className="text-sm text-green-600">
-                          Save ${((instructor.hourlyRate * pkg.hours) - pkg.price).toFixed(0)}
-                        </p>
-                      )}
+
+                {/* Booking durations */}
+                {allowedDurations.length > 0 && (
+                  <div className="py-2 border-b border-gray-50">
+                    <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide font-medium">Available lesson lengths</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allowedDurations.map((mins) => {
+                        const cost = (instructor.hourlyRate * mins) / 60;
+                        return (
+                          <div key={mins} className="flex flex-col items-center px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-center">
+                            <span className="text-sm font-semibold text-gray-800">{formatDuration(mins)}</span>
+                            <span className="text-xs text-gray-500">${cost % 1 === 0 ? cost.toFixed(0) : cost.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                ))}
+                )}
+
+                {/* Service area */}
+                {(baseSuburb || instructor.serviceRadiusKm) && (
+                  <div className="flex items-center gap-2 py-2 border-b border-gray-50">
+                    <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span className="text-sm text-gray-600">
+                      {baseSuburb ? `Based in ${baseSuburb}` : 'Local area'}
+                      {instructor.serviceRadiusKm ? ` · up to ${instructor.serviceRadiusKm} km radius` : ''}
+                    </span>
+                  </div>
+                )}
+
+                {/* Packages */}
+                {activePackages.map((pkg: any) => {
+                  const pkgDuration = pkg.durationMinutes
+                    ? formatDuration(pkg.durationMinutes)
+                    : pkg.hours
+                    ? `${pkg.hours} hrs`
+                    : null;
+                  const hourlyEquiv = pkg.durationMinutes
+                    ? (instructor.hourlyRate * pkg.durationMinutes) / 60
+                    : pkg.hours
+                    ? instructor.hourlyRate * pkg.hours
+                    : null;
+                  const saving = hourlyEquiv ? hourlyEquiv - pkg.price : null;
+                  return (
+                    <div key={pkg.id} className="flex justify-between items-start py-2 border-b border-gray-50 last:border-0">
+                      <div>
+                        <p className="text-base font-medium text-gray-800">{pkg.name}</p>
+                        {pkgDuration && <p className="text-sm text-gray-400">{pkgDuration}</p>}
+                        {pkg.description && <p className="text-xs text-gray-400 mt-0.5">{pkg.description}</p>}
+                      </div>
+                      <div className="text-right shrink-0 ml-3">
+                        <p className="font-bold" style={{ color: secondary }}>${pkg.price.toFixed(2)}</p>
+                        {saving && saving > 0 && (
+                          <p className="text-xs text-green-600">Save ${saving.toFixed(0)}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -426,6 +577,19 @@ export default async function SubdomainBookingPage({
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-gray-400 shrink-0" />
                   <p className="text-base text-gray-600">{instructor.bookingBufferMinutes} min buffer between lessons</p>
+                </div>
+              )}
+              {workingHoursSummary.length > 0 && (
+                <div className="flex items-start gap-2">
+                  <Calendar className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Availability</p>
+                    <div className="space-y-0.5">
+                      {workingHoursSummary.map((line, i) => (
+                        <p key={i} className="text-sm text-gray-700">{line}</p>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
               {instructor.isVerified && (
@@ -521,8 +685,20 @@ export default async function SubdomainBookingPage({
             )}
 
             <div id="booking-form" className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Book a Lesson</h2>
-              <p className="text-sm text-gray-500 mb-6">Choose your package and preferred time</p>
+              {/* Social proof banner */}
+              {(instructor.totalReviews > 0 || nextAvailableLabel) && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4 text-sm text-gray-600">
+                  {instructor.totalReviews > 0 && (
+                    <span>⭐ {instructor.averageRating?.toFixed(1) ?? '5.0'} from {instructor.totalReviews} reviews</span>
+                  )}
+                  {nextAvailableLabel && (
+                    <span>⏱ Next available: {nextAvailableLabel}</span>
+                  )}
+                  <span>🔒 No account required</span>
+                </div>
+              )}
+              <h2 className="text-xl font-bold text-gray-900 mb-0.5">Book Your Lesson</h2>
+              <p className="text-sm text-gray-500 mb-6">Takes less than 60 seconds · No account required</p>
               <BulkBookingForm
                 instructorId={instructor.id}
                 instructorName={instructor.name}
@@ -534,17 +710,18 @@ export default async function SubdomainBookingPage({
                 serviceAreas={instructor.serviceAreas}
                 baseAddress={instructor.baseAddress}
                 serviceRadiusKm={instructor.serviceRadiusKm}
+                allowedDurations={allowedDurations}
               />
             </div>
 
             {/* Reviews section */}
-            {recentReviews.length > 0 && (
+            {recentReviews.length > 0 ? (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-gray-900">Student Reviews</h2>
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-semibold text-gray-900">{instructor.averageRating?.toFixed(1) || '5.0'}</span>
+                    <span className="font-semibold text-gray-900">{instructor.averageRating?.toFixed(1)}</span>
                     <span className="text-sm text-gray-500">({instructor.totalReviews})</span>
                   </div>
                 </div>
@@ -568,6 +745,16 @@ export default async function SubdomainBookingPage({
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center">
+                <div className="flex justify-center gap-0.5 mb-2">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="h-5 w-5 text-gray-200" />
+                  ))}
+                </div>
+                <p className="text-sm font-medium text-gray-700">No reviews yet</p>
+                <p className="text-xs text-gray-400 mt-1">Be the first to book and leave a review</p>
               </div>
             )}
           </div>
@@ -598,6 +785,7 @@ export default async function SubdomainBookingPage({
             serviceAreas={instructor.serviceAreas}
             baseAddress={instructor.baseAddress}
             serviceRadiusKm={instructor.serviceRadiusKm}
+            allowedDurations={allowedDurations}
           />
         </div>
       </SubdomainClientFeatures>

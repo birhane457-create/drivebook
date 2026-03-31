@@ -12,7 +12,7 @@ interface TimeSlot {
 interface SlotPickerProps {
   instructorId: string;
   duration?: number; // minutes, default 60
-  onSelect: (date: string, time: string) => void;
+  onSelect: (date: string, time: string, isShortNotice?: boolean) => void;
   selected?: { date: string; time: string } | null;
   primaryColor?: string;
 }
@@ -57,9 +57,11 @@ export default function SlotPicker({
     fetch(`/api/availability/slots?instructorId=${instructorId}&date=${selectedDate}&duration=${duration}&bypassDurationCheck=true`)
       .then(r => r.json())
       .then(data => {
-        const available = (data.slots || []).filter((s: TimeSlot) => s.available);
-        setSlots(available);
-        setNoAvailability(available.length === 0);
+        const allSlots = (data.slots || []) as TimeSlot[];
+        const available = allSlots.filter((s: TimeSlot) => s.available);
+        const shortNotice = allSlots.filter((s: TimeSlot) => !s.available && s.reason === 'short_notice');
+        setSlots([...available, ...shortNotice]);
+        setNoAvailability(available.length === 0 && shortNotice.length === 0);
       })
       .catch(() => setNoAvailability(true))
       .finally(() => setLoadingSlots(false));
@@ -72,7 +74,8 @@ export default function SlotPicker({
   };
 
   const handleTimeSelect = (time: string) => {
-    onSelect(selectedDate, time);
+    const slot = slots.find(s => s.time === time);
+    onSelect(selectedDate, time, slot?.reason === 'short_notice');
   };
 
   return (
@@ -147,6 +150,7 @@ export default function SlotPicker({
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
               {slots.map(slot => {
                 const isChosen = selected?.date === selectedDate && selected?.time === slot.time;
+                const isShortNotice = slot.reason === 'short_notice';
                 return (
                   <button
                     key={slot.time}
@@ -155,11 +159,15 @@ export default function SlotPicker({
                     className={`py-2 rounded-lg text-sm font-medium border transition-all
                       ${isChosen
                         ? 'text-white border-transparent'
+                        : isShortNotice
+                        ? 'text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-100'
                         : 'text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
                       }`}
-                    style={isChosen ? { backgroundColor: primaryColor, borderColor: primaryColor } : {}}
+                    style={isChosen ? { backgroundColor: isShortNotice ? '#d97706' : primaryColor, borderColor: isShortNotice ? '#d97706' : primaryColor } : {}}
+                    title={isShortNotice ? 'Last-minute slot — requires instructor approval' : undefined}
                   >
                     {slot.time}
+                    {isShortNotice && <span className="block text-[9px] leading-tight">⚡ approval</span>}
                   </button>
                 );
               })}
@@ -169,6 +177,12 @@ export default function SlotPicker({
           {selected?.date === selectedDate && selected?.time && (
             <p className="text-sm mt-2 font-medium" style={{ color: primaryColor }}>
               ✓ {formatDateLabel(selectedDate)} at {selected.time}
+            </p>
+          )}
+
+          {slots.some(s => s.reason === 'short_notice') && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+              ⚡ Amber slots are within 2 hours and require instructor approval before confirming.
             </p>
           )}
         </div>

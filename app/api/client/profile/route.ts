@@ -48,7 +48,9 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             name: true,
-            hourlyRate: true
+            hourlyRate: true,
+            phone: true,
+            whatsapp: true,
           }
         }
       },
@@ -133,7 +135,9 @@ export async function GET(req: NextRequest) {
           instructor: {
             id: b.instructor.id,
             name: b.instructor.name,
-            hourlyRate: b.instructor.hourlyRate
+            hourlyRate: b.instructor.hourlyRate,
+            phone: (b.instructor as any).phone || null,
+            whatsapp: (b.instructor as any).whatsapp || null,
           }
         };
       }),

@@ -25,10 +25,11 @@ interface BulkBookingFormProps {
   serviceAreas?: string | null;
   baseAddress?: string | null;
   serviceRadiusKm?: number | null;
+  allowedDurations?: number[];
 }
 
 const STEP_LABELS_BASE = ['Package', 'Time Slot', 'Your Details', 'Confirm'];
-const STEP_LABELS_WITH_AREA = ['Package', 'Service Area', 'Time Slot', 'Your Details', 'Confirm'];
+const STEP_LABELS_WITH_AREA = ['Package', 'Pickup Location', 'Time Slot', 'Your Details', 'Confirm'];
 
 export default function BulkBookingForm({
   instructorId,
@@ -40,6 +41,7 @@ export default function BulkBookingForm({
   serviceAreas,
   baseAddress,
   serviceRadiusKm,
+  allowedDurations = [60],
 }: BulkBookingFormProps) {
   const primary = brandColorPrimary || '#3B82F6';
   const hasServiceAreaData = !!(serviceAreas || (baseAddress && serviceRadiusKm));
@@ -49,18 +51,22 @@ export default function BulkBookingForm({
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Duration — default to first allowed duration
+  const [selectedDuration, setSelectedDuration] = useState<number>(allowedDurations[0] ?? 60);
+
   // Package
   const [selectedPackage, setSelectedPackage] = useState<PackageType>('PACKAGE_10');
   const [customHours, setCustomHours] = useState(10);
   const [includeTestPackage, setIncludeTestPackage] = useState(false);
 
-  // Service area
-  const [areaCheckAddress, setAreaCheckAddress] = useState(searchedLocation || '');
-  const [areaCheckResult, setAreaCheckResult] = useState<'unknown' | 'in' | 'out' | 'skipped'>('unknown');
-  const [areaCheckLoading, setAreaCheckLoading] = useState(false);
+  // Service area / pickup location
+  const [pickupAddress, setPickupAddress] = useState(searchedLocation || '');
+  const [areaCheckResult, setAreaCheckResult] = useState<'unknown' | 'in' | 'out' | 'skipped' | 'checking'>('unknown');
+  const [areaCheckDetail, setAreaCheckDetail] = useState<{ distanceKm?: number; radiusKm?: number } | null>(null);
 
   // Slot
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
+  const [isShortNoticeSlot, setIsShortNoticeSlot] = useState(false);
 
   // Details
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'new' | 'exists'>('idle');
@@ -69,8 +75,7 @@ export default function BulkBookingForm({
     name: '', email: '', phone: '',
     address: searchedLocation || '',
     password: '', confirmPassword: '', notes: '',
-  });
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  });  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hours = selectedPackage === 'CUSTOM' ? customHours : HOUR_PACKAGES[selectedPackage].hours;
   const pricing = calculatePackagePrice(hourlyRate, hours, selectedPackage, includeTestPackage);
@@ -95,33 +100,30 @@ export default function BulkBookingForm({
     }
   };
 
-  const checkServiceArea = async () => {
-    if (!areaCheckAddress.trim() || !baseAddress || !serviceRadiusKm) {
-      setAreaCheckResult('skipped');
-      return;
-    }
-    setAreaCheckLoading(true);
+  const checkServiceArea = async (address: string) => {
+    if (!address.trim()) return;
+    setAreaCheckResult('checking');
+    setAreaCheckDetail(null);
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-      if (!apiKey) { setAreaCheckResult('skipped'); return; }
-      const [uRes, bRes] = await Promise.all([
-        fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(areaCheckAddress)}&key=${apiKey}`),
-        fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(baseAddress)}&key=${apiKey}`),
-      ]);
-      const [uData, bData] = await Promise.all([uRes.json(), bRes.json()]);
-      if (!uData.results?.[0] || !bData.results?.[0]) { setAreaCheckResult('skipped'); return; }
-      const { lat: uLat, lng: uLng } = uData.results[0].geometry.location;
-      const { lat: bLat, lng: bLng } = bData.results[0].geometry.location;
-      const R = 6371;
-      const dLat = (uLat - bLat) * Math.PI / 180;
-      const dLng = (uLng - bLng) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos(bLat * Math.PI / 180) * Math.cos(uLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      setAreaCheckResult(dist <= serviceRadiusKm ? 'in' : 'out');
+      const res = await fetch(
+        `/api/public/check-service-area?instructorId=${encodeURIComponent(instructorId)}&address=${encodeURIComponent(address)}`
+      );
+      const data = await res.json();
+      if (data.result === 'in' || data.result === 'out') {
+        setAreaCheckResult(data.result);
+        setAreaCheckDetail({ distanceKm: data.distanceKm, radiusKm: data.radiusKm });
+      } else if (data.reason === 'no_service_area_configured') {
+        // Instructor hasn't set a service area — silently allow
+        setAreaCheckResult('skipped');
+      } else if (data.reason === 'no_api_key') {
+        // No geocoding available — can't check, allow through
+        setAreaCheckResult('skipped');
+      } else {
+        // Geocode failed (bad address) — keep unknown so student must fix address or skip manually
+        setAreaCheckResult('unknown');
+      }
     } catch {
       setAreaCheckResult('skipped');
-    } finally {
-      setAreaCheckLoading(false);
     }
   };
 
@@ -145,7 +147,16 @@ export default function BulkBookingForm({
 
   const canProceed = (): boolean => {
     if (currentLabel === 'Package') return true;
-    if (currentLabel === 'Service Area') return areaCheckResult !== 'unknown';
+    if (currentLabel === 'Pickup Location') {
+      if (pickupAddress.trim().length <= 5) return false;
+      if (areaCheckResult === 'checking') return false;
+      // If instructor has service area data, require the check to have been run
+      if (hasServiceAreaData) {
+        return areaCheckResult === 'in' || areaCheckResult === 'out' || areaCheckResult === 'skipped';
+      }
+      // No service area configured — just need a non-empty address
+      return true;
+    }
     if (currentLabel === 'Time Slot') return !!(selectedSlot?.time);
     if (currentLabel === 'Your Details') return !!(formData.name && formData.email && formData.phone && formData.address);
     return true;
@@ -153,6 +164,10 @@ export default function BulkBookingForm({
 
   const handleNext = () => {
     if (currentLabel === 'Your Details' && !validateDetails()) return;
+    // Carry pickup address forward to details step
+    if (currentLabel === 'Pickup Location') {
+      setFormData(prev => ({ ...prev, address: pickupAddress }));
+    }
     setStep(s => s + 1);
   };
 
@@ -178,9 +193,10 @@ export default function BulkBookingForm({
           scheduledBookings: [{
             date: selectedSlot.date,
             time: selectedSlot.time,
-            duration: 60,
+            duration: selectedDuration,
             pickupLocation: formData.address,
             notes: formData.notes || '',
+            isShortNotice: isShortNoticeSlot,
           }],
         }),
       });
@@ -189,7 +205,12 @@ export default function BulkBookingForm({
         const host = window.location.host;
         const parts = host.split('.');
         const mainHost = parts.length > 1 && !parts[0].includes(':') ? parts.slice(1).join('.') : host;
-        window.location.href = `${window.location.protocol}//${mainHost}/booking/${data.bookingId}/payment`;
+        if (data.isShortNotice) {
+          // Short-notice: no payment — go straight to confirmation with pending status
+          window.location.href = `${window.location.protocol}//${mainHost}/booking/${data.bookingId}/confirmation?status=pending_approval`;
+        } else {
+          window.location.href = `${window.location.protocol}//${mainHost}/booking/${data.bookingId}/payment`;
+        }
       } else {
         alert(data.error || 'Booking failed. Please try again.');
       }
@@ -277,6 +298,37 @@ export default function BulkBookingForm({
             <h3 className="text-lg font-bold">Choose Your Package</h3>
             <p className="text-sm text-gray-500 mt-1">Packages save you money — the more hours, the bigger the discount.</p>
           </div>
+
+          {/* Duration picker — shown first so slot availability is correct */}
+          {allowedDurations.length > 1 && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
+              <p className="text-sm font-semibold text-gray-800">Lesson duration</p>
+              <div className="flex flex-wrap gap-2">
+                {allowedDurations.map((mins) => {
+                  const h = Math.floor(mins / 60);
+                  const m = mins % 60;
+                  const label = m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`;
+                  const cost = (hourlyRate * mins) / 60;
+                  const isSelected = selectedDuration === mins;
+                  return (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => { setSelectedDuration(mins); setSelectedSlot(null); }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all font-medium text-sm"
+                      style={isSelected
+                        ? { borderColor: primary, backgroundColor: `${primary}15`, color: primary }
+                        : { borderColor: '#e5e7eb', color: '#374151' }}
+                    >
+                      {label}
+                      <span className="text-xs opacity-60">${cost % 1 === 0 ? cost.toFixed(0) : cost.toFixed(2)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400">Selected: {(() => { const h = Math.floor(selectedDuration / 60); const m = selectedDuration % 60; return m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`; })()} per lesson</p>
+            </div>
+          )}
 
           {/* Single / Custom */}
           <div
@@ -399,80 +451,119 @@ export default function BulkBookingForm({
         </div>
       )}
 
-      {/* ── STEP: Service Area ── */}
-      {currentLabel === 'Service Area' && (
+      {/* ── STEP: Pickup Location ── */}
+      {currentLabel === 'Pickup Location' && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-lg font-bold">Service Area Check</h3>
+            <h3 className="text-lg font-bold">Your Pickup Address</h3>
             <p className="text-sm text-gray-500 mt-1">
-              Confirm {instructorName} covers your pickup location before booking.
+              Enter your full pickup address. We&apos;ll check if {instructorName} services your area.
             </p>
           </div>
 
           {serviceAreas && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
-              <p className="font-medium text-blue-900 mb-1">Areas covered:</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+              <p className="font-medium text-blue-900 mb-0.5">Areas covered:</p>
               <p className="text-blue-800">{serviceAreas}</p>
             </div>
           )}
 
-          {baseAddress && serviceRadiusKm && (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-600">
-                {instructorName} operates within <strong>{serviceRadiusKm}km</strong> of {baseAddress}.
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={areaCheckAddress}
-                  onChange={(e) => { setAreaCheckAddress(e.target.value); setAreaCheckResult('unknown'); }}
-                  onKeyDown={(e) => e.key === 'Enter' && checkServiceArea()}
-                  placeholder="Enter your suburb or postcode"
-                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={checkServiceArea}
-                  disabled={areaCheckLoading || !areaCheckAddress.trim()}
-                  className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50"
-                  style={{ backgroundColor: primary }}
-                >
-                  {areaCheckLoading ? 'Checking...' : 'Check'}
-                </button>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <MapPin className="inline h-4 w-4 mr-1" />
+              Pickup address *
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={pickupAddress}
+                onChange={(e) => {
+                  setPickupAddress(e.target.value);
+                  setAreaCheckResult('unknown');
+                  setAreaCheckDetail(null);
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && checkServiceArea(pickupAddress)}
+                placeholder="e.g. 12 Smith St, Maylands WA 6051"
+                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                autoComplete="street-address"
+              />
+              <button
+                type="button"
+                onClick={() => checkServiceArea(pickupAddress)}
+                disabled={areaCheckResult === 'checking' || !pickupAddress.trim()}
+                className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 shrink-0"
+                style={{ backgroundColor: primary }}
+              >
+                {areaCheckResult === 'checking' ? 'Checking…' : 'Check'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">Enter your full street address for the most accurate check</p>
+          </div>
+
+          {/* Hint when check hasn't been run yet */}
+          {areaCheckResult === 'unknown' && pickupAddress.trim().length > 5 && hasServiceAreaData && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Click <strong>Check</strong> to verify your address is within the service area before continuing.
+            </p>
+          )}
+
+          {/* Result feedback */}
+          {areaCheckResult === 'in' && (
+            <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+              <CheckCircle className="h-5 w-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">{instructorName} services your area.</p>
+                {areaCheckDetail?.distanceKm !== undefined && (
+                  <p className="text-xs mt-0.5 text-green-700">
+                    {areaCheckDetail.distanceKm} km from base · within {areaCheckDetail.radiusKm} km radius
+                  </p>
+                )}
               </div>
-
-              {areaCheckResult === 'in' && (
-                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
-                  <CheckCircle className="h-5 w-5 shrink-0" />
-                  {instructorName} covers your area. You&apos;re good to go!
-                </div>
-              )}
-              {areaCheckResult === 'out' && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
-                  <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium">Your location may be outside the service area.</p>
-                    <p className="mt-0.5">You can still proceed — {instructorName} will confirm availability.</p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {!baseAddress && !serviceAreas && (
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-              No service area restrictions set for this instructor.
+          {areaCheckResult === 'out' && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+              <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Your address is outside the service area.</p>
+                {areaCheckDetail?.distanceKm !== undefined && (
+                  <p className="text-xs mt-0.5">
+                    {areaCheckDetail.distanceKm} km from base · service radius is {areaCheckDetail.radiusKm} km
+                  </p>
+                )}
+                <p className="mt-1 text-xs">
+                  You can still proceed, but by doing so you confirm you understand this instructor may not be able to service your location. The instructor may cancel if the address is too far.
+                </p>
+              </div>
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => setAreaCheckResult('skipped')}
-            className="text-sm text-gray-400 underline hover:text-gray-600"
-          >
-            Skip this check and continue
-          </button>
+          {areaCheckResult === 'skipped' && pickupAddress.trim() && (
+            <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
+              <CheckCircle className="h-4 w-4 shrink-0" />
+              Address saved. You&apos;re good to continue.
+            </div>
+          )}
 
+          {/* Manual skip — only after a geocode failure, not before any check */}
+          {areaCheckResult === 'unknown' && pickupAddress.trim().length > 5 && hasServiceAreaData && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+              <p className="text-sm text-amber-800 font-medium">
+                ⚠️ We couldn&apos;t verify this address. Please make sure you&apos;ve entered a valid street address within {areaCheckDetail?.radiusKm ?? (serviceRadiusKm ?? '')} km of the service area.
+              </p>
+              <p className="text-xs text-amber-700">
+                By continuing without verification, you confirm your pickup address is within the instructor&apos;s service area. If it&apos;s not, the instructor may need to cancel your booking.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAreaCheckResult('skipped')}
+                className="text-xs text-amber-800 underline hover:text-amber-900 font-medium"
+              >
+                I confirm my address is within the service area — continue anyway
+              </button>
+            </div>
+          )}
           <NavButtons />
         </div>
       )}
@@ -495,11 +586,31 @@ export default function BulkBookingForm({
 
           <SlotPicker
             instructorId={instructorId}
-            duration={60}
+            duration={selectedDuration}
             selected={selectedSlot}
-            onSelect={(date, time) => setSelectedSlot(time ? { date, time } : { date, time: '' })}
+            onSelect={(date, time, shortNotice) => {
+              setSelectedSlot(time ? { date, time } : { date, time: '' });
+              setIsShortNoticeSlot(!!shortNotice);
+            }}
             primaryColor={primary}
           />
+
+          {/* Show selected duration as reminder */}
+          {allowedDurations.length > 1 && (
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Lesson duration:</span>
+              <span className="font-medium text-gray-700">
+                {(() => { const h = Math.floor(selectedDuration / 60); const m = selectedDuration % 60; return m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`; })()}
+              </span>
+              <button
+                type="button"
+                onClick={() => setStep(0)}
+                className="text-blue-500 underline hover:text-blue-700"
+              >
+                Change
+              </button>
+            </div>
+          )}
 
           {selectedSlot?.time && (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
@@ -599,15 +710,29 @@ export default function BulkBookingForm({
             <label className="block text-sm font-medium mb-1">
               <MapPin className="inline h-4 w-4 mr-1" />Pickup Address *
             </label>
-            <input
-              type="text"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${fieldErrors.address ? 'border-red-400' : ''}`}
-              placeholder="123 Main St, Melbourne VIC 3000"
-            />
+            {hasServiceAreaData && formData.address ? (
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-gray-50">
+                <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                <span className="flex-1 text-sm text-gray-700">{formData.address}</span>
+                <button
+                  type="button"
+                  onClick={() => setStep(stepLabels.indexOf('Pickup Location'))}
+                  className="text-xs text-blue-600 hover:underline shrink-0"
+                >
+                  Edit
+                </button>
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${fieldErrors.address ? 'border-red-400' : ''}`}
+                placeholder="123 Main St, Melbourne VIC 3000"
+              />
+            )}
             {fieldErrors.address && <p className="text-xs text-red-600 mt-1">{fieldErrors.address}</p>}
-            <p className="text-xs text-gray-500 mt-1">Where should {instructorName} pick you up?</p>
+            {!hasServiceAreaData && <p className="text-xs text-gray-500 mt-1">Where should {instructorName} pick you up?</p>}
           </div>
 
           {emailStatus !== 'exists' && (
@@ -671,11 +796,27 @@ export default function BulkBookingForm({
         <div className="space-y-4">
           <h3 className="text-lg font-bold">Confirm Your Booking</h3>
 
+          {isShortNoticeSlot && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-800 text-sm">
+              <span className="text-lg shrink-0">⚡</span>
+              <div>
+                <p className="font-semibold">Last-minute booking — requires instructor approval</p>
+                <p className="text-xs mt-0.5">This slot is within 2 hours. Your booking will be submitted as a request. The instructor will be notified urgently and must approve before it&apos;s confirmed. You will be notified of their decision.</p>
+              </div>
+            </div>
+          )}
+
           <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-100 text-sm">
             <div className="px-4 py-3 flex justify-between">
               <span className="text-gray-500">Package</span>
               <span className="font-medium">
                 {hours} hours{includeTestPackage ? ' + Test Package' : ''}
+              </span>
+            </div>
+            <div className="px-4 py-3 flex justify-between">
+              <span className="text-gray-500">Lesson duration</span>
+              <span className="font-medium">
+                {(() => { const h = Math.floor(selectedDuration / 60); const m = selectedDuration % 60; return m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`; })()}
               </span>
             </div>
             <div className="px-4 py-3 flex justify-between">

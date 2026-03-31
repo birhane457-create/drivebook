@@ -12,16 +12,38 @@ export default function BookingConfirmationPage() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const bookingId = params.id as string;
-  const paymentStatus = searchParams.get('payment');
-  
+  const paymentStatus = searchParams.get('redirect_status');
+  const paymentIntentId = searchParams.get('payment_intent');
+  const pendingApproval = searchParams.get('status') === 'pending_approval';
+
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [verified, setVerified] = useState(false);
 
   useEffect(() => {
-    if (bookingId) {
+    if (pendingApproval && bookingId) {
+      fetchBooking(); // No payment to verify — just load the booking
+    } else if (bookingId && paymentIntentId && paymentStatus === 'succeeded') {
+      verifyAndFetch();
+    } else if (bookingId) {
       fetchBooking();
     }
   }, [bookingId]);
+
+  const verifyAndFetch = async () => {
+    try {
+      // Verify payment with Stripe directly — handles case where webhook hasn't fired yet
+      await fetch('/api/payments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentIntentId, bookingId }),
+      });
+      setVerified(true);
+    } catch {
+      // Non-fatal — booking may already be confirmed via webhook
+    }
+    await fetchBooking();
+  };
 
   const fetchBooking = async () => {
     try {
@@ -53,16 +75,22 @@ export default function BookingConfirmationPage() {
       <div className="max-w-3xl mx-auto">
         {/* Success Icon */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 mb-4">
-            <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-4" style={{ backgroundColor: pendingApproval ? '#fef3c7' : '#dcfce7' }}>
+            {pendingApproval ? (
+              <span className="text-4xl">⚡</span>
+            ) : (
+              <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Booking Confirmed!
+            {pendingApproval ? 'Request Sent!' : 'Booking Confirmed!'}
           </h1>
           <p className="text-lg text-gray-600">
-            {paymentStatus === 'success' ? 'Payment successful' : 'Your booking has been confirmed'}
+            {pendingApproval
+              ? 'Your last-minute lesson request is awaiting instructor approval'
+              : paymentStatus === 'success' ? 'Payment successful' : 'Your booking has been confirmed'}
           </p>
         </div>
 
@@ -72,43 +100,75 @@ export default function BookingConfirmationPage() {
             What's Next?
           </h2>
 
-          <div className="space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <span className="text-blue-600 font-semibold">1</span>
+          {pendingApproval ? (
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                  <span className="text-amber-600 font-semibold">1</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Instructor Notified</h3>
+                  <p className="text-gray-600 text-sm">Your instructor has been sent an urgent notification and must approve within 1 hour.</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Check Your Email</h3>
-                <p className="text-gray-600 text-sm">
-                  We've sent a confirmation email with all your booking details and instructor contact information.
-                </p>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                  <span className="text-amber-600 font-semibold">2</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">You'll Be Notified</h3>
+                  <p className="text-gray-600 text-sm">Once approved, you'll receive a notification and can complete payment. If declined, no charge is made.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                  <span className="text-amber-600 font-semibold">3</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">No Payment Yet</h3>
+                  <p className="text-gray-600 text-sm">Payment is only processed after the instructor approves your request.</p>
+                </div>
               </div>
             </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-blue-600 font-semibold">1</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Check Your Email</h3>
+                  <p className="text-gray-600 text-sm">
+                    We've sent a confirmation email with all your booking details and instructor contact information.
+                  </p>
+                </div>
+              </div>
 
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <span className="text-blue-600 font-semibold">2</span>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-blue-600 font-semibold">2</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Access Your Dashboard</h3>
+                  <p className="text-gray-600 text-sm">
+                    Login to your dashboard to view your bookings, schedule remaining hours, and manage your account.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Access Your Dashboard</h3>
-                <p className="text-gray-600 text-sm">
-                  Login to your dashboard to view your bookings, schedule remaining hours, and manage your account.
-                </p>
-              </div>
-            </div>
 
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <span className="text-blue-600 font-semibold">3</span>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Contact Your Instructor</h3>
-                <p className="text-gray-600 text-sm">
-                  Your instructor will reach out to you shortly. You can also contact them directly using the details in your confirmation email.
-                </p>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-blue-600 font-semibold">3</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Contact Your Instructor</h3>
+                  <p className="text-gray-600 text-sm">
+                    Your instructor will reach out to you shortly. You can also contact them directly using the details in your confirmation email.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Booking Reference */}
@@ -126,7 +186,7 @@ export default function BookingConfirmationPage() {
         <div className="flex flex-col sm:flex-row gap-4">
           {session?.user ? (
             <Link
-              href={session.user.role === 'CLIENT' ? '/client/dashboard' : '/dashboard'}
+              href="/client-dashboard"
               className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center"
             >
               Go to Dashboard

@@ -245,6 +245,19 @@ export default function BookingsPage() {
       <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold">Bookings ({bookings.length})</h1>
+
+          {/* Urgent: pending short-notice approval requests */}
+          {bookings.filter(b => b.status === 'PENDING' && new Date(b.startTime) < new Date(Date.now() + 2 * 60 * 60 * 1000)).length > 0 && (
+            <div className="w-full mt-4 p-4 bg-amber-50 border-2 border-amber-400 rounded-xl flex items-start gap-3">
+              <span className="text-2xl shrink-0">⚡</span>
+              <div className="flex-1">
+                <p className="font-bold text-amber-900">Last-minute booking requests need your approval</p>
+                <p className="text-sm text-amber-800 mt-0.5">
+                  {bookings.filter(b => b.status === 'PENDING' && new Date(b.startTime) < new Date(Date.now() + 2 * 60 * 60 * 1000)).length} request(s) within the next 2 hours. Approve or decline below.
+                </p>
+              </div>
+            </div>
+          )}
           <Link 
             href="/dashboard/bookings/new"
             className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700"

@@ -25,6 +25,16 @@ export async function GET(req: NextRequest) {
     const selectedDate = new Date(date)
     const dayName = format(selectedDate, 'EEEE').toLowerCase()
 
+    // Determine the earliest bookable time:
+    // - If today: now + minimum advance notice (2 hours)
+    // - If future date: start of working hours
+    const now = new Date()
+    const isToday = selectedDate.toDateString() === now.toDateString()
+    const minimumAdvanceMinutes = 120 // 2 hours minimum notice
+    const earliestBookable = isToday
+      ? addMinutes(now, minimumAdvanceMinutes)
+      : null
+
     // Get instructor's working hours, buffer settings, and slot configuration
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
@@ -48,12 +58,12 @@ export async function GET(req: NextRequest) {
     const travelTimeMinutes = (instructor as any).travelTimeMinutes || 10
 
     // Validate that requested duration is allowed by instructor
-    // Skip this check when rescheduling (bypassDurationCheck=true) since we keep the same duration
+    // bypassDurationCheck is only for reschedule flows where the duration is already set
     const bypassDurationCheck = searchParams.get('bypassDurationCheck') === 'true'
-    if (!bypassDurationCheck && !allowedDurations.includes(duration)) {
+    if (!bypassDurationCheck && allowedDurations.length > 0 && !allowedDurations.includes(duration)) {
       return NextResponse.json({ 
         slots: [], 
-        message: `This instructor does not offer ${duration}-minute lessons. Available durations: ${allowedDurations.join(', ')} minutes` 
+        message: `This instructor does not offer ${duration}-minute lessons. Available: ${(allowedDurations as number[]).map(d => d + ' min').join(', ')}` 
       })
     }
 
@@ -220,6 +230,15 @@ export async function GET(req: NextRequest) {
           break
         }
         
+        // Skip slots in the past (before now)
+        if (isToday && currentTime <= now) {
+          currentTime = addMinutes(currentTime, slotInterval)
+          continue
+        }
+
+        // Flag slots within minimum advance notice window — show but not bookable
+        const isShortNotice = earliestBookable !== null && currentTime < earliestBookable
+
         // Check if slot conflicts with any blocked ranges
         // Use slotEnd (not bufferEnd) as the lesson boundary for conflict detection
         const hasConflict = blockedRanges.some(blocked => 
@@ -232,7 +251,8 @@ export async function GET(req: NextRequest) {
         if (!hasConflict) {
           slots.push({
             time: format(currentTime, 'HH:mm'),
-            available: true
+            available: true,
+            reason: isShortNotice ? 'short_notice' : undefined
           })
         }
         

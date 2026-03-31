@@ -1,13 +1,13 @@
 # DriveBook Domain & Public Booking Page System
 
-**Last Updated:** March 29, 2026  
-**Scope:** How instructor public booking pages work — subdomain routing, custom domains, DNS setup, mobile UX, and branding tiers
+**Last Updated:** March 30, 2026  
+**Scope:** How instructor public booking pages work — subdomain routing, custom domains, DNS setup, mobile UX, branding tiers, booking form, and SEO
 
 ---
 
 ## 1. Overview
 
-Every instructor gets a public booking page that students can visit without logging in. The page shows the instructor's profile, pricing, reviews, and a full booking form. Students can book and pay in under 2 minutes.
+Every instructor gets a public booking page that students can visit without logging in. The page shows the instructor's profile, pricing, availability, reviews, and a full booking form. Students can book and pay in under 2 minutes.
 
 There are three ways a student can reach an instructor's page:
 
@@ -15,7 +15,7 @@ There are three ways a student can reach an instructor's page:
 |---|---|---|---|
 | Default (by ID) | `abc123.drivebook.com.au` | Automatic — always works | Any |
 | Custom slug | `john.drivebook.com.au` | Instructor picks a slug | PRO+ |
-| Custom domain | `x.com.au` or `book.x.com.au` | Instructor points DNS | STUDIO / BUSINESS |
+| Custom domain | `book.x.com.au` | Instructor points DNS | STUDIO / BUSINESS |
 
 ---
 
@@ -79,55 +79,38 @@ DNS is managed by **us** (Vercel wildcard). The instructor just picks a slug —
 ```
 
 ### Default URL — all tiers
-Every instructor has a working URL at `<instructorId>.drivebook.com.au` from day one. No setup needed. The subdomain page falls back to looking up by `id` if no `customDomain` matches.
+Every instructor has a working URL at `<instructorId>.drivebook.com.au` from day one. No setup needed.
 
 ### STUDIO / BUSINESS — bring your own domain
 
-The instructor owns `x.com.au` and wants their booking page there.
-
-**Option A — Use a subdomain of their domain (recommended)**
-
-They want `book.x.com.au`. At their registrar (VentraIP, Crazy Domains, GoDaddy, etc.):
+**Option A — Use a subdomain (recommended)**
 
 ```
 Type:  CNAME
-Name:  book          ← just the label, NOT the full domain
+Name:  book
 Value: cname.vercel-dns.com
 ```
 
-**Option B — Use the root domain `x.com.au` itself**
-
-Root domains can't use a standard CNAME (DNS spec limitation). Options:
+**Option B — Root domain `x.com.au`**
 
 | Method | How |
 |---|---|
-| ALIAS / ANAME | Some registrars (VentraIP, Cloudflare) support this. Add `ALIAS @ → cname.vercel-dns.com` |
-| Cloudflare DNS | Move nameservers to Cloudflare (free). Add `CNAME @ → cname.vercel-dns.com` — Cloudflare flattens it automatically |
-| www + redirect | Add `CNAME www → cname.vercel-dns.com`, then set a URL redirect at registrar: `x.com.au → www.x.com.au` |
-
-The domain wizard in the branding page detects root vs subdomain and shows the correct instructions automatically.
+| ALIAS / ANAME | Some registrars support this. Add `ALIAS @ → cname.vercel-dns.com` |
+| Cloudflare DNS | Move nameservers to Cloudflare. Add `CNAME @ → cname.vercel-dns.com` |
+| www + redirect | `CNAME www → cname.vercel-dns.com`, then redirect root to www |
 
 ---
 
 ## 4. Domain Verification Flow (Studio/Business)
 
 ```
-Instructor enters domain in branding page
+Instructor enters domain → POST /api/instructor/domain/verify
         │
         ▼
-Clicks "Verify Domain"
+Server does DNS CNAME lookup
         │
-        ▼
-POST /api/instructor/domain/verify
-        │
-        ▼
-Server does DNS CNAME lookup on the domain
-        │
-        ├── CNAME resolves to *.vercel* → mark domainVerified=true ✅
-        │   instructor.customDomain = domain
-        │   instructor.domainVerifiedAt = now()
-        │
-        └── Not found / wrong target → return error + show instructions
+        ├── resolves to *.vercel* → domainVerified=true ✅
+        └── wrong target → return error + show instructions
 ```
 
 **Schema fields:**
@@ -137,7 +120,7 @@ domainVerified   Boolean   @default(false)
 domainVerifiedAt DateTime?
 ```
 
-**Important:** After verification, you must also add the domain to your Vercel project settings so Vercel issues an SSL certificate and routes traffic. This is currently a manual step in the Vercel dashboard.
+After verification, add the domain in Vercel project settings for SSL.
 
 ---
 
@@ -147,13 +130,11 @@ domainVerifiedAt DateTime?
 |---|---|---|---|---|
 | Public booking page | ✅ | ✅ | ✅ | ✅ |
 | Default URL (by ID) | ✅ | ✅ | ✅ | ✅ |
-| Custom slug (`john.drivebook.com.au`) | ❌ | ✅ | ✅ | ✅ |
+| Custom slug | ❌ | ✅ | ✅ | ✅ |
 | Custom logo + brand colors | ❌ | ✅ | ✅ | ✅ |
-| White-label nav (hide "DriveBook") | ❌ | ✅ | ✅ | ✅ |
-| Custom domain (bring your own) | ❌ | ❌ | ✅ | ✅ |
+| White-label nav | ❌ | ✅ | ✅ | ✅ |
+| Custom domain | ❌ | ❌ | ✅ | ✅ |
 | Multiple instructors | ❌ | ❌ | ❌ | ✅ |
-| Monthly price | $29 | $79 | $129 | $199 |
-| Commission rate | 15% | 12% | 11% | 10% |
 
 ---
 
@@ -161,38 +142,48 @@ domainVerifiedAt DateTime?
 
 **Files:**
 - `app/subdomain/[slug]/page.tsx` — handles `*.drivebook.com.au` subdomains
-- `app/custom-domain/page.tsx` — handles custom domains (reads `x-custom-domain` header set by middleware)
+- `app/custom-domain/page.tsx` — handles custom domains
 
-Both render the same booking page. `custom-domain/page.tsx` looks up the instructor by their verified custom domain and delegates to the same render function.
+**Caching:** `export const revalidate = 300` — page is cached for 5 minutes. Instructor profile changes take up to 5 minutes to appear publicly.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Desktop nav bar (hidden on mobile)                      │
-│  [Logo]  [Instructor name]  [WhatsApp]  [Login]         │
+│ Desktop nav bar                                         │
+│  [Logo/Brand]  [About] [Services] [Contact] [Book Now]  │
+│  [WhatsApp]  [Login]                                    │
+├─────────────────────────────────────────────────────────┤
+│ JSON-LD structured data (LocalBusiness schema)          │
 ├─────────────────────────────────────────────────────────┤
 │ Hero banner (gradient using brand colors)               │
-│  [Profile photo]  [Name]  [Stars]  [Service area]       │
+│  [Profile photo]  [Name]  [Stars or "New instructor"]   │
+│  [Service area / suburb]  [Vehicle types]               │
 │  [Years exp]  [Student count]  [Next available]         │
 ├─────────────────────────────────────────────────────────┤
 │ Trust badges strip                                      │
-│  ✅ Verified  🏆 X+ Years  ⭐ Rating  🔒 Secure Booking │
+│  ✅ Verified  🏆 X+ Years  ⭐ Rating (only if reviews)  │
+│  🔒 Secure Booking                                      │
 ├──────────────────────┬──────────────────────────────────┤
 │ Left column          │ Right column                     │
 │                      │                                  │
 │ Next availability    │ [Location pre-fill banner]       │
 │                      │                                  │
 │ [section-about]      │ [booking-form]                   │
-│ About / bio          │ BulkBookingForm                  │
-│                      │                                  │
-│ [section-services]   │ Student reviews                  │
-│ Services & Pricing   │                                  │
+│ About / bio          │  Social proof banner             │
+│ (hidden if empty)    │  "Book Your Lesson"              │
+│                      │  BulkBookingForm                 │
+│ [section-services]   │                                  │
+│ Services & Pricing   │ Student reviews                  │
 │  - Single lesson     │                                  │
+│  - Lesson durations  │                                  │
+│  - Service area      │                                  │
 │  - Packages          │                                  │
 │                      │                                  │
 │ [section-contact]    │                                  │
 │ Details              │                                  │
 │  - Vehicle types     │                                  │
 │  - Languages         │                                  │
+│  - Buffer time       │                                  │
+│  - Availability hrs  │                                  │
 │  - Phone             │                                  │
 │ Social links         │                                  │
 │ Vehicle photo        │                                  │
@@ -207,151 +198,205 @@ Both render the same booking page. `custom-domain/page.tsx` looks up the instruc
 
 ---
 
-## 7. Mobile UX
+## 7. Booking Form (BulkBookingForm)
+
+**File:** `components/BulkBookingForm.tsx`
+
+**Steps:**
+
+| Step | Label | Condition |
+|---|---|---|
+| 1 | Package | Always |
+| 2 | Service Area | Only if `serviceAreas` or `baseAddress + serviceRadiusKm` set |
+| 3 | Time Slot | Always |
+| 4 | Your Details | Always |
+| 5 | Confirm | Always |
+
+**Duration picker (Package step):**
+- Shows chips for each duration in `allowedDurations` (e.g. "1 hr / $90", "2 hrs / $180")
+- Student selects a duration before proceeding
+- Selected duration is passed to `SlotPicker` so availability is calculated for the correct block length
+- Selected duration is submitted in the booking payload (`scheduledBookings[0].duration`)
+- If `allowedDurations` is empty, a warning is shown: "Lesson durations not configured yet"
+
+**Service area check:**
+- Client-side only (advisory, not enforced server-side)
+- Uses Google Maps Geocoding API to calculate distance from `baseAddress`
+- Student can skip the check and proceed regardless
+
+**Slot picker:**
+- Fetches from `/api/availability/slots?instructorId=X&date=Y&duration=Z`
+- Duration is now dynamic — passed from the selected duration chip
+- `bypassDurationCheck=true` used only for reschedule flows
+
+---
+
+## 8. Availability Slots API
+
+**Endpoint:** `GET /api/availability/slots`
+
+**Parameters:**
+| Param | Type | Description |
+|---|---|---|
+| `instructorId` | string | Required |
+| `date` | string | YYYY-MM-DD |
+| `duration` | number | Minutes (must be in instructor's `allowedDurations`) |
+| `bypassDurationCheck` | boolean | Skip duration validation (reschedule only) |
+| `excludeBookingId` | string | Exclude a booking from conflict check (edit mode) |
+
+**Working hours format** (stored in `instructor.workingHours` JSON):
+```json
+{
+  "monday": [{ "start": "09:00", "end": "17:00" }],
+  "tuesday": [{ "start": "09:00", "end": "17:00" }],
+  "saturday": [{ "start": "09:00", "end": "13:00" }],
+  "sunday": []
+}
+```
+Each day is an **array of time slots** (supports split shifts). Empty array = not working that day.
+
+**Important:** The subdomain page's `nextAvailableLabel` computation reads this same format. The old `{ enabled, start, end }` format is no longer used.
+
+---
+
+## 9. SEO
+
+The page uses two layers of SEO:
+
+**1. `generateMetadata()` — Next.js metadata**
+- Title: `Book Driving Lessons with {name}`
+- Description: bio (truncated to 155 chars) or auto-generated from service areas + rate
+- OpenGraph + Twitter card images from `profileImage`
+
+**2. JSON-LD structured data (inline `<script>` tag)**
+```json
+{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "...",
+  "image": "...",
+  "description": "...",
+  "areaServed": "...",
+  "priceRange": "From $90/hr",
+  "address": {
+    "@type": "PostalAddress",
+    "addressLocality": "Maylands",
+    "addressCountry": "AU"
+  },
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": 4.9,
+    "reviewCount": 42
+  }
+}
+```
+- `address` is only included if `baseAddress` is set (suburb extracted automatically)
+- `aggregateRating` is only included if `totalReviews > 0`
+
+---
+
+## 10. Profile Fields That Appear on the Booking Page
+
+| Field | Where to edit | What it affects |
+|---|---|---|
+| `name` | Profile page | Hero, nav, SEO title |
+| `bio` | Profile page | About section (hidden if empty/whitespace) |
+| `profileImage` | Profile page | Hero photo, SEO image |
+| `carImage` | Profile page | Vehicle photo card |
+| `carMake/Model/Year` | Profile page | Vehicle photo caption |
+| `baseAddress` | Profile page | Service area display (suburb only shown publicly), JSON-LD address, distance check |
+| `serviceRadiusKm` | Settings page | Service area display, distance check |
+| `serviceAreas` | Profile page | Hero subtitle, service area check |
+| `hourlyRate` | Settings page | Pricing display |
+| `allowedDurations` | Settings page | Duration chips, slot picker, booking payload |
+| `lessonPackages` | Settings page | Package cards in services section |
+| `workingHours` | Settings page | Next available label, slot picker |
+| `bookingBufferMinutes` | Settings page | Details card, slot calculation |
+| `vehicleTypes` | Settings page | Hero subtitle, details card |
+| `languages` | Profile page | Details card |
+| `yearsExperience` | Profile page | Hero, trust badges |
+| `whatsapp` | Profile page | Nav button, connect card |
+| `instagram` / `facebook` | Profile page | Connect card |
+| `brandColorPrimary` | Branding page | All accent colors (all tiers) |
+| `brandColorSecondary` | Branding page | Package prices, savings |
+| `brandLogo` | Branding page | Nav logo (PRO+ only) |
+| `showBrandingOnBookingPage` | Branding page | White-label nav (PRO+ only) |
+
+**Note:** `baseAddress` was previously read-only in the profile page. It is now editable. Only the suburb portion is shown publicly — the full address is never exposed.
+
+---
+
+## 11. Mobile UX
 
 **File:** `components/subdomain/SubdomainClientFeatures.tsx`
 
 On mobile (`< md` breakpoint):
+- **Bottom nav bar** — fixed, 4 tabs: About / Services / Contact / Book Now
+- **Book Now** opens a full-screen drawer with `BulkBookingForm` as children
+- Body scroll is locked while drawer is open
+- iPhone safe area inset handled via `env(safe-area-inset-bottom)`
 
-- **Bottom nav bar** — fixed to bottom of screen with 4 tabs:
-  - About → smooth scrolls to `#section-about`
-  - Services → smooth scrolls to `#section-services`
-  - Contact → smooth scrolls to `#section-contact`
-  - Book Now → opens full-screen booking drawer (branded with instructor's primary color)
-
-- **Full-screen booking drawer** — slides up from bottom with:
-  - Header bar in instructor's brand color
-  - Back arrow (ChevronLeft) to close
-  - Instructor name shown in header
-  - Full `BulkBookingForm` passed as children — real React component, not a DOM clone
-  - Body scroll locked while open
-
-- **Text sizes** — bumped from `text-sm` to `text-base` throughout for readability on small screens
-
-On desktop the bottom nav is hidden (`md:hidden`) and the booking form stays inline.
+On desktop:
+- Bottom nav is hidden (`md:hidden`)
+- **Desktop nav** (`SubdomainDesktopNav.tsx`) shows anchor links: About / Services / Contact / Book Now
+- Book Now scrolls to `#booking-form`
 
 ---
 
-## 8. Instructor Setup Guide
+## 12. Conversion Features
 
-### PRO — Set a custom slug
-
-1. Go to **Dashboard → Brand & Public Page** (`/dashboard/branding`)
-2. Enter a slug in "Your Booking URL" (e.g. `john-smith`)
-3. System checks availability in real time
-4. Save — page is live immediately at `john-smith.drivebook.com.au`
-
-If no slug is set, the default URL `<instructorId>.drivebook.com.au` always works.
-
-### STUDIO — Set up a custom domain
-
-1. Go to **Dashboard → Brand & Public Page**
-2. In the "Custom Domain" section, enter your domain (e.g. `book.x.com.au`)
-3. The wizard shows the exact DNS record to add at your registrar
-4. Add the DNS record, wait for propagation (up to 24 hours)
-5. Click "Verify Domain" — the system checks your CNAME via DNS lookup
-6. Once verified, `book.x.com.au` serves your booking page
-
-**Also required:** Add the domain in your Vercel project settings (Vercel dashboard → Domains) so SSL is issued.
-
-### Profile fields that appear on the booking page
-
-Fill these in via **Dashboard → Profile**:
-
-- Profile photo, bio, service areas
-- Base address + service radius (for distance check)
-- Vehicle types, languages, years of experience
-- Car photo, make, model, year
-- WhatsApp, Instagram, Facebook
-- Booking buffer minutes
-
-### Working hours
-
-Set via **Dashboard → Availability**. The slot picker reads directly from `workingHours`.
-
-### Packages
-
-Set via **Dashboard → Settings → Lesson Packages**. Active packages appear in the booking form.
+- **Social proof banner** above booking form: rating, review count, next available time, "No account required"
+- **Microcopy:** "Book Your Lesson — Takes less than 60 seconds · No account required"
+- **New instructor handling:** Shows "New instructor" pill instead of fake 5.0 rating when `totalReviews === 0`
+- **About section:** Hidden if `bio` is empty or whitespace-only — prevents broken/test content showing
+- **Hero subtitle:** Shows vehicle types ("Automatic & Manual driving lessons") and suburb + "& surrounding areas" if `serviceAreas` not set
+- **Next available label:** Computed server-side from working hours + upcoming bookings, shown in hero and social proof banner
 
 ---
 
-## 9. APIs
+## 13. APIs
 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/public/bookings/bulk` | POST | Create booking + user account |
-| `/api/public/bookings/[id]` | GET | Fetch booking for payment page |
 | `/api/payments/create-intent` | POST | Create Stripe PaymentIntent |
 | `/api/stripe/webhook` | POST | Handle payment confirmation |
-| `/api/availability/slots` | GET | Fetch available time slots |
+| `/api/availability/slots` | GET | Fetch available time slots for a date + duration |
 | `/api/auth/check-email` | POST | Check if email already registered |
-| `/api/instructor/branding` | GET/PUT | Read/write branding + domain settings |
+| `/api/instructor/branding` | GET/PUT | Branding + domain settings |
+| `/api/instructor/profile` | GET/PUT | Profile fields including `baseAddress` |
 | `/api/instructor/subdomain/check` | GET | Check if slug is available |
-| `/api/instructor/domain/verify` | POST | DNS CNAME verification for custom domains |
-| `/api/cron/cleanup-expired-bookings` | GET | Expire unpaid PENDING_PAYMENT slots |
+| `/api/instructor/domain/verify` | POST | DNS CNAME verification |
 
 ---
 
-## 10. File Reference
+## 14. File Reference
 
 | File | Purpose |
 |---|---|
 | `middleware.ts` | Subdomain extraction + custom domain detection + rewrites |
-| `app/subdomain/[slug]/page.tsx` | Public booking page — looks up by `customDomain` OR `id` |
-| `app/custom-domain/page.tsx` | Custom domain entry point — reads `x-custom-domain` header |
-| `components/BulkBookingForm.tsx` | 4–5 step booking form |
-| `components/SlotPicker.tsx` | Date + time slot picker |
-| `components/subdomain/SubdomainClientFeatures.tsx` | Mobile bottom nav + full-screen booking drawer |
+| `app/subdomain/[slug]/page.tsx` | Public booking page (5-min cache) |
+| `app/custom-domain/page.tsx` | Custom domain entry point |
+| `components/BulkBookingForm.tsx` | 4–5 step booking form with duration picker |
+| `components/SlotPicker.tsx` | Date + time slot picker (duration-aware) |
+| `components/subdomain/SubdomainClientFeatures.tsx` | Mobile bottom nav + booking drawer |
+| `components/subdomain/SubdomainDesktopNav.tsx` | Desktop anchor nav (About/Services/Contact/Book Now) |
+| `app/api/availability/slots/route.ts` | Slot availability API |
 | `app/api/public/bookings/bulk/route.ts` | Booking creation |
-| `app/api/instructor/branding/route.ts` | Branding GET/PUT (includes domainVerified fields) |
-| `app/api/instructor/subdomain/check/route.ts` | Slug availability check |
-| `app/api/instructor/domain/verify/route.ts` | DNS CNAME verification |
-| `app/dashboard/branding/page.tsx` | Instructor branding UI (subdomain + custom domain wizard) |
-| `lib/config/subscriptions.ts` | Tier definitions (BASIC/PRO/STUDIO/BUSINESS) |
+| `app/api/instructor/profile/route.ts` | Profile GET/PUT (includes baseAddress) |
+| `app/api/instructor/branding/route.ts` | Branding GET/PUT |
+| `app/dashboard/profile/page.tsx` | Instructor profile UI (baseAddress now editable) |
+| `app/dashboard/settings/page.tsx` | Settings UI (allowedDurations, packages, working hours) |
+| `app/dashboard/branding/page.tsx` | Branding UI (subdomain + custom domain wizard) |
 
 ---
 
-## 11. DNS Records (Our Domain — Vercel)
-
-The domain `drivebook.com.au` uses Vercel nameservers:
-
-```
-ns1.vercel-dns.com
-ns2.vercel-dns.com
-```
-
-Vercel DNS records:
-
-| Name | Type | Value |
-|---|---|---|
-| `*` | CNAME | `cname.vercel-dns.com` |
-| `@` | A | Vercel IP (auto-managed) |
-| `www` | CNAME | `cname.vercel-dns.com` |
-
-The wildcard `*` covers all instructor subdomains automatically.
-
----
-
-## 12. Local Development
-
-Add to hosts file:
-```
-# Windows: C:\Windows\System32\drivers\etc\hosts
-127.0.0.1  test.localhost
-```
-
-Visit `http://test.localhost:3000` — middleware rewrites to `/subdomain/test`.
-
-`next.config.js` has `allowedDevOrigins: ['*.localhost:3000']` to suppress cross-origin warnings.
-
-> Use `http://` only on localhost — `https://` will fail with SSL error, which is expected.
-
----
-
-## 13. Known Gaps
+## 15. Known Gaps
 
 | Gap | Notes |
 |---|---|
-| Vercel domain registration not automated | After instructor verifies DNS, you must manually add their domain in Vercel dashboard for SSL. Could be automated via Vercel API. |
-| Service area check is client-side only | Advisory only by design — not enforced server-side |
-| Custom FAQ not yet editable | FAQ is currently hardcoded. `pageContent` JSON field planned for Studio tier. |
+| Vercel domain registration not automated | After DNS verification, must manually add domain in Vercel dashboard for SSL |
+| Service area check is client-side only | Advisory only — not enforced server-side |
+| Custom FAQ not editable | FAQ is hardcoded. `pageContent` JSON field planned for Studio tier |
+| Show real slots upfront | Calendly-style slot preview above booking form would improve conversion. Needs a client component to fetch slots on page load |
+| Phone/contact gating | Phone number currently shown before booking. Marketplace best practice is to reveal after booking confirmation |

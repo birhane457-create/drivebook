@@ -15,7 +15,11 @@ import {
   Star,
   Edit2,
   Check,
-  ChevronDown
+  ChevronDown,
+  Phone,
+  MessageCircle,
+  ChevronUp,
+  Wallet,
 } from 'lucide-react';
 import AddCreditsModal from '../../components/AddCreditsModal';
 import StripeProvider from '../../components/StripeProvider';
@@ -35,6 +39,8 @@ interface Booking {
     name: string;
     avatar?: string;
     hourlyRate: number;
+    phone?: string | null;
+    whatsapp?: string | null;
   };
 }
 
@@ -107,6 +113,7 @@ export default function ClientDashboard() {
   const [showAddCredits, setShowAddCredits] = useState(false);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
   const [showTransactionHistory, setShowTransactionHistory] = useState(false);
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
   const [rescheduleModal, setRescheduleModal] = useState<{
     isOpen: boolean;
     bookingId: string;
@@ -389,31 +396,7 @@ export default function ClientDashboard() {
                 </div>
               )}
 
-              {/* Package Info */}
-              {currentInstructor.packageInfo && (
-                <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-purple-900 mb-2">📦 Package Status</p>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div>
-                      <p className="text-xs text-gray-500">Total</p>
-                      <p className="text-base font-bold text-gray-900">{currentInstructor.packageInfo.totalHours}h</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Used</p>
-                      <p className="text-base font-bold text-orange-600">{currentInstructor.packageInfo.usedHours}h</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Remaining</p>
-                      <p className="text-base font-bold text-green-600">{currentInstructor.packageInfo.remainingHours}h</p>
-                    </div>
-                  </div>
-                  {currentInstructor.packageInfo.expiryDate && (
-                    <p className="text-xs text-gray-500 mt-2 text-center">
-                      Expires {new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU')}
-                    </p>
-                  )}
-                </div>
-              )}
+              {/* Package Info — moved to standalone section below */}
 
               {/* Action buttons */}
               <div className="mt-4 flex gap-2">
@@ -425,12 +408,54 @@ export default function ClientDashboard() {
                   Book a Lesson
                 </button>
                 <button
-                  onClick={() => router.push('/client-dashboard/book-lesson?newInstructor=true')}
+                  onClick={() => {
+                    if (profile?.wallet.creditsRemaining && profile.wallet.creditsRemaining > 0) {
+                      if (!confirm(`You have $${profile.wallet.creditsRemaining.toFixed(2)} remaining in your wallet. Your credits are not locked to this instructor — you can use them with any instructor. Switch anyway?`)) return;
+                    }
+                    router.push('/client-dashboard/book-lesson?newInstructor=true');
+                  }}
                   className="px-4 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition text-sm"
                 >
                   Switch
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Standalone package + wallet credits card */}
+        {currentInstructor?.packageInfo && (
+          <div className="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-800 px-5 py-3 flex items-center justify-between">
+              <p className="text-white text-sm font-semibold">📦 Your Package & Credits</p>
+              <span className="text-purple-200 text-xs">Wallet balance: <span className="text-white font-bold">${profile?.wallet.creditsRemaining?.toFixed(2) ?? '0.00'}</span></span>
+            </div>
+            <div className="p-5">
+              <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Total</p>
+                  <p className="text-xl font-bold text-gray-900">{currentInstructor.packageInfo.totalHours}h</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Used</p>
+                  <p className="text-xl font-bold text-orange-600">{currentInstructor.packageInfo.usedHours}h</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Remaining</p>
+                  <p className="text-xl font-bold text-green-600">{currentInstructor.packageInfo.remainingHours}h</p>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{ width: `${currentInstructor.packageInfo.totalHours > 0 ? (currentInstructor.packageInfo.usedHours / currentInstructor.packageInfo.totalHours) * 100 : 0}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 text-center">
+                Credits are instructor-agnostic — your wallet balance can be used with any instructor.
+                {currentInstructor.packageInfo.expiryDate && ` Expires ${new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU')}.`}
+              </p>
             </div>
           </div>
         )}
@@ -554,63 +579,95 @@ export default function ClientDashboard() {
                   {upcomingBookings.length > 0 ? (
                     <div className="space-y-3">
                       {upcomingBookings.map((booking) => (
-                        <div
-                          key={booking.id}
-                          className="flex items-center justify-between p-3 md:p-4 border border-gray-200 rounded-lg hover:shadow-md transition"
-                        >
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">
-                              {booking.instructor.name}
-                            </h4>
-                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-4 h-4" />
-                                {new Date(booking.date).toLocaleDateString()}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-4 h-4" />
-                                {booking.time}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <BookOpen className="w-4 h-4" />
-                                {booking.duration}h
-                              </span>
-                              <span className="font-semibold text-gray-900">
-                                ${booking.price.toFixed(2)}
-                              </span>
+                        <div key={booking.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-gray-50 transition">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">{booking.instructor.name}</h4>
+                              <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-4 h-4" />
+                                  {new Date(booking.date).toLocaleDateString()}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-4 h-4" />
+                                  {booking.time}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <BookOpen className="w-4 h-4" />
+                                  {booking.duration}h
+                                </span>
+                                <span className="font-semibold text-gray-900">${booking.price.toFixed(2)}</span>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 ml-4 items-center">
+                              {/* Expand contact */}
+                              <button
+                                onClick={() => setExpandedBookingId(expandedBookingId === booking.id ? null : booking.id)}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                title="Contact instructor"
+                              >
+                                {expandedBookingId === booking.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => setRescheduleModal({
+                                  isOpen: true,
+                                  bookingId: booking.id,
+                                  instructorId: booking.instructor.id,
+                                  date: booking.date,
+                                  time: booking.time,
+                                  duration: booking.duration * 60,
+                                  price: booking.price,
+                                  instructor: booking.instructor.name,
+                                  hourlyRate: booking.instructor.hourlyRate
+                                })}
+                                className="px-2 py-1 md:px-3 md:py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-1"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Reschedule
+                              </button>
+                              <button
+                                onClick={() => setCancelDialog({
+                                  isOpen: true,
+                                  bookingId: booking.id,
+                                  date: booking.date,
+                                  instructor: booking.instructor.name,
+                                  price: booking.price
+                                })}
+                                className="px-2 py-1 md:px-3 md:py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold"
+                              >
+                                Cancel
+                              </button>
                             </div>
                           </div>
-                          <div className="flex gap-2 ml-4">
-                            <button
-                              onClick={() => setRescheduleModal({
-                                isOpen: true,
-                                bookingId: booking.id,
-                                instructorId: booking.instructor.id,
-                                date: booking.date,
-                                time: booking.time,
-                                duration: booking.duration * 60, // Convert hours to minutes
-                                price: booking.price,
-                                instructor: booking.instructor.name,
-                                hourlyRate: booking.instructor.hourlyRate
-                              })}
-                              className="px-2 py-1 md:px-3 md:py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-1"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                              Reschedule
-                            </button>
-                            <button
-                              onClick={() => setCancelDialog({
-                                isOpen: true,
-                                bookingId: booking.id,
-                                date: booking.date,
-                                instructor: booking.instructor.name,
-                                price: booking.price
-                              })}
-                              className="px-2 py-1 md:px-3 md:py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold"
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                          {/* Expandable contact panel */}
+                          {expandedBookingId === booking.id && (
+                            <div className="border-t border-gray-100 bg-blue-50 px-4 py-3 flex flex-wrap gap-4 items-center">
+                              <p className="text-xs font-semibold text-blue-900 w-full">Contact {booking.instructor.name}</p>
+                              {booking.instructor.phone && (
+                                <a
+                                  href={`tel:${booking.instructor.phone}`}
+                                  className="flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 bg-white px-3 py-1.5 rounded-lg border border-blue-200 hover:border-blue-400 transition"
+                                >
+                                  <Phone className="w-4 h-4" />
+                                  {booking.instructor.phone}
+                                </a>
+                              )}
+                              {booking.instructor.whatsapp && (
+                                <a
+                                  href={`https://wa.me/${booking.instructor.whatsapp.replace(/\D/g, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 text-sm text-green-700 hover:text-green-900 bg-white px-3 py-1.5 rounded-lg border border-green-200 hover:border-green-400 transition"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                  WhatsApp
+                                </a>
+                              )}
+                              {!booking.instructor.phone && !booking.instructor.whatsapp && (
+                                <p className="text-xs text-blue-700">Contact details will be shared by your instructor directly.</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

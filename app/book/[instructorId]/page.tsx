@@ -14,10 +14,8 @@ export default async function PublicBookingPage({
 }) {
   const instructor = await prisma.instructor.findUnique({
     where: { id: params.instructorId },
-  })
-  if (!instructor) {
-    notFound()
-  }
+  }) as any;
+  if (!instructor) notFound();
 
   // Check if branding is enabled for PRO/BUSINESS tier
   const hasBranding = 
@@ -31,6 +29,9 @@ export default async function PublicBookingPage({
   const searchedLocation = searchParams.location || null;
 
   const activePackages = ((instructor.lessonPackages as any[]) || []).filter((p: any) => p.isActive !== false);
+  const allowedDurations: number[] = Array.isArray((instructor as any).allowedDurations)
+    ? (instructor as any).allowedDurations as number[]
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -102,9 +103,13 @@ export default async function PublicBookingPage({
                 <h1 className="text-xl font-bold text-gray-900">{instructor.name}</h1>
                 <div className="flex items-center gap-1 mt-1 mb-3">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                    <Star key={i} className={`h-4 w-4 ${i < Math.round((instructor as any).averageRating ?? 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />
                   ))}
-                  <span className="ml-1 text-sm text-gray-500">(4.9)</span>
+                  {(instructor as any).totalReviews > 0 ? (
+                    <span className="ml-1 text-sm text-gray-500">({(instructor as any).averageRating?.toFixed(1)} · {(instructor as any).totalReviews} reviews)</span>
+                  ) : (
+                    <span className="ml-1 text-sm text-gray-400">New instructor</span>
+                  )}
                 </div>
 
                 {/* Bio */}
@@ -181,6 +186,7 @@ export default async function PublicBookingPage({
                 serviceAreas={instructor.serviceAreas}
                 baseAddress={instructor.baseAddress}
                 serviceRadiusKm={instructor.serviceRadiusKm}
+                allowedDurations={allowedDurations}
               />
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
+import { sendSingleLessonReceipt, sendPackagePurchaseReceipt, sendWalletTopUpReceipt } from '@/lib/services/receipt-email';
 import { SUBSCRIPTION_PLANS } from '@/lib/config/subscriptions';
 import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
 import { webhookRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
@@ -238,6 +239,8 @@ async function handleWalletPaymentSuccess(
 ): Promise<void> {
   console.log(`💰 Processing wallet payment: transactionId=${transactionId}, walletId=${walletId}`);
 
+  let confirmedTransactions: any[] = [];
+
   await prisma.$transaction(async (tx) => {
     // Record webhook event
     await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
@@ -291,7 +294,39 @@ async function handleWalletPaymentSuccess(
     });
 
     console.log(`✅ Wallet payment processed: ${wallet?.user.email} - ${transactions.length} transaction(s) confirmed`);
+    confirmedTransactions = transactions;
   });
+
+  // Send wallet top-up receipt (non-critical)
+  try {
+    const confirmedTx = confirmedTransactions[0];
+    if (confirmedTx) {
+      const walletRecord = await prisma.clientWallet.findUnique({
+        where: { id: confirmedTx.walletId },
+        include: { user: true },
+      });
+      if (walletRecord?.user?.email) {
+        const amountAdded = confirmedTransactions
+          .filter((t: any) => t.type === 'CREDIT')
+          .reduce((sum: number, t: any) => sum + t.amount, 0);
+        const balanceAfter = walletRecord.balance;
+        const balanceBefore = balanceAfter - amountAdded;
+        await sendWalletTopUpReceipt({
+          clientName: walletRecord.user.name || walletRecord.user.email,
+          clientEmail: walletRecord.user.email,
+          receiptId: paymentIntent.id,
+          paidAt: new Date(),
+          amountAdded,
+          walletBalanceBefore: balanceBefore,
+          walletBalanceAfter: balanceAfter,
+          stripeRef: paymentIntent.id,
+          paymentMethod: 'Card',
+        });
+      }
+    }
+  } catch (receiptErr) {
+    console.error('Wallet top-up receipt email failed:', receiptErr);
+  }
 }
 
 async function handleBookingPaymentSuccess(
@@ -520,6 +555,56 @@ async function handleBookingPaymentSuccess(
         booking.client?.name || booking.clientName || 'Client',
         bookingId
       );
+    }
+
+    // Send receipt to student
+    if (booking?.client?.email) {
+      const isPackage = (booking as any).isPackageBooking && (booking as any).packageHours > 1;
+      const packageTotalPaid = (booking as any).packageTotalPaid as number | null;
+      const durationHours = booking.duration ? booking.duration / 60 : 1;
+      const instructor = booking.instructor;
+
+      if (isPackage && packageTotalPaid) {
+        await sendPackagePurchaseReceipt({
+          clientName: booking.client.name,
+          clientEmail: booking.client.email,
+          receiptId: bookingId,
+          paidAt: new Date(),
+          instructorName: instructor.name,
+          packageHours: (booking as any).packageHours,
+          hourlyRate: instructor.hourlyRate,
+          discountPercent: 0,
+          subtotal: packageTotalPaid,
+          discount: 0,
+          platformFee: (booking as any).platformFee ?? 0,
+          total: packageTotalPaid,
+          firstLessonDate: booking.startTime!,
+          firstLessonDurationHours: durationHours,
+          pickupAddress: booking.pickupAddress ?? undefined,
+          walletLoaded: packageTotalPaid,
+          firstLessonDebit: booking.price,
+          walletBalance: packageTotalPaid - booking.price,
+          stripeRef: paymentIntent.id,
+          paymentMethod: 'Card',
+        }).catch(e => console.error('Package receipt email failed:', e));
+      } else {
+        await sendSingleLessonReceipt({
+          clientName: booking.client.name,
+          clientEmail: booking.client.email,
+          receiptId: bookingId,
+          paidAt: new Date(),
+          instructorName: instructor.name,
+          lessonDate: booking.startTime!,
+          durationHours,
+          hourlyRate: instructor.hourlyRate,
+          lessonCost: booking.price,
+          platformFee: (booking as any).platformFee ?? 0,
+          total: booking.price + ((booking as any).platformFee ?? 0),
+          pickupAddress: booking.pickupAddress ?? undefined,
+          stripeRef: paymentIntent.id,
+          paymentMethod: 'Card',
+        }).catch(e => console.error('Single lesson receipt email failed:', e));
+      }
     }
   } catch (notifError) {
     console.error('Failed to create payment notification:', notifError);

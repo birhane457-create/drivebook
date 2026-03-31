@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { bulkBookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
+import { notifyShortNoticeBookingRequest, notifyClientBookingPendingApproval } from '@/lib/services/notifications';
 
 const bulkBookingSchema = z.object({
   instructorId: z.string(),
@@ -15,7 +16,8 @@ const bulkBookingSchema = z.object({
     time: z.string(),
     duration: z.number(),
     pickupLocation: z.string(),
-    notes: z.string()
+    notes: z.string(),
+    isShortNotice: z.boolean().optional().default(false),
   })).optional(),
   registrationType: z.enum(['myself', 'someone-else']),
   // Account holder (always required)
@@ -126,12 +128,15 @@ export async function POST(req: NextRequest) {
 
     // ── Pricing ──────────────────────────────────────────────────────────────
     // The Stripe charge is for the FULL package (data.pricing.total).
-    // The booking record stores the FIRST LESSON price only (1hr × hourlyRate).
+    // The booking record stores the FIRST LESSON price only (selectedDuration × hourlyRate).
     // After payment, the webhook will:
     //   CREDIT wallet = full package total
     //   DEBIT  wallet = first lesson price
     // Remaining hours sit as wallet balance for future lessons.
-    const firstLessonDurationHours = 1;
+
+    const isShortNotice = data.scheduledBookings?.[0]?.isShortNotice ?? false;
+    const firstLessonDurationMinutes = data.scheduledBookings?.[0]?.duration ?? 60;
+    const firstLessonDurationHours = firstLessonDurationMinutes / 60;
     const firstLessonPrice = parseFloat((instructor.hourlyRate * firstLessonDurationHours).toFixed(2));
     const PLATFORM_FEE_RATE = 0.036;
     const firstLessonPlatformFee = parseFloat((firstLessonPrice * PLATFORM_FEE_RATE).toFixed(2));
@@ -149,7 +154,7 @@ export async function POST(req: NextRequest) {
       startTime.setHours(h, m, 0, 0);
     }
 
-    const endTime = new Date(startTime.getTime() + firstLessonDurationHours * 60 * 60 * 1000);
+    const endTime = new Date(startTime.getTime() + firstLessonDurationMinutes * 60 * 1000);
 
     // ── Atomic slot claim ─────────────────────────────────────────────────────
     // On MongoDB we can't use SELECT FOR UPDATE, so we do the conflict check
@@ -178,7 +183,9 @@ export async function POST(req: NextRequest) {
             clientId: clientId,
             clientName,
             clientPhone,
-            status: 'PENDING_PAYMENT', // Holds the slot for up to 10 min while payment completes
+            // Short-notice: PENDING (awaiting instructor approval before payment)
+            // Normal: PENDING_PAYMENT (slot held while Stripe payment completes)
+            status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
             startTime,
             endTime,
             duration: firstLessonDurationHours,
@@ -190,7 +197,6 @@ export async function POST(req: NextRequest) {
             isPackageBooking: data.hours > 1,
             packageHours: data.hours,
             packageHoursRemaining: data.hours - firstLessonDurationHours,
-            // Store full package total so the webhook knows what Stripe charged
             packageTotalPaid: data.pricing.total,
           } as any,
         });
@@ -202,12 +208,34 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    console.log('Booking created with id', booking.id, '| first lesson price:', firstLessonPrice, '| package total:', data.pricing.total);
+    console.log('Booking created with id', booking.id, '| first lesson price:', firstLessonPrice, '| package total:', data.pricing.total, '| shortNotice:', isShortNotice);
+
+    // For short-notice bookings: notify instructor urgently, notify client of pending status
+    if (isShortNotice) {
+      try {
+        const instructorUser = instructor.userId
+          ? await prisma.user.findUnique({ where: { id: instructor.userId }, select: { id: true } })
+          : null;
+        if (instructorUser) {
+          await notifyShortNoticeBookingRequest(instructorUser.id, clientName, booking.id, startTime);
+        }
+        // Notify client their request is pending
+        if (userId) {
+          await notifyClientBookingPendingApproval(userId, instructor.name, booking.id, startTime);
+        }
+      } catch (notifErr) {
+        console.error('Short-notice notification failed:', notifErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       bookingId: booking.id,
-      // Tell the payment page to charge the FULL package amount via Stripe
-      total: data.pricing.total
+      isShortNotice,
+      // For short-notice: no payment yet — instructor must approve first
+      // For normal: charge the full package amount via Stripe
+      total: isShortNotice ? 0 : data.pricing.total,
+      status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
     }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

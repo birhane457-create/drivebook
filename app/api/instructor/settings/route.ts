@@ -71,7 +71,7 @@ export async function PUT(req: NextRequest) {
     const updateData: any = {}
     if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate
     if (data.serviceRadiusKm !== undefined) updateData.serviceRadiusKm = data.serviceRadiusKm
-    if (data.vehicleTypes !== undefined) updateData.vehicleTypes = data.vehicleTypes
+    if (data.vehicleTypes !== undefined) updateData.vehicleTypes = Array.isArray(data.vehicleTypes) ? data.vehicleTypes.join(',') : data.vehicleTypes
     if (data.workingHours !== undefined) updateData.workingHours = data.workingHours
     if (data.licenseNumber !== undefined) updateData.licenseNumber = data.licenseNumber
     if (data.insuranceNumber !== undefined) updateData.insuranceNumber = data.insuranceNumber

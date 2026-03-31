@@ -19,6 +19,7 @@ const profileSchema = z.object({
   instagram: z.string().optional().nullable(),
   facebook: z.string().optional().nullable(),
   yearsExperience: z.number().optional().nullable(),
+  baseAddress: z.string().optional().nullable(),
 })
 
 // Helper: find instructor by session (handles null instructorId via userId fallback)
@@ -80,6 +81,7 @@ export async function PUT(req: NextRequest) {
         ...(data.instagram !== undefined && { instagram: data.instagram }),
         ...(data.facebook !== undefined && { facebook: data.facebook }),
         ...(data.yearsExperience !== undefined && { yearsExperience: data.yearsExperience }),
+        ...(data.baseAddress !== undefined && { baseAddress: data.baseAddress }),
       } as any
     })
 

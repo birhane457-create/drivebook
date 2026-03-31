@@ -4,17 +4,16 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
-import { recordBookingPayment } from '@/lib/services/ledger-operations';
 import { paymentService } from '@/lib/services/payment';
 import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 
-
 export const dynamic = 'force-dynamic';
+
 const cartItemSchema = z.object({
   instructorId: z.string().min(1),
   instructorName: z.string().min(1),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
-  time: z.string().regex(/^([0-1]?\d|2[0-3]):[0-5]\d$/), // HH:MM
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  time: z.string().regex(/^([0-1]?\d|2[0-3]):[0-5]\d$/),
   duration: z.number().min(0.5).max(8),
   price: z.number().nonnegative(),
   pickupLocation: z.string().min(0).max(300).optional(),
@@ -39,107 +38,79 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // FIXED: Rate limiting for bulk operations
     const rateLimitId = getRateLimitIdentifier(
       session.user.id,
       request.headers.get('x-forwarded-for'),
       'bulk-booking'
     );
-    
     const rateLimitResult = await checkRateLimit(bulkBookingRateLimit, rateLimitId);
-    
     if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: rateLimitResult.error },
-        { 
-          status: 429,
-          headers: rateLimitResult.headers 
-        }
-      );
+      return NextResponse.json({ error: rateLimitResult.error }, { status: 429, headers: rateLimitResult.headers });
     }
 
     const body = await request.json();
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) {
-      console.warn('Validation failed:', parsed.error.format());
       return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
     }
-
     const cartItems = parsed.data.cart;
 
-    // Basic duplicate-in-cart check (same instructor & overlapping times)
-    const batchSlots: Array<{ instructorId: string; start: Date; end: Date }> = [];
-    for (const item of cartItems) {
-      const start = parseDateTime(item.date, item.time);
-      const end = new Date(start);
-      end.setHours(end.getHours() + item.duration);
-      const conflict = batchSlots.some(s => s.instructorId === item.instructorId && (
-        (start >= s.start && start < s.end) ||
-        (end > s.start && end <= s.end) ||
-        (start <= s.start && end >= s.end)
-      ));
-      if (conflict) {
-        return NextResponse.json({ error: `Conflict in cart for ${item.instructorName} ${item.date} ${item.time}` }, { status: 400 });
-      }
-      batchSlots.push({ instructorId: item.instructorId, start, end });
+    // ── Pre-flight checks OUTSIDE transaction ─────────────────────────────────
+    // These are read-only and slow — do them before opening the transaction.
+
+    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    const client = await prisma.client.findFirst({ where: { userId: user.id } });
+    if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+
+    const wallet = await prisma.clientWallet.findUnique({
+      where: { userId: user.id },
+      include: { transactions: { where: { status: 'CONFIRMED' } } }
+    });
+    if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
+
+    const totalCredits = wallet.transactions.filter(t => t.type.toUpperCase() === 'CREDIT').reduce((s, t) => s + t.amount, 0);
+    const totalDebits = wallet.transactions.filter(t => t.type.toUpperCase() === 'DEBIT').reduce((s, t) => s + Math.abs(t.amount), 0);
+    const actualBalance = totalCredits - totalDebits;
+    const totalCost = cartItems.reduce((s, it) => s + it.price, 0);
+
+    console.log('[BOOKING] Balance check:', { totalCredits, totalDebits, actualBalance, totalCost, sufficient: actualBalance >= totalCost });
+
+    if (actualBalance < totalCost) {
+      return NextResponse.json({
+        error: `Insufficient credits. You have $${actualBalance.toFixed(2)} but need $${totalCost.toFixed(2)}`
+      }, { status: 400 });
     }
 
-    // Proceed in a transaction to avoid race conditions
+    // Pre-compute commissions outside transaction (involves external calls)
+    const commissions: any[] = [];
+    for (const item of cartItems) {
+      const commission = await paymentService.calculateCommission(item.instructorId, client.id, item.price);
+      commissions.push(commission);
+    }
+
+    // Validate instructors exist outside transaction
+    const instructorIds = [...new Set(cartItems.map(i => i.instructorId))];
+    const instructors = await prisma.instructor.findMany({
+      where: { id: { in: instructorIds } },
+      select: { id: true, userId: true }
+    });
+    const instructorMap = new Map(instructors.map(i => [i.id, i]));
+
+    // ── Minimal transaction: slot claim + booking create + wallet debit ────────
+    // Keep this as small as possible to stay within the 5s timeout.
     const result = await prisma.$transaction(async (tx) => {
-      // Lookup user, client, wallet inside transaction to get consistent view
-      const user = await tx.user.findUnique({ where: { email: session.user.email } });
-      if (!user) throw new Error('User not found');
-
-      const client = await tx.client.findFirst({ where: { userId: user.id } });
-      if (!client) throw new Error('Client not found');
-
-      const wallet = await tx.clientWallet.findUnique({ 
-        where: { userId: user.id },
-        include: {
-          transactions: {
-            where: { status: 'CONFIRMED' }
-          }
-        }
-      });
-      if (!wallet) throw new Error('Wallet not found');
-
-      // Calculate actual balance from transactions
-      const totalCredits = wallet.transactions
-        .filter(t => t.type.toUpperCase() === 'CREDIT')
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      const totalDebits = wallet.transactions
-        .filter(t => t.type.toUpperCase() === 'DEBIT')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      
-      const actualBalance = totalCredits - totalDebits;
-
-      const totalCost = cartItems.reduce((s, it) => s + it.price, 0);
-      
-      console.log('[BOOKING] Balance check:', {
-        totalCredits,
-        totalDebits,
-        actualBalance,
-        totalCost,
-        sufficient: actualBalance >= totalCost
-      });
-      
-      // Check wallet balance using calculated balance
-      if (actualBalance < totalCost) {
-        throw new Error(`Insufficient credits. You have $${actualBalance.toFixed(2)} but need $${totalCost.toFixed(2)}`);
-      }
-
       const created: any[] = [];
-      const ledgerEntries: any[] = [];
 
-      for (const item of cartItems) {
+      for (let i = 0; i < cartItems.length; i++) {
+        const item = cartItems[i];
+        const commission = commissions[i];
         const startTime = parseDateTime(item.date, item.time);
-        const endTime = new Date(startTime);
-        endTime.setHours(endTime.getHours() + item.duration);
+        const endTime = new Date(startTime.getTime() + item.duration * 60 * 60 * 1000);
 
-        // Check for existing conflicts for this instructor
-        // PENDING_PAYMENT included — those slots are reserved during active payment flows
-        const existingConflict = await tx.booking.findFirst({
+        // Conflict check inside transaction (atomic slot claim)
+        const conflict = await tx.booking.findFirst({
           where: {
             instructorId: item.instructorId,
             status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
@@ -148,24 +119,10 @@ export async function POST(request: NextRequest) {
               { startTime: { lt: endTime }, endTime: { gte: endTime } },
               { startTime: { gte: startTime }, endTime: { lte: endTime } }
             ]
-          }
+          },
+          select: { id: true }
         });
-
-        if (existingConflict) {
-          throw new Error(`Time slot no longer available for ${item.instructorName} at ${item.date} ${item.time}`);
-        }
-
-        // Ensure instructor exists
-        const instructor = await tx.instructor.findUnique({ where: { id: item.instructorId } });
-        if (!instructor) throw new Error(`Instructor ${item.instructorName} not found`);
-        if (!client) throw new Error('Client not found');
-
-        // Calculate commission for this booking
-        const commission = await paymentService.calculateCommission(
-          item.instructorId,
-          client.id,
-          item.price
-        );
+        if (conflict) throw new Error(`Time slot no longer available for ${item.instructorName} at ${item.date} ${item.time}`);
 
         const booking = await tx.booking.create({
           data: {
@@ -190,46 +147,16 @@ export async function POST(request: NextRequest) {
           } as any
         });
 
-        // NEW: Record booking payment in ledger (3 entries per booking)
-        try {
-          const ledgerResult = await recordBookingPayment({
-            bookingId: booking.id,
-            userId: user.id,
-            instructorId: item.instructorId,
-            totalAmount: commission.totalAmount,
-            platformFee: commission.platformFee,
-            instructorPayout: commission.instructorPayout,
-            createdBy: user.id
-          });
-          
-          ledgerEntries.push(ledgerResult);
-        } catch (ledgerError) {
-          console.error('[Ledger] Failed to record booking payment:', ledgerError);
-          // Continue with old system for now, but log the error
-        }
-
-        // Create old-system transaction record for backward compatibility
-        await (tx as any).transaction.create({
-          data: {
-            bookingId: booking.id,
-            instructorId: item.instructorId,
-            type: 'BOOKING_PAYMENT',
-            amount: commission.totalAmount,
-            platformFee: commission.platformFee,
-            instructorPayout: commission.instructorPayout,
-            commissionRate: commission.commissionRate,
-            status: 'COMPLETED', // Paid from wallet
-            description: `Booking payment - ${commission.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
-            metadata: {
-              isFirstBooking: commission.isFirstBooking,
-            },
-          },
+        created.push({
+          booking,
+          instructorName: item.instructorName,
+          instructorUserId: instructorMap.get(item.instructorId)?.userId,
+          clientUserId: user.id,
+          commission,
         });
-
-        created.push({ booking, instructorName: item.instructorName, instructorUserId: instructor.userId, clientUserId: user.id });
       }
 
-      // All bookings created - debit wallet
+      // Debit wallet
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -240,47 +167,45 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // Get updated balance for response
-      const allTx = await tx.walletTransaction.findMany({ where: { walletId: wallet.id } });
-      const newBalance = allTx
-        .filter(t => t.type.toUpperCase() === 'CREDIT')
-        .reduce((s, t) => s + t.amount, 0)
-        - allTx.filter(t => t.type.toUpperCase() === 'DEBIT').reduce((s, t) => s + Math.abs(t.amount), 0);
-
-      return { created, totalCost, remaining: newBalance, ledgerEntries };
+      return { created, totalCost, remaining: actualBalance - totalCost };
+    }, {
+      timeout: 15000, // 15s — enough for the minimal work inside
     });
 
-    // Fire notifications for each booking (outside transaction - non-critical)
-    // Get client name for notification message
-    const clientUser = await prisma.user.findUnique({ where: { email: session.user.email }, select: { name: true } });
-    const clientDisplayName = clientUser?.name || session.user.email;
-
+    // ── Post-transaction: ledger + transaction records + notifications ─────────
+    // These are non-critical and can run after the transaction commits.
     for (const c of result.created) {
       try {
-        // Notify instructor of new booking
+        await (prisma as any).transaction.create({
+          data: {
+            bookingId: c.booking.id,
+            instructorId: c.booking.instructorId,
+            type: 'BOOKING_PAYMENT',
+            amount: c.commission.totalAmount,
+            platformFee: c.commission.platformFee,
+            instructorPayout: c.commission.instructorPayout,
+            commissionRate: c.commission.commissionRate,
+            status: 'COMPLETED',
+            description: `Booking payment - ${c.commission.isFirstBooking ? 'First booking' : 'Repeat booking'}`,
+            metadata: { isFirstBooking: c.commission.isFirstBooking },
+          },
+        });
+      } catch (e) {
+        console.error('[Transaction record] Failed:', e);
+      }
+
+      try {
         if (c.instructorUserId && c.booking.startTime) {
-          await notifyBookingRequest(
-            c.instructorUserId,
-            clientDisplayName,
-            c.booking.id,
-            new Date(c.booking.startTime)
-          );
+          await notifyBookingRequest(c.instructorUserId, user.name || session.user.email, c.booking.id, new Date(c.booking.startTime));
         }
-        // Notify client their booking is confirmed (wallet payment = instant confirm)
         if (c.clientUserId && c.booking.startTime) {
-          await notifyClientBookingConfirmed(
-            c.clientUserId,
-            c.instructorName,
-            c.booking.id,
-            new Date(c.booking.startTime)
-          );
+          await notifyClientBookingConfirmed(c.clientUserId, c.instructorName, c.booking.id, new Date(c.booking.startTime));
         }
-      } catch (notifError) {
-        console.error('Failed to send booking notification:', notifError);
+      } catch (e) {
+        console.error('[Notification] Failed:', e);
       }
     }
 
-    // Build response
     return NextResponse.json({
       success: true,
       bookings: result.created.map((c: any) => ({
@@ -295,7 +220,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('=== BOOKING CREATION ERROR ===', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message === 'Insufficient credits' ? 400 : 500;
+    const status = message.startsWith('Insufficient') || message.startsWith('Time slot') ? 400 : 500;
     return NextResponse.json({ error: 'Failed to create bookings', details: message }, { status });
   }
 }

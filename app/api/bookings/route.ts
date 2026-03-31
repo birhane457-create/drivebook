@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { availabilityService } from '@/lib/services/availability'
 import { emailService } from '@/lib/services/email'
+import { sendWalletLessonReceipt } from '@/lib/services/receipt-email'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { paymentService } from '@/lib/services/payment'
 import { getWalletBalance } from '@/lib/services/wallet-helpers'
@@ -279,7 +280,7 @@ export async function POST(req: NextRequest) {
       console.error('Calendar sync failed:', e)
     }
 
-    // Email confirmation (non-critical)
+    // Email confirmation + receipt (non-critical)
     try {
       await emailService.sendBookingConfirmation({
         clientName: booking.client!.name,
@@ -292,6 +293,28 @@ export async function POST(req: NextRequest) {
       })
     } catch (e) {
       console.error('Email confirmation failed:', e)
+    }
+
+    try {
+      // Fetch wallet balance after deduction for the receipt
+      const clientWallet = await prisma.clientWallet.findUnique({ where: { userId: client.userId! } })
+      const walletAfter = clientWallet?.balance ?? 0
+      await sendWalletLessonReceipt({
+        clientName: booking.client!.name,
+        clientEmail: booking.client!.email,
+        receiptId: booking.id,
+        bookedAt: now,
+        instructorName: booking.instructor.name,
+        lessonDate: newStart,
+        durationHours,
+        hourlyRate: instructor.hourlyRate,
+        lessonCost: lessonPrice,
+        walletBalanceBefore: walletAfter + lessonPrice,
+        walletBalanceAfter: walletAfter,
+        bookedBy: 'instructor',
+      })
+    } catch (e) {
+      console.error('Receipt email failed:', e)
     }
 
     // In-app notification (non-critical)

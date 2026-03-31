@@ -150,3 +150,39 @@ export async function notifyClientBookingCancelled(clientUserId: string, instruc
     metadata: { bookingId, instructorName },
   });
 }
+
+// Short-notice booking — urgent approval request to instructor
+export async function notifyShortNoticeBookingRequest(
+  instructorUserId: string,
+  clientName: string,
+  bookingId: string,
+  startTime: Date
+) {
+  const timeStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const minutesUntil = Math.round((startTime.getTime() - Date.now()) / 60000);
+  return createNotification({
+    userId: instructorUserId,
+    type: 'BOOKING_REQUEST',
+    title: '⚡ Urgent: Last-Minute Booking Request',
+    message: `${clientName} wants to book TODAY at ${timeStr} (${minutesUntil} min away). Approve or decline from your dashboard.`,
+    link: `/dashboard/bookings/${bookingId}`,
+    metadata: { bookingId, clientName, isShortNotice: true, startTime: startTime.toISOString() },
+  });
+}
+
+// Client notification — booking pending instructor approval
+export async function notifyClientBookingPendingApproval(
+  clientUserId: string,
+  instructorName: string,
+  bookingId: string,
+  startTime: Date
+) {
+  return createNotification({
+    userId: clientUserId,
+    type: 'BOOKING_REQUEST',
+    title: 'Booking Awaiting Approval',
+    message: `Your last-minute lesson request with ${instructorName} at ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} is awaiting approval.`,
+    link: `/client-dashboard/bookings`,
+    metadata: { bookingId, instructorName, isShortNotice: true },
+  });
+}
