@@ -141,6 +141,28 @@ export default function AboutPage() {
           </div>
         </section>
 
+        {/* Founder's Story */}
+        <section className="bg-white rounded-2xl border border-purple-100 shadow-sm p-10">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
+                <Heart className="h-5 w-5 text-purple-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Why I Built DriveBook</h2>
+            </div>
+            <p className="text-gray-700 leading-relaxed text-lg mb-4">
+              I built DriveBook while navigating a neurological condition and a period of unemployment. I needed work that could flex around my health — not the other way around. Teaching driving was something I could do on my own terms, but the admin side was a mess: chasing payments, managing schedules, answering calls mid-lesson.
+            </p>
+            <p className="text-gray-700 leading-relaxed text-lg mb-4">
+              So I built the platform I wished existed. Every feature — the AI receptionist, automated payouts, the booking system — came from a real problem I faced or heard from other instructors in the same boat.
+            </p>
+            <p className="text-gray-700 leading-relaxed text-lg">
+              Whether you're teaching full-time or fitting lessons around life's challenges, DriveBook is built to give you back your time and your independence.
+            </p>
+            <p className="text-sm text-purple-600 font-medium mt-6">— Birhane, Founder of DriveBook</p>
+          </div>
+        </section>
+
         {/* CTA */}
         <section className="bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl p-10 text-center">
           <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
