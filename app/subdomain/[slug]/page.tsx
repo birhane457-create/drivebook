@@ -111,10 +111,7 @@ export default async function SubdomainBookingPage({
       facebook: true,
       yearsExperience: true,
       allowedDurations: true,
-      offersTestPackage: true,
-      testPackagePrice: true,
-      testPackageDuration: true,
-      testPackageIncludes: true,
+      // Test package fields — accessed via (instructor as any) until schema is pushed to production
     },
   });
 
@@ -715,10 +712,10 @@ export default async function SubdomainBookingPage({
                 baseAddress={instructor.baseAddress}
                 serviceRadiusKm={instructor.serviceRadiusKm}
                 allowedDurations={allowedDurations}
-                offersTestPackage={instructor.offersTestPackage ?? false}
-                testPackagePrice={instructor.testPackagePrice ?? undefined}
-                testPackageDuration={instructor.testPackageDuration ?? undefined}
-                testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
+                offersTestPackage={(instructor as any).offersTestPackage ?? false}
+                testPackagePrice={(instructor as any).testPackagePrice ?? undefined}
+                testPackageDuration={(instructor as any).testPackageDuration ?? undefined}
+                testPackageIncludes={((instructor as any).testPackageIncludes as string[]) ?? []}
               />
             </div>
 
@@ -794,10 +791,10 @@ export default async function SubdomainBookingPage({
             baseAddress={instructor.baseAddress}
             serviceRadiusKm={instructor.serviceRadiusKm}
             allowedDurations={allowedDurations}
-            offersTestPackage={instructor.offersTestPackage ?? false}
-            testPackagePrice={instructor.testPackagePrice ?? undefined}
-            testPackageDuration={instructor.testPackageDuration ?? undefined}
-            testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
+            offersTestPackage={(instructor as any).offersTestPackage ?? false}
+            testPackagePrice={(instructor as any).testPackagePrice ?? undefined}
+            testPackageDuration={(instructor as any).testPackageDuration ?? undefined}
+            testPackageIncludes={((instructor as any).testPackageIncludes as string[]) ?? []}
           />
         </div>
       </SubdomainClientFeatures>

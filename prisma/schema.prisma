@@ -138,6 +138,12 @@ model Instructor {
   facebook        String?
   yearsExperience Int?
 
+  // PDA / Driving Test Package — instructor-controlled
+  offersTestPackage    Boolean  @default(false)
+  testPackagePrice     Float?
+  testPackageDuration  Int?     // minutes
+  testPackageIncludes  Json?    // string[]
+
   bookings      Booking[]
   clients       Client[]
   subscriptions Subscription[]
