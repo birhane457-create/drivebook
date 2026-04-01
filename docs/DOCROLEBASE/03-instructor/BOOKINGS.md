@@ -26,6 +26,10 @@ Instructors can create bookings on behalf of clients from `/dashboard/bookings/n
 
 **API:** `POST /api/bookings`
 
+**Security:** Price is always calculated server-side (`instructor.hourlyRate × durationHours`). The `price` field is not accepted from the request body — it is ignored if sent.
+
+**Concurrency:** Slot conflict is checked both before and inside the `$transaction` to prevent TOCTOU race conditions. If two concurrent requests race for the same slot, one will get a 409.
+
 If the client's wallet is insufficient, the API returns a `topUpAmount` value. The instructor can then send a payment link to the client via `POST /api/bookings/send-payment-link` — this emails the client a pre-filled wallet top-up link.
 
 On successful booking creation, a **receipt email is sent to the student** via `sendWalletLessonReceipt()` showing:

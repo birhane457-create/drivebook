@@ -31,10 +31,12 @@ The `GET /api/client/wallet/summary` endpoint returns:
 Students can add funds directly to their wallet:
 
 1. Student enters a top-up amount (min $10, max $500 — configurable via `/admin/pricing`)
-2. Calls `POST /api/client/wallet-topup-intent` → creates a Stripe PaymentIntent
-3. Stripe Elements collects card details
-4. On `payment_intent.succeeded` webhook:
-   - Creates a `CONFIRMED` CREDIT `WalletTransaction`
+2. Calls `POST /api/client/wallet-topup-intent` → creates a PENDING `WalletTransaction`, then creates a Stripe PaymentIntent
+3. If Stripe fails, the PENDING transaction is deleted immediately (no orphaned records)
+4. Stripe Elements collects card details
+5. On `payment_intent.succeeded` webhook:
+   - Validates `amount_received` matches the PENDING transaction amount (rejects if mismatch)
+   - Confirms the transaction to `CONFIRMED`
    - Balance is immediately available
    - **Receipt email sent** — `sendWalletTopUpReceipt()` fires showing credits added, previous balance, new balance with approx hours remaining
 

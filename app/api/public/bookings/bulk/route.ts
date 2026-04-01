@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Check if instructor exists
+    // Check if instructor exists and is active/approved
     const instructor = await prisma.instructor.findUnique({
       where: { id: data.instructorId },
       include: { user: true }
@@ -69,6 +69,14 @@ export async function POST(req: NextRequest) {
 
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
+    }
+
+    if ((instructor as any).approvalStatus && (instructor as any).approvalStatus !== 'APPROVED') {
+      return NextResponse.json({ error: 'Instructor is not available for bookings' }, { status: 403 });
+    }
+
+    if ((instructor as any).status === 'SUSPENDED' || (instructor as any).isActive === false) {
+      return NextResponse.json({ error: 'Instructor is not available for bookings' }, { status: 403 });
     }
 
     // Create user account or link to existing

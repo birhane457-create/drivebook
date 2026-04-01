@@ -41,7 +41,7 @@ How the system detects, surfaces, and recovers from failures.
 
 ### Payout Stuck in PROCESSING
 
-- Reconciliation cron detects payouts in `PROCESSING` for >24h
+- Reconciliation cron detects payouts in `PROCESSING` for >10 minutes (not 24h — the threshold is `STUCK_THRESHOLD_MINUTES = 10` in `reconcile-stripe/route.ts`)
 - Creates `ReconciliationReport` entry with issue
 - Alert email sent
 - Admin investigates and either retries or marks as failed
@@ -82,8 +82,8 @@ How the system detects, surfaces, and recovers from failures.
 
 ### Duplicate Booking Attempt
 
-- Slot availability checked at booking creation
-- Concurrent requests: optimistic locking on slot prevents double-booking
+- Slot availability checked at booking creation — both outside (fast rejection) and inside the `$transaction` (definitive, prevents TOCTOU race)
+- Concurrent requests: the in-transaction check ensures only one succeeds
 - Second request receives 409 Conflict
 
 ### Reschedule After Payment
@@ -108,6 +108,12 @@ How the system detects, surfaces, and recovers from failures.
 - `assertNonNegativeBalance()` throws before debit
 - Booking creation fails with 400
 - Client prompted to top up wallet
+
+### Wallet Top-Up Stripe Failure
+
+- If Stripe intent creation fails, the PENDING `WalletTransaction` is deleted immediately
+- No orphaned PENDING records accumulate
+- Client sees an error and can retry
 
 ---
 

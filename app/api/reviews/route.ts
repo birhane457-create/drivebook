@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
+import { notifyReviewReceived } from '@/lib/services/notifications';
 
 
 export const dynamic = 'force-dynamic';
@@ -235,7 +236,7 @@ export async function POST(req: NextRequest) {
       } as any
     });
 
-    // Send notification email to instructor
+    // Send notification email + in-app notification to instructor
     try {
       const ratingText = ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][rating - 1] || `${rating} stars`;
       await emailService.sendGenericEmail({
@@ -251,6 +252,10 @@ export async function POST(req: NextRequest) {
           <p>Login to your dashboard to see all your reviews and ratings.</p>
         `
       });
+      // In-app notification
+      if (booking.instructor.userId) {
+        await notifyReviewReceived(booking.instructor.userId, booking.client.name, rating);
+      }
       console.log(`✅ Review notification sent to ${booking.instructor.user.email}`);
     } catch (emailError) {
       console.error(`❌ Failed to send review notification: ${emailError}`);

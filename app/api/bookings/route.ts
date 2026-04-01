@@ -29,7 +29,6 @@ const bookingSchema = z.object({
   pickupLongitude: z.number().optional(),
   dropoffAddress: z.string().optional(),
   notes: z.string().optional(),
-  price: z.number().optional(),
   // PDA Test specific fields
   testCenterName: z.string().optional(),
   testCenterAddress: z.string().optional(),
@@ -118,9 +117,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
 
-    // Calculate price — commission from PlatformSettings based on instructor tier
+    // Calculate price — always server-side, never trust client input
     const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60)
-    const lessonPrice = data.price ?? parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
+    const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
     const platformFee = parseFloat((lessonPrice * PLATFORM_FEE_RATE).toFixed(2))
     const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC')
     const commissionRate = commissionRatePct / 100
@@ -161,6 +160,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── AVAILABILITY CHECK ────────────────────────────────────────────────────
+    // NOTE: Pre-check outside transaction for fast rejection. The definitive
+    // check is INSIDE the transaction below to prevent TOCTOU race conditions.
     const hasConflict = await availabilityService.checkDoubleBooking(
       session.user.instructorId,
       newStart,
@@ -186,6 +187,21 @@ export async function POST(req: NextRequest) {
       })
       const txBalance = txns.reduce((sum, t) => t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
       if (txBalance < lessonPrice) throw new Error('INSUFFICIENT_BALANCE')
+
+      // ── Definitive slot conflict check inside transaction (prevents TOCTOU race) ──
+      const slotConflict = await tx.booking.findFirst({
+        where: {
+          instructorId: session.user.instructorId,
+          status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+          OR: [
+            { startTime: { lte: newStart }, endTime: { gt: newStart } },
+            { startTime: { lt: newEnd }, endTime: { gte: newEnd } },
+            { startTime: { gte: newStart }, endTime: { lte: newEnd } },
+          ],
+        },
+        select: { id: true },
+      })
+      if (slotConflict) throw new Error('SLOT_TAKEN')
 
       // Deduct from wallet (update both stored balance and transaction log)
       await tx.clientWallet.update({
@@ -331,6 +347,9 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     if (error?.message === 'INSUFFICIENT_BALANCE') {
       return NextResponse.json({ error: 'Insufficient wallet balance', insufficientBalance: true }, { status: 422 })
+    }
+    if (error?.message === 'SLOT_TAKEN') {
+      return NextResponse.json({ error: 'Time slot was just taken. Please choose another time.' }, { status: 409 })
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })

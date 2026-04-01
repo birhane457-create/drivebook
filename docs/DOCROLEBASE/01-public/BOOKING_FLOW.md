@@ -64,15 +64,15 @@ On form submit, calls `POST /api/public/bookings/bulk`.
 
 **What the API does:**
 1. Rate-limits by IP + email + instructorId
-2. Validates instructor exists and is active
+2. Validates instructor exists, is approved, and is not suspended
 3. Checks if email already has an account:
    - New user → creates `User` with hashed password
    - Existing user → links booking to their account
 4. Finds or creates a `Client` record for this instructor
-5. Calculates pricing (first lesson price + package total)
+5. Calculates pricing **server-side** using `calculatePackagePriceDynamic()` — client-submitted total is validated against server calculation (rejects if >1 cent difference)
 6. **Atomic slot claim** — conflict check + booking create in a single `$transaction`. Concurrent requests for the same slot get a 409.
 7. Creates booking with `status: PENDING_PAYMENT` — holds slot for 10 minutes
-8. Returns `{ bookingId, total }`
+8. Returns `{ bookingId, total }` where `total` is the server-verified amount
 
 **On success:** redirects to `/booking/[id]/payment`
 
@@ -93,6 +93,8 @@ On payment success, the confirmation page calls `POST /api/payments/verify` to c
 ## Slot Expiry
 
 If the client does not complete payment within 10 minutes, the cron job (`/api/cron/cleanup-expired-bookings`) sets the booking to `EXPIRED` and releases the slot.
+
+Short-notice `PENDING` bookings (awaiting instructor approval) expire after 2 hours if the instructor has not approved.
 
 If the client returns to the payment page after expiry, they see a "Slot Expired — Go Back & Rebook" screen.
 

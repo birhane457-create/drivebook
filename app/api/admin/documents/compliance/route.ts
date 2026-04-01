@@ -2,6 +2,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { notifyDocumentExpiring } from '@/lib/services/notifications';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,8 +99,36 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'sendReminder') {
-      console.log(`Reminder queued for instructor ${instructorId}`);
-      return NextResponse.json({ success: true, message: 'Reminder queued' });
+      const instructor = await prisma.instructor.findUnique({
+        where: { id: instructorId },
+        select: {
+          userId: true,
+          workingHours: true,
+          licenseImageFront: true,
+          insurancePolicyDoc: true,
+          policeCheckDoc: true,
+          wwcCheckDoc: true,
+        },
+      });
+      if (instructor?.userId) {
+        const wh = (instructor.workingHours as any) || {};
+        const exp = wh.expiry || {};
+        const docs = [
+          { name: 'Driver Licence', expiry: exp.licenseExpiry, url: instructor.licenseImageFront },
+          { name: 'Insurance Policy', expiry: exp.insuranceExpiry, url: instructor.insurancePolicyDoc },
+          { name: 'Police Check', expiry: exp.policeCheckExpiry, url: instructor.policeCheckDoc },
+          { name: 'Working With Children Check', expiry: exp.wwcCheckExpiry, url: instructor.wwcCheckDoc },
+        ];
+        for (const doc of docs) {
+          if (doc.url && doc.expiry) {
+            const status = docStatus(doc.expiry, doc.url);
+            if (status.status !== 'valid') {
+              await notifyDocumentExpiring(instructor.userId, doc.name, new Date(doc.expiry)).catch(() => {});
+            }
+          }
+        }
+      }
+      return NextResponse.json({ success: true, message: 'Reminder sent' });
     }
 
     if (action === 'autoProcess') {

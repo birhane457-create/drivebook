@@ -47,6 +47,18 @@ export async function GET(req: NextRequest) {
         status: 'EXPIRED'
       }
     });
+
+    // Expire short-notice PENDING bookings (instructor approval) older than 2 hours
+    // If instructor hasn't approved within 2 hours, the slot is released
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const expiredShortNotice = await prisma.booking.updateMany({
+      where: {
+        status: 'PENDING',
+        createdBy: 'client', // only auto-expire client-initiated short-notice bookings
+        createdAt: { lt: twoHoursAgo },
+      },
+      data: { status: 'EXPIRED' },
+    });
     
     // Expire old PENDING wallet transactions
     const expiredTransactions = await prisma.walletTransaction.updateMany({
@@ -61,7 +73,6 @@ export async function GET(req: NextRequest) {
 
     // Auto-complete CONFIRMED bookings whose end time has passed and check-in was recorded
     // (check-in already sets COMPLETED when endTime < now, this catches any that slipped through)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
     const autoCompleted = await (prisma as any).booking.updateMany({
       where: {
         status: 'CONFIRMED',
@@ -86,6 +97,7 @@ export async function GET(req: NextRequest) {
     const result = {
       success: true,
       expiredBookings: expiredBookings.count,
+      expiredShortNotice: expiredShortNotice.count,
       expiredTransactions: expiredTransactions.count,
       autoCompleted: autoCompleted.count,
       autoNoShow: autoNoShow.count,

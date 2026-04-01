@@ -42,15 +42,23 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Pass transactionId + walletId in metadata so the webhook can find it
-    const paymentIntent = await stripeService.createPaymentIntent({
-      amount,
-      instructorId: '',
-      transactionId: pendingTx.id,
-      walletId: wallet.id,
-      clientEmail: session.user.email,
-      description: `Wallet top-up $${amount.toFixed(2)}`,
-    });
+    // Pass transactionId + walletId in metadata so the webhook can find it.
+    // If Stripe fails, delete the orphaned PENDING transaction so it doesn't
+    // pollute the wallet history or confuse the webhook on retry.
+    let paymentIntent;
+    try {
+      paymentIntent = await stripeService.createPaymentIntent({
+        amount,
+        instructorId: '',
+        transactionId: pendingTx.id,
+        walletId: wallet.id,
+        clientEmail: session.user.email,
+        description: `Wallet top-up $${amount.toFixed(2)}`,
+      });
+    } catch (stripeError) {
+      await prisma.walletTransaction.delete({ where: { id: pendingTx.id } }).catch(() => {});
+      throw stripeError;
+    }
 
     return NextResponse.json({ clientSecret: paymentIntent.clientSecret });
   } catch (error: any) {

@@ -16,7 +16,9 @@ Each gap is classified:
 
 ## 1. Booking Creation Flow
 
-### 1.1 DOC_WRONG — Booking does not start as PENDING_PAYMENT
+### 1.1 ~~DOC_WRONG~~ RESOLVED — Booking does not start as PENDING_PAYMENT
+
+**Fixed:** `SYSTEM_FLOWS.md` updated to distinguish Path A (instructor wallet booking → CONFIRMED directly) from Path B (Stripe → PENDING_PAYMENT). `BOOKINGS.md` updated to note price is always server-side calculated.
 
 **Docs say:** `POST /api/bookings → Booking created (PENDING_PAYMENT)`  
 **Code does:** `app/api/bookings/route.ts` creates the booking with `status: 'CONFIRMED'` directly, inside the same atomic transaction that debits the wallet. There is no `PENDING_PAYMENT` state for instructor-created wallet bookings.
@@ -34,7 +36,9 @@ Each gap is classified:
 
 ---
 
-### 1.3 DOC_MISSING — Wallet balance check uses two different methods
+### 1.3 ~~DOC_MISSING~~ RESOLVED — Wallet balance check uses two different methods
+
+**Fixed:** `WALLET.md` updated to document that balance is always computed from CONFIRMED transactions. Admin booking path still uses stored `balance` field directly — known inconsistency, low risk since admin bookings are rare.
 
 **Docs say:** Wallet balance is `ClientWallet.balance`  
 **Code does:** `app/api/bookings/route.ts` uses `getWalletBalance(client.userId)` which recomputes balance from `WalletTransaction` sum (not the stored `balance` field). Then inside the `$transaction`, it re-checks by summing `WalletTransaction` again.
@@ -47,14 +51,13 @@ Each gap is classified:
 
 ### 1.4 DOC_MISSING — No AuditLog entry on booking creation
 
-**Docs say:** `AuditLog entries created: BOOKING_CREATED, BOOKING_CONFIRMED...`  
-**Code does:** `app/api/bookings/route.ts` creates no `AuditLog` entry on booking creation. The cancel route does log via `logBookingAction`. The admin bookings PATCH does not log.
-
-**Impact:** `SYSTEM_FLOWS.md` flow 1 lists `BOOKING_CREATED` as an audit event — it does not exist in the instructor booking path.
+**Status:** Known gap, low priority. `POST /api/bookings` creates no AuditLog. Cancellation, completion, and no-show are all logged. Adding creation logging is deferred.
 
 ---
 
-### 1.5 DOC_MISSING — Booking creation is instructor-only (not client-initiated)
+### 1.5 ~~DOC_MISSING~~ RESOLVED — Booking creation is instructor-only (not client-initiated)
+
+**Fixed:** `SYSTEM_FLOWS.md` and `BOOKINGS.md` updated to clearly distinguish the two booking paths.
 
 **Docs say:** "Client creates booking"  
 **Code does:** `POST /api/bookings` requires `session.user.instructorId` — only instructors can call this endpoint. Clients cannot create bookings directly. The public booking flow (`/book/[instructorId]`) goes through a different path (Stripe payment intent → webhook).
@@ -65,7 +68,9 @@ Each gap is classified:
 
 ## 2. Payment Flow
 
-### 2.1 DOC_WRONG — Webhook sets transaction to SETTLED, not COMPLETED
+### 2.1 ~~DOC_WRONG~~ RESOLVED — Webhook sets transaction to SETTLED, not COMPLETED
+
+**Fixed:** `STATE_MACHINES.md` updated with correct transaction states. `SYSTEM_FLOWS.md` updated to show SETTLED as the payout-eligible status.
 
 **Docs say:** `Transaction created (BOOKING_PAYMENT, COMPLETED)`  
 **Code does:** `app/api/stripe/webhook/route.ts` `handleBookingPaymentSuccess` calls `transaction.updateMany` with `status: 'SETTLED'` (not COMPLETED). The transaction is created elsewhere (likely in the public booking route) and the webhook updates it to SETTLED.
@@ -74,14 +79,18 @@ Each gap is classified:
 
 ---
 
-### 2.2 DOC_MISSING — Webhook handles EXPIRED booking revival
+### 2.2 ~~DOC_MISSING~~ RESOLVED — Webhook handles EXPIRED booking revival
+
+**Fixed:** `FAILURE_HANDLING.md` and `STATE_MACHINES.md` document the EXPIRED → CONFIRMED revival path.
 
 **Code does:** If a booking is in `EXPIRED` status when `payment_intent.succeeded` fires, the webhook revives it to `CONFIRMED`. This is a critical edge case (race between slot expiry cron and payment capture).  
 **Docs say:** Nothing about this. `FAILURE_HANDLING.md` mentions "Booking stays in PENDING_PAYMENT" but not the EXPIRED revival path.
 
 ---
 
-### 2.3 DOC_MISSING — Package payment creates wallet CREDIT + DEBIT in webhook
+### 2.3 ~~DOC_MISSING~~ RESOLVED — Package payment creates wallet CREDIT + DEBIT in webhook
+
+**Fixed:** `WALLET.md` documents the package flow with CREDIT + DEBIT wallet transactions.
 
 **Code does:** For package bookings, the webhook creates a wallet CREDIT for the full package amount and a DEBIT for the first lesson. This is the mechanism by which remaining package credits become available.  
 **Docs say:** Nothing about this in `SYSTEM_FLOWS.md` or `FINANCIAL_DOCTRINE.md`.
@@ -100,7 +109,9 @@ Each gap is classified:
 
 ## 3. Cancellation Flow
 
-### 3.1 DOC_WRONG — Transaction is set to CANCELLED, not REFUNDED
+### 3.1 ~~DOC_WRONG~~ RESOLVED — Transaction is set to CANCELLED, not REFUNDED
+
+**Fixed:** `STATE_MACHINES.md` updated — CANCELLED is used for booking cancellations, REFUNDED only for dispute resolutions.
 
 **Docs say:** `Transaction → REFUNDED`  
 **Code does:** `app/api/bookings/[id]/cancel/route.ts` calls `transaction.updateMany` with `status: 'CANCELLED'`. The wallet is credited separately. There is no `REFUNDED` transaction status used here.
@@ -109,7 +120,9 @@ Each gap is classified:
 
 ---
 
-### 3.2 DOC_MISSING — Refund uses originalStartTime anti-exploit logic
+### 3.2 ~~DOC_MISSING~~ RESOLVED — Refund uses originalStartTime anti-exploit logic
+
+**Fixed:** `SYSTEM_FLOWS.md` cancellation flow documents the `min(originalStartTime, currentStartTime)` anti-exploit mechanism.
 
 **Code does:** Refund policy is applied to `min(originalStartTime, currentStartTime)` to prevent the exploit: book far future → reschedule close → cancel for full refund.  
 **Docs say:** `FINANCIAL_DOCTRINE.md` and `SYSTEM_FLOWS.md` describe refund tiers but do not mention this anti-exploit mechanism.
@@ -126,7 +139,9 @@ Each gap is classified:
 
 ## 4. Admin Booking Actions
 
-### 4.1 DOC_WRONG — Admin marks COMPLETED via PATCH, not a dedicated endpoint
+### 4.1 ~~DOC_WRONG~~ RESOLVED — Admin marks COMPLETED via PATCH, not a dedicated endpoint
+
+**Fixed:** `SYSTEM_FLOWS.md` updated to show `PATCH /api/admin/bookings`.
 
 **Docs say:** `POST /api/admin/bookings → status: COMPLETED`  
 **Code does:** `PATCH /api/admin/bookings` with `{ bookingId, status }`. The method is PATCH, not POST.
@@ -164,28 +179,36 @@ Each gap is classified:
 
 ---
 
-### 5.2 DOC_WRONG — Payout eligibility requires SETTLED status, not COMPLETED
+### 5.2 ~~DOC_WRONG~~ RESOLVED — Payout eligibility requires SETTLED status, not COMPLETED
+
+**Fixed:** `STATE_MACHINES.md` and `FINANCIAL_DOCTRINE.md` updated to show SETTLED as payout-eligible status.
 
 **Docs say:** `FINANCIAL_DOCTRINE.md` — "Transaction status = COMPLETED" for payout eligibility  
 **Code does:** `GET /api/admin/payouts/route.ts` and `buildPayout` both query `status: 'SETTLED'`. `COMPLETED` is not a payout-eligible status.
 
 ---
 
-### 5.3 DOC_MISSING — ABN gate only blocks if ABN is present but unverified
+### 5.3 ~~DOC_MISSING~~ RESOLVED — ABN gate only blocks if ABN is present but unverified
+
+**Fixed:** `INSTRUCTOR_APPROVALS.md` updated to document the gate behavior: missing ABN proceeds with 47% withholding, present-but-unverified ABN blocks payout.
 
 **Code does:** `POST /api/admin/payouts/process` — payout is blocked only if `instructor.abn && !instructor.abnVerified`. If the instructor has no ABN at all, payout proceeds with 47% withholding.  
 **Docs say:** `INSTRUCTOR_APPROVALS.md` says "verified ABN → 0%, unverified or no ABN → 47%". The gate behavior (block vs proceed with withholding) is not documented.
 
 ---
 
-### 5.4 DOC_MISSING — Reconciliation stuck threshold is 10 minutes, not 24 hours
+### 5.4 ~~DOC_MISSING~~ RESOLVED — Reconciliation stuck threshold is 10 minutes, not 24 hours
+
+**Fixed:** `FAILURE_HANDLING.md` updated to show 10-minute threshold.
 
 **Docs say:** `FAILURE_HANDLING.md` — "Payouts stuck in PROCESSING for >24h"  
 **Code does:** `reconcile-stripe/route.ts` — `STUCK_THRESHOLD_MINUTES = 10`. Payouts stuck for >10 minutes are flagged.
 
 ---
 
-### 5.5 DOC_MISSING — Reconciliation check 1 matches on LedgerEntry, not Transaction
+### 5.5 ~~DOC_MISSING~~ RESOLVED — Reconciliation check 1 matches on LedgerEntry, not Transaction
+
+**Fixed:** `SYSTEM_FLOWS.md` reconciliation flow updated to describe the LedgerEntry check correctly.
 
 **Docs say:** `SYSTEM_FLOWS.md` flow 5 — "Check 1: Completed bookings with no transaction record"  
 **Code does:** Check 1 looks for Stripe `payment_intent.succeeded` events with no corresponding `LedgerEntry(PAYMENT_COLLECTED)`. It does not check for missing `Transaction` records.
@@ -194,14 +217,18 @@ Each gap is classified:
 
 ## 6. ABN Flow
 
-### 6.1 DOC_WRONG — recheck-abn is weekly, not daily
+### 6.1 ~~DOC_WRONG~~ RESOLVED — recheck-abn is weekly, not daily
+
+**Fixed:** `INSTRUCTOR_APPROVALS.md` updated to weekly schedule (Mondays 2am).
 
 **Docs say:** `INSTRUCTOR_APPROVALS.md` — "Daily cron (GET /api/cron/recheck-abn)"  
 **Code does:** The cron comment says "weekly" and the `vercel.json` schedule should be checked. The code itself does not enforce frequency — it runs whenever triggered.
 
 ---
 
-### 6.2 DOC_MISSING — recheck-abn skips if ABR_GUID not configured
+### 6.2 ~~DOC_MISSING~~ RESOLVED — recheck-abn skips if ABR_GUID not configured
+
+**Fixed:** `INSTRUCTOR_APPROVALS.md` documents the skip condition and notes ABR_GUID is now set in .env.
 
 **Code does:** Returns `{ skipped: true, reason: 'ABR_GUID not configured' }` if `ABR_GUID` env var is empty.  
 **Docs say:** Nothing about this skip condition. Given ABR_GUID is still pending (ref: ABNL26479), the cron is currently a no-op.
@@ -210,7 +237,9 @@ Each gap is classified:
 
 ## 7. State Machines
 
-### 7.1 DOC_WRONG — Transaction state machine is incomplete
+### 7.1 ~~DOC_WRONG~~ RESOLVED — Transaction state machine is incomplete
+
+**Fixed:** `STATE_MACHINES.md` fully updated with both booking paths, correct status values, and CANCELLED vs REFUNDED distinction.
 
 **Docs say:** `PENDING → COMPLETED → SETTLED → REFUNDED / FAILED`  
 **Code reality:**
@@ -224,7 +253,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 7.2 DOC_MISSING — EXPIRED is a real booking status
+### 7.2 ~~DOC_MISSING~~ RESOLVED — EXPIRED is a real booking status
+
+**Fixed:** `STATE_MACHINES.md` shows PENDING_PAYMENT → EXPIRED and the revival path EXPIRED → CONFIRMED (webhook race condition).
 
 **Code does:** `app/api/stripe/webhook/route.ts` explicitly handles `booking.status === 'EXPIRED'` and revives it. The booking GET query in `app/api/bookings/route.ts` filters for `['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']` — EXPIRED is excluded.  
 **Docs say:** `STATE_MACHINES.md` shows `PENDING_PAYMENT → EXPIRED` but does not show the revival path back to `CONFIRMED`.
@@ -240,7 +271,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 8.2 SCHEMA_GAP — WalletTransaction.status values are inconsistent
+### 8.2 ~~SCHEMA_GAP~~ RESOLVED — WalletTransaction.status values are inconsistent
+
+**Fixed:** All wallet transaction creates now use `status: 'CONFIRMED'`. The cancel route was verified to already use `'CONFIRMED'`. `getWalletBalance()` correctly only counts `CONFIRMED` transactions.
 
 **Code does:** Uses both `'CONFIRMED'` and `'COMPLETED'` as status values in different places:
 - `app/api/bookings/route.ts`: creates with `status: 'CONFIRMED'`
@@ -324,7 +357,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.2 CODE_BUG — Wallet top-up creates PENDING transaction before Stripe intent; no cleanup on failure
+### 11.2 ~~CODE_BUG~~ RESOLVED — Wallet top-up creates PENDING transaction before Stripe intent; no cleanup on failure
+
+**Fixed (April 2026):** `app/api/client/wallet-topup-intent/route.ts` now wraps the Stripe intent creation in try/catch. If Stripe fails, the orphaned PENDING transaction is deleted before re-throwing. File was also recreated (had been deleted from disk).
 
 **File:** `app/api/client/wallet-topup-intent/route.ts`
 
@@ -338,7 +373,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.3 CODE_BUG — Booking price accepted from client request body
+### 11.3 ~~CODE_BUG~~ RESOLVED — Booking price accepted from client request body
+
+**Fixed (April 2026):** Removed `price` from `bookingSchema` in `app/api/bookings/route.ts`. Price is now always calculated server-side as `instructor.hourlyRate × durationHours`. Client can no longer pass an arbitrary price.
 
 **File:** `app/api/bookings/route.ts` line ~100
 
@@ -352,7 +389,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.4 CODE_BUG — Availability check is outside the booking transaction (TOCTOU race)
+### 11.4 ~~CODE_BUG~~ RESOLVED — Availability check is outside the booking transaction (TOCTOU race)
+
+**Fixed (April 2026):** `app/api/bookings/route.ts` now has a definitive slot conflict check INSIDE the `$transaction` block (after the wallet balance re-check). The pre-check outside the transaction is kept for fast rejection but the atomic check inside is the authoritative one. Throws `SLOT_TAKEN` which is caught and returns 409.
 
 **File:** `app/api/bookings/route.ts`
 
@@ -368,7 +407,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.5 CODE_BUG — Bulk booking doesn't validate instructor is active/approved
+### 11.5 ~~CODE_BUG~~ RESOLVED — Bulk booking doesn't validate instructor is active/approved
+
+**Fixed (April 2026):** `app/api/public/bookings/bulk/route.ts` now checks `approvalStatus !== 'APPROVED'`, `status === 'SUSPENDED'`, and `isActive === false` after fetching the instructor. Returns 403 if any check fails.
 
 **File:** `app/api/public/bookings/bulk/route.ts`
 
@@ -382,7 +423,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.6 CODE_BUG — Short-notice pending bookings never expire
+### 11.6 ~~CODE_BUG~~ RESOLVED — Short-notice pending bookings never expire
+
+**Fixed (April 2026):** `app/api/cron/cleanup-expired-bookings/route.ts` now expires `PENDING` bookings with `createdBy: 'client'` older than 2 hours. This covers short-notice bookings awaiting instructor approval. Instructor-created `PENDING` bookings are not auto-expired.
 
 **File:** `app/api/public/bookings/bulk/route.ts`
 
@@ -412,7 +455,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.8 ENHANCEMENT — Availability buffer can extend past working hours
+### 11.8 ENHANCEMENT — Availability buffer can extend past working hours (acceptable)
+
+**Status:** Reviewed and accepted as intentional. The slot generator checks `slotEnd > workEnd` (lesson must fit within hours) but allows the buffer to extend past `workEnd`. This is correct — the instructor rests after their last lesson, which may extend past official end time. No code change needed.
 
 **File:** `app/api/availability/slots/route.ts`
 
@@ -426,7 +471,12 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.9 ENHANCEMENT — Notification triggers incomplete
+### 11.9 ~~ENHANCEMENT~~ RESOLVED — Notification triggers incomplete
+
+**Fixed (April 2026):**
+- `notifyReviewReceived()` wired into `app/api/reviews/route.ts` after review creation
+- `notifyDocumentExpiring()` wired into `app/api/admin/documents/compliance/route.ts` `sendReminder` action (was a no-op `console.log`)
+- `notifyLessonReminder()` — still not wired (requires a scheduled cron, deferred)
 
 **File:** `lib/services/notifications.ts`
 
