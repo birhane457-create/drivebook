@@ -303,3 +303,170 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 - ~~No AuditLog on admin booking PATCH~~ — BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_CANCELLED now logged
 - ~~No-show tagging via description string~~ — `noShowParty` field added to Booking schema; dispute query uses proper field
 - ~~Ledger silent failure~~ — failure now logs 🚨 with bookingId; reconciliation cron provides safety net
+
+---
+
+## 11. Deep Inspection Findings (April 2026)
+
+### 11.1 CODE_BUG — Wallet top-up webhook confirms transactions without amount validation
+
+**File:** `app/api/stripe/webhook/route.ts` → `handleWalletPaymentSuccess()`
+
+**Code does:** Finds PENDING wallet transactions by `transactionId` or by `walletId + last 10 minutes`, then confirms them. Does NOT validate that `paymentIntent.amount_received` matches the transaction amount.
+
+**Risk:** If a client creates a $500 top-up intent but pays $50 (e.g. via Stripe test manipulation), the webhook confirms the $500 PENDING transaction. Client gets $500 credit for $50 paid.
+
+**Fix:** Add before confirming: `if (paymentIntent.amount_received !== Math.round(transaction.amount * 100)) throw new Error('Amount mismatch')`
+
+**Severity:** CRITICAL — direct financial loss
+
+---
+
+### 11.2 CODE_BUG — Wallet top-up creates PENDING transaction before Stripe intent; no cleanup on failure
+
+**File:** `app/api/client/wallet-topup-intent/route.ts`
+
+**Code does:** Creates a PENDING `WalletTransaction` BEFORE calling Stripe. If Stripe fails (network error, card declined), the PENDING transaction is never cleaned up. `getWalletBalance()` correctly excludes PENDING transactions, but the orphaned record accumulates.
+
+**Risk:** Low financial risk (PENDING excluded from balance), but orphaned records pollute the transaction log and could confuse support.
+
+**Fix:** Wrap in try/catch — if Stripe intent creation fails, delete the pending transaction. Or add a cron to clean up PENDING transactions older than 30 minutes with no matching Stripe intent.
+
+**Severity:** MEDIUM — data hygiene
+
+---
+
+### 11.3 CODE_BUG — Booking price accepted from client request body
+
+**File:** `app/api/bookings/route.ts` line ~100
+
+**Code does:** `const lessonPrice = data.price ?? parseFloat((instructor.hourlyRate * durationHours).toFixed(2))` — if `data.price` is provided, it's used directly without validation against `instructor.hourlyRate`.
+
+**Risk:** Instructor could pass any price in the request body. Undercharging is possible (though instructor would be hurting themselves). More importantly, if the API is called by a compromised client, arbitrary prices could be set.
+
+**Fix:** Always calculate server-side: `const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2))`. Remove `data.price` from the schema or only allow it for admin-created bookings with explicit override flag.
+
+**Severity:** HIGH — financial integrity
+
+---
+
+### 11.4 CODE_BUG — Availability check is outside the booking transaction (TOCTOU race)
+
+**File:** `app/api/bookings/route.ts`
+
+**Code does:** Calls `availabilityService.checkDoubleBooking()` OUTSIDE the `$transaction`, then creates the booking INSIDE. Between the check and the create, another request could claim the same slot.
+
+**Code already has:** A re-check inside the transaction (`txBalance < lessonPrice` check), but NOT a re-check of slot availability inside the transaction.
+
+**Risk:** Two instructors booking the same client at the same time, or the same instructor double-booking via concurrent requests.
+
+**Fix:** Move the conflict check inside the `$transaction` block (same pattern as `public/bookings/bulk/route.ts` which already does this correctly).
+
+**Severity:** HIGH — double-booking risk
+
+---
+
+### 11.5 CODE_BUG — Bulk booking doesn't validate instructor is active/approved
+
+**File:** `app/api/public/bookings/bulk/route.ts`
+
+**Code does:** `prisma.instructor.findUnique({ where: { id: data.instructorId } })` — only checks existence, not status.
+
+**Risk:** Students can book with suspended or unapproved instructors.
+
+**Fix:** Add `where: { id: data.instructorId, isActive: true, approvalStatus: 'APPROVED' }` (or equivalent fields from schema).
+
+**Severity:** HIGH — business logic
+
+---
+
+### 11.6 CODE_BUG — Short-notice pending bookings never expire
+
+**File:** `app/api/public/bookings/bulk/route.ts`
+
+**Code does:** Creates booking with `status: 'PENDING'` for short-notice slots. No timeout or expiry mechanism exists for these.
+
+**Risk:** If instructor never approves, the booking holds the slot indefinitely. The slot expiry cron only handles `PENDING_PAYMENT` bookings, not `PENDING` ones.
+
+**Fix:** Add short-notice bookings to the expiry cron, or auto-expire after 2 hours if not approved.
+
+**Severity:** MEDIUM — slot blocking
+
+---
+
+### 11.7 CODE_BUG — WalletTransaction.status uses 'COMPLETED' in cancel route
+
+**File:** `app/api/bookings/[id]/cancel/route.ts`
+
+**Code does:** Creates refund wallet transaction with `status: 'COMPLETED'`. All other routes use `status: 'CONFIRMED'`. `getWalletBalance()` in `wallet-helpers.ts` only counts `status: 'CONFIRMED'` transactions.
+
+**Risk:** Refund credits are NOT included in wallet balance calculation. Student gets refunded but their balance doesn't increase.
+
+**Fix:** Change cancel route to use `status: 'CONFIRMED'` for the refund wallet transaction.
+
+**Severity:** CRITICAL — refunds don't appear in wallet balance
+
+---
+
+### 11.8 ENHANCEMENT — Availability buffer can extend past working hours
+
+**File:** `app/api/availability/slots/route.ts`
+
+**Code does:** Blocks `booking.endTime + bufferMinutes` as unavailable. If a booking ends at 4:45pm with a 15-min buffer and working hours end at 5pm, the buffer extends to 5:00pm which is fine. But if a booking ends at 4:55pm, the buffer extends to 5:10pm — past working hours — and the slot at 5:00pm is blocked even though it's outside working hours anyway.
+
+**Risk:** Low — just means the last slot of the day is blocked slightly more aggressively than needed.
+
+**Fix:** Cap buffer end at `workEnd`: `const bufferEnd = min(addMinutes(booking.endTime, buffer), workEnd)`
+
+**Severity:** LOW — minor UX
+
+---
+
+### 11.9 ENHANCEMENT — Notification triggers incomplete
+
+**File:** `lib/services/notifications.ts`
+
+**Defined but never called:**
+- `notifyLessonReminder()` — no cron sends lesson reminders
+- `notifyDocumentExpiring()` — no cron checks document expiry
+- `notifyReviewReceived()` — review creation doesn't call this
+
+**Risk:** Instructors and students miss important notifications.
+
+**Fix:** Wire `notifyLessonReminder()` into a daily cron (24h before lesson). Wire `notifyReviewReceived()` into the review creation route. Wire `notifyDocumentExpiring()` into the compliance cron.
+
+**Severity:** MEDIUM — feature gap
+
+---
+
+### 11.10 ENHANCEMENT — Booking price not validated against instructor's current rate
+
+**File:** `app/api/public/bookings/bulk/route.ts`
+
+**Code does:** Accepts `pricing.total` from the client request body and uses it as the Stripe charge amount. The server recalculates `firstLessonPrice` from `instructor.hourlyRate`, but the total package price is taken from the client.
+
+**Risk:** If the client manipulates `pricing.total` to be lower, they pay less than the correct package price. The webhook then credits the wallet with the manipulated amount.
+
+**Fix:** Always calculate `pricing.total` server-side using `calculatePackagePrice(hourlyRate, hours, packageType)`. Never trust client-submitted pricing.
+
+**Severity:** CRITICAL — financial fraud vector
+
+---
+
+## 12. Updated Priority Actions (April 2026)
+
+### Fix immediately (financial integrity)
+1. **11.7** — Refund wallet transactions use `'COMPLETED'` not `'CONFIRMED'` — refunds don't show in balance
+2. **11.10** — Package total price accepted from client — fraud vector
+3. **11.1** — Wallet top-up amount not validated in webhook — double-credit risk
+4. **11.3** — Booking price accepted from request body — financial integrity
+
+### Fix before go-live
+5. **11.4** — Availability check outside transaction — double-booking race
+6. **11.5** — Bulk booking doesn't check instructor is active
+7. **11.6** — Short-notice pending bookings never expire
+8. **11.2** — Orphaned PENDING wallet transactions on Stripe failure
+
+### Enhancement (post-launch)
+9. **11.9** — Wire up missing notification triggers
+10. **11.8** — Cap availability buffer at working hours end
