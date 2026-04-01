@@ -187,6 +187,10 @@ export default async function PublicBookingPage({
                 baseAddress={instructor.baseAddress}
                 serviceRadiusKm={instructor.serviceRadiusKm}
                 allowedDurations={allowedDurations}
+                offersTestPackage={instructor.offersTestPackage ?? false}
+                testPackagePrice={instructor.testPackagePrice ?? undefined}
+                testPackageDuration={instructor.testPackageDuration ?? undefined}
+                testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
               />
             </div>
           </div>
