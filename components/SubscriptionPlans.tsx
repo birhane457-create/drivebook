@@ -55,22 +55,21 @@ export default function SubscriptionPlans({
 
     setLoading(true);
     try {
-      const res = await fetch('/api/instructor/subscription/change-plan', {
+      const res = await fetch('/api/instructor/subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          newTier,
+          tier: newTier,
           billingCycle,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        if (data.requiresCheckout && data.checkoutUrl) {
+        if (data.checkoutUrl) {
           window.location.href = data.checkoutUrl;
         } else {
           alert(data.message || 'Plan changed successfully!');
-          // Force page reload to show updated plan
           window.location.href = '/dashboard/subscription?success=true';
         }
       } else {
