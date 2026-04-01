@@ -26,10 +26,17 @@ interface BulkBookingFormProps {
   baseAddress?: string | null;
   serviceRadiusKm?: number | null;
   allowedDurations?: number[];
+  // Instructor test package settings
+  offersTestPackage?: boolean;
+  testPackagePrice?: number;
+  testPackageDuration?: number;
+  testPackageIncludes?: string[];
 }
 
-const STEP_LABELS_BASE = ['Package', 'Time Slot', 'Your Details', 'Confirm'];
-const STEP_LABELS_WITH_AREA = ['Package', 'Pickup Location', 'Time Slot', 'Your Details', 'Confirm'];
+const STEP_LABELS_BASE = ['How to Book', 'Package', 'Time Slot', 'Your Details', 'Confirm'];
+const STEP_LABELS_BASE_LATER = ['How to Book', 'Package', 'Your Details', 'Confirm'];
+const STEP_LABELS_WITH_AREA = ['How to Book', 'Package', 'Pickup Location', 'Time Slot', 'Your Details', 'Confirm'];
+const STEP_LABELS_WITH_AREA_LATER = ['How to Book', 'Package', 'Pickup Location', 'Your Details', 'Confirm'];
 
 export default function BulkBookingForm({
   instructorId,
@@ -42,10 +49,20 @@ export default function BulkBookingForm({
   baseAddress,
   serviceRadiusKm,
   allowedDurations = [60],
+  offersTestPackage = false,
+  testPackagePrice,
+  testPackageDuration,
+  testPackageIncludes = [],
 }: BulkBookingFormProps) {
   const primary = brandColorPrimary || '#3B82F6';
   const hasServiceAreaData = !!(serviceAreas || (baseAddress && serviceRadiusKm));
-  const stepLabels = hasServiceAreaData ? STEP_LABELS_WITH_AREA : STEP_LABELS_BASE;
+
+  // Booking type: 'now' = pick slot, 'later' = skip slot (schedule from dashboard)
+  const [bookingType, setBookingType] = useState<'now' | 'later'>('now');
+
+  const stepLabels = bookingType === 'later'
+    ? (hasServiceAreaData ? STEP_LABELS_WITH_AREA_LATER : STEP_LABELS_BASE_LATER)
+    : (hasServiceAreaData ? STEP_LABELS_WITH_AREA : STEP_LABELS_BASE);
 
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -78,7 +95,18 @@ export default function BulkBookingForm({
   });  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hours = selectedPackage === 'CUSTOM' ? customHours : HOUR_PACKAGES[selectedPackage].hours;
+  // Use instructor's test package price if available, otherwise fall back to platform default
+  const effectiveTestPackagePrice = offersTestPackage && testPackagePrice ? testPackagePrice : DRIVING_TEST_PACKAGE.price;
   const pricing = calculatePackagePrice(hourlyRate, hours, selectedPackage, includeTestPackage);
+  // Override test package amount with instructor's price
+  const adjustedPricing = includeTestPackage && offersTestPackage && testPackagePrice
+    ? {
+        ...pricing,
+        testPackage: testPackagePrice,
+        total: pricing.total - DRIVING_TEST_PACKAGE.price + testPackagePrice,
+        installments: (pricing.total - DRIVING_TEST_PACKAGE.price + testPackagePrice) / 4,
+      }
+    : pricing;
   const isPackage = hours > 1;
   const currentLabel = stepLabels[step];
 
@@ -146,6 +174,7 @@ export default function BulkBookingForm({
   };
 
   const canProceed = (): boolean => {
+    if (currentLabel === 'How to Book') return false; // handled by direct button click
     if (currentLabel === 'Package') return true;
     if (currentLabel === 'Pickup Location') {
       if (pickupAddress.trim().length <= 5) return false;
@@ -172,7 +201,7 @@ export default function BulkBookingForm({
   };
 
   const handleSubmit = async () => {
-    if (!selectedSlot?.time) return;
+    if (bookingType === 'now' && !selectedSlot?.time) return;
     setLoading(true);
     try {
       const res = await fetch('/api/public/bookings/bulk', {
@@ -183,21 +212,21 @@ export default function BulkBookingForm({
           packageType: selectedPackage,
           hours,
           includeTestPackage,
-          bookingType: 'later',
+          bookingType,
           registrationType: 'myself',
           accountHolderName: formData.name,
           accountHolderEmail: formData.email,
           accountHolderPhone: formData.phone,
           accountHolderPassword: emailStatus === 'exists' ? '' : formData.password,
-          pricing,
-          scheduledBookings: [{
+          pricing: adjustedPricing,
+          scheduledBookings: bookingType === 'now' && selectedSlot?.time ? [{
             date: selectedSlot.date,
             time: selectedSlot.time,
             duration: selectedDuration,
             pickupLocation: formData.address,
             notes: formData.notes || '',
             isShortNotice: isShortNoticeSlot,
-          }],
+          }] : undefined,
         }),
       });
       const data = await res.json();
@@ -290,6 +319,54 @@ export default function BulkBookingForm({
   return (
     <div className="space-y-4">
       <ProgressBar />
+
+      {/* ── STEP: How to Book ── */}
+      {currentLabel === 'How to Book' && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-bold">How would you like to book?</h3>
+            <p className="text-sm text-gray-500 mt-1">Choose how you want to get started.</p>
+          </div>
+
+          <div className="space-y-3">
+            {/* Book Now */}
+            <button
+              type="button"
+              onClick={() => { setBookingType('now'); setStep(s => s + 1); }}
+              className="w-full p-4 border-2 rounded-xl text-left transition-all hover:shadow-md"
+              style={{ borderColor: primary, backgroundColor: `${primary}08` }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xl shrink-0" style={{ backgroundColor: primary }}>
+                  📅
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900">Book Now</p>
+                  <p className="text-sm text-gray-600 mt-0.5">Pick a date and time slot, pay, and your lesson is confirmed immediately.</p>
+                </div>
+              </div>
+            </button>
+
+            {/* Book Later */}
+            <button
+              type="button"
+              onClick={() => { setBookingType('later'); setStep(s => s + 1); }}
+              className="w-full p-4 border-2 rounded-xl text-left transition-all hover:shadow-md border-gray-200 hover:border-gray-300"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xl shrink-0 bg-gray-400">
+                  🕐
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900">Buy Credits, Schedule Later</p>
+                  <p className="text-sm text-gray-600 mt-0.5">Purchase a lesson package now and schedule your lessons from your dashboard whenever you&apos;re ready.</p>
+                  <p className="text-xs text-green-700 mt-1 font-medium">✓ Credits never expire</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── STEP: Package ── */}
       {currentLabel === 'Package' && (
@@ -392,28 +469,38 @@ export default function BulkBookingForm({
             })}
           </div>
 
-          {/* Test package add-on */}
-          <div className="border rounded-lg p-4 flex items-start gap-3 bg-purple-50 border-purple-200">
-            <input
-              type="checkbox" id="testPkg" checked={includeTestPackage}
-              onChange={(e) => setIncludeTestPackage(e.target.checked)}
-              className="mt-1 h-5 w-5 accent-purple-600"
-            />
-            <label htmlFor="testPkg" className="cursor-pointer flex-1">
-              <span className="font-semibold text-gray-900">Add Driving Test Package </span>
-              <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-0.5 rounded ml-1">
-                +${DRIVING_TEST_PACKAGE.price}
-              </span>
-              <p className="text-sm text-gray-600 mt-1">{DRIVING_TEST_PACKAGE.description}</p>
-              <ul className="mt-2 space-y-1">
-                {DRIVING_TEST_PACKAGE.features.map((f, i) => (
-                  <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
-                    <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />{f}
-                  </li>
-                ))}
-              </ul>
-            </label>
-          </div>
+          {/* Test package add-on — only shown if instructor offers it */}
+          {offersTestPackage && testPackagePrice && (
+            <div className="border rounded-lg p-4 flex items-start gap-3 bg-purple-50 border-purple-200">
+              <input
+                type="checkbox" id="testPkg" checked={includeTestPackage}
+                onChange={(e) => setIncludeTestPackage(e.target.checked)}
+                className="mt-1 h-5 w-5 accent-purple-600"
+              />
+              <label htmlFor="testPkg" className="cursor-pointer flex-1">
+                <span className="font-semibold text-gray-900">Add Driving Test Package </span>
+                <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-0.5 rounded ml-1">
+                  +${testPackagePrice}
+                </span>
+                {testPackageDuration && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {testPackageDuration >= 60
+                      ? `${(testPackageDuration / 60).toFixed(1).replace('.0', '')}hr Test Package`
+                      : `${testPackageDuration}min Test Package`}
+                  </p>
+                )}
+                {testPackageIncludes.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {testPackageIncludes.map((f, i) => (
+                      <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
+                        <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />{f}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </label>
+            </div>
+          )}
 
           {/* Order summary */}
           <div className="rounded-lg border p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
@@ -421,29 +508,29 @@ export default function BulkBookingForm({
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">{hours} hrs credit</span>
-                <span>${pricing.subtotal.toFixed(2)}</span>
+                <span>${adjustedPricing.subtotal.toFixed(2)}</span>
               </div>
-              {pricing.discount > 0 && (
+              {adjustedPricing.discount > 0 && (
                 <div className="flex justify-between text-green-700">
-                  <span>Discount ({pricing.discountPercentage}% off)</span>
-                  <span>-${pricing.discount.toFixed(2)}</span>
+                  <span>Discount ({adjustedPricing.discountPercentage}% off)</span>
+                  <span>-${adjustedPricing.discount.toFixed(2)}</span>
                 </div>
               )}
               {includeTestPackage && (
                 <div className="flex justify-between">
                   <span>Test Package</span>
-                  <span>${pricing.testPackage.toFixed(2)}</span>
+                  <span>${adjustedPricing.testPackage.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-gray-500">
                 <span>Platform fee (3.6%)</span>
-                <span>${pricing.platformFee.toFixed(2)}</span>
+                <span>${adjustedPricing.platformFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-base border-t pt-2 mt-1">
                 <span>Total</span>
-                <span style={{ color: primary }}>${pricing.total.toFixed(2)}</span>
+                <span style={{ color: primary }}>${adjustedPricing.total.toFixed(2)}</span>
               </div>
-              <p className="text-center text-gray-500 text-xs">or 4 x ${pricing.installments.toFixed(2)}</p>
+              <p className="text-center text-gray-500 text-xs">or 4 x ${adjustedPricing.installments.toFixed(2)}</p>
             </div>
           </div>
 
@@ -615,9 +702,19 @@ export default function BulkBookingForm({
           {selectedSlot?.time && (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
               <CheckCircle className="h-4 w-4 shrink-0" />
-              {new Date(selectedSlot.date + 'T00:00:00').toLocaleDateString('en-AU', {
-                weekday: 'long', day: 'numeric', month: 'long',
-              })} at {selectedSlot.time}
+              <span>
+                {new Date(selectedSlot.date + 'T00:00:00').toLocaleDateString('en-AU', {
+                  weekday: 'long', day: 'numeric', month: 'long',
+                })} at {selectedSlot.time}
+                {' '}–{' '}
+                {(() => {
+                  const [h, m] = selectedSlot.time.split(':').map(Number);
+                  const endMins = h * 60 + m + selectedDuration;
+                  const eh = Math.floor(endMins / 60) % 24;
+                  const em = endMins % 60;
+                  return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+                })()}
+              </span>
             </div>
           )}
 
@@ -806,53 +903,93 @@ export default function BulkBookingForm({
             </div>
           )}
 
-          <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-100 text-sm">
-            <div className="px-4 py-3 flex justify-between">
-              <span className="text-gray-500">Package</span>
-              <span className="font-medium">
-                {hours} hours{includeTestPackage ? ' + Test Package' : ''}
-              </span>
+          {/* Booking summary card */}
+          <div className="rounded-xl border-2 p-5 space-y-4" style={{ borderColor: `${primary}40`, backgroundColor: `${primary}08` }}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ backgroundColor: primary }}>
+                {instructorName.charAt(0)}
+              </div>
+              <div>
+                <p className="font-bold text-gray-900">{instructorName}</p>
+                <p className="text-xs text-gray-500">Driving Instructor</p>
+              </div>
             </div>
-            <div className="px-4 py-3 flex justify-between">
-              <span className="text-gray-500">Lesson duration</span>
-              <span className="font-medium">
-                {(() => { const h = Math.floor(selectedDuration / 60); const m = selectedDuration % 60; return m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`; })()}
-              </span>
+
+            <div className="border-t pt-3 space-y-2 text-sm">
+              {selectedSlot?.time ? (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Date &amp; Time</span>
+                  <span className="font-semibold text-gray-900 text-right">
+                    {new Date(selectedSlot.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+                    {' · '}
+                    {selectedSlot.time}
+                    {' – '}
+                    {(() => {
+                      const [h, m] = selectedSlot.time.split(':').map(Number);
+                      const endMins = h * 60 + m + selectedDuration;
+                      const eh = Math.floor(endMins / 60) % 24;
+                      const em = endMins % 60;
+                      return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+                    })()}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">First Lesson</span>
+                  <span className="font-medium text-green-700">Schedule from dashboard after payment</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">Duration</span>
+                <span className="font-medium text-gray-900">
+                  {(() => { const h = Math.floor(selectedDuration / 60); const m = selectedDuration % 60; return m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`; })()}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Package</span>
+                <span className="font-medium text-gray-900">{hours} hours{includeTestPackage ? ' + Test Package' : ''}</span>
+              </div>
+              {formData.address && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Pickup</span>
+                  <span className="font-medium text-gray-900 text-right max-w-[55%]">{formData.address}</span>
+                </div>
+              )}
             </div>
-            <div className="px-4 py-3 flex justify-between">
-              <span className="text-gray-500">First Lesson</span>
-              <span className="font-medium">
-                {selectedSlot
-                  ? `${new Date(selectedSlot.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} at ${selectedSlot.time}`
-                  : '—'}
-              </span>
-            </div>
-            <div className="px-4 py-3 flex justify-between">
-              <span className="text-gray-500">Name</span>
-              <span className="font-medium">{formData.name}</span>
-            </div>
-            <div className="px-4 py-3 flex justify-between">
-              <span className="text-gray-500">Email</span>
-              <span className="font-medium">{formData.email}</span>
-            </div>
-            <div className="px-4 py-3 flex justify-between">
-              <span className="text-gray-500">Phone</span>
-              <span className="font-medium">{formData.phone}</span>
-            </div>
-            <div className="px-4 py-3 flex justify-between">
-              <span className="text-gray-500">Pickup</span>
-              <span className="font-medium text-right max-w-[60%]">{formData.address}</span>
-            </div>
-            <div className="px-4 py-3 flex justify-between items-center">
-              <span className="font-bold">Total</span>
-              <span className="text-2xl font-bold" style={{ color: primary }}>
-                ${pricing.total.toFixed(2)}
-              </span>
+
+            <div className="border-t pt-3 space-y-1 text-sm">
+              <div className="flex justify-between text-gray-500">
+                <span>{hours} hrs × ${hourlyRate}/hr</span>
+                <span>${adjustedPricing.subtotal.toFixed(2)}</span>
+              </div>
+              {adjustedPricing.discount > 0 && (
+                <div className="flex justify-between text-green-700">
+                  <span>Discount ({adjustedPricing.discountPercentage}%)</span>
+                  <span>-${adjustedPricing.discount.toFixed(2)}</span>
+                </div>
+              )}
+              {includeTestPackage && adjustedPricing.testPackage > 0 && (
+                <div className="flex justify-between text-gray-500">
+                  <span>Test Package</span>
+                  <span>+${adjustedPricing.testPackage.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-gray-500">
+                <span>Platform fee (3.6%)</span>
+                <span>+${adjustedPricing.platformFee.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-base pt-2 border-t">
+                <span>Total</span>
+                <span style={{ color: primary }}>${adjustedPricing.total.toFixed(2)}</span>
+              </div>
             </div>
           </div>
 
           <p className="text-xs text-gray-500 text-center">
-            Secure payment via Stripe. Remaining lessons scheduled after payment.
+            Secure payment via Stripe.{' '}
+            {bookingType === 'now'
+              ? 'Remaining lessons scheduled after payment.'
+              : 'Schedule all your lessons from your dashboard after payment.'}
           </p>
 
           <NavButtons />

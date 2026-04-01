@@ -111,6 +111,10 @@ export default async function SubdomainBookingPage({
       facebook: true,
       yearsExperience: true,
       allowedDurations: true,
+      offersTestPackage: true,
+      testPackagePrice: true,
+      testPackageDuration: true,
+      testPackageIncludes: true,
     },
   });
 
@@ -711,6 +715,10 @@ export default async function SubdomainBookingPage({
                 baseAddress={instructor.baseAddress}
                 serviceRadiusKm={instructor.serviceRadiusKm}
                 allowedDurations={allowedDurations}
+                offersTestPackage={instructor.offersTestPackage ?? false}
+                testPackagePrice={instructor.testPackagePrice ?? undefined}
+                testPackageDuration={instructor.testPackageDuration ?? undefined}
+                testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
               />
             </div>
 
@@ -786,6 +794,10 @@ export default async function SubdomainBookingPage({
             baseAddress={instructor.baseAddress}
             serviceRadiusKm={instructor.serviceRadiusKm}
             allowedDurations={allowedDurations}
+            offersTestPackage={instructor.offersTestPackage ?? false}
+            testPackagePrice={instructor.testPackagePrice ?? undefined}
+            testPackageDuration={instructor.testPackageDuration ?? undefined}
+            testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
           />
         </div>
       </SubdomainClientFeatures>
