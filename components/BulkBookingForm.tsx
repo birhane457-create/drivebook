@@ -376,8 +376,8 @@ export default function BulkBookingForm({
             <p className="text-sm text-gray-500 mt-1">Packages save you money — the more hours, the bigger the discount.</p>
           </div>
 
-          {/* Duration picker — shown first so slot availability is correct */}
-          {allowedDurations.length > 1 && (
+          {/* Duration picker — only shown for Book Later (affects price per lesson) */}
+          {bookingType === 'later' && allowedDurations.length > 1 && (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
               <p className="text-sm font-semibold text-gray-800">Lesson duration</p>
               <div className="flex flex-wrap gap-2">
@@ -671,6 +671,39 @@ export default function BulkBookingForm({
             )}
           </div>
 
+          {/* Duration picker — shown here for Book Now so it affects slot availability */}
+          {allowedDurations.length > 1 && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
+              <p className="text-sm font-semibold text-gray-800">Lesson duration</p>
+              <div className="flex flex-wrap gap-2">
+                {allowedDurations.map((mins) => {
+                  const h = Math.floor(mins / 60);
+                  const m = mins % 60;
+                  const label = m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`;
+                  const cost = (hourlyRate * mins) / 60;
+                  const isSelected = selectedDuration === mins;
+                  return (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => { setSelectedDuration(mins); setSelectedSlot(null); }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all font-medium text-sm"
+                      style={isSelected
+                        ? { borderColor: primary, backgroundColor: `${primary}15`, color: primary }
+                        : { borderColor: '#e5e7eb', color: '#374151' }}
+                    >
+                      {label}
+                      <span className="text-xs opacity-60">${cost % 1 === 0 ? cost.toFixed(0) : cost.toFixed(2)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400">
+                Slots shown are for {(() => { const h = Math.floor(selectedDuration / 60); const m = selectedDuration % 60; return m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`; })()} lessons
+              </p>
+            </div>
+          )}
+
           <SlotPicker
             instructorId={instructorId}
             duration={selectedDuration}
@@ -681,23 +714,6 @@ export default function BulkBookingForm({
             }}
             primaryColor={primary}
           />
-
-          {/* Show selected duration as reminder */}
-          {allowedDurations.length > 1 && (
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>Lesson duration:</span>
-              <span className="font-medium text-gray-700">
-                {(() => { const h = Math.floor(selectedDuration / 60); const m = selectedDuration % 60; return m === 0 ? (h === 1 ? '1 hr' : `${h} hrs`) : `${h}h ${m}m`; })()}
-              </span>
-              <button
-                type="button"
-                onClick={() => setStep(0)}
-                className="text-blue-500 underline hover:text-blue-700"
-              >
-                Change
-              </button>
-            </div>
-          )}
 
           {selectedSlot?.time && (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
