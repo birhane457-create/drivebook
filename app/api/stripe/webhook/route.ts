@@ -277,6 +277,16 @@ async function handleWalletPaymentSuccess(
       throw new Error('No wallet transactions found');
     }
 
+    // ✅ Validate payment amount matches transaction total (prevents underpayment fraud)
+    const expectedCents = Math.round(
+      transactions.filter((t: any) => t.type === 'CREDIT').reduce((s: number, t: any) => s + t.amount, 0) * 100
+    );
+    const receivedCents = paymentIntent.amount_received;
+    if (receivedCents !== expectedCents) {
+      console.error('❌ Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
+      throw new Error(`Wallet payment amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
+    }
+
     // ✅ Confirm all PENDING wallet transactions
     for (const transaction of transactions) {
       await tx.walletTransaction.update({

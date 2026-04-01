@@ -4,6 +4,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { bulkBookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { notifyShortNoticeBookingRequest, notifyClientBookingPendingApproval } from '@/lib/services/notifications';
+import { calculatePackagePriceDynamic, HOUR_PACKAGES } from '@/lib/config/packages';
 
 const bulkBookingSchema = z.object({
   instructorId: z.string(),
@@ -127,12 +128,28 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Pricing ──────────────────────────────────────────────────────────────
-    // The Stripe charge is for the FULL package (data.pricing.total).
-    // The booking record stores the FIRST LESSON price only (selectedDuration × hourlyRate).
-    // After payment, the webhook will:
-    //   CREDIT wallet = full package total
-    //   DEBIT  wallet = first lesson price
-    // Remaining hours sit as wallet balance for future lessons.
+    // Always calculate server-side — never trust client-submitted pricing.
+    // The client sends pricing for display purposes only; we recalculate here.
+    const serverPricing = await calculatePackagePriceDynamic(
+      instructor.hourlyRate,
+      data.hours,
+      data.packageType,
+      data.includeTestPackage
+    );
+
+    // Validate client-submitted total is within 1 cent of server calculation
+    // (floating point tolerance). If it differs, reject — prevents price manipulation.
+    const clientTotal = data.pricing.total;
+    if (Math.abs(clientTotal - serverPricing.total) > 0.01) {
+      console.error('❌ Pricing mismatch:', { clientTotal, serverTotal: serverPricing.total });
+      return NextResponse.json({
+        error: 'Pricing has changed. Please refresh and try again.',
+        serverTotal: serverPricing.total,
+      }, { status: 409 });
+    }
+
+    // Use server-calculated pricing for all downstream operations
+    const verifiedTotal = serverPricing.total;
 
     const isShortNotice = data.scheduledBookings?.[0]?.isShortNotice ?? false;
     const firstLessonDurationMinutes = data.scheduledBookings?.[0]?.duration ?? 60;
@@ -197,7 +214,7 @@ export async function POST(req: NextRequest) {
             isPackageBooking: data.hours > 1,
             packageHours: data.hours,
             packageHoursRemaining: data.hours - firstLessonDurationHours,
-            packageTotalPaid: data.pricing.total,
+            packageTotalPaid: verifiedTotal,
           } as any,
         });
       });
@@ -208,7 +225,7 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    console.log('Booking created with id', booking.id, '| first lesson price:', firstLessonPrice, '| package total:', data.pricing.total, '| shortNotice:', isShortNotice);
+    console.log('Booking created with id', booking.id, '| first lesson price:', firstLessonPrice, '| package total (server-verified):', verifiedTotal, '| shortNotice:', isShortNotice);
 
     // For short-notice bookings: notify instructor urgently, notify client of pending status
     if (isShortNotice) {
@@ -234,7 +251,7 @@ export async function POST(req: NextRequest) {
       isShortNotice,
       // For short-notice: no payment yet — instructor must approve first
       // For normal: charge the full package amount via Stripe
-      total: isShortNotice ? 0 : data.pricing.total,
+      total: isShortNotice ? 0 : verifiedTotal,
       status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
     }, { status: 201 });
   } catch (error) {

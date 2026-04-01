@@ -308,7 +308,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ## 11. Deep Inspection Findings (April 2026)
 
-### 11.1 CODE_BUG — Wallet top-up webhook confirms transactions without amount validation
+### 11.1 ~~CODE_BUG~~ RESOLVED — Wallet top-up webhook confirms transactions without amount validation
+
+**Fixed (April 2026):** Added amount validation in `handleWalletPaymentSuccess()` before confirming transactions. Calculates expected cents from CREDIT transactions, compares to `paymentIntent.amount_received`. Throws if mismatch — prevents underpayment fraud.
 
 **File:** `app/api/stripe/webhook/route.ts` → `handleWalletPaymentSuccess()`
 
@@ -394,7 +396,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.7 CODE_BUG — WalletTransaction.status uses 'COMPLETED' in cancel route
+### 11.7 ~~CODE_BUG~~ RESOLVED — WalletTransaction.status uses 'COMPLETED' in cancel route
+
+**Was:** Gap analysis noted this as a risk. On inspection, the cancel route already uses `status: 'CONFIRMED'` (fixed when the route was rewritten in March 2026). No action needed.
 
 **File:** `app/api/bookings/[id]/cancel/route.ts`
 
@@ -439,7 +443,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.10 ENHANCEMENT — Booking price not validated against instructor's current rate
+### 11.10 ~~CODE_BUG~~ RESOLVED — Booking price not validated against instructor's current rate
+
+**Fixed (April 2026):** `app/api/public/bookings/bulk/route.ts` now calls `calculatePackagePriceDynamic()` server-side and validates the client-submitted `pricing.total` is within 1 cent. If it differs, returns 409 with the correct server total. `packageTotalPaid` on the booking now always uses the server-verified amount.
 
 **File:** `app/api/public/bookings/bulk/route.ts`
 
