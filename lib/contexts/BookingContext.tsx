@@ -23,6 +23,14 @@ interface Instructor {
   testPackagePrice: number | null;
   testPackageDuration: number | null;
   testPackageIncludes: string[];
+  lessonPackages?: Array<{
+    id: string;
+    name: string;
+    durationMinutes: number;
+    price: number;
+    description: string;
+    isActive: boolean;
+  }>;
 }
 
 interface PricingBreakdown {
@@ -32,6 +40,14 @@ interface PricingBreakdown {
   testPackage: number;
   platformFee: number;
   total: number;
+}
+
+interface PlatformPricingSettings {
+  platformFeePercentage: number;
+  package6Discount: number;
+  package10Discount: number;
+  package15Discount: number;
+  drivingTestPackagePrice: number;
 }
 
 interface ScheduledBooking {
@@ -50,6 +66,8 @@ interface BookingState {
   packageType: PackageType;
   hours: number;
   includeTestPackage: boolean;
+  customPackageId: string | null;   // instructor's fixed-price lesson package id
+  customPackagePrice: number | null; // fixed price — bypasses hourlyRate × hours calc
   
   // Step 3: Book Now/Later
   bookingType: 'now' | 'later' | null;
@@ -82,6 +100,9 @@ interface BookingState {
   
   // Calculated
   pricing: PricingBreakdown;
+
+  // Platform pricing settings (fetched from DB, not hardcoded)
+  platformSettings: PlatformPricingSettings;
 }
 
 interface BookingContextType {
@@ -89,6 +110,7 @@ interface BookingContextType {
   updateBooking: (updates: Partial<BookingState>) => void;
   setInstructor: (instructor: Instructor) => void;
   setPackage: (packageType: PackageType, hours: number) => void;
+  setInstructorPackage: (id: string, price: number, durationMinutes: number) => void;
   toggleTestPackage: () => void;
   setClientDetails: (details: Partial<BookingState>) => void;
   addScheduledBooking: (booking: ScheduledBooking) => void;
@@ -117,11 +139,21 @@ const defaultPricing: PricingBreakdown = {
   total: 0
 };
 
+const defaultPlatformSettings: PlatformPricingSettings = {
+  platformFeePercentage: 3.6,
+  package6Discount: 5,
+  package10Discount: 10,
+  package15Discount: 12,
+  drivingTestPackagePrice: 225,
+};
+
 const initialState: BookingState = {
   instructor: null,
   packageType: 'PACKAGE_10',
   hours: 10,
   includeTestPackage: false,
+  customPackageId: null,
+  customPackagePrice: null,
   bookingType: null,
   scheduledBookings: [],
   remainingHours: 0,
@@ -137,7 +169,8 @@ const initialState: BookingState = {
   slotReservations: [],
   sessionId: typeof window !== 'undefined' ? localStorage.getItem('bookingSessionId') || generateSessionId() : generateSessionId(),
   savedAt: 0,
-  pricing: defaultPricing
+  pricing: defaultPricing,
+  platformSettings: defaultPlatformSettings,
 };
 
 function generateSessionId(): string {
@@ -155,33 +188,44 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       return defaultPricing;
     }
 
-    const pricing = calculatePackagePrice(
-      state.instructor.hourlyRate,
-      state.hours,
-      state.packageType,
-      false // Don't include default test package
-    );
+    const s = state.platformSettings;
+    const discountMap: Record<string, number> = {
+      PACKAGE_6: s.package6Discount,
+      PACKAGE_10: s.package10Discount,
+      PACKAGE_15: s.package15Discount,
+      CUSTOM: 0,
+    };
+    const discountPercentage = discountMap[state.packageType] ?? 0;
+    // If an instructor fixed-price package is selected, use its price directly — no hourlyRate calc
+    const subtotal = state.customPackagePrice !== null
+      ? state.customPackagePrice
+      : state.instructor.hourlyRate * state.hours;
+    const discount = state.customPackagePrice !== null ? 0 : (subtotal * discountPercentage) / 100;
 
-    // If test package is selected and instructor has custom price, use it
-    if (state.includeTestPackage && state.instructor.offersTestPackage && state.instructor.testPackagePrice) {
-      const customTestPrice = state.instructor.testPackagePrice;
-      
-      return {
-        ...pricing,
-        testPackage: customTestPrice,
-        total: pricing.total - pricing.testPackage + customTestPrice
-      };
+    // Test package price
+    let testPackageAmount = 0;
+    if (state.includeTestPackage) {
+      if (state.instructor.offersTestPackage && state.instructor.testPackagePrice) {
+        testPackageAmount = state.instructor.testPackagePrice;
+      } else if (!state.instructor.offersTestPackage) {
+        testPackageAmount = 0;
+      } else {
+        testPackageAmount = s.drivingTestPackagePrice;
+      }
     }
 
-    // If test package selected but instructor doesn't offer it, don't include it
-    if (state.includeTestPackage && !state.instructor.offersTestPackage) {
-      return {
-        ...pricing,
-        testPackage: 0
-      };
-    }
+    const afterDiscount = subtotal - discount + testPackageAmount;
+    const platformFee = (afterDiscount * s.platformFeePercentage) / 100;
+    const total = afterDiscount + platformFee;
 
-    return pricing;
+    return {
+      subtotal,
+      discount,
+      discountPercentage,
+      testPackage: testPackageAmount,
+      platformFee,
+      total,
+    };
   }, []);
 
   const updateBooking = useCallback((updates: Partial<BookingState>) => {
@@ -207,7 +251,25 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         ...prev, 
         packageType, 
         hours: actualHours,
-        remainingHours: actualHours // Initialize remaining hours when package is set
+        remainingHours: actualHours,
+        customPackageId: null,
+        customPackagePrice: null,
+      };
+      newState.pricing = calculatePricing(newState);
+      return newState;
+    });
+  }, [calculatePricing]);
+
+  const setInstructorPackage = useCallback((id: string, price: number, durationMinutes: number) => {
+    setBookingState(prev => {
+      const hours = durationMinutes / 60;
+      const newState = {
+        ...prev,
+        packageType: 'CUSTOM' as PackageType,
+        hours,
+        remainingHours: hours,
+        customPackageId: id,
+        customPackagePrice: price,
       };
       newState.pricing = calculatePricing(newState);
       return newState;
@@ -379,6 +441,22 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return false;
   }, []);
 
+  // Fetch platform pricing settings from DB on mount
+  useEffect(() => {
+    fetch('/api/public/pricing')
+      .then(res => res.json())
+      .then(settings => {
+        setBookingState(prev => {
+          const newState = { ...prev, platformSettings: settings };
+          newState.pricing = calculatePricing(newState);
+          return newState;
+        });
+      })
+      .catch(() => {
+        // Keep defaults on failure — booking flow continues
+      });
+  }, []);
+
   // Auto-save to localStorage when booking state changes
   useEffect(() => {
     if (bookingState.instructor) {
@@ -391,6 +469,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     updateBooking,
     setInstructor,
     setPackage,
+    setInstructorPackage,
     toggleTestPackage,
     setClientDetails,
     addScheduledBooking,

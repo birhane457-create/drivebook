@@ -38,7 +38,8 @@ const bulkBookingSchema = z.object({
     platformFee: z.coerce.number(),
     total: z.coerce.number(),
     installments: z.coerce.number().optional()
-  }).passthrough()
+  }).passthrough(),
+  customPackageId: z.string().optional(), // instructor's fixed-price lesson package
 });
 
 export async function POST(req: NextRequest) {
@@ -64,8 +65,18 @@ export async function POST(req: NextRequest) {
     // Check if instructor exists and is active/approved
     const instructor = await prisma.instructor.findUnique({
       where: { id: data.instructorId },
-      include: { user: true }
-    });
+      select: {
+        id: true,
+        name: true,
+        hourlyRate: true,
+        userId: true,
+        approvalStatus: true,
+        status: true,
+        isActive: true,
+        subscriptionTier: true,
+        lessonPackages: true,
+      } as any,
+    }) as any;
 
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
@@ -138,12 +149,38 @@ export async function POST(req: NextRequest) {
     // ── Pricing ──────────────────────────────────────────────────────────────
     // Always calculate server-side — never trust client-submitted pricing.
     // The client sends pricing for display purposes only; we recalculate here.
-    const serverPricing = await calculatePackagePriceDynamic(
-      instructor.hourlyRate,
-      data.hours,
-      data.packageType,
-      data.includeTestPackage
-    );
+    let serverPricing: Awaited<ReturnType<typeof calculatePackagePriceDynamic>>;
+
+    if (data.customPackageId) {
+      // Instructor's fixed-price lesson package — look up the price from DB
+      const pkg = (instructor as any).lessonPackages?.find(
+        (p: any) => p.id === data.customPackageId && p.isActive !== false
+      );
+      if (!pkg) {
+        return NextResponse.json({ error: 'Selected package is no longer available' }, { status: 400 });
+      }
+      // Build pricing using the fixed package price — no platform bulk discount
+      const { getPlatformPricing } = await import('@/lib/services/platform-pricing');
+      const platformSettings = await getPlatformPricing();
+      const afterDiscount = pkg.price; // fixed price, no discount
+      const platformFee = (afterDiscount * platformSettings.platformFeePercentage) / 100;
+      serverPricing = {
+        subtotal: pkg.price,
+        discount: 0,
+        discountPercentage: 0,
+        testPackage: 0,
+        platformFee,
+        total: afterDiscount + platformFee,
+        installments: (afterDiscount + platformFee) / 4,
+      };
+    } else {
+      serverPricing = await calculatePackagePriceDynamic(
+        instructor.hourlyRate,
+        data.hours,
+        data.packageType,
+        data.includeTestPackage
+      );
+    }
 
     // Validate client-submitted total is within 1 cent of server calculation
     // (floating point tolerance). If it differs, reject — prevents price manipulation.
@@ -223,6 +260,8 @@ export async function POST(req: NextRequest) {
             packageHours: data.hours,
             packageHoursRemaining: data.hours - firstLessonDurationHours,
             packageTotalPaid: verifiedTotal,
+            lockedHourlyRate: instructor.hourlyRate,
+            lockedDiscountPct: serverPricing.discountPercentage,
           } as any,
         });
       });

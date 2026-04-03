@@ -526,3 +526,42 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 ### Enhancement (post-launch)
 9. **11.9** — Wire up missing notification triggers
 10. **11.8** — Cap availability buffer at working hours end
+
+---
+
+## 13. Rate & Discount Locking (April 2026)
+
+### 13.1 RESOLVED — Package rate and discount not locked at purchase time
+
+**Fixed (April 2026):**
+- `lockedHourlyRate Float?` and `lockedDiscountPct Float?` added to `Booking` schema
+- `app/api/public/bookings/bulk/route.ts` stores `instructor.hourlyRate` and `serverPricing.discountPercentage` on the booking at creation
+- `app/api/client/confirm-package-booking/route.ts` now uses `packageBooking.lockedHourlyRate` (falls back to `instructor.hourlyRate` for legacy records) when calculating the deduction amount for individual lessons
+- `prisma generate` run to pick up new fields
+
+**SQL migration required (run in Supabase SQL editor):**
+```sql
+ALTER TABLE "Booking"
+  ADD COLUMN IF NOT EXISTS "lockedHourlyRate" DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS "lockedDiscountPct" DOUBLE PRECISION;
+
+ALTER TABLE "PlatformSettings"
+  ADD COLUMN IF NOT EXISTS "bulkDiscountsEnabled" BOOLEAN NOT NULL DEFAULT true;
+```
+
+**Policy:**
+- Already booked → price is locked, rate changes have no effect
+- Package purchased (paid) → `lockedHourlyRate` and `lockedDiscountPct` stored on the booking; all future lesson deductions from that package use these values regardless of instructor rate changes
+- Wallet top-up only (not yet booked) → no lock; booking uses current rate at booking time
+- UI tip shown in `PackageSelector`: "Rate & discount locked at purchase — instructor price changes won't affect your package"
+- Server always recalculates pricing at submission using live DB rate; if client-submitted total differs by >$0.01, returns 409 with `serverTotal` so the UI can show the updated price and ask the student to confirm
+
+**Files changed:**
+- `prisma/schema.prisma` — `lockedHourlyRate`, `lockedDiscountPct` on `Booking`; `bulkDiscountsEnabled` on `PlatformSettings`
+- `app/api/public/bookings/bulk/route.ts` — stores locked values on booking create
+- `app/api/client/confirm-package-booking/route.ts` — uses locked rate for deductions
+- `components/PackageSelector.tsx` — lock benefit bullet; discount rates from live DB
+- `lib/contexts/BookingContext.tsx` — fetches `platformSettings` from `/api/public/pricing` on mount
+- `app/api/public/pricing/route.ts` — public endpoint returning live discount rates
+
+**Severity:** HIGH — without this, instructor rate increases silently overcharge students on pre-purchased packages

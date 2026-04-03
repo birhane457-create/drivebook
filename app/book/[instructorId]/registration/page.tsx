@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
+import { useEffect } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import MultiStepBookingLayout from '@/components/MultiStepBookingLayout';
 import RegistrationForm from '@/components/RegistrationForm';
@@ -11,8 +12,13 @@ export default function RegistrationPage() {
   const { bookingState } = useBooking();
   const { instructor } = bookingState;
 
+  useEffect(() => {
+    if (!instructor) {
+      router.push('/book');
+    }
+  }, [instructor, router]);
+
   if (!instructor) {
-    router.push('/book');
     return null;
   }
 

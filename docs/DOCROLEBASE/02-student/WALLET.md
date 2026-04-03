@@ -67,11 +67,21 @@ Each transaction has:
 ## Package Flow
 
 When a student purchases a package via the public booking form:
-1. Stripe charges `packageTotalPaid` (e.g. $600 for 10 hours)
-2. Wallet is CREDITED with $600
-3. Wallet is DEBITED with `booking.price` (first lesson, e.g. $60)
-4. Remaining $540 is available for future lessons from the client dashboard
+1. Stripe charges `packageTotalPaid` (e.g. $630 for 10 hours at $70/hr with 10% discount)
+2. Wallet is CREDITED with $630
+3. Wallet is DEBITED with `booking.price` (first lesson, e.g. $70)
+4. Remaining $560 is available for future lessons from the client dashboard
 5. **Receipt email sent** — `sendPackagePurchaseReceipt()` fires showing package details, payment breakdown, and wallet balance after first lesson debit
+
+**Rate & discount locking:**
+At package purchase time, the instructor's `hourlyRate` and the applied discount percentage are stored on the `Booking` record as `lockedHourlyRate` and `lockedDiscountPct`. When the student later books individual lessons from the package (`POST /api/client/confirm-package-booking`), the deduction uses `lockedHourlyRate` — not the instructor's current rate. This means:
+
+- Instructor raises rate from $70 → $75 after package purchase → student's remaining hours still deduct at $70/hr
+- Instructor lowers rate → student's package is unaffected (they paid the old rate)
+- The discount % is also locked — a 10% package discount stays 10% for all lessons in that package
+
+**Wallet top-up (not yet booked):**
+A plain wallet top-up is just money — no rate is locked. If the instructor changes their rate between the top-up and the booking, the booking uses the current rate at booking time. The booking UI shows: "Book all lessons now to lock in the current rate."
 
 ---
 

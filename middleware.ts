@@ -55,7 +55,7 @@ export async function middleware(req: NextRequest) {
 
   // If subdomain exists, rewrite to /subdomain/[slug] (skip API/_next/static)
   if (subdomain && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
-    if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/_next') && !url.pathname.startsWith('/static') && !url.pathname.startsWith('/booking') && !url.pathname.startsWith('/login') && !url.pathname.startsWith('/register')) {
+    if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/_next') && !url.pathname.startsWith('/static') && !url.pathname.startsWith('/booking') && !url.pathname.startsWith('/login') && !url.pathname.startsWith('/register') && !url.pathname.startsWith('/book/') && url.pathname !== '/book') {
       const rest = url.pathname === '/' ? '' : url.pathname
       url.pathname = `/subdomain/${subdomain}${rest}`
       const response = NextResponse.rewrite(url)

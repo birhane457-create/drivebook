@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
+import { useEffect } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import MultiStepBookingLayout from '@/components/MultiStepBookingLayout';
 import BookingDetailsForm from '@/components/BookingDetailsForm';
@@ -10,9 +11,13 @@ export default function BookingDetailsPage() {
   const params = useParams();
   const { bookingState } = useBooking();
 
-  // Redirect if no instructor or booking type not selected
+  useEffect(() => {
+    if (!bookingState.instructor || bookingState.bookingType !== 'now') {
+      router.push('/book');
+    }
+  }, [bookingState.instructor, bookingState.bookingType, router]);
+
   if (!bookingState.instructor || bookingState.bookingType !== 'now') {
-    router.push('/book');
     return null;
   }
 

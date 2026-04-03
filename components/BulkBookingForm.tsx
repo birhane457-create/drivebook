@@ -33,10 +33,10 @@ interface BulkBookingFormProps {
   testPackageIncludes?: string[];
 }
 
-const STEP_LABELS_BASE = ['How to Book', 'Package', 'Time Slot', 'Your Details', 'Confirm'];
-const STEP_LABELS_BASE_LATER = ['How to Book', 'Package', 'Your Details', 'Confirm'];
-const STEP_LABELS_WITH_AREA = ['How to Book', 'Package', 'Pickup Location', 'Time Slot', 'Your Details', 'Confirm'];
-const STEP_LABELS_WITH_AREA_LATER = ['How to Book', 'Package', 'Pickup Location', 'Your Details', 'Confirm'];
+const STEP_LABELS_BASE = ['Package', 'Time Slot', 'Your Details', 'Confirm'];
+const STEP_LABELS_BASE_LATER = ['Package', 'Your Details', 'Confirm'];
+const STEP_LABELS_WITH_AREA = ['Package', 'Pickup Location', 'Time Slot', 'Your Details', 'Confirm'];
+const STEP_LABELS_WITH_AREA_LATER = ['Package', 'Pickup Location', 'Your Details', 'Confirm'];
 
 export default function BulkBookingForm({
   instructorId,
@@ -174,7 +174,6 @@ export default function BulkBookingForm({
   };
 
   const canProceed = (): boolean => {
-    if (currentLabel === 'How to Book') return false; // handled by direct button click
     if (currentLabel === 'Package') return true;
     if (currentLabel === 'Pickup Location') {
       if (pickupAddress.trim().length <= 5) return false;
@@ -320,57 +319,38 @@ export default function BulkBookingForm({
     <div className="space-y-4">
       <ProgressBar />
 
-      {/* ── STEP: How to Book ── */}
-      {currentLabel === 'How to Book' && (
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-lg font-bold">How would you like to book?</h3>
-            <p className="text-sm text-gray-500 mt-1">Choose how you want to get started.</p>
-          </div>
-
-          <div className="space-y-3">
-            {/* Book Now */}
-            <button
-              type="button"
-              onClick={() => { setBookingType('now'); setStep(s => s + 1); }}
-              className="w-full p-4 border-2 rounded-xl text-left transition-all hover:shadow-md"
-              style={{ borderColor: primary, backgroundColor: `${primary}08` }}
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xl shrink-0" style={{ backgroundColor: primary }}>
-                  📅
-                </div>
-                <div>
-                  <p className="font-bold text-gray-900">Book Now</p>
-                  <p className="text-sm text-gray-600 mt-0.5">Pick a date and time slot, pay, and your lesson is confirmed immediately.</p>
-                </div>
-              </div>
-            </button>
-
-            {/* Book Later */}
-            <button
-              type="button"
-              onClick={() => { setBookingType('later'); setStep(s => s + 1); }}
-              className="w-full p-4 border-2 rounded-xl text-left transition-all hover:shadow-md border-gray-200 hover:border-gray-300"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xl shrink-0 bg-gray-400">
-                  🕐
-                </div>
-                <div>
-                  <p className="font-bold text-gray-900">Buy Credits, Schedule Later</p>
-                  <p className="text-sm text-gray-600 mt-0.5">Purchase a lesson package now and schedule your lessons from your dashboard whenever you&apos;re ready.</p>
-                  <p className="text-xs text-green-700 mt-1 font-medium">✓ Credits never expire</p>
-                </div>
-              </div>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ── STEP: Package ── */}
       {currentLabel === 'Package' && (
         <div className="space-y-4">
+          {/* Book Now / Book Later toggle — at the top of the first step */}
+          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+            <button
+              type="button"
+              onClick={() => { setBookingType('now'); setSelectedSlot(null); }}
+              className="flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-all"
+              style={bookingType === 'now'
+                ? { backgroundColor: primary, color: '#fff' }
+                : { color: '#6b7280' }}
+            >
+              📅 Book Now
+            </button>
+            <button
+              type="button"
+              onClick={() => { setBookingType('later'); setSelectedSlot(null); }}
+              className="flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-all"
+              style={bookingType === 'later'
+                ? { backgroundColor: primary, color: '#fff' }
+                : { color: '#6b7280' }}
+            >
+              🕐 Buy Credits
+            </button>
+          </div>
+          {bookingType === 'later' && (
+            <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              ✓ Purchase hours now, schedule your lessons from your dashboard whenever you&apos;re ready. Credits never expire.
+            </p>
+          )}
+
           <div>
             <h3 className="text-lg font-bold">Choose Your Package</h3>
             <p className="text-sm text-gray-500 mt-1">Packages save you money — the more hours, the bigger the discount.</p>

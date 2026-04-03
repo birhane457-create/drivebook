@@ -187,6 +187,8 @@ model Booking {
   packageTotalPaid      Float?
   packageExpiryDate     DateTime?
   packageStatus         String?
+  lockedHourlyRate      Float?     // Rate at time of package purchase — never changes
+  lockedDiscountPct     Float?     // Discount % at time of package purchase — never changes
   createdBy             String?
   originalStartTime     DateTime?
   isNonRefundable       Boolean    @default(false)

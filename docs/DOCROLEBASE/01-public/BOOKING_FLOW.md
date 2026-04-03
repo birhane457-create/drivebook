@@ -50,11 +50,16 @@ A multi-step form (`components/BulkBookingForm.tsx`) that handles:
 **Pricing calculation (client-side preview):**
 ```
 singleLesson = instructor.hourlyRate × duration
-package6     = (hourlyRate × 6) × (1 − 0.05)   // 5% discount
-package10    = (hourlyRate × 10) × (1 − 0.10)  // 10% discount
-package15    = (hourlyRate × 15) × (1 − 0.12)  // 12% discount
+package6     = (hourlyRate × 6) × (1 − package6Discount/100)
+package10    = (hourlyRate × 10) × (1 − package10Discount/100)
+package15    = (hourlyRate × 15) × (1 − package15Discount/100)
 ```
-Discounts are configurable via `/admin/pricing` → `PlatformSettings`.
+Discount rates are fetched live from `GET /api/public/pricing` (sourced from `PlatformSettings` in DB) on context mount. Configurable via `/admin/pricing`.
+
+**Rate & discount locking:**
+When a package is purchased, the instructor's current `hourlyRate` and the applied `discountPercentage` are stored on the `Booking` record as `lockedHourlyRate` and `lockedDiscountPct`. All future lesson deductions from that package use these locked values — instructor rate changes after purchase do not affect the student's remaining hours.
+
+Wallet-only top-ups (not yet booked) are not locked — they are plain money. If the instructor raises their rate before the student books, the booking uses the current rate at booking time. The UI shows a tip: "Book all lessons now to lock in the current rate."
 
 ---
 
@@ -77,6 +82,8 @@ On form submit, calls `POST /api/public/bookings/bulk`.
 **On success:** redirects to `/booking/[id]/payment`
 
 **On 409 (slot taken):** shows "This slot was just taken — please choose another time"
+
+**On 409 (price changed):** the server recalculates pricing using the instructor's current `hourlyRate` at submission time. If the client-submitted total differs from the server total by more than $0.01, a 409 is returned with `{ serverTotal }`. The wizard shows the updated price and asks the student to confirm before retrying.
 
 ---
 

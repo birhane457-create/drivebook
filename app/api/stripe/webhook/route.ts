@@ -435,7 +435,8 @@ async function handleBookingPaymentSuccess(
     // ✅ P0 FIX #5: Verify payment customer matches instructor
     if (paymentIntent.customer) {
       const instructor = await tx.instructor.findUnique({ 
-        where: { id: booking.instructorId } 
+        where: { id: booking.instructorId },
+        select: { id: true, stripeCustomerId: true },
       });
       
       if (instructor?.stripeCustomerId && instructor.stripeCustomerId !== paymentIntent.customer) {
@@ -555,7 +556,10 @@ async function handleBookingPaymentSuccess(
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { instructor: true, client: true }
+      include: {
+        instructor: { select: { id: true, userId: true, name: true, hourlyRate: true } },
+        client: true,
+      },
     });
     const payChannels = getNotifChannels('PAYMENT_RECEIVED');
     if (payChannels.inApp && booking?.instructor?.userId) {
@@ -746,7 +750,7 @@ async function handleSubscriptionUpdate(
   if (status === 'active') {
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
-      include: { user: true }
+      select: { id: true, name: true, user: { select: { email: true, name: true } } },
     });
 
     if (instructor?.user) {
@@ -828,7 +832,7 @@ async function handleTrialEnding(
 
   const instructor = await prisma.instructor.findUnique({
     where: { id: instructorId },
-    include: { user: true }
+    select: { id: true, name: true, user: { select: { email: true, name: true } } },
   });
 
   if (instructor?.user && trial_end) {

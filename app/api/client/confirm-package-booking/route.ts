@@ -126,7 +126,9 @@ export async function POST(request: Request) {
     });
 
     if (userWallet) {
-      const transactionAmount = hoursToDeduct * (booking.instructor?.hourlyRate || 0);
+      // Use the locked rate from when the package was purchased — not the instructor's current rate
+      const lockedRate = (packageBooking as any).lockedHourlyRate ?? booking.instructor?.hourlyRate ?? 0;
+      const transactionAmount = hoursToDeduct * lockedRate;
       await prisma.transaction.create({
         data: {
           bookingId: bookingId,

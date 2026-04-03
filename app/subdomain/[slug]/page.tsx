@@ -6,6 +6,7 @@ import { MapPin, Car, Star, Phone, Globe, Clock, CheckCircle, MessageCircle, Ins
 import BulkBookingForm from '@/components/BulkBookingForm';
 import SubdomainClientFeatures from '@/components/subdomain/SubdomainClientFeatures';
 import SubdomainDesktopNav from '@/components/subdomain/SubdomainDesktopNav';
+import SubdomainBookingEntry from '@/components/subdomain/SubdomainBookingEntry';
 import type { Metadata } from 'next';
 
 export const revalidate = 300; // cache 5 minutes — instructor profiles don't change by the second
@@ -163,7 +164,10 @@ export default async function SubdomainBookingPage({
   });
 
   let nextAvailableLabel: string | null = null;
-  for (let i = 0; i < 14 && !nextAvailableLabel; i++) {
+  const nextAvailableSlots: string[] = [];
+  const minBookableTime = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2hrs from now
+
+  for (let i = 0; i < 14 && nextAvailableSlots.length < 3; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     const dayName = days[d.getDay()];
@@ -171,7 +175,7 @@ export default async function SubdomainBookingPage({
     if (daySlots.length === 0) continue;
 
     for (const slot of daySlots) {
-      if (nextAvailableLabel) break;
+      if (nextAvailableSlots.length >= 3) break;
       const [startH, startM] = slot.start.split(':').map(Number);
       const [endH, endM] = slot.end.split(':').map(Number);
       const dayStart = new Date(d);
@@ -179,9 +183,12 @@ export default async function SubdomainBookingPage({
       const dayEnd = new Date(d);
       dayEnd.setHours(endH, endM, 0, 0);
 
-      let cursor = dayStart < now ? new Date(now.getTime() + 60 * 60 * 1000) : new Date(dayStart);
+      // Start cursor at the later of: slot start, or minBookableTime (rounded up to next hour)
+      let cursor = new Date(Math.max(dayStart.getTime(), minBookableTime.getTime()));
       cursor.setMinutes(0, 0, 0);
-      while (cursor < dayEnd) {
+      if (cursor < minBookableTime) cursor = new Date(cursor.getTime() + 60 * 60 * 1000);
+
+      while (cursor < dayEnd && nextAvailableSlots.length < 3) {
         const slotEnd = new Date(cursor.getTime() + 60 * 60 * 1000);
         const blocked = upcomingBookings.some(b => {
           const bs = new Date(b.startTime!);
@@ -189,15 +196,15 @@ export default async function SubdomainBookingPage({
           return cursor < be && slotEnd > bs;
         });
         if (!blocked) {
-          const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-AU', { weekday: 'long' });
+          const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' });
           const timeStr = cursor.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
-          nextAvailableLabel = `${label} at ${timeStr}`;
-          break;
+          nextAvailableSlots.push(`${label} ${timeStr}`);
         }
         cursor = slotEnd;
       }
     }
   }
+  if (nextAvailableSlots.length > 0) nextAvailableLabel = nextAvailableSlots[0];
 
   // Working hours summary for display (e.g. "Mon–Fri 9am–5pm, Sat 9am–1pm")
   const workingHoursSummary = (() => {
@@ -430,7 +437,7 @@ export default async function SubdomainBookingPage({
                 {nextAvailableLabel && (
                   <div className="flex items-center gap-1 text-white/90 text-xs">
                     <Calendar className="h-3.5 w-3.5" />
-                    {nextAvailableLabel}
+                    {nextAvailableSlots.slice(0, 2).join(' · ')}
                   </div>
                 )}
               </div>
@@ -460,12 +467,16 @@ export default async function SubdomainBookingPage({
           <div className="lg:col-span-1 space-y-4">
 
             {/* Next availability callout */}
-            {nextAvailableLabel && (
-              <div className="rounded-xl p-4 border-2 flex items-center gap-3" style={{ backgroundColor: `${primary}10`, borderColor: `${primary}40` }}>
-                <Calendar className="h-5 w-5 shrink-0" style={{ color: primary }} />
+            {nextAvailableSlots.length > 0 && (
+              <div className="rounded-xl p-4 border-2 flex items-start gap-3" style={{ backgroundColor: `${primary}10`, borderColor: `${primary}40` }}>
+                <Calendar className="h-5 w-5 shrink-0 mt-0.5" style={{ color: primary }} />
                 <div>
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Next Available</p>
-                  <p className="font-semibold text-gray-900">{nextAvailableLabel}</p>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">Next Available</p>
+                  <div className="space-y-0.5">
+                    {nextAvailableSlots.map((slot, i) => (
+                      <p key={i} className={`font-semibold ${i === 0 ? 'text-gray-900' : 'text-gray-500 text-sm font-normal'}`}>{slot}</p>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -541,7 +552,7 @@ export default async function SubdomainBookingPage({
                       <div className="text-right shrink-0 ml-3">
                         <p className="font-bold" style={{ color: secondary }}>${pkg.price.toFixed(2)}</p>
                         {saving && saving > 0 && (
-                          <p className="text-xs text-green-600">Save ${saving.toFixed(0)}</p>
+                          <p className="text-xs text-green-600">Save ${saving.toFixed(0)} vs hourly</p>
                         )}
                       </div>
                     </div>
@@ -693,29 +704,28 @@ export default async function SubdomainBookingPage({
                     <span>⭐ {instructor.averageRating?.toFixed(1) ?? '5.0'} from {instructor.totalReviews} reviews</span>
                   )}
                   {nextAvailableLabel && (
-                    <span>⏱ Next available: {nextAvailableLabel}</span>
+                    <span>⏱ Next available: {nextAvailableSlots.slice(0, 2).join(' · ')}</span>
                   )}
                   <span>🔒 No account required</span>
                 </div>
               )}
               <h2 className="text-xl font-bold text-gray-900 mb-0.5">Book Your Lesson</h2>
               <p className="text-sm text-gray-500 mb-6">Takes less than 60 seconds · No account required</p>
-              <BulkBookingForm
-                instructorId={instructor.id}
-                instructorName={instructor.name}
-                hourlyRate={instructor.hourlyRate}
-                searchedLocation={searchedLocation}
-                brandColorPrimary={primary}
-                brandColorSecondary={secondary}
-                lessonPackages={activePackages}
-                serviceAreas={instructor.serviceAreas}
-                baseAddress={instructor.baseAddress}
-                serviceRadiusKm={instructor.serviceRadiusKm}
-                allowedDurations={allowedDurations}
-                offersTestPackage={(instructor as any).offersTestPackage ?? false}
-                testPackagePrice={(instructor as any).testPackagePrice ?? undefined}
-                testPackageDuration={(instructor as any).testPackageDuration ?? undefined}
-                testPackageIncludes={((instructor as any).testPackageIncludes as string[]) ?? []}
+              <SubdomainBookingEntry
+                instructor={{
+                  id: instructor.id,
+                  name: instructor.name,
+                  profileImage: instructor.profileImage,
+                  hourlyRate: instructor.hourlyRate,
+                  averageRating: instructor.averageRating,
+                  totalReviews: instructor.totalReviews,
+                  offersTestPackage: (instructor as any).offersTestPackage ?? false,
+                  testPackagePrice: (instructor as any).testPackagePrice ?? null,
+                  testPackageDuration: (instructor as any).testPackageDuration ?? null,
+                  testPackageIncludes: ((instructor as any).testPackageIncludes as string[]) ?? [],
+                  lessonPackages: activePackages,
+                }}
+                primary={primary}
               />
             </div>
 
@@ -779,22 +789,21 @@ export default async function SubdomainBookingPage({
       <SubdomainClientFeatures primary={primary} instructorName={instructor.name}>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-gray-900">Book a Lesson</h2>
-          <BulkBookingForm
-            instructorId={instructor.id}
-            instructorName={instructor.name}
-            hourlyRate={instructor.hourlyRate}
-            searchedLocation={searchedLocation}
-            brandColorPrimary={primary}
-            brandColorSecondary={secondary}
-            lessonPackages={activePackages}
-            serviceAreas={instructor.serviceAreas}
-            baseAddress={instructor.baseAddress}
-            serviceRadiusKm={instructor.serviceRadiusKm}
-            allowedDurations={allowedDurations}
-            offersTestPackage={(instructor as any).offersTestPackage ?? false}
-            testPackagePrice={(instructor as any).testPackagePrice ?? undefined}
-            testPackageDuration={(instructor as any).testPackageDuration ?? undefined}
-            testPackageIncludes={((instructor as any).testPackageIncludes as string[]) ?? []}
+          <SubdomainBookingEntry
+            instructor={{
+              id: instructor.id,
+              name: instructor.name,
+              profileImage: instructor.profileImage,
+              hourlyRate: instructor.hourlyRate,
+              averageRating: instructor.averageRating,
+              totalReviews: instructor.totalReviews,
+              offersTestPackage: (instructor as any).offersTestPackage ?? false,
+              testPackagePrice: (instructor as any).testPackagePrice ?? null,
+              testPackageDuration: (instructor as any).testPackageDuration ?? null,
+              testPackageIncludes: ((instructor as any).testPackageIncludes as string[]) ?? [],
+              lessonPackages: activePackages,
+            }}
+            primary={primary}
           />
         </div>
       </SubdomainClientFeatures>
