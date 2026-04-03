@@ -35,6 +35,9 @@ export async function GET(
       notes: booking.notes,
       isPackageBooking: booking.isPackageBooking,
       packageHours: booking.packageHours,
+      packageTotalPaid: (booking as any).packageTotalPaid,
+      lockedHourlyRate: (booking as any).lockedHourlyRate,
+      lockedDiscountPct: (booking as any).lockedDiscountPct,
       instructor: {
         name: booking.instructor.name,
         phone: booking.instructor.phone,

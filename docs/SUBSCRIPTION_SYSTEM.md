@@ -14,11 +14,16 @@ DriveBook uses a three-tier subscription model for instructors. Subscriptions ar
 
 Default values defined in `lib/config/subscriptions.ts` and overridable via the admin pricing page (`/admin/pricing`) which persists to the `PlatformSettings` DB model. Payment intent creation reads live rates from DB via `lib/services/platform-pricing.ts`.
 
-| Tier     | Monthly | Annual | Commission (default) | New Student Bonus (default) | Trial Days |
-|----------|---------|--------|----------------------|-----------------------------|------------|
-| BASIC    | $29     | $290   | 15%                  | 8%                          | 14 days    |
-| PRO      | $79     | $790   | 12%                  | 10%                         | 14 days    |
-| BUSINESS | $199    | $1990  | 10%                  | 12%                         | 30 days    |
+| Tier     | Monthly | Annual | Commission (default) | New Student Bonus (default) | Trial Days | Status        |
+|----------|---------|--------|----------------------|-----------------------------|------------|---------------|
+| BASIC    | $29     | $290   | 15%                  | 8%                          | 14 days    | Live          |
+| PRO      | $79     | $790   | 12%                  | 10%                         | 14 days    | Live          |
+| STUDIO   | $129    | $1290  | 11%                  | 10%                         | 14 days    | Live          |
+| BUSINESS | $199    | $1990  | 10%                  | 12%                         | 30 days    | Under review — not shown as purchasable |
+
+**STUDIO** is the custom-domain tier — single instructor, brings their own domain, white-label booking page. Sits between PRO and BUSINESS.
+
+**BUSINESS** is multi-instructor school management. It is defined in config and schema but marked "Coming Soon" in the UI (`SubscriptionPlans.tsx`). The card is shown greyed out with a "Coming Soon" badge and a disabled button. It will not be purchasable until the multi-instructor management features are built and reviewed.
 
 ---
 
@@ -129,7 +134,9 @@ Mobile-specific endpoint using JWT auth (not NextAuth sessions). Reads real DB v
 - Trial status banner with days remaining (or expired warning)
 - Active subscription banner with renewal date and commission rate
 - PAST_DUE warning banner
-- Three plan cards (BASIC, PRO, BUSINESS) with monthly/annual toggle
+- Four plan cards (BASIC, PRO, STUDIO, BUSINESS) with monthly/annual toggle
+  - BASIC, PRO, STUDIO — fully purchasable
+  - BUSINESS — shown greyed out with "Coming Soon" badge, button disabled
 - "Manage Billing & Payment" button → opens Stripe Billing Portal or Checkout
 
 ### What it does NOT show
@@ -145,13 +152,13 @@ Mobile-specific endpoint using JWT auth (not NextAuth sessions). Reads real DB v
 
 Defined in `lib/config/subscriptions.ts` under `limits`:
 
-| Feature           | BASIC | PRO  | BUSINESS |
-|-------------------|-------|------|----------|
-| customDomain      | ✗     | ✗    | ✓        |
-| brandedPages      | ✗     | ✓    | ✓        |
-| prioritySupport   | ✗     | ✓    | ✓        |
-| apiAccess         | ✗     | ✗    | ✓        |
-| maxInstructors    | 1     | 1    | 999      |
+| Feature           | BASIC | PRO  | STUDIO | BUSINESS |
+|-------------------|-------|------|--------|----------|
+| customDomain      | ✗     | ✗    | ✓      | ✓        |
+| brandedPages      | ✗     | ✓    | ✓      | ✓        |
+| prioritySupport   | ✗     | ✓    | ✓      | ✓        |
+| apiAccess         | ✗     | ✗    | ✗      | ✓        |
+| maxInstructors    | 1     | 1    | 1      | 999      |
 
 **Note:** The branding dashboard (`/dashboard/branding`) gates on `PRO || BUSINESS` — but the config says `brandedPages` is only `true` for BUSINESS. The UI is more permissive than the config. Colors apply to all tiers on the subdomain page; logo/name white-labelling requires `showBrandingOnBookingPage === true` (PRO/BUSINESS gate in UI).
 
@@ -174,6 +181,8 @@ STRIPE_BASIC_MONTHLY_PRICE_ID=
 STRIPE_BASIC_ANNUAL_PRICE_ID=
 STRIPE_PRO_MONTHLY_PRICE_ID=
 STRIPE_PRO_ANNUAL_PRICE_ID=
+STRIPE_STUDIO_MONTHLY_PRICE_ID=
+STRIPE_STUDIO_ANNUAL_PRICE_ID=
 STRIPE_BUSINESS_MONTHLY_PRICE_ID=
 STRIPE_BUSINESS_ANNUAL_PRICE_ID=
 ```

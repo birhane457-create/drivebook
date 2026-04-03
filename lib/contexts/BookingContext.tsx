@@ -196,11 +196,16 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       CUSTOM: 0,
     };
     const discountPercentage = discountMap[state.packageType] ?? 0;
-    // If an instructor fixed-price package is selected, use its price directly — no hourlyRate calc
-    const subtotal = state.customPackagePrice !== null
-      ? state.customPackagePrice
-      : state.instructor.hourlyRate * state.hours;
-    const discount = state.customPackagePrice !== null ? 0 : (subtotal * discountPercentage) / 100;
+
+    // Standard package: always price it if hours > 0 and packageType is set
+    const standardSubtotal = state.hours > 0 ? state.instructor.hourlyRate * state.hours : 0;
+    const standardDiscount = (standardSubtotal * discountPercentage) / 100;
+
+    // Instructor add-on: fixed price, no discount
+    const addonPrice = state.customPackagePrice ?? 0;
+
+    const subtotal = standardSubtotal + addonPrice;
+    const discount = standardDiscount;
 
     // Test package price
     let testPackageAmount = 0;
@@ -262,12 +267,8 @@ export function BookingProvider({ children }: { children: ReactNode }) {
 
   const setInstructorPackage = useCallback((id: string, price: number, durationMinutes: number) => {
     setBookingState(prev => {
-      const hours = durationMinutes / 60;
       const newState = {
         ...prev,
-        packageType: 'CUSTOM' as PackageType,
-        hours,
-        remainingHours: hours,
         customPackageId: id,
         customPackagePrice: price,
       };

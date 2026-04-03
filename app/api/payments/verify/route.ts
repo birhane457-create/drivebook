@@ -69,10 +69,11 @@ export async function POST(req: NextRequest) {
       });
 
       if (client?.userId) {
-        let wallet = await prisma.clientWallet.findUnique({ where: { userId: client.userId } });
-        if (!wallet) {
-          wallet = await prisma.clientWallet.create({ data: { userId: client.userId } });
-        }
+        let wallet = await prisma.clientWallet.upsert({
+          where: { userId: client.userId },
+          update: {},
+          create: { userId: client.userId },
+        });
 
         // Check idempotency — don't double-credit if webhook already ran
         // Use a booking-specific marker in the description
@@ -177,10 +178,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ status: 'no_user', message: 'No user linked to client' });
   }
 
-  let wallet = await prisma.clientWallet.findUnique({ where: { userId: client.userId } });
-  if (!wallet) {
-    wallet = await prisma.clientWallet.create({ data: { userId: client.userId } });
-  }
+  let wallet = await prisma.clientWallet.upsert({
+    where: { userId: client.userId },
+    update: {},
+    create: { userId: client.userId },
+  });
 
   const alreadyCredited = await prisma.walletTransaction.findFirst({
     where: {

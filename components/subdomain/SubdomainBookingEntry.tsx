@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import SubdomainBookingWizard from './SubdomainBookingWizard';
+import { BookingProvider } from '@/lib/contexts/BookingContext';
 
 interface SubdomainBookingEntryProps {
   instructor: {
@@ -28,20 +29,57 @@ interface SubdomainBookingEntryProps {
 }
 
 export default function SubdomainBookingEntry({ instructor, primary }: SubdomainBookingEntryProps) {
-  const [started, setStarted] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  if (!started) {
-    return (
+  return (
+    <>
+      {/* CTA button — shown on the profile page */}
       <button
         type="button"
-        onClick={() => setStarted(true)}
+        onClick={() => setOpen(true)}
         className="w-full py-4 rounded-xl text-white font-bold text-lg transition-all hover:opacity-90 active:scale-95"
         style={{ backgroundColor: primary }}
       >
         Book Your Lesson →
       </button>
-    );
-  }
 
-  return <SubdomainBookingWizard instructor={instructor} primary={primary} />;
+      {/* Full-screen booking overlay — hides the rest of the page */}
+      {open && (
+        <div className="fixed inset-0 z-[100] bg-gray-50 overflow-y-auto">
+          {/* Compact header */}
+          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
+            <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                  style={{ backgroundColor: primary }}
+                >
+                  {instructor.name.charAt(0)}
+                </div>
+                <span className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">
+                  {instructor.name}
+                </span>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span className="hidden sm:inline">Back to profile</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Wizard */}
+          <div className="max-w-4xl mx-auto px-4 py-6">
+            <BookingProvider>
+              <SubdomainBookingWizard instructor={instructor} primary={primary} />
+            </BookingProvider>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

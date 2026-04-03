@@ -48,6 +48,7 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
   const [step, setStep] = useState<Step>('package');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentOpened, setPaymentOpened] = useState(false);
 
   // Pre-populate instructor in context on mount
   useEffect(() => {
@@ -162,11 +163,19 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
 
       const data = await res.json();
       if (res.ok) {
-        // Redirect to payment on main domain
+        // Open payment in a new blank tab — subdomain page stays open underneath
         const host = window.location.host;
         const parts = host.split('.');
         const mainHost = parts.length > 1 && !parts[0].includes(':') ? parts.slice(1).join('.') : host;
-        window.location.href = `${window.location.protocol}//${mainHost}/booking/${data.bookingId}/payment`;
+        const baseUrl = `${window.location.protocol}//${mainHost}`;
+        const fromParam = `?from=${encodeURIComponent(host)}`;
+
+        const paymentUrl = data.transactionId
+          ? `${baseUrl}/payment/wallet/${data.transactionId}${fromParam}`
+          : `${baseUrl}/booking/${data.bookingId}/payment${fromParam}`;
+
+        window.open(paymentUrl, '_blank', 'noopener');
+        setPaymentOpened(true);
       } else {
         setError(data.error || 'Booking failed. Please try again.');
       }
@@ -202,6 +211,26 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
       ))}
     </div>
   );
+
+  // Payment opened in new tab — show a waiting screen
+  if (paymentOpened) {
+    return (
+      <div className="text-center py-8 space-y-4">
+        <div className="text-5xl">🎉</div>
+        <h3 className="text-xl font-bold text-gray-900">Payment page opened!</h3>
+        <p className="text-gray-600 text-sm max-w-xs mx-auto">
+          Complete your payment in the new tab. This page will stay open — you can come back here anytime.
+        </p>
+        <button
+          type="button"
+          onClick={() => { setPaymentOpened(false); setStep('package'); }}
+          className="text-sm text-gray-500 underline hover:text-gray-700"
+        >
+          Start a new booking
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

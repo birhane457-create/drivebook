@@ -31,6 +31,24 @@ export default function AboutPage() {
 
       <main className="max-w-5xl mx-auto px-4 py-16 space-y-20">
 
+        {/* Founder's Story — leads the page */}
+        <section className="bg-purple-50 rounded-2xl border border-purple-100 p-10">
+          <div className="max-w-3xl mx-auto">
+            <p className="text-xs font-semibold text-purple-500 uppercase tracking-widest mb-4">Why DriveBook exists</p>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">Built by an instructor who needed a better way</h2>
+            <p className="text-gray-700 leading-relaxed text-lg mb-4">
+              I built DriveBook while navigating a neurological condition and a period of unemployment. I needed work that could flex around my health — not the other way around. Teaching driving was something I could do on my own terms, but the admin side was a mess: chasing payments, managing schedules, answering calls mid-lesson.
+            </p>
+            <p className="text-gray-700 leading-relaxed text-lg mb-4">
+              That unpredictability made every inefficiency intolerable. So I engineered a solution — the AI receptionist, automated payouts, the booking system — every feature came from a real problem I faced or heard from other instructors in the same boat.
+            </p>
+            <p className="text-gray-700 leading-relaxed text-lg">
+              Whether you're teaching full-time or fitting lessons around life's challenges, DriveBook is built by someone who's been there.
+            </p>
+            <p className="text-sm text-purple-600 font-medium mt-6">— Birhane, Founder of DriveBook</p>
+          </div>
+        </section>
+
         {/* Mission */}
         <section className="text-center">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Our Mission</h2>
@@ -110,59 +128,6 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* How it works for instructors */}
-        <section>
-          <h2 className="text-3xl font-bold text-gray-900 mb-4 text-center">Built for Instructors Too</h2>
-          <p className="text-center text-gray-600 mb-10 max-w-2xl mx-auto">
-            DriveBook isn't just for learners. We give driving instructors the tools to run a professional, growing business — without the admin overhead.
-          </p>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="p-6 border border-gray-200 rounded-xl">
-              <h3 className="font-semibold text-gray-900 mb-2">📅 Smart Scheduling</h3>
-              <p className="text-gray-600 text-sm">Set your availability once. Clients book into your real-time calendar. No double-bookings, no back-and-forth.</p>
-            </div>
-            <div className="p-6 border border-gray-200 rounded-xl">
-              <h3 className="font-semibold text-gray-900 mb-2">💰 Guaranteed Payments</h3>
-              <p className="text-gray-600 text-sm">Clients pay upfront. You get paid within 48 hours of lesson completion. No chasing invoices.</p>
-            </div>
-            <div className="p-6 border border-gray-200 rounded-xl">
-              <h3 className="font-semibold text-gray-900 mb-2">🌐 Your Own Booking Page</h3>
-              <p className="text-gray-600 text-sm">Every instructor gets a personalised booking page at their own subdomain — share it anywhere and clients can book directly.</p>
-            </div>
-            <div className="p-6 border border-gray-200 rounded-xl">
-              <h3 className="font-semibold text-gray-900 mb-2">📱 AI Receptionist</h3>
-              <p className="text-gray-600 text-sm">Our AI phone receptionist answers calls and takes bookings 24/7 — even when you're in the middle of a lesson.</p>
-            </div>
-          </div>
-          <div className="text-center mt-8">
-            <Link href="/teach-with-drivebook" className="inline-block bg-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-purple-700">
-              Learn About Joining as an Instructor →
-            </Link>
-          </div>
-        </section>
-
-        {/* Founder's Story */}
-        <section className="bg-white rounded-2xl border border-purple-100 shadow-sm p-10">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
-                <Heart className="h-5 w-5 text-purple-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900">Why I Built DriveBook</h2>
-            </div>
-            <p className="text-gray-700 leading-relaxed text-lg mb-4">
-              I built DriveBook while navigating a neurological condition and a period of unemployment. I needed work that could flex around my health — not the other way around. Teaching driving was something I could do on my own terms, but the admin side was a mess: chasing payments, managing schedules, answering calls mid-lesson.
-            </p>
-            <p className="text-gray-700 leading-relaxed text-lg mb-4">
-              So I built the platform I wished existed. Every feature — the AI receptionist, automated payouts, the booking system — came from a real problem I faced or heard from other instructors in the same boat.
-            </p>
-            <p className="text-gray-700 leading-relaxed text-lg">
-              Whether you're teaching full-time or fitting lessons around life's challenges, DriveBook is built to give you back your time and your independence.
-            </p>
-            <p className="text-sm text-purple-600 font-medium mt-6">— Birhane, Founder of DriveBook</p>
-          </div>
-        </section>
-
         {/* CTA */}
         <section className="bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl p-10 text-center">
           <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
@@ -170,6 +135,12 @@ export default function AboutPage() {
           <Link href="/book" className="inline-block bg-white text-purple-600 px-10 py-4 rounded-lg font-bold text-lg hover:shadow-xl transition-all">
             Find Your Instructor →
           </Link>
+          <p className="mt-6 text-purple-200 text-sm">
+            Are you a driving instructor?{' '}
+            <Link href="/teach-with-drivebook" className="text-white underline hover:text-purple-200">
+              See how DriveBook can grow your business →
+            </Link>
+          </p>
         </section>
       </main>
 

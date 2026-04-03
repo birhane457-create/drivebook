@@ -112,6 +112,10 @@ export default async function SubdomainBookingPage({
       facebook: true,
       yearsExperience: true,
       allowedDurations: true,
+      offersTestPackage: true,
+      testPackagePrice: true,
+      testPackageDuration: true,
+      testPackageIncludes: true,
       // Test package fields — accessed via (instructor as any) until schema is pushed to production
     },
   });
@@ -551,9 +555,7 @@ export default async function SubdomainBookingPage({
                       </div>
                       <div className="text-right shrink-0 ml-3">
                         <p className="font-bold" style={{ color: secondary }}>${pkg.price.toFixed(2)}</p>
-                        {saving && saving > 0 && (
-                          <p className="text-xs text-green-600">Save ${saving.toFixed(0)} vs hourly</p>
-                        )}
+                        {/* No "save vs hourly" — instructor packages include extras beyond lesson time */}
                       </div>
                     </div>
                   );
@@ -719,10 +721,10 @@ export default async function SubdomainBookingPage({
                   hourlyRate: instructor.hourlyRate,
                   averageRating: instructor.averageRating,
                   totalReviews: instructor.totalReviews,
-                  offersTestPackage: (instructor as any).offersTestPackage ?? false,
-                  testPackagePrice: (instructor as any).testPackagePrice ?? null,
-                  testPackageDuration: (instructor as any).testPackageDuration ?? null,
-                  testPackageIncludes: ((instructor as any).testPackageIncludes as string[]) ?? [],
+                  offersTestPackage: instructor.offersTestPackage ?? false,
+                  testPackagePrice: instructor.testPackagePrice ?? null,
+                  testPackageDuration: instructor.testPackageDuration ?? null,
+                  testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
                   lessonPackages: activePackages,
                 }}
                 primary={primary}

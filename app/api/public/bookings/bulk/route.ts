@@ -71,11 +71,10 @@ export async function POST(req: NextRequest) {
         hourlyRate: true,
         userId: true,
         approvalStatus: true,
-        status: true,
         isActive: true,
         subscriptionTier: true,
         lessonPackages: true,
-      } as any,
+      },
     }) as any;
 
     if (!instructor) {
@@ -86,7 +85,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor is not available for bookings' }, { status: 403 });
     }
 
-    if ((instructor as any).status === 'SUSPENDED' || (instructor as any).isActive === false) {
+    if ((instructor as any).approvalStatus === 'SUSPENDED' || (instructor as any).isActive === false) {
       return NextResponse.json({ error: 'Instructor is not available for bookings' }, { status: 403 });
     }
 
@@ -152,26 +151,39 @@ export async function POST(req: NextRequest) {
     let serverPricing: Awaited<ReturnType<typeof calculatePackagePriceDynamic>>;
 
     if (data.customPackageId) {
-      // Instructor's fixed-price lesson package — look up the price from DB
+      // Instructor's fixed-price add-on — look up the price from DB
       const pkg = (instructor as any).lessonPackages?.find(
         (p: any) => p.id === data.customPackageId && p.isActive !== false
       );
       if (!pkg) {
         return NextResponse.json({ error: 'Selected package is no longer available' }, { status: 400 });
       }
-      // Build pricing using the fixed package price — no platform bulk discount
       const { getPlatformPricing } = await import('@/lib/services/platform-pricing');
       const platformSettings = await getPlatformPricing();
-      const afterDiscount = pkg.price; // fixed price, no discount
-      const platformFee = (afterDiscount * platformSettings.platformFeePercentage) / 100;
+
+      // Calculate standard package discount using the same source as the client (/api/public/pricing)
+      const discountMap: Record<string, number> = {
+        PACKAGE_6: platformSettings.package6Discount,
+        PACKAGE_10: platformSettings.package10Discount,
+        PACKAGE_15: platformSettings.package15Discount,
+        CUSTOM: 0,
+      };
+      const discountPct = discountMap[data.packageType] ?? 0;
+      const standardSubtotal = data.hours > 0 ? instructor.hourlyRate * data.hours : 0;
+      const standardDiscount = (standardSubtotal * discountPct) / 100;
+      const standardAfterDiscount = standardSubtotal - standardDiscount;
+
+      const addonPrice = pkg.price; // fixed, no discount
+      const combinedBeforeFee = standardAfterDiscount + addonPrice;
+      const platformFee = (combinedBeforeFee * platformSettings.platformFeePercentage) / 100;
       serverPricing = {
-        subtotal: pkg.price,
-        discount: 0,
-        discountPercentage: 0,
+        subtotal: standardSubtotal + addonPrice,
+        discount: standardDiscount,
+        discountPercentage: discountPct,
         testPackage: 0,
         platformFee,
-        total: afterDiscount + platformFee,
-        installments: (afterDiscount + platformFee) / 4,
+        total: combinedBeforeFee + platformFee,
+        installments: (combinedBeforeFee + platformFee) / 4,
       };
     } else {
       serverPricing = await calculatePackagePriceDynamic(
@@ -204,40 +216,66 @@ export async function POST(req: NextRequest) {
     const firstLessonPlatformFee = parseFloat((firstLessonPrice * PLATFORM_FEE_RATE).toFixed(2));
     const firstLessonPayout = parseFloat((firstLessonPrice - firstLessonPlatformFee).toFixed(2));
 
-    // Choose date/time from first scheduled slot or default to tomorrow 9am
-    let startTime = new Date();
-    startTime.setDate(startTime.getDate() + 1);
-    startTime.setHours(9, 0, 0, 0);
+    // For "book later" with no scheduled slots: no specific time is being claimed.
+    // ── Book Later: wallet-only, no booking created ───────────────────────────
+    // Student pays → wallet credited → books individual lessons from dashboard
+    if (data.bookingType === 'later') {
+      // Get or create wallet for this user
+      let wallet = await prisma.clientWallet.upsert({
+        where: { userId: userId! },
+        update: {},
+        create: { userId: userId! },
+      });
 
-    if (data.scheduledBookings && data.scheduledBookings.length > 0) {
-      const slot = data.scheduledBookings[0];
+      const walletTransaction = await prisma.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          amount: verifiedTotal,
+          type: 'CREDIT',
+          description: `Package purchase: ${data.hours} hrs with ${instructor.name}`,
+          status: 'PENDING',
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        transactionId: walletTransaction.id,
+        total: verifiedTotal,
+        bookingType: 'later',
+      }, { status: 201 });
+    }
+
+    // ── Book Now: create booking + slot claim ─────────────────────────────────
+    const hasScheduledSlot = data.scheduledBookings && data.scheduledBookings.length > 0;
+
+    let startTime: Date | null = null;
+    let endTime: Date | null = null;
+
+    if (hasScheduledSlot) {
+      const slot = data.scheduledBookings![0];
       const [h, m] = slot.time.split(':').map(Number);
       startTime = new Date(slot.date);
       startTime.setHours(h, m, 0, 0);
+      endTime = new Date(startTime.getTime() + firstLessonDurationMinutes * 60 * 1000);
     }
 
-    const endTime = new Date(startTime.getTime() + firstLessonDurationMinutes * 60 * 1000);
-
-    // ── Atomic slot claim ─────────────────────────────────────────────────────
-    // On MongoDB we can't use SELECT FOR UPDATE, so we do the conflict check
-    // AND the booking create inside a single transaction. If two requests race,
-    // one will see the other's PENDING_PAYMENT row and throw SLOT_TAKEN.
     let booking: any;
     try {
       booking = await prisma.$transaction(async (tx) => {
-        // Re-check for conflicts inside the transaction
-        const conflict = await tx.booking.findFirst({
-          where: {
-            instructorId: data.instructorId,
-            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
-            OR: [
-              { startTime: { lte: startTime }, endTime: { gt: startTime } },
-              { startTime: { lt: endTime }, endTime: { gte: endTime } },
-              { startTime: { gte: startTime }, endTime: { lte: endTime } },
-            ],
-          },
-        });
-        if (conflict) throw new Error('SLOT_TAKEN');
+        if (startTime && endTime) {
+          const conflict = await tx.booking.findFirst({
+            where: {
+              instructorId: data.instructorId,
+              status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+              OR: [
+                { startTime: { lte: startTime }, endTime: { gt: startTime } },
+                { startTime: { lt: endTime }, endTime: { gte: endTime } },
+                { startTime: { gte: startTime }, endTime: { lte: endTime } },
+              ],
+            },
+          });
+          if (conflict) throw new Error('SLOT_TAKEN');
+        }
 
         return tx.booking.create({
           data: {
@@ -245,11 +283,9 @@ export async function POST(req: NextRequest) {
             clientId: clientId,
             clientName,
             clientPhone,
-            // Short-notice: PENDING (awaiting instructor approval before payment)
-            // Normal: PENDING_PAYMENT (slot held while Stripe payment completes)
             status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
-            startTime,
-            endTime,
+            startTime: startTime ?? undefined,
+            endTime: endTime ?? undefined,
             duration: firstLessonDurationHours,
             price: firstLessonPrice,
             platformFee: firstLessonPlatformFee,
@@ -274,18 +310,16 @@ export async function POST(req: NextRequest) {
 
     console.log('Booking created with id', booking.id, '| first lesson price:', firstLessonPrice, '| package total (server-verified):', verifiedTotal, '| shortNotice:', isShortNotice);
 
-    // For short-notice bookings: notify instructor urgently, notify client of pending status
     if (isShortNotice) {
       try {
         const instructorUser = instructor.userId
           ? await prisma.user.findUnique({ where: { id: instructor.userId }, select: { id: true } })
           : null;
         if (instructorUser) {
-          await notifyShortNoticeBookingRequest(instructorUser.id, clientName, booking.id, startTime);
+          await notifyShortNoticeBookingRequest(instructorUser.id, clientName, booking.id, startTime ?? new Date());
         }
-        // Notify client their request is pending
         if (userId) {
-          await notifyClientBookingPendingApproval(userId, instructor.name, booking.id, startTime);
+          await notifyClientBookingPendingApproval(userId, instructor.name, booking.id, startTime ?? new Date());
         }
       } catch (notifErr) {
         console.error('Short-notice notification failed:', notifErr);
@@ -296,8 +330,6 @@ export async function POST(req: NextRequest) {
       success: true,
       bookingId: booking.id,
       isShortNotice,
-      // For short-notice: no payment yet — instructor must approve first
-      // For normal: charge the full package amount via Stripe
       total: isShortNotice ? 0 : verifiedTotal,
       status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
     }, { status: 201 });

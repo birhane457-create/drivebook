@@ -44,6 +44,24 @@ export default function TeachWithDriveBookPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-5">
+        {/* Founder story — leads the instructor page */}
+        <section className="my-16 -mt-6">
+          <div className="bg-white rounded-2xl shadow-lg border-l-4 border-green-600 p-8 md:p-10 max-w-3xl mx-auto">
+            <p className="text-xs font-semibold text-green-600 uppercase tracking-widest mb-3">Why this platform exists</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Built by an instructor who needed a better way</h2>
+            <p className="text-gray-700 leading-relaxed mb-3">
+              I built DriveBook while navigating a neurological condition and a period of unemployment. Teaching driving was something I could do on my own terms — but the admin was a mess: chasing payments, managing schedules, answering calls mid-lesson.
+            </p>
+            <p className="text-gray-700 leading-relaxed mb-3">
+              That unpredictability made every inefficiency intolerable. So I engineered a solution. The AI receptionist, automated payouts, the booking system — every feature came from a real problem I faced or heard from other instructors in the same boat.
+            </p>
+            <p className="text-gray-700 leading-relaxed font-medium">
+              DriveBook is built by an instructor who's been there. For instructors who want their time back.
+            </p>
+            <p className="text-sm text-green-600 font-medium mt-4">— Birhane, Founder of DriveBook</p>
+          </div>
+        </section>
+
         {/* AI Receptionist - Instructor Angle */}
         <section className="my-16 -mt-10">
           <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12 border-t-4 border-green-600">
@@ -55,7 +73,7 @@ export default function TeachWithDriveBookPage() {
             <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-8 mb-8">
               <h3 className="text-2xl font-semibold text-gray-900 mb-4">Picture this scenario:</h3>
               <p className="text-lg text-gray-700 mb-4">
-                You&apos;re helping a nervous student parallel park. Your phone rings - it&apos;s a parent ready to book a £1,000 package.
+                You&apos;re helping a nervous student parallel park. Your phone rings - it&apos;s a parent ready to book a $1,000 package.
               </p>
               <p className="text-lg text-gray-700 mb-4">
                 <strong className="text-red-600">With traditional driving schools:</strong> That call goes to voicemail. The parent hangs up and calls your competitor. <span className="text-red-600 font-semibold">Revenue lost forever.</span>
@@ -122,7 +140,7 @@ export default function TeachWithDriveBookPage() {
             <div className="mt-8 bg-blue-50 border-l-4 border-blue-500 p-6 rounded">
               <h4 className="font-semibold text-gray-900 mb-2">💡 Recovered Revenue Calculator</h4>
               <p className="text-gray-700">
-                Average driving instructor misses 3-5 calls per week while teaching. At £500 average package value, that&apos;s <strong className="text-blue-600">£1,500-£2,500 in lost revenue every week</strong>. Your AI receptionist pays for itself instantly.
+                Average driving instructor misses 3-5 calls per week while teaching. At $500 average package value, that&apos;s <strong className="text-blue-600">$1,500–$2,500 in lost revenue every week</strong>. Your AI receptionist pays for itself instantly.
               </p>
             </div>
           </div>

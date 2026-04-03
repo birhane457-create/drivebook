@@ -105,6 +105,24 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-2 md:px-4">
+        {/* Audience fork — get each visitor into their lane immediately */}
+        <section className="my-8 md:my-10 pt-8">
+          <div className="grid sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
+            <Link href="/book" className="group flex flex-col items-center text-center p-8 rounded-2xl border-2 border-purple-200 bg-purple-50 hover:border-purple-500 hover:bg-purple-100 transition-all no-underline">
+              <span className="text-4xl mb-3">🎓</span>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">I want to learn to drive</h2>
+              <p className="text-gray-600 text-sm">Find a verified local instructor, book instantly, track your progress.</p>
+              <span className="mt-4 text-purple-600 font-semibold group-hover:underline">Find an instructor →</span>
+            </Link>
+            <Link href="/teach-with-drivebook" className="group flex flex-col items-center text-center p-8 rounded-2xl border-2 border-green-200 bg-green-50 hover:border-green-500 hover:bg-green-100 transition-all no-underline">
+              <span className="text-4xl mb-3">🚗</span>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">I want to grow my driving school</h2>
+              <p className="text-gray-600 text-sm">Automate bookings, payments, and admin. AI receptionist included.</p>
+              <span className="mt-4 text-green-600 font-semibold group-hover:underline">Learn more →</span>
+            </Link>
+          </div>
+        </section>
+
         {/* Trust Badge — single authoritative statement, no repetition */}
         <section className="my-8 md:my-10 pt-8">
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 bg-green-50 border border-green-200 rounded-2xl px-6 py-5 max-w-3xl mx-auto">

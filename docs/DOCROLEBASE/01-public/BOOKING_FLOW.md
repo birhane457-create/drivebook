@@ -74,26 +74,47 @@ On form submit, calls `POST /api/public/bookings/bulk`.
    - New user → creates `User` with hashed password
    - Existing user → links booking to their account
 4. Finds or creates a `Client` record for this instructor
-5. Calculates pricing **server-side** using `calculatePackagePriceDynamic()` — client-submitted total is validated against server calculation (rejects if >1 cent difference)
-6. **Atomic slot claim** — conflict check + booking create in a single `$transaction`. Concurrent requests for the same slot get a 409.
-7. Creates booking with `status: PENDING_PAYMENT` — holds slot for 10 minutes
-8. Returns `{ bookingId, total }` where `total` is the server-verified amount
+5. Calculates pricing **server-side** — client-submitted total is validated against server calculation (rejects if >$0.01 difference)
 
-**On success:** redirects to `/booking/[id]/payment`
+**Book Later path (`bookingType: later`):**
+- No booking record created
+- Creates a `WalletTransaction (PENDING)` for the full package amount
+- Returns `{ transactionId }` — no `bookingId`
+- Payment page: `/payment/wallet/[transactionId]` (opens in new tab from subdomain)
+- On payment success: webhook confirms the wallet transaction → balance available immediately
+- Student books individual lessons from their dashboard using wallet credits
 
-**On 409 (slot taken):** shows "This slot was just taken — please choose another time"
+**Book Now path (`bookingType: now`):**
+- Atomic slot claim — conflict check + booking create in a single `$transaction`
+- Creates booking with `status: PENDING_PAYMENT` — holds slot for 10 minutes
+- Returns `{ bookingId, total }`
+- Payment page: `/booking/[id]/payment`
 
-**On 409 (price changed):** the server recalculates pricing using the instructor's current `hourlyRate` at submission time. If the client-submitted total differs from the server total by more than $0.01, a 409 is returned with `{ serverTotal }`. The wizard shows the updated price and asks the student to confirm before retrying.
+**On 409 (slot taken):** "This slot was just taken — please choose another time"
+
+**On 409 (price changed):** server recalculates at submission time. If client total differs by >$0.01, returns `{ serverTotal }`. Wizard shows updated price and asks student to confirm.
 
 ---
 
 ## Step 4 — Payment
 
-After booking creation, student is redirected to `/booking/[id]/payment` which renders Stripe Elements.
+**From subdomain:** payment page opens in a **new blank tab** — the subdomain page stays open underneath. The wizard shows "Payment page opened!" with a "Start a new booking" option.
 
-On payment success, the confirmation page calls `POST /api/payments/verify` to confirm the booking if the Stripe webhook hasn't fired yet (common in local dev, rare in production). This endpoint also handles wallet crediting for package bookings.
+**From public flow:** student is redirected to the payment page in the same tab.
 
-**Receipt email:** `sendSingleLessonReceipt()` or `sendPackagePurchaseReceipt()` fires from the Stripe webhook after `payment_intent.succeeded` — not from the verify endpoint.
+**Book Now payment page** (`/booking/[id]/payment`):
+- Fetches booking from `/api/public/bookings/[id]`
+- Uses `lockedHourlyRate` and `lockedDiscountPct` stored on the booking for the price breakdown
+- Calls `POST /api/payments/create-intent` with `{ bookingId, amount }`
+- On success: Stripe redirects to `/booking/[id]/confirmation`
+
+**Book Later payment page** (`/payment/wallet/[transactionId]`):
+- Calls `POST /api/payments/create-intent` with `{ transactionId }`
+- Shows "Your wallet will be credited with $X"
+- On success: Stripe redirects to `/payment/wallet/[transactionId]/confirmation`
+- Confirmation page links to client dashboard and book-lesson page
+
+**Receipt email:** fires from the Stripe webhook after `payment_intent.succeeded`.
 
 ---
 

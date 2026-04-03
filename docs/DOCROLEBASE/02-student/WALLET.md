@@ -66,22 +66,31 @@ Each transaction has:
 
 ## Package Flow
 
-When a student purchases a package via the public booking form:
-1. Stripe charges `packageTotalPaid` (e.g. $630 for 10 hours at $70/hr with 10% discount)
-2. Wallet is CREDITED with $630
-3. Wallet is DEBITED with `booking.price` (first lesson, e.g. $70)
-4. Remaining $560 is available for future lessons from the client dashboard
-5. **Receipt email sent** — `sendPackagePurchaseReceipt()` fires showing package details, payment breakdown, and wallet balance after first lesson debit
+When a student purchases a package via the public booking form or subdomain:
+
+**Book Later (no slot selected):**
+1. `POST /api/public/bookings/bulk` with `bookingType: later`
+2. No booking record created — only a `WalletTransaction (PENDING)` for the full package amount
+3. Returns `{ transactionId }` — payment page opens at `/payment/wallet/[transactionId]`
+4. On `payment_intent.succeeded` webhook: transaction confirmed to `CONFIRMED`
+5. Wallet balance immediately available — student books lessons from dashboard
+6. Receipt email sent
+
+**Book Now (slot selected):**
+1. `POST /api/public/bookings/bulk` with `bookingType: now` + scheduled slots
+2. Booking created (`PENDING_PAYMENT`), slot held for 10 minutes
+3. Returns `{ bookingId }` — payment page at `/booking/[id]/payment`
+4. On `payment_intent.succeeded` webhook:
+   - Wallet CREDITED with `packageTotalPaid`
+   - Wallet DEBITED with `booking.price` (first lesson)
+   - Remaining balance available for future lessons
+5. Receipt email sent
 
 **Rate & discount locking:**
-At package purchase time, the instructor's `hourlyRate` and the applied discount percentage are stored on the `Booking` record as `lockedHourlyRate` and `lockedDiscountPct`. When the student later books individual lessons from the package (`POST /api/client/confirm-package-booking`), the deduction uses `lockedHourlyRate` — not the instructor's current rate. This means:
-
-- Instructor raises rate from $70 → $75 after package purchase → student's remaining hours still deduct at $70/hr
-- Instructor lowers rate → student's package is unaffected (they paid the old rate)
-- The discount % is also locked — a 10% package discount stays 10% for all lessons in that package
+At package purchase time, `lockedHourlyRate` and `lockedDiscountPct` are stored on the booking record. When the student later books individual lessons from the package, the deduction uses `lockedHourlyRate` — not the instructor's current rate.
 
 **Wallet top-up (not yet booked):**
-A plain wallet top-up is just money — no rate is locked. If the instructor changes their rate between the top-up and the booking, the booking uses the current rate at booking time. The booking UI shows: "Book all lessons now to lock in the current rate."
+A plain wallet top-up is just money — no rate is locked. If the instructor changes their rate between the top-up and the booking, the booking uses the current rate at booking time.
 
 ---
 

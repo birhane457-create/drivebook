@@ -29,6 +29,9 @@ export default function BookingSummary({
   const { bookingState } = useBooking();
   const [showPackageInfo, setShowPackageInfo] = useState(false);
   const { instructor, packageType, hours, includeTestPackage, pricing } = bookingState;
+  const addonPackage = bookingState.customPackageId
+    ? (instructor as any)?.lessonPackages?.find((p: any) => p.id === bookingState.customPackageId)
+    : null;
 
   if (!instructor) {
     return (
@@ -117,6 +120,13 @@ export default function BookingSummary({
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Test Package</span>
               <span className="text-gray-900">${pricing.testPackage.toFixed(2)}</span>
+            </div>
+          )}
+
+          {addonPackage && bookingState.customPackagePrice && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">{addonPackage.name} <span className="text-xs text-gray-400">(add-on)</span></span>
+              <span className="text-gray-900">${bookingState.customPackagePrice.toFixed(2)}</span>
             </div>
           )}
 
@@ -228,6 +238,12 @@ export default function BookingSummary({
                     <div className="flex justify-between">
                       <span className="text-gray-600">Test Package Add-on</span>
                       <span className="text-gray-900">${pricing.testPackage.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {addonPackage && bookingState.customPackagePrice && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">{addonPackage.name}</span>
+                      <span className="text-gray-900">${bookingState.customPackagePrice.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">

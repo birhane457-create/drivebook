@@ -32,13 +32,29 @@ export async function getPricingSettings() {
   }
 
   try {
-    const platform = await prisma.platform.findFirst();
-    const settings = (platform?.settings as any)?.pricing;
+    // Use PlatformSettings (the correct model) — not the non-existent Platform model
+    const settings = await prisma.platformSettings.findFirst({
+      where: { key: 'default' },
+    });
     
     if (settings) {
-      cachedSettings = settings;
+      const mapped = {
+        platformFeePercentage: settings.platformFeePercentage,
+        package6Discount: settings.package6Discount,
+        package10Discount: settings.package10Discount,
+        package15Discount: settings.package15Discount,
+        basicCommissionRate: settings.basicCommissionRate,
+        proCommissionRate: settings.proCommissionRate,
+        businessCommissionRate: settings.businessCommissionRate,
+        basicNewStudentBonus: settings.basicNewStudentBonus,
+        proNewStudentBonus: settings.proNewStudentBonus,
+        businessNewStudentBonus: settings.businessNewStudentBonus,
+        drivingTestPackagePrice: settings.drivingTestPackagePrice,
+        discountPaidBy: settings.discountPaidBy as 'platform' | 'shared' | 'instructor',
+      };
+      cachedSettings = mapped;
       cacheTime = now;
-      return settings;
+      return mapped;
     }
   } catch (error) {
     console.error('Error fetching pricing settings:', error);
