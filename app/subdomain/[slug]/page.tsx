@@ -725,6 +725,7 @@ export default async function SubdomainBookingPage({
                   testPackagePrice: instructor.testPackagePrice ?? null,
                   testPackageDuration: instructor.testPackageDuration ?? null,
                   testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
+                  allowedDurations: allowedDurations,
                   lessonPackages: activePackages,
                 }}
                 primary={primary}
@@ -799,10 +800,11 @@ export default async function SubdomainBookingPage({
               hourlyRate: instructor.hourlyRate,
               averageRating: instructor.averageRating,
               totalReviews: instructor.totalReviews,
-              offersTestPackage: (instructor as any).offersTestPackage ?? false,
-              testPackagePrice: (instructor as any).testPackagePrice ?? null,
-              testPackageDuration: (instructor as any).testPackageDuration ?? null,
-              testPackageIncludes: ((instructor as any).testPackageIncludes as string[]) ?? [],
+              offersTestPackage: instructor.offersTestPackage ?? false,
+              testPackagePrice: instructor.testPackagePrice ?? null,
+              testPackageDuration: instructor.testPackageDuration ?? null,
+              testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
+              allowedDurations: allowedDurations,
               lessonPackages: activePackages,
             }}
             primary={primary}

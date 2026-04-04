@@ -75,12 +75,26 @@ Refund is credited to the wallet immediately as a CREDIT transaction.
 
 | Status | Meaning |
 |--------|---------|
+| `PENDING` | Short-notice booking awaiting instructor approval (2hr expiry if not approved) |
 | `PENDING_PAYMENT` | Slot held, awaiting Stripe payment (10 min window) |
 | `CONFIRMED` | Paid and confirmed |
 | `COMPLETED` | Lesson delivered |
 | `CANCELLED` | Cancelled |
-| `EXPIRED` | Payment not completed in time |
-| `NO_SHOW` | Marked by admin or auto-set |
+| `EXPIRED` | Payment not completed in time, or short-notice not approved in time |
+| `NO_SHOW` | Marked by admin |
+
+---
+
+## Package Booking from Dashboard
+
+When a student has wallet credits from a package purchase (book later flow), they book individual lessons from `/client-dashboard/book-lesson`. Each lesson deducts from the wallet at the `lockedHourlyRate` stored at package purchase time — not the instructor's current rate.
+
+**API:** `POST /api/client/bookings/create-bulk`
+
+Bookings created this way are immediately `CONFIRMED` — no Stripe step, wallet is debited directly. The API validates:
+- Wallet balance ≥ total cart cost
+- No slot conflicts (atomic check inside `$transaction`)
+- Instructor is active and approved
 
 ---
 

@@ -197,3 +197,19 @@ STRIPE_BUSINESS_ANNUAL_PRICE_ID=
 4. ~~Mobile subscription route returns hardcoded mock data~~ **Fixed** — route now reads real DB values and derives rates from config
 5. ~~Stripe Price IDs are placeholder strings~~ **Fixed** — real Price IDs set in `.env`
 6. ~~`commissionRate` shown in subscription dashboard "Your Plan Benefits" section will be `undefined`~~ **Fixed** — dashboard now derives from `SUBSCRIPTION_PLANS[tier]`
+
+---
+
+## Tier Detail Reference
+
+For full per-tier feature breakdown, pricing, commission rates, domain setup, and Business "Coming Soon" status, see:
+
+**`docs/DOCROLEBASE/03-instructor/SUBSCRIPTION_TIERS.md`**
+
+Summary:
+- **BASIC** ($29/mo) — individual instructor, 15% commission, default URL only
+- **PRO** ($79/mo) — custom slug, branded page, 12% commission
+- **STUDIO** ($129/mo) — custom domain, white-label, 11% commission ← new tier
+- **BUSINESS** ($199/mo) — multi-instructor, under review, not purchasable in UI
+
+The `SubscriptionPlans.tsx` component shows all 4 tiers. Business is rendered greyed out at 60% opacity with a "COMING SOON" badge and a disabled button. It will be enabled once multi-instructor management is built.

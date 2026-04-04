@@ -23,6 +23,7 @@ interface Instructor {
   testPackagePrice: number | null;
   testPackageDuration: number | null;
   testPackageIncludes: string[];
+  allowedDurations?: number[];
   lessonPackages?: Array<{
     id: string;
     name: string;

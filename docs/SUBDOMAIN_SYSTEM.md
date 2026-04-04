@@ -198,36 +198,52 @@ After verification, add the domain in Vercel project settings for SSL.
 
 ---
 
-## 7. Booking Form (BulkBookingForm)
+## 7. Booking Flow (Subdomain)
 
-**File:** `components/BulkBookingForm.tsx`
+**Files:**
+- `components/subdomain/SubdomainBookingEntry.tsx` — CTA button + full-screen overlay
+- `components/subdomain/SubdomainBookingWizard.tsx` — multi-step wizard inside the overlay
 
-**Steps:**
+**Entry point:** Student clicks "Book Your Lesson →" on the profile page. This opens a **full-screen overlay** on top of the profile page — the profile stays open underneath. The overlay has a compact header with the instructor's name and a "Back to profile" close button.
+
+**Wizard steps:**
 
 | Step | Label | Condition |
 |---|---|---|
 | 1 | Package | Always |
-| 2 | Service Area | Only if `serviceAreas` or `baseAddress + serviceRadiusKm` set |
-| 3 | Time Slot | Always |
-| 4 | Your Details | Always |
-| 5 | Confirm | Always |
+| 2 | Test Package | Only if `instructor.offersTestPackage = true` |
+| 3 | When to Book | Always |
+| 4 | Schedule | Only if `bookingType = now` |
+| 5 | Your Details | Always |
 
-**Duration picker (Package step):**
-- Shows chips for each duration in `allowedDurations` (e.g. "1 hr / $90", "2 hrs / $180")
-- Student selects a duration before proceeding
-- Selected duration is passed to `SlotPicker` so availability is calculated for the correct block length
-- Selected duration is submitted in the booking payload (`scheduledBookings[0].duration`)
-- If `allowedDurations` is empty, a warning is shown: "Lesson durations not configured yet"
+**Package step:**
+- Standard packages (6/10/15 hrs) — radio select, platform bulk discounts applied
+- Instructor add-on packages — checkbox style, fixed price, no platform discount, can combine with standard package
+- Custom hours dropdown (1–50 hrs)
+- Discount rates fetched from `/api/public/pricing` on context mount
 
-**Service area check:**
-- Client-side only (advisory, not enforced server-side)
-- Uses Google Maps Geocoding API to calculate distance from `baseAddress`
-- Student can skip the check and proceed regardless
+**When to Book step:**
+- "Book Now" — student schedules at least one lesson before paying
+- "Book Later" — student pays to load wallet, books from dashboard later
 
-**Slot picker:**
-- Fetches from `/api/availability/slots?instructorId=X&date=Y&duration=Z`
-- Duration is now dynamic — passed from the selected duration chip
-- `bypassDurationCheck=true` used only for reschedule flows
+**Schedule step (Book Now only):**
+- Date picker + duration selector (from `instructor.allowedDurations`)
+- Slot grid fetched from `/api/availability/slots` — duration-aware (3hr slot at 9am blocked if 10am is taken)
+- Local overlap check prevents scheduling two lessons that overlap before API call
+- Student can add multiple lessons up to the total package hours
+
+**Payment:**
+- After "Continue to Payment", wizard shows order summary with "Complete Payment →" link
+- Payment page opens in a **new blank tab** — profile page stays open
+- Book Now → `/booking/[id]/payment`
+- Book Later → `/payment/wallet/[transactionId]` (wallet credited, no booking created)
+- Pricing params passed via URL query string to the wallet payment page for display
+
+**Slot availability rules:**
+- Slots API checks full duration overlap against DB bookings + buffer time
+- A 3hr slot at 9am is unavailable if any booking exists between 9am and 12pm
+- Short-notice slots (< 2hrs from now) shown but flagged — require instructor approval
+- Minimum advance notice: 2 hours
 
 ---
 
@@ -332,14 +348,21 @@ The page uses two layers of SEO:
 
 On mobile (`< md` breakpoint):
 - **Bottom nav bar** — fixed, 4 tabs: About / Services / Contact / Book Now
-- **Book Now** opens a full-screen drawer with `BulkBookingForm` as children
-- Body scroll is locked while drawer is open
+- **Book Now** opens a full-screen overlay (same as desktop) — `SubdomainBookingEntry` handles this
+- Body scroll is locked while overlay is open
 - iPhone safe area inset handled via `env(safe-area-inset-bottom)`
+- Mobile summary bar — shows total + "View details" tap to expand order summary drawer
 
 On desktop:
 - Bottom nav is hidden (`md:hidden`)
 - **Desktop nav** (`SubdomainDesktopNav.tsx`) shows anchor links: About / Services / Contact / Book Now
-- Book Now scrolls to `#booking-form`
+- Book Now opens the full-screen overlay
+
+**Booking overlay (all screen sizes):**
+- Fixed `inset-0 z-[100]` — covers entire viewport
+- Compact sticky header: instructor initial + name + "Back to profile ✕"
+- Wizard content scrollable inside overlay
+- Payment opens in new tab — overlay stays open so student can come back
 
 ---
 
@@ -378,12 +401,22 @@ On desktop:
 | `middleware.ts` | Subdomain extraction + custom domain detection + rewrites |
 | `app/subdomain/[slug]/page.tsx` | Public booking page (5-min cache) |
 | `app/custom-domain/page.tsx` | Custom domain entry point |
-| `components/BulkBookingForm.tsx` | 4–5 step booking form with duration picker |
+| `components/subdomain/SubdomainBookingEntry.tsx` | CTA button + full-screen overlay wrapper |
+| `components/subdomain/SubdomainBookingWizard.tsx` | Multi-step booking wizard (package → schedule → details → payment) |
+| `components/BulkBookingForm.tsx` | Public flow booking form (used on `/book/[instructorId]`) |
+| `components/PackageSelector.tsx` | Package selection step — standard + instructor add-ons |
+| `components/BookingDetailsForm.tsx` | Schedule step — date/time/duration picker with overlap check |
+| `components/BookingSummary.tsx` | Order summary sidebar (desktop) + mobile bottom bar |
 | `components/SlotPicker.tsx` | Date + time slot picker (duration-aware) |
-| `components/subdomain/SubdomainClientFeatures.tsx` | Mobile bottom nav + booking drawer |
+| `components/subdomain/SubdomainClientFeatures.tsx` | Mobile bottom nav + booking overlay |
 | `components/subdomain/SubdomainDesktopNav.tsx` | Desktop anchor nav (About/Services/Contact/Book Now) |
-| `app/api/availability/slots/route.ts` | Slot availability API |
-| `app/api/public/bookings/bulk/route.ts` | Booking creation |
+| `app/booking/[id]/payment/page.tsx` | Book Now payment page |
+| `app/payment/wallet/[transactionId]/page.tsx` | Book Later wallet payment page |
+| `app/payment/wallet/[transactionId]/confirmation/page.tsx` | Book Later confirmation page |
+| `app/api/availability/slots/route.ts` | Slot availability API (duration-aware overlap check) |
+| `app/api/availability/check-and-reserve/route.ts` | Slot reservation API (10-min hold) |
+| `app/api/public/bookings/bulk/route.ts` | Booking creation (book now) or wallet transaction (book later) |
+| `app/api/payments/create-intent/route.ts` | Stripe PaymentIntent — supports both bookingId and transactionId |
 | `app/api/instructor/profile/route.ts` | Profile GET/PUT (includes baseAddress) |
 | `app/api/instructor/branding/route.ts` | Branding GET/PUT |
 | `app/dashboard/profile/page.tsx` | Instructor profile UI (baseAddress now editable) |

@@ -151,6 +151,19 @@ export default function BookingDetailsForm() {
       return;
     }
 
+    // Check for overlap with already-scheduled local bookings
+    const newStart = new Date(`${selectedDate}T${selectedTime}`);
+    const newEnd = new Date(newStart.getTime() + selectedDuration * 60 * 1000);
+    const hasLocalConflict = scheduledBookings.some(b => {
+      const bStart = new Date(`${b.date}T${b.time}`);
+      const bEnd = new Date(bStart.getTime() + b.duration * 60 * 1000);
+      return newStart < bEnd && newEnd > bStart;
+    });
+    if (hasLocalConflict) {
+      alert('This time overlaps with a lesson you already scheduled. Please choose a different time.');
+      return;
+    }
+
     // Reserve the slot before adding
     try {
       const response = await fetch('/api/availability/check-and-reserve', {

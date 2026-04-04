@@ -29,8 +29,8 @@ The entry point for new students. No API calls on this page.
 
 **What it shows:**
 - Instructor name, photo, rating, years experience, car details, languages
-- Hourly rate and available lesson durations
-- Package pricing (6h, 10h, 15h discounts)
+- Hourly rate and available lesson durations (from `instructor.allowedDurations`)
+- Package pricing (6h, 10h, 15h discounts) + instructor custom add-on packages
 - Available time slots via `SlotPicker` component
 - `BulkBookingForm` — the main booking form
 
@@ -38,23 +38,28 @@ The entry point for new students. No API calls on this page.
 
 A multi-step form (`components/BulkBookingForm.tsx`) that handles:
 
-1. **Slot selection** — date picker + slot grid
-2. **Package selection** — single lesson or package (6/10/15 hours)
-3. **Client details** — name, email, phone, pickup address
-4. **Existing email handling** — if the email already has a DriveBook account, shows a warning:
-   - "Login to my account" → redirects to `/login`
-   - "Continue anyway" → proceeds, booking linked to existing account
+1. **Package selection** — standard packages (6/10/15 hrs with platform discounts) + optional instructor add-on packages (fixed price, no platform discount)
+2. **Book Now / Book Later** — student chooses whether to schedule now or load wallet and book from dashboard
+3. **Schedule** (Book Now only) — date picker + slot grid + duration selector. Slots are duration-aware — a 3hr slot at 9am is blocked if 10am is already booked. Local overlap check prevents scheduling two lessons that overlap.
+4. **Client details** — name, email, phone, pickup address
 5. **Password creation** — for new users only (min 6 chars)
-6. **Review & confirm** — price breakdown, terms acceptance
+6. **Review & confirm** — price breakdown with order summary
+
+**Instructor add-on packages:**
+- Set by instructor in Settings → Custom Lesson Packages
+- Fixed price — no platform bulk discount applied
+- Shown as optional checkboxes below standard packages
+- Can be combined with a standard package or selected alone
+- `customPackageId` sent in booking payload; server looks up price from DB
 
 **Pricing calculation (client-side preview):**
 ```
-singleLesson = instructor.hourlyRate × duration
-package6     = (hourlyRate × 6) × (1 − package6Discount/100)
-package10    = (hourlyRate × 10) × (1 − package10Discount/100)
-package15    = (hourlyRate × 15) × (1 − package15Discount/100)
+standardLesson = instructor.hourlyRate × hours × (1 − discountPct/100)
+addonPackage   = pkg.price (fixed, no discount)
+platformFee    = (standardLesson + addonPackage) × platformFeePercentage/100
+total          = standardLesson + addonPackage + platformFee
 ```
-Discount rates are fetched live from `GET /api/public/pricing` (sourced from `PlatformSettings` in DB) on context mount. Configurable via `/admin/pricing`.
+Discount rates and platform fee fetched live from `GET /api/public/pricing` (sourced from `PlatformSettings` in DB). Configurable via `/admin/pricing`.
 
 **Rate & discount locking:**
 When a package is purchased, the instructor's current `hourlyRate` and the applied `discountPercentage` are stored on the `Booking` record as `lockedHourlyRate` and `lockedDiscountPct`. All future lesson deductions from that package use these locked values — instructor rate changes after purchase do not affect the student's remaining hours.

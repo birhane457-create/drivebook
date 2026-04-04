@@ -22,6 +22,7 @@ interface SubdomainBookingWizardProps {
     testPackagePrice: number | null;
     testPackageDuration: number | null;
     testPackageIncludes: string[];
+    allowedDurations?: number[];
     lessonPackages?: Array<{
       id: string;
       name: string;
@@ -64,6 +65,7 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
       testPackagePrice: instructor.testPackagePrice,
       testPackageDuration: instructor.testPackageDuration,
       testPackageIncludes: instructor.testPackageIncludes,
+      allowedDurations: instructor.allowedDurations,
       lessonPackages: instructor.lessonPackages,
     });
   }, [instructor.id]);
