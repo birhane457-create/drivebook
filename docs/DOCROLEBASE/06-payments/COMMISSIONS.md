@@ -12,6 +12,7 @@
 |------|-----------|-----------------|
 | BASIC | 15% | 85% |
 | PRO | 12% | 88% |
+| STUDIO | 11% | 89% |
 | BUSINESS | 10% | 90% |
 
 ---
@@ -24,6 +25,7 @@ Applied on the first booking between a client and instructor (`isFirstBooking: t
 |------|-------------------|-----------------|
 | BASIC | 8% | 92% |
 | PRO | 10% | 90% |
+| STUDIO | 10% | 90% |
 | BUSINESS | 12% | 88% |
 
 ---
@@ -127,6 +129,6 @@ Instructor Net:       $123.20
 ## Related
 
 - `docs/05-admin/SETTINGS.md` — Admin pricing configuration
-- `docs/07-subscriptions/TIERS.md` — Tier feature comparison
+- `docs/DOCROLEBASE/03-instructor/SUBSCRIPTION_TIERS.md` — Tier feature comparison
 - `docs/00-foundation/FINANCIAL_DOCTRINE.md` — Full financial rules
 - `lib/services/platform-pricing.ts` — Runtime rate lookup
