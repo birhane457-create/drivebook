@@ -49,6 +49,7 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentOpened, setPaymentOpened] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
 
   // Pre-populate instructor in context on mount
   useEffect(() => {
@@ -163,7 +164,6 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
 
       const data = await res.json();
       if (res.ok) {
-        // Open payment in a new blank tab — subdomain page stays open underneath
         const host = window.location.host;
         const parts = host.split('.');
         const mainHost = parts.length > 1 && !parts[0].includes(':') ? parts.slice(1).join('.') : host;
@@ -171,11 +171,11 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
         const fromParam = `?from=${encodeURIComponent(host)}`;
 
         const paymentUrl = data.transactionId
-          ? `${baseUrl}/payment/wallet/${data.transactionId}${fromParam}`
+          ? `${baseUrl}/payment/wallet/${data.transactionId}${fromParam}&hrs=${bookingState.hours}&rate=${bookingState.instructor?.hourlyRate ?? 0}&disc=${bookingState.pricing.discountPercentage}&total=${bookingState.pricing.total}&addon=${bookingState.customPackagePrice ?? 0}`
           : `${baseUrl}/booking/${data.bookingId}/payment${fromParam}`;
 
-        window.open(paymentUrl, '_blank', 'noopener');
         setPaymentOpened(true);
+        setPaymentUrl(paymentUrl);
       } else {
         setError(data.error || 'Booking failed. Please try again.');
       }
@@ -212,19 +212,70 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
     </div>
   );
 
-  // Payment opened in new tab — show a waiting screen
-  if (paymentOpened) {
+  if (paymentOpened && paymentUrl) {
+    const isBookLater = bookingState.bookingType === 'later';
+    const p = bookingState.pricing;
+    const hrs = bookingState.hours;
+    const rate = bookingState.instructor?.hourlyRate ?? 0;
+
     return (
-      <div className="text-center py-8 space-y-4">
-        <div className="text-5xl">🎉</div>
-        <h3 className="text-xl font-bold text-gray-900">Payment page opened!</h3>
-        <p className="text-gray-600 text-sm max-w-xs mx-auto">
-          Complete your payment in the new tab. This page will stay open — you can come back here anytime.
-        </p>
+      <div className="space-y-5 py-4">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <div className="text-4xl">{isBookLater ? '💳' : '✅'}</div>
+          <h3 className="text-xl font-bold text-gray-900">
+            {isBookLater ? 'Almost there!' : 'Slot reserved!'}
+          </h3>
+          <p className="text-gray-500 text-sm">
+            {isBookLater
+              ? 'Complete payment to load your wallet. Book lessons from your dashboard anytime.'
+              : 'Your slot is held for 10 minutes. Complete payment to confirm.'}
+          </p>
+        </div>
+
+        {/* Order summary */}
+        <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+          <p className="font-semibold text-gray-700 mb-3">Order Summary</p>
+          <div className="flex justify-between text-gray-600">
+            <span>{hrs} hrs × ${rate}/hr</span>
+            <span>${(hrs * rate).toFixed(2)}</span>
+          </div>
+          {p.discount > 0 && (
+            <div className="flex justify-between text-green-600">
+              <span>Discount ({p.discountPercentage}%)</span>
+              <span>-${p.discount.toFixed(2)}</span>
+            </div>
+          )}
+          {bookingState.customPackageId && bookingState.customPackagePrice && (
+            <div className="flex justify-between text-gray-600">
+              <span>Add-on package</span>
+              <span>${bookingState.customPackagePrice.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-gray-400">
+            <span>Platform fee</span>
+            <span>${p.platformFee.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between font-bold text-gray-900 border-t pt-2 text-base">
+            <span>Total</span>
+            <span>${p.total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <a
+          href={paymentUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block w-full py-4 rounded-xl text-white font-bold text-lg text-center transition-all hover:opacity-90"
+          style={{ backgroundColor: primary }}
+        >
+          Complete Payment →
+        </a>
         <button
           type="button"
-          onClick={() => { setPaymentOpened(false); setStep('package'); }}
-          className="text-sm text-gray-500 underline hover:text-gray-700"
+          onClick={() => { setPaymentOpened(false); setPaymentUrl(null); setStep('package'); }}
+          className="w-full text-sm text-gray-400 underline hover:text-gray-600"
         >
           Start a new booking
         </button>

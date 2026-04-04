@@ -382,9 +382,29 @@ async function handleBookingPaymentSuccess(
     // ── Handle EXPIRED booking recovery ──────────────────────────────────────
     // Race: cron expired the booking at 10:00, webhook arrived at 10:01.
     // Stripe already charged the client — we MUST honour the payment.
-    // Revive the booking to CONFIRMED so the client gets their lesson.
     if (booking.status === 'EXPIRED') {
       console.warn(`⚠️ Booking ${bookingId} was EXPIRED — reviving to CONFIRMED (payment received)`);
+      // Check if the slot was taken by another booking while this one was expired
+      if (booking.startTime && booking.endTime) {
+        const conflict = await tx.booking.findFirst({
+          where: {
+            id: { not: bookingId },
+            instructorId: booking.instructorId,
+            status: { in: ['CONFIRMED', 'PENDING_PAYMENT'] },
+            OR: [
+              { startTime: { lte: booking.startTime }, endTime: { gt: booking.startTime } },
+              { startTime: { lt: booking.endTime }, endTime: { gte: booking.endTime } },
+              { startTime: { gte: booking.startTime }, endTime: { lte: booking.endTime } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (conflict) {
+          // Slot was taken — still confirm (Stripe charged) but flag for admin
+          console.error(`🚨 DOUBLE BOOKING: Booking ${bookingId} revived but slot already taken by ${conflict.id}. Admin review required.`);
+          // Fall through — confirm the booking, admin must resolve manually
+        }
+      }
       // Fall through — the update below will set it to CONFIRMED
     } else if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
       // Already processed (idempotent replay) — skip wallet ops but don't error

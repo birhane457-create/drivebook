@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
@@ -18,14 +18,12 @@ function PaymentForm({ transactionId, amount }: { transactionId: string; amount:
     if (!stripe || !elements) return
     setProcessing(true)
     setError(null)
-
     const { error: submitError } = await stripe.confirmPayment({
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/payment/wallet/${transactionId}/confirmation`,
       },
     })
-
     if (submitError) {
       setError(submitError.message || 'Payment failed')
       setProcessing(false)
@@ -35,9 +33,7 @@ function PaymentForm({ transactionId, amount }: { transactionId: string; amount:
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <PaymentElement />
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">{error}</div>
-      )}
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">{error}</div>}
       <button
         type="submit"
         disabled={!stripe || processing}
@@ -52,6 +48,7 @@ function PaymentForm({ transactionId, amount }: { transactionId: string; amount:
 
 export default function WalletPaymentPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const transactionId = params.transactionId as string
 
@@ -59,6 +56,17 @@ export default function WalletPaymentPage() {
   const [amount, setAmount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Pricing details passed via URL params from the wizard
+  const hrs = parseFloat(searchParams.get('hrs') || '0')
+  const rate = parseFloat(searchParams.get('rate') || '0')
+  const discPct = parseFloat(searchParams.get('disc') || '0')
+  const total = parseFloat(searchParams.get('total') || '0')
+  const addonPrice = parseFloat(searchParams.get('addon') || '0')
+
+  const subtotal = hrs * rate
+  const discount = (subtotal * discPct) / 100
+  const platformFee = total > 0 ? Math.max(0, total - (subtotal - discount + addonPrice)) : 0
 
   useEffect(() => {
     async function init() {
@@ -99,32 +107,69 @@ export default function WalletPaymentPage() {
           <div className="text-red-600 text-5xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Error</h1>
           <p className="text-gray-600 mb-6">{error || 'Unable to load payment'}</p>
-          <button onClick={() => router.push('/')} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
-            Go Home
-          </button>
+          <button onClick={() => router.push('/')} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">Go Home</button>
         </div>
       </div>
     )
   }
 
+  const payAmount = amount || total
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-lg mx-auto">
+      <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
           <div className="bg-blue-600 text-white px-6 py-4">
             <h1 className="text-xl font-bold">Complete Your Package Purchase</h1>
             <p className="text-blue-100 text-sm mt-1">Credits will be added to your wallet after payment</p>
           </div>
-          <div className="p-6">
-            <div className="bg-blue-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-800">
-                💳 After payment, your wallet will be credited with <strong>${amount.toFixed(2)}</strong>.
-                You can then book individual lessons from your dashboard at any time.
-              </p>
+          <div className="p-6 md:p-8">
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Order Summary */}
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h2>
+                <div className="bg-blue-50 rounded-lg p-4 mb-4 text-sm text-blue-800">
+                  💳 After payment, your wallet will be credited with <strong>${payAmount.toFixed(2)}</strong>. Book lessons from your dashboard at any time.
+                </div>
+                {hrs > 0 && rate > 0 && (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between text-gray-600">
+                      <span>{hrs} hrs × ${rate}/hr</span>
+                      <span>${subtotal.toFixed(2)}</span>
+                    </div>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Discount ({discPct}%)</span>
+                        <span>-${discount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {addonPrice > 0 && (
+                      <div className="flex justify-between text-gray-600">
+                        <span>Add-on package</span>
+                        <span>${addonPrice.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {platformFee > 0 && (
+                      <div className="flex justify-between text-gray-400">
+                        <span>Platform fee</span>
+                        <span>${platformFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-gray-900 border-t pt-2 text-base">
+                      <span>Total</span>
+                      <span>${payAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Payment Form */}
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment Details</h2>
+                <Elements stripe={stripePromise} options={{ clientSecret }}>
+                  <PaymentForm transactionId={transactionId} amount={payAmount} />
+                </Elements>
+              </div>
             </div>
-            <Elements stripe={stripePromise} options={{ clientSecret }}>
-              <PaymentForm transactionId={transactionId} amount={amount} />
-            </Elements>
           </div>
         </div>
       </div>
