@@ -1,12 +1,12 @@
 # Subscription & Trial System
 
-Last updated: 2026-03-22
+Last updated: 2026-04-06
 
 ---
 
 ## Overview
 
-DriveBook uses a three-tier subscription model for instructors. Subscriptions are managed via a combination of Prisma/MongoDB records and Stripe. Trial periods are tracked in the database without requiring a payment method upfront.
+DriveBook uses a four-tier subscription model for instructors (BASIC, PRO, STUDIO, BUSINESS). Three tiers are live and purchasable — BUSINESS is defined but marked "Coming Soon" pending multi-instructor management features. Subscriptions are managed via Prisma/PostgreSQL records and Stripe. Trial periods are tracked in the database without requiring a payment method upfront.
 
 ---
 
@@ -47,7 +47,7 @@ maxInstructors      Int       @default(1)
 ```
 id                   ObjectId
 instructorId         ObjectId
-tier                 String           (BASIC | PRO | BUSINESS)
+tier                 String           (BASIC | PRO | STUDIO | BUSINESS)
 status               String           (TRIAL | ACTIVE | PAST_DUE | CANCELLED)
 billingCycle         String           (monthly | annual)
 monthlyAmount        Float

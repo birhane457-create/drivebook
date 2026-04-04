@@ -2,7 +2,7 @@
 
 **Route:** `/subdomain/[slug]` (served at `[slug].drivebook.com.au`)  
 **Auth required:** No  
-**File:** `app/subdomain/[slug]/page.tsx`, `components/subdomain/SubdomainClientFeatures.tsx`  
+**File:** `app/subdomain/[slug]/page.tsx`, `components/subdomain/SubdomainBookingEntry.tsx`, `components/subdomain/SubdomainBookingWizard.tsx`  
 **Full reference:** `docs/SUBDOMAIN_SYSTEM.md`
 
 ---
@@ -18,47 +18,92 @@ Each instructor gets a white-labeled public booking page. The URL slug comes fro
 ```
 ┌─────────────────────────────────────────────────────────┐
 │ Nav bar: [Logo/Car icon]  [Instructor name]  [WhatsApp] │
+│          [Login]                                        │
 ├─────────────────────────────────────────────────────────┤
 │ Hero banner (gradient using brand colors)               │
-│  [Profile photo]  [Name]  [Star rating]                 │
-│  [Service areas]  [Years exp]  [Next available]         │
+│  [Profile photo]  [Name]  [Star rating or "New"]        │
+│  [Service areas]  [Vehicle types]  [Years exp]          │
+│  [Next available: 2-3 real slots from now]              │
 ├─────────────────────────────────────────────────────────┤
 │ Trust badges: ✅ Verified  🏆 X+ Years  ⭐ Rating  🔒   │
 ├──────────────────────┬──────────────────────────────────┤
 │ Left column          │ Right column                     │
-│ Next availability    │ Booking form (BulkBookingForm)   │
+│ Next availability    │ Social proof banner              │
+│ (2-3 real slots)     │ "Book Your Lesson →" button      │
 │ About / bio          │ Student reviews                  │
 │ Pricing              │                                  │
+│  - Single lesson     │                                  │
+│  - Lesson durations  │                                  │
+│  - Instructor pkgs   │                                  │
 │ Vehicle details      │                                  │
 │ Social links         │                                  │
 │ Vehicle photo        │                                  │
 │ FAQ accordion        │                                  │
 └──────────────────────┴──────────────────────────────────┘
-│ Sticky mobile "Book a Lesson" button (after 300px scroll)│
+│ MOBILE: Fixed bottom nav (About/Services/Contact/Book)  │
 └─────────────────────────────────────────────────────────┘
 ```
 
-Data fetched server-side: instructor profile, last 5 reviews (completed bookings with `clientRating != null`), next available slot (14-day window), active packages.
+Data fetched server-side: instructor profile, last 5 reviews (completed bookings with `clientRating != null`), next 2-3 available slots (14-day window, starting 2hrs from now), active packages.
+
+---
+
+## Booking Flow
+
+When the student clicks "Book Your Lesson →", a **full-screen overlay** opens on top of the profile page. The profile stays open underneath — the student can close the overlay and return to the profile at any time.
+
+**Overlay components:**
+- `components/subdomain/SubdomainBookingEntry.tsx` — CTA button + overlay wrapper
+- `components/subdomain/SubdomainBookingWizard.tsx` — multi-step wizard
+
+**Wizard steps:**
+1. Package — standard (6/10/15 hrs) + instructor add-on packages (fixed price, no platform discount)
+2. Test Package — only if `instructor.offersTestPackage = true`
+3. When to Book — Book Now or Book Later
+4. Schedule — only if Book Now (date/time/duration, duration from `instructor.allowedDurations`)
+5. Your Details — name, email, phone, password
+
+**After submit:**
+- Wizard shows order summary with "Complete Payment →" link
+- Payment opens in a **new blank tab** — profile stays open
+- Book Now → `/booking/[id]/payment`
+- Book Later → `/payment/wallet/[transactionId]` (wallet credited, no booking created)
+
+See [BOOKING_FLOW.md](./BOOKING_FLOW.md) for full payment flow.
 
 ---
 
 ## Branding Tiers
 
-| Feature | BASIC | PRO | BUSINESS |
-|---------|-------|-----|----------|
-| Public booking page | ✅ | ✅ | ✅ |
-| Custom slug / URL | ✅ | ✅ | ✅ |
-| Custom logo | ❌ | ✅ | ✅ |
-| Custom brand colors | ❌ | ✅ | ✅ |
-| White-label nav (hide "DriveBook") | ❌ | ✅ | ✅ |
-| Social links | ✅ | ✅ | ✅ |
+| Feature | BASIC | PRO | STUDIO | BUSINESS |
+|---------|-------|-----|--------|----------|
+| Public booking page | ✅ | ✅ | ✅ | ✅ |
+| Default URL (by ID) | ✅ | ✅ | ✅ | ✅ |
+| Custom slug | ❌ | ✅ | ✅ | ✅ |
+| Custom logo | ❌ | ✅ | ✅ | ✅ |
+| Custom brand colors | ✅ | ✅ | ✅ | ✅ |
+| White-label nav (hide "DriveBook") | ❌ | ✅ | ✅ | ✅ |
+| Custom domain | ❌ | ❌ | ✅ | ✅ |
+| Social links | ✅ | ✅ | ✅ | ✅ |
 
 ```typescript
-const isPro = instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'BUSINESS';
+const isPro = instructor.subscriptionTier === 'PRO' 
+           || instructor.subscriptionTier === 'STUDIO' 
+           || instructor.subscriptionTier === 'BUSINESS';
 const hasBranding = isPro && instructor.showBrandingOnBookingPage;
 // Nav shows instructor name only if hasBranding, otherwise shows "DriveBook"
-// Colors fall back to #3B82F6 / #10B981 if not set
+// Colors apply to all tiers — fall back to #3B82F6 / #10B981 if not set
 ```
+
+---
+
+## Next Available Slots
+
+Computed server-side from working hours + upcoming bookings. Shows up to 3 real available slots starting from 2 hours from now (not just working hours start time).
+
+- Shown in hero banner (first 2 slots inline)
+- Shown in left column "Next Available" card (all 3 slots, first prominent)
+- Shown in booking form social proof banner
 
 ---
 
@@ -68,6 +113,8 @@ const hasBranding = isPro && instructor.showBrandingOnBookingPage;
 - `<title>` — `"Book Driving Lessons with [Name]"`
 - `<description>` — instructor bio (truncated to 155 chars) or generated fallback
 - OpenGraph + Twitter card — for WhatsApp/Facebook link previews with profile image
+
+JSON-LD `LocalBusiness` structured data inline — includes `aggregateRating` only if `totalReviews > 0`, `address` only if `baseAddress` is set.
 
 ---
 
@@ -85,27 +132,39 @@ const trustBadges = [
 
 ---
 
+## Mobile UX
+
+`components/subdomain/SubdomainClientFeatures.tsx` — client component (isolated from the Server Component page).
+
+- Fixed bottom nav bar: About / Services / Contact / Book Now
+- "Book Now" opens the same full-screen overlay as the desktop button
+- Body scroll locked while overlay is open
+- iPhone safe area inset handled via `env(safe-area-inset-bottom)`
+
+---
+
+## Instructor Add-On Packages
+
+Instructor custom packages (e.g. PDA test package) are shown in the Services & Pricing card on the left column. They display:
+- Package name
+- Duration
+- Description (includes/features)
+- Fixed price
+- "Save $X vs hourly" only if instructor priced it below the hourly equivalent
+
+No platform bulk discount is applied to instructor packages — they have a fixed price set by the instructor.
+
+---
+
 ## FAQ Accordion
 
 Uses native HTML `<details>`/`<summary>` — zero JS, works without hydration. Questions: what to bring, pickup location, cancellation policy, first-timers, how packages work.
 
 ---
 
-## Sticky Mobile Button
-
-`components/subdomain/SubdomainClientFeatures.tsx` — client component (isolated from the Server Component page). Appears after 300px scroll, scrolls to `#booking-form` on click.
-
----
-
-## Booking Flow
-
-Same as the public booking flow — `BulkBookingForm` behaves identically to `/book/[instructorId]`. See [BOOKING_FLOW.md](./BOOKING_FLOW.md).
-
----
-
 ## Slug Resolution
 
-`Instructor.customDomain` → slug. 404 if no match.
+`Instructor.customDomain` → slug. Falls back to `Instructor.id` — every instructor has a working URL at `<id>.drivebook.com.au` from day one.
 
 Middleware compound TLD awareness (`.com.au` needs 4+ parts for a subdomain):
 ```typescript
@@ -118,12 +177,12 @@ const minParts = isCompoundTLD ? 4 : 3
 
 ## DNS (Live)
 
-Wildcard CNAME `*` → `cname.vercel-dns.com` in Vercel DNS panel. SSL auto-managed by Vercel (wildcard cert, expires Jun 2026).
+Wildcard CNAME `*` → `cname.vercel-dns.com` in Vercel DNS panel. SSL auto-managed by Vercel (wildcard cert).
 
 ---
 
 ## Related
 
-- [BOOKING_FLOW.md](./BOOKING_FLOW.md) — Booking form behavior
-- `docs/SUBDOMAIN_SYSTEM.md` — Full reference (DNS, middleware, local dev setup)
-- `docs/03-instructor/BRANDING.md` — How instructors configure their subdomain
+- [BOOKING_FLOW.md](./BOOKING_FLOW.md) — Full booking flow (public + subdomain)
+- `docs/SUBDOMAIN_SYSTEM.md` — Full reference (DNS, middleware, local dev setup, all fields)
+- `docs/DOCROLEBASE/03-instructor/SUBSCRIPTION_TIERS.md` — Tier features and domain setup
