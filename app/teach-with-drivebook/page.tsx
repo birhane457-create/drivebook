@@ -48,15 +48,15 @@ export default function TeachWithDriveBookPage() {
         <section className="my-16 -mt-6">
           <div className="bg-white rounded-2xl shadow-lg border-l-4 border-green-600 p-8 md:p-10 max-w-3xl mx-auto">
             <p className="text-xs font-semibold text-green-600 uppercase tracking-widest mb-3">Why this platform exists</p>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Built by an instructor who needed a better way</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Built for instructors — by someone who wished he could be one</h2>
             <p className="text-gray-700 leading-relaxed mb-3">
-              I built DriveBook while navigating a neurological condition and a period of unemployment. Teaching driving was something I could do on my own terms — but the admin was a mess: chasing payments, managing schedules, answering calls mid-lesson.
+              I built DriveBook while living with a neurological condition that took away my ability to work the way I'd planned. I'm not a driving instructor — I wish my health allowed it. But I couldn't teach, so I built the platform I wished existed for those who can.
             </p>
             <p className="text-gray-700 leading-relaxed mb-3">
-              That unpredictability made every inefficiency intolerable. So I engineered a solution. The AI receptionist, automated payouts, the booking system — every feature came from a real problem I faced or heard from other instructors in the same boat.
+              I watched instructors lose bookings to missed calls, chase payments, and burn time on admin that had nothing to do with teaching. I had the skills and the drive to fix it — even when my health made every day uncertain.
             </p>
             <p className="text-gray-700 leading-relaxed font-medium">
-              DriveBook is built by an instructor who's been there. For instructors who want their time back.
+              Every feature — the AI receptionist, automated payouts, the booking system — came from real problems real instructors face. I may not be able to teach, but I can build something that makes teaching easier for everyone who does.
             </p>
             <p className="text-sm text-green-600 font-medium mt-4">— Birhane, Founder of DriveBook</p>
           </div>
