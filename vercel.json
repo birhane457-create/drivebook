@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/reconcile-stripe",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/lesson-reminders",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/document-expiry-check",
+      "schedule": "0 2 * * 1"
     }
   ]
 }

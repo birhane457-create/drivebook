@@ -77,7 +77,11 @@ function footer(rn: string): string {
   return `
     <p style="font-size:14px;color:#6b7280;margin:0;">
       Questions? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> &middot;
-      <a href="${BASE_URL}/client-dashboard">View your dashboard</a>
+      <a href="${BASE_URL}/client-dashboard">View your dashboard</a> &middot;
+      <a href="${BASE_URL}/login">Login to DriveBook</a>
+    </p>
+    <p style="font-size:12px;color:#9ca3af;margin:8px 0 0;">
+      New to DriveBook? Your account was created automatically. Login at ${BASE_URL}/login using the email this receipt was sent to.
     </p>
   </div>
   <div class="footer">DriveBook &middot; ${BASE_URL} &middot; Receipt ${rn}</div>

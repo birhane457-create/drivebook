@@ -186,3 +186,40 @@ export async function notifyClientBookingPendingApproval(
     metadata: { bookingId, instructorName, isShortNotice: true },
   });
 }
+
+// Lesson reminder — sent 24hrs before lesson to both instructor and student
+export async function notifyLessonReminderInstructor(
+  instructorUserId: string,
+  clientName: string,
+  bookingId: string,
+  startTime: Date
+) {
+  const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  return createNotification({
+    userId: instructorUserId,
+    type: 'LESSON_REMINDER',
+    title: '📅 Lesson Tomorrow',
+    message: `Reminder: lesson with ${clientName} tomorrow ${dateStr} at ${timeStr}.`,
+    link: `/dashboard/bookings/${bookingId}`,
+    metadata: { bookingId, clientName, startTime: startTime.toISOString() },
+  });
+}
+
+export async function notifyLessonReminderStudent(
+  studentUserId: string,
+  instructorName: string,
+  bookingId: string,
+  startTime: Date
+) {
+  const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  return createNotification({
+    userId: studentUserId,
+    type: 'LESSON_REMINDER',
+    title: '📅 Lesson Tomorrow',
+    message: `Reminder: your lesson with ${instructorName} is tomorrow ${dateStr} at ${timeStr}.`,
+    link: `/client-dashboard/bookings`,
+    metadata: { bookingId, instructorName, startTime: startTime.toISOString() },
+  });
+}

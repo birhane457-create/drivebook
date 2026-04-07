@@ -150,6 +150,34 @@ export default function PricingSettingsForm() {
 
       {/* Package Discounts */}
       <Section icon={<Package className="h-5 w-5" />} title="Package Discounts" color="text-green-700">
+        {/* Master toggle */}
+        <div className="flex items-center gap-3 mb-5 p-3 bg-green-50 rounded-lg border border-green-200">
+          <button
+            type="button"
+            onClick={() => {
+              const allZero = s.package6Discount === 0 && s.package10Discount === 0 && s.package15Discount === 0;
+              if (allZero) {
+                // Restore sensible defaults
+                set({ package6Discount: 5, package10Discount: 10, package15Discount: 12 });
+              } else {
+                set({ package6Discount: 0, package10Discount: 0, package15Discount: 0 });
+              }
+            }}
+            className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${
+              s.package6Discount > 0 || s.package10Discount > 0 || s.package15Discount > 0
+                ? 'bg-green-600' : 'bg-gray-300'
+            }`}
+          >
+            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${
+              s.package6Discount > 0 || s.package10Discount > 0 || s.package15Discount > 0
+                ? 'translate-x-5' : 'translate-x-0.5'
+            }`} />
+          </button>
+          <div>
+            <span className="text-sm font-medium text-gray-700">Enable bulk discounts</span>
+            <p className="text-xs text-gray-500">Turning off sets all rates to 0% — clients pay full hourly rate for any package size</p>
+          </div>
+        </div>
         <div className="grid sm:grid-cols-3 gap-4 mb-4">
           <Field label="6-lesson package (%)">
             <NumInput value={s.package6Discount} onChange={v => set({ package6Discount: v })} min={0} max={30} />

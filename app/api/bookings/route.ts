@@ -6,6 +6,7 @@ import { availabilityService } from '@/lib/services/availability'
 import { emailService } from '@/lib/services/email'
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
+import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
 import { paymentService } from '@/lib/services/payment'
 import { getWalletBalance } from '@/lib/services/wallet-helpers'
 import { notifyBookingRequest } from '@/lib/services/notifications'
@@ -132,31 +133,141 @@ export async function POST(req: NextRequest) {
     )
 
     // ── WALLET CHECK ──────────────────────────────────────────────────────────
+    // Every client added via POST /api/clients now has a userId (silently
+    // created). The no-account path is a legacy edge case — handle gracefully.
     if (!client.userId) {
       return NextResponse.json({
-        error: 'Client does not have a DriveBook account. They must register before bookings can be made.',
+        error: 'Client account not set up. Please remove and re-add this client.',
         noAccount: true,
-        clientEmail: client.email,
-        clientName: client.name,
       }, { status: 422 })
     }
 
     const { balance } = await getWalletBalance(client.userId)
     if (balance < lessonPrice) {
-      const shortfall = parseFloat((lessonPrice - balance).toFixed(2))
-      const topUpAmount = parseFloat((shortfall / (1 - PLATFORM_FEE_RATE)).toFixed(2))
+      // Create booking as PENDING_PAYMENT — no wallet deduction yet.
+      // Send the student an email: "your instructor booked a lesson, top up to confirm."
+      // This is the natural first contact — they have a real reason to act.
+      const hasConflict = await availabilityService.checkDoubleBooking(
+        session.user.instructorId, newStart, newEnd
+      )
+      if (hasConflict) {
+        return NextResponse.json({ error: 'Time slot already booked' }, { status: 409 })
+      }
+
+      const pickupLocation = data.pickupAddress || client.defaultPickupAddress || null
+      const pendingBooking = await prisma.booking.create({
+        data: {
+          instructorId: session.user.instructorId,
+          clientId: data.clientId,
+          clientName: client.name,
+          clientPhone: client.phone,
+          bookingType: data.bookingType,
+          startTime: newStart,
+          endTime: newEnd,
+          duration: durationHours * 60,
+          price: lessonPrice,
+          platformFee,
+          instructorPayout,
+          commissionRate,
+          isFirstBooking,
+          isPaid: false,
+          pickupAddress: pickupLocation,
+          pickupLatitude: data.pickupLatitude ?? client.defaultPickupLat,
+          pickupLongitude: data.pickupLongitude ?? client.defaultPickupLng,
+          dropoffAddress: data.dropoffAddress,
+          notes: data.notes,
+          status: 'PENDING_PAYMENT',
+          createdBy: 'instructor',
+          originalStartTime: newStart,
+        } as any,
+        include: { client: true, instructor: { include: { user: true } } }
+      })
+
+      // Send "top up to confirm" email — includes set-password link if account is new
+      try {
+        const clientUser = await prisma.user.findUnique({
+          where: { id: client.userId },
+          select: { resetToken: true, resetTokenExpiry: true }
+        })
+        const shortfall = parseFloat((lessonPrice - balance).toFixed(2))
+        const topUpAmount = parseFloat((shortfall / (1 - PLATFORM_FEE_RATE)).toFixed(2))
+        const dateStr = newStart.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
+        const timeStr = newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+
+        // If account is new (has a resetToken), link to set-password page
+        // Otherwise link to login page
+        const isNewAccount = !!(clientUser?.resetToken && clientUser.resetTokenExpiry && clientUser.resetTokenExpiry > new Date())
+        const actionUrl = isNewAccount
+          ? `${process.env.NEXTAUTH_URL}/reset-password?token=${clientUser!.resetToken}`
+          : `${process.env.NEXTAUTH_URL}/login`
+        const actionLabel = isNewAccount ? 'Set Password & Top Up →' : 'Log In & Top Up →'
+
+        await emailService.sendGenericEmail({
+          to: client.email,
+          subject: `📅 ${instructor.name} booked a lesson for you — top up to confirm`,
+          html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+                .lesson-box { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #10b981; }
+                .cta-box { background: #eff6ff; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; }
+                .button { display: inline-block; background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; }
+                .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <div class="header">
+                  <h1 style="margin:0;font-size:24px;">📅 Lesson Booked for You</h1>
+                </div>
+                <div class="content">
+                  <p>Hi ${client.name},</p>
+                  <p><strong>${instructor.name}</strong> has booked a driving lesson for you.</p>
+                  <div class="lesson-box">
+                    <h3 style="margin-top:0;">Lesson Details</h3>
+                    <p style="margin:5px 0;"><strong>Date:</strong> ${dateStr}</p>
+                    <p style="margin:5px 0;"><strong>Time:</strong> ${timeStr}</p>
+                    <p style="margin:5px 0;"><strong>Duration:</strong> ${durationHours} hour${durationHours !== 1 ? 's' : ''}</p>
+                    <p style="margin:5px 0;"><strong>Cost:</strong> $${lessonPrice.toFixed(2)}</p>
+                  </div>
+                  <div class="cta-box">
+                    <h3 style="margin-top:0;">Top up your wallet to confirm</h3>
+                    <p>You need <strong>$${topUpAmount.toFixed(2)}</strong> in your DriveBook wallet to confirm this booking.</p>
+                    <a href="${actionUrl}" class="button">${actionLabel}</a>
+                  </div>
+                  <p style="color:#6b7280;font-size:14px;">Once your wallet is topped up, the booking will be confirmed automatically.</p>
+                  <div class="footer"><p><strong>DriveBook</strong> — Your Driving Instructor Platform</p></div>
+                </div>
+              </div>
+            </body>
+            </html>
+          `
+        })
+      } catch (e) {
+        console.error('Top-up email failed:', e)
+      }
+
+      try {
+        await logBookingAction({
+          bookingId: pendingBooking.id,
+          action: AuditAction.BOOKING_CREATED,
+          actorId: session.user.instructorId,
+          actorRole: ActorRole.INSTRUCTOR,
+          metadata: { clientId: data.clientId, price: pendingBooking.price, pendingPayment: true }
+        })
+      } catch (e) { /* non-critical */ }
+
       return NextResponse.json({
-        error: 'Insufficient wallet balance',
-        insufficientBalance: true,
-        clientName: client.name,
-        clientEmail: client.email,
-        clientId: client.id,
-        currentBalance: parseFloat(balance.toFixed(2)),
-        required: lessonPrice,
-        shortfall,
-        topUpAmount,
-        platformFeeRate: PLATFORM_FEE_RATE,
-      }, { status: 422 })
+        success: true,
+        booking: pendingBooking,
+        pendingPayment: true,
+        message: `Booking created. An email has been sent to ${client.email} to top up their wallet and confirm.`,
+      }, { status: 201 })
     }
 
     // ── AVAILABILITY CHECK ────────────────────────────────────────────────────
@@ -269,6 +380,19 @@ export async function POST(req: NextRequest) {
 
       return newBooking
     }, { maxWait: 5000, timeout: 10000 })
+
+    // Audit log — record instructor-created booking (non-critical)
+    try {
+      await logBookingAction({
+        bookingId: booking.id,
+        action: AuditAction.BOOKING_CREATED,
+        actorId: session.user.instructorId,
+        actorRole: ActorRole.INSTRUCTOR,
+        metadata: { clientId: data.clientId, price: booking.price, durationHours }
+      })
+    } catch (auditErr) {
+      console.error('Audit log failed for booking creation:', auditErr)
+    }
 
     // Google Calendar sync (non-critical)
     try {

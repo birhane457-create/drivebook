@@ -62,9 +62,19 @@ total          = standardLesson + addonPackage + platformFee
 Discount rates and platform fee fetched live from `GET /api/public/pricing` (sourced from `PlatformSettings` in DB). Configurable via `/admin/pricing`.
 
 **Rate & discount locking:**
-When a package is purchased, the instructor's current `hourlyRate` and the applied `discountPercentage` are stored on the `Booking` record as `lockedHourlyRate` and `lockedDiscountPct`. All future lesson deductions from that package use these locked values — instructor rate changes after purchase do not affect the student's remaining hours.
 
-Wallet-only top-ups (not yet booked) are not locked — they are plain money. If the instructor raises their rate before the student books, the booking uses the current rate at booking time. The UI shows a tip: "Book all lessons now to lock in the current rate."
+| Scenario | Rate used | Locked? |
+|----------|-----------|---------|
+| Buy package + book all slots now | `instructor.hourlyRate` at purchase time | Yes — stored as `lockedHourlyRate` + `lockedDiscountPct` on `Booking` |
+| Buy package + book later (wallet top-up) | `instructor.hourlyRate` at time of each individual booking | No — wallet is plain money |
+| Already-confirmed booking | `booking.price` (immutable after creation) | Yes — field never updated |
+
+When `bookingType: now`, `lockedHourlyRate` and `lockedDiscountPct` are stored on the `Booking` record at creation. Instructor rate changes after purchase have zero effect on these bookings.
+
+When `bookingType: later`, the wallet is credited with the package amount but no rate is locked. When the student later books individual lessons from their dashboard (`POST /api/client/bookings/create-bulk`), the server fetches the instructor's current `hourlyRate` and recalculates the price — client-submitted prices are ignored entirely.
+
+**Slot blocking during scheduling (Book Now):**
+When the student selects a time slot in the schedule step, `BookingDetailsForm` calls `POST /api/availability/check-and-reserve` before adding the slot. This places a 10-minute in-memory reservation on the slot, preventing another concurrent session from claiming it. If the slot is already reserved, returns 409 and the form refreshes available slots. Reservations are released on slot removal and component unmount. The 10-minute window matches the `PENDING_PAYMENT` booking expiry.
 
 ---
 

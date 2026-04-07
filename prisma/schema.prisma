@@ -434,6 +434,19 @@ model ReconciliationReport {
   createdAt        DateTime  @default(now())
 }
 
+model AvailabilityException {
+  id           String   @id @default(cuid())
+  instructorId String
+  label        String?  // e.g. "Cash lesson - John", "Holiday", "Personal"
+  exceptionDate DateTime
+  startTime    String   // "HH:mm"
+  endTime      String   // "HH:mm"
+  allDay       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([instructorId, exceptionDate])
+}
+
 model LearningContent {
   id           String   @id @default(cuid())
   title        String

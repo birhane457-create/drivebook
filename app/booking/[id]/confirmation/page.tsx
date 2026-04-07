@@ -192,12 +192,17 @@ export default function BookingConfirmationPage() {
               Go to Dashboard
             </Link>
           ) : (
-            <Link
-              href="/login"
-              className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center"
-            >
-              Login to View Booking
-            </Link>
+            <>
+              <Link
+                href="/login"
+                className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center"
+              >
+                Login to View Booking
+              </Link>
+              <p className="w-full text-center text-sm text-gray-500 mt-2">
+                Your DriveBook account was created automatically. Login with the email you used to book.
+              </p>
+            </>
           )}
           <Link
             href="/"

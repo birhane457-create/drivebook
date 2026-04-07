@@ -52,147 +52,75 @@ The `.env` file in dev has `GOOGLE_REDIRECT_URI=https://localhost:3000/api/calen
 
 ## P1 — High Priority (fix before first real instructor goes live)
 
-### P1.1 — Instructor not notified on normal (non-short-notice) booking
+### P1.1 — Instructor not notified on normal (non-short-notice) booking ✅ DONE
 
-**Current state:**  
-In `app/api/public/bookings/bulk/route.ts`, `notifyShortNoticeBookingRequest` is called only when `isShortNotice === true`. For normal bookings (`PENDING_PAYMENT`), no notification is sent to the instructor.
+**Was:** Only short-notice bookings triggered `notifyShortNoticeBookingRequest`. Normal bookings sent no notification to the instructor.
 
-```typescript
-if (isShortNotice) {
-  // notify instructor
-}
-// Normal bookings: instructor gets no notification
-```
-
-**Impact:** Instructor doesn't know a student booked. They find out when they check the dashboard or when the student shows up.
-
-**Fix:**  
-After the booking is confirmed (post-payment via webhook), send `notifyBookingRequest` to the instructor. The webhook already handles this for the payment success path — verify it fires correctly. For the "book later" path (wallet only), add a notification after wallet transaction is confirmed.
-
-**Files:** `app/api/stripe/webhook/route.ts` (verify notification fires), `app/api/public/bookings/bulk/route.ts`  
-**Effort:** 1-2 hours
+**Fixed:** `app/api/public/bookings/bulk/route.ts` now calls `notifyBookingRequest` to the instructor and `notifyClientBookingConfirmed` to the student for all normal (non-short-notice) bookings.
 
 ---
 
-### P1.2 — No lesson reminder notifications
+### P1.2 — No lesson reminder notifications ✅ DONE
 
-**Current state:**  
-`notifyLessonReminder()` is defined in `lib/services/notifications.ts` but is never called. No cron job exists to send reminders before lessons.
+**Was:** `notifyLessonReminder` was defined but never called. No cron existed.
 
-**Impact:** Students and instructors get no reminder. Missed lessons, no-shows, chargebacks.
-
-**Fix:**  
-Create `app/api/cron/lesson-reminders/route.ts`:
-- Runs daily (e.g. 8am via Vercel cron)
-- Queries bookings with `status: CONFIRMED` and `startTime` between now+23hrs and now+25hrs
-- Calls `notifyLessonReminder(instructorUserId, studentName, bookingId, startTime)` for each
-- Calls a student reminder notification (add `notifyStudentLessonReminder` to notifications service)
-
-Add to `vercel.json`:
-```json
-{ "path": "/api/cron/lesson-reminders", "schedule": "0 22 * * *" }
-```
-(10pm UTC = 8am AEST)
-
-**Files:** `app/api/cron/lesson-reminders/route.ts` (new), `lib/services/notifications.ts`, `vercel.json`  
-**Effort:** 3-4 hours
+**Fixed:**
+- Added `notifyLessonReminderInstructor` and `notifyLessonReminderStudent` to `lib/services/notifications.ts`
+- Created `app/api/cron/lesson-reminders/route.ts` — queries CONFIRMED bookings in the 23-25hr window, sends reminders to both parties
+- Added to `vercel.json`: `"0 22 * * *"` (10pm UTC = 8am AEST)
 
 ---
 
-### P1.3 — Compliance email reminders not triggered automatically
+### P1.3 — Compliance email reminders not triggered automatically ✅ DONE
 
-**Current state:**  
-`app/api/admin/documents/compliance/route.ts` has a `sendReminder` action that calls `notifyDocumentExpiring()` — this part works. However, it is only triggered manually by an admin clicking "Send Reminder" in the admin UI. There is no automated cron that checks for expiring documents and sends reminders proactively.
+**Was:** `sendReminder` in the compliance route called `notifyDocumentExpiring` but only when an admin manually clicked "Send Reminder". No automated check existed.
 
-**Impact:** Instructor's insurance expires. Payouts are blocked. Instructor was never warned. Support ticket.
-
-**Fix:**  
-Create `app/api/cron/document-expiry-check/route.ts`:
-- Runs weekly (Mondays 2am)
-- Queries instructors with documents expiring in the next 30 days
-- Sends `notifyDocumentExpiring` for each expiring document
-- Already exists as `app/api/cron/recheck-abn/route.ts` — follow same pattern
-
-**Files:** `app/api/cron/document-expiry-check/route.ts` (new), `vercel.json`  
-**Effort:** 2-3 hours
+**Fixed:**
+- Created `app/api/cron/document-expiry-check/route.ts` — queries instructors with documents expiring within 30 days, sends `notifyDocumentExpiring` for each
+- Added to `vercel.json`: `"0 2 * * 1"` (Mondays 2am UTC, same schedule as ABN recheck)
 
 ---
 
-### P1.4 — Student post-payment onboarding gap
+### P1.4 — Student post-payment onboarding gap ✅ DONE
 
-**Current state:**  
-After a student books via subdomain and pays, they land on a confirmation page. But:
-- New students don't know their account was created
-- No clear "login to see your booking" prompt
-- No email with login credentials or booking summary (receipt email fires but may not include login link)
+**Was:** New students had no clear path to their account after paying. Confirmation pages had no login prompt.
 
-**Impact:** Student paid, has no idea how to access their booking or schedule remaining lessons.
-
-**Fix:**  
-1. Add to the booking confirmation email: "Your DriveBook account has been created. Login at drivebook.com.au/login with your email."
-2. Update `/booking/[id]/confirmation` and `/payment/wallet/[transactionId]/confirmation` to show: "Check your email for your booking confirmation and login details."
-3. Ensure the receipt email (`sendPackagePurchaseReceipt`) includes a login link
-
-**Files:** `lib/services/receipt-email.ts`, `app/booking/[id]/confirmation/page.tsx`, `app/payment/wallet/[transactionId]/confirmation/page.tsx`  
-**Effort:** 2 hours
+**Fixed:**
+- `app/booking/[id]/confirmation/page.tsx` — unauthenticated users now see "Your DriveBook account was created automatically. Login with the email you used to book."
+- `app/payment/wallet/[transactionId]/confirmation/page.tsx` — same message + login link added
+- `lib/services/receipt-email.ts` footer — added login link and "New to DriveBook? Your account was created automatically" note to all receipt emails
 
 ---
 
 ## P2 — Medium Priority (fix within first week of production)
 
-### P2.1 — Instructor "book on behalf" requires existing account + wallet balance
+### P2.1 — Instructor "book on behalf" requires existing account + wallet balance ✅ DONE
 
-**Current state:**  
-`POST /api/bookings` (instructor-created booking) requires:
-- `client.userId` must exist (client must have a DriveBook account)
-- Client wallet balance ≥ lesson price
+**Was:**  
+`POST /api/bookings` hard-rejected if `client.userId` was null — meaning the client had no DriveBook account. Instructors couldn't book for new students who hadn't registered yet.
 
-If an instructor is sitting with a new student who hasn't registered, they cannot book for them.
+**Fixed:**  
+- `app/api/bookings/route.ts` — removed the hard block. If `client.userId` is null, the booking is created with status `PENDING_PAYMENT` (no wallet deduction). A "claim your account" email is sent to the student with a registration link pre-filled with their email and the booking ID.
+- `lib/services/email.ts` — added `sendClaimAccountEmail()` method.
+- `app/dashboard/clients/page.tsx` — clients without a DriveBook account now show an amber "No account" badge and an explanatory note in the expanded view.
 
-**Impact:** Instructors can't onboard new students face-to-face. They have to tell the student to go home and register online first.
-
-**Fix (pragmatic for launch):**  
-Add a "Create account for client" flow in the instructor dashboard:
-1. Instructor enters client name + email + phone
-2. System creates a `User` + `Client` record with a temporary password
-3. Sends welcome email to client with login link
-4. Instructor can then book for them immediately
-
-For the wallet requirement: allow instructors to create a booking with `paymentMethod: 'invoice'` that creates the booking as `CONFIRMED` and marks it as "payment pending" — instructor collects cash/card directly.
-
-**Files:** `app/api/bookings/route.ts`, new `app/api/instructor/clients/create/route.ts`, `app/dashboard/clients/page.tsx`  
-**Effort:** 1 day
+The existing `POST /api/clients` already creates a `Client` without requiring a `User`, so no new endpoint was needed.
 
 ---
 
-### P2.2 — AuditLog missing for instructor-created bookings
+### P2.2 — AuditLog missing for instructor-created bookings ✅ DONE
 
-**Current state:**  
-`POST /api/bookings` creates no `AuditLog` entry. If an instructor creates a booking and something goes wrong (wrong price, wrong client, dispute), there is no trace.
+**Was:** `POST /api/bookings` created no `AuditLog` entry.
 
-**Fix:**  
-Add after successful booking creation in `app/api/bookings/route.ts`:
-```typescript
-await logBookingAction(AuditAction.BOOKING_CREATED, ActorRole.INSTRUCTOR, session.user.instructorId, booking.id, { clientId, price: lessonPrice });
-```
-
-**Files:** `app/api/bookings/route.ts`  
-**Effort:** 30 minutes
+**Fixed:** `app/api/bookings/route.ts` now calls `logBookingAction(BOOKING_CREATED, INSTRUCTOR, ...)` after successful booking creation.
 
 ---
 
-### P2.3 — Wallet-only refund policy not communicated to students
+### P2.3 — Wallet-only refund policy not communicated to students ✅ DONE
 
-**Current state:**  
-All cancellation refunds go to the DriveBook wallet, not the original payment card. This is by design but students don't know this before cancelling.
+**Was:** Students could cancel without knowing refunds go to wallet, not original card.
 
-**Impact:** Student cancels, expects bank refund, sees wallet credit, raises Stripe chargeback.
-
-**Fix:**  
-Add to the cancel confirmation modal: "Refunds are credited to your DriveBook wallet, not your original payment card. Your wallet balance can be used for future lessons."
-
-**Files:** `app/client-dashboard/bookings/[id]/page.tsx` (cancel modal)  
-**Effort:** 30 minutes
+**Fixed:** `components/CancelDialog.tsx` now shows: "Refunds are credited to your DriveBook wallet, not your original payment card. Wallet credits can be used for future lessons."
 
 ---
 
@@ -224,14 +152,14 @@ Add to the cancel confirmation modal: "Refunds are credited to your DriveBook wa
 
 ## Fix Order Summary
 
-| Priority | Item | Effort | Who |
-|----------|------|--------|-----|
-| P0.1 | Set real Stripe webhook secret in Vercel | 5 min | Config |
-| P0.2 | Verify Google redirect URI in Vercel | 5 min | Config |
-| P1.1 | Instructor notification on normal booking | 2 hrs | Code |
-| P1.2 | Lesson reminder cron | 4 hrs | Code |
-| P1.3 | Document expiry cron | 3 hrs | Code |
-| P1.4 | Student post-payment onboarding email | 2 hrs | Code |
-| P2.1 | Instructor book-on-behalf for new clients | 1 day | Code |
-| P2.2 | AuditLog for instructor bookings | 30 min | Code |
-| P2.3 | Wallet refund policy copy | 30 min | Copy |
+| Priority | Item | Status |
+|----------|------|--------|
+| P0.1 | Set real Stripe webhook secret in Vercel | ⚠️ Config — must be done manually in Vercel dashboard |
+| P0.2 | Verify Google redirect URI in Vercel | ⚠️ Config — must be verified in Vercel + Google Cloud Console |
+| P1.1 | Instructor notification on normal booking | ✅ Done |
+| P1.2 | Lesson reminder cron | ✅ Done |
+| P1.3 | Document expiry cron | ✅ Done |
+| P1.4 | Student post-payment onboarding email | ✅ Done |
+| P2.1 | Instructor book-on-behalf for new clients | ✅ Done |
+| P2.2 | AuditLog for instructor bookings | ✅ Done |
+| P2.3 | Wallet refund policy copy | ✅ Done |

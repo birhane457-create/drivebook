@@ -203,6 +203,9 @@ export function CancelDialog({
                 <li>• 24-48 hours notice: 50% refund to wallet</li>
                 <li>• Less than 24 hours: No refund</li>
               </ul>
+              <p className="text-xs text-gray-500 mt-2 italic">
+                Refunds are credited to your DriveBook wallet, not your original payment card. Wallet credits can be used for future lessons.
+              </p>
             </div>
           </div>
 

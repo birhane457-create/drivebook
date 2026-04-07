@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { bulkBookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
-import { notifyShortNoticeBookingRequest, notifyClientBookingPendingApproval } from '@/lib/services/notifications';
+import { notifyShortNoticeBookingRequest, notifyClientBookingPendingApproval, notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 import { calculatePackagePriceDynamic, HOUR_PACKAGES } from '@/lib/config/packages';
 
 const bulkBookingSchema = z.object({
@@ -323,6 +323,21 @@ export async function POST(req: NextRequest) {
         }
       } catch (notifErr) {
         console.error('Short-notice notification failed:', notifErr);
+      }
+    } else {
+      // Normal booking — notify instructor a new booking was made
+      try {
+        const instructorUser = instructor.userId
+          ? await prisma.user.findUnique({ where: { id: instructor.userId }, select: { id: true } })
+          : null;
+        if (instructorUser) {
+          await notifyBookingRequest(instructorUser.id, clientName, booking.id, startTime ?? new Date());
+        }
+        if (userId) {
+          await notifyClientBookingConfirmed(userId, instructor.name, booking.id, startTime ?? new Date());
+        }
+      } catch (notifErr) {
+        console.error('Booking notification failed:', notifErr);
       }
     }
 

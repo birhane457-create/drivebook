@@ -484,6 +484,74 @@ The DriveBook Team
       `
     });
   }
+  async sendClaimAccountEmail(data: {
+    clientName: string
+    clientEmail: string
+    instructorName: string
+    lessonDate: Date
+    claimUrl: string
+  }) {
+    const { clientName, clientEmail, instructorName, lessonDate, claimUrl } = data
+    const dateStr = lessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    const timeStr = lessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+
+    await this.transporter.sendMail({
+      from: `"DriveBook" <${process.env.EMAIL_FROM}>`,
+      to: clientEmail,
+      subject: `📅 ${instructorName} booked a lesson for you — claim your account`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+            .lesson-box { background: white; padding: 25px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #10b981; }
+            .cta-box { background: #eff6ff; padding: 25px; margin: 20px 0; border-radius: 8px; text-align: center; }
+            .button { display: inline-block; background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; }
+            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0; font-size: 26px;">📅 Lesson Booked for You</h1>
+              <p style="margin: 10px 0 0 0; opacity: 0.9;">Your instructor scheduled a lesson on DriveBook</p>
+            </div>
+            <div class="content">
+              <p>Hi ${clientName},</p>
+              <p><strong>${instructorName}</strong> has booked a driving lesson for you on DriveBook.</p>
+
+              <div class="lesson-box">
+                <h3 style="margin-top: 0; color: #1f2937;">📅 Your Lesson Details</h3>
+                <p style="margin: 5px 0;"><strong>Date:</strong> ${dateStr}</p>
+                <p style="margin: 5px 0;"><strong>Time:</strong> ${timeStr}</p>
+                <p style="margin: 5px 0;"><strong>Instructor:</strong> ${instructorName}</p>
+              </div>
+
+              <div class="cta-box">
+                <h3 style="margin-top: 0; color: #1f2937;">🔐 Claim Your Account</h3>
+                <p>Set up your DriveBook account to view your booking, track your progress, and manage future lessons.</p>
+                <a href="${claimUrl}" class="button">Claim My Account →</a>
+                <p style="font-size: 12px; color: #6b7280; margin-top: 15px;">This link expires in 7 days.</p>
+              </div>
+
+              <p style="color: #6b7280; font-size: 14px;">
+                If you weren't expecting this email, you can ignore it — no account will be created unless you click the link above.
+              </p>
+
+              <div class="footer">
+                <p><strong>DriveBook</strong> — Your Driving Instructor Platform</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    })
+  }
 }
 
 export const emailService = new EmailService()

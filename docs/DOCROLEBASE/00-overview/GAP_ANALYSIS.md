@@ -49,9 +49,13 @@ Each gap is classified:
 
 ---
 
-### 1.4 DOC_MISSING — No AuditLog entry on booking creation
+### 1.4 ~~DOC_MISSING~~ RESOLVED — AuditLog on booking creation + no-account client booking
 
-**Status:** Known gap, low priority. `POST /api/bookings` creates no AuditLog. Cancellation, completion, and no-show are all logged. Adding creation logging is deferred.
+**Fixed (April 2026):**
+- `POST /api/bookings` now calls `logBookingAction(BOOKING_CREATED, INSTRUCTOR, ...)` after every successful booking creation (both wallet and no-account paths).
+- No-account client path added: if `client.userId` is null, booking is created as `PENDING_PAYMENT` and a "claim your account" email is sent to the student. The hard 422 rejection was removed.
+- `lib/services/email.ts` — `sendClaimAccountEmail()` added.
+- `app/dashboard/clients/page.tsx` — amber "No account" badge shown for clients without `userId`.
 
 ---
 
@@ -294,8 +298,9 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 | ABR_GUID | ~~Pending~~ | **RESOLVED** — set in .env; recheck-abn cron active (weekly, Mondays 2am) |
 | Prisma client stale | ~~Not generated~~ | **RESOLVED** — `prisma generate` run March 2026 |
 | Stripe Connect automated transfer | ~~Documented as "not yet configured"~~ | **RESOLVED** — `payout-service.ts` fully implements Stripe Connect path (`payoutMethod === 'stripe_connect'`). Instructors need `stripeAccountId` set to use it. |
-| AuditLog on booking creation | Documented in SYSTEM_FLOWS.md | Not implemented — `POST /api/bookings` creates no AuditLog |
-| AuditLog on admin booking status change | Documented in SYSTEM_FLOWS.md | Not implemented — `PATCH /api/admin/bookings` creates no AuditLog |
+| AuditLog on booking creation | Documented in SYSTEM_FLOWS.md | **RESOLVED** — `POST /api/bookings` now calls `logBookingAction` (April 2026) |
+| AuditLog on admin booking status change | Documented in SYSTEM_FLOWS.md | **RESOLVED** — `PATCH /api/admin/bookings` logs BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_CANCELLED |
+| Instructor book-on-behalf for no-account clients | Was hard 422 rejection | **RESOLVED** — creates PENDING_PAYMENT booking + sends claim email (April 2026) |
 | Google Calendar fields missing from schema | Was causing crash on every booking | **RESOLVED** — `googleAccessToken`, `googleRefreshToken`, `googleCalendarId` added to schema March 2026 |
 | Commission hardcoded | Was 15% regardless of tier | **RESOLVED** — both booking routes now use `getCommissionRate(tier)` |
 | Wallet balance drift | Instructor path didn't update stored balance | **RESOLVED** — atomic decrement added March 2026 |
@@ -565,3 +570,79 @@ ALTER TABLE "PlatformSettings"
 - `app/api/public/pricing/route.ts` — public endpoint returning live discount rates
 
 **Severity:** HIGH — without this, instructor rate increases silently overcharge students on pre-purchased packages
+
+---
+
+## 14. Slot Blocking, Price Lock & Discount Toggle (April 2026)
+
+### 14.1 RESOLVED — Slot blocking during booking flow (TOCTOU in public wizard)
+
+**Fixed (April 2026):** `app/api/availability/check-and-reserve/route.ts` implemented. Called by `BookingDetailsForm` when the student selects a time slot in the "Book Now" wizard step.
+
+**How it works:**
+- `POST /api/availability/check-and-reserve` — checks DB for overlapping PENDING/CONFIRMED bookings, then writes a 10-minute in-memory reservation keyed by `instructorId:date:time:duration:sessionId`
+- `DELETE /api/availability/check-and-reserve` — releases the reservation (called on slot removal and component unmount)
+- Reservations expire automatically after 10 minutes (same window as `PENDING_PAYMENT` booking expiry)
+- If another session tries to reserve the same slot, returns 409 `{ available: false, reason: 'Slot is temporarily reserved by another user' }`
+- `BookingDetailsForm` calls this before `addScheduledBooking()` — if 409, refreshes available slots and shows error
+
+**Note:** In-memory store — does not survive server restarts. Acceptable for dev/single-instance. For multi-instance production, replace `slotReservations` Map with Redis (Upstash).
+
+**Files:** `app/api/availability/check-and-reserve/route.ts`, `components/BookingDetailsForm.tsx`
+
+---
+
+### 14.2 RESOLVED — Price lock rule: book-now vs book-later
+
+**Fixed (April 2026):** Clear two-path rule implemented and enforced server-side.
+
+**Rule:**
+
+| Scenario | Rate used | Locked? |
+|----------|-----------|---------|
+| Buy package + book all slots now | `instructor.hourlyRate` at purchase time | Yes — stored as `lockedHourlyRate` on `Booking` |
+| Buy package + book later (wallet top-up) | `instructor.hourlyRate` at time of each individual booking | No — wallet is plain money |
+| Already-confirmed booking | `booking.price` (immutable after creation) | Yes — field never updated |
+
+**Book-now path (`public/bookings/bulk` with `bookingType: now`):**
+- `lockedHourlyRate` and `lockedDiscountPct` stored on the `Booking` record at creation
+- Instructor rate changes after purchase have zero effect on these bookings
+
+**Book-later path (`client/bookings/create-bulk`):**
+- Server fetches current `instructor.hourlyRate` at booking time
+- Client-submitted `item.price` is ignored entirely — server recalculates as `hourlyRate × duration`
+- If instructor raised rate from $70 to $80, student pays $80/hr when they book from dashboard
+- UI tip in `PackageSelector`: "Rate & discount locked at purchase" — this applies to book-now only; book-later students should be aware the rate is not locked
+
+**Files:** `app/api/public/bookings/bulk/route.ts` (stores locked values), `app/api/client/bookings/create-bulk/route.ts` (recalculates at booking time)
+
+---
+
+### 14.3 RESOLVED — Admin bulk discount toggle
+
+**Fixed (April 2026):** `PricingSettingsForm` now has an "Enable bulk discounts" master toggle at the top of the Package Discounts section.
+
+**Behaviour:**
+- Toggle ON → individual 6/10/15hr discount fields are active (default: 5/10/12%)
+- Toggle OFF → sets all three rates to 0% atomically — clients pay full hourly rate for any package size
+- Toggle back ON → restores sensible defaults (5/10/12%)
+- Individual fields remain editable regardless of toggle state
+- Saved via `POST /api/admin/pricing` — takes effect on next booking (existing bookings unaffected)
+
+**Files:** `components/admin/PricingSettingsForm.tsx`
+
+---
+
+### 14.4 RESOLVED — 409 price-change auto-refresh in subdomain wizard
+
+**Fixed (April 2026):** `SubdomainBookingWizard` now handles 409 responses from `POST /api/public/bookings/bulk` where the error message contains "pric".
+
+**Flow:**
+1. Student submits booking
+2. Server recalculates pricing — if client total differs by >$0.01, returns 409 `{ error: 'Pricing has changed...' }`
+3. Wizard re-fetches `/api/public/pricing` and calls `updateBooking({ platformSettings: freshSettings })`
+4. `BookingContext.calculatePricing()` recalculates with new rates — `PackageSelector` and order summary update automatically
+5. Amber banner shown: "Prices updated — please review the new totals and try again"
+6. Student can re-submit with the correct price
+
+**Files:** `components/subdomain/SubdomainBookingWizard.tsx`, `lib/contexts/BookingContext.tsx`

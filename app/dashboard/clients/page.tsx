@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, Phone, Mail, MapPin, Plus, Search, Edit2, ChevronDown, ChevronUp, Save, X, CalendarPlus } from 'lucide-react'
+import { User, Phone, Mail, MapPin, Plus, Search, Edit2, ChevronDown, ChevronUp, Save, X, CalendarPlus, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
 interface Client {
@@ -265,7 +265,15 @@ export default function ClientsPage() {
                           <User className="h-5 w-5 text-blue-600" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold truncate">{client.name}</h3>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold truncate">{client.name}</h3>
+                            {!client.userId && (
+                              <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex-shrink-0">
+                                <AlertCircle className="h-3 w-3" />
+                                No account
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-4 text-sm text-gray-600">
                             <span className="flex items-center gap-1">
                               <Phone className="h-3 w-3" />
@@ -416,6 +424,12 @@ export default function ClientsPage() {
                             <div className="pt-2 border-t text-xs text-gray-500">
                               Added {new Date(displayClient.createdAt).toLocaleDateString()}
                             </div>
+                            {!client.userId && (
+                              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                <span>This client hasn't registered yet. You can still book for them — they'll receive an email to claim their account and complete payment.</span>
+                              </div>
+                            )}
                             <div className="pt-2">
                               <Link
                                 href={`/dashboard/bookings/new?clientId=${client.id}`}

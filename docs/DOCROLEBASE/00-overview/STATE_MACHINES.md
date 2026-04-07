@@ -9,7 +9,8 @@ All entity state transitions in DriveBook. Every transition is explicit — no i
 ```
 PENDING_PAYMENT
     │
-    ├─► EXPIRED          (10-minute slot hold elapsed, no payment)
+    ├─► EXPIRED          (10-minute slot hold elapsed, no payment — Stripe path only)
+    │                    (instructor no-account path: no auto-expiry, student must claim)
     │
     └─► CONFIRMED        (payment captured — Stripe webhook or wallet debit)
             │
@@ -25,13 +26,15 @@ PENDING_PAYMENT
 | From | To | Who | Condition |
 |------|----|-----|-----------|
 | PENDING_PAYMENT | CONFIRMED | System | Payment captured (Stripe webhook or wallet confirm) |
-| PENDING_PAYMENT | EXPIRED | System | 10-minute hold elapsed without payment |
+| PENDING_PAYMENT | EXPIRED | System | 10-minute hold elapsed without payment (Stripe path only) |
 | CONFIRMED | COMPLETED | Admin | `endTime <= now` |
 | CONFIRMED | NO_SHOW | Admin | `startTime <= now` |
 | CONFIRMED | CANCELLED | Client / Instructor / Admin | Any time before lesson |
 | COMPLETED | CANCELLED | SUPER_ADMIN only | Requires override reason |
 
 COMPLETED and CANCELLED are terminal states. No further transitions except SUPER_ADMIN override.
+
+**Instructor no-account path:** When an instructor books for a client with no DriveBook account, the booking starts as `PENDING_PAYMENT` and stays there until the student registers, tops up their wallet, and confirms. There is no auto-expiry for these bookings.
 
 **No-show party:** When a booking is marked `NO_SHOW`, the `noShowParty` field on the `Booking` record is set to `'instructor'`, `'client'`, or `'both'`. This determines the resolution path in the Payouts admin panel.
 

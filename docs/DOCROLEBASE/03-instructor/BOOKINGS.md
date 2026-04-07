@@ -21,8 +21,8 @@ Instructors can create bookings on behalf of clients from `/dashboard/bookings/n
 
 **Requirements:**
 - Active subscription
-- Client must have a DriveBook account (`client.userId` must exist)
-- Client wallet balance ≥ lesson price
+- Client must belong to this instructor (`client.instructorId`)
+- Rate limiting applies
 
 **API:** `POST /api/bookings`
 
@@ -30,12 +30,28 @@ Instructors can create bookings on behalf of clients from `/dashboard/bookings/n
 
 **Concurrency:** Slot conflict is checked both before and inside the `$transaction` to prevent TOCTOU race conditions. If two concurrent requests race for the same slot, one will get a 409.
 
-If the client's wallet is insufficient, the API returns a `topUpAmount` value. The instructor can then send a payment link to the client via `POST /api/bookings/send-payment-link` — this emails the client a pre-filled wallet top-up link.
+### Client has a DriveBook account + sufficient wallet balance
 
-On successful booking creation, a **receipt email is sent to the student** via `sendWalletLessonReceipt()` showing:
+The normal path. Wallet is debited atomically, booking is created as `CONFIRMED` immediately.
+
+On success, a **receipt email is sent to the student** via `sendWalletLessonReceipt()` showing:
 - Lesson date, time, duration, instructor name
 - "Booked by: Your instructor" label
 - Wallet debit amount and remaining balance
+
+If the client's wallet is insufficient, the API returns a `topUpAmount` value. The instructor can then send a payment link to the client via `POST /api/bookings/send-payment-link` — this emails the client a pre-filled wallet top-up link.
+
+### Client has no DriveBook account
+
+If `client.userId` is null (client was added by the instructor but hasn't registered), the booking is still created — as `PENDING_PAYMENT` — without any wallet deduction.
+
+The student receives a **"claim your account" email** with:
+- Their lesson details (date, time, instructor name)
+- A link to `/register?email=...&ref=instructor-booking&bookingId=...` pre-filled with their email
+
+Once they register and top up their wallet, they can confirm the booking from their dashboard.
+
+The instructor's clients list shows an amber **"No account"** badge on clients without a DriveBook account, with a note explaining the flow.
 
 ---
 

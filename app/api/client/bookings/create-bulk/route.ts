@@ -16,7 +16,7 @@ const cartItemSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().regex(/^([0-1]?\d|2[0-3]):[0-5]\d$/),
   duration: z.number().min(0.5).max(8),
-  price: z.number().nonnegative(),
+  price: z.number().nonnegative(), // client hint only — server recalculates
   pickupLocation: z.string().min(0).max(300).optional(),
   service: z.string().min(0).max(500).optional()
 });
@@ -57,7 +57,6 @@ export async function POST(request: NextRequest) {
     const cartItems = parsed.data.cart;
 
     // ── Pre-flight checks OUTSIDE transaction ─────────────────────────────────
-    // These are read-only and slow — do them before opening the transaction.
 
     const user = await prisma.user.findUnique({ where: { email: session.user.email } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -65,6 +64,28 @@ export async function POST(request: NextRequest) {
     const client = await prisma.client.findFirst({ where: { userId: user.id } });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
+    // ── Fetch current instructor rates (server-side price recalculation) ───────
+    // "Book later" wallet funds are NOT rate-locked at purchase time.
+    // Each lesson is priced at the instructor's CURRENT hourlyRate at booking time.
+    // Client-submitted prices are ignored entirely.
+    const instructorIds = [...new Set(cartItems.map(i => i.instructorId))];
+    const instructors = await prisma.instructor.findMany({
+      where: { id: { in: instructorIds } },
+      select: { id: true, userId: true, hourlyRate: true }
+    });
+    const instructorMap = new Map(instructors.map(i => [i.id, i]));
+
+    const recalculatedItems = cartItems.map(item => {
+      const instructor = instructorMap.get(item.instructorId);
+      if (!instructor) throw new Error(`Instructor not found: ${item.instructorId}`);
+      // price = current hourlyRate × duration (hours) — rate NOT locked at wallet purchase
+      const serverPrice = parseFloat((instructor.hourlyRate * item.duration).toFixed(2));
+      return { ...item, price: serverPrice };
+    });
+
+    const totalCost = recalculatedItems.reduce((s, it) => s + it.price, 0);
+
+    // ── Wallet balance check ───────────────────────────────────────────────────
     const wallet = await prisma.clientWallet.findUnique({
       where: { userId: user.id },
       include: { transactions: { where: { status: 'CONFIRMED' } } }
@@ -74,9 +95,8 @@ export async function POST(request: NextRequest) {
     const totalCredits = wallet.transactions.filter(t => t.type.toUpperCase() === 'CREDIT').reduce((s, t) => s + t.amount, 0);
     const totalDebits = wallet.transactions.filter(t => t.type.toUpperCase() === 'DEBIT').reduce((s, t) => s + Math.abs(t.amount), 0);
     const actualBalance = totalCredits - totalDebits;
-    const totalCost = cartItems.reduce((s, it) => s + it.price, 0);
 
-    console.log('[BOOKING] Balance check:', { totalCredits, totalDebits, actualBalance, totalCost, sufficient: actualBalance >= totalCost });
+    console.log('[BOOKING] Balance check:', { actualBalance, totalCost, sufficient: actualBalance >= totalCost });
 
     if (actualBalance < totalCost) {
       return NextResponse.json({
@@ -86,26 +106,17 @@ export async function POST(request: NextRequest) {
 
     // Pre-compute commissions outside transaction (involves external calls)
     const commissions: any[] = [];
-    for (const item of cartItems) {
+    for (const item of recalculatedItems) {
       const commission = await paymentService.calculateCommission(item.instructorId, client.id, item.price);
       commissions.push(commission);
     }
 
-    // Validate instructors exist outside transaction
-    const instructorIds = [...new Set(cartItems.map(i => i.instructorId))];
-    const instructors = await prisma.instructor.findMany({
-      where: { id: { in: instructorIds } },
-      select: { id: true, userId: true }
-    });
-    const instructorMap = new Map(instructors.map(i => [i.id, i]));
-
     // ── Minimal transaction: slot claim + booking create + wallet debit ────────
-    // Keep this as small as possible to stay within the 5s timeout.
     const result = await prisma.$transaction(async (tx) => {
       const created: any[] = [];
 
-      for (let i = 0; i < cartItems.length; i++) {
-        const item = cartItems[i];
+      for (let i = 0; i < recalculatedItems.length; i++) {
+        const item = recalculatedItems[i];
         const commission = commissions[i];
         const startTime = parseDateTime(item.date, item.time);
         const endTime = new Date(startTime.getTime() + item.duration * 60 * 60 * 1000);
@@ -135,7 +146,7 @@ export async function POST(request: NextRequest) {
             endTime,
             duration: item.duration,
             pickupAddress: item.pickupLocation || null,
-            price: item.price,
+            price: item.price,           // server-recalculated price
             platformFee: commission.platformFee,
             instructorPayout: commission.instructorPayout,
             commissionRate: commission.commissionRate,
@@ -157,24 +168,23 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Debit wallet
+      // Debit wallet using server-calculated total
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: 'DEBIT',
           amount: totalCost,
-          description: `Booked ${cartItems.length} lesson${cartItems.length > 1 ? 's' : ''}`,
+          description: `Booked ${recalculatedItems.length} lesson${recalculatedItems.length > 1 ? 's' : ''}`,
           status: 'CONFIRMED',
         }
       });
 
       return { created, totalCost, remaining: actualBalance - totalCost };
     }, {
-      timeout: 15000, // 15s — enough for the minimal work inside
+      timeout: 15000,
     });
 
-    // ── Post-transaction: ledger + transaction records + notifications ─────────
-    // These are non-critical and can run after the transaction commits.
+    // ── Post-transaction: transaction records + notifications + receipts ───────
     for (const c of result.created) {
       try {
         await (prisma as any).transaction.create({
@@ -206,7 +216,6 @@ export async function POST(request: NextRequest) {
         console.error('[Notification] Failed:', e);
       }
 
-      // Send receipt per booking
       try {
         const durationHours = typeof c.booking.duration === 'number' ? c.booking.duration : 1;
         const hourlyRate = durationHours > 0 ? c.booking.price / durationHours : c.booking.price;

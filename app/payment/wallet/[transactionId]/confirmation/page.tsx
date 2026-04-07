@@ -84,6 +84,15 @@ export default function WalletPaymentConfirmation() {
           >
             Book a Lesson Now
           </Link>
+          <Link
+            href="/login"
+            className="block w-full text-center text-sm text-blue-600 hover:underline mt-2"
+          >
+            Not logged in? Login to DriveBook
+          </Link>
+          <p className="text-xs text-gray-400 text-center">
+            Your account was created automatically. Login with the email you used to book.
+          </p>
         </div>
       </div>
     </div>

@@ -87,7 +87,16 @@ When a student purchases a package via the public booking form or subdomain:
 5. Receipt email sent
 
 **Rate & discount locking:**
-At package purchase time, `lockedHourlyRate` and `lockedDiscountPct` are stored on the booking record. When the student later books individual lessons from the package, the deduction uses `lockedHourlyRate` — not the instructor's current rate.
+
+| Scenario | Rate used | Locked? |
+|----------|-----------|---------|
+| Buy package + book all slots now | `instructor.hourlyRate` at purchase time | Yes — `lockedHourlyRate` + `lockedDiscountPct` on `Booking` |
+| Buy package + book later (wallet top-up) | `instructor.hourlyRate` at time of each individual booking | No — wallet is plain money |
+| Already-confirmed booking | `booking.price` (immutable) | Yes |
+
+**Book-now:** `lockedHourlyRate` and `lockedDiscountPct` stored on the booking at creation. Instructor rate changes after purchase have zero effect.
+
+**Book-later:** The wallet holds money, not a rate promise. When the student books individual lessons from the dashboard (`POST /api/client/bookings/create-bulk`), the server fetches the instructor's current `hourlyRate` and recalculates the price server-side — client-submitted prices are ignored. If the instructor raised their rate from $70 to $80 between the top-up and the booking, the student pays $80/hr.
 
 **Wallet top-up (not yet booked):**
 A plain wallet top-up is just money — no rate is locked. If the instructor changes their rate between the top-up and the booking, the booking uses the current rate at booking time.

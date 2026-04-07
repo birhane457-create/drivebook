@@ -49,6 +49,7 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
   const [step, setStep] = useState<Step>('package');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [priceUpdated, setPriceUpdated] = useState(false);
   const [paymentOpened, setPaymentOpened] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
 
@@ -139,6 +140,7 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
     if (!validateRegistration()) return;
     setLoading(true);
     setError(null);
+    setPriceUpdated(false);
 
     try {
       const res = await fetch('/api/public/bookings/bulk', {
@@ -165,6 +167,23 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
       });
 
       const data = await res.json();
+
+      if (res.status === 409 && data.error?.toLowerCase().includes('pric')) {
+        // Pricing changed — re-fetch live rates, recalculate, show notice
+        try {
+          const pricingRes = await fetch('/api/public/pricing');
+          if (pricingRes.ok) {
+            const freshSettings = await pricingRes.json();
+            updateBooking({ platformSettings: freshSettings });
+          }
+        } catch {
+          // ignore — defaults already in context
+        }
+        setPriceUpdated(true);
+        setError('Prices have been updated — please review the new totals and try again.');
+        return;
+      }
+
       if (res.ok) {
         const host = window.location.host;
         const parts = host.split('.');
@@ -290,7 +309,8 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
       <ProgressBar />
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+        <div className={`p-3 border rounded-lg text-sm ${priceUpdated ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          {priceUpdated && <span className="font-semibold">Prices updated — </span>}
           {error}
         </div>
       )}

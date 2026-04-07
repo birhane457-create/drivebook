@@ -11,9 +11,19 @@ There are two distinct booking creation paths:
 **Path A — Instructor creates booking (wallet payment):**
 ```
 1. Instructor opens booking form (/dashboard/bookings/new)
-2. POST /api/bookings → Booking created (CONFIRMED directly, no PENDING_PAYMENT)
+2. POST /api/bookings
+
+   Path A1 — Client has account + sufficient wallet balance:
+   └─ Booking created (CONFIRMED directly, no PENDING_PAYMENT)
    └─ Wallet debited atomically in same transaction
    └─ Transaction created (BOOKING_PAYMENT, COMPLETED)
+   └─ Receipt email sent to student
+
+   Path A2 — Client has no DriveBook account (client.userId is null):
+   └─ Booking created (PENDING_PAYMENT, no wallet deduction)
+   └─ "Claim your account" email sent to student with registration link
+   └─ Student registers → tops up wallet → confirms booking from dashboard
+
 3. Lesson occurs
 4. Admin marks booking COMPLETED (/admin/bookings)
    └─ PATCH /api/admin/bookings → status: COMPLETED
@@ -37,9 +47,7 @@ There are two distinct booking creation paths:
 5. Admin marks booking COMPLETED → same as Path A steps 4–5
 ```
 
-AuditLog entries created: `BOOKING_COMPLETED`, `PAYOUT_PAID`
-
-Note: `BOOKING_CREATED` is not currently logged for instructor-created bookings (known gap — low priority).
+AuditLog entries created: `BOOKING_CREATED` (instructor), `BOOKING_COMPLETED`, `PAYOUT_PAID`
 
 ---
 
