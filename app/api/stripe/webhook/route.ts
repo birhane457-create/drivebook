@@ -13,7 +13,7 @@ import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2026-02-25.clover',
 });
 
 /**
@@ -641,24 +641,18 @@ async function handleBookingPaymentSuccess(
       }
     }
 
-    // SMS booking confirmation (non-critical)
+    // SMS booking confirmation — student only (non-critical)
+    // Instructor gets in-app notification; SMS confirmation only goes to the student
     try {
       const { smsService } = await import('@/lib/services/sms');
-      if (booking?.client?.phone && booking?.instructor) {
-        const instructorRecord = await prisma.instructor.findUnique({
-          where: { id: booking.instructorId },
-          select: { phone: true },
+      if (booking?.client?.phone && booking?.instructor && booking.startTime) {
+        await smsService.sendBookingConfirmation({
+          clientPhone: booking.client.phone,
+          clientName: booking.client.name || booking.clientName || 'Student',
+          instructorName: booking.instructor.name,
+          startTime: booking.startTime,
+          price: booking.price,
         });
-        if (instructorRecord?.phone && booking.startTime) {
-          await smsService.sendBookingConfirmation({
-            clientPhone: booking.client.phone,
-            instructorPhone: instructorRecord.phone,
-            clientName: booking.client.name || booking.clientName || 'Student',
-            instructorName: booking.instructor.name,
-            startTime: booking.startTime,
-            price: booking.price,
-          });
-        }
       }
     } catch (smsErr) {
       console.error('SMS confirmation failed (non-critical):', smsErr);

@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
         source: 'offline',
         offlinePaymentMethod: data.offlinePaymentMethod ?? null,
         offlineAmountPaid: data.offlineAmountPaid ?? null,
+        clientEmail: data.clientEmail ?? null,
       } as any,
     });
 

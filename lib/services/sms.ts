@@ -56,20 +56,47 @@ class SMSService {
     }
   }
 
-  // Booking reminder (24 hours before)
-  async sendBookingReminder(data: {
+  // Booking confirmation — student only
+  // Instructor gets in-app notification + email; SMS would be too noisy for them
+  async sendBookingConfirmation(data: {
+    clientPhone: string;
+    clientName: string;
+    instructorName: string;
+    startTime: Date;
+    price: number;
+  }) {
+    const clientMessage = `Booking confirmed! Your lesson with ${data.instructorName} is on ${data.startTime.toLocaleDateString('en-AU')} at ${data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}. Price: $${data.price}`;
+    return this.sendSMS({ to: data.clientPhone, message: clientMessage });
+  }
+
+  // 24hr lesson reminder — student
+  async sendLessonReminderStudent(data: {
     clientPhone: string;
     clientName: string;
     instructorName: string;
     startTime: Date;
     pickupAddress?: string;
   }) {
-    const message = `Hi ${data.clientName}! Reminder: Your driving lesson with ${data.instructorName} is tomorrow at ${data.startTime.toLocaleTimeString()}. ${data.pickupAddress ? `Pickup: ${data.pickupAddress}` : ''} Reply CONFIRM to confirm.`;
-    
-    return this.sendSMS({
-      to: data.clientPhone,
-      message,
-    });
+    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+    const pickup = data.pickupAddress ? ` Pickup: ${data.pickupAddress}.` : '';
+    const message = `Hi ${data.clientName}! Reminder: your driving lesson with ${data.instructorName} is tomorrow ${dateStr} at ${timeStr}.${pickup}`;
+    return this.sendSMS({ to: data.clientPhone, message });
+  }
+
+  // 24hr lesson reminder — instructor
+  async sendLessonReminderInstructor(data: {
+    instructorPhone: string;
+    instructorName: string;
+    clientName: string;
+    startTime: Date;
+    pickupAddress?: string;
+  }) {
+    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+    const pickup = data.pickupAddress ? ` Pickup: ${data.pickupAddress}.` : '';
+    const message = `Hi ${data.instructorName}! Reminder: lesson with ${data.clientName} tomorrow ${dateStr} at ${timeStr}.${pickup}`;
+    return this.sendSMS({ to: data.instructorPhone, message });
   }
 
   // Check-in notification

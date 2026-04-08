@@ -135,7 +135,19 @@ ALTER TABLE "Booking"
 
 ---
 
-## Revenue & Commission Rules
+## Notifications for Offline Bookings
+
+Offline students don't have a DriveBook account, so in-app notifications don't apply. Instead:
+
+| Event | Student | Instructor |
+|-------|---------|------------|
+| Booking created | ❌ No confirmation (no account) | ✅ In-app notification |
+| 24hr reminder | ✅ SMS to `clientPhone` (if provided) | ✅ SMS to instructor phone |
+| 24hr reminder | ✅ Email to `clientEmail` (if provided) | ✅ In-app notification |
+
+The `clientEmail` field is stored on the `Booking` record for offline bookings and used by the lesson reminders cron.
+
+---
 
 Offline bookings are **completely excluded** from:
 - Platform commission calculation
@@ -189,6 +201,9 @@ This is the most important rule in the offline booking system.
 | Offline booking form at `/dashboard/bookings/new?offline=true` | ✅ Done |
 | Analytics — offline excluded from revenue/commission stats | ✅ Done (Transaction table naturally excludes offline — no Transaction record created) |
 | Prisma schema updated | ✅ Done |
+| `clientEmail` stored on offline booking for email reminders | ✅ Done |
+| SMS + email reminders for offline students (24hr cron) | ✅ Done |
+| SMS reminder for instructor (24hr cron, all bookings) | ✅ Done |
 
 ---
 

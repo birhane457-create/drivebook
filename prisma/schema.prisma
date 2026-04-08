@@ -210,6 +210,7 @@ model Booking {
   source                String     @default("platform") // 'platform' | 'offline'
   offlinePaymentMethod  String?    // 'cash' | 'bank_transfer' | 'other'
   offlineAmountPaid     Float?     // instructor's record only — not platform revenue
+  clientEmail           String?    // stored for offline bookings — used for email reminders
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 
