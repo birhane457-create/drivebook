@@ -2,7 +2,7 @@
 
 **Feature name:** Offline Booking Tracking / Schedule Manager  
 **Tier gate:** PRO and above  
-**Status:** Planned — not yet implemented  
+**Status:** Implemented — April 2026  
 **Spec date:** April 2026
 
 ---

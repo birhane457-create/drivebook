@@ -49,8 +49,8 @@ What the system guarantees, and the mechanism that enforces each guarantee.
 | Gap | Status |
 |-----|--------|
 | Stripe Connect automated transfer | Not yet configured — payouts are manual bank transfer |
-| `sendReminder` in compliance route | Logs intent but does not send email yet |
-| Staff governance stats API | `/api/admin/staff-governance/stats` endpoint not yet implemented |
+| `sendReminder` in compliance route | ~~Logs intent only~~ | **RESOLVED** — now sends real email to instructor listing expiring docs |
+| Staff governance stats API | ~~Endpoint not yet implemented~~ | **RESOLVED** — `GET /api/admin/staff-governance/stats` implemented with real DB queries |
 | ~~STRIPE_WEBHOOK_SECRET~~ | **RESOLVED** — real secret set (test mode); replace with production secret at go-live |
 | ~~Prisma client stale~~ | **RESOLVED** — `prisma generate` run March 2026; payout + ledger services functional |
 | `wallet.balance` drift | Instructor booking path creates `WalletTransaction` but does not update stored `balance` field |

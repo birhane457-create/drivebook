@@ -64,7 +64,7 @@ How the system detects, surfaces, and recovers from failures.
 
 ### ABN Cancelled After Verification
 
-- Daily `recheck-abn` cron detects cancellation
+- Weekly `recheck-abn` cron (Mondays 2am AEST) detects cancellation
 - `abnVerified: false`, `withholdingTaxRate: 47` set automatically
 - Alert email sent: `ABN_VERIFICATION_REVOKED`
 - AuditLog: `ABN_VERIFICATION_REVOKED`
@@ -76,7 +76,7 @@ How the system detects, surfaces, and recovers from failures.
 
 ### Lesson Completed but Not Marked
 
-- Transaction stays in `COMPLETED` (not `SETTLED`)
+- Transaction stays in `COMPLETED` (instructor wallet path) or `SETTLED` (Stripe path)
 - Not payout-eligible until admin marks booking `COMPLETED`
 - No automated resolution — admin action required
 

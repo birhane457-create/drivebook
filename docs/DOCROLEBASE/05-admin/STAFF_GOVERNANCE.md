@@ -77,7 +77,7 @@ These are static status indicators — they reflect system design, not live chec
 
 ## Notes
 
-- The `/api/admin/staff-governance/stats` endpoint is expected to aggregate data from tasks, bookings, and transactions. If the endpoint is not yet implemented, the page will show a "Failed to load governance data" error state.
+- The `/api/admin/staff-governance/stats` endpoint aggregates data from pending instructor approvals, disputes, refund totals, failed/stuck payouts, and expired documents. It returns real DB counts — not placeholder data.
 - This page is intended for SUPER_ADMIN and platform owner use. Regular ADMIN users may have read-only access depending on role configuration.
 
 ---

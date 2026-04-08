@@ -292,8 +292,8 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 | Feature | Documented | Status |
 |---------|-----------|--------|
-| `sendReminder` in compliance route | Logs intent only | No email sent — `console.log` only |
-| Staff governance stats API `/api/admin/staff-governance/stats` | Documented in STAFF_GOVERNANCE.md | Endpoint does not exist |
+| `sendReminder` in compliance route | ~~Logs intent only~~ | **RESOLVED** — now sends real email to instructor listing expiring docs with days remaining |
+| Staff governance stats API `/api/admin/staff-governance/stats` | ~~Endpoint does not exist~~ | **RESOLVED** — implemented with real DB queries (pending approvals, disputes, refunds, stuck payouts, expired docs) |
 | `STRIPE_WEBHOOK_SECRET` | ~~Placeholder~~ | **RESOLVED** — set in .env (test mode) |
 | ABR_GUID | ~~Pending~~ | **RESOLVED** — set in .env; recheck-abn cron active (weekly, Mondays 2am) |
 | Prisma client stale | ~~Not generated~~ | **RESOLVED** — `prisma generate` run March 2026 |
@@ -332,8 +332,8 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 ### Medium priority (docs only — no code impact)
 3. ~~Update `STATE_MACHINES.md`~~ — **DONE** — transaction states corrected: `SETTLED` not `COMPLETED`, `CANCELLED` not `REFUNDED`, two-path model documented, `noShowParty` field added
 4. ~~Update `SYSTEM_FLOWS.md`~~ — **DONE** — instructor-created vs Stripe booking paths distinguished, transaction statuses corrected, no-show flow updated to use `noShowParty` field, reconciliation check descriptions corrected, ABN recheck corrected to weekly
-5. Document `sendReminder` as not yet implemented (currently a no-op `console.log`) — low priority, no user impact
-6. Document staff governance stats endpoint as missing — low priority, page still renders without it
+5. ~~Document `sendReminder` as not yet implemented~~ — **RESOLVED** — `sendReminder` now sends real email to instructor listing expiring docs
+6. ~~Document staff governance stats endpoint as missing~~ — **RESOLVED** — endpoint implemented
 
 ### Resolved this session (March 2026)
 - ~~Cancel route missing~~ — created `app/api/bookings/[id]/cancel/route.ts` with single atomic transaction
@@ -476,25 +476,16 @@ The actual transaction status values in use: `COMPLETED`, `SETTLED`, `CANCELLED`
 
 ---
 
-### 11.9 ~~ENHANCEMENT~~ RESOLVED — Notification triggers incomplete
+### 11.9 ~~ENHANCEMENT~~ FULLY RESOLVED — Notification triggers complete
 
-**Fixed (April 2026):**
-- `notifyReviewReceived()` wired into `app/api/reviews/route.ts` after review creation
-- `notifyDocumentExpiring()` wired into `app/api/admin/documents/compliance/route.ts` `sendReminder` action (was a no-op `console.log`)
-- `notifyLessonReminder()` — still not wired (requires a scheduled cron, deferred)
+**Fixed (April 2026 — fully resolved):**
+- `notifyReviewReceived()` — wired into `app/api/reviews/route.ts` ✅
+- `notifyDocumentExpiring()` — wired into `app/api/admin/documents/compliance/route.ts` `sendReminder` action ✅
+- `sendReminder` now also sends a real email to the instructor listing expiring docs with days remaining ✅
+- `notifyLessonReminderInstructor()` + `notifyLessonReminderStudent()` — fully wired into `app/api/cron/lesson-reminders/route.ts` ✅
+- Lesson reminders cron also sends SMS to both instructor and student, and email to offline students ✅
 
-**File:** `lib/services/notifications.ts`
-
-**Defined but never called:**
-- `notifyLessonReminder()` — no cron sends lesson reminders
-- `notifyDocumentExpiring()` — no cron checks document expiry
-- `notifyReviewReceived()` — review creation doesn't call this
-
-**Risk:** Instructors and students miss important notifications.
-
-**Fix:** Wire `notifyLessonReminder()` into a daily cron (24h before lesson). Wire `notifyReviewReceived()` into the review creation route. Wire `notifyDocumentExpiring()` into the compliance cron.
-
-**Severity:** MEDIUM — feature gap
+**All notification triggers are now wired. No deferred items remain in this area.**
 
 ---
 
@@ -662,12 +653,12 @@ ALTER TABLE "PlatformSettings"
 | Medium (M1–M6) | 6 | No |
 | Low (L1–L8) | 8 | No |
 
-**Critical items still open:**
-- C1: `UPSTASH_REDIS_REST_URL` empty — rate limiting is in-memory only in production
-- C2: Lesson reminders cron is a no-op — `notifyLessonReminder()` never called
-- C3: Client review UI missing — no way for students to leave reviews
-- C4: Fake testimonials on `/teach-with-drivebook` — credibility risk
-- C5: `ABN: [Your ABN]` placeholder in footer — legal non-compliance
+**Critical items status (April 2026):**
+- C1: `UPSTASH_REDIS_REST_URL` empty — rate limiting is in-memory only in production ❌ Open (owner to set in Vercel)
+- C2: ~~Lesson reminders cron is a no-op~~ ✅ **RESOLVED** — `notifyLessonReminderInstructor()` + `notifyLessonReminderStudent()` fully wired; SMS + email for offline students added
+- C3: ~~Client review UI missing~~ ✅ **RESOLVED** — `ReviewModal`, `GET /api/client/pending-reviews`, "Leave Review" button on bookings page
+- C4: ~~Fake testimonials on `/teach-with-drivebook`~~ ✅ **RESOLVED** — replaced with honest "Early Access" section
+- C5: `ABN: [Your ABN]` placeholder in footer — legal non-compliance ❌ Open (owner to add real ABN)
 
 See `docs/LAUNCH_PLAN.md` for full details, fix instructions, and production deployment checklist.
 
