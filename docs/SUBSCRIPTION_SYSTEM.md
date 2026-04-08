@@ -45,8 +45,8 @@ maxInstructors      Int       @default(1)
 ### `Subscription` model
 
 ```
-id                   ObjectId
-instructorId         ObjectId
+id                   String (CUID)
+instructorId         String
 tier                 String           (BASIC | PRO | STUDIO | BUSINESS)
 status               String           (TRIAL | ACTIVE | PAST_DUE | CANCELLED)
 billingCycle         String           (monthly | annual)

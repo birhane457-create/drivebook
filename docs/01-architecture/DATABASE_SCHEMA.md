@@ -2,8 +2,9 @@
 
 **Purpose**: Define data models and relationships  
 **Owner**: Technical Team  
-**Last Updated**: March 22, 2026  
-**Scope**: MongoDB schema via Prisma ORM  
+**Last Updated**: April 2026  
+**Scope**: PostgreSQL (Supabase) via Prisma ORM  
+**Note:** This document shows the current PostgreSQL schema. The `@db.ObjectId` annotations shown below are from the original MongoDB schema and have been removed — see `docs/DOCROLEBASE/08-technical/POSTGRES_MIGRATION.md` for the migration history. The actual current schema is in `prisma/schema.prisma`.
 
 ---
 

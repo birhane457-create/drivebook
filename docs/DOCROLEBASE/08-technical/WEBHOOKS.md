@@ -51,7 +51,7 @@ if (existing) return { received: true, duplicate: true };
 await prisma.webhookEvent.create({ data: { idempotencyKey, ... } });
 ```
 
-Webhook events are retained indefinitely in MongoDB. Add a TTL index if storage becomes a concern.
+Webhook events are retained indefinitely in PostgreSQL. Add a cleanup cron or Supabase scheduled function if storage becomes a concern.
 
 ---
 

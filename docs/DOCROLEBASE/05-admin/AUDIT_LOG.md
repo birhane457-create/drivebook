@@ -25,7 +25,7 @@ Each `AuditLog` entry contains:
 
 | Field | Description |
 |-------|-------------|
-| `id` | MongoDB ObjectId — monotonically increasing, used for cursor pagination |
+| `id` | PostgreSQL CUID — used for cursor pagination |
 | `action` | Standardised action string (e.g. `PAYOUT_PAID`) |
 | `actorId` | User ID of the admin who triggered the action, or `SYSTEM` for automated actions |
 | `actorRole` | `ADMIN`, `SUPER_ADMIN`, or `SYSTEM` |
@@ -91,7 +91,7 @@ Returns a paginated list of audit log entries, newest first.
 
 **Pagination notes:**
 - Cursor-based (not offset). Safe for high-frequency writes — no skipped or duplicated rows between pages.
-- Cursor is the `id` of the last entry on the current page (MongoDB ObjectId).
+- Cursor is the `id` (CUID) of the last entry on the current page.
 - Sort is always `createdAt DESC`.
 
 ---
@@ -198,7 +198,14 @@ The `AuditLog` collection should have the following indexes for acceptable query
 { action: 1, createdAt: -1 }
 ```
 
-These are not yet defined in `schema.prisma` (MongoDB with Prisma does not require explicit index declarations for basic queries, but they should be added via the MongoDB Atlas UI or a migration script before the collection exceeds ~100k entries).
+These are not yet defined as explicit Prisma indexes. Add them via a Supabase SQL migration before the table exceeds ~100k entries:
+
+```sql
+CREATE INDEX IF NOT EXISTS "AuditLog_createdAt_idx" ON "AuditLog" ("createdAt" DESC);
+CREATE INDEX IF NOT EXISTS "AuditLog_targetType_createdAt_idx" ON "AuditLog" ("targetType", "createdAt" DESC);
+CREATE INDEX IF NOT EXISTS "AuditLog_actorId_createdAt_idx" ON "AuditLog" ("actorId", "createdAt" DESC);
+CREATE INDEX IF NOT EXISTS "AuditLog_action_createdAt_idx" ON "AuditLog" ("action", "createdAt" DESC);
+```
 
 ---
 

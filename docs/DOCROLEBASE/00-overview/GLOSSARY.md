@@ -166,7 +166,7 @@ Terms used throughout DriveBook documentation and codebase.
 
 ## Technical
 
-**Prisma** — The ORM used to interact with MongoDB. Schema at `prisma/schema.prisma`.
+**Prisma** — The ORM used to interact with PostgreSQL (Supabase). Schema at `prisma/schema.prisma`.
 
 **PlatformSettings** — A singleton DB record (key = `"default"`) storing all admin-configurable rates and fees, including commission rates per tier, `withholdingTaxRate`, and surcharges. Accessed via `lib/services/platform-pricing.ts`.
 

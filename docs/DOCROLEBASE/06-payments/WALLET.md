@@ -9,15 +9,15 @@
 
 ```
 ClientWallet
-  id        ObjectId
-  userId    ObjectId (unique — one wallet per user)
+  id        String (CUID)
+  userId    String (unique — one wallet per user)
   balance   Float    (NOT used — computed from transactions)
   createdAt DateTime
   updatedAt DateTime
 
 WalletTransaction
-  id          ObjectId
-  walletId    ObjectId
+  id          String (CUID)
+  walletId    String
   amount      Float
   type        CREDIT | DEBIT
   description String?

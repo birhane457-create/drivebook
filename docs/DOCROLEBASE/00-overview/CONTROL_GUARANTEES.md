@@ -27,7 +27,7 @@ What the system guarantees, and the mechanism that enforces each guarantee.
 | Every critical action is audited | `AuditLog.create()` called in every mutation path |
 | No orphan bookings | Slot expiry cron cleans PENDING_PAYMENT bookings after 10 minutes |
 | Cron jobs don't double-run | Concurrency lock checked at start of each cron execution |
-| Compliance failures are surfaced | Daily `recheck-abn` and `reconcile-stripe` crons + alert emails |
+| Compliance failures are surfaced | **Weekly** `recheck-abn` (Mondays 2am) and daily `reconcile-stripe` crons + alert emails |
 | Admin is always in control | All lifecycle transitions require ADMIN or SUPER_ADMIN session |
 
 ---
