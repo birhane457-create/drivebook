@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X, RefreshCw } from 'lucide-react'
+import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X, RefreshCw, Banknote } from 'lucide-react'
 import Link from 'next/link'
 
 interface Booking {
@@ -16,16 +16,21 @@ interface Booking {
   notes?: string
   checkInTime?: string
   checkOutTime?: string
+  source?: string // 'platform' | 'offline'
+  offlinePaymentMethod?: string
+  offlineAmountPaid?: number
   client: {
     name: string
     phone: string
     email: string
   }
+  clientName?: string // offline bookings may not have a client record
 }
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'platform' | 'offline'>('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -220,10 +225,11 @@ export default function BookingsPage() {
     const matchesSearch = clientName.toLowerCase().includes(search.toLowerCase())
     const bookingDate = new Date(booking.startTime)
     const now = new Date()
-    
-    if (filter === 'upcoming') return bookingDate >= now && matchesSearch
-    if (filter === 'past') return bookingDate < now && matchesSearch
-    return matchesSearch
+    const matchesSource = sourceFilter === 'all' || (booking.source ?? 'platform') === sourceFilter
+
+    if (filter === 'upcoming') return bookingDate >= now && matchesSearch && matchesSource
+    if (filter === 'past') return bookingDate < now && matchesSearch && matchesSource
+    return matchesSearch && matchesSource
   })
 
   const getStatusColor = (status: string) => {
@@ -258,13 +264,22 @@ export default function BookingsPage() {
               </div>
             </div>
           )}
-          <Link 
-            href="/dashboard/bookings/new"
-            className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700"
-          >
-            <Plus className="h-5 w-5" />
-            New Booking
-          </Link>
+          <div className="flex gap-2">
+            <Link 
+              href="/dashboard/bookings/new"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm font-medium"
+            >
+              <Plus className="h-4 w-4" />
+              Platform Booking
+            </Link>
+            <Link
+              href="/dashboard/bookings/new?offline=true"
+              className="bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-800 text-sm font-medium"
+            >
+              <Banknote className="h-4 w-4" />
+              Offline / Cash
+            </Link>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow p-4 mb-6">
@@ -282,25 +297,16 @@ export default function BookingsPage() {
               </div>
             </div>
             
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFilter('all')}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilter('upcoming')}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg ${filter === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
-              >
-                Upcoming
-              </button>
-              <button
-                onClick={() => setFilter('past')}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg ${filter === 'past' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
-              >
-                Past
-              </button>
+            <div className="flex flex-wrap gap-2">
+              {/* Time filter */}
+              <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-lg text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>All</button>
+              <button onClick={() => setFilter('upcoming')} className={`px-3 py-1.5 rounded-lg text-sm ${filter === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Upcoming</button>
+              <button onClick={() => setFilter('past')} className={`px-3 py-1.5 rounded-lg text-sm ${filter === 'past' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Past</button>
+              {/* Source filter */}
+              <div className="w-px bg-gray-200 mx-1" />
+              <button onClick={() => setSourceFilter('all')} className={`px-3 py-1.5 rounded-lg text-sm ${sourceFilter === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-100'}`}>All Types</button>
+              <button onClick={() => setSourceFilter('platform')} className={`px-3 py-1.5 rounded-lg text-sm ${sourceFilter === 'platform' ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-100'}`}>Platform</button>
+              <button onClick={() => setSourceFilter('offline')} className={`px-3 py-1.5 rounded-lg text-sm ${sourceFilter === 'offline' ? 'bg-gray-200 text-gray-800 border border-gray-400' : 'bg-gray-100'}`}>Offline</button>
             </div>
           </div>
         </div>
@@ -344,6 +350,16 @@ export default function BookingsPage() {
                             <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(booking.status)}`}>
                               {booking.status}
                             </span>
+                            {/* Source badge */}
+                            {(booking.source ?? 'platform') === 'offline' ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-gray-200 text-gray-700 border border-gray-300 flex items-center gap-1">
+                                <Banknote className="h-3 w-3" /> Offline
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                                Platform
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-4 text-sm text-gray-600">
                             <span className="flex items-center gap-1">

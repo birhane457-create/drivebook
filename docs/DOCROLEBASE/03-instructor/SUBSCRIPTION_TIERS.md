@@ -26,6 +26,7 @@ DriveBook uses a 4-tier subscription model for instructors. Three tiers are live
 | Custom slug | ❌ | ✅ | ✅ | ✅ |
 | Branded booking page | ❌ | ✅ | ✅ | ✅ |
 | Custom domain | ❌ | ❌ | ✅ | ✅ |
+| Offline booking tracking | ❌ | ✅ | ✅ | ✅ |
 | Priority support | ❌ | ✅ | ✅ | ✅ |
 | Multiple instructors | ❌ | ❌ | ❌ | ✅ |
 | API access | ❌ | ❌ | ❌ | ✅ |
@@ -70,6 +71,7 @@ For instructors growing their business and wanting a professional presence.
 - Document management
 - Check-in/Check-out system
 - Custom service areas
+- **Offline booking tracking** — log cash/bank lessons in your schedule without platform payment
 - 12% commission per booking
 - 10% bonus for new students
 - Priority email support
@@ -186,6 +188,7 @@ Feature access is checked at the component level using `instructor.subscriptionT
 | Custom domain | `app/subdomain/[slug]/page.tsx` — `isPro` check |
 | Branding settings | `app/dashboard/branding/page.tsx` — shows upgrade wall for BASIC |
 | Custom slug | `app/api/instructor/branding/route.ts` |
+| Offline booking tracking | `POST /api/bookings/offline` — returns 403 with `upgradeRequired: true` for BASIC |
 
 **Note:** Color customization (`brandColorPrimary`, `brandColorSecondary`) applies to all tiers on the subdomain page. Logo and white-label nav require PRO+.
 

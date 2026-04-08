@@ -207,6 +207,9 @@ model Booking {
   clientRating          Int?
   clientReview          String?
   reviewGivenAt         DateTime?
+  source                String     @default("platform") // 'platform' | 'offline'
+  offlinePaymentMethod  String?    // 'cash' | 'bank_transfer' | 'other'
+  offlineAmountPaid     Float?     // instructor's record only — not platform revenue
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 

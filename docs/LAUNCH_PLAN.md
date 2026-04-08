@@ -56,7 +56,7 @@
 | M3 | Availability slots no caching | ✅ Deferred — acceptable at current scale; add Redis when instructors > 100 |
 | M4 | Staff governance stats endpoint missing | ✅ Done — `GET /api/admin/staff-governance/stats` created with real DB queries |
 | M5 | Stripe API preview version | ✅ Done — pinned to `2024-12-18.acacia` (stable) |
-| M6 | `as any` casts for test package fields | ⏳ Owner to run SQL in Supabase (see production checklist below), then remove casts |
+| M6 | `as any` casts for test package fields | ✅ Done — SQL run via `prisma.$executeRawUnsafe`, all 4 columns added to `Instructor` table |
 
 ---
 

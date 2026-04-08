@@ -490,11 +490,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(req.url)
+    const sourceFilter = searchParams.get('source') // 'platform' | 'offline' | null (all)
+
     const bookings = await prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
         status: { in: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] },
         deletedAt: null,
+        ...(sourceFilter ? { source: sourceFilter } as any : {}),
       } as any,
       include: { client: true },
       orderBy: { startTime: 'asc' }

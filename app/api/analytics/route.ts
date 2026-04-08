@@ -46,14 +46,14 @@ export async function GET(req: NextRequest) {
       clientCount,
       avgRating
     ] = await Promise.all([
-      // Total bookings in period
+      // Total bookings in period — platform only (exclude offline from schedule count too? No — include all for schedule)
       prisma.booking.count({
         where: {
           instructorId: session.user.instructorId,
           ...(startDate && { startTime: { gte: startDate } })
         }
       }),
-      // Completed bookings
+      // Completed bookings (all sources — for schedule stats)
       prisma.booking.count({
         where: {
           instructorId: session.user.instructorId,
@@ -77,7 +77,8 @@ export async function GET(req: NextRequest) {
           ...(startDate && { startTime: { gte: startDate } })
         }
       }),
-      // FIXED: Use Transaction table like earnings API does
+      // Revenue: platform transactions only — offline bookings have no Transaction record
+      // and commissionRate: 0, so they are naturally excluded from Transaction queries.
       (prisma as any).transaction.aggregate({
         where: {
           instructorId: session.user.instructorId,

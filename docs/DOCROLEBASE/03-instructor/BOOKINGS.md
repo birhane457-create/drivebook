@@ -127,4 +127,5 @@ After a lesson is completed, the instructor can submit PDA-style feedback:
 
 - [CHECK_IN.md](./CHECK_IN.md) — Mobile check-in detail
 - [CLIENTS.md](./CLIENTS.md) — Client management
+- [OFFLINE_BOOKINGS.md](./OFFLINE_BOOKINGS.md) — Offline booking tracking (PRO+)
 - `docs/BOOKING_SYSTEM.md` — Full booking system reference
