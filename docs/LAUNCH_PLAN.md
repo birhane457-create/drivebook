@@ -28,10 +28,10 @@ These block a safe production launch.
 | # | Issue | Impact | Status |
 |---|-------|--------|--------|
 | C1 | `UPSTASH_REDIS_REST_URL` is empty — rate limiting falls back to in-memory | No abuse protection in production | ❌ Open |
-| C2 | Lesson reminders cron runs but `notifyLessonReminder()` is a no-op | Students miss lesson reminders | ❌ Open |
-| C3 | Client review UI missing — no way for students to leave reviews | No feedback collection | ❌ Open |
-| C4 | Fake testimonials on `/teach-with-drivebook` (James T., Sarah M., etc.) | Damages credibility | ❌ Open |
-| C5 | `ABN: [Your ABN]` placeholder in footer | Legal non-compliance | ❌ Open |
+| C2 | Lesson reminders cron runs but `notifyLessonReminder()` is a no-op | Students miss lesson reminders | ✅ Done — cron fully wired with `notifyLessonReminderInstructor` + `notifyLessonReminderStudent` |
+| C3 | Client review UI missing — no way for students to leave reviews | No feedback collection | ✅ Done — `ReviewModal` web component + `GET /api/client/pending-reviews` + "Leave Review" button on bookings page |
+| C4 | Fake testimonials on `/teach-with-drivebook` (James T., Sarah M., etc.) | Damages credibility | ✅ Done — replaced with honest "Early Access" section |
+| C5 | `ABN: [Your ABN]` placeholder in footer | Legal non-compliance | ⏳ Owner to fix |
 
 **Fix C1:** Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Vercel env vars (get from upstash.com — free tier is fine).
 

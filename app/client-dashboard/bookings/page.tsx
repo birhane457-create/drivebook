@@ -13,10 +13,12 @@ import {
   Edit2,
   X as XIcon,
   MapPin,
-  User
+  User,
+  Star
 } from 'lucide-react';
 import RescheduleModal from '@/components/RescheduleModal';
 import CancelDialog from '@/components/CancelDialog';
+import ReviewModal from '@/components/ReviewModal';
 
 interface Booking {
   id: string;
@@ -63,6 +65,11 @@ export default function ClientBookingsPage() {
     date: string;
     instructor: string;
     price: number;
+  } | null>(null);
+  const [reviewModal, setReviewModal] = useState<{
+    isOpen: boolean;
+    bookingId: string;
+    instructorName: string;
   } | null>(null);
 
   useEffect(() => {
@@ -246,40 +253,55 @@ export default function ClientBookingsPage() {
                     </div>
                   </div>
 
-                  {booking.status === 'upcoming' && (
-                    <div className="flex flex-col gap-2 ml-4">
+                  <div className="flex flex-col gap-2 ml-4">
+                    {booking.status === 'upcoming' && (
+                      <>
+                        <button
+                          onClick={() => setRescheduleModal({
+                            isOpen: true,
+                            bookingId: booking.id,
+                            instructorId: booking.instructor.id,
+                            date: booking.date,
+                            time: booking.time,
+                            duration: booking.duration * 60,
+                            price: booking.price,
+                            instructor: booking.instructor.name,
+                            hourlyRate: booking.instructor.hourlyRate
+                          })}
+                          className="px-4 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-2"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          Reschedule
+                        </button>
+                        <button
+                          onClick={() => setCancelDialog({
+                            isOpen: true,
+                            bookingId: booking.id,
+                            date: booking.date,
+                            instructor: booking.instructor.name,
+                            price: booking.price
+                          })}
+                          className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold flex items-center gap-2"
+                        >
+                          <XIcon className="w-4 h-4" />
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                    {booking.status === 'completed' && (
                       <button
-                        onClick={() => setRescheduleModal({
+                        onClick={() => setReviewModal({
                           isOpen: true,
                           bookingId: booking.id,
-                          instructorId: booking.instructor.id,
-                          date: booking.date,
-                          time: booking.time,
-                          duration: booking.duration * 60, // Convert hours to minutes
-                          price: booking.price,
-                          instructor: booking.instructor.name,
-                          hourlyRate: booking.instructor.hourlyRate
+                          instructorName: booking.instructor.name,
                         })}
-                        className="px-4 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-2"
+                        className="px-4 py-2 text-yellow-600 border border-yellow-500 rounded-lg hover:bg-yellow-50 transition text-sm font-semibold flex items-center gap-2"
                       >
-                        <Edit2 className="w-4 h-4" />
-                        Reschedule
+                        <Star className="w-4 h-4" />
+                        Leave Review
                       </button>
-                      <button
-                        onClick={() => setCancelDialog({
-                          isOpen: true,
-                          bookingId: booking.id,
-                          date: booking.date,
-                          instructor: booking.instructor.name,
-                          price: booking.price
-                        })}
-                        className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold flex items-center gap-2"
-                      >
-                        <XIcon className="w-4 h-4" />
-                        Cancel
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -335,6 +357,17 @@ export default function ClientBookingsPage() {
           instructorName={cancelDialog.instructor}
           bookingDate={cancelDialog.date}
           bookingPrice={cancelDialog.price}
+          onSuccess={loadData}
+        />
+      )}
+
+      {/* Review Modal */}
+      {reviewModal && (
+        <ReviewModal
+          isOpen={reviewModal.isOpen}
+          onClose={() => setReviewModal(null)}
+          bookingId={reviewModal.bookingId}
+          instructorName={reviewModal.instructorName}
           onSuccess={loadData}
         />
       )}

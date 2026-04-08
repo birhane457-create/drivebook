@@ -220,35 +220,17 @@ export default function TeachWithDriveBookPage() {
 
         {/* Testimonials */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-10 text-gray-800">What Instructors Say</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            <blockquote className="border-l-4 border-green-600 p-6 bg-gray-50 rounded-r-lg">
-              <p className="text-gray-700 italic mb-4">
-                &quot;Since joining DriveBook, my bookings have doubled. The AI receptionist handles calls while I&apos;m teaching, and I get paid on time every week. Game changer!&quot;
-              </p>
-              <p className="font-semibold text-gray-900">— James T., Driving Instructor, London</p>
-            </blockquote>
-            
-            <blockquote className="border-l-4 border-green-600 p-6 bg-gray-50 rounded-r-lg">
-              <p className="text-gray-700 italic mb-4">
-                &quot;I used to spend hours managing spreadsheets and chasing payments. Now everything is automated. I can focus on teaching instead of admin work.&quot;
-              </p>
-              <p className="font-semibold text-gray-900">— Sarah M., Driving Instructor, Manchester</p>
-            </blockquote>
-            
-            <blockquote className="border-l-4 border-green-600 p-6 bg-gray-50 rounded-r-lg">
-              <p className="text-gray-700 italic mb-4">
-                &quot;The AI receptionist is incredible. I never miss a booking anymore, even when I&apos;m in the car all day. My revenue has increased by 40%.&quot;
-              </p>
-              <p className="font-semibold text-gray-900">— David K., Driving Instructor, Birmingham</p>
-            </blockquote>
-            
-            <blockquote className="border-l-4 border-green-600 p-6 bg-gray-50 rounded-r-lg">
-              <p className="text-gray-700 italic mb-4">
-                &quot;Best decision I made for my driving school. The platform is easy to use, students love the booking system, and I get paid weekly without any hassle.&quot;
-              </p>
-              <p className="font-semibold text-gray-900">— Emma R., Driving Instructor, Leeds</p>
-            </blockquote>
+          <h2 className="text-4xl text-center mb-4 text-gray-800">What Instructors Say</h2>
+          <p className="text-center text-gray-500 mb-10 text-sm">Be among the first instructors on DriveBook — early members shape the platform.</p>
+          <div className="bg-green-50 border border-green-200 rounded-2xl p-10 text-center max-w-2xl mx-auto">
+            <div className="text-5xl mb-4">🎯</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Early Access — Limited Spots</h3>
+            <p className="text-gray-600 mb-6">
+              DriveBook is launching soon. The first instructors to join get priority listing, lower commission rates during the launch period, and direct input into new features.
+            </p>
+            <Link href="/register" className="inline-block bg-green-600 text-white px-8 py-4 rounded-lg no-underline font-bold text-lg hover:bg-green-700 transition-all">
+              Claim Your Spot →
+            </Link>
           </div>
         </section>
 

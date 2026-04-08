@@ -1,96 +1,54 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 
-
 export const dynamic = 'force-dynamic';
-export async function GET(req: NextRequest) {
+
+/**
+ * GET /api/client/pending-reviews
+ * Returns completed bookings (past startTime, status CONFIRMED or COMPLETED)
+ * that have not yet been reviewed by this client.
+ */
+export async function GET() {
   try {
-    // Try JWT token first (for mobile), then NextAuth session (for web)
-    const auth = await validateMobileToken(req);
-    const userId = auth.valid ? auth.user?.id : null;
-
-    if (!userId) {
-      // Fall back to NextAuth for web clients
-      const session = await getServerSession(authOptions);
-      if (!session?.user?.email) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
-        );
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { email: session.user.email },
-      });
-
-      if (!user) {
-        return NextResponse.json(
-          { error: 'User not found' },
-          { status: 404 }
-        );
-      }
-
-      return getClientPendingReviews(user.id);
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    return getClientPendingReviews(userId);
-  } catch (error) {
-    console.error('Error fetching pending reviews:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
+    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-async function getClientPendingReviews(userId: string) {
-  try {
-    // TODO: Review model not yet implemented in schema
-    // Return empty array until model is added
-    return NextResponse.json([]);
+    const client = await prisma.client.findFirst({ where: { userId: user.id } });
+    if (!client) return NextResponse.json([]);
 
-    /* Uncomment when Review model is added to schema:
-    // First, find all clients associated with this user
-    const clients = await prisma.client.findMany({
-      where: { userId: userId },
-      select: { id: true }
-    });
+    const now = new Date();
 
-    const clientIds = clients.map(c => c.id);
-
-    // Get completed bookings that don't have reviews yet
-    const completedBookings = await prisma.booking.findMany({
+    const bookings = await prisma.booking.findMany({
       where: {
-        clientId: { in: clientIds },
-        status: 'COMPLETED',
-        reviews: {
-          none: {} // No reviews yet
-        }
-      },
+        clientId: client.id,
+        status: { in: ['CONFIRMED', 'COMPLETED'] },
+        startTime: { lt: now },
+        isReviewed: false,
+      } as any,
       include: {
-        instructor: true,
-        reviews: true
+        instructor: { select: { name: true } },
       },
-      orderBy: { endTime: 'desc' }
+      orderBy: { startTime: 'desc' },
+      take: 20,
     });
 
-    const pendingReviews = completedBookings.map(booking => ({
-      id: booking.id,
-      bookingId: booking.id,
-      instructorName: booking.instructor.name,
-      bookingDate: booking.startTime?.toISOString() || new Date().toISOString()
+    const pending = bookings.map(b => ({
+      id: b.id,
+      bookingId: b.id,
+      instructorName: b.instructor.name,
+      bookingDate: b.startTime?.toISOString() ?? '',
     }));
 
-    return NextResponse.json(pendingReviews);
-    */
+    return NextResponse.json(pending);
   } catch (error) {
-    console.error('Error fetching pending reviews:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Pending reviews error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
