@@ -137,7 +137,9 @@ Metadata includes: `abn`, `entityName`, `note`.
 
 ### Automatic ABN Recheck
 
-A daily cron at `GET /api/cron/recheck-abn` re-validates all instructor ABNs against the ABR API. If an ABN that was previously active is found to be cancelled or invalid, it sets `abnVerified: false`, `withholdingTaxRate: 47`, and fires an alert via the alert service.
+A **weekly** cron (Mondays 2am AEST) at `GET /api/cron/recheck-abn` re-validates all instructor ABNs against the ABR API. If an ABN that was previously active is found to be cancelled or invalid, it sets `abnVerified: false`, `withholdingTaxRate: 47`, and fires an alert via the alert service.
+
+Requires `ABR_GUID` env var to be set. If not configured, the cron returns `{ skipped: true }` and does nothing.
 
 ---
 

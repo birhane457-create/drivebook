@@ -102,12 +102,14 @@ export async function POST(req: NextRequest) {
       const instructor = await prisma.instructor.findUnique({
         where: { id: instructorId },
         select: {
+          name: true,
           userId: true,
           workingHours: true,
           licenseImageFront: true,
           insurancePolicyDoc: true,
           policeCheckDoc: true,
           wwcCheckDoc: true,
+          user: { select: { email: true } },
         },
       });
       if (instructor?.userId) {
@@ -119,13 +121,31 @@ export async function POST(req: NextRequest) {
           { name: 'Police Check', expiry: exp.policeCheckExpiry, url: instructor.policeCheckDoc },
           { name: 'Working With Children Check', expiry: exp.wwcCheckExpiry, url: instructor.wwcCheckDoc },
         ];
-        for (const doc of docs) {
-          if (doc.url && doc.expiry) {
-            const status = docStatus(doc.expiry, doc.url);
-            if (status.status !== 'valid') {
-              await notifyDocumentExpiring(instructor.userId, doc.name, new Date(doc.expiry)).catch(() => {});
-            }
-          }
+        const expiringDocs = docs.filter(d => d.url && d.expiry && docStatus(d.expiry, d.url).status !== 'valid');
+
+        for (const doc of expiringDocs) {
+          // In-app notification
+          await notifyDocumentExpiring(instructor.userId, doc.name, new Date(doc.expiry!)).catch(() => {});
+        }
+
+        // Email reminder — send directly to instructor's email
+        if (expiringDocs.length > 0 && instructor.user?.email) {
+          const { emailService } = await import('@/lib/services/email');
+          const docList = expiringDocs.map(d => {
+            const days = Math.ceil((new Date(d.expiry!).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+            return `<li><strong>${d.name}</strong> — ${days < 0 ? 'EXPIRED' : `expires in ${days} day${days !== 1 ? 's' : ''}`}</li>`;
+          }).join('');
+          await emailService.sendGenericEmail({
+            to: instructor.user.email,
+            subject: `Action required: ${expiringDocs.length} document${expiringDocs.length > 1 ? 's' : ''} expiring — ${instructor.name}`,
+            html: `
+              <h2>Document Expiry Reminder</h2>
+              <p>Hi ${instructor.name},</p>
+              <p>The following document${expiringDocs.length > 1 ? 's require' : ' requires'} your attention:</p>
+              <ul>${docList}</ul>
+              <p>Please upload updated documents from your <a href="${process.env.NEXTAUTH_URL}/dashboard/documents">instructor dashboard</a> to avoid suspension.</p>
+            `,
+          }).catch(e => console.error('Document reminder email failed:', e));
         }
       }
       return NextResponse.json({ success: true, message: 'Reminder sent' });

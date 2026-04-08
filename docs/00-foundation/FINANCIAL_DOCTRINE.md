@@ -40,7 +40,9 @@ No payment (free/testing) → No transaction → No payout
 **When**: Client pays for booking  
 **Amount**: Full booking price  
 **Creates**: Original transaction record  
-**Status**: PENDING → COMPLETED  
+**Status flow**: Created as `COMPLETED` (instructor wallet path) or updated to `SETTLED` by Stripe webhook (public booking path)
+
+**Payout eligibility:** `SETTLED` status — not `COMPLETED`. The webhook sets transactions to `SETTLED` after Stripe confirms payment. `COMPLETED` is used for instructor-created wallet bookings which bypass Stripe entirely.
 
 **Example**:
 ```json
@@ -49,7 +51,7 @@ No payment (free/testing) → No transaction → No payout
   "amount": 140.00,
   "platformFee": 21.00,
   "instructorPayout": 119.00,
-  "status": "COMPLETED",
+  "status": "SETTLED",
   "bookingId": "booking_123"
 }
 ```
@@ -326,19 +328,26 @@ const refundAmount = booking.price * (refundPercentage / 100);
 ### Payout Eligibility
 
 **Requirements**:
-1. Booking status = COMPLETED
-2. Transaction status = COMPLETED
-3. 24 hours passed since completion
-4. Not already paid (status ≠ PAID)
+1. Booking status = `CONFIRMED` or `COMPLETED`
+2. Transaction status = `SETTLED` (set by Stripe webhook after payment confirmed)
+3. 24 hours passed since booking end time
+4. Not already covered by an active or paid payout
+
+**Note on status terminology:**
+- `SETTLED` = payout-eligible (Stripe payment confirmed by webhook)
+- `COMPLETED` = used for instructor-created wallet bookings (bypass Stripe)
+- Both are payout-eligible; the payout query uses `status: 'SETTLED'`
 
 **Check**:
 ```typescript
 const eligibleTransactions = await prisma.transaction.findMany({
   where: {
-    status: 'COMPLETED',
-    processedAt: { 
-      lt: new Date(Date.now() - 24 * 60 * 60 * 1000) 
-    }
+    status: 'SETTLED',
+    type: 'BOOKING_PAYMENT',
+    booking: {
+      status: { in: ['CONFIRMED', 'COMPLETED'] },
+      endTime: { lte: bufferCutoff }, // 24hr buffer
+    },
   }
 });
 ```

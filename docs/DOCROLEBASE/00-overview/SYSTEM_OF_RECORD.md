@@ -8,9 +8,9 @@ For every domain, there is exactly one authoritative source of truth. When data 
 
 | Domain | Source of Truth | Notes |
 |--------|----------------|-------|
-| Bookings | `Booking` collection (MongoDB) | Status, timing, participants |
-| Payments | Stripe + `Transaction` collection | Stripe is authoritative for payment status; Transaction is authoritative for platform accounting |
-| Client wallet balance | `ClientWallet.balance` | Derived from `WalletTransaction` sum — reconciled daily |
+| Bookings | `Booking` table (PostgreSQL) | Status, timing, participants |
+| Payments | Stripe + `Transaction` table | Stripe is authoritative for payment status; Transaction is authoritative for platform accounting |
+| Client wallet balance | `WalletTransaction` sum (computed) | `ClientWallet.balance` is a cached copy — the transaction sum is authoritative. Two code paths exist: instructor booking path recomputes from transactions (correct); admin booking path uses stored `balance` field directly (known inconsistency, low risk). When they conflict, the transaction sum wins. |
 | Instructor earnings | `Transaction.instructorPayout` sum | Not stored as a running total — always computed |
 | Payouts | `Payout` + `PayoutTransaction` collections | Payout system is authoritative for what has been paid |
 | Commission rates | `PlatformSettings` (DB) | Never stored on `Instructor` — always fetched at payment time |
