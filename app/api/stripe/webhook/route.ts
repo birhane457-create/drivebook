@@ -13,7 +13,7 @@ import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-01-28.clover',
+  apiVersion: '2024-12-18.acacia',
 });
 
 /**
@@ -639,6 +639,29 @@ async function handleBookingPaymentSuccess(
           paymentMethod: 'Card',
         }).catch(e => console.error('Single lesson receipt email failed:', e));
       }
+    }
+
+    // SMS booking confirmation (non-critical)
+    try {
+      const { smsService } = await import('@/lib/services/sms');
+      if (booking?.client?.phone && booking?.instructor) {
+        const instructorRecord = await prisma.instructor.findUnique({
+          where: { id: booking.instructorId },
+          select: { phone: true },
+        });
+        if (instructorRecord?.phone && booking.startTime) {
+          await smsService.sendBookingConfirmation({
+            clientPhone: booking.client.phone,
+            instructorPhone: instructorRecord.phone,
+            clientName: booking.client.name || booking.clientName || 'Student',
+            instructorName: booking.instructor.name,
+            startTime: booking.startTime,
+            price: booking.price,
+          });
+        }
+      }
+    } catch (smsErr) {
+      console.error('SMS confirmation failed (non-critical):', smsErr);
     }
   } catch (notifError) {
     console.error('Failed to create payment notification:', notifError);

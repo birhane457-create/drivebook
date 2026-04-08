@@ -12,6 +12,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
+    const skip = (page - 1) * limit;
+
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const bufferCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -45,6 +50,21 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    });
+
+    const totalEligible = await prisma.transaction.count({
+      where: {
+        status: 'SETTLED',
+        type: 'BOOKING_PAYMENT',
+        id: excludeIds.length ? { notIn: excludeIds } : undefined,
+        booking: {
+          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          endTime: { lte: bufferCutoff },
+          deletedAt: null,
+        },
+      },
     });
 
     // WITHHELD: cancelled/no-show bookings with SETTLED transactions
@@ -229,6 +249,9 @@ export async function GET(req: NextRequest) {
       totalPending,
       completedThisMonth: completedAgg._sum.netAmount || 0,
       failedPayouts,
+      page,
+      totalPages: Math.ceil(totalEligible / limit),
+      totalEligible,
       // Manual transfer queues
       pendingTransferPayouts: pendingTransferPayouts.map((p) => {
         const inst = manualInstructorMap.get(p.instructorId);

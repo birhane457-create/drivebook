@@ -13,6 +13,9 @@ export async function GET(req: NextRequest) {
     const nameQuery = searchParams.get('name') || '';
     // ?admin=true — skip approved-only filter, return extra fields
     const isAdmin = searchParams.get('admin') === 'true';
+    // Pagination
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
 
     if (!location && !nameQuery) {
       return NextResponse.json({ error: 'Provide location or name' }, { status: 400 });
@@ -47,7 +50,15 @@ export async function GET(req: NextRequest) {
     if (nameQuery && !location) {
       const nl = nameQuery.toLowerCase();
       const matched = instructors.filter(i => i.name.toLowerCase().includes(nl));
-      return NextResponse.json({ instructors: format(matched, null), count: matched.length });
+      const total = matched.length;
+      const paginated = matched.slice((page - 1) * limit, page * limit);
+      return NextResponse.json({
+        instructors: format(paginated, null),
+        count: paginated.length,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+      });
     }
 
     // --- Location / radius search ---
@@ -61,9 +72,14 @@ export async function GET(req: NextRequest) {
         const hay = `${i.serviceAreas || ''} ${i.baseAddress || ''}`.toLowerCase();
         return tokens.some(t => hay.includes(t));
       });
+      const total = fallback.length;
+      const paginated = fallback.slice((page - 1) * limit, page * limit);
       return NextResponse.json({
-        instructors: format(fallback, null),
-        count: fallback.length,
+        instructors: format(paginated, null),
+        count: paginated.length,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
         geocodeFailed: true,
         message: `Could not resolve "${location}" to coordinates — showing text matches`,
       });
@@ -74,14 +90,11 @@ export async function GET(req: NextRequest) {
 
     await Promise.all(
       instructors.map(async (i) => {
-        if (!i.baseAddress) return; // can't do radius check without a base
-
+        if (!i.baseAddress) return;
         const base = await geocode(i.baseAddress);
         if (!base) return;
-
         const radius = i.serviceRadiusKm ?? DEFAULT_RADIUS_KM;
         const dist = distanceKm(searchPoint, base);
-
         if (dist <= radius) {
           results.push({ instructor: i, distKm: Math.round(dist * 10) / 10 });
         }
@@ -91,12 +104,18 @@ export async function GET(req: NextRequest) {
     // Sort closest first
     results.sort((a, b) => a.distKm - b.distKm);
 
+    const total = results.length;
+    const paginated = results.slice((page - 1) * limit, page * limit);
+
     return NextResponse.json({
-      instructors: results.map(({ instructor: i, distKm }) => ({
+      instructors: paginated.map(({ instructor: i, distKm }) => ({
         ...format([i], searchPoint)[0],
         distance: distKm,
       })),
-      count: results.length,
+      count: paginated.length,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
       searchQuery: location,
       searchPoint,
     });
@@ -110,7 +129,7 @@ export async function GET(req: NextRequest) {
 function format(
   instructors: {
     id: string; name: string; profileImage: string | null; carImage: string | null;
-    carMake: string | null; carModel: string | null; carYear: number | null;
+    carMake: string | null; carModel: string | null; carYear: string | number | null;
     hourlyRate: number; vehicleTypes: string | null; languages: string | null;
     averageRating: number | null; totalReviews: number; bio: string | null;
     serviceAreas: string | null; baseAddress: string | null; serviceRadiusKm: number | null;
