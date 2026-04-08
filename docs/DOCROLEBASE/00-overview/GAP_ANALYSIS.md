@@ -646,3 +646,37 @@ ALTER TABLE "PlatformSettings"
 6. Student can re-submit with the correct price
 
 **Files:** `components/subdomain/SubdomainBookingWizard.tsx`, `lib/contexts/BookingContext.tsx`
+
+---
+
+## 15. Launch Readiness Assessment (April 2026)
+
+**Full inspection completed April 2026.** Findings consolidated into `docs/LAUNCH_PLAN.md` which is now the single source of truth for outstanding work.
+
+**Summary of open items:**
+
+| Priority | Count | Blocking launch? |
+|----------|-------|-----------------|
+| Critical (C1–C5) | 5 | Yes |
+| High (H1–H5) | 5 | No, but important |
+| Medium (M1–M6) | 6 | No |
+| Low (L1–L8) | 8 | No |
+
+**Critical items still open:**
+- C1: `UPSTASH_REDIS_REST_URL` empty — rate limiting is in-memory only in production
+- C2: Lesson reminders cron is a no-op — `notifyLessonReminder()` never called
+- C3: Client review UI missing — no way for students to leave reviews
+- C4: Fake testimonials on `/teach-with-drivebook` — credibility risk
+- C5: `ABN: [Your ABN]` placeholder in footer — legal non-compliance
+
+See `docs/LAUNCH_PLAN.md` for full details, fix instructions, and production deployment checklist.
+
+**Note:** The following files are now superseded by `LAUNCH_PLAN.md` and can be ignored:
+- `FINAL_IMPLEMENTATION_STATUS.md`
+- `FINAL_STATUS_SUMMARY.md`
+- `P0_FIXES_COMPLETE.md`
+- `P0_README.md`
+- `REMAINING_WORK.md`
+- `DEPLOY_NOW.md`
+- `ALL_ISSUES_FIXED.md`
+- `VERIFICATION_COMPLETE.md`
