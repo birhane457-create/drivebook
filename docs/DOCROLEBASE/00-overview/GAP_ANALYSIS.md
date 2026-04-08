@@ -1,20 +1,13 @@
-# Gap Analysis — Documentation vs Reality
+# Gap Analysis — Historical Audit Record
 
-**Inspection date:** March 2026  
+> **This file is a historical audit log, not current documentation.**  
+> It records gaps that were found and fixed during development. For the current state of the system, read the feature docs in `DOCROLEBASE/` and `docs/LAUNCH_PLAN.md`.
+
+**Inspection date:** March–April 2026  
 **Method:** Direct code read of all critical paths vs documentation claims  
 **Scope:** Booking flow, payment flow, payout flow, cancellation, reconciliation, ABN, state machines, schema
 
-Each gap is classified:
-
-- `DOC_WRONG` — documentation says X, code does Y
-- `DOC_MISSING` — code does something not documented anywhere
-- `CODE_MISSING` — documentation describes something not yet implemented in code
-- `SCHEMA_GAP` — Prisma schema does not match what code or docs claim
-- `KNOWN_GAP` — already noted in CONTROL_GUARANTEES.md, listed here for completeness
-
 ---
-
-## 1. Booking Creation Flow
 
 ### 1.1 ~~DOC_WRONG~~ RESOLVED — Booking does not start as PENDING_PAYMENT
 
