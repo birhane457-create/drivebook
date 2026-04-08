@@ -10,8 +10,12 @@
 
 Shows all bookings for the instructor, filterable by:
 - Status (upcoming, completed, cancelled)
-- Date range
-- Client name
+- Source (platform / offline)
+- Client name search
+
+Two create buttons: "Platform Booking" and "Offline / Cash" (PRO+).
+
+Each booking card shows a source badge: blue "Platform" or grey "Offline".
 
 ---
 
@@ -112,14 +116,19 @@ If `endTime` has already passed at check-in time, the booking is atomically set 
 
 ## Lesson Feedback
 
-After a lesson is completed, the instructor can submit PDA-style feedback:
+After a lesson is completed, the instructor can submit PDA-style feedback from the **booking detail page** (`/dashboard/bookings/[id]`).
+
+The feedback form (`components/instructor/LessonFeedbackForm.tsx`) appears in the "Lesson Feedback" section for past/completed bookings. If feedback has already been submitted, the score and notes are shown with an option to edit.
+
+**API:** `POST /api/instructor/lesson-feedback`
+
+Fields stored on `Booking`:
 - `lessonFeedback` — array of PDA feedback codes
 - `studentStrengths` — array of strength codes
 - `focusAreas` — array of focus area codes
-- `performanceScore` — integer score
-- `instructorNotes` — free text
-
-**File:** `components/instructor/LessonFeedbackForm.tsx`
+- `performanceScore` — integer score (0–100, calculated from codes)
+- `instructorNotes` — free text (strengths + areas to improve + notes combined)
+- `feedbackGivenAt` — timestamp
 
 ---
 

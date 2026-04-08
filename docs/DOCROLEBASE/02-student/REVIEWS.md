@@ -1,38 +1,67 @@
 # Student Reviews
 
+**Route:** `/client-dashboard/reviews`  
 **Auth required:** CLIENT role  
-**API:** `POST /api/bookings/[id]/review`
+**APIs:** `POST /api/reviews`, `GET /api/reviews`, `GET /api/client/pending-reviews`
 
 ---
 
 ## Leaving a Review
 
-After a lesson is `COMPLETED`, the student can leave a star rating (1–5) and optional text review.
+After a lesson has passed (startTime in the past) and the booking is `CONFIRMED` or `COMPLETED`, the student can leave a star rating (1–5) and a written comment.
 
-Stored on the `Booking` model:
+**Two entry points:**
+1. **Bookings page** (`/client-dashboard/bookings`) — a "Leave Review" button (yellow star icon) appears on each completed booking card
+2. **Reviews page** (`/client-dashboard/reviews`) — "Pending Reviews" tab lists all completed lessons awaiting a review
+
+**UI:** `components/ReviewModal.tsx` — modal with interactive star rating and comment textarea. Submits to `POST /api/reviews`.
+
+**Rules:**
+- One review per booking — once submitted, the button disappears
+- Booking must have a past `startTime` — cannot review future lessons
+- Only the client who made the booking can review it
+
+**Stored on the `Booking` model:**
 - `clientRating` — integer 1–5
-- `clientReview` — text (optional)
+- `clientReview` — text comment
 - `reviewGivenAt` — timestamp
+- `isReviewed` — boolean flag (set to `true` after submission)
 
-Reviews can only be submitted once per booking. The review form is shown on the booking detail page after the lesson is completed.
+---
+
+## Pending Reviews
+
+`GET /api/client/pending-reviews` returns completed past bookings where `isReviewed = false`. The reviews page shows these in the "Pending Reviews" tab so students know which lessons they haven't reviewed yet.
+
+---
+
+## After Submission
+
+On successful review:
+- `Booking.isReviewed` set to `true`
+- `Instructor.averageRating` and `Instructor.totalReviews` recalculated from all published reviews
+- Instructor receives an email notification: "New Review from [Student] — [Rating] stars"
+- In-app notification sent to instructor via `notifyReviewReceived()`
 
 ---
 
 ## Where Reviews Appear
 
-- Instructor's public profile (`/book/[instructorId]`)
+- Instructor's public booking page (`/book/[instructorId]`)
 - Instructor's subdomain page (`/subdomain/[slug]`)
-- Instructor's `averageRating` and `totalReviews` fields are updated on the `Instructor` model when a review is submitted
+- Admin reviews page (`/admin/reviews`) — read-only moderation view
 
 ---
 
 ## Admin Moderation
 
-Admins can view and manage reviews via `/admin/reviews`. Reviews are not deleted — they can be flagged or hidden by admin action.
+Admins can view all reviews via `/admin/reviews`. Reviews are not deleted — they can be flagged or hidden by admin action.
 
 ---
 
 ## Related
 
-- [BOOKINGS.md](./BOOKINGS.md) — Booking lifecycle
-- `docs/03-instructor/DASHBOARD.md` — How instructors see their ratings
+- [BOOKINGS.md](./BOOKINGS.md) — Booking lifecycle and the "Leave Review" button
+- `components/ReviewModal.tsx` — Review submission modal
+- `app/api/client/pending-reviews/route.ts` — Pending reviews API
+- `app/api/reviews/route.ts` — Review creation and retrieval

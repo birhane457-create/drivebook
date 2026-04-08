@@ -91,8 +91,10 @@
 
 **Instructor Dashboard**
 - Bookings list + booking detail page with PDA lesson feedback form
+- Platform / Offline source badges and filter tabs on bookings list
+- Offline booking form (`/dashboard/bookings/new?offline=true`) — PRO+ gate + platform client guard
 - Clients management
-- Earnings breakdown
+- Earnings breakdown (platform bookings only — offline excluded from revenue stats)
 - Availability (working hours + blocked dates)
 - Settings (rate, durations, service radius, custom packages)
 - Branding (logo, colors, custom domain)
@@ -103,7 +105,7 @@
 - Book lesson (search → instructor → cart → pay from wallet)
 - Wallet (balance, top-up, transaction history)
 - Bookings (upcoming + past, reschedule, cancel, leave review)
-- Reviews page (pending + submitted)
+- Reviews page (pending + submitted, `ReviewModal` component)
 - Progress tracking
 
 **Admin Panel**

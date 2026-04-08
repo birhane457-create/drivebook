@@ -35,7 +35,8 @@ DriveBook is a controlled operational and financial platform connecting driving 
 
 | Domain | Responsibility |
 |--------|---------------|
-| Bookings | Lifecycle from creation to completion or cancellation |
+| Bookings | Lifecycle from creation to completion or cancellation — platform and offline |
+| Offline Bookings | Instructor-managed schedule entries for cash/bank students (PRO+, no platform commission) |
 | Payments | Stripe capture, wallet debit, transaction recording |
 | Payouts | Instructor earnings calculation, withholding, transfer |
 | Wallet | Client credit balance — internal payment method |

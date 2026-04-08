@@ -15,6 +15,10 @@ Shows all bookings for the logged-in student, grouped by status:
 
 Each booking card shows: instructor name, date/time, duration, price, status badge.
 
+**For completed past bookings:** a "Leave Review" button (yellow star icon) appears. Clicking it opens `ReviewModal` — a star rating (1–5) + comment form. See [REVIEWS.md](./REVIEWS.md) for full details.
+
+**Reschedule button** appears on upcoming bookings. **Cancel button** appears on upcoming bookings.
+
 ---
 
 ## Book a Lesson
@@ -101,6 +105,7 @@ Bookings created this way are immediately `CONFIRMED` — no Stripe step, wallet
 ## Related
 
 - [WALLET.md](./WALLET.md) — Wallet balance and top-up
+- [REVIEWS.md](./REVIEWS.md) — Leaving reviews after lessons
 - `docs/06-payments/REFUNDS.md` — Refund policy details
 - `docs/BOOKING_SYSTEM.md` — Full booking system reference
 
