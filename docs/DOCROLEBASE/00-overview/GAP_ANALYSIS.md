@@ -47,6 +47,9 @@
 | 36 | 409 price-change refresh | Not built | SubdomainBookingWizard re-fetches pricing and shows amber banner |
 | 37 | Offline booking system | Not built | POST /api/bookings/offline with PRO gate and platform client guard |
 | 38 | SMS policy | Instructor received confirmation SMS | Confirmation SMS now student-only; instructor gets 24hr reminder SMS only |
+| 39 | AuditLog indexes missing | No indexes on AuditLog table | 4 indexes created via SQL migration (createdAt, targetType, actorId, action) |
+| 40 | Stripe payment events not in AuditLog | payment_intent.succeeded/failed not logged | PAYMENT_SUCCEEDED, PAYMENT_FAILED, WALLET_PAYMENT_SUCCEEDED actions added to webhook |
+| 41 | Bank transfer risk undocumented | No warning about format-only BSB validation | PAYOUTS.md documents: format-only validation, admin must confirm before first transfer |
 
 ---
 

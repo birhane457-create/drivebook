@@ -309,6 +309,28 @@ async function handleWalletPaymentSuccess(
 
   // Send wallet top-up receipt (non-critical)
   try {
+    const { logFinancialAction, AuditAction, ActorRole } = await import('@/lib/services/auditLogger');
+    const confirmedTx = confirmedTransactions[0];
+    if (confirmedTx) {
+      await logFinancialAction({
+        transactionId: confirmedTx.id,
+        action: AuditAction.WALLET_PAYMENT_SUCCEEDED,
+        actorId: 'SYSTEM',
+        actorRole: ActorRole.SYSTEM,
+        amount: paymentIntent.amount_received / 100,
+        metadata: {
+          stripePaymentIntentId: paymentIntent.id,
+          walletId: confirmedTx.walletId,
+          transactionCount: confirmedTransactions.length,
+          amountCents: paymentIntent.amount_received,
+        },
+      });
+    }
+  } catch (auditErr) {
+    console.error('AuditLog for wallet payment (non-critical):', auditErr);
+  }
+
+  try {
     const confirmedTx = confirmedTransactions[0];
     if (confirmedTx) {
       const walletRecord = await prisma.clientWallet.findUnique({
@@ -547,6 +569,30 @@ async function handleBookingPaymentSuccess(
 
   console.log(`✅ Booking payment processed with validations: ${bookingId}`);
 
+  // ── Audit log: Stripe payment event ──────────────────────────────────────
+  // This closes the audit blind spot — Stripe payment events are now in AuditLog
+  try {
+    const { logFinancialAction, AuditAction, ActorRole } = await import('@/lib/services/auditLogger');
+    const txRecord = await (prisma as any).transaction.findFirst({
+      where: { stripePaymentIntentId: paymentIntent.id },
+      select: { id: true, amount: true },
+    });
+    await logFinancialAction({
+      transactionId: txRecord?.id ?? bookingId,
+      action: AuditAction.PAYMENT_SUCCEEDED,
+      actorId: 'SYSTEM',
+      actorRole: ActorRole.SYSTEM,
+      amount: paymentIntent.amount_received / 100,
+      metadata: {
+        stripePaymentIntentId: paymentIntent.id,
+        bookingId,
+        amountCents: paymentIntent.amount_received,
+      },
+    });
+  } catch (auditErr) {
+    console.error('AuditLog for payment_succeeded failed (non-critical):', auditErr);
+  }
+
   // ── Ledger: record payment collected ─────────────────────────────────────
   // Moved inside the main flow (after transaction) but with retry on failure.
   // This populates totalCollected + totalReserved so payout balance checks work.
@@ -691,6 +737,26 @@ async function handleBookingPaymentFailed(
   });
 
   console.log(`❌ Booking payment failed: ${bookingId}`);
+
+  // Audit log: Stripe payment failure
+  try {
+    const { logFinancialAction, AuditAction, ActorRole } = await import('@/lib/services/auditLogger');
+    await logFinancialAction({
+      transactionId: bookingId,
+      action: AuditAction.PAYMENT_FAILED,
+      actorId: 'SYSTEM',
+      actorRole: ActorRole.SYSTEM,
+      amount: paymentIntent.amount / 100,
+      metadata: {
+        stripePaymentIntentId: paymentIntent.id,
+        bookingId,
+        failureMessage: paymentIntent.last_payment_error?.message,
+        failureCode: paymentIntent.last_payment_error?.code,
+      },
+    });
+  } catch (auditErr) {
+    console.error('AuditLog for payment_failed (non-critical):', auditErr);
+  }
 }
 
 // ============================================================================

@@ -55,6 +55,9 @@ Each `AuditLog` entry contains:
 | `DISPUTE_RESOLVED_SPLIT` | Dispute — split resolution | `resolve-split` endpoint |
 | `ABN_VERIFICATION_REVOKED` | ABN revoked | Weekly `recheck-abn` cron finds a cancelled ABN |
 | `ABN_VERIFIED` | ABN verified | Admin manually verifies via `POST /api/admin/instructors/[id]/verify-abn` |
+| `PAYMENT_SUCCEEDED` | Stripe payment confirmed | `payment_intent.succeeded` webhook — booking payment |
+| `PAYMENT_FAILED` | Stripe payment failed | `payment_intent.payment_failed` webhook |
+| `WALLET_PAYMENT_SUCCEEDED` | Wallet top-up confirmed | `payment_intent.succeeded` webhook — wallet/package purchase |
 | `INSTRUCTOR_APPROVED` | Instructor approved | Admin approves instructor registration |
 | `INSTRUCTOR_SUSPENDED` | Instructor suspended | Admin suspends instructor account |
 
@@ -189,23 +192,16 @@ Current SYSTEM actors:
 
 ## Performance Notes
 
-The `AuditLog` collection should have the following indexes for acceptable query performance at scale:
-
-```
-{ createdAt: -1 }
-{ targetType: 1, createdAt: -1 }
-{ actorId: 1, createdAt: -1 }
-{ action: 1, createdAt: -1 }
-```
-
-These are not yet defined as explicit Prisma indexes. Add them via a Supabase SQL migration before the table exceeds ~100k entries:
+The `AuditLog` table has the following indexes (created via SQL migration — already applied):
 
 ```sql
-CREATE INDEX IF NOT EXISTS "AuditLog_createdAt_idx" ON "AuditLog" ("createdAt" DESC);
-CREATE INDEX IF NOT EXISTS "AuditLog_targetType_createdAt_idx" ON "AuditLog" ("targetType", "createdAt" DESC);
-CREATE INDEX IF NOT EXISTS "AuditLog_actorId_createdAt_idx" ON "AuditLog" ("actorId", "createdAt" DESC);
-CREATE INDEX IF NOT EXISTS "AuditLog_action_createdAt_idx" ON "AuditLog" ("action", "createdAt" DESC);
+CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog" ("createdAt" DESC);
+CREATE INDEX "AuditLog_targetType_createdAt_idx" ON "AuditLog" ("targetType", "createdAt" DESC);
+CREATE INDEX "AuditLog_actorId_createdAt_idx" ON "AuditLog" ("actorId", "createdAt" DESC);
+CREATE INDEX "AuditLog_action_createdAt_idx" ON "AuditLog" ("action", "createdAt" DESC);
 ```
+
+These support all common query patterns: filter by action, filter by target, filter by actor, sort by time.
 
 ---
 
