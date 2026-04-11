@@ -103,13 +103,31 @@ Retrying a failed payout with the same transactions is always safe.
 
 Instructors choose their method at `/dashboard/settings/payout`:
 
-| Method | Execution | Risk |
+| Method | Execution | Recommended |
 |---|---|---|
-| `stripe_connect` | Automatic `stripe.transfers.create()` to `instructor.stripeAccountId` | Low — Stripe verifies identity and bank account |
-| `bank_transfer` | Admin manually transfers to BSB/account on file | High — bank details are not ownership-verified |
-| `manual` | Admin arranges payment — payout marked PAID by admin | Depends on admin process |
+| `stripe_connect` | Automatic `stripe.transfers.create()` to `instructor.stripeAccountId` | ✅ Yes — Stripe verifies identity and bank account |
+| `bank_transfer` | Admin manually transfers to BSB/account on file | Fallback only — format validation only, no ownership check |
+| `manual` | Admin arranges payment — payout marked PAID by admin | Last resort |
 
-**Bank transfer risk:** BSB and account number are validated for format only. There is no Australian API to verify bank account ownership. An instructor could enter incorrect or fraudulent details. Admin must manually confirm bank details before processing the first bank transfer payout. For scale, Stripe Connect is strongly recommended — Stripe handles KYC, identity verification, and bank account ownership confirmation.
+### Stripe Connect Onboarding
+
+Instructors connect their bank account via Stripe's hosted onboarding — the platform never sees their bank details.
+
+**Flow:**
+1. Instructor clicks "Connect with Stripe" at `/dashboard/settings/payout`
+2. Platform calls `POST /api/instructor/stripe-connect/onboard` — creates a Stripe Express account and generates a secure onboarding link
+3. Instructor is redirected to Stripe's own hosted page (stripe.com) — they enter their bank details directly
+4. Stripe verifies bank account ownership (micro-deposits or instant verification) and identity
+5. Instructor is redirected back to `/dashboard/settings/payout?stripe=success`
+6. Stripe fires `account.updated` webhook — platform sets `payoutMethod: stripe_connect` automatically
+7. Future payouts execute via `stripe.transfers.create()` directly to the instructor's verified account
+
+**API:** `POST /api/instructor/stripe-connect/onboard`  
+**Webhook:** `account.updated` → `handleConnectAccountUpdated()` in `app/api/stripe/webhook/route.ts`
+
+### Bank Transfer (Fallback)
+
+For instructors who cannot use Stripe Connect. BSB and account number are validated for format only — there is no Australian API to verify bank account ownership. Admin must manually confirm bank details before processing the first bank transfer payout.
 
 ---
 

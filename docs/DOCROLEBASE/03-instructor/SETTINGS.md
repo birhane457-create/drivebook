@@ -61,11 +61,17 @@ Instructors configure how they receive payouts and provide tax details for ATO c
 
 | Method | Description |
 |---|---|
-| `stripe_connect` | Automatic transfer to Stripe Connect account |
-| `bank_transfer` | Manual transfer to BSB/account on file |
-| `manual` | Admin arranges payment directly |
+| `stripe_connect` | Recommended — automatic transfer via Stripe Connect. Stripe verifies your bank account and identity. You never share bank details with DriveBook. |
+| `bank_transfer` | Fallback — admin manually transfers to your BSB/account. Requires admin to confirm your details before first transfer. |
+| `manual` | Last resort — admin arranges payment directly. Contact support. |
 
-### Bank Details (for `bank_transfer`)
+**Setting up Stripe Connect:**
+
+Click "Connect with Stripe" on the payout settings page. You'll be taken to Stripe's secure hosted page where you enter your bank details directly — DriveBook never sees them. Stripe verifies your bank account ownership and identity. Once complete, payouts are processed automatically every week.
+
+If you need help setting up a Stripe account, visit [stripe.com/au](https://stripe.com/au) or contact support.
+
+### Bank Details (for `bank_transfer` fallback only)
 
 - BSB (`bankBsb`) — 6 digits, format XXX-XXX. Validated for format on save. The platform maps known BSB prefixes to bank names (e.g. `062` → Commonwealth Bank) for UX feedback — this does not verify account ownership.
 - Account number (`bankAccount`) — 6–10 digits
@@ -114,8 +120,6 @@ Instructors can connect Google Calendar to sync bookings automatically.
 - `calendarBufferMode` — how buffer time is handled in calendar events
 
 OAuth callback: `GET /api/calendar/callback`
-
-**Note:** `GOOGLE_REDIRECT_URI` in `.env` must point to the correct domain. Current value has a typo (`deivebook` instead of `drivebook`) — needs fixing.
 
 ---
 
