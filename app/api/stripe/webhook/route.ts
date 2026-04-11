@@ -164,6 +164,11 @@ async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): P
       await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice, idempotencyKey);
       break;
 
+    // STRIPE CONNECT EVENTS
+    case 'account.updated':
+      await handleConnectAccountUpdated(event.data.object as Stripe.Account, idempotencyKey);
+      break;
+
     default:
       console.log(`ℹ️ Unhandled event type: ${event.type}`);
       // Still record it for idempotency
@@ -1069,4 +1074,48 @@ async function recordWebhookEvent(
       processedAt: new Date()
     }
   });
+}
+
+// ============================================================================
+// STRIPE CONNECT ACCOUNT HANDLER
+// ============================================================================
+
+/**
+ * Handle Stripe Connect account.updated
+ * Fired when an instructor completes (or updates) their Connect onboarding.
+ * We mark payoutMethod as stripe_connect and record the account as active.
+ */
+async function handleConnectAccountUpdated(
+  account: Stripe.Account,
+  idempotencyKey: string
+): Promise<void> {
+  const instructorId = account.metadata?.instructorId;
+  if (!instructorId) {
+    await recordWebhookEvent(idempotencyKey, 'account.updated', account.id, {
+      note: 'No instructorId in metadata — skipped',
+    });
+    return;
+  }
+
+  const chargesEnabled = account.charges_enabled;
+  const payoutsEnabled = account.payouts_enabled;
+  const detailsSubmitted = account.details_submitted;
+
+  await prisma.instructor.update({
+    where: { id: instructorId },
+    data: {
+      stripeAccountId: account.id,
+      // Switch to stripe_connect automatically once onboarding is complete
+      ...(chargesEnabled && payoutsEnabled ? { payoutMethod: 'stripe_connect' } : {}),
+    } as any,
+  });
+
+  await recordWebhookEvent(idempotencyKey, 'account.updated', account.id, {
+    instructorId,
+    chargesEnabled,
+    payoutsEnabled,
+    detailsSubmitted,
+  });
+
+  console.log(`✅ Connect account updated: instructor=${instructorId} charges=${chargesEnabled} payouts=${payoutsEnabled}`);
 }

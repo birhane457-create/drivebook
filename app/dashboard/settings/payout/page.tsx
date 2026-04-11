@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Building2, CreditCard, FileText, Save, CheckCircle, XCircle, Info, Loader2, AlertTriangle } from 'lucide-react';
+import { Building2, CreditCard, FileText, Save, CheckCircle, XCircle, Info, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { isValidABNFormat, formatABN, isValidBSB, isValidBankAccount, getBankNameFromBSB } from '@/lib/utils/abn-validation';
+import { useSearchParams } from 'next/navigation';
 
 interface PayoutSettings {
   payoutMethod: 'stripe_connect' | 'bank_transfer' | 'manual';
@@ -64,7 +65,23 @@ export default function PayoutSettingsPage() {
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<AbnVerifyResult | null>(null);
   const [toast, setToast] = useState<Toast>(null);
+  const [connectingStripe, setConnectingStripe] = useState(false);
   const abnDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchParams = useSearchParams();
+
+  // Handle Stripe Connect return
+  useEffect(() => {
+    const stripeParam = searchParams?.get('stripe');
+    if (stripeParam === 'success') {
+      showToast('success', 'Stripe account connected — payouts will be processed automatically');
+      // Refresh settings to pick up the new stripeAccountId
+      fetch('/api/instructor/payout-settings').then(r => r.json()).then(data => {
+        setS(prev => ({ ...prev, ...data, abn: data.abn ?? '', bankBsb: data.bankBsb ?? '', bankAccount: data.bankAccount ?? '', bankAccountName: data.bankAccountName ?? '', abnHolderName: data.abnHolderName ?? data.abnEntityName ?? '' }));
+      });
+    } else if (stripeParam === 'refresh') {
+      showToast('error', 'Stripe setup was not completed. Click "Connect with Stripe" to try again.');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetch('/api/instructor/payout-settings')
@@ -180,6 +197,23 @@ export default function PayoutSettingsPage() {
     }
   }
 
+  async function handleStripeConnect() {
+    setConnectingStripe(true);
+    try {
+      const res = await fetch('/api/instructor/stripe-connect/onboard', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        showToast('error', data.error || 'Failed to start Stripe setup');
+      }
+    } catch {
+      showToast('error', 'Network error — please try again');
+    } finally {
+      setConnectingStripe(false);
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
 
@@ -261,9 +295,9 @@ export default function PayoutSettingsPage() {
           </h2>
           <div className="grid gap-3">
             {([
-              { value: 'stripe_connect', label: 'Stripe Connect', desc: 'Automatic transfer to your connected Stripe account' },
-              { value: 'bank_transfer', label: 'Bank Transfer (EFT)', desc: 'Manual transfer to your Australian bank account' },
-              { value: 'manual', label: 'Manual / Cheque', desc: 'Admin will arrange payment manually' },
+              { value: 'stripe_connect', label: 'Stripe Connect (Recommended)', desc: 'Automatic transfer to your bank — Stripe verifies your account, DriveBook never sees your details' },
+              { value: 'bank_transfer', label: 'Bank Transfer (EFT)', desc: 'Manual transfer — admin processes weekly. Requires admin to confirm your bank details first.' },
+              { value: 'manual', label: 'Manual / Cheque', desc: 'Admin will arrange payment manually — contact support' },
             ] as const).map(opt => (
               <label key={opt.value} className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${s.payoutMethod === opt.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
                 <input
@@ -281,11 +315,47 @@ export default function PayoutSettingsPage() {
           </div>
 
           {s.payoutMethod === 'stripe_connect' && (
-            <div className={`flex items-center gap-2 text-sm p-3 rounded-lg ${s.stripeAccountId ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
-              <Info className="h-4 w-4 flex-shrink-0" />
-              {s.stripeAccountId
-                ? `Stripe account connected (${s.stripeAccountId.slice(0, 12)}...)`
-                : 'No Stripe account connected. Contact admin to set up Stripe Connect.'}
+            <div className="space-y-3">
+              {s.stripeAccountId ? (
+                <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-green-50 text-green-700 border border-green-200">
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">Stripe account connected</p>
+                    <p className="text-xs text-green-600 mt-0.5">Payouts are processed automatically. Account: {s.stripeAccountId.slice(0, 16)}...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2 text-sm p-3 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
+                    <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium">Connect your bank account via Stripe</p>
+                      <p className="text-xs text-blue-700 mt-1">
+                        You'll be taken to Stripe's secure page to enter your bank details directly.
+                        DriveBook never sees your account number — Stripe verifies it for you.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStripeConnect}
+                    disabled={connectingStripe}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg font-medium text-sm transition-colors"
+                  >
+                    {connectingStripe ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Connecting...</>
+                    ) : (
+                      <><ExternalLink className="h-4 w-4" /> Connect with Stripe →</>
+                    )}
+                  </button>
+                  <p className="text-xs text-gray-500">
+                    Need help?{' '}
+                    <a href="https://stripe.com/au/connect" target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                      Learn about Stripe Connect
+                    </a>
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
