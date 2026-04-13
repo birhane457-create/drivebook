@@ -12,14 +12,16 @@ const VERCEL_CNAME_TARGET = 'cname.vercel-dns.com';
 async function addDomainToVercel(domain: string): Promise<{ success: boolean; error?: string }> {
   const token = process.env.VERCEL_API_TOKEN;
   const projectId = process.env.VERCEL_PROJECT_ID;
-  const teamId = process.env.VERCEL_TEAM_ID; // optional — only needed for team accounts
+  const teamId = process.env.VERCEL_TEAM_ID;
 
   if (!token || !projectId) {
-    console.warn('VERCEL_API_TOKEN or VERCEL_PROJECT_ID not set — skipping auto-add to Vercel');
-    return { success: false, error: 'Vercel API not configured' };
+    const missing = [!token && 'VERCEL_API_TOKEN', !projectId && 'VERCEL_PROJECT_ID'].filter(Boolean).join(', ');
+    console.warn(`[domain-verify] Skipping Vercel auto-add — missing env vars: ${missing}`);
+    return { success: false, error: `Missing env vars: ${missing}` };
   }
 
   const url = `https://api.vercel.com/v10/projects/${projectId}/domains${teamId ? `?teamId=${teamId}` : ''}`;
+  console.log(`[domain-verify] Calling Vercel API: POST ${url} domain=${domain}`);
 
   try {
     const res = await fetch(url, {
@@ -32,18 +34,19 @@ async function addDomainToVercel(domain: string): Promise<{ success: boolean; er
     });
 
     const data = await res.json();
+    console.log(`[domain-verify] Vercel API response ${res.status}:`, JSON.stringify(data));
 
     if (res.ok) return { success: true };
 
     // Domain already added — not an error
     if (data.error?.code === 'domain_already_in_use' || data.error?.code === 'domain_already_exists') {
+      console.log(`[domain-verify] Domain already in Vercel — treating as success`);
       return { success: true };
     }
 
-    console.error('Vercel add domain error:', data);
-    return { success: false, error: data.error?.message || 'Failed to add domain to Vercel' };
+    return { success: false, error: data.error?.message || `Vercel API error ${res.status}` };
   } catch (err) {
-    console.error('Vercel API call failed:', err);
+    console.error('[domain-verify] Vercel API call failed:', err);
     return { success: false, error: 'Vercel API unreachable' };
   }
 }
