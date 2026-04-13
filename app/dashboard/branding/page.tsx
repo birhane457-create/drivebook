@@ -593,7 +593,12 @@ function CustomDomainWizard({
 
       {/* DNS instructions */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-        <p className="text-xs font-semibold text-gray-700 mb-3">Step 1 — Add this DNS record at your registrar:</p>
+        <p className="text-xs font-semibold text-gray-700 mb-1">Step 1 — Add this DNS record at your registrar:</p>
+        <div className="mb-3 bg-indigo-50 border border-indigo-200 rounded p-2 flex items-center gap-2">
+          <span className="text-xs text-indigo-700">The value is always:</span>
+          <span className="font-mono text-xs font-bold text-indigo-900 bg-white border border-indigo-200 rounded px-2 py-0.5 select-all">cname.vercel-dns.com</span>
+          <span className="text-xs text-indigo-600">— copy this exactly</span>
+        </div>
 
         {customDomain ? (() => {
           const parts = customDomain.split('.');
@@ -734,11 +739,11 @@ function CustomDomainWizard({
                 <tbody><tr>
                   <td className="pr-3 text-gray-800">CNAME</td>
                   <td className="pr-3 text-indigo-800 font-semibold">{cnameLabel}</td>
-                  <td className="text-indigo-700">cname.vercel-dns.com</td>
+                  <td className="text-indigo-700 font-bold">cname.vercel-dns.com</td>
                 </tr></tbody>
               </table>
               <p className="text-xs text-gray-500 mt-2">
-                The "Name" or "Host" field is just <span className="font-mono font-semibold">{cnameLabel}</span> — not the full domain.
+                Name / Host = <span className="font-mono font-semibold">{cnameLabel}</span> &nbsp;|&nbsp; Value = <span className="font-mono font-semibold text-indigo-700">cname.vercel-dns.com</span> (always this, for every instructor)
               </p>
             </div>
           );
