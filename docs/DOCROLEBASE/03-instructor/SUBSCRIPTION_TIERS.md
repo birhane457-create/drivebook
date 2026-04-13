@@ -83,8 +83,9 @@ For instructors growing their business and wanting a professional presence.
 For instructors who want their own domain and a fully white-labelled experience.
 
 **Everything in Pro, plus:**
+- Custom slug (`yourname.drivebook.com.au`) — same as PRO, works independently
 - Custom domain (bring your own — e.g. `book.yourdrivingschool.com.au`)
-- 1 year free domain included (planned)
+- Both slug and custom domain can be active simultaneously
 - Fully white-label booking experience on your own domain
 - 11% commission per booking
 - 10% bonus for new students
@@ -92,16 +93,19 @@ For instructors who want their own domain and a fully white-labelled experience.
 
 **Domain setup:**
 1. Instructor enters their domain in `/dashboard/branding`
-2. System verifies DNS CNAME points to `cname.vercel-dns.com`
+2. System verifies DNS — checks CNAME first, then A record (handles ANAME/ALIAS for root domains)
 3. `domainVerified = true` stored on instructor record
-4. Domain added to Vercel project for SSL (manual step currently)
+4. Domain automatically added to Vercel project via API (requires `VERCEL_API_TOKEN` + `VERCEL_PROJECT_ID` env vars). Falls back to manual admin add in Vercel Dashboard.
 
 **Schema fields:**
 ```
-customDomain     String?
+customSlug       String?   // slug for slug.drivebook.com.au (PRO+)
+customDomain     String?   // full custom domain (Studio+)
 domainVerified   Boolean   @default(false)
 domainVerifiedAt DateTime?
 ```
+
+**Free domain perk:** Domain registration assistance is a planned perk — currently fulfilled manually on request. Instructor connects any domain they already own.
 
 ---
 
@@ -140,6 +144,8 @@ During trial:
 - No payment method required upfront
 - Trial end date stored in `instructor.trialEndsAt`
 - After trial expires, subscription must be activated to continue
+
+**Trial is per-instructor, not per-tier.** Changing tiers during a trial preserves the original trial end date — it is never reset. An instructor gets one trial window regardless of how many times they switch tiers during it. The Stripe checkout also only passes `trial_period_days` for first-time subscribers.
 
 ---
 

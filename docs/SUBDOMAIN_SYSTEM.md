@@ -1,13 +1,13 @@
 # DriveBook Domain & Public Booking Page System
 
-**Last Updated:** March 30, 2026  
-**Scope:** How instructor public booking pages work — subdomain routing, custom domains, DNS setup, mobile UX, branding tiers, booking form, and SEO
+**Last Updated:** April 13, 2026
+**Scope:** How instructor public booking pages work — subdomain routing, custom domains, DNS setup, branding tiers, booking form, and SEO
 
 ---
 
 ## 1. Overview
 
-Every instructor gets a public booking page that students can visit without logging in. The page shows the instructor's profile, pricing, availability, reviews, and a full booking form. Students can book and pay in under 2 minutes.
+Every instructor gets a public booking page that students can visit without logging in. The page shows the instructor's profile, pricing, availability, reviews, and a full booking form.
 
 There are three ways a student can reach an instructor's page:
 
@@ -16,6 +16,8 @@ There are three ways a student can reach an instructor's page:
 | Default (by ID) | `abc123.drivebook.com.au` | Automatic — always works | Any |
 | Custom slug | `john.drivebook.com.au` | Instructor picks a slug | PRO+ |
 | Custom domain | `book.x.com.au` | Instructor points DNS | STUDIO / BUSINESS |
+
+Slug and custom domain are **independent** — a Studio instructor can have both simultaneously.
 
 ---
 
@@ -42,7 +44,7 @@ VISITOR HITS A URL
         │         │        │                                            │
         │         │        ▼                                            │
         │         │   DB lookup:                                        │
-        │         │   customDomain='john' OR id='john'                 │
+        │         │   customSlug='john' OR id='john'                   │
         │         │        │                                            │
         │         │        ├── found → render booking page ✅           │
         │         │        └── not found → 404                         │
@@ -60,19 +62,32 @@ VISITOR HITS A URL
                   AND domainVerified=true                              │
                   AND tier IN (STUDIO, BUSINESS)                       │
                   │                                                     │
-                  ├── found → render booking page ✅                    │
+                  ├── found → render booking page using instructor.id  │
                   └── not found → 404                                  │
 ```
 
 ---
 
-## 3. DNS Setup by Tier
+## 3. Schema Fields
+
+```prisma
+customSlug       String?   // PRO+: slug for slug.drivebook.com.au
+customDomain     String?   // Studio+: full custom domain (e.g. book.yourdomain.com.au)
+domainVerified   Boolean   @default(false)
+domainVerifiedAt DateTime?
+```
+
+`customSlug` and `customDomain` are separate fields. Changing one does not affect the other.
+
+---
+
+## 4. DNS Setup by Tier
 
 ### BASIC
-No public booking URL. Upgrade prompt shown in branding page.
+No public booking URL customisation. Upgrade prompt shown in branding page.
 
 ### PRO — `john.drivebook.com.au`
-DNS is managed by **us** (Vercel wildcard). The instructor just picks a slug — no DNS work required on their end.
+DNS is managed by us (Vercel wildcard). The instructor just picks a slug — no DNS work required on their end.
 
 ```
 *.drivebook.com.au  →  cname.vercel-dns.com   (set once in Vercel DNS panel)
@@ -83,48 +98,91 @@ Every instructor has a working URL at `<instructorId>.drivebook.com.au` from day
 
 ### STUDIO / BUSINESS — bring your own domain
 
-**Option A — Use a subdomain (recommended)**
+**Option A — Use a subdomain (recommended, e.g. `book.yourdomain.com.au`)**
 
-```
-Type:  CNAME
-Name:  book
-Value: cname.vercel-dns.com
-```
+| Field | Value |
+|---|---|
+| Type | CNAME |
+| Name / Host | `book` (just the prefix, not the full domain) |
+| Value / Points to | `cname.vercel-dns.com` |
 
-**Option B — Root domain `x.com.au`**
+**Option B — Root domain (e.g. `yourdomain.com.au`)**
+
+Root domains cannot use a standard CNAME record. Three options:
 
 | Method | How |
 |---|---|
-| ALIAS / ANAME | Some registrars support this. Add `ALIAS @ → cname.vercel-dns.com` |
-| Cloudflare DNS | Move nameservers to Cloudflare. Add `CNAME @ → cname.vercel-dns.com` |
-| www + redirect | `CNAME www → cname.vercel-dns.com`, then redirect root to www |
+| ALIAS / ANAME | Add `ALIAS @ → cname.vercel-dns.com`. Supported by VentraIP, Cloudflare, Namecheap. |
+| Cloudflare DNS | Move nameservers to Cloudflare (free). Add `CNAME @ → cname.vercel-dns.com`. Cloudflare flattens it automatically. |
+| www + redirect | `CNAME www → cname.vercel-dns.com`, redirect root to www at registrar, enter `www.yourdomain.com.au` in the domain field. |
+
+The value is always `cname.vercel-dns.com` regardless of which option is chosen.
 
 ---
 
-## 4. Domain Verification Flow (Studio/Business)
+## 5. Domain Verification Flow (Studio/Business)
 
 ```
 Instructor enters domain → POST /api/instructor/domain/verify
         │
         ▼
-Server does DNS CNAME lookup
+1. Try dns.resolveCname(domain)
+   ├── resolves to *.vercel* → verified ✅
+   └── fails (CNAME not found)
         │
-        ├── resolves to *.vercel* → domainVerified=true ✅
-        └── wrong target → return error + show instructions
+        ▼
+2. Try dns.resolve4(domain) — handles ANAME/ALIAS records
+   ├── IP in 76.76.21.x or 76.76.19.x (Vercel range) → verified ✅
+   └── not Vercel IP → not verified ❌
+        │
+        ▼
+On success:
+  - Set domainVerified=true, domainVerifiedAt=now in DB
+  - Call Vercel API to add domain to project (auto-provisions SSL)
+  - Return { verified: true, dnsMethod, vercelAdded }
 ```
 
-**Schema fields:**
-```prisma
-customDomain     String?
-domainVerified   Boolean   @default(false)
-domainVerifiedAt DateTime?
+**Why two DNS checks:** ANAME/ALIAS records are proprietary and invisible to standard CNAME queries. They resolve as A records externally. The fallback A-record check handles root domains using ANAME/ALIAS.
+
+**Vercel auto-add:** When `VERCEL_API_TOKEN` and `VERCEL_PROJECT_ID` are set in environment variables, the domain is automatically added to the Vercel project on successful verification. SSL is provisioned within ~60 seconds. Without these env vars, the admin must add the domain manually in Vercel Dashboard → Settings → Domains.
+
+**Required env vars for auto-add:**
+```
+VERCEL_API_TOKEN=    # vercel.com/account/tokens → Create token (Full Account scope)
+VERCEL_PROJECT_ID=   # Vercel Dashboard → project → Settings → General → Project ID
+VERCEL_TEAM_ID=      # Leave blank for personal accounts
 ```
 
-After verification, add the domain in Vercel project settings for SSL.
+**Test endpoint:** `GET /api/admin/test-vercel-api` (admin only) — verifies credentials are working and returns current domain count.
 
 ---
 
-## 5. Branding Tiers
+## 6. Branding Page (Instructor)
+
+**File:** `app/dashboard/branding/page.tsx`
+
+| Section | Tier | What it does |
+|---|---|---|
+| Booking URL / Slug | PRO+ | Set `yourname.drivebook.com.au`. Shows default ID URL if no slug set. Availability check on type. |
+| Custom Domain | Studio+ | Full domain wizard with DNS instructions, verify button, verified badge. Works alongside slug. |
+| Social Links | PRO+ | WhatsApp, Instagram, Facebook, years of experience |
+| Logo Upload | PRO+ | PNG/JPG/SVG up to 2MB |
+| Brand Colors | PRO+ | Primary + secondary hex color pickers |
+| Show branding toggle | PRO+ | White-labels booking page with logo + colors |
+
+**Active URLs panel** (right column) shows all active URLs for the instructor:
+- Default (always active)
+- Slug (if set)
+- Custom domain (if set, with Verified/Pending badge)
+
+**DNS instructions** in the custom domain wizard:
+- Subdomain: shows a single CNAME table with exact Name and Value fields
+- Root domain: shows three expandable options (ALIAS/ANAME, Cloudflare, www redirect) each with a field-by-field table
+- The value `cname.vercel-dns.com` is highlighted prominently at the top of the DNS section
+
+---
+
+## 7. Branding Tiers
 
 | Feature | BASIC | PRO | STUDIO | BUSINESS |
 |---|---|---|---|---|
@@ -133,18 +191,21 @@ After verification, add the domain in Vercel project settings for SSL.
 | Custom slug | ❌ | ✅ | ✅ | ✅ |
 | Custom logo + brand colors | ❌ | ✅ | ✅ | ✅ |
 | White-label nav | ❌ | ✅ | ✅ | ✅ |
-| Custom domain | ❌ | ❌ | ✅ | ✅ |
+| Custom domain (bring your own) | ❌ | ❌ | ✅ | ✅ |
+| Slug + custom domain simultaneously | ❌ | ❌ | ✅ | ✅ |
 | Multiple instructors | ❌ | ❌ | ❌ | ✅ |
+
+**Free domain perk (Studio):** The Studio plan advertises "bring your own domain". Domain registration assistance (1 year free domain) is a planned perk — currently fulfilled manually on request. Instructor connects any domain they already own.
 
 ---
 
-## 6. Page Anatomy
+## 8. Page Anatomy
 
 **Files:**
 - `app/subdomain/[slug]/page.tsx` — handles `*.drivebook.com.au` subdomains
-- `app/custom-domain/page.tsx` — handles custom domains
+- `app/custom-domain/page.tsx` — handles custom domains (looks up by `customDomain` field, renders using instructor ID)
 
-**Caching:** `export const revalidate = 300` — page is cached for 5 minutes. Instructor profile changes take up to 5 minutes to appear publicly.
+**Caching:** `export const revalidate = 300` — page cached for 5 minutes.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -160,31 +221,11 @@ After verification, add the domain in Vercel project settings for SSL.
 │  [Years exp]  [Student count]  [Next available]         │
 ├─────────────────────────────────────────────────────────┤
 │ Trust badges strip                                      │
-│  ✅ Verified  🏆 X+ Years  ⭐ Rating (only if reviews)  │
-│  🔒 Secure Booking                                      │
 ├──────────────────────┬──────────────────────────────────┤
 │ Left column          │ Right column                     │
-│                      │                                  │
-│ Next availability    │ [Location pre-fill banner]       │
-│                      │                                  │
-│ [section-about]      │ [booking-form]                   │
-│ About / bio          │  Social proof banner             │
-│ (hidden if empty)    │  "Book Your Lesson"              │
-│                      │  BulkBookingForm                 │
-│ [section-services]   │                                  │
+│ About / bio          │ Booking form                     │
 │ Services & Pricing   │ Student reviews                  │
-│  - Single lesson     │                                  │
-│  - Lesson durations  │                                  │
-│  - Service area      │                                  │
-│  - Packages          │                                  │
-│                      │                                  │
-│ [section-contact]    │                                  │
-│ Details              │                                  │
-│  - Vehicle types     │                                  │
-│  - Languages         │                                  │
-│  - Buffer time       │                                  │
-│  - Availability hrs  │                                  │
-│  - Phone             │                                  │
+│ Contact details      │                                  │
 │ Social links         │                                  │
 │ Vehicle photo        │                                  │
 │ FAQ accordion        │                                  │
@@ -192,245 +233,71 @@ After verification, add the domain in Vercel project settings for SSL.
 │ Footer                                                  │
 ├─────────────────────────────────────────────────────────┤
 │ MOBILE ONLY: Bottom nav bar (fixed)                     │
-│  [About] [Services] [Contact] [Book Now ←primary color] │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 7. Booking Flow (Subdomain)
+## 9. Booking Flow (Subdomain)
 
-**Files:**
-- `components/subdomain/SubdomainBookingEntry.tsx` — CTA button + full-screen overlay
-- `components/subdomain/SubdomainBookingWizard.tsx` — multi-step wizard inside the overlay
-
-**Entry point:** Student clicks "Book Your Lesson →" on the profile page. This opens a **full-screen overlay** on top of the profile page — the profile stays open underneath. The overlay has a compact header with the instructor's name and a "Back to profile" close button.
+**Entry point:** Student clicks "Book Your Lesson →" — opens a full-screen overlay.
 
 **Wizard steps:**
 
-| Step | Label | Condition |
-|---|---|---|
-| 1 | Package | Always |
-| 2 | Test Package | Only if `instructor.offersTestPackage = true` |
-| 3 | When to Book | Always |
-| 4 | Schedule | Only if `bookingType = now` |
-| 5 | Your Details | Always |
-
-**Package step:**
-- Standard packages (6/10/15 hrs) — radio select, platform bulk discounts applied
-- Instructor add-on packages — checkbox style, fixed price, no platform discount, can combine with standard package
-- Custom hours dropdown (1–50 hrs)
-- Discount rates fetched from `/api/public/pricing` on context mount
-
-**When to Book step:**
-- "Book Now" — student schedules at least one lesson before paying
-- "Book Later" — student pays to load wallet, books from dashboard later
-
-**Schedule step (Book Now only):**
-- Date picker + duration selector (from `instructor.allowedDurations`)
-- Slot grid fetched from `/api/availability/slots` — duration-aware (3hr slot at 9am blocked if 10am is taken)
-- Local overlap check prevents scheduling two lessons that overlap before API call
-- Student can add multiple lessons up to the total package hours
+| Step | Condition |
+|---|---|
+| Package | Always |
+| Test Package | Only if `instructor.offersTestPackage = true` |
+| When to Book | Always |
+| Schedule | Only if `bookingType = now` |
+| Your Details | Always |
 
 **Payment:**
-- After "Continue to Payment", wizard shows order summary with "Complete Payment →" link
-- Payment page opens in a **new blank tab** — profile page stays open
-- Book Now → `/booking/[id]/payment`
-- Book Later → `/payment/wallet/[transactionId]` (wallet credited, no booking created)
-- Pricing params passed via URL query string to the wallet payment page for display
-
-**Slot availability rules:**
-- Slots API checks full duration overlap against DB bookings + buffer time
-- A 3hr slot at 9am is unavailable if any booking exists between 9am and 12pm
-- Short-notice slots (< 2hrs from now) shown but flagged — require instructor approval
-- Minimum advance notice: 2 hours
+- Book Now → `/booking/[id]/payment` (new tab)
+- Book Later → `/payment/wallet/[transactionId]` (wallet credited, book from dashboard later)
 
 ---
 
-## 8. Availability Slots API
-
-**Endpoint:** `GET /api/availability/slots`
-
-**Parameters:**
-| Param | Type | Description |
-|---|---|---|
-| `instructorId` | string | Required |
-| `date` | string | YYYY-MM-DD |
-| `duration` | number | Minutes (must be in instructor's `allowedDurations`) |
-| `bypassDurationCheck` | boolean | Skip duration validation (reschedule only) |
-| `excludeBookingId` | string | Exclude a booking from conflict check (edit mode) |
-
-**Working hours format** (stored in `instructor.workingHours` JSON):
-```json
-{
-  "monday": [{ "start": "09:00", "end": "17:00" }],
-  "tuesday": [{ "start": "09:00", "end": "17:00" }],
-  "saturday": [{ "start": "09:00", "end": "13:00" }],
-  "sunday": []
-}
-```
-Each day is an **array of time slots** (supports split shifts). Empty array = not working that day.
-
-**Important:** The subdomain page's `nextAvailableLabel` computation reads this same format. The old `{ enabled, start, end }` format is no longer used.
-
----
-
-## 9. SEO
-
-The page uses two layers of SEO:
-
-**1. `generateMetadata()` — Next.js metadata**
-- Title: `Book Driving Lessons with {name}`
-- Description: bio (truncated to 155 chars) or auto-generated from service areas + rate
-- OpenGraph + Twitter card images from `profileImage`
-
-**2. JSON-LD structured data (inline `<script>` tag)**
-```json
-{
-  "@context": "https://schema.org",
-  "@type": "LocalBusiness",
-  "name": "...",
-  "image": "...",
-  "description": "...",
-  "areaServed": "...",
-  "priceRange": "From $90/hr",
-  "address": {
-    "@type": "PostalAddress",
-    "addressLocality": "Maylands",
-    "addressCountry": "AU"
-  },
-  "aggregateRating": {
-    "@type": "AggregateRating",
-    "ratingValue": 4.9,
-    "reviewCount": 42
-  }
-}
-```
-- `address` is only included if `baseAddress` is set (suburb extracted automatically)
-- `aggregateRating` is only included if `totalReviews > 0`
-
----
-
-## 10. Profile Fields That Appear on the Booking Page
-
-| Field | Where to edit | What it affects |
-|---|---|---|
-| `name` | Profile page | Hero, nav, SEO title |
-| `bio` | Profile page | About section (hidden if empty/whitespace) |
-| `profileImage` | Profile page | Hero photo, SEO image |
-| `carImage` | Profile page | Vehicle photo card |
-| `carMake/Model/Year` | Profile page | Vehicle photo caption |
-| `baseAddress` | Profile page | Service area display (suburb only shown publicly), JSON-LD address, distance check |
-| `serviceRadiusKm` | Settings page | Service area display, distance check |
-| `serviceAreas` | Profile page | Hero subtitle, service area check |
-| `hourlyRate` | Settings page | Pricing display |
-| `allowedDurations` | Settings page | Duration chips, slot picker, booking payload |
-| `lessonPackages` | Settings page | Package cards in services section |
-| `workingHours` | Settings page | Next available label, slot picker |
-| `bookingBufferMinutes` | Settings page | Details card, slot calculation |
-| `vehicleTypes` | Settings page | Hero subtitle, details card |
-| `languages` | Profile page | Details card |
-| `yearsExperience` | Profile page | Hero, trust badges |
-| `whatsapp` | Profile page | Nav button, connect card |
-| `instagram` / `facebook` | Profile page | Connect card |
-| `brandColorPrimary` | Branding page | All accent colors (all tiers) |
-| `brandColorSecondary` | Branding page | Package prices, savings |
-| `brandLogo` | Branding page | Nav logo (PRO+ only) |
-| `showBrandingOnBookingPage` | Branding page | White-label nav (PRO+ only) |
-
-**Note:** `baseAddress` was previously read-only in the profile page. It is now editable. Only the suburb portion is shown publicly — the full address is never exposed.
-
----
-
-## 11. Mobile UX
-
-**File:** `components/subdomain/SubdomainClientFeatures.tsx`
-
-On mobile (`< md` breakpoint):
-- **Bottom nav bar** — fixed, 4 tabs: About / Services / Contact / Book Now
-- **Book Now** opens a full-screen overlay (same as desktop) — `SubdomainBookingEntry` handles this
-- Body scroll is locked while overlay is open
-- iPhone safe area inset handled via `env(safe-area-inset-bottom)`
-- Mobile summary bar — shows total + "View details" tap to expand order summary drawer
-
-On desktop:
-- Bottom nav is hidden (`md:hidden`)
-- **Desktop nav** (`SubdomainDesktopNav.tsx`) shows anchor links: About / Services / Contact / Book Now
-- Book Now opens the full-screen overlay
-
-**Booking overlay (all screen sizes):**
-- Fixed `inset-0 z-[100]` — covers entire viewport
-- Compact sticky header: instructor initial + name + "Back to profile ✕"
-- Wizard content scrollable inside overlay
-- Payment opens in new tab — overlay stays open so student can come back
-
----
-
-## 12. Conversion Features
-
-- **Social proof banner** above booking form: rating, review count, next available time, "No account required"
-- **Microcopy:** "Book Your Lesson — Takes less than 60 seconds · No account required"
-- **New instructor handling:** Shows "New instructor" pill instead of fake 5.0 rating when `totalReviews === 0`
-- **About section:** Hidden if `bio` is empty or whitespace-only — prevents broken/test content showing
-- **Hero subtitle:** Shows vehicle types ("Automatic & Manual driving lessons") and suburb + "& surrounding areas" if `serviceAreas` not set
-- **Next available label:** Computed server-side from working hours + upcoming bookings, shown in hero and social proof banner
-
----
-
-## 13. APIs
+## 10. APIs
 
 | Endpoint | Method | Purpose |
 |---|---|---|
+| `/api/instructor/branding` | GET/PUT | Branding settings — reads/writes `customSlug` and `customDomain` separately |
+| `/api/instructor/subdomain/check` | GET | Check if slug is available (queries `customSlug` field) |
+| `/api/instructor/domain/verify` | POST | DNS verification — checks CNAME then A record (ANAME support), auto-adds to Vercel |
+| `/api/admin/test-vercel-api` | GET | Admin: verify Vercel API credentials are working |
 | `/api/public/bookings/bulk` | POST | Create booking + user account |
 | `/api/payments/create-intent` | POST | Create Stripe PaymentIntent |
-| `/api/stripe/webhook` | POST | Handle payment confirmation |
-| `/api/availability/slots` | GET | Fetch available time slots for a date + duration |
-| `/api/auth/check-email` | POST | Check if email already registered |
-| `/api/public/check-service-area` | GET | Check if a lat/lng is within instructor's service radius |
-| `/api/instructor/branding` | GET/PUT | Branding + domain settings |
-| `/api/instructor/profile` | GET/PUT | Profile fields including `baseAddress` |
-| `/api/instructor/subdomain/check` | GET | Check if slug is available |
-| `/api/instructor/domain/verify` | POST | DNS CNAME verification |
+| `/api/availability/slots` | GET | Fetch available time slots |
+| `/api/public/check-service-area` | GET | Check if lat/lng is within instructor's service radius |
 
 ---
 
-## 14. File Reference
+## 11. File Reference
 
 | File | Purpose |
 |---|---|
 | `middleware.ts` | Subdomain extraction + custom domain detection + rewrites |
-| `app/subdomain/[slug]/page.tsx` | Public booking page (5-min cache) |
-| `app/custom-domain/page.tsx` | Custom domain entry point |
+| `app/subdomain/[slug]/page.tsx` | Public booking page — looks up by `customSlug` or `id` |
+| `app/custom-domain/page.tsx` | Custom domain entry — looks up by `customDomain`, renders via instructor ID |
+| `app/dashboard/branding/page.tsx` | Branding UI — slug section (PRO+) + custom domain wizard (Studio+) |
+| `app/api/instructor/branding/route.ts` | Branding API — handles `customSlug` and `customDomain` as separate fields |
+| `app/api/instructor/subdomain/check/route.ts` | Slug availability check |
+| `app/api/instructor/domain/verify/route.ts` | DNS verification + Vercel auto-add |
+| `app/api/admin/test-vercel-api/route.ts` | Admin credential test for Vercel API |
 | `components/subdomain/SubdomainBookingEntry.tsx` | CTA button + full-screen overlay wrapper |
-| `components/subdomain/SubdomainBookingWizard.tsx` | Multi-step booking wizard (package → schedule → details → payment) |
-| `components/BulkBookingForm.tsx` | Public flow booking form (used on `/book/[instructorId]`) |
-| `components/PackageSelector.tsx` | Package selection step — standard + instructor add-ons |
-| `components/BookingDetailsForm.tsx` | Schedule step — date/time/duration picker with overlap check |
-| `components/BookingSummary.tsx` | Order summary sidebar (desktop) + mobile bottom bar |
-| `components/SlotPicker.tsx` | Date + time slot picker (duration-aware) |
+| `components/subdomain/SubdomainBookingWizard.tsx` | Multi-step booking wizard |
 | `components/subdomain/SubdomainClientFeatures.tsx` | Mobile bottom nav + booking overlay |
-| `components/subdomain/SubdomainDesktopNav.tsx` | Desktop anchor nav (About/Services/Contact/Book Now) |
-| `app/booking/[id]/payment/page.tsx` | Book Now payment page |
-| `app/payment/wallet/[transactionId]/page.tsx` | Book Later wallet payment page |
-| `app/payment/wallet/[transactionId]/confirmation/page.tsx` | Book Later confirmation page |
-| `app/api/availability/slots/route.ts` | Slot availability API (duration-aware overlap check) |
-| `app/api/availability/check-and-reserve/route.ts` | Slot reservation API (10-min hold) |
-| `app/api/public/bookings/bulk/route.ts` | Booking creation (book now) or wallet transaction (book later) |
-| `app/api/payments/create-intent/route.ts` | Stripe PaymentIntent — supports both bookingId and transactionId |
-| `app/api/instructor/profile/route.ts` | Profile GET/PUT (includes baseAddress) |
-| `app/api/instructor/branding/route.ts` | Branding GET/PUT |
-| `app/dashboard/profile/page.tsx` | Instructor profile UI (baseAddress now editable) |
-| `app/dashboard/settings/page.tsx` | Settings UI (allowedDurations, packages, working hours) |
-| `app/dashboard/branding/page.tsx` | Branding UI (subdomain + custom domain wizard) |
+| `components/subdomain/SubdomainDesktopNav.tsx` | Desktop anchor nav |
 
 ---
 
-## 15. Known Gaps
+## 12. Known Gaps / Planned
 
-| Gap | Notes |
+| Item | Status |
 |---|---|
-| Vercel domain registration not automated | After DNS verification, must manually add domain in Vercel dashboard for SSL |
-| Service area check is client-side only | Advisory only — not enforced server-side |
+| Free domain registration (Studio perk) | Planned — currently fulfilled manually on request. Registrar API (Namecheap/Cloudflare) needed for automation. |
+| Vercel auto-add requires env vars | Set `VERCEL_API_TOKEN` + `VERCEL_PROJECT_ID` in Vercel env vars to enable. Manual add in Vercel Dashboard works as fallback. |
+| Service area check is advisory only | Not enforced server-side |
 | Custom FAQ not editable | FAQ is hardcoded. `pageContent` JSON field planned for Studio tier |
-| Show real slots upfront | Calendly-style slot preview above booking form would improve conversion. Needs a client component to fetch slots on page load |
-| Phone/contact gating | Phone number currently shown before booking. Marketplace best practice is to reveal after booking confirmation |
+| Slot preview above booking form | Calendly-style slot preview would improve conversion |
