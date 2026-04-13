@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { tier, billingCycle = 'monthly' } = body;
 
-    if (!tier || !['BASIC', 'PRO', 'BUSINESS'].includes(tier)) {
+    if (!tier || !['BASIC', 'PRO', 'STUDIO', 'BUSINESS'].includes(tier)) {
       return NextResponse.json(
         { error: 'Invalid subscription tier' },
         { status: 400 }
@@ -164,12 +164,12 @@ export async function POST(req: NextRequest) {
     // Otherwise, create/update trial subscription (no payment required yet)
     const amount = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
     const now = new Date();
-    const trialEnd = getTrialEndDate(tier as any);
     const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
     let subscription;
     if (existingSubscription) {
-      // Update existing subscription
+      // Changing tier mid-trial — keep the ORIGINAL trial end date, never reset it.
+      // The instructor gets one trial across all tiers, not a fresh trial per tier change.
       subscription = await prisma.subscription.update({
         where: { id: existingSubscription.id },
         data: {
@@ -177,10 +177,43 @@ export async function POST(req: NextRequest) {
           monthlyAmount: amount,
           billingCycle,
           currentPeriodEnd: periodEnd,
+          // trialEndsAt intentionally NOT updated — preserve original trial window
         },
       });
+
+      // Update instructor tier but keep existing trialEndsAt
+      await prisma.instructor.update({
+        where: { id: user.instructor.id },
+        data: {
+          subscriptionTier: tier as any,
+          subscriptionStatus: subscription.status as any,
+          maxInstructors: plan.limits.instructors,
+          // trialEndsAt intentionally NOT updated
+        },
+      });
+
+      const daysLeft = existingSubscription.trialEndsAt
+        ? Math.max(0, Math.ceil((new Date(existingSubscription.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        : 0;
+
+      return NextResponse.json({
+        success: true,
+        subscription: {
+          id: subscription.id,
+          tier: subscription.tier,
+          status: subscription.status,
+          monthlyAmount: subscription.monthlyAmount,
+          billingCycle: subscription.billingCycle,
+          trialEndsAt: existingSubscription.trialEndsAt,
+          currentPeriodEnd: subscription.currentPeriodEnd,
+        },
+        message: daysLeft > 0
+          ? `Switched to ${plan.name} plan — ${daysLeft} trial day${daysLeft !== 1 ? 's' : ''} remaining`
+          : `Switched to ${plan.name} plan`,
+      });
     } else {
-      // Create new subscription with trial
+      // First-ever subscription — start fresh trial
+      const trialEnd = getTrialEndDate(tier as any);
       subscription = await prisma.subscription.create({
         data: {
           instructorId: user.instructor.id,
@@ -193,32 +226,31 @@ export async function POST(req: NextRequest) {
           trialEndsAt: trialEnd,
         },
       });
+
+      await prisma.instructor.update({
+        where: { id: user.instructor.id },
+        data: {
+          subscriptionTier: tier as any,
+          subscriptionStatus: 'TRIAL',
+          trialEndsAt: trialEnd,
+          maxInstructors: plan.limits.instructors,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        subscription: {
+          id: subscription.id,
+          tier: subscription.tier,
+          status: subscription.status,
+          monthlyAmount: subscription.monthlyAmount,
+          billingCycle: subscription.billingCycle,
+          trialEndsAt: subscription.trialEndsAt,
+          currentPeriodEnd: subscription.currentPeriodEnd,
+        },
+        message: `Started ${plan.trialDays}-day free trial of ${plan.name} plan`,
+      });
     }
-
-    // Update instructor with new tier
-    await prisma.instructor.update({
-      where: { id: user.instructor.id },
-      data: {
-        subscriptionTier: tier as any,
-        subscriptionStatus: subscription.status as any,
-        trialEndsAt: trialEnd,
-        maxInstructors: plan.limits.instructors,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      subscription: {
-        id: subscription.id,
-        tier: subscription.tier,
-        status: subscription.status,
-        monthlyAmount: subscription.monthlyAmount,
-        billingCycle: subscription.billingCycle,
-        trialEndsAt: subscription.trialEndsAt,
-        currentPeriodEnd: subscription.currentPeriodEnd,
-      },
-      message: `Started ${plan.trialDays}-day free trial of ${plan.name} plan`,
-    });
   } catch (error) {
     console.error('Error creating subscription:', error);
     return NextResponse.json(

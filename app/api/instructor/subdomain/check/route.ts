@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     // Check if already taken
     const existing = await prisma.instructor.findFirst({
-      where: { customDomain: subdomain },
+      where: { customSlug: subdomain },
       select: { id: true },
     });
 

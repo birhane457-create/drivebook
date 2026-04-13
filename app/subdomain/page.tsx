@@ -12,9 +12,9 @@ export default async function SubdomainPage() {
   }
 
   try {
-    // Look up instructor by subdomain
+    // Look up instructor by slug
     const instructor = await prisma.instructor.findFirst({
-      where: { customDomain: subdomain },
+      where: { customSlug: subdomain },
       select: { id: true },
     });
 

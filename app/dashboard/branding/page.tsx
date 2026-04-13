@@ -14,7 +14,7 @@ export default function BrandingPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const [instructor, setInstructor] = useState<any>(null);
   const [brandLogo, setBrandLogo] = useState('');
@@ -24,11 +24,11 @@ export default function BrandingPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
 
-  // Subdomain (PRO)
-  const [subdomain, setSubdomain] = useState('');
-  const [savedSubdomain, setSavedSubdomain] = useState('');
-  const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
-  const [checkingSubdomain, setCheckingSubdomain] = useState(false);
+  // Slug (PRO+)
+  const [slug, setSlug] = useState('');
+  const [savedSlug, setSavedSlug] = useState('');
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [checkingSlug, setCheckingSlug] = useState(false);
 
   // Social links
   const [whatsapp, setWhatsapp] = useState('');
@@ -36,7 +36,7 @@ export default function BrandingPage() {
   const [facebook, setFacebook] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
 
-  // Custom domain (Studio tier)
+  // Custom domain (Studio+)
   const [customDomain, setCustomDomain] = useState('');
   const [savedCustomDomain, setSavedCustomDomain] = useState('');
   const [domainVerified, setDomainVerified] = useState(false);
@@ -69,19 +69,15 @@ export default function BrandingPage() {
         setLogoPreview(d.brandLogo || '');
         setDomainVerified(d.domainVerified || false);
         setDomainVerifiedAt(d.domainVerifiedAt || null);
+        setInstructor((prev: any) => ({ ...prev, subscriptionTier: d.subscriptionTier }));
 
-        const tier = d.subscriptionTier;
-        setInstructor((prev: any) => ({ ...prev, subscriptionTier: tier }));
+        // Slug (separate field)
+        setSlug(d.customSlug || '');
+        setSavedSlug(d.customSlug || '');
 
-        // Studio/Business: customDomain is a full domain (has a dot)
-        if ((tier === 'STUDIO' || tier === 'BUSINESS') && d.customDomain?.includes('.')) {
-          setCustomDomain(d.customDomain);
-          setSavedCustomDomain(d.customDomain);
-        } else {
-          // PRO: customDomain is a subdomain slug
-          setSubdomain(d.customDomain || '');
-          setSavedSubdomain(d.customDomain || '');
-        }
+        // Custom domain (Studio+)
+        setCustomDomain(d.customDomain || '');
+        setSavedCustomDomain(d.customDomain || '');
       }
     } catch (err) {
       console.error(err);
@@ -103,32 +99,32 @@ export default function BrandingPage() {
     reader.readAsDataURL(file);
   };
 
-  const checkSubdomainAvailability = async (value: string) => {
-    if (!value || value.length < 3) { setSubdomainAvailable(null); return; }
-    if (!/^[a-z0-9-]+$/.test(value)) { setSubdomainAvailable(false); return; }
-    setCheckingSubdomain(true);
+  const checkSlugAvailability = async (value: string) => {
+    if (!value || value.length < 3) { setSlugAvailable(null); return; }
+    if (!/^[a-z0-9-]+$/.test(value)) { setSlugAvailable(false); return; }
+    setCheckingSlug(true);
     try {
       const res = await fetch(`/api/instructor/subdomain/check?subdomain=${value}`);
       const data = await res.json();
-      setSubdomainAvailable(data.available);
-    } catch { setSubdomainAvailable(null); }
-    finally { setCheckingSubdomain(false); }
+      setSlugAvailable(data.available);
+    } catch { setSlugAvailable(null); }
+    finally { setCheckingSlug(false); }
   };
 
-  const handleSubdomainChange = (value: string) => {
+  const handleSlugChange = (value: string) => {
     const cleaned = value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    setSubdomain(cleaned);
-    if (cleaned !== savedSubdomain) {
-      setTimeout(() => checkSubdomainAvailability(cleaned), 500);
+    setSlug(cleaned);
+    if (cleaned !== savedSlug) {
+      setTimeout(() => checkSlugAvailability(cleaned), 500);
     } else {
-      setSubdomainAvailable(null);
+      setSlugAvailable(null);
     }
   };
 
-  const copyUrl = (url: string) => {
+  const copyUrl = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const handleVerifyDomain = async () => {
@@ -174,7 +170,6 @@ export default function BrandingPage() {
 
       const tier = instructor?.subscriptionTier;
       const isStudio = tier === 'STUDIO' || tier === 'BUSINESS';
-      const domainToSave = isStudio ? (customDomain || null) : (subdomain || null);
 
       const brandRes = await fetch('/api/instructor/branding', {
         method: 'PUT',
@@ -184,7 +179,8 @@ export default function BrandingPage() {
           brandColorPrimary,
           brandColorSecondary,
           showBrandingOnBookingPage,
-          customDomain: domainToSave,
+          customSlug: slug || null,
+          customDomain: isStudio ? (customDomain || null) : null,
         }),
       });
       if (!brandRes.ok) throw new Error((await brandRes.json()).error || 'Failed to save branding');
@@ -206,7 +202,7 @@ export default function BrandingPage() {
       setMessage('All settings saved!');
       setBrandLogo(logoUrl);
       setLogoFile(null);
-      if (!isStudio) setSavedSubdomain(subdomain);
+      setSavedSlug(slug);
       await fetchData();
     } catch (err: any) {
       setError(err.message || 'Failed to save');
@@ -256,8 +252,82 @@ export default function BrandingPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-6">
 
-            {/* Booking URL — subdomain for PRO, custom domain for Studio */}
-            {isStudio ? (
+            {/* ── Slug section (PRO+, always shown) ── */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-purple-600" />
+                Your Booking URL
+                <span className="ml-auto text-xs font-semibold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">PRO+</span>
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">Share this link with students to book directly with you</p>
+
+              {/* Default URL — shown when no slug set */}
+              {instructor?.id && !savedSlug && (
+                <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Your default booking URL (always active):</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <a href={`https://${instructor.id}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
+                      className="text-gray-600 text-xs hover:underline truncate font-mono">
+                      {instructor.id}.drivebook.com.au
+                    </a>
+                    <button type="button" onClick={() => copyUrl(`https://${instructor.id}.drivebook.com.au`, 'default')}
+                      className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">
+                      {copied === 'default' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Set a custom slug below to get a friendlier URL</p>
+                </div>
+              )}
+
+              {savedSlug && (
+                <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between gap-2">
+                  <a href={`https://${savedSlug}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
+                    className="text-purple-700 font-semibold text-sm hover:underline truncate">
+                    {savedSlug}.drivebook.com.au
+                  </a>
+                  <button type="button" onClick={() => copyUrl(`https://${savedSlug}.drivebook.com.au`, 'slug')}
+                    className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700">
+                    {copied === 'slug' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied === 'slug' ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Custom slug <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input type="text" value={slug} onChange={(e) => handleSlugChange(e.target.value)}
+                    placeholder="yourname"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                    maxLength={30} />
+                  <span className="text-gray-500 text-sm whitespace-nowrap">.drivebook.com.au</span>
+                </div>
+                {checkingSlug && <p className="text-xs text-gray-500 mt-1">Checking...</p>}
+                {slugAvailable === true && slug && slug !== savedSlug && (
+                  <p className="text-xs text-green-600 mt-1">✓ {slug}.drivebook.com.au is available</p>
+                )}
+                {slugAvailable === false && slug && (
+                  <p className="text-xs text-red-600 mt-1">✗ Already taken — try another</p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, hyphens. Min 3 characters.</p>
+              </div>
+
+              {!isStudio && (
+                <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                  <p className="text-xs text-indigo-800 font-medium">Want your own domain?</p>
+                  <p className="text-xs text-indigo-700 mt-0.5">Upgrade to Studio to use <span className="font-semibold">yourdomain.com.au</span></p>
+                  <button onClick={() => router.push('/dashboard/subscription')}
+                    className="mt-2 text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline">
+                    See Studio plan →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Custom Domain section (Studio+ only) ── */}
+            {isStudio && (
               <CustomDomainWizard
                 customDomain={customDomain}
                 savedCustomDomain={savedCustomDomain}
@@ -268,75 +338,8 @@ export default function BrandingPage() {
                 copied={copied}
                 onDomainChange={(v) => { setCustomDomain(v); setDomainVerifyResult(null); }}
                 onVerify={handleVerifyDomain}
-                onCopy={() => copyUrl(`https://${savedCustomDomain}`)}
+                onCopy={() => copyUrl(`https://${savedCustomDomain}`, 'domain')}
               />
-            ) : (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
-                  <Link2 className="h-5 w-5 text-purple-600" />
-                  Your Booking URL
-                </h2>
-                <p className="text-sm text-gray-500 mb-4">Share this link with students to book directly with you</p>
-
-                {/* Default URL — always works even without a custom slug */}
-                {instructor?.id && !savedSubdomain && (
-                  <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                    <p className="text-xs text-gray-500 mb-1">Your default booking URL (always active):</p>
-                    <div className="flex items-center justify-between gap-2">
-                      <a href={`https://${instructor.id}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
-                        className="text-gray-600 text-xs hover:underline truncate font-mono">
-                        {instructor.id}.drivebook.com.au
-                      </a>
-                      <button type="button" onClick={() => copyUrl(`https://${instructor.id}.drivebook.com.au`)}
-                        className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">
-                        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">Set a custom slug below to get a friendlier URL</p>
-                  </div>
-                )}
-
-                {savedSubdomain && (
-                  <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between gap-2">
-                    <a href={`https://${savedSubdomain}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
-                      className="text-purple-700 font-semibold text-sm hover:underline truncate">
-                      {savedSubdomain}.drivebook.com.au
-                    </a>
-                    <button type="button" onClick={() => copyUrl(`https://${savedSubdomain}.drivebook.com.au`)}
-                      className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700">
-                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <input type="text" value={subdomain} onChange={(e) => handleSubdomainChange(e.target.value)}
-                    placeholder="yourname"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                    maxLength={30} />
-                  <span className="text-gray-500 text-sm whitespace-nowrap">.drivebook.com.au</span>
-                </div>
-
-                {checkingSubdomain && <p className="text-xs text-gray-500 mt-1">Checking...</p>}
-                {subdomainAvailable === true && subdomain && subdomain !== savedSubdomain && (
-                  <p className="text-xs text-green-600 mt-1">✓ {subdomain}.drivebook.com.au is available</p>
-                )}
-                {subdomainAvailable === false && subdomain && (
-                  <p className="text-xs text-red-600 mt-1">✗ Already taken — try another</p>
-                )}
-                <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, hyphens. Min 3 characters.</p>
-
-                {/* Studio upsell */}
-                <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-                  <p className="text-xs text-indigo-800 font-medium">Want your own domain?</p>
-                  <p className="text-xs text-indigo-700 mt-0.5">Upgrade to Studio to use <span className="font-semibold">yourdomain.com.au</span> — includes 1 year free domain.</p>
-                  <button onClick={() => router.push('/dashboard/subscription')}
-                    className="mt-2 text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline">
-                    See Studio plan →
-                  </button>
-                </div>
-              </div>
             )}
 
             {/* Social Links */}
@@ -384,7 +387,7 @@ export default function BrandingPage() {
               </h2>
               <input type="file" accept="image/*" onChange={handleLogoChange}
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer" />
-              <p className="text-xs text-gray-500 mt-1">PNG, JPG or SVG. Max 2MB. Recommended: 200x200px</p>
+              <p className="text-xs text-gray-500 mt-1">PNG, JPG or SVG. Max 2MB. Recommended: 200×200px</p>
               {logoPreview && (
                 <div className="mt-3 border-2 border-dashed border-gray-200 rounded-lg p-3 text-center">
                   <Image src={logoPreview} alt="Logo preview" width={80} height={80} className="mx-auto object-contain" />
@@ -472,6 +475,43 @@ export default function BrandingPage() {
               </div>
             </div>
 
+            {/* Active URLs summary */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Globe className="h-5 w-5 text-purple-600" />
+                Active URLs
+              </h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg p-2">
+                  <div>
+                    <p className="text-xs text-gray-500">Default</p>
+                    <p className="font-mono text-xs text-gray-700 truncate">{instructor?.id}.drivebook.com.au</p>
+                  </div>
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                </div>
+                {savedSlug && (
+                  <div className="flex items-center justify-between gap-2 bg-purple-50 rounded-lg p-2">
+                    <div>
+                      <p className="text-xs text-gray-500">Slug</p>
+                      <p className="font-mono text-xs text-purple-700 truncate">{savedSlug}.drivebook.com.au</p>
+                    </div>
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                  </div>
+                )}
+                {isStudio && savedCustomDomain && (
+                  <div className="flex items-center justify-between gap-2 bg-indigo-50 rounded-lg p-2">
+                    <div>
+                      <p className="text-xs text-gray-500">Custom Domain</p>
+                      <p className="font-mono text-xs text-indigo-700 truncate">{savedCustomDomain}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${domainVerified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {domainVerified ? 'Verified' : 'Pending'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
               <h3 className="font-semibold text-purple-900 mb-2">Tips</h3>
               <ul className="text-sm text-purple-800 space-y-1">
@@ -479,8 +519,8 @@ export default function BrandingPage() {
                 <li>• Share your booking URL on social media</li>
                 <li>• Add WhatsApp so students can message you directly</li>
                 {isStudio
-                  ? <li>• Domain goes live once CNAME is verified</li>
-                  : <li>• Your subdomain is live immediately after saving</li>
+                  ? <li>• You can use both a slug and a custom domain simultaneously</li>
+                  : <li>• Your slug is live immediately after saving</li>
                 }
               </ul>
             </div>
@@ -499,7 +539,7 @@ interface DomainWizardProps {
   domainVerifiedAt: string | null;
   verifyingDomain: boolean;
   domainVerifyResult: { verified: boolean; message?: string } | null;
-  copied: boolean;
+  copied: string | null;
   onDomainChange: (v: string) => void;
   onVerify: () => void;
   onCopy: () => void;
@@ -517,9 +557,8 @@ function CustomDomainWizard({
         Custom Domain
         <span className="ml-auto text-xs font-semibold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Studio</span>
       </h2>
-      <p className="text-sm text-gray-500 mb-4">Use your own domain for your booking page</p>
+      <p className="text-sm text-gray-500 mb-4">Use your own domain for your booking page — works alongside your slug</p>
 
-      {/* Verified badge */}
       {domainVerified && savedCustomDomain && (
         <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -532,15 +571,16 @@ function CustomDomainWizard({
           </div>
           <button type="button" onClick={onCopy}
             className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700">
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? 'Copied!' : 'Copy'}
+            {copied === 'domain' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied === 'domain' ? 'Copied!' : 'Copy'}
           </button>
         </div>
       )}
 
-      {/* Domain input */}
       <div className="mb-4">
-        <label className="block text-xs font-medium text-gray-600 mb-1">Your domain</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          Your domain <span className="text-gray-400 font-normal">(optional)</span>
+        </label>
         <input
           type="text"
           value={customDomain}
@@ -556,22 +596,20 @@ function CustomDomainWizard({
         <p className="text-xs font-semibold text-gray-700 mb-3">Step 1 — Add this DNS record at your registrar:</p>
 
         {customDomain ? (() => {
-          const parts = customDomain.split('.')
-          const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
-          const tld2 = parts.slice(-2).join('.')
-          const isCompoundTLD = twoPartTLDs.includes(tld2)
-          const rootParts = isCompoundTLD ? 3 : 2
-          const isRootDomain = parts.length <= rootParts
-          const cnameLabel = isRootDomain ? '@' : parts.slice(0, parts.length - rootParts).join('.')
+          const parts = customDomain.split('.');
+          const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au'];
+          const tld2 = parts.slice(-2).join('.');
+          const isCompoundTLD = twoPartTLDs.includes(tld2);
+          const rootParts = isCompoundTLD ? 3 : 2;
+          const isRootDomain = parts.length <= rootParts;
+          const cnameLabel = isRootDomain ? '@' : parts.slice(0, parts.length - rootParts).join('.');
 
           return isRootDomain ? (
-            // Root domain — can't CNAME apex, show all 3 options
             <div className="space-y-3">
               <p className="text-xs text-gray-600">
-                <span className="font-mono font-semibold">{customDomain}</span> is a root domain. Root domains can't use a standard CNAME record. Pick one of these options:
+                <span className="font-mono font-semibold">{customDomain}</span> is a root domain. Root domains can't use a standard CNAME. Pick one option:
               </p>
-
-              <details className="group">
+              <details>
                 <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
                   <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option A</span>
                   ALIAS / ANAME record <span className="text-gray-400 font-normal">(if your registrar supports it)</span>
@@ -585,36 +623,33 @@ function CustomDomainWizard({
                       <td className="text-indigo-700">cname.vercel-dns.com</td>
                     </tr></tbody>
                   </table>
-                  <p className="text-xs text-gray-500">Supported by VentraIP, Cloudflare, and some others. Check your registrar's DNS panel for ALIAS or ANAME.</p>
+                  <p className="text-xs text-gray-500">Supported by VentraIP, Cloudflare, and some others.</p>
                 </div>
               </details>
-
-              <details className="group">
+              <details>
                 <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
                   <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option B</span>
                   Use Cloudflare DNS <span className="text-gray-400 font-normal">(free, recommended)</span>
                 </summary>
                 <div className="mt-2 pl-2 border-l-2 border-indigo-200 text-xs text-gray-600 space-y-1">
                   <p>1. Create a free Cloudflare account and add your domain</p>
-                  <p>2. Update your nameservers at your registrar to Cloudflare's</p>
-                  <p>3. In Cloudflare DNS, add: <span className="font-mono">CNAME @ → cname.vercel-dns.com</span> (Cloudflare flattens it automatically)</p>
+                  <p>2. Update nameservers at your registrar to Cloudflare's</p>
+                  <p>3. In Cloudflare DNS: <span className="font-mono">CNAME @ → cname.vercel-dns.com</span></p>
                 </div>
               </details>
-
-              <details className="group">
+              <details>
                 <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
                   <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option C</span>
                   Use www instead <span className="text-gray-400 font-normal">(simplest)</span>
                 </summary>
                 <div className="mt-2 pl-2 border-l-2 border-indigo-200 text-xs text-gray-600 space-y-1">
-                  <p>1. Add a CNAME at your registrar: <span className="font-mono">www → cname.vercel-dns.com</span></p>
-                  <p>2. Set up a URL redirect at your registrar: <span className="font-mono">{customDomain}</span> → <span className="font-mono">www.{customDomain}</span></p>
-                  <p>3. Enter <span className="font-mono">www.{customDomain}</span> in the domain field above instead</p>
+                  <p>1. Add CNAME: <span className="font-mono">www → cname.vercel-dns.com</span></p>
+                  <p>2. Set a URL redirect: <span className="font-mono">{customDomain}</span> → <span className="font-mono">www.{customDomain}</span></p>
+                  <p>3. Enter <span className="font-mono">www.{customDomain}</span> in the domain field above</p>
                 </div>
               </details>
             </div>
           ) : (
-            // Subdomain — straightforward CNAME
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono">
                 <thead><tr className="text-gray-500 font-sans">
@@ -629,10 +664,10 @@ function CustomDomainWizard({
                 </tr></tbody>
               </table>
               <p className="text-xs text-gray-500 mt-2">
-                In your registrar's DNS panel, the "Name" or "Host" field is just <span className="font-mono font-semibold">{cnameLabel}</span> — not the full domain. The value always points to <span className="font-mono">cname.vercel-dns.com</span>.
+                The "Name" or "Host" field is just <span className="font-mono font-semibold">{cnameLabel}</span> — not the full domain.
               </p>
             </div>
-          )
+          );
         })() : (
           <p className="text-xs text-gray-400 italic">Enter your domain above to see the DNS record</p>
         )}
@@ -640,7 +675,6 @@ function CustomDomainWizard({
         <p className="text-xs text-gray-500 mt-3">DNS changes can take up to 24 hours to propagate.</p>
       </div>
 
-      {/* Verify button */}
       <div className="mb-3">
         <p className="text-xs font-semibold text-gray-700 mb-2">Step 2 — Verify your domain:</p>
         <button
@@ -656,7 +690,6 @@ function CustomDomainWizard({
         </button>
       </div>
 
-      {/* Verify result */}
       {domainVerifyResult && (
         <div className={`rounded-lg p-3 flex items-start gap-2 text-sm ${domainVerifyResult.verified ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
           {domainVerifyResult.verified

@@ -152,8 +152,14 @@ export default async function SubscriptionPage() {
                 <p className="text-2xl font-bold text-gray-900">{plan.newStudentBonus}%</p>
                 <p className="text-sm text-gray-500">Extra for first booking with new students</p>
               </div>
-              {instructor.subscriptionTier === 'BUSINESS' && (
+              {(instructor.subscriptionTier === 'BUSINESS' || instructor.subscriptionTier === 'STUDIO') && (
                 <>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Booking Slug</h3>
+                    <p className="text-sm text-gray-900">
+                      {instructor.customSlug ? `${instructor.customSlug}.drivebook.com.au` : 'Not configured'}
+                    </p>
+                  </div>
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-2">Custom Domain</h3>
                     <p className="text-sm text-gray-900">

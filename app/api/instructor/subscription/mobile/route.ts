@@ -69,14 +69,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { tier, billingCycle = 'monthly' } = body;
 
-  if (!tier || !['BASIC', 'PRO', 'BUSINESS'].includes(tier)) {
+  if (!tier || !['BASIC', 'PRO', 'STUDIO', 'BUSINESS'].includes(tier)) {
     return NextResponse.json({ error: 'Invalid tier' }, { status: 400 });
   }
 
   const plan = SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS];
   const amount = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
   const now = new Date();
-  const trialEnd = getTrialEndDate(tier as any);
   const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   const existing = await prisma.subscription.findFirst({
@@ -85,11 +84,24 @@ export async function POST(req: NextRequest) {
 
   let subscription;
   if (existing) {
+    // Tier change mid-trial — preserve original trial end, never reset it
     subscription = await prisma.subscription.update({
       where: { id: existing.id },
       data: { tier: tier as any, monthlyAmount: amount, billingCycle, currentPeriodEnd: periodEnd },
     });
+
+    await prisma.instructor.update({
+      where: { id: instructor.id },
+      data: {
+        subscriptionTier: tier as any,
+        subscriptionStatus: subscription.status as any,
+        maxInstructors: plan.limits.instructors,
+        // trialEndsAt intentionally NOT updated
+      },
+    });
   } else {
+    // First subscription — start fresh trial
+    const trialEnd = getTrialEndDate(tier as any);
     subscription = await prisma.subscription.create({
       data: {
         instructorId: instructor.id,
@@ -102,17 +114,17 @@ export async function POST(req: NextRequest) {
         trialEndsAt: trialEnd,
       },
     });
-  }
 
-  await prisma.instructor.update({
-    where: { id: instructor.id },
-    data: {
-      subscriptionTier: tier as any,
-      subscriptionStatus: subscription.status as any,
-      trialEndsAt: trialEnd,
-      maxInstructors: plan.limits.instructors,
-    },
-  });
+    await prisma.instructor.update({
+      where: { id: instructor.id },
+      data: {
+        subscriptionTier: tier as any,
+        subscriptionStatus: 'TRIAL',
+        trialEndsAt: trialEnd,
+        maxInstructors: plan.limits.instructors,
+      },
+    });
+  }
 
   return NextResponse.json({ success: true, subscription });
 }

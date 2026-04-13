@@ -73,7 +73,8 @@ model Instructor {
   subscriptionTier          String    @default("BASIC")
   subscriptionStatus        String    @default("TRIAL")
   trialEndsAt               DateTime?
-  customDomain              String?
+  customSlug                String?   // PRO+: slug.drivebook.com.au
+  customDomain              String?   // Studio+: full custom domain (e.g. bookings.yourdomain.com.au)
   domainVerified            Boolean   @default(false)
   domainVerifiedAt          DateTime?
   brandedBookingPage        Boolean   @default(false)

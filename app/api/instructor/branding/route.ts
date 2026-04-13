@@ -3,12 +3,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-
 export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user || (session.user.role !== 'INSTRUCTOR' && session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -22,6 +21,7 @@ export async function GET(req: NextRequest) {
         brandColorPrimary: true,
         brandColorSecondary: true,
         showBrandingOnBookingPage: true,
+        customSlug: true,
         customDomain: true,
         domainVerified: true,
         domainVerifiedAt: true,
@@ -33,23 +33,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Allow access for all tiers (BASIC users will see upgrade prompt in UI)
-    // PRO and BUSINESS users can use branding features
-
     return NextResponse.json(instructor);
   } catch (error) {
     console.error('Error fetching branding:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch branding settings' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch branding settings' }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user || (session.user.role !== 'INSTRUCTOR' && session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -58,72 +51,42 @@ export async function PUT(req: NextRequest) {
       where: session.user.instructorId
         ? { id: session.user.instructorId }
         : { userId: session.user.id },
-      select: {
-        id: true,
-        subscriptionTier: true,
-      },
+      select: { id: true, subscriptionTier: true },
     });
 
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Allow access for all tiers (BASIC users will see upgrade prompt in UI)
-    // PRO and BUSINESS users can use branding features
-
     const body = await req.json();
-    const {
-      brandLogo,
-      brandColorPrimary,
-      brandColorSecondary,
-      showBrandingOnBookingPage,
-      customDomain,
-    } = body;
+    const { brandLogo, brandColorPrimary, brandColorSecondary, showBrandingOnBookingPage, customSlug, customDomain } = body;
 
-    // Validate subdomain if provided
-    if (customDomain) {
-      // Check format
-      const subdomainRegex = /^[a-z0-9-]{3,30}$/;
-      if (!subdomainRegex.test(customDomain)) {
+    // Validate slug if provided
+    if (customSlug) {
+      const slugRegex = /^[a-z0-9-]{3,30}$/;
+      if (!slugRegex.test(customSlug)) {
         return NextResponse.json(
-          { error: 'Invalid subdomain format. Use lowercase letters, numbers, and hyphens only (3-30 characters)' },
+          { error: 'Invalid slug format. Use lowercase letters, numbers, and hyphens only (3–30 characters)' },
           { status: 400 }
         );
       }
-
-      // Check if already taken by another instructor
       const existing = await prisma.instructor.findFirst({
-        where: {
-          customDomain: customDomain,
-          id: { not: instructor.id },
-        },
+        where: { customSlug, id: { not: instructor.id } },
       });
-
       if (existing) {
-        return NextResponse.json(
-          { error: 'This subdomain is already taken. Please choose another one.' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 400 });
       }
     }
 
     // Validate hex colors
-    const hexColorRegex = /^#[0-9A-F]{6}$/i;
-    if (brandColorPrimary && !hexColorRegex.test(brandColorPrimary)) {
-      return NextResponse.json(
-        { error: 'Invalid primary color format. Use hex format (#RRGGBB)' },
-        { status: 400 }
-      );
+    const hexRegex = /^#[0-9A-F]{6}$/i;
+    if (brandColorPrimary && !hexRegex.test(brandColorPrimary)) {
+      return NextResponse.json({ error: 'Invalid primary color format. Use hex (#RRGGBB)' }, { status: 400 });
+    }
+    if (brandColorSecondary && !hexRegex.test(brandColorSecondary)) {
+      return NextResponse.json({ error: 'Invalid secondary color format. Use hex (#RRGGBB)' }, { status: 400 });
     }
 
-    if (brandColorSecondary && !hexColorRegex.test(brandColorSecondary)) {
-      return NextResponse.json(
-        { error: 'Invalid secondary color format. Use hex format (#RRGGBB)' },
-        { status: 400 }
-      );
-    }
-
-    // Update branding settings
     const updated = await prisma.instructor.update({
       where: { id: instructor.id },
       data: {
@@ -131,6 +94,7 @@ export async function PUT(req: NextRequest) {
         brandColorPrimary: brandColorPrimary || null,
         brandColorSecondary: brandColorSecondary || null,
         showBrandingOnBookingPage: showBrandingOnBookingPage === true,
+        customSlug: customSlug || null,
         customDomain: customDomain || null,
       },
       select: {
@@ -138,19 +102,14 @@ export async function PUT(req: NextRequest) {
         brandColorPrimary: true,
         brandColorSecondary: true,
         showBrandingOnBookingPage: true,
+        customSlug: true,
         customDomain: true,
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      branding: updated,
-    });
+    return NextResponse.json({ success: true, branding: updated });
   } catch (error) {
     console.error('Error updating branding:', error);
-    return NextResponse.json(
-      { error: 'Failed to update branding settings' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update branding settings' }, { status: 500 });
   }
 }

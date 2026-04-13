@@ -7,8 +7,11 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Custom domain booking page (Studio tier).
- * Middleware rewrites requests from custom domains to /custom-domain.
- * We read the x-custom-domain header to find the instructor.
+ * Middleware rewrites requests from custom domains to /custom-domain
+ * and sets the x-custom-domain header.
+ *
+ * We look up the instructor by their customDomain field, then render
+ * the standard subdomain booking page using the instructor's ID as the slug.
  */
 export default async function CustomDomainPage({
   searchParams,
@@ -20,22 +23,23 @@ export default async function CustomDomainPage({
 
   if (!customDomain) notFound();
 
-  // Verify this domain belongs to a verified Studio/Business instructor
+  // Find the instructor who owns this verified custom domain
   const instructor = await prisma.instructor.findFirst({
     where: {
       customDomain,
       domainVerified: true,
       subscriptionTier: { in: ['STUDIO', 'BUSINESS'] },
     },
-    select: { customDomain: true },
+    select: { id: true },
   });
 
   if (!instructor) notFound();
 
-  // Reuse the subdomain page — it already handles all the rendering
-  // We pass the customDomain as the slug (it will look up by customDomain field)
+  // Render the standard booking page using the instructor's ID as the slug.
+  // The subdomain page falls back to ID lookup, so this always resolves correctly
+  // regardless of whether the instructor has a customSlug set.
   return SubdomainBookingPage({
-    params: { slug: customDomain },
+    params: { slug: instructor.id },
     searchParams,
   });
 }

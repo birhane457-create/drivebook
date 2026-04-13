@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { tier, billingCycle = 'monthly' } = body;
 
-    if (!tier || !['BASIC', 'PRO', 'BUSINESS'].includes(tier)) {
+    if (!tier || !['BASIC', 'PRO', 'STUDIO', 'BUSINESS'].includes(tier)) {
       return NextResponse.json(
         { error: 'Invalid subscription tier' },
         { status: 400 }
@@ -61,6 +61,14 @@ export async function POST(req: NextRequest) {
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
     const priceId = getStripePriceId(tier as any, billingCycle);
 
+    // Only give a trial if this instructor has never had one
+    const existingSubscription = await prisma.subscription.findFirst({
+      where: { instructorId: user.instructor.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    const hasHadTrial = !!existingSubscription;
+    const trialDays = hasHadTrial ? 0 : SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS].trialDays;
+
     const checkoutSession = await stripe.checkout.sessions.create({
       customer_email: user.email,
       line_items: [
@@ -78,7 +86,7 @@ export async function POST(req: NextRequest) {
         billingCycle,
       },
       subscription_data: {
-        trial_period_days: SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS].trialDays,
+        ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
         metadata: {
           instructorId: user.instructor.id,
           tier,
