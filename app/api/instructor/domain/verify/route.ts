@@ -83,15 +83,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid domain format' }, { status: 400 });
     }
 
-    // DNS lookup — check CNAME points to Vercel
+    // DNS lookup — check CNAME or ANAME/ALIAS points to Vercel
+    // ANAME/ALIAS records don't appear in CNAME lookups — they resolve as A records.
+    // So we check CNAME first, then fall back to A record resolution against Vercel's IPs.
     let verified = false;
     let dnsValue = '';
+    let dnsMethod = '';
+
     try {
-      const records = await dns.resolveCname(domain);
-      dnsValue = records[0] || '';
+      // Try CNAME first (works for subdomains and Cloudflare-flattened root domains)
+      const cnameRecords = await dns.resolveCname(domain);
+      dnsValue = cnameRecords[0] || '';
+      dnsMethod = 'CNAME';
       verified = dnsValue.toLowerCase().includes('vercel');
     } catch {
-      verified = false;
+      // CNAME not found — try A record (ANAME/ALIAS resolves this way)
+      try {
+        const aRecords = await dns.resolve4(domain);
+        if (aRecords.length > 0) {
+          // Vercel's edge network uses 76.76.21.x range
+          const isVercelIP = aRecords.some(ip =>
+            ip.startsWith('76.76.21.') || ip.startsWith('76.76.19.')
+          );
+          dnsValue = aRecords.join(', ');
+          dnsMethod = 'ANAME/A';
+          verified = isVercelIP;
+        }
+      } catch {
+        verified = false;
+      }
     }
 
     if (verified) {
@@ -111,8 +131,8 @@ export async function POST(req: NextRequest) {
         verified: true,
         domain,
         dnsValue,
+        dnsMethod,
         vercelAdded: vercelResult.success,
-        // If Vercel API isn't configured, tell the admin they need to add it manually
         adminActionRequired: !vercelResult.success,
         message: vercelResult.success
           ? 'Domain verified and added to Vercel. SSL will be ready within a minute.'
@@ -124,7 +144,9 @@ export async function POST(req: NextRequest) {
       verified: false,
       domain,
       dnsValue: dnsValue || null,
-      message: `CNAME not pointing to ${VERCEL_CNAME_TARGET}. Current value: ${dnsValue || 'not found'}`,
+      message: dnsValue
+        ? `DNS found (${dnsMethod}: ${dnsValue}) but not pointing to Vercel. Check your DNS record value.`
+        : `No CNAME or ANAME/A record found for ${domain}. DNS may still be propagating (up to 24h).`,
     });
   } catch (error) {
     console.error('Domain verify error:', error);
