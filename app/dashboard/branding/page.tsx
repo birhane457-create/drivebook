@@ -606,46 +606,120 @@ function CustomDomainWizard({
 
           return isRootDomain ? (
             <div className="space-y-3">
-              <p className="text-xs text-gray-600">
-                <span className="font-mono font-semibold">{customDomain}</span> is a root domain. Root domains can't use a standard CNAME. Pick one option:
-              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+                <span className="font-semibold">{customDomain}</span> is a root domain (no subdomain prefix). Root domains can't use a standard CNAME record — pick one of the options below.
+              </div>
+
+              {/* Option A */}
               <details>
                 <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
                   <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option A</span>
-                  ALIAS / ANAME record <span className="text-gray-400 font-normal">(if your registrar supports it)</span>
+                  ALIAS / ANAME record <span className="text-gray-400 font-normal ml-1">(check if your registrar supports it)</span>
                 </summary>
-                <div className="mt-2 pl-2 border-l-2 border-indigo-200">
-                  <table className="w-full text-xs font-mono mb-1">
-                    <thead><tr className="text-gray-500 font-sans"><th className="text-left pr-3 pb-1">Type</th><th className="text-left pr-3 pb-1">Name</th><th className="text-left pb-1">Value</th></tr></thead>
-                    <tbody><tr>
-                      <td className="pr-3 text-gray-800">ALIAS or ANAME</td>
-                      <td className="pr-3 text-gray-800">@ (root)</td>
-                      <td className="text-indigo-700">cname.vercel-dns.com</td>
-                    </tr></tbody>
-                  </table>
-                  <p className="text-xs text-gray-500">Supported by VentraIP, Cloudflare, and some others.</p>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 space-y-2">
+                  <p className="text-xs text-gray-600">In your registrar's DNS panel, add a new record with these exact values:</p>
+                  <div className="bg-white border border-gray-200 rounded overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50"><tr>
+                        <th className="text-left px-2 py-1.5 text-gray-500 font-medium border-b border-gray-200">Field</th>
+                        <th className="text-left px-2 py-1.5 text-gray-500 font-medium border-b border-gray-200">What to type</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-2 py-1.5 text-gray-600">Type</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-gray-900">ALIAS <span className="text-gray-400 font-sans font-normal">or</span> ANAME</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-2 py-1.5 text-gray-600">Name / Host</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-gray-900">@ <span className="text-gray-400 font-sans font-normal text-xs">(means root domain)</span></td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 text-gray-600">Value / Points to</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-indigo-700">cname.vercel-dns.com</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-gray-500">Supported by: VentraIP, Cloudflare, Namecheap (ALIAS), Route 53 (ALIAS). If you don't see ALIAS or ANAME as a record type, use Option B or C instead.</p>
                 </div>
               </details>
+
+              {/* Option B */}
               <details>
                 <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
                   <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option B</span>
-                  Use Cloudflare DNS <span className="text-gray-400 font-normal">(free, recommended)</span>
+                  Move DNS to Cloudflare <span className="text-gray-400 font-normal ml-1">(free, works with any registrar)</span>
                 </summary>
-                <div className="mt-2 pl-2 border-l-2 border-indigo-200 text-xs text-gray-600 space-y-1">
-                  <p>1. Create a free Cloudflare account and add your domain</p>
-                  <p>2. Update nameservers at your registrar to Cloudflare's</p>
-                  <p>3. In Cloudflare DNS: <span className="font-mono">CNAME @ → cname.vercel-dns.com</span></p>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 space-y-1.5 text-xs text-gray-600">
+                  <p className="font-medium text-gray-700">Steps:</p>
+                  <p>1. Go to <span className="font-mono text-indigo-700">cloudflare.com</span> → create a free account → Add site → enter <span className="font-mono font-semibold">{customDomain}</span></p>
+                  <p>2. Cloudflare will show you two nameserver addresses (e.g. <span className="font-mono">ada.ns.cloudflare.com</span>)</p>
+                  <p>3. At your current registrar, replace the nameservers with Cloudflare's two addresses</p>
+                  <p>4. Back in Cloudflare DNS, add this record:</p>
+                  <div className="bg-white border border-gray-200 rounded overflow-hidden mt-1">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50"><tr>
+                        <th className="text-left px-2 py-1.5 text-gray-500 font-medium border-b border-gray-200">Field</th>
+                        <th className="text-left px-2 py-1.5 text-gray-500 font-medium border-b border-gray-200">What to type</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-2 py-1.5 text-gray-600">Type</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-gray-900">CNAME</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-2 py-1.5 text-gray-600">Name</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-gray-900">@ <span className="text-gray-400 font-sans font-normal text-xs">(root)</span></td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 text-gray-600">Target</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-indigo-700">cname.vercel-dns.com</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-gray-500">Cloudflare automatically flattens CNAME at root — this just works.</p>
                 </div>
               </details>
+
+              {/* Option C */}
               <details>
                 <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
                   <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-xs">Option C</span>
-                  Use www instead <span className="text-gray-400 font-normal">(simplest)</span>
+                  Use <span className="font-mono mx-1">www.{customDomain}</span> instead <span className="text-gray-400 font-normal ml-1">(easiest, no nameserver change)</span>
                 </summary>
-                <div className="mt-2 pl-2 border-l-2 border-indigo-200 text-xs text-gray-600 space-y-1">
-                  <p>1. Add CNAME: <span className="font-mono">www → cname.vercel-dns.com</span></p>
-                  <p>2. Set a URL redirect: <span className="font-mono">{customDomain}</span> → <span className="font-mono">www.{customDomain}</span></p>
-                  <p>3. Enter <span className="font-mono">www.{customDomain}</span> in the domain field above</p>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 space-y-1.5 text-xs text-gray-600">
+                  <p className="font-medium text-gray-700">Steps:</p>
+                  <p>1. At your registrar, add this DNS record:</p>
+                  <div className="bg-white border border-gray-200 rounded overflow-hidden mt-1 mb-1">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50"><tr>
+                        <th className="text-left px-2 py-1.5 text-gray-500 font-medium border-b border-gray-200">Field</th>
+                        <th className="text-left px-2 py-1.5 text-gray-500 font-medium border-b border-gray-200">What to type</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-2 py-1.5 text-gray-600">Type</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-gray-900">CNAME</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-2 py-1.5 text-gray-600">Name / Host</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-gray-900">www</td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 text-gray-600">Value / Points to</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-indigo-700">cname.vercel-dns.com</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p>2. Also add a URL redirect (usually under "Forwarding" or "Redirects" at your registrar):</p>
+                  <div className="bg-white border border-gray-200 rounded p-2 font-mono text-xs">
+                    <span className="text-gray-600">{customDomain}</span>
+                    <span className="text-gray-400 mx-2">→</span>
+                    <span className="text-indigo-700">www.{customDomain}</span>
+                  </div>
+                  <p>3. Come back here and change the domain field above to <span className="font-mono font-semibold">www.{customDomain}</span></p>
                 </div>
               </details>
             </div>
