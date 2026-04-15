@@ -1,76 +1,54 @@
 # Admin Reviews
 
-**Route:** `/admin/reviews`
-**Auth required:** ADMIN or SUPER_ADMIN
-**File:** `app/admin/reviews/page.tsx`
+**Route:** `/admin/reviews`  
+**Auth required:** ADMIN or SUPER_ADMIN  
+**File:** `app/admin/reviews/page.tsx`  
+**Data source:** `Booking` model fields — `clientRating`, `clientReview`, `isReviewed`, `reviewGivenAt`
 
 ---
 
-## Overview
+## What It Shows
 
-Read-only view of all reviews on the platform. Shows moderation status (published / hidden / flagged). Currently a display-only page — no publish/unpublish/delete actions are wired in the UI. Moderation actions would need to be added.
+Stats row:
+- Total reviews
+- Average rating (⭐)
+- 5-star count
+- 1–2 star count
 
----
-
-## Stats
-
-| Stat | Description |
-|------|-------------|
-| Total Reviews | All reviews ever submitted |
-| Published | `isPublished = true` |
-| Flagged | `isFlagged = true` |
-| Avg Rating | Mean star rating across all reviews |
-
----
-
-## Review List
-
-Shows the 50 most recent reviews ordered by `createdAt DESC`.
-
-**Mobile:** Card layout — rating stars, client name, instructor name, date, status badges, comment (truncated to 3 lines).
-
-**Desktop:** Table layout — Rating, Client, Instructor, Comment (truncated), Date, Status.
-
-### Status badges
-
-| Badge | Condition |
-|-------|-----------|
-| Published (green) | `isPublished = true` |
-| Hidden (grey) | `isPublished = false` |
-| Flagged (red) | `isFlagged = true` — shown in addition to published/hidden |
-
----
-
-## Current Limitations
-
-- No publish/unpublish toggle in the UI
-- No delete action
-- No response/reply from instructor
-- No pagination (capped at 50)
-- No filter by instructor or rating
-
-These are known gaps. The data model supports `isPublished` and `isFlagged` — the UI just doesn't expose the write operations yet.
+Review table (last 100, ordered by `reviewGivenAt DESC`):
+- Star rating (★★★★★ visual)
+- Student name
+- Instructor name
+- Review comment (truncated)
+- Date submitted
 
 ---
 
 ## Data Model
 
-```
-Review {
-  id
-  rating        Int (1–5)
-  comment       String?
-  isPublished   Boolean
-  isFlagged     Boolean
-  createdAt     DateTime
-  instructor    → Instructor
-  client        → Client
-}
-```
+Reviews are NOT stored in a separate `Review` model. They are stored directly on the `Booking` record:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `clientRating` | `Int?` | 1–5 star rating |
+| `clientReview` | `String?` | Written comment |
+| `isReviewed` | `Boolean` | Set to `true` after submission |
+| `reviewGivenAt` | `DateTime?` | Timestamp of submission |
+
+The page queries `Booking` where `isReviewed = true` and `clientRating != null`.
+
+---
+
+## Moderation
+
+Reviews are currently read-only in the admin. There is no hide/flag/delete action in the UI.
+
+The `Instructor.averageRating` and `Instructor.totalReviews` fields are recalculated automatically when a student submits a review via `POST /api/reviews`.
 
 ---
 
 ## Related
 
-- `docs/02-student/REVIEWS.md` — How clients submit reviews
-- `docs/03-instructor/DASHBOARD.md` — How instructors see their reviews
+- [INSTRUCTOR_APPROVALS.md](./INSTRUCTOR_APPROVALS.md) — Instructor profile shows review count and average rating
+- `app/api/reviews/route.ts` — Student review submission
+- `app/api/client/pending-reviews/route.ts` — Pending reviews for students

@@ -14,6 +14,7 @@ PENDING → APPROVED
 PENDING → REJECTED
 APPROVED → SUSPENDED
 SUSPENDED → APPROVED  (reinstatement)
+REJECTED → APPROVED   (reinstatement)
 ```
 
 `Instructor.approvalStatus` field.
@@ -22,35 +23,58 @@ SUSPENDED → APPROVED  (reinstatement)
 
 ## Instructor List
 
-Filterable by:
-- Status (PENDING, APPROVED, REJECTED, SUSPENDED)
-- Search (name, email)
+The list uses `InstructorApprovalList` — a client component with inline actions.
 
-Each row shows: name, email, subscription tier, status, documents verified, date registered.
+**Each row shows:**
+- Avatar + name
+- Approval status badge (PENDING / APPROVED / REJECTED / SUSPENDED)
+- Subscription tier badge (PRO / STUDIO / BUSINESS — BASIC not shown)
+- Compliance dot (green = all valid, yellow = expiring soon, red = expired/missing)
+- Email, phone, suburb
+- Booking count, average rating, hourly rate
+- Action buttons (context-aware per status)
+- Expand chevron → shows compliance expiry dates, document status, stats, bio
 
----
+**Filter tabs:** All / PENDING / APPROVED / REJECTED / SUSPENDED (via `?status=` query param)
 
-## Approve
-
-Sets `approvalStatus: "APPROVED"` and `isVerified: true`. Sends an approval email to the instructor.
-
-**API:** `POST /api/admin/instructors/[id]/approve`
-
----
-
-## Reject
-
-Sets `approvalStatus: "REJECTED"`. Requires a rejection reason. Sends a rejection email to the instructor.
-
-**API:** `POST /api/admin/instructors/[id]/reject`
+**Search:** Name, email, phone, suburb — client-side filter
 
 ---
 
-## Suspend
+## Inline Actions
 
-Sets `approvalStatus: "SUSPENDED"` and `isActive: false`. The instructor cannot create new bookings while suspended. Existing confirmed bookings are not affected.
+All actions happen without leaving the list page:
 
-**API:** `POST /api/admin/instructors/[id]/suspend`
+| Action | When shown | Effect |
+|--------|-----------|--------|
+| Approve | PENDING | Sets `approvalStatus = APPROVED`, `isVerified = true`. Sends approval email. |
+| Reject | PENDING | Opens reason modal (min 10 chars). Sets `approvalStatus = REJECTED`. Sends rejection email. |
+| Suspend | APPROVED | Opens reason modal. Sets `approvalStatus = SUSPENDED`, `isActive = false`. |
+| Reactivate | SUSPENDED or REJECTED | Calls approve endpoint. Sets `approvalStatus = APPROVED`. |
+| Profile | Any | Links to `/admin/instructors/[id]` |
+| Docs | Any | Links to `/admin/documents/review/[id]` |
+
+After each action, the page reloads to reflect the new state. A flash toast confirms success.
+
+---
+
+## Instructor Detail
+
+**Route:** `/admin/instructors/[id]`  
+**File:** `app/admin/instructors/[id]/page.tsx`
+
+Three tabs: Overview / Bookings / Documents
+
+**Overview tab shows:**
+- Booking stats (completed, upcoming, cancelled, pending)
+- Document status (license, insurance, police check, WWC) with expiry dates
+- Subscription tier, status, hourly rate, payout method
+- ABN number, verification status, withholding tax rate
+- Link to manage ABN verification
+
+**Bookings tab:** All bookings for this instructor with status, client, date, price
+
+**Documents tab:** Document images with view links, expiry dates, link to full document review page
 
 ---
 
@@ -73,80 +97,25 @@ Document expiry dates are shown. Expired documents trigger a warning.
 
 ---
 
-## Instructor Detail
-
-**Route:** `/admin/instructors/[id]`  
-**File:** `app/admin/instructors/[id]/page.tsx`
-
-Full instructor profile view including:
-- All profile fields
-- Subscription status and history
-- Booking history
-- Document status
-- Audit log entries
-
----
-
 ## ABN Verification
 
-**Route:** `POST /api/admin/instructors/[id]/verify-abn`  
-**File:** `app/api/admin/instructors/[id]/verify-abn/route.ts`
+**Route:** `POST /api/admin/instructors/[id]/verify-abn`
 
-Admins can manually verify or revoke an instructor's ABN. This is used when the ABR API is unavailable or the admin has confirmed the ABN via other means.
-
-### Request Body
-
-```json
-{
-  "verified": true,
-  "entityName": "John Smith Driving Pty Ltd",
-  "note": "Confirmed via ABR lookup"
-}
-```
-
-### Effect on Instructor Record
+Admins can manually verify or revoke an instructor's ABN.
 
 | Field | When `verified: true` | When `verified: false` |
 |-------|----------------------|------------------------|
 | `abnVerified` | `true` | `false` |
 | `abnStatus` | `ACTIVE` | `REVIEW_REQUIRED` |
-| `abnEntityName` | Set from `entityName` | Unchanged |
-| `abnVerifiedAt` | Current timestamp | `null` |
-| `abnVerifiedBy` | Admin user ID | Unchanged |
-| `withholdingTaxRate` | `0` (no withholding) | `47` (47% withholding) |
+| `withholdingTaxRate` | `0` | `47` |
 
-### Withholding Tax Gate on Payouts
-
-`withholdingTaxRate` directly controls how much is withheld from instructor payouts:
-
-- Verified ABN → `withholdingTaxRate: 0` → full payout amount
-- Unverified or no ABN → `withholdingTaxRate: 47` → 47% withheld from each payout
-
-This is enforced in `payout-service.ts` at payout build time. An instructor with an unverified ABN will still receive payouts, but 47% is withheld and retained by the platform.
-
-### Audit Trail
-
-Every verify/revoke action creates an `AuditLog` entry:
-
-| Action | Trigger |
-|--------|---------|
-| `ABN_VERIFIED` | `verified: true` |
-| `ABN_VERIFICATION_REVOKED` | `verified: false` |
-
-Metadata includes: `abn`, `entityName`, `note`.
-
-### Automatic ABN Recheck
-
-A **weekly** cron (Mondays 2am AEST) at `GET /api/cron/recheck-abn` re-validates all instructor ABNs against the ABR API. If an ABN that was previously active is found to be cancelled or invalid, it sets `abnVerified: false`, `withholdingTaxRate: 47`, and fires an alert via the alert service.
-
-Requires `ABR_GUID` env var to be set. If not configured, the cron returns `{ skipped: true }` and does nothing.
+A weekly cron (`GET /api/cron/recheck-abn`) re-validates all instructor ABNs against the ABR API. If an ABN is cancelled, `abnVerified` is cleared and payouts are blocked.
 
 ---
 
 ## Related
 
-- [DASHBOARD.md](./DASHBOARD.md) — Platform overview
+- [DASHBOARD.md](./DASHBOARD.md) — Platform overview with pending count alert
 - [DOCUMENTS.md](./DOCUMENTS.md) — Document compliance review
 - [PAYOUTS.md](./PAYOUTS.md) — How ABN status gates payout withholding
 - [AUDIT_LOG.md](./AUDIT_LOG.md) — ABN verification events
-- `docs/03-instructor/SETTINGS.md` — What instructors submit for approval

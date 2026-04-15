@@ -81,6 +81,13 @@
 | 63 | Admin test centre management | Only way to manage centres was seed script | Created `app/admin/test-centres/page.tsx` + `GET/POST /api/admin/test-centres` + `PATCH/DELETE /api/admin/test-centres/[id]`; added to admin nav |
 | 64 | Google Calendar OAuth — already implemented | Marked as missing but callback route existed | Confirmed `GET /api/calendar/callback` + `GoogleCalendarSettings` component fully implemented |
 | 65 | Custom domain DNS guide — already implemented | Marked as missing but wizard existed | Confirmed `CustomDomainWizard` in branding page has full step-by-step DNS guide with CNAME table and root domain options |
+| 66 | Admin dashboard hardcoded zeros | pendingInstructors, subscriptionStats all hardcoded to 0 | Dashboard now queries real data: pending count, subscription breakdown by tier, revenue MTD |
+| 67 | Admin dashboard no action alerts | No surface for daily operational tasks | Added 4 alert banners: ended lessons, expiring docs, unverified ABNs, pending approvals |
+| 68 | Admin reviews page crashed silently | Queried `prisma.review` — model doesn't exist | Fixed to read from `Booking.clientRating/clientReview/isReviewed` |
+| 69 | Instructor detail "Coming Soon" box | Subscription/ABN/tax data not shown | Replaced with real subscription tier, status, hourly rate, payout method, ABN, withholding rate |
+| 70 | Instructor detail broken booking link | Linked to `/booking/[id]` (public page) | Fixed to `/admin/bookings` |
+| 71 | Instructor list no subscription tier | Couldn't see tier at a glance | PRO/STUDIO/BUSINESS badge added inline to each row |
+| 72 | Staff governance broken links | `/staff/dashboard` and `/admin/audit-logs` don't exist | Fixed to `/admin/audit-log` and `/admin/payouts` |
 
 ---
 
@@ -124,7 +131,95 @@ This is a deployment step, not a code gap.
 
 | Category | Count |
 |----------|-------|
-| Resolved (all time) | 65 |
+| Resolved (all time) | 72 |
 | Open — deployment/config | 3 (OPEN-02, OPEN-04, OPEN-05) |
 | Open — feature gap | 1 (OPEN-10 — progress chart) |
 | Deferred — future tier | 1 (OPEN-01 — BUSINESS tier) |
+
+---
+
+## Open — What Still Needs to Be Built
+
+These are genuine gaps that have not been implemented yet. Ordered by priority.
+
+---
+
+### OPEN-01: BUSINESS Tier — Multi-Instructor Management
+
+**Status:** Deferred — tier is "Coming Soon" in UI, cannot be purchased  
+**Scope:** Large — separate spec required before starting
+
+---
+
+### OPEN-02: Prisma Migration for TestCentre
+
+**Status:** Migration run locally (April 2026). Must be run on production DB if not already applied.  
+**Action:** `npx prisma migrate dev --name add-test-centre` then `npm run seed:test-centres`
+
+---
+
+### OPEN-04: Rate Limiting — Redis Not Configured
+
+**Status:** In-memory fallback only in production (serverless-unsafe)  
+**Action:** Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Vercel env vars.
+
+---
+
+### OPEN-05: ABN Placeholder in Footer
+
+**Status:** Placeholder text in `app/about/page.tsx`  
+**Action:** Add real ABN once registered. One-line change.
+
+---
+
+### OPEN-10: Student Progress — No Chart Library
+
+**Status:** Progress page uses CSS bar chart (div widths) instead of a real chart library.  
+**Decision:** Acceptable for launch. Install `recharts` post-launch if needed.
+
+---
+
+### OPEN-11: Live Mode Stripe Keys
+
+**Status:** All Stripe keys are test mode. Real payments cannot be processed.  
+**Action before go-live:** Create live Stripe products/prices, update all `STRIPE_*` env vars in Vercel with live keys, update `STRIPE_WEBHOOK_SECRET` with the live webhook signing secret from Stripe Dashboard.
+
+---
+
+## Resolved Contradictions (Documentation Corrections)
+
+These were identified as contradictions in the docs but are resolved in code. Documented here for clarity.
+
+| # | Contradiction | Resolution |
+|---|--------------|------------|
+| C1 | Wallet balance drift — instructor vs admin path | Fixed (gap #26). All paths use transaction sum. SYSTEM_OF_RECORD.md updated to remove "known inconsistency" language. |
+| C2 | Stripe webhook secret "placeholder" warning | Resolved. Real test secret set in Vercel. STRIPE.md updated with current status. |
+| C3 | Payout eligibility "COMPLETED" vs "SETTLED" | Resolved (gap #6/#13). All docs use SETTLED. |
+| C4 | Reconciliation stuck threshold 24h vs 10min | Resolved (gap #15). FAILURE_HANDLING.md corrected to 10 minutes. |
+| C5 | "Lesson Completed" transaction status inconsistency | Resolved. FAILURE_HANDLING.md now correctly says SETTLED for all paths. |
+| C6 | AuditLog missing on POST /api/bookings | Resolved (gap #4). Booking creation logs BOOKING_CREATED. |
+| C7 | Stale Prisma client | Resolved. Migration run April 2026, client regenerated. |
+
+---
+
+## Design Decisions (Intentional, Not Bugs)
+
+| Item | Decision | Rationale |
+|------|----------|-----------|
+| TFN collection | Not active. Field commented out in schema. | Enabled only if legally required by ATO. |
+| Manual recovery for negative balances | Admin creates MANUAL_ADJUSTMENT transaction. No automated self-healing. | Prevents accidental corrections. Every adjustment requires human review and audit trail. |
+| Automated Stripe Connect transfers | Implemented for `payoutMethod = stripe_connect`. Manual bank transfer for others. | Instructors who haven't completed Connect onboarding fall back to manual. |
+| Progress chart (CSS bars) | Functional. Recharts not installed. | Acceptable for launch. Real chart library is a post-launch enhancement. |
+| No TFN collection | TFN fields commented out in schema. | ATO does not require TFN for contractor payments if ABN is provided. |
+
+---
+
+## Summary
+
+| Category | Count |
+|----------|-------|
+| Resolved (all time) | 72 |
+| Open — deployment/config | 4 (OPEN-02, OPEN-04, OPEN-05, OPEN-11) |
+| Open — feature gap | 1 (OPEN-10 — progress chart) |
+| Deferred — future tier | 1 (OPEN-01 — BUSINESS tier) |
+| Resolved contradictions | 7 (C1–C7) |

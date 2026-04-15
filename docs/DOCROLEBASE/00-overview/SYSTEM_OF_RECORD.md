@@ -10,7 +10,7 @@ For every domain, there is exactly one authoritative source of truth. When data 
 |--------|----------------|-------|
 | Bookings | `Booking` table (PostgreSQL) | Status, timing, participants |
 | Payments | Stripe + `Transaction` table | Stripe is authoritative for payment status; Transaction is authoritative for platform accounting |
-| Client wallet balance | `WalletTransaction` sum (computed) | `ClientWallet.balance` is a cached copy — the transaction sum is authoritative. Two code paths exist: instructor booking path recomputes from transactions (correct); admin booking path uses stored `balance` field directly (known inconsistency, low risk). When they conflict, the transaction sum wins. |
+| Client wallet balance | `WalletTransaction` sum (computed) | `ClientWallet.balance` is a cached field — the transaction sum is the authoritative source. All booking paths (instructor, admin, client) compute balance from the transaction sum. The stored `balance` field is not used for financial decisions. |
 | Instructor earnings | `Transaction.instructorPayout` sum | Not stored as a running total — always computed |
 | Payouts | `Payout` + `PayoutTransaction` collections | Payout system is authoritative for what has been paid |
 | Commission rates | `PlatformSettings` (DB) | Never stored on `Instructor` — always fetched at payment time |

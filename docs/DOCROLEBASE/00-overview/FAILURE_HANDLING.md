@@ -76,9 +76,10 @@ How the system detects, surfaces, and recovers from failures.
 
 ### Lesson Completed but Not Marked
 
-- Transaction stays in `COMPLETED` (instructor wallet path) or `SETTLED` (Stripe path)
-- Not payout-eligible until admin marks booking `COMPLETED`
-- No automated resolution — admin action required
+- Transaction stays in `SETTLED` status (payout-eligible) but the booking is still `CONFIRMED`
+- Not payout-eligible until admin marks booking `COMPLETED` via `/admin/bookings`
+- The admin dashboard shows an alert: "X lessons ended but still CONFIRMED"
+- No automated resolution — admin action required daily
 
 ### Duplicate Booking Attempt
 
