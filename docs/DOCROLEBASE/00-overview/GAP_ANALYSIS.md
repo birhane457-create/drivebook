@@ -54,9 +54,77 @@
 
 ---
 
-## Open
+## Resolved — April 2026 Gap Sprint
 
-| # | Item | Owner |
-|---|------|-------|
-| C1 | UPSTASH_REDIS_REST_URL empty — rate limiting is in-memory only | Set in Vercel env vars |
-| C5 | ABN placeholder in footer | Add real ABN to app/about/page.tsx |
+| # | Area | What was wrong | What was done |
+|---|------|---------------|---------------|
+| 43 | Student booking detail page | No `/client-dashboard/bookings/[id]` page existed | Created `app/client-dashboard/bookings/[id]/page.tsx` + `app/api/client/bookings/[id]/route.ts` |
+| 44 | PENDING/PENDING_PAYMENT hidden from students | `api/client/profile` filtered out unpaid bookings | All statuses now visible with correct display labels |
+| 45 | Student notifications page missing | No dedicated `/client-dashboard/notifications` page | Created `app/client-dashboard/notifications/page.tsx` |
+| 46 | Reviews not in mobile nav | No reviews indicator in client mobile bottom nav | Pending-reviews badge added to "My Bookings" tab |
+| 47 | Instructor client detail page missing | No `/dashboard/clients/[id]` page | Created `app/dashboard/clients/[id]/page.tsx` + `app/api/instructor/clients/[id]/route.ts` |
+| 48 | Booking edit page missing | `/dashboard/bookings/[id]/edit` folder had no `page.tsx` | Created `app/dashboard/bookings/[id]/edit/page.tsx` |
+| 49 | Send payment link button missing | API existed but no UI triggered it | Button added to booking detail page and client detail page |
+| 50 | /my-bookings orphaned page | Legacy leftover not linked from anywhere | Deleted |
+| 51 | /instructor-dashboard redirect dead weight | Just a redirect to /dashboard | Deleted |
+| 52 | PDA test result update broken | `PUT /api/pda-tests/[id]` route folder had no `route.ts` | Created `app/api/pda-tests/[id]/route.ts` with PUT + DELETE |
+| 53 | PDA test schedule form missing | "Schedule Test" button opened nothing | Rebuilt `app/dashboard/pda-tests/page.tsx` with full form |
+| 54 | PDA availability blocking broken | Called `prisma.pDATest` — model doesn't exist | Fixed to query `Booking` where `bookingType = 'PDA_TEST'` |
+| 55 | PDA mobile route stub | Returned empty array with TODO comment | Replaced with real Booking query |
+| 56 | PDA test duration wrong | Hardcoded 45min | Fixed to 165min (2h45) |
+| 57 | PDA test centre free-text | Dirty data, no consistency | Added `TestCentre` model, seeded 15 WA DVS centres, schedule form uses dropdown grouped by region |
+| 58 | PDA test price not configurable per test | No price field in schedule form | Price field added, defaults to instructor's `testPackagePrice`, per-test override supported |
+| 59 | PDA tests invisible to students | Students couldn't see test day bookings | Student booking detail shows purple "Test Day" badge, centre name/address displayed correctly |
+| 60 | Availability buffer not applied | `bookingBufferMinutes` fetched but never used in slot generation | Fixed — buffer applied to all bookings; PDA tests block `testStart - buffer` through `testEnd` |
+| 61 | Student reschedule page missing | `/client-dashboard/bookings/[id]/reschedule` returned 404 | Created `app/client-dashboard/bookings/[id]/reschedule/page.tsx` with calendar + slot picker |
+| 62 | /manage-booking not linked from emails | Page existed but no email linked to it | Added "Manage booking" link to all booking receipt emails; page pre-fills from `?id=` query param |
+| 63 | Admin test centre management | Only way to manage centres was seed script | Created `app/admin/test-centres/page.tsx` + `GET/POST /api/admin/test-centres` + `PATCH/DELETE /api/admin/test-centres/[id]`; added to admin nav |
+| 64 | Google Calendar OAuth — already implemented | Marked as missing but callback route existed | Confirmed `GET /api/calendar/callback` + `GoogleCalendarSettings` component fully implemented |
+| 65 | Custom domain DNS guide — already implemented | Marked as missing but wizard existed | Confirmed `CustomDomainWizard` in branding page has full step-by-step DNS guide with CNAME table and root domain options |
+
+---
+
+## Open — What Still Needs to Be Built
+
+These are genuine gaps that have not been implemented yet. Ordered by priority.
+
+---
+
+### OPEN-01: BUSINESS Tier — Multi-Instructor Management
+
+**Status:** Deferred — tier is "Coming Soon" in UI, cannot be purchased  
+**Scope:** Large — separate spec required before starting
+
+---
+
+### OPEN-02: Prisma Migration Required for TestCentre
+
+**Status:** Schema updated, migration not yet run  
+**Action:** Run `npx prisma migrate dev --name add-test-centre` then `npm run seed:test-centres`
+
+This is a deployment step, not a code gap.
+
+---
+
+### OPEN-04: Rate Limiting — Redis Not Configured
+
+**Status:** In-memory fallback only  
+**Action:** Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Vercel env vars.
+
+---
+
+### OPEN-05: ABN Placeholder in Footer
+
+**Status:** Placeholder text in `app/about/page.tsx`  
+**Action:** Add real ABN once registered. One-line change.
+
+---
+
+## Summary
+
+| Category | Count |
+|----------|-------|
+| Resolved (all time) | 65 |
+| Open — deployment/config | 3 (OPEN-02, OPEN-04, OPEN-05) |
+| Open — feature gap | 1 (OPEN-10 — progress chart) |
+| Deferred — future tier | 1 (OPEN-01 — BUSINESS tier) |

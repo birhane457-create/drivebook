@@ -3,61 +3,80 @@
 **Route:** `/dashboard/clients`  
 **Auth required:** INSTRUCTOR role  
 **File:** `app/dashboard/clients/page.tsx`  
-**APIs:** `GET /api/instructor/clients`, `POST /api/instructor/clients`, `PATCH /api/instructor/clients/[id]`
+**APIs:** `GET /api/clients`, `POST /api/clients`, `PUT /api/clients/[id]`, `GET /api/instructor/clients/[id]`
 
 ---
 
 ## Client List
 
-Shows all clients linked to the instructor. Each client card shows:
-- Name, email, phone
-- Total lessons booked
-- Last lesson date
-- Wallet balance (if they have a DriveBook account)
-- Quick actions: Book Now, Edit, View History
+Shows all clients linked to the instructor. Each row shows:
+- Name, phone, email
+- "No account" amber badge if `client.userId` is null
+- Eye icon → `/dashboard/clients/[id]` (client detail page)
+- Calendar icon → `/dashboard/bookings/new?clientId=[id]` (book now)
+- Edit icon → inline expand for editing
+
+Expandable row shows: email, address, notes, "No account" explanation, "Book Now" button.
+
+---
+
+## Client Detail Page
+
+**Route:** `/dashboard/clients/[id]`  
+**File:** `app/dashboard/clients/[id]/page.tsx`  
+**API:** `GET /api/instructor/clients/[id]`
+
+Shows:
+- Contact info (name, phone, email, address, notes)
+- Account status (registered / no account)
+- Wallet balance (computed from confirmed credit/debit transactions — only shown if client has a DriveBook account)
+- Stats: total bookings, total spend on completed lessons
+- Booking history (last 20 bookings with status badges, each links to `/dashboard/bookings/[id]`)
+- "Book Now" button
+- "Send Payment Link" button (only shown if client has a DriveBook account)
+
+The API is scoped — only returns clients belonging to this instructor. Returns 404 otherwise.
 
 ---
 
 ## Add Client
 
-Instructors can manually add clients (e.g. for clients who don't self-register).
+Instructors can manually add clients from the clients list page.
 
-Required fields:
-- Name
-- Email
-- Phone
+Required: name, email, phone.  
+Optional: default pickup address, notes.
 
-Optional:
-- Default pickup address
-- Notes
-
-A `Client` record is created linked to the instructor. If the email matches an existing `User`, the client is linked to that account. Otherwise, the client exists without a DriveBook account — they cannot book via the client dashboard until they register.
+A `Client` record is created linked to the instructor. If the email matches an existing `User`, the client is linked to that account. Otherwise, a dormant `User` account is created with a random password — the client cannot log in until they set their password via the link sent when the instructor first books a lesson for them.
 
 ---
 
 ## Edit Client
 
-Instructors can update client details (name, phone, pickup address, notes) from the client detail page.
+Inline edit from the clients list (expand row → edit icon). Fields: name, phone, address, notes.
+
+Email cannot be edited if the client has a DriveBook account (`client.userId` is set) — they must change it through their own account settings.
 
 ---
 
-## Book on Behalf
+## Send Payment Link
 
-From the client list, instructors can click "Book Now" to create a booking for a specific client. This opens the booking creation form pre-filled with the client's details.
+When a client's wallet is insufficient for a booking, the instructor can send a payment link from:
+- The booking detail page (when `status = PENDING_PAYMENT`)
+- The client detail page
 
-**Requirement:** The client must have a DriveBook account (`client.userId` must exist) and sufficient wallet balance.
+**API:** `POST /api/bookings/send-payment-link`
 
-If the wallet is insufficient, the instructor can send a payment link to the client's email.
+Sends the client an email with a pre-filled wallet top-up link showing the lesson cost breakdown and a direct link to their wallet page.
 
 ---
 
-## Client History
+## No Account Clients
 
-The client detail page (`/dashboard/clients/[id]`) shows:
-- All bookings with this client
-- Lesson feedback history
-- Performance scores over time
-- Total hours driven
+If `client.userId` is null:
+- Amber "No account" badge shown in the client list
+- Booking is created as `PENDING_PAYMENT` (no wallet deduction)
+- Client receives a "claim your account" email with a pre-filled registration link
+- Once registered, they can confirm the booking from their dashboard
 
 ---
 

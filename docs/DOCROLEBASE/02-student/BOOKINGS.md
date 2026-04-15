@@ -2,22 +2,65 @@
 
 **Route:** `/client-dashboard/bookings`  
 **Auth required:** CLIENT role  
-**APIs:** `GET /api/client/bookings`, `PUT /api/client/bookings/[id]/reschedule`, `POST /api/bookings/[id]/cancel`
+**APIs:** `GET /api/client/profile`, `GET /api/client/bookings/[id]`, `PUT /api/client/bookings/[id]/reschedule`, `POST /api/bookings/[id]/cancel`
 
 ---
 
 ## Booking List
 
-Shows all bookings for the logged-in student, grouped by status:
-- Upcoming (CONFIRMED)
-- Pending payment (PENDING_PAYMENT)
+**File:** `app/client-dashboard/bookings/page.tsx`
+
+Shows all bookings for the logged-in student. Each booking card is a link to the booking detail page. Bookings are filterable by:
+- Upcoming (CONFIRMED, PENDING, PENDING_PAYMENT)
 - Past (COMPLETED, CANCELLED, EXPIRED, NO_SHOW)
 
-Each booking card shows: instructor name, date/time, duration, price, status badge.
+Each card shows: instructor name, date, time, duration, price, status badge, pickup address (if set).
 
-**For completed past bookings:** a "Leave Review" button (yellow star icon) appears. Clicking it opens `ReviewModal` — a star rating (1–5) + comment form. See [REVIEWS.md](./REVIEWS.md) for full details.
+**PENDING_PAYMENT bookings** show an amber "Awaiting Payment" banner with a "Complete Payment →" link to `/booking/[id]/payment`.
 
-**Reschedule button** appears on upcoming bookings. **Cancel button** appears on upcoming bookings.
+---
+
+## Booking Detail Page
+
+**Route:** `/client-dashboard/bookings/[id]`  
+**File:** `app/client-dashboard/bookings/[id]/page.tsx`  
+**API:** `GET /api/client/bookings/[id]`
+
+Full detail view for a single booking. Shows:
+- Date, time, duration
+- Pickup address
+- Price (with package badge if applicable)
+- Notes
+- Instructor name, phone (tap to call), WhatsApp (if set)
+- Status badge with human-readable label
+- Lesson feedback / PDA performance score (if completed and instructor submitted feedback)
+- Strengths and focus areas from instructor feedback
+- Instructor notes
+
+**Context-aware actions:**
+- "Leave a Review" — appears on completed bookings where `isReviewed = false`
+- "Reschedule" — appears on upcoming bookings with >12h notice remaining
+- "Cancel Booking" — appears on upcoming and awaiting-confirmation bookings
+- "Complete Payment →" — appears on `PENDING_PAYMENT` bookings
+
+The API is scoped — only returns bookings belonging to the logged-in student's client records. Returns 404 if the booking ID doesn't match.
+
+---
+
+## Booking Statuses
+
+| DB Status | Display Label | Badge |
+|-----------|--------------|-------|
+| `CONFIRMED` (future) | Upcoming | Green |
+| `CONFIRMED` (past endTime) | Completed | Grey |
+| `COMPLETED` | Completed | Grey |
+| `PENDING` | Awaiting Confirmation | Amber |
+| `PENDING_PAYMENT` | Awaiting Payment | Yellow |
+| `NO_SHOW` | No Show | Red |
+| `CANCELLED` | Cancelled | Red |
+| `EXPIRED` | Expired | Grey |
+
+All statuses are now visible to the student. Previously, PENDING, PENDING_PAYMENT, CANCELLED, and EXPIRED were hidden — this has been corrected.
 
 ---
 
@@ -28,11 +71,11 @@ Each booking card shows: instructor name, date/time, duration, price, status bad
 
 A 5-step wizard for booking lessons using wallet balance:
 
-1. **Instructor search** — find by name or location
-2. **Date & slot selection** — calendar + available slots
-3. **Duration & package** — single lesson or package
-4. **Cart review** — multiple lessons can be added to cart (max 10)
-5. **Confirm & pay** — deducts from wallet balance
+1. Instructor search — find by name or location
+2. Date & slot selection — calendar + available slots
+3. Duration & package — single lesson or package
+4. Cart review — multiple lessons can be added to cart (max 10)
+5. Confirm & pay — deducts from wallet balance
 
 **API:** `POST /api/client/bookings/create-bulk`
 
@@ -44,7 +87,7 @@ Bookings created this way are immediately `CONFIRMED` (no Stripe payment step �
 
 ## Reschedule
 
-Students can reschedule a booking from the booking detail page.
+Students can reschedule from the booking detail page.
 
 **Rules:**
 - Minimum 12 hours notice required
@@ -58,7 +101,7 @@ Students can reschedule a booking from the booking detail page.
 
 ## Cancel
 
-Students can cancel a booking from the booking detail page.
+Students can cancel from the booking detail page.
 
 **Refund tiers** (based on `originalStartTime` to prevent gaming via reschedule):
 
@@ -75,30 +118,11 @@ Refund is credited to the wallet immediately as a CREDIT transaction.
 
 ---
 
-## Booking Statuses
-
-| Status | Meaning |
-|--------|---------|
-| `PENDING` | Short-notice booking awaiting instructor approval (2hr expiry if not approved) |
-| `PENDING_PAYMENT` | Slot held, awaiting Stripe payment (10 min window) |
-| `CONFIRMED` | Paid and confirmed |
-| `COMPLETED` | Lesson delivered |
-| `CANCELLED` | Cancelled |
-| `EXPIRED` | Payment not completed in time, or short-notice not approved in time |
-| `NO_SHOW` | Marked by admin |
-
----
-
 ## Package Booking from Dashboard
 
-When a student has wallet credits from a package purchase (book later flow), they book individual lessons from `/client-dashboard/book-lesson`. Each lesson deducts from the wallet at the `lockedHourlyRate` stored at package purchase time — not the instructor's current rate.
+When a student has wallet credits from a package purchase (book later flow), they book individual lessons from `/client-dashboard/book-lesson`. Each lesson deducts from the wallet at the current instructor rate (book-later does not lock the rate).
 
 **API:** `POST /api/client/bookings/create-bulk`
-
-Bookings created this way are immediately `CONFIRMED` — no Stripe step, wallet is debited directly. The API validates:
-- Wallet balance ≥ total cart cost
-- No slot conflicts (atomic check inside `$transaction`)
-- Instructor is active and approved
 
 ---
 
@@ -108,5 +132,3 @@ Bookings created this way are immediately `CONFIRMED` — no Stripe step, wallet
 - [REVIEWS.md](./REVIEWS.md) — Leaving reviews after lessons
 - `docs/06-payments/REFUNDS.md` — Refund policy details
 - `docs/BOOKING_SYSTEM.md` — Full booking system reference
-
-

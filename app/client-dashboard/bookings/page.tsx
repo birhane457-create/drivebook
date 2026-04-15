@@ -10,15 +10,9 @@ import {
   Loader2,
   AlertCircle,
   BookOpen,
-  Edit2,
-  X as XIcon,
   MapPin,
   User,
-  Star
 } from 'lucide-react';
-import RescheduleModal from '@/components/RescheduleModal';
-import CancelDialog from '@/components/CancelDialog';
-import ReviewModal from '@/components/ReviewModal';
 
 interface Booking {
   id: string;
@@ -28,6 +22,8 @@ interface Booking {
   duration: number;
   price: number;
   status: string;
+  dbStatus?: string;
+  pickupAddress?: string | null;
   instructor: {
     id: string;
     name: string;
@@ -48,29 +44,6 @@ export default function ClientBookingsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all');
-  const [rescheduleModal, setRescheduleModal] = useState<{
-    isOpen: boolean;
-    bookingId: string;
-    instructorId: string;
-    date: string;
-    time: string;
-    duration: number;
-    price: number;
-    instructor: string;
-    hourlyRate: number;
-  } | null>(null);
-  const [cancelDialog, setCancelDialog] = useState<{
-    isOpen: boolean;
-    bookingId: string;
-    date: string;
-    instructor: string;
-    price: number;
-  } | null>(null);
-  const [reviewModal, setReviewModal] = useState<{
-    isOpen: boolean;
-    bookingId: string;
-    instructorName: string;
-  } | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -121,8 +94,12 @@ export default function ClientBookingsPage() {
     );
   }
 
-  const upcomingBookings = profile.bookings.filter(b => b.status === 'upcoming');
-  const pastBookings = profile.bookings.filter(b => b.status === 'completed');
+  const upcomingBookings = profile.bookings.filter(b =>
+    b.status === 'upcoming' || b.status === 'awaiting_payment' || b.status === 'awaiting_confirmation'
+  );
+  const pastBookings = profile.bookings.filter(b =>
+    b.status === 'completed' || b.status === 'cancelled' || b.status === 'expired'
+  );
   const filteredBookings = filter === 'upcoming' ? upcomingBookings :
     filter === 'past' ? pastBookings :
     profile.bookings;
@@ -190,121 +167,75 @@ export default function ClientBookingsPage() {
         {/* Bookings List */}
         {filteredBookings.length > 0 ? (
           <div className="space-y-4">
-            {filteredBookings.map((booking) => (
-              <div
-                key={booking.id}
-                className={`bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition ${
-                  booking.status === 'completed' ? 'opacity-75' : ''
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+            {filteredBookings.map((booking) => {
+              const statusMap: Record<string, { label: string; cls: string }> = {
+                upcoming:               { label: 'Upcoming',             cls: 'bg-green-100 text-green-700' },
+                completed:              { label: 'Completed',            cls: 'bg-gray-100 text-gray-600' },
+                awaiting_payment:       { label: 'Awaiting Payment',     cls: 'bg-yellow-100 text-yellow-700' },
+                awaiting_confirmation:  { label: 'Awaiting Confirmation',cls: 'bg-amber-100 text-amber-700' },
+                cancelled:              { label: 'Cancelled',            cls: 'bg-red-100 text-red-600' },
+                expired:                { label: 'Expired',              cls: 'bg-gray-100 text-gray-500' },
+              };
+              const s = statusMap[booking.status] ?? statusMap.upcoming;
+
+              return (
+                <Link
+                  key={booking.id}
+                  href={`/client-dashboard/bookings/${booking.id}`}
+                  className={`block bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition ${
+                    booking.status === 'completed' || booking.status === 'cancelled' || booking.status === 'expired'
+                      ? 'opacity-75' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
                         <User className="w-6 h-6 text-blue-600" />
                       </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900">
+                      <div className="min-w-0">
+                        <h3 className="text-base font-bold text-gray-900 truncate">
                           {booking.instructor.name}
                         </h3>
-                        <span
-                          className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
-                            booking.status === 'upcoming'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {booking.status === 'upcoming' ? 'Upcoming' : 'Completed'}
+                        <span className={`inline-block px-2 py-0.5 text-xs font-semibold rounded mt-0.5 ${s.cls}`}>
+                          {s.label}
                         </span>
                       </div>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Calendar className="w-5 h-5 text-blue-600" />
-                        <div>
-                          <p className="text-xs text-gray-500">Date</p>
-                          <p className="font-semibold">
-                            {new Date(booking.date).toLocaleDateString('en-US', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Clock className="w-5 h-5 text-blue-600" />
-                        <div>
-                          <p className="text-xs text-gray-500">Time & Duration</p>
-                          <p className="font-semibold">{booking.time} • {booking.duration}h</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <BookOpen className="w-5 h-5 text-blue-600" />
-                        <div>
-                          <p className="text-xs text-gray-500">Price</p>
-                          <p className="font-semibold text-gray-900">
-                            ${booking.price.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-gray-900">${booking.price.toFixed(2)}</p>
+                      {booking.date && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {new Date(booking.date).toLocaleDateString('en-AU', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })}
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 ml-4">
-                    {booking.status === 'upcoming' && (
-                      <>
-                        <button
-                          onClick={() => setRescheduleModal({
-                            isOpen: true,
-                            bookingId: booking.id,
-                            instructorId: booking.instructor.id,
-                            date: booking.date,
-                            time: booking.time,
-                            duration: booking.duration * 60,
-                            price: booking.price,
-                            instructor: booking.instructor.name,
-                            hourlyRate: booking.instructor.hourlyRate
-                          })}
-                          className="px-4 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-2"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                          Reschedule
-                        </button>
-                        <button
-                          onClick={() => setCancelDialog({
-                            isOpen: true,
-                            bookingId: booking.id,
-                            date: booking.date,
-                            instructor: booking.instructor.name,
-                            price: booking.price
-                          })}
-                          className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold flex items-center gap-2"
-                        >
-                          <XIcon className="w-4 h-4" />
-                          Cancel
-                        </button>
-                      </>
+                  <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600">
+                    {booking.time && (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-blue-500" />
+                        {booking.time}{booking.duration ? ` · ${booking.duration >= 60 ? `${booking.duration / 60}h` : `${booking.duration}min`}` : ''}
+                      </div>
                     )}
-                    {booking.status === 'completed' && (
-                      <button
-                        onClick={() => setReviewModal({
-                          isOpen: true,
-                          bookingId: booking.id,
-                          instructorName: booking.instructor.name,
-                        })}
-                        className="px-4 py-2 text-yellow-600 border border-yellow-500 rounded-lg hover:bg-yellow-50 transition text-sm font-semibold flex items-center gap-2"
-                      >
-                        <Star className="w-4 h-4" />
-                        Leave Review
-                      </button>
+                    {booking.pickupAddress && (
+                      <div className="flex items-center gap-1.5 truncate max-w-xs">
+                        <MapPin className="w-4 h-4 text-blue-500 shrink-0" />
+                        <span className="truncate">{booking.pickupAddress}</span>
+                      </div>
                     )}
                   </div>
-                </div>
-              </div>
-            ))}
+
+                  {booking.status === 'awaiting_payment' && (
+                    <div className="mt-3 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+                      Payment required to confirm your slot. Tap to complete payment.
+                    </div>
+                  )}
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
@@ -330,47 +261,6 @@ export default function ClientBookingsPage() {
           </div>
         )}
       </div>
-
-      {/* Reschedule Modal */}
-      {rescheduleModal && (
-        <RescheduleModal
-          isOpen={rescheduleModal.isOpen}
-          onClose={() => setRescheduleModal(null)}
-          bookingId={rescheduleModal.bookingId}
-          instructorId={rescheduleModal.instructorId}
-          currentDate={rescheduleModal.date}
-          currentTime={rescheduleModal.time}
-          currentDuration={rescheduleModal.duration}
-          currentPrice={rescheduleModal.price}
-          instructorName={rescheduleModal.instructor}
-          instructorHourlyRate={rescheduleModal.hourlyRate}
-          onSuccess={loadData}
-        />
-      )}
-
-      {/* Cancel Dialog */}
-      {cancelDialog && (
-        <CancelDialog
-          isOpen={cancelDialog.isOpen}
-          onClose={() => setCancelDialog(null)}
-          bookingId={cancelDialog.bookingId}
-          instructorName={cancelDialog.instructor}
-          bookingDate={cancelDialog.date}
-          bookingPrice={cancelDialog.price}
-          onSuccess={loadData}
-        />
-      )}
-
-      {/* Review Modal */}
-      {reviewModal && (
-        <ReviewModal
-          isOpen={reviewModal.isOpen}
-          onClose={() => setReviewModal(null)}
-          bookingId={reviewModal.bookingId}
-          instructorName={reviewModal.instructorName}
-          onSuccess={loadData}
-        />
-      )}
     </div>
   );
 }

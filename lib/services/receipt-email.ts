@@ -73,10 +73,13 @@ function cancellationPolicy(): string {
     </div>`;
 }
 
-function footer(rn: string): string {
+function footer(rn: string, bookingId?: string): string {
+  const manageLink = bookingId
+    ? `<a href="${BASE_URL}/manage-booking?id=${bookingId}">Manage booking</a> &middot; `
+    : '';
   return `
     <p style="font-size:14px;color:#6b7280;margin:0;">
-      Questions? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> &middot;
+      ${manageLink}Questions? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> &middot;
       <a href="${BASE_URL}/client-dashboard">View your dashboard</a> &middot;
       <a href="${BASE_URL}/login">Login to DriveBook</a>
     </p>
@@ -111,6 +114,7 @@ export async function sendPackagePurchaseReceipt(data: {
   walletBalance: number;
   stripeRef?: string;
   paymentMethod?: string;
+  bookingId?: string;
 }) {
   const rn = receiptNumber(data.receiptId);
   const html = `<!DOCTYPE html><html><head><style>${styles}</style></head><body>
@@ -161,7 +165,7 @@ export async function sendPackagePurchaseReceipt(data: {
       </div>
 
       ${cancellationPolicy()}
-      ${footer(rn)}`;
+      ${footer(rn, data.bookingId)}`;
 
   await emailService.sendGenericEmail({
     to: data.clientEmail,
@@ -184,6 +188,7 @@ export async function sendWalletLessonReceipt(data: {
   walletBalanceBefore: number;
   walletBalanceAfter: number;
   bookedBy?: 'instructor' | 'client';
+  bookingId?: string;
 }) {
   const rn = receiptNumber(data.receiptId);
   const html = `<!DOCTYPE html><html><head><style>${styles}</style></head><body>
@@ -228,7 +233,7 @@ export async function sendWalletLessonReceipt(data: {
       </div>
 
       ${cancellationPolicy()}
-      ${footer(rn)}`;
+      ${footer(rn, data.bookingId)}`;
 
   await emailService.sendGenericEmail({
     to: data.clientEmail,
@@ -253,6 +258,7 @@ export async function sendSingleLessonReceipt(data: {
   pickupAddress?: string;
   stripeRef?: string;
   paymentMethod?: string;
+  bookingId?: string;
 }) {
   const rn = receiptNumber(data.receiptId);
   const packageSaving = (data.hourlyRate * 10 * 0.10).toFixed(0);
@@ -297,7 +303,7 @@ export async function sendSingleLessonReceipt(data: {
       </div>
 
       ${cancellationPolicy()}
-      ${footer(rn)}`;
+      ${footer(rn, data.bookingId)}`;
 
   await emailService.sendGenericEmail({
     to: data.clientEmail,

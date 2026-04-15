@@ -467,3 +467,17 @@ model LearningContent {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+model TestCentre {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  address   String
+  suburb    String
+  state     String   @default("WA")
+  region    String?
+  lat       Float?
+  lng       Float?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -98,6 +98,15 @@ function NotificationBell() {
               ))
             )}
           </div>
+          <div className="border-t px-4 py-2.5">
+            <Link
+              href="/client-dashboard/notifications"
+              onClick={() => setOpen(false)}
+              className="text-xs text-blue-600 hover:underline font-medium"
+            >
+              View all notifications →
+            </Link>
+          </div>
         </div>
       )}
     </div>

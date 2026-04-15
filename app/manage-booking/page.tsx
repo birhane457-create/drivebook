@@ -1,15 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { Search, Calendar, Clock, MapPin, DollarSign, User, Mail, Phone } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function ManageBookingPage() {
+function ManageBookingContent() {
   const router = useRouter()
-  const [bookingId, setBookingId] = useState('')
+  const searchParams = useSearchParams()
+  const [bookingId, setBookingId] = useState(searchParams.get('id') || '')
   const [loading, setLoading] = useState(false)
   const [booking, setBooking] = useState<any>(null)
   const [error, setError] = useState('')
+
+  // Auto-search if id is in query params
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (id) {
+      setBookingId(id)
+      fetch(`/api/public/bookings/${id}`)
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(setBooking)
+        .catch(() => setError('Booking not found. Please check your Booking ID.'))
+    }
+  }, [])
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -247,5 +260,13 @@ export default function ManageBookingPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function ManageBookingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>}>
+      <ManageBookingContent />
+    </Suspense>
   )
 }

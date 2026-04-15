@@ -31,7 +31,7 @@ Instructors can block out specific dates or date ranges (e.g. holidays, PDA test
 
 Stored in the `AvailabilityException` model. The availability service (`lib/services/availability.ts`) checks these when generating slots.
 
-PDA tests automatically block 2 hours before + 1 hour after each test.
+PDA tests automatically block 60 minutes before + 30 minutes after each test (based on the test's `startTime` stored on the `Booking` record with `bookingType = 'PDA_TEST'`). The availability service queries these bookings directly — there is no separate PDA test model.
 
 ---
 
@@ -39,22 +39,49 @@ PDA tests automatically block 2 hours before + 1 hour after each test.
 
 `getAvailableSlots(instructorId, date, lessonDurationMinutes)` in `lib/services/availability.ts`:
 
-1. Fetches `workingHours` for the day
-2. Fetches existing `PENDING`, `PENDING_PAYMENT`, and `CONFIRMED` bookings
-3. Fetches PDA tests and availability exceptions
-4. Generates slots every 30 minutes within working hours, skipping conflicts
+1. Fetches `workingHours`, `bookingBufferMinutes`, `enableTravelTime`, `travelTimeMinutes` for the instructor
+2. Fetches existing `PENDING`, `PENDING_PAYMENT`, and `CONFIRMED` bookings (excluding PDA tests)
+3. Fetches PDA test bookings (`bookingType = 'PDA_TEST'`) separately
+4. Fetches availability exceptions
+5. Generates slots every 30 minutes within working hours, skipping conflicts
+
+**Effective gap** = `max(bookingBufferMinutes, travelTimeMinutes)` (if travel time is enabled)
 
 ---
 
 ## Booking Buffer
 
-`Instructor.bookingBufferMinutes` — a gap added between consecutive bookings (e.g. 15 min travel time). Slots within the buffer of an existing booking are excluded.
+`Instructor.bookingBufferMinutes` — a gap added after each booking before the next slot can start. The platform minimum is 10 minutes. Instructors set this in their availability settings to account for travel time between pickups.
+
+The buffer is applied to all bookings including PDA tests. When generating slots, the availability service extends each booking's end time by `bookingBufferMinutes` before checking for conflicts.
 
 ---
 
 ## Travel Time
 
-If `enableTravelTime: true`, the instructor's `travelTimeMinutes` is added to each booking's effective end time when checking for conflicts.
+If `enableTravelTime: true`, the instructor's `travelTimeMinutes` is used instead of `bookingBufferMinutes` if it is larger. The effective gap = `max(bookingBufferMinutes, travelTimeMinutes)`.
+
+---
+
+## PDA Test Blocking
+
+When a PDA test is scheduled, the availability service blocks:
+- From: `testStart - effectiveGapMinutes` (instructor needs to finish last lesson + travel to centre)
+- To: `testEnd` (end of the 2h45 test)
+
+The gap after the test is handled automatically by the regular booking buffer — no separate post-test block is needed.
+
+**Example with 15min buffer:**
+- PDA test at 10:00am, duration 2h45 (ends 12:45pm)
+- Block starts at 9:45am (10:00 - 15min buffer)
+- Block ends at 12:45pm
+- Next available slot: 12:45pm + 15min buffer = 1:00pm
+
+**Example with 30min buffer:**
+- PDA test at 10:00am
+- Block starts at 9:30am
+- Block ends at 12:45pm
+- Next available slot: 1:15pm
 
 ---
 

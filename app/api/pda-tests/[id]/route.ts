@@ -1,59 +1,92 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { z } from 'zod'
-
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
-const updateTestSchema = z.object({
-  result: z.enum(['PENDING', 'PASS', 'FAIL'])
-})
 
+const updateSchema = z.object({
+  result: z.enum(['PASS', 'FAIL', 'PENDING']),
+  notes: z.string().optional(),
+});
+
+// PUT — update PDA test result
 export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    
+    const session = await getServerSession(authOptions);
     if (!session?.user?.instructorId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json()
-    const data = updateTestSchema.parse(body)
+    const body = await req.json();
+    const data = updateSchema.parse(body);
 
-    // TODO: PDATest model not yet implemented in schema
-    // Return 501 Not Implemented until model is added
-    return NextResponse.json({ 
-      error: 'PDA Test feature not yet implemented' 
-    }, { status: 501 })
+    // Verify booking belongs to this instructor and is a PDA test
+    const booking = await prisma.booking.findFirst({
+      where: {
+        id: params.id,
+        instructorId: session.user.instructorId,
+        bookingType: 'PDA_TEST',
+      } as any,
+    });
 
-    /* Uncomment when PDATest model is added to schema:
-    // Verify test belongs to instructor
-    const existingTest = await prisma.pDATest.findUnique({
-      where: { id: params.id },
-      select: { instructorId: true }
-    })
-
-    if (!existingTest || existingTest.instructorId !== session.user.instructorId) {
-      return NextResponse.json({ error: 'Test not found' }, { status: 404 })
+    if (!booking) {
+      return NextResponse.json({ error: 'PDA test not found' }, { status: 404 });
     }
 
-    // Update test result
-    const test = await prisma.pDATest.update({
+    const updated = await prisma.booking.update({
       where: { id: params.id },
-      data: { result: data.result }
-    })
+      data: {
+        instructorNotes: `RESULT: ${data.result}`,
+        notes: data.notes !== undefined ? data.notes : booking.notes,
+      },
+    });
 
-    return NextResponse.json(test)
-    */
+    return NextResponse.json({ success: true, booking: updated });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      return NextResponse.json({ error: error.errors }, { status: 400 });
     }
-    console.error('Update test error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('PDA test update error:', error);
+    return NextResponse.json({ error: 'Failed to update PDA test' }, { status: 500 });
+  }
+}
+
+// DELETE — remove a PDA test (soft delete via CANCELLED status)
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.instructorId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const booking = await prisma.booking.findFirst({
+      where: {
+        id: params.id,
+        instructorId: session.user.instructorId,
+        bookingType: 'PDA_TEST',
+      } as any,
+    });
+
+    if (!booking) {
+      return NextResponse.json({ error: 'PDA test not found' }, { status: 404 });
+    }
+
+    await prisma.booking.update({
+      where: { id: params.id },
+      data: { status: 'CANCELLED', deletedAt: new Date() } as any,
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('PDA test delete error:', error);
+    return NextResponse.json({ error: 'Failed to delete PDA test' }, { status: 500 });
   }
 }

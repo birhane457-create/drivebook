@@ -75,14 +75,16 @@ export async function GET(req: NextRequest) {
     });
 
     const activeBookings = bookings.filter(b => {
-      // Exclude cancelled/expired
-      if (b.status === 'CANCELLED' || b.status === 'EXPIRED') return false;
-      // Exclude PENDING_PAYMENT bookings that were never paid — these are
-      // abandoned slot reservations, not real bookings the client should see
-      if (b.status === 'PENDING_PAYMENT' && !b.isPaid) return false;
-      // Exclude PENDING bookings that were never paid — old test data / failed payments
-      if (b.status === 'PENDING' && !b.isPaid) return false;
-      return true;
+      // Always show these — student needs to see them
+      if (b.status === 'PENDING_PAYMENT') return true; // "Awaiting Payment"
+      if (b.status === 'PENDING') return true;          // "Awaiting Confirmation"
+      // Show terminal states so student has history
+      if (b.status === 'CONFIRMED') return true;
+      if (b.status === 'COMPLETED') return true;
+      if (b.status === 'NO_SHOW') return true;
+      if (b.status === 'CANCELLED') return true;
+      if (b.status === 'EXPIRED') return true;
+      return false;
     });
 
     return NextResponse.json({
@@ -100,13 +102,23 @@ export async function GET(req: NextRequest) {
         let displayStatus: string;
         switch (b.status) {
           case 'CONFIRMED':
-            // If the lesson end time has passed, treat as completed for display
-            // (cron will catch up and set COMPLETED shortly)
             displayStatus = b.endTime && b.endTime <= now ? 'completed' : 'upcoming';
             break;
           case 'COMPLETED':
           case 'NO_SHOW':
             displayStatus = 'completed';
+            break;
+          case 'PENDING_PAYMENT':
+            displayStatus = 'awaiting_payment';
+            break;
+          case 'PENDING':
+            displayStatus = 'awaiting_confirmation';
+            break;
+          case 'CANCELLED':
+            displayStatus = 'cancelled';
+            break;
+          case 'EXPIRED':
+            displayStatus = 'expired';
             break;
           default:
             displayStatus = 'upcoming';
@@ -119,6 +131,8 @@ export async function GET(req: NextRequest) {
           duration: b.duration || null,
           status: displayStatus,
           dbStatus: b.status,
+          pickupAddress: (b as any).pickupAddress || null,
+          notes: (b as any).notes || null,
           // For package bookings: price should always be the per-lesson rate (1hr × hourlyRate).
           // Guard against old-bug bookings where price was incorrectly set to packageTotalPaid.
           price: (() => {

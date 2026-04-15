@@ -55,32 +55,56 @@ export async function POST(req: NextRequest) {
     
     // SECURITY: Idempotency check
     const idempotencyKey = `${event.type}_${event.id}_${event.created}`;
-    const existingEvent = await (prisma as any).webhookEvent.findUnique({
-      where: { idempotencyKey }
-    });
     
-    if (existingEvent) {
-      console.log('✅ Webhook already processed (idempotent):', idempotencyKey);
-      return NextResponse.json({ received: true, duplicate: true });
+    try {
+      const existingEvent = await (prisma as any).webhookEvent.findUnique({
+        where: { idempotencyKey }
+      });
+      
+      if (existingEvent) {
+        console.log('✅ Webhook already processed (idempotent):', idempotencyKey);
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+    } catch (idempotencyErr) {
+      // WebhookEvent table may not exist yet — log and continue processing
+      console.warn('⚠️ Idempotency check failed (non-fatal):', idempotencyErr);
     }
 
-    // Process event based on type
-    await handleStripeEvent(event, idempotencyKey);
+    // Process event based on type — errors here are caught below
+    try {
+      await handleStripeEvent(event, idempotencyKey);
+    } catch (handlerErr) {
+      // Log the error but return 200 so Stripe stops retrying for handler-level errors
+      // (signature is valid, we received the event — processing errors should not cause retries)
+      console.error(`🚨 Webhook handler error for ${event.type}:`, handlerErr);
+      // Return 200 to acknowledge receipt — admin must investigate via logs
+      return NextResponse.json({ received: true, handlerError: true });
+    }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
     console.error('🚨 Webhook error:', error);
     
+    // Signature verification failure — return 400 (not 500) so Stripe knows it's a bad request
+    if (error.message?.includes('signature') || error.message?.includes('Invalid webhook')) {
+      return NextResponse.json(
+        { error: 'Invalid webhook signature' },
+        { status: 400 }
+      );
+    }
+    
     // Log security events
     if (error.message?.includes('signature')) {
-      await logSubscriptionAction({
-        subscriptionId: 'unknown',
-        instructorId: 'unknown',
-        action: AuditAction.WEBHOOK_VERIFICATION_FAILED,
-        ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
-        success: false,
-        errorMessage: error.message
-      });
+      try {
+        await logSubscriptionAction({
+          subscriptionId: 'unknown',
+          instructorId: 'unknown',
+          action: AuditAction.WEBHOOK_VERIFICATION_FAILED,
+          ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
+          success: false,
+          errorMessage: error.message
+        });
+      } catch { /* audit log failure is non-fatal */ }
     }
     
     return NextResponse.json(

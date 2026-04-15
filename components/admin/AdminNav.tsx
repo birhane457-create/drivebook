@@ -144,6 +144,7 @@ export default function AdminNav() {
         { name: 'Documents', href: '/admin/documents', icon: '📄' },
         { name: 'Bookings', href: '/admin/bookings', icon: '📅' },
         { name: 'Audit Log', href: '/admin/audit-log', icon: '🔍' },
+        { name: 'Test Centres', href: '/admin/test-centres', icon: '🚗' },
       ]
     },
     {

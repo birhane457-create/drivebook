@@ -16,13 +16,23 @@ export class AvailabilityService {
     date: Date,
     lessonDurationMinutes: number = 60
   ): Promise<Date[]> {
-    // 1. Get instructor's working hours for this day
+    // 1. Get instructor's working hours and buffer settings for this day
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
-      select: { workingHours: true }
+      select: {
+        workingHours: true,
+        bookingBufferMinutes: true,
+        enableTravelTime: true,
+        travelTimeMinutes: true,
+      }
     })
 
     if (!instructor) throw new Error('Instructor not found')
+
+    const bufferMinutes = instructor.bookingBufferMinutes ?? 10; // platform minimum is 10
+    const travelMinutes = instructor.enableTravelTime ? (instructor.travelTimeMinutes ?? 0) : 0;
+    // Effective gap after any booking before the next slot can start
+    const effectiveGapMinutes = Math.max(bufferMinutes, travelMinutes);
 
     const dayName = format(date, 'EEEE').toLowerCase()
     const workingHours = (instructor.workingHours as unknown) as WorkingHours
@@ -30,7 +40,7 @@ export class AvailabilityService {
 
     if (daySlots.length === 0) return []
 
-    // 2. Get existing bookings for this day
+    // 2. Get existing bookings for this day (excluding PDA tests — handled separately)
     const startOfDay = new Date(date)
     startOfDay.setHours(0, 0, 0, 0)
     const endOfDay = new Date(date)
@@ -39,34 +49,25 @@ export class AvailabilityService {
     const bookings = await prisma.booking.findMany({
       where: {
         instructorId,
-        startTime: {
-          gte: startOfDay,
-          lte: endOfDay
-        },
-        status: {
-          in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED']
-        }
+        startTime: { gte: startOfDay, lte: endOfDay },
+        status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+        NOT: { bookingType: 'PDA_TEST' } as any,
       },
-      select: {
-        startTime: true,
-        endTime: true
-      }
+      select: { startTime: true, endTime: true }
     })
 
-    // 3. Get PDA tests and their 2-hour prep blocks
-    const pdaTests = await prisma.pDATest.findMany({
+    // 3. Get PDA tests — block from (testStart - bufferMinutes) to (testEnd)
+    // The instructor's buffer already handles the gap after the test ends.
+    // PDA test duration is stored on the booking (165 min = 2h45).
+    const pdaTestBookings = await prisma.booking.findMany({
       where: {
         instructorId,
-        testDate: {
-          gte: startOfDay,
-          lte: endOfDay
-        }
-      },
-      select: {
-        testDate: true,
-        testTime: true
-      }
-    })
+        bookingType: 'PDA_TEST',
+        startTime: { gte: startOfDay, lte: endOfDay },
+        status: { in: ['CONFIRMED', 'PENDING'] },
+      } as any,
+      select: { startTime: true, endTime: true, duration: true },
+    });
 
     // 4. Get availability exceptions
     const exceptions = await prisma.availabilityException.findMany({
@@ -97,18 +98,27 @@ export class AvailabilityService {
 
         if (slotEndTime > slotEnd) break
 
-        // Check if this slot conflicts with any booking
-        const hasBookingConflict = bookings.some(booking => 
-          this.hasTimeConflict(currentTime, slotEndTime, booking.startTime, booking.endTime)
-        )
+        // Check if this slot conflicts with any regular booking (+ buffer after each booking)
+        const hasBookingConflict = bookings.some(booking => {
+          if (!booking.startTime || !booking.endTime) return false;
+          // Extend the booking's end time by the buffer — no new slot can start within that window
+          const bufferedEnd = addMinutes(booking.endTime, effectiveGapMinutes);
+          return this.hasTimeConflict(currentTime, slotEndTime, booking.startTime, bufferedEnd);
+        });
 
-        // Check if this slot conflicts with PDA test prep time
-        const hasPDAConflict = pdaTests.some(test => {
-          const testDateTime = this.parseTestDateTime(test.testDate, test.testTime)
-          const prepStart = addMinutes(testDateTime, -120) // 2 hours before
-          const prepEnd = addMinutes(testDateTime, 60) // 1 hour after
-          return this.hasTimeConflict(currentTime, slotEndTime, prepStart, prepEnd)
-        })
+        // Check if this slot conflicts with a PDA test block.
+        // Block = (testStart - bufferMinutes) through testEnd.
+        // The buffer before the test ensures the instructor can finish their last lesson,
+        // travel to the centre, and arrive on time.
+        // The buffer after the test is handled automatically by the regular booking buffer
+        // when the next lesson is booked.
+        const hasPDAConflict = pdaTestBookings.some(test => {
+          if (!test.startTime) return false;
+          const testDurationMins = (test as any).duration ?? 165; // default 2h45
+          const testEnd = test.endTime ?? addMinutes(test.startTime, testDurationMins);
+          const blockStart = addMinutes(test.startTime, -effectiveGapMinutes);
+          return this.hasTimeConflict(currentTime, slotEndTime, blockStart, testEnd);
+        });
 
         // Check if this slot conflicts with exceptions
         const hasExceptionConflict = exceptions.some(exception => {
@@ -139,10 +149,6 @@ export class AvailabilityService {
       (end1 > start2 && end1 <= end2) ||
       (start1 <= start2 && end1 >= end2)
     )
-  }
-
-  private parseTestDateTime(testDate: Date, testTime: string): Date {
-    return parse(testTime, 'HH:mm', testDate)
   }
 
   async checkDoubleBooking(

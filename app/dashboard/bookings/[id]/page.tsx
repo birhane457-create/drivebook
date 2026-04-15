@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Calendar, Clock, MapPin, User, DollarSign, ClipboardList, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, MapPin, User, DollarSign, ClipboardList, CheckCircle, Send, Loader2 } from 'lucide-react';
 import LessonFeedbackForm from '@/components/instructor/LessonFeedbackForm';
 
 interface Booking {
@@ -38,6 +38,8 @@ export default function BookingDetailPage() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [sendingLink, setSendingLink] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
@@ -73,6 +75,34 @@ export default function BookingDetailPage() {
   const isPast = startTime ? startTime < new Date() : false;
   const isCompleted = booking.status === 'COMPLETED' || (booking.status === 'CONFIRMED' && isPast);
   const hasFeedback = (booking.lessonFeedback?.length ?? 0) > 0 || !!booking.feedbackGivenAt;
+
+  const handleSendPaymentLink = async () => {
+    if (!booking?.client) return;
+    setSendingLink(true);
+    try {
+      const res = await fetch('/api/bookings/send-payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: booking.client.id,
+          topUpAmount: booking.price,
+          lessonPrice: booking.price,
+          lessonDate: startTime?.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }),
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.error || 'Failed to send payment link.');
+        return;
+      }
+      setLinkSent(true);
+      setTimeout(() => setLinkSent(false), 4000);
+    } catch {
+      alert('Failed to send payment link.');
+    } finally {
+      setSendingLink(false);
+    }
+  };
 
   const statusColors: Record<string, string> = {
     CONFIRMED: 'bg-green-100 text-green-700',
@@ -218,7 +248,21 @@ export default function BookingDetailPage() {
       )}
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
+        {booking.status === 'PENDING_PAYMENT' && booking.client && (
+          <button
+            onClick={handleSendPaymentLink}
+            disabled={sendingLink || linkSent}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-60"
+          >
+            {linkSent
+              ? <><CheckCircle className="h-4 w-4" /> Link Sent</>
+              : sendingLink
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <><Send className="h-4 w-4" /> Send Payment Link</>
+            }
+          </button>
+        )}
         {booking.status === 'CONFIRMED' && !isPast && (
           <>
             <Link

@@ -15,7 +15,9 @@
     "mobile:dev": "npm run dev",
     "mobile:build": "npm run build && npm run cap:sync",
     "mobile:test:emulator": "echo Testing on emulator - Server at localhost:3000 && npm run dev",
-    "mobile:test:device": "echo Testing on device - Update capacitor.config.ts with your IP && npm run dev"
+    "mobile:test:device": "echo Testing on device - Update capacitor.config.ts with your IP && npm run dev",
+    "seed:test-centres": "node seed-test-centres.js",
+    "seed:learning-content": "node seed-learning-content.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
