@@ -28,11 +28,7 @@ export default async function AdminInstructorsPage({
     where: whereClause,
     include: {
       user: { select: { email: true } },
-      _count: {
-        select: {
-          bookings: true,
-        },
-      },
+      _count: { select: { bookings: true } },
     },
     orderBy: { id: 'desc' },
   }) as any;

@@ -14,6 +14,8 @@ interface Instructor {
   bio: string | null;
   profileImage: string | null;
   approvalStatus: string;
+  subscriptionTier: string;
+  subscriptionStatus: string;
   licenseNumber: string | null;
   licenseExpiry: Date | null;
   insuranceNumber: string | null;
@@ -210,6 +212,13 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-gray-900 text-sm">{instructor.name}</span>
                   <StatusBadge status={instructor.approvalStatus} />
+                  {instructor.subscriptionTier && instructor.subscriptionTier !== 'BASIC' && (
+                    <span className={`px-1.5 py-0.5 text-xs font-bold rounded ${
+                      instructor.subscriptionTier === 'BUSINESS' ? 'bg-purple-100 text-purple-700' :
+                      instructor.subscriptionTier === 'STUDIO' ? 'bg-indigo-100 text-indigo-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>{instructor.subscriptionTier}</span>
+                  )}
                   <ComplianceDot status={comp?.status} />
                 </div>
                 <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">

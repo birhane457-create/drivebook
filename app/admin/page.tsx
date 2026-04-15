@@ -14,6 +14,7 @@ export default async function AdminDashboard() {
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   const [
     totalInstructors,
@@ -25,6 +26,9 @@ export default async function AdminDashboard() {
     recentBookings,
     subscriptionBreakdown,
     revenueThisMonth,
+    endedConfirmed,
+    expiringDocs,
+    unverifiedABNs,
   ] = await Promise.all([
     prisma.instructor.count(),
     prisma.instructor.count({ where: { approvalStatus: 'PENDING' } }),
@@ -46,12 +50,33 @@ export default async function AdminDashboard() {
       _count: { id: true },
     }),
     (prisma as any).transaction.aggregate({
-      where: {
-        createdAt: { gte: monthStart },
-        status: 'SETTLED',
-      },
+      where: { createdAt: { gte: monthStart }, status: 'SETTLED' },
       _sum: { platformFee: true },
     }).catch(() => ({ _sum: { platformFee: 0 } })),
+    // Lessons that ended but are still CONFIRMED — need admin to mark complete
+    prisma.booking.count({
+      where: {
+        status: 'CONFIRMED',
+        endTime: { lt: now },
+        deletedAt: null,
+      } as any,
+    }),
+    // Instructors with documents expiring in 30 days
+    prisma.instructor.count({
+      where: {
+        approvalStatus: 'APPROVED',
+        OR: [
+          { licenseExpiry: { gte: now, lte: thirtyDaysFromNow } },
+          { insuranceExpiry: { gte: now, lte: thirtyDaysFromNow } },
+          { policeCheckExpiry: { gte: now, lte: thirtyDaysFromNow } },
+          { wwcCheckExpiry: { gte: now, lte: thirtyDaysFromNow } },
+        ],
+      },
+    }),
+    // Approved instructors with unverified ABN
+    prisma.instructor.count({
+      where: { approvalStatus: 'APPROVED', abnVerified: false, abn: { not: null } },
+    }),
   ]);
 
   const subMap = subscriptionBreakdown.reduce((acc: Record<string, number>, row: any) => {
@@ -78,6 +103,42 @@ export default async function AdminDashboard() {
             <Link href="/admin/instructors?status=PENDING" className="text-amber-700 underline text-sm font-semibold">
               Review now →
             </Link>
+          </div>
+        )}
+
+        {/* Action items — things that need attention today */}
+        {(endedConfirmed > 0 || expiringDocs > 0 || unverifiedABNs > 0) && (
+          <div className="mb-6 space-y-2">
+            {endedConfirmed > 0 && (
+              <div className="bg-purple-50 border border-purple-300 rounded-xl px-4 py-3 flex items-center justify-between">
+                <p className="text-purple-800 font-medium text-sm">
+                  🕐 {endedConfirmed} lesson{endedConfirmed > 1 ? 's' : ''} ended but still CONFIRMED — mark complete to release payouts
+                </p>
+                <Link href="/admin/bookings" className="text-purple-700 underline text-sm font-semibold shrink-0 ml-3">
+                  Go to Bookings →
+                </Link>
+              </div>
+            )}
+            {expiringDocs > 0 && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-3 flex items-center justify-between">
+                <p className="text-yellow-800 font-medium text-sm">
+                  ⚠️ {expiringDocs} instructor{expiringDocs > 1 ? 's have' : ' has'} documents expiring within 30 days
+                </p>
+                <Link href="/admin/documents" className="text-yellow-700 underline text-sm font-semibold shrink-0 ml-3">
+                  Review Docs →
+                </Link>
+              </div>
+            )}
+            {unverifiedABNs > 0 && (
+              <div className="bg-orange-50 border border-orange-300 rounded-xl px-4 py-3 flex items-center justify-between">
+                <p className="text-orange-800 font-medium text-sm">
+                  🔴 {unverifiedABNs} approved instructor{unverifiedABNs > 1 ? 's have' : ' has'} unverified ABN — 47% withholding applies
+                </p>
+                <Link href="/admin/instructors" className="text-orange-700 underline text-sm font-semibold shrink-0 ml-3">
+                  Verify ABNs →
+                </Link>
+              </div>
+            )}
           </div>
         )}
 
