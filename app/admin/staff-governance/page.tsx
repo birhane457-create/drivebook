@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import AdminNav from '@/components/admin/AdminNav';
+import Link from 'next/link';
 import {
   AlertTriangle,
   DollarSign,
@@ -287,18 +288,18 @@ export default function StaffGovernancePage() {
 
             {/* Action Buttons */}
             <div className="mt-8 flex gap-4">
-              <button
-                onClick={() => window.location.href = '/staff/dashboard'}
+              <Link
+                href="/admin/audit-log"
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
               >
-                View Staff Dashboard
-              </button>
-              <button
-                onClick={() => window.location.href = '/admin/audit-logs'}
+                View Audit Log
+              </Link>
+              <Link
+                href="/admin/payouts"
                 className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
               >
-                View Audit Logs
-              </button>
+                Process Payouts
+              </Link>
               <button
                 onClick={fetchGovernanceStats}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"

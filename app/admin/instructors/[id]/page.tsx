@@ -4,15 +4,23 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import AdminNav from '@/components/admin/AdminNav';
 import Link from 'next/link';
-import { formatBookingId } from '@/lib/utils';
 
 interface InstructorData {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   bio: string | null;
   profileImage: string | null;
   approvalStatus: string;
+  subscriptionTier: string;
+  subscriptionStatus: string;
+  hourlyRate: number;
+  abn: string | null;
+  abnVerified: boolean;
+  abnStatus: string | null;
+  withholdingTaxRate: number;
+  payoutMethod: string;
   licenseNumber: string | null;
   licenseExpiry: Date | null;
   insuranceNumber: string | null;
@@ -25,15 +33,11 @@ interface InstructorData {
   policeCheckDoc: string | null;
   wwcCheckDoc: string | null;
   averageRating: number | null;
+  totalReviews: number;
   isActive: boolean;
   createdAt: Date;
-  email?: string;
   user: { email: string } | null;
-  _count: {
-    bookings: number;
-    clients?: number;
-    subscriptions?: number;
-  };
+  _count: { bookings: number };
   bookings: any[];
 }
 
@@ -316,14 +320,43 @@ export default function AdminInstructorProfilePage() {
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-blue-900 mb-2">📋 Coming Soon</h3>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• Payment History & Invoices</li>
-                    <li>• Earnings & Commission Breakdown</li>
-                    <li>• PDA Test Results & Statistics</li>
-                    <li>• Activity Log (Login history, changes made)</li>
-                    <li>• Performance Metrics (Completion rate, cancellation rate)</li>
-                  </ul>
+                  <h3 className="font-semibold text-blue-900 mb-3">Subscription & Tax</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-gray-500">Tier</p>
+                      <p className="font-semibold text-gray-900">{instructor.subscriptionTier || 'BASIC'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Status</p>
+                      <p className={`font-semibold ${instructor.subscriptionStatus === 'ACTIVE' ? 'text-green-600' : 'text-amber-600'}`}>
+                        {instructor.subscriptionStatus || 'TRIAL'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Hourly Rate</p>
+                      <p className="font-semibold text-gray-900">${instructor.hourlyRate}/hr</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Payout Method</p>
+                      <p className="font-semibold text-gray-900">{instructor.payoutMethod?.replace('_', ' ') || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">ABN</p>
+                      <p className="font-semibold text-gray-900">{instructor.abn || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">ABN Status</p>
+                      <p className={`font-semibold ${instructor.abnVerified ? 'text-green-600' : 'text-red-600'}`}>
+                        {instructor.abnVerified ? '✓ Verified' : '✗ Unverified'} — {instructor.withholdingTaxRate}% withholding
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Link href={`/admin/instructors/${instructor.id}/verify-abn`}
+                      className="text-xs text-blue-600 hover:underline">
+                      Manage ABN →
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}
@@ -348,7 +381,7 @@ export default function AdminInstructorProfilePage() {
                       <tbody className="bg-white divide-y divide-gray-200">
                         {instructor.bookings.map((booking: any) => (
                           <tr key={booking.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-gray-900">#{formatBookingId(booking.id)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">#{booking.id.slice(-6).toUpperCase()}</td>
                             <td className="px-4 py-3">
                               <div className="text-sm font-medium text-gray-900">
                                 {booking.client?.name || booking.clientName || 'N/A'}
@@ -375,7 +408,7 @@ export default function AdminInstructorProfilePage() {
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">${booking.price.toFixed(2)}</td>
                             <td className="px-4 py-3">
                               <Link
-                                href={`/booking/${booking.id}`}
+                                href={`/admin/bookings`}
                                 className="text-sm text-blue-600 hover:text-blue-900"
                               >
                                 View

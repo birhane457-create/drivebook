@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import AdminNav from '@/components/admin/AdminNav';
+import Link from 'next/link';
 
 export default async function AdminDashboard() {
   const session = await getServerSession(authOptions);
@@ -11,29 +12,55 @@ export default async function AdminDashboard() {
     redirect('/login');
   }
 
-  // Fetch platform statistics
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
   const [
     totalInstructors,
+    pendingInstructors,
+    suspendedInstructors,
     totalBookings,
+    bookingsThisMonth,
     totalClients,
     recentBookings,
+    subscriptionBreakdown,
+    revenueThisMonth,
   ] = await Promise.all([
     prisma.instructor.count(),
-    prisma.booking.count(),
+    prisma.instructor.count({ where: { approvalStatus: 'PENDING' } }),
+    prisma.instructor.count({ where: { approvalStatus: 'SUSPENDED' } }),
+    prisma.booking.count({ where: { deletedAt: null } as any }),
+    prisma.booking.count({ where: { createdAt: { gte: monthStart }, deletedAt: null } as any }),
     prisma.client.count(),
     prisma.booking.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
+      where: { deletedAt: null } as any,
       include: {
         instructor: { select: { name: true } },
         client: { select: { name: true, phone: true } },
       },
     }),
+    prisma.instructor.groupBy({
+      by: ['subscriptionTier'],
+      _count: { id: true },
+    }),
+    (prisma as any).transaction.aggregate({
+      where: {
+        createdAt: { gte: monthStart },
+        status: 'SETTLED',
+      },
+      _sum: { platformFee: true },
+    }).catch(() => ({ _sum: { platformFee: 0 } })),
   ]);
 
-  const pendingInstructors = 0; // Not available in simplified schema
-  const activeInstructors = totalInstructors; // Assume all are active
-  const subscriptionStats = { pro: 0, business: 0, trial: 0, pastDue: 0 };
+  const subMap = subscriptionBreakdown.reduce((acc: Record<string, number>, row: any) => {
+    acc[row.subscriptionTier] = row._count.id;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const approvedInstructors = totalInstructors - pendingInstructors - suspendedInstructors;
+  const platformRevenueThisMonth = revenueThisMonth._sum?.platformFee ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -42,208 +69,119 @@ export default async function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8">
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">Platform Overview</h1>
 
+        {/* Pending alert */}
+        {pendingInstructors > 0 && (
+          <div className="mb-4 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 flex items-center justify-between">
+            <p className="text-amber-800 font-medium text-sm">
+              {pendingInstructors} instructor{pendingInstructors > 1 ? 's' : ''} awaiting approval
+            </p>
+            <Link href="/admin/instructors?status=PENDING" className="text-amber-700 underline text-sm font-semibold">
+              Review now →
+            </Link>
+          </div>
+        )}
+
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 lg:mb-8">
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 lg:p-6">
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Instructors</p>
-                <div className="bg-blue-100 rounded-full p-1.5 sm:p-2">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{totalInstructors}</p>
-              <p className="mt-1 text-xs sm:text-sm text-gray-500">{activeInstructors} active</p>
-            </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 lg:gap-6 mb-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+            <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Instructors</p>
+            <p className="text-2xl lg:text-3xl font-bold text-gray-900">{totalInstructors}</p>
+            <p className="text-xs text-gray-400 mt-1">{approvedInstructors} approved · {pendingInstructors} pending</p>
           </div>
-
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 lg:p-6">
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Pending</p>
-                <div className="bg-orange-100 rounded-full p-1.5 sm:p-2">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-orange-600">{pendingInstructors}</p>
-              <a href="/admin/instructors?status=pending" className="mt-1 text-xs sm:text-sm text-blue-600 hover:text-blue-800">
-                Review →
-              </a>
-            </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+            <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Bookings</p>
+            <p className="text-2xl lg:text-3xl font-bold text-gray-900">{totalBookings}</p>
+            <p className="text-xs text-gray-400 mt-1">+{bookingsThisMonth} this month</p>
           </div>
-
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 lg:p-6">
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Bookings</p>
-                <div className="bg-green-100 rounded-full p-1.5 sm:p-2">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{totalBookings}</p>
-              <a href="/admin/bookings" className="mt-1 text-xs sm:text-sm text-blue-600 hover:text-blue-800">
-                View all →
-              </a>
-            </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+            <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Students</p>
+            <p className="text-2xl lg:text-3xl font-bold text-gray-900">{totalClients}</p>
           </div>
-
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 lg:p-6">
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Clients</p>
-                <div className="bg-purple-100 rounded-full p-1.5 sm:p-2">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-              </div>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{totalClients}</p>
-            </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+            <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Revenue (MTD)</p>
+            <p className="text-2xl lg:text-3xl font-bold text-green-600">${platformRevenueThisMonth.toFixed(0)}</p>
+            <p className="text-xs text-gray-400 mt-1">Platform fees collected</p>
           </div>
         </div>
 
-        {/* Subscription Stats */}
-        <div className="bg-white rounded-lg shadow mb-6 sm:mb-8">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Subscription Overview</h2>
+        {/* Subscription Overview */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-base font-semibold text-gray-900">Subscription Breakdown</h2>
           </div>
-          <div className="p-4 sm:p-6">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-lg">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">PRO Active</p>
-                <p className="text-xl sm:text-2xl font-bold text-blue-600">{subscriptionStats.pro}</p>
-                <p className="text-xs text-gray-500 mt-1">$29/mo</p>
+          <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { tier: 'BASIC',    label: 'Basic',    price: '$29/mo',  color: 'bg-gray-50 text-gray-700' },
+              { tier: 'PRO',      label: 'Pro',      price: '$79/mo',  color: 'bg-blue-50 text-blue-700' },
+              { tier: 'STUDIO',   label: 'Studio',   price: '$129/mo', color: 'bg-indigo-50 text-indigo-700' },
+              { tier: 'BUSINESS', label: 'Business', price: '$199/mo', color: 'bg-purple-50 text-purple-700' },
+            ].map(({ tier, label, price, color }) => (
+              <div key={tier} className={`rounded-lg p-4 text-center ${color}`}>
+                <p className="text-xs font-medium mb-1">{label}</p>
+                <p className="text-2xl font-bold">{subMap[tier] ?? 0}</p>
+                <p className="text-xs opacity-70 mt-1">{price}</p>
               </div>
-              <div className="text-center p-3 sm:p-4 bg-purple-50 rounded-lg">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">BUSINESS Active</p>
-                <p className="text-xl sm:text-2xl font-bold text-purple-600">{subscriptionStats.business}</p>
-                <p className="text-xs text-gray-500 mt-1">$59/mo</p>
-              </div>
-              <div className="text-center p-3 sm:p-4 bg-green-50 rounded-lg">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">Trial</p>
-                <p className="text-xl sm:text-2xl font-bold text-green-600">{subscriptionStats.trial}</p>
-                <p className="text-xs text-gray-500 mt-1">14 days</p>
-              </div>
-              <div className="text-center p-3 sm:p-4 bg-red-50 rounded-lg">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">Past Due</p>
-                <p className="text-xl sm:text-2xl font-bold text-red-600">{subscriptionStats.pastDue}</p>
-                <p className="text-xs text-gray-500 mt-1">Action needed</p>
-              </div>
-            </div>
-            <div className="mt-4 text-center">
-              <p className="text-sm text-gray-600">
-                Monthly Revenue: <span className="font-semibold text-gray-900">
-                  ${((subscriptionStats.pro * 29) + (subscriptionStats.business * 59)).toFixed(2)}
-                </span>
-              </p>
-            </div>
+            ))}
           </div>
+        </div>
+
+        {/* Quick links */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {[
+            { href: '/admin/instructors?status=PENDING', label: 'Pending Approvals', count: pendingInstructors, color: 'border-amber-300 bg-amber-50 text-amber-800' },
+            { href: '/admin/payouts', label: 'Process Payouts', count: null, color: 'border-green-300 bg-green-50 text-green-800' },
+            { href: '/admin/bookings', label: 'All Bookings', count: totalBookings, color: 'border-blue-300 bg-blue-50 text-blue-800' },
+            { href: '/admin/revenue', label: 'Revenue Report', count: null, color: 'border-purple-300 bg-purple-50 text-purple-800' },
+          ].map(({ href, label, count, color }) => (
+            <Link key={href} href={href} className={`border rounded-xl p-4 text-center hover:opacity-80 transition ${color}`}>
+              <p className="text-sm font-semibold">{label}</p>
+              {count !== null && <p className="text-xl font-bold mt-1">{count}</p>}
+            </Link>
+          ))}
         </div>
 
         {/* Recent Bookings */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Recent Bookings</h2>
-            <a href="/admin/bookings" className="text-sm text-blue-600 hover:text-blue-800">View all</a>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+            <h2 className="text-base font-semibold text-gray-900">Recent Bookings</h2>
+            <Link href="/admin/bookings" className="text-sm text-blue-600 hover:underline">View all</Link>
           </div>
-          {/* Mobile: Card view */}
-          <div className="block sm:hidden">
-            {recentBookings.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-gray-500">
-                No bookings yet
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-200">
-                {recentBookings.map((booking) => (
-                  <div key={booking.id} className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {booking.client?.name || booking.clientName || 'N/A'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {booking.client?.phone || booking.clientPhone || 'N/A'}
-                        </p>
-                      </div>
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        (booking as any).status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                        (booking as any).status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                        (booking as any).status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {(booking as any).status || 'N/A'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-600">{booking.instructor?.name || 'N/A'}</span>
-                      <span className="font-medium text-gray-900">{booking.date} {booking.time}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Duration: {booking.duration} min
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* Desktop: Table view */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-100 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instructor</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-50">
                 {recentBookings.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                      No bookings yet
+                  <tr><td colSpan={5} className="px-5 py-8 text-center text-gray-400">No bookings yet</td></tr>
+                ) : recentBookings.map((b) => (
+                  <tr key={b.id} className="hover:bg-gray-50 transition">
+                    <td className="px-5 py-3">
+                      <p className="font-medium text-gray-900">{b.client?.name || (b as any).clientName || '—'}</p>
+                      <p className="text-xs text-gray-400">{b.client?.phone || (b as any).clientPhone || ''}</p>
                     </td>
+                    <td className="px-5 py-3 text-gray-700">{b.instructor?.name || '—'}</td>
+                    <td className="px-5 py-3 text-gray-500">
+                      {b.startTime ? new Date(b.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
+                        (b as any).status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
+                        (b as any).status === 'COMPLETED' ? 'bg-blue-100 text-blue-700' :
+                        (b as any).status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                        (b as any).status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>{(b as any).status}</span>
+                    </td>
+                    <td className="px-5 py-3 font-medium text-gray-900">${((b as any).price || 0).toFixed(2)}</td>
                   </tr>
-                ) : (
-                  recentBookings.map((booking) => (
-                    <tr key={booking.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {booking.client?.name || booking.clientName || 'N/A'}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {booking.client?.phone || booking.clientPhone || 'N/A'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.instructor?.name || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {booking.startTime ? new Date(booking.startTime).toLocaleDateString() : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          (booking as any).status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                          (booking as any).status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                          (booking as any).status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {(booking as any).status || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${((booking as any).price || 0).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>

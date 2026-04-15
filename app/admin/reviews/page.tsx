@@ -11,158 +11,100 @@ export default async function AdminReviewsPage() {
     redirect('/login');
   }
 
-  const reviews = await (prisma as any).review.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 50,
+  // Reviews are stored on Booking records (clientRating, clientReview, isReviewed)
+  const reviews = await prisma.booking.findMany({
+    where: {
+      isReviewed: true,
+      clientRating: { not: null },
+    } as any,
+    orderBy: { reviewGivenAt: 'desc' } as any,
+    take: 100,
     include: {
       instructor: { select: { name: true } },
       client: { select: { name: true } },
     },
   });
 
-  const stats = {
-    total: reviews.length,
-    published: reviews.filter((r: any) => r.isPublished).length,
-    flagged: reviews.filter((r: any) => r.isFlagged).length,
-    avgRating: reviews.length > 0 
-      ? (reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length).toFixed(1)
-      : '0.0',
-  };
+  const totalReviews = reviews.length;
+  const avgRating = totalReviews > 0
+    ? (reviews.reduce((sum, r) => sum + ((r as any).clientRating ?? 0), 0) / totalReviews).toFixed(1)
+    : '0.0';
+  const fiveStars = reviews.filter((r) => (r as any).clientRating === 5).length;
+  const oneOrTwo = reviews.filter((r) => (r as any).clientRating <= 2).length;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">Reviews Management</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">Reviews</h1>
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 text-center">
-            <p className="text-xs sm:text-sm text-gray-600">Total Reviews</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+            <p className="text-xs text-gray-500 mb-1">Total Reviews</p>
+            <p className="text-2xl font-bold text-gray-900">{totalReviews}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 text-center">
-            <p className="text-xs sm:text-sm text-gray-600">Published</p>
-            <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.published}</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+            <p className="text-xs text-gray-500 mb-1">Avg Rating</p>
+            <p className="text-2xl font-bold text-yellow-500">{avgRating} ⭐</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 text-center">
-            <p className="text-xs sm:text-sm text-gray-600">Flagged</p>
-            <p className="text-xl sm:text-2xl font-bold text-red-600">{stats.flagged}</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+            <p className="text-xs text-gray-500 mb-1">5-Star Reviews</p>
+            <p className="text-2xl font-bold text-green-600">{fiveStars}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 text-center">
-            <p className="text-xs sm:text-sm text-gray-600">Avg Rating</p>
-            <p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.avgRating} ⭐</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+            <p className="text-xs text-gray-500 mb-1">1–2 Star Reviews</p>
+            <p className="text-2xl font-bold text-red-500">{oneOrTwo}</p>
           </div>
         </div>
 
-        {/* Reviews List */}
-        <div className="bg-white rounded-lg shadow">
+        {/* Reviews list */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           {reviews.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              No reviews yet
+            <div className="p-12 text-center text-gray-400">
+              <p className="text-lg font-medium">No reviews yet</p>
+              <p className="text-sm mt-1">Reviews appear here once students submit them after completed lessons.</p>
             </div>
           ) : (
-            <>
-              {/* Mobile: Card view */}
-              <div className="block sm:hidden divide-y divide-gray-200">
-                {reviews.map((review: any) => (
-                  <div key={review.id} className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-yellow-500">{'⭐'.repeat(review.rating)}</span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(review.createdAt).toLocaleDateString()}
-                          </span>
+            <table className="min-w-full divide-y divide-gray-100 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Review</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {reviews.map((r) => {
+                  const rating = (r as any).clientRating ?? 0;
+                  const review = (r as any).clientReview;
+                  const reviewDate = (r as any).reviewGivenAt;
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50 transition">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-yellow-400 text-base">{'★'.repeat(rating)}{'☆'.repeat(5 - rating)}</span>
+                          <span className="text-xs text-gray-500 ml-1">{rating}/5</span>
                         </div>
-                        <p className="text-sm font-medium text-gray-900">{review.client?.name || 'Anonymous'}</p>
-                        <p className="text-xs text-gray-500">for {review.instructor?.name || 'N/A'}</p>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        {review.isPublished ? (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                            Published
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                            Hidden
-                          </span>
-                        )}
-                        {review.isFlagged && (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                            Flagged
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {review.comment && (
-                      <p className="text-sm text-gray-700 mt-2 line-clamp-3">{review.comment}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop: Table view */}
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Comment</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      </td>
+                      <td className="px-5 py-3 font-medium text-gray-900">
+                        {r.client?.name || (r as any).clientName || '—'}
+                      </td>
+                      <td className="px-5 py-3 text-gray-700">{r.instructor?.name || '—'}</td>
+                      <td className="px-5 py-3 max-w-xs">
+                        <p className="text-gray-600 truncate">{review || <span className="text-gray-300 italic">No comment</span>}</p>
+                      </td>
+                      <td className="px-5 py-3 text-gray-400 text-xs">
+                        {reviewDate ? new Date(reviewDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {reviews.map((review: any) => (
-                      <tr key={review.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <span className="text-yellow-500 text-lg">{review.rating}</span>
-                            <span className="ml-1 text-gray-400">⭐</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {review.client?.name || 'Anonymous'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {review.instructor?.name || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 max-w-xs">
-                          <p className="text-sm text-gray-700 truncate">
-                            {review.comment || 'No comment'}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(review.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex flex-col gap-1">
-                            {review.isPublished ? (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                Published
-                              </span>
-                            ) : (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                Hidden
-                              </span>
-                            )}
-                            {review.isFlagged && (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                Flagged
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
