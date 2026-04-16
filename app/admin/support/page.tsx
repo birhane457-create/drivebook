@@ -1,146 +1,147 @@
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import AdminNav from '@/components/admin/AdminNav';
+import Link from 'next/link';
+import { Search, User, GraduationCap, Shield } from 'lucide-react';
 
-export default async function AdminSupportPage() {
+export default async function AdminSupportPage({
+  searchParams,
+}: {
+  searchParams: { q?: string };
+}) {
   const session = await getServerSession(authOptions);
-
   if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
     redirect('/login');
   }
+
+  const q = searchParams.q?.trim() || '';
+
+  let users: any[] = [];
+  if (q.length >= 2) {
+    users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      select: {
+        id: true, email: true, name: true, role: true, createdAt: true,
+        instructor: { select: { approvalStatus: true, subscriptionTier: true } },
+      },
+      take: 20,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  const roleIcon = (role: string) => {
+    if (role === 'INSTRUCTOR') return <GraduationCap className="w-4 h-4 text-blue-500" />;
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') return <Shield className="w-4 h-4 text-purple-500" />;
+    return <User className="w-4 h-4 text-gray-400" />;
+  };
+
+  const roleColor = (role: string) => {
+    if (role === 'INSTRUCTOR') return 'bg-blue-100 text-blue-700';
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') return 'bg-purple-100 text-purple-700';
+    return 'bg-gray-100 text-gray-600';
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">Support & Help</h1>
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Support Centre</h1>
+        <p className="text-gray-500 text-sm mb-6">Search for a user to view their account, send messages, reset passwords, or add wallet credits.</p>
 
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Quick Actions</h2>
-          </div>
-          <div className="p-4 sm:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <a
-                href="/admin/instructors?status=pending"
-                className="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <span className="text-2xl mr-3">👥</span>
-                <div>
-                  <p className="font-medium text-gray-900">Review Pending Instructors</p>
-                  <p className="text-sm text-gray-500">Approve or reject applications</p>
-                </div>
-              </a>
-              <a
-                href="/admin/bookings"
-                className="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <span className="text-2xl mr-3">📅</span>
-                <div>
-                  <p className="font-medium text-gray-900">View All Bookings</p>
-                  <p className="text-sm text-gray-500">Monitor platform activity</p>
-                </div>
-              </a>
-              <a
-                href="/admin/reviews"
-                className="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <span className="text-2xl mr-3">⭐</span>
-                <div>
-                  <p className="font-medium text-gray-900">Manage Reviews</p>
-                  <p className="text-sm text-gray-500">Moderate flagged content</p>
-                </div>
-              </a>
-              <a
-                href="/admin/settings"
-                className="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <span className="text-2xl mr-3">⚙️</span>
-                <div>
-                  <p className="font-medium text-gray-900">Platform Settings</p>
-                  <p className="text-sm text-gray-500">Configure pricing & features</p>
-                </div>
-              </a>
+        {/* Search */}
+        <form method="GET" className="mb-6">
+          <div className="flex gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Search by name or email..."
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                autoFocus
+              />
             </div>
+            <button type="submit"
+              className="px-5 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
+              Search
+            </button>
           </div>
-        </div>
+        </form>
 
-        {/* Documentation */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Documentation</h2>
+        {/* Results */}
+        {q.length >= 2 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {users.length === 0 ? (
+              <div className="px-5 py-10 text-center text-gray-400">
+                <User className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p>No users found for "{q}"</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {users.map(u => (
+                  <Link key={u.id} href={`/admin/support/user/${u.id}`}
+                    className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center">
+                        {roleIcon(u.role)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{u.name || '(no name)'}</p>
+                        <p className="text-xs text-gray-500">{u.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(u.role)}`}>
+                        {u.role}
+                      </span>
+                      {u.instructor && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          u.instructor.approvalStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {u.instructor.approvalStatus}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">
+                        {new Date(u.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="p-4 sm:p-6 space-y-4">
-            <div className="border-l-4 border-blue-500 pl-4">
-              <h3 className="font-semibold text-gray-900 mb-2">Platform Owner Guide</h3>
-              <p className="text-sm text-gray-600 mb-2">
-                Complete guide for managing instructors, subscriptions, and platform operations.
-              </p>
-              <a href="/PLATFORM_OWNER_GUIDE.md" className="text-sm text-blue-600 hover:text-blue-800">
-                View Guide →
-              </a>
-            </div>
-            <div className="border-l-4 border-green-500 pl-4">
-              <h3 className="font-semibold text-gray-900 mb-2">Project Documentation</h3>
-              <p className="text-sm text-gray-600 mb-2">
-                Technical documentation covering features, architecture, and setup.
-              </p>
-              <a href="/PROJECT_DOCUMENTATION.md" className="text-sm text-blue-600 hover:text-blue-800">
-                View Documentation →
-              </a>
-            </div>
-          </div>
-        </div>
+        )}
 
-        {/* Common Tasks */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Common Admin Tasks</h2>
+        {!q && (
+          <div className="grid sm:grid-cols-3 gap-4 mt-4">
+            <Link href="/admin/instructors?status=PENDING"
+              className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition">
+              <GraduationCap className="w-6 h-6 text-amber-500 mb-2" />
+              <p className="font-semibold text-gray-900">Pending Instructors</p>
+              <p className="text-xs text-gray-500 mt-1">Review and approve applications</p>
+            </Link>
+            <Link href="/admin/clients"
+              className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition">
+              <User className="w-6 h-6 text-blue-500 mb-2" />
+              <p className="font-semibold text-gray-900">All Clients</p>
+              <p className="text-xs text-gray-500 mt-1">Manage student accounts and wallets</p>
+            </Link>
+            <Link href="/admin/bookings"
+              className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition">
+              <Search className="w-6 h-6 text-purple-500 mb-2" />
+              <p className="font-semibold text-gray-900">All Bookings</p>
+              <p className="text-xs text-gray-500 mt-1">Find and manage any booking</p>
+            </Link>
           </div>
-          <div className="p-4 sm:p-6">
-            <div className="space-y-4">
-              <div className="border-b pb-4">
-                <h3 className="font-medium text-gray-900 mb-2">Approving New Instructors</h3>
-                <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                  <li>Go to Instructors → Pending tab</li>
-                  <li>Review instructor profile and documents</li>
-                  <li>Click Approve or Reject with reason</li>
-                  <li>Instructor receives email notification</li>
-                </ol>
-              </div>
-              <div className="border-b pb-4">
-                <h3 className="font-medium text-gray-900 mb-2">Managing Subscriptions</h3>
-                <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                  <li>View subscription stats on Overview page</li>
-                  <li>Monitor trial users and past due accounts</li>
-                  <li>PRO: $29/mo with 12% commission</li>
-                  <li>BUSINESS: $59/mo with 7% commission</li>
-                </ol>
-              </div>
-              <div className="border-b pb-4">
-                <h3 className="font-medium text-gray-900 mb-2">Handling Support Issues</h3>
-                <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                  <li>Check bookings for cancellations or issues</li>
-                  <li>Review flagged reviews for inappropriate content</li>
-                  <li>Contact instructors directly via their profile</li>
-                  <li>Use admin tools to suspend accounts if needed</li>
-                </ol>
-              </div>
-              <div>
-                <h3 className="font-medium text-gray-900 mb-2">Revenue Monitoring</h3>
-                <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                  <li>Monthly subscription revenue shown on Overview</li>
-                  <li>Commission tracked per booking (12% or 7%)</li>
-                  <li>8% bonus for first booking with new client</li>
-                  <li>View detailed revenue in admin/revenue API</li>
-                </ol>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
