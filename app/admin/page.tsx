@@ -12,80 +12,75 @@ export default async function AdminDashboard() {
     redirect('/login');
   }
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  // All DB queries wrapped in try/catch — dashboard must never crash
+  let totalInstructors = 0, pendingInstructors = 0, suspendedInstructors = 0;
+  let totalBookings = 0, bookingsThisMonth = 0, totalClients = 0;
+  let recentBookings: any[] = [];
+  let subMap: Record<string, number> = {};
+  let platformRevenueThisMonth = 0;
+  let endedConfirmed = 0, expiringDocs = 0, unverifiedABNs = 0;
 
-  const [
-    totalInstructors,
-    pendingInstructors,
-    suspendedInstructors,
-    totalBookings,
-    bookingsThisMonth,
-    totalClients,
-    recentBookings,
-    subscriptionBreakdown,
-    revenueThisMonth,
-    endedConfirmed,
-    expiringDocs,
-    unverifiedABNs,
-  ] = await Promise.all([
-    prisma.instructor.count(),
-    prisma.instructor.count({ where: { approvalStatus: 'PENDING' } }),
-    prisma.instructor.count({ where: { approvalStatus: 'SUSPENDED' } }),
-    prisma.booking.count({ where: { deletedAt: null } as any }),
-    prisma.booking.count({ where: { createdAt: { gte: monthStart }, deletedAt: null } as any }),
-    prisma.client.count(),
-    prisma.booking.findMany({
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      where: { deletedAt: null } as any,
-      include: {
-        instructor: { select: { name: true } },
-        client: { select: { name: true, phone: true } },
-      },
-    }),
-    prisma.instructor.groupBy({
-      by: ['subscriptionTier'],
-      _count: { id: true },
-    }),
-    (prisma as any).transaction.aggregate({
-      where: { createdAt: { gte: monthStart }, status: 'SETTLED' },
-      _sum: { platformFee: true },
-    }).catch(() => ({ _sum: { platformFee: 0 } })),
-    // Lessons that ended but are still CONFIRMED — need admin to mark complete
-    prisma.booking.count({
-      where: {
-        status: 'CONFIRMED',
-        endTime: { lt: now },
-        deletedAt: null,
-      } as any,
-    }),
-    // Instructors with documents expiring in 30 days
-    prisma.instructor.count({
-      where: {
-        approvalStatus: 'APPROVED',
-        OR: [
-          { licenseExpiry: { gte: now, lte: thirtyDaysFromNow } },
-          { insuranceExpiry: { gte: now, lte: thirtyDaysFromNow } },
-          { policeCheckExpiry: { gte: now, lte: thirtyDaysFromNow } },
-          { wwcCheckExpiry: { gte: now, lte: thirtyDaysFromNow } },
-        ],
-      },
-    }),
-    // Approved instructors with unverified ABN
-    prisma.instructor.count({
-      where: { approvalStatus: 'APPROVED', abnVerified: false, abn: { not: null } },
-    }),
-  ]);
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  const subMap = subscriptionBreakdown.reduce((acc: Record<string, number>, row: any) => {
-    acc[row.subscriptionTier] = row._count.id;
-    return acc;
-  }, {} as Record<string, number>);
+    const [
+      ti, pi, si, tb, bm, tc, rb, sd, rev, ec, ed, ua,
+    ] = await Promise.all([
+      prisma.instructor.count(),
+      prisma.instructor.count({ where: { approvalStatus: 'PENDING' } }),
+      prisma.instructor.count({ where: { approvalStatus: 'SUSPENDED' } }),
+      prisma.booking.count({ where: { deletedAt: null } as any }),
+      prisma.booking.count({ where: { createdAt: { gte: monthStart }, deletedAt: null } as any }),
+      prisma.client.count(),
+      prisma.booking.findMany({
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        where: { deletedAt: null } as any,
+        include: {
+          instructor: { select: { name: true } },
+          client: { select: { name: true, phone: true } },
+        },
+      }),
+      prisma.instructor.groupBy({ by: ['subscriptionTier'], _count: { id: true } }),
+      (prisma as any).transaction.aggregate({
+        where: { createdAt: { gte: monthStart }, status: 'SETTLED' },
+        _sum: { platformFee: true },
+      }).catch(() => ({ _sum: { platformFee: 0 } })),
+      prisma.booking.count({
+        where: { status: 'CONFIRMED', endTime: { lt: now }, deletedAt: null } as any,
+      }).catch(() => 0),
+      prisma.instructor.count({
+        where: {
+          approvalStatus: 'APPROVED',
+          OR: [
+            { licenseExpiry: { gte: now, lte: thirtyDaysFromNow } },
+            { insuranceExpiry: { gte: now, lte: thirtyDaysFromNow } },
+            { policeCheckExpiry: { gte: now, lte: thirtyDaysFromNow } },
+            { wwcCheckExpiry: { gte: now, lte: thirtyDaysFromNow } },
+          ],
+        },
+      }).catch(() => 0),
+      prisma.instructor.count({
+        where: { approvalStatus: 'APPROVED', abnVerified: false, abn: { not: null } },
+      }).catch(() => 0),
+    ]);
+
+    totalInstructors = ti; pendingInstructors = pi; suspendedInstructors = si;
+    totalBookings = tb; bookingsThisMonth = bm; totalClients = tc;
+    recentBookings = rb;
+    subMap = sd.reduce((acc: Record<string, number>, row: any) => {
+      acc[row.subscriptionTier] = row._count.id; return acc;
+    }, {});
+    platformRevenueThisMonth = rev._sum?.platformFee ?? 0;
+    endedConfirmed = ec; expiringDocs = ed; unverifiedABNs = ua;
+  } catch (err) {
+    console.error('Admin dashboard query error:', err);
+    // Continue with zero values — page still renders
+  }
 
   const approvedInstructors = totalInstructors - pendingInstructors - suspendedInstructors;
-  const platformRevenueThisMonth = revenueThisMonth._sum?.platformFee ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -100,13 +95,13 @@ export default async function AdminDashboard() {
             <p className="text-amber-800 font-medium text-sm">
               {pendingInstructors} instructor{pendingInstructors > 1 ? 's' : ''} awaiting approval
             </p>
-            <Link href="/admin/instructors?status=PENDING" className="text-amber-700 underline text-sm font-semibold">
+            <Link href="/admin/instructors?status=PENDING" className="text-amber-700 underline text-sm font-semibold shrink-0 ml-3">
               Review now →
             </Link>
           </div>
         )}
 
-        {/* Action items — things that need attention today */}
+        {/* Action alerts */}
         {(endedConfirmed > 0 || expiringDocs > 0 || unverifiedABNs > 0) && (
           <div className="mb-6 space-y-2">
             {endedConfirmed > 0 && (
@@ -192,7 +187,7 @@ export default async function AdminDashboard() {
             { href: '/admin/instructors?status=PENDING', label: 'Pending Approvals', count: pendingInstructors, color: 'border-amber-300 bg-amber-50 text-amber-800' },
             { href: '/admin/payouts', label: 'Process Payouts', count: null, color: 'border-green-300 bg-green-50 text-green-800' },
             { href: '/admin/bookings', label: 'All Bookings', count: totalBookings, color: 'border-blue-300 bg-blue-50 text-blue-800' },
-            { href: '/admin/revenue', label: 'Revenue Report', count: null, color: 'border-purple-300 bg-purple-50 text-purple-800' },
+            { href: '/admin/support', label: 'Support Centre', count: null, color: 'border-purple-300 bg-purple-50 text-purple-800' },
           ].map(({ href, label, count, color }) => (
             <Link key={href} href={href} className={`border rounded-xl p-4 text-center hover:opacity-80 transition ${color}`}>
               <p className="text-sm font-semibold">{label}</p>
