@@ -91,6 +91,17 @@
 
 ---
 
+## Resolved — May 2026 Admin Sprint
+
+| # | Area | What was wrong | What was done |
+|---|------|---------------|---------------|
+| 73 | PlatformSettings/PlatformLedger missing after DB reset | DB reset wiped all data; dashboard crashed on missing seed records | Created `seed-platform-data.js` (idempotent upsert); run after any fresh migration |
+| 74 | Admin dashboard crashed on missing data | Unguarded Prisma queries threw 500 on empty DB | All dashboard queries wrapped in `try/catch`; page renders with zero stats if DB unavailable |
+| 75 | Admin support centre missing | No way for admin to act on behalf of users | Built `/admin/support` (user search) + `/admin/support/user/[userId]` (send message, reset password, add wallet credit); all actions logged to AuditLog |
+| 76 | Admin reviews page crashed silently | Queried `prisma.review` — model doesn't exist in schema | Fixed to read from `Booking.clientRating`, `Booking.clientReview`, `Booking.isReviewed` |
+
+---
+
 ## Open — What Still Needs to Be Built
 
 These are genuine gaps that have not been implemented yet. Ordered by priority.
@@ -131,8 +142,8 @@ This is a deployment step, not a code gap.
 
 | Category | Count |
 |----------|-------|
-| Resolved (all time) | 72 |
-| Open — deployment/config | 3 (OPEN-02, OPEN-04, OPEN-05) |
+| Resolved (all time) | 76 |
+| Open — deployment/config | 4 (OPEN-02, OPEN-04, OPEN-05, OPEN-11) |
 | Open — feature gap | 1 (OPEN-10 — progress chart) |
 | Deferred — future tier | 1 (OPEN-01 — BUSINESS tier) |
 
@@ -218,7 +229,7 @@ These were identified as contradictions in the docs but are resolved in code. Do
 
 | Category | Count |
 |----------|-------|
-| Resolved (all time) | 72 |
+| Resolved (all time) | 76 |
 | Open — deployment/config | 4 (OPEN-02, OPEN-04, OPEN-05, OPEN-11) |
 | Open — feature gap | 1 (OPEN-10 — progress chart) |
 | Deferred — future tier | 1 (OPEN-01 — BUSINESS tier) |

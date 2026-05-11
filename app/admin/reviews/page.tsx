@@ -11,10 +11,9 @@ export default async function AdminReviewsPage() {
     redirect('/login');
   }
 
-  // Reviews are stored on Booking records (clientRating, clientReview, isReviewed)
+  // Reviews are stored on Booking records (clientRating, clientReview, reviewGivenAt)
   const reviews = await prisma.booking.findMany({
     where: {
-      isReviewed: true,
       clientRating: { not: null },
     } as any,
     orderBy: { reviewGivenAt: 'desc' } as any,

@@ -3,7 +3,7 @@
 **Route:** `/admin`  
 **Auth required:** ADMIN or SUPER_ADMIN  
 **File:** `app/admin/page.tsx`  
-**API:** Direct Prisma queries (server component)
+**Data source:** Direct Prisma queries (server component, all wrapped in try/catch)
 
 ---
 
@@ -24,8 +24,6 @@
 | 🔴 Unverified ABNs | Approved instructors with ABN on file but `abnVerified = false` | `/admin/instructors` |
 | 🟠 Pending approvals | `approvalStatus = PENDING` | `/admin/instructors?status=PENDING` |
 
-These alerts are the primary daily operational surface. The dashboard is designed so the admin can see everything that needs action today without navigating anywhere.
-
 **Subscription breakdown (4 tiles):**
 - BASIC / PRO / STUDIO / BUSINESS — live count per tier with price label
 
@@ -33,10 +31,12 @@ These alerts are the primary daily operational surface. The dashboard is designe
 - Pending Approvals → `/admin/instructors?status=PENDING`
 - Process Payouts → `/admin/payouts`
 - All Bookings → `/admin/bookings`
-- Revenue Report → `/admin/revenue`
+- Support Centre → `/admin/support`
 
 **Recent Bookings table:**
 - Last 10 bookings with client, instructor, date, status, price
+
+**Crash resilience:** All DB queries are wrapped in `try/catch` with zero fallbacks. The dashboard renders with empty stats if the DB is unavailable — it never shows a 500 error.
 
 ---
 
@@ -71,11 +71,21 @@ Admin nav groups:
 | Pricing | `/admin/pricing` | Commission rates, package discounts, fees |
 | Settings | `/admin/settings` | Platform name, booking window, notifications |
 | Reviews | `/admin/reviews` | Review moderation — reads from Booking.clientRating/clientReview |
-| Support | `/admin/support` | Quick links and operator reference |
+| Support | `/admin/support` | User search + act on behalf (send message, reset password, add credit) |
 | Audit Log | `/admin/audit-log` | Full history of all financial and admin actions |
 | Credits | `/admin/credits` | Client credit overview and statistics |
 | Staff Governance | `/admin/staff-governance` | Operational controls, refund monitoring, SLA stats |
 | Test Centres | `/admin/test-centres` | Add/edit/deactivate WA DVS test centres |
+
+---
+
+## Required Data
+
+The dashboard requires these records to exist in the database:
+- `PlatformSettings` (key: `default`) — created by `node seed-platform-data.js`
+- `PlatformLedger` (key: `default`) — created by `node seed-platform-data.js`
+
+If these are missing, the dashboard renders with zero stats (no crash). Run `node seed-platform-data.js` after any fresh migration.
 
 ---
 
@@ -84,9 +94,6 @@ Admin nav groups:
 - [BOOKINGS.md](./BOOKINGS.md)
 - [CLIENTS.md](./CLIENTS.md)
 - [INSTRUCTOR_APPROVALS.md](./INSTRUCTOR_APPROVALS.md)
-- [DOCUMENTS.md](./DOCUMENTS.md)
+- [SUPPORT.md](./SUPPORT.md)
 - [REVENUE.md](./REVENUE.md)
 - [PAYOUTS.md](./PAYOUTS.md)
-- [SETTINGS.md](./SETTINGS.md)
-- [REVIEWS.md](./REVIEWS.md)
-- [AUDIT_LOG.md](./AUDIT_LOG.md)

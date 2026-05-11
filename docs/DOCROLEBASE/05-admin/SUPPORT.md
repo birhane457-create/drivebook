@@ -1,55 +1,93 @@
-# Admin Support
+# Admin Support Centre
 
-**Route:** `/admin/support`
-**Auth required:** ADMIN or SUPER_ADMIN
-**File:** `app/admin/support/page.tsx`
-
----
-
-## Overview
-
-A static reference page for admin operators. No dynamic data — it's a quick-access hub with links to other admin sections and a summary of common operational tasks.
+**Route:** `/admin/support`  
+**Auth required:** ADMIN or SUPER_ADMIN  
+**File:** `app/admin/support/page.tsx`, `app/admin/support/user/[userId]/page.tsx`
 
 ---
 
-## Quick Actions
+## Purpose
 
-| Link | Destination | Purpose |
-|------|-------------|---------|
-| Review Pending Instructors | `/admin/instructors?status=pending` | Approve or reject new applications |
-| View All Bookings | `/admin/bookings` | Monitor platform activity |
-| Manage Reviews | `/admin/reviews` | Moderate flagged content |
-| Platform Settings | `/admin/settings` | Configure pricing and features |
+The Support Centre is the primary tool for admin to help students and instructors. When a user contacts support, admin searches for them here and can take action on their behalf without the user needing to do anything themselves.
 
 ---
 
-## Common Admin Tasks (reference)
+## User Search
 
-### Approving new instructors
-1. Go to Instructors → Pending tab
-2. Review profile and documents
-3. Click Approve or Reject with reason
-4. Instructor receives email notification
+`/admin/support` — search by name or email (min 2 characters). Returns up to 20 matching users with their role, approval status, and join date. Click any user to open their support panel.
 
-### Managing subscriptions
-- View subscription stats on the Overview (Dashboard) page
-- Monitor trial users and past-due accounts
-- PRO: $29/mo, 12% commission
-- BUSINESS: $59/mo, 7% commission
-
-### Handling support issues
-1. Check bookings for cancellations or disputes
-2. Review flagged reviews for inappropriate content
-3. Contact instructors via their profile page
-4. Suspend accounts via `/admin/instructors/[id]` if needed
-
-### Revenue monitoring
-- Monthly subscription revenue on Dashboard
-- Commission tracked per booking
-- Detailed breakdown at `/admin/revenue`
+Quick links shown when no search is active:
+- Pending Instructors → `/admin/instructors?status=PENDING`
+- All Clients → `/admin/clients`
+- All Bookings → `/admin/bookings`
 
 ---
 
-## Note
+## Per-User Support Panel
 
-This page is a static operator reference. It does not have a backend API. For live support tooling (ticket system, chat, etc.), that would need to be built separately.
+**Route:** `/admin/support/user/[userId]`  
+**API:** `GET /api/admin/users/[userId]`
+
+Shows the user's full account state and provides action tools.
+
+### Account Info
+
+- Role, email, join date
+- Wallet balance (for CLIENT users)
+- Instructor: approval status, subscription tier, ABN, withholding rate
+- Booking count
+
+### Actions
+
+**Send Message** (`POST /api/admin/contact`)
+
+Sends a message to the user via:
+- Email + in-app notification (default)
+- Email only
+- In-app notification only
+
+All messages are logged to AuditLog with `action: ADMIN_CONTACT_SENT`.
+
+**Password Reset** (`POST /api/admin/users/[userId]/reset-password`)
+
+Sends a 24-hour password reset link to the user's email. Admin-initiated — user doesn't need to request it. Logged to AuditLog with `action: ADMIN_PASSWORD_RESET_SENT`.
+
+**Add Wallet Credit** (CLIENT users only)
+
+Calls `POST /api/admin/clients/[userId]/wallet/add-credit` with amount and reason. Immediately adds credit to the student's wallet. Logged to AuditLog.
+
+### Quick Links
+
+- View Instructor Profile → `/admin/instructors/[id]`
+- Review Documents → `/admin/documents/review/[id]`
+- View Client Detail → `/admin/clients/[id]`
+
+---
+
+## APIs
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `GET /api/admin/users/[userId]` | GET | Full user profile for support panel |
+| `POST /api/admin/contact` | POST | Send email + notification to user |
+| `POST /api/admin/users/[userId]/reset-password` | POST | Admin-initiated password reset |
+
+---
+
+## Audit Trail
+
+Every support action is logged:
+
+| Action | Trigger |
+|--------|---------|
+| `ADMIN_CONTACT_SENT` | Admin sends message to user |
+| `ADMIN_PASSWORD_RESET_SENT` | Admin sends password reset |
+| `WALLET_CREDITED` | Admin adds wallet credit |
+
+---
+
+## Related
+
+- [CLIENTS.md](./CLIENTS.md) — Full client management
+- [INSTRUCTOR_APPROVALS.md](./INSTRUCTOR_APPROVALS.md) — Instructor management
+- [AUDIT_LOG.md](./AUDIT_LOG.md) — All admin actions logged here
