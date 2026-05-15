@@ -153,6 +153,20 @@ export default async function SubdomainBookingPage({
   const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
   const now = new Date();
 
+  // Normalize workingHours: DB stores { day: { start, end, enabled } } but we need { day: [{ start, end }] }
+  // Handle both formats gracefully
+  function getDaySlots(wh: any, dayName: string): { start: string; end: string }[] {
+    const val = wh[dayName];
+    if (!val) return [];
+    // Array format: [{ start, end }]
+    if (Array.isArray(val)) return val.filter((s: any) => s.start && s.end);
+    // Object format: { start, end, enabled }
+    if (typeof val === 'object' && val.start && val.end && val.enabled !== false) {
+      return [{ start: val.start, end: val.end }];
+    }
+    return [];
+  }
+
   const upcomingBookings = await prisma.booking.findMany({
     where: {
       instructorId: instructor.id,
@@ -175,7 +189,7 @@ export default async function SubdomainBookingPage({
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     const dayName = days[d.getDay()];
-    const daySlots: { start: string; end: string }[] = workingHours[dayName] || [];
+    const daySlots = getDaySlots(workingHours, dayName);
     if (daySlots.length === 0) continue;
 
     for (const slot of daySlots) {
@@ -216,7 +230,7 @@ export default async function SubdomainBookingPage({
     const orderedDays = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
     const lines: string[] = [];
     for (const day of orderedDays) {
-      const slots: { start: string; end: string }[] = workingHours[day] || [];
+      const slots = getDaySlots(workingHours, day);
       if (slots.length === 0) continue;
       const abbr = dayAbbr[orderedDays.indexOf(day) < 5 ? orderedDays.indexOf(day) + 1 : orderedDays.indexOf(day) === 5 ? 6 : 0];
       const times = slots.map(s => {
