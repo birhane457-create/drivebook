@@ -96,7 +96,6 @@ export async function GET(req: NextRequest) {
           price: true,
           platformFee: true,
           instructorPayout: true,
-          clientName: true,
           client: {
             select: {
               name: true
@@ -104,7 +103,7 @@ export async function GET(req: NextRequest) {
           },
           isPackageBooking: true,
           parentBookingId: true
-        },
+        } as any,
         orderBy: {
           startTime: 'asc'
         },
@@ -209,8 +208,9 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error('Earnings fetch error:', error);
+    console.error('Earnings error stack:', error instanceof Error ? error.stack : String(error));
     return NextResponse.json(
-      { error: 'Failed to fetch earnings' },
+      { error: 'Failed to fetch earnings', detail: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
