@@ -66,7 +66,16 @@ export async function GET(
     // Get working hours for this day
     const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     const workingHours = (instructor.workingHours as any) || {};
-    const daySlots = workingHours[dayName] || [];
+
+    // Normalize: DB may store { day: { start, end, enabled } } or { day: [{ start, end }] }
+    function normalizeDaySlots(val: any): { start: string; end: string }[] {
+      if (!val) return []
+      if (Array.isArray(val)) return val.filter((s: any) => s?.start && s?.end)
+      if (typeof val === 'object' && val.start && val.end && val.enabled !== false) return [{ start: val.start, end: val.end }]
+      return []
+    }
+
+    const daySlots = normalizeDaySlots(workingHours[dayName]);
 
     if (daySlots.length === 0) {
       return NextResponse.json({

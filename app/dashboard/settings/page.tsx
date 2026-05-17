@@ -71,19 +71,43 @@ export default function SettingsPage() {
         const res = await fetch('/api/instructor/settings')
         if (res.ok) {
           const data = await res.json()
-          setFormData({
-            hourlyRate: data.hourlyRate || 60,
-            serviceRadiusKm: data.serviceRadiusKm || 20,
-            vehicleTypes: data.vehicleTypes || ['AUTO'],
-            workingHours: data.workingHours || {
+
+          // Normalize workingHours from DB: DB may store { day: { start, end, enabled } }
+          // but the UI needs { day: [{ start, end }] }
+          const normalizeWorkingHours = (wh: any): WorkingHours => {
+            const days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] as const
+            const defaults: WorkingHours = {
               monday: [{ start: '09:00', end: '17:00' }],
               tuesday: [{ start: '09:00', end: '17:00' }],
               wednesday: [{ start: '09:00', end: '17:00' }],
               thursday: [{ start: '09:00', end: '17:00' }],
               friday: [{ start: '09:00', end: '17:00' }],
               saturday: [{ start: '09:00', end: '13:00' }],
-              sunday: []
-            },
+              sunday: [],
+            }
+            if (!wh || typeof wh !== 'object') return defaults
+            const result = { ...defaults }
+            for (const day of days) {
+              const val = wh[day]
+              if (!val) { result[day] = []; continue }
+              if (Array.isArray(val)) {
+                // Already array format — filter valid slots
+                result[day] = val.filter((s: any) => s && s.start && s.end)
+              } else if (typeof val === 'object' && val.start && val.end) {
+                // Object format { start, end, enabled }
+                result[day] = val.enabled === false ? [] : [{ start: val.start, end: val.end }]
+              } else {
+                result[day] = []
+              }
+            }
+            return result
+          }
+
+          setFormData({
+            hourlyRate: data.hourlyRate || 60,
+            serviceRadiusKm: data.serviceRadiusKm || 20,
+            vehicleTypes: data.vehicleTypes || ['AUTO'],
+            workingHours: normalizeWorkingHours(data.workingHours),
             allowedDurations: data.allowedDurations || [60, 120],
             bookingBufferMinutes: data.bookingBufferMinutes || 15,
             enableTravelTime: data.enableTravelTime || false,
