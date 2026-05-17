@@ -9,11 +9,22 @@ export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session?.user?.instructorId) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const instructorId = session.user.instructorId;
+    // Resolve instructorId — prefer JWT value, fall back to userId lookup
+    let instructorId = session.user.instructorId;
+    if (!instructorId) {
+      const found = await prisma.instructor.findFirst({
+        where: { userId: session.user.id },
+        select: { id: true },
+      });
+      if (!found) {
+        return NextResponse.json({ error: 'Instructor not found' }, { status: 401 });
+      }
+      instructorId = found.id;
+    }
 
     // FIXED: Use database aggregation instead of loading all data
     const now = new Date();
@@ -85,6 +96,7 @@ export async function GET(req: NextRequest) {
           price: true,
           platformFee: true,
           instructorPayout: true,
+          clientName: true,
           client: {
             select: {
               name: true
@@ -186,7 +198,7 @@ export async function GET(req: NextRequest) {
           startTime: booking.startTime,
           endTime: booking.endTime,
           duration: booking.duration,
-          clientName: booking.client.name,
+          clientName: booking.client?.name ?? (booking as any).clientName ?? 'Guest',
           instructorPayout: payout || 0,
           price: booking.price,
           isFromPackage: booking.isPackageBooking && booking.parentBookingId !== null
