@@ -102,6 +102,25 @@
 
 ---
 
+## Resolved — May 2026 Instructor Dashboard Sprint
+
+| # | Area | What was wrong | What was done |
+|---|------|---------------|---------------|
+| 77 | Dashboard home — `Settings` icon not imported | `<Settings />` used in Quick Actions but not in import list — build error | Added `Settings`, `AlertTriangle`, `Star` to lucide-react import |
+| 78 | Dashboard home — CLIENT "View All" linked to deleted page | `href="/my-bookings"` — page was deleted in GAP-09 | Changed to `/client-dashboard/bookings` |
+| 79 | Dashboard home — CLIENT stats showed "Completed" twice | Slot 2 and slot 4 both showed `completedBookings` | Slot 4 changed to "Lessons Done" with Star icon |
+| 80 | Dashboard home — "Remind" button linked to generic clients list | `href="/dashboard/clients"` instead of specific client | Changed to `/dashboard/clients/${pkg.client.id}` |
+| 81 | Dashboard home — no subscription status banner | Spec required trial/past-due banners; none existed | Added 3 conditional banners: trial expired (red), trial ≤7 days (amber), past due (yellow) |
+| 82 | Settings page — `alert()` used for save feedback | Jarring on mobile, inconsistent with rest of app | Replaced with inline toast state (same pattern as availability page) |
+| 83 | Profile page — languages not editable | Languages shown as read-only badges with no edit path | Added tag-based multi-input (add/remove); saves via `PUT /api/instructor/profile` |
+| 84 | Profile page — license/insurance numbers read-only | Fields read-only with broken link to `/setup/complete-profile` | Made both fields editable; `PUT /api/instructor/profile` now accepts `licenseNumber`, `insuranceNumber`, `languages` |
+| 85 | Profile API — missing fields in PUT | `licenseNumber`, `insuranceNumber`, `languages` not in schema or update | Added to Zod schema and Prisma update in `app/api/instructor/profile/route.ts` |
+| 86 | Progress page — `/api/instructor/lesson-feedback/summary` missing | Page called endpoint that didn't exist; data never shown | Created `app/api/instructor/lesson-feedback/summary/route.ts` — aggregates feedback across all bookings |
+| 87 | Mobile bottom nav — no PDA Tests tab | PDA Tests only accessible via desktop "More" dropdown | Replaced "Availability" tab with "PDA Tests" tab (availability accessible via Settings) |
+| 88 | Stale earnings files | 3 dead `.tsx` files in earnings directory | Deleted `page-enhanced.tsx`, `page-old.tsx`, `page-verbose.tsx` |
+
+---
+
 ## Open — What Still Needs to Be Built
 
 These are genuine gaps that have not been implemented yet. Ordered by priority.
@@ -142,7 +161,7 @@ This is a deployment step, not a code gap.
 
 | Category | Count |
 |----------|-------|
-| Resolved (all time) | 76 |
+| Resolved (all time) | 88 |
 | Open — deployment/config | 4 (OPEN-02, OPEN-04, OPEN-05, OPEN-11) |
 | Open — feature gap | 1 (OPEN-10 — progress chart) |
 | Deferred — future tier | 1 (OPEN-01 — BUSINESS tier) |
@@ -229,7 +248,7 @@ These were identified as contradictions in the docs but are resolved in code. Do
 
 | Category | Count |
 |----------|-------|
-| Resolved (all time) | 76 |
+| Resolved (all time) | 88 |
 | Open — deployment/config | 4 (OPEN-02, OPEN-04, OPEN-05, OPEN-11) |
 | Open — feature gap | 1 (OPEN-10 — progress chart) |
 | Deferred — future tier | 1 (OPEN-01 — BUSINESS tier) |

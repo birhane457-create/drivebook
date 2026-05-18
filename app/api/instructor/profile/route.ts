@@ -20,6 +20,9 @@ const profileSchema = z.object({
   facebook: z.string().optional().nullable(),
   yearsExperience: z.number().optional().nullable(),
   baseAddress: z.string().optional().nullable(),
+  licenseNumber: z.string().optional().nullable(),
+  insuranceNumber: z.string().optional().nullable(),
+  languages: z.array(z.string()).optional(),
 })
 
 // Helper: find instructor by session (handles null instructorId via userId fallback)
@@ -82,6 +85,9 @@ export async function PUT(req: NextRequest) {
         ...(data.facebook !== undefined && { facebook: data.facebook }),
         ...(data.yearsExperience !== undefined && { yearsExperience: data.yearsExperience }),
         ...(data.baseAddress !== undefined && { baseAddress: data.baseAddress }),
+        ...(data.licenseNumber !== undefined && { licenseNumber: data.licenseNumber }),
+        ...(data.insuranceNumber !== undefined && { insuranceNumber: data.insuranceNumber }),
+        ...(data.languages !== undefined && { languages: data.languages }),
       } as any
     })
 

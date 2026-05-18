@@ -139,7 +139,7 @@ export default function AnalyticsPage() {
             <p className="text-3xl font-bold">{analytics.averageRating.toFixed(1)}</p>
             <div className="flex gap-1 mt-2">
               {[...Array(5)].map((_, i) => (
-                <span key={i} className="text-yellow-400">★</span>
+                <span key={i} className={i < Math.round(analytics.averageRating) ? 'text-yellow-400' : 'text-gray-300'}>★</span>
               ))}
             </div>
           </div>

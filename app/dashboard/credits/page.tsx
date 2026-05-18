@@ -97,7 +97,7 @@ export default function InstructorCreditsPage() {
             <DollarSign className="w-5 h-5" /> How Bonuses Work
           </h2>
           <ul className="space-y-2 text-sm text-blue-800">
-            <li> New student bonuses are paid per first-time booking on your subscription tier</li>
+            <li>• New student bonuses are paid per first-time booking on your subscription tier</li>
             <li> Basic tier: bonus per new student as set by platform</li>
             <li> Pro & Business tiers: higher bonus rates  upgrade to earn more</li>
             <li> Bonuses are included in your regular payout cycle</li>

@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
-import { Calendar, Users, DollarSign, Car, TrendingUp, Clock, Wallet, Package, CreditCard } from 'lucide-react'
+import { Calendar, Users, DollarSign, Car, TrendingUp, Clock, Wallet, Package, CreditCard, Settings, AlertTriangle, Star } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function DashboardPage() {
@@ -93,10 +93,10 @@ export default async function DashboardPage() {
           <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Completed</p>
+                <p className="text-gray-500 text-sm">Lessons Done</p>
                 <p className="text-2xl md:text-3xl font-bold">{completedBookings}</p>
               </div>
-              <TrendingUp className="h-12 w-12 text-yellow-600" />
+              <Star className="h-12 w-12 text-yellow-600" />
             </div>
           </div>
         </div>
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
           <div className="bg-white rounded-lg shadow p-4 md:p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Upcoming Lessons</h2>
-              <Link href="/my-bookings" className="text-blue-600 hover:text-blue-800 text-sm">
+              <Link href="/client-dashboard/bookings" className="text-blue-600 hover:text-blue-800 text-sm">
                 View All
               </Link>
             </div>
@@ -324,12 +324,58 @@ export default async function DashboardPage() {
     ? ((dailyAverageThisMonth - dailyAverageLastMonth) / dailyAverageLastMonth) * 100 
     : 0
 
+  // Subscription status helpers
+  const trialEndsAt = instructor.trialEndsAt
+  const daysLeftInTrial = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+    : 0
+  const trialExpired = trialEndsAt ? new Date(trialEndsAt) < now : false
+  const subStatus = instructor.subscriptionStatus
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-7 py-4 sm:py-8">
-      <div className="mb-6 sm:mb-8">
+      <div className="mb-4 sm:mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back, {instructor.name}!</h1>
         <p className="text-sm sm:text-base text-gray-600">Here's what's happening with your driving school today.</p>
       </div>
+
+      {/* Subscription status banner */}
+      {subStatus === 'TRIAL' && trialExpired && (
+        <div className="mb-5 bg-red-50 border-2 border-red-300 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-red-900">Your free trial has expired</p>
+            <p className="text-sm text-red-700 mt-0.5">Choose a plan to continue accepting bookings.</p>
+          </div>
+          <Link href="/dashboard/subscription" className="shrink-0 bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-red-700">
+            Choose Plan
+          </Link>
+        </div>
+      )}
+      {subStatus === 'TRIAL' && !trialExpired && daysLeftInTrial <= 7 && (
+        <div className="mb-5 bg-amber-50 border-2 border-amber-300 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900">Trial ends in {daysLeftInTrial} day{daysLeftInTrial !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-amber-700 mt-0.5">Add a payment method now to avoid interruption.</p>
+          </div>
+          <Link href="/dashboard/subscription" className="shrink-0 bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-700">
+            Upgrade
+          </Link>
+        </div>
+      )}
+      {subStatus === 'PAST_DUE' && (
+        <div className="mb-5 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-yellow-900">Payment past due</p>
+            <p className="text-sm text-yellow-700 mt-0.5">Update your payment method to keep your account active.</p>
+          </div>
+          <Link href="/dashboard/subscription" className="shrink-0 bg-yellow-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-yellow-700">
+            Fix Now
+          </Link>
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
@@ -461,7 +507,7 @@ export default async function DashboardPage() {
                         </p>
                       </div>
                       <Link 
-                        href={`/dashboard/clients`}
+                        href={`/dashboard/clients/${pkg.client.id}`}
                         className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
                       >
                         Remind
@@ -503,7 +549,7 @@ export default async function DashboardPage() {
             href="/dashboard/settings"
             className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
           >
-            <Car className="h-6 w-6 mb-2" />
+            <Settings className="h-6 w-6 mb-2" />
             <p className="font-semibold">Settings</p>
           </Link>
         </div>

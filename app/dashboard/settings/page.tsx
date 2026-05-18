@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, Package } from 'lucide-react'
+import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, Package, CheckCircle, AlertCircle } from 'lucide-react'
 import GoogleCalendarSettings from '@/components/GoogleCalendarSettings'
 
 interface TimeSlot {
@@ -31,6 +31,7 @@ interface LessonPackage {
 export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [workingHoursExpanded, setWorkingHoursExpanded] = useState(false)
   const [bookingPrefsExpanded, setBookingPrefsExpanded] = useState(false)
   const [packagesExpanded, setPackagesExpanded] = useState(false)
@@ -155,12 +156,17 @@ export default function SettingsPage() {
     }))
   }
 
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), 4000)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     // Validate at least one duration is selected
     if (formData.allowedDurations.length === 0) {
-      alert('Please select at least one lesson duration')
+      showToast('error', 'Please select at least one lesson duration')
       return
     }
     
@@ -176,15 +182,15 @@ export default function SettingsPage() {
       })
 
       if (res.ok) {
-        alert('Settings saved successfully!')
+        showToast('success', 'Settings saved successfully!')
       } else {
         const error = await res.json()
         console.error('❌ Settings save error:', error)
-        alert(`Failed to save: ${error.details || error.error || 'Unknown error'}`)
+        showToast('error', `Failed to save: ${error.details || error.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Failed to save settings:', error)
-      alert('Failed to save settings')
+      showToast('error', 'Failed to save settings')
     } finally {
       setSaving(false)
     }
@@ -196,6 +202,15 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
         <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6">Settings</h1>
+
+        {/* Toast */}
+        {toast && (
+          <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium
+            ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+            {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+            {toast.message}
+          </div>
+        )}
 
         {loading ? (
           <div className="bg-white rounded-lg shadow p-6 text-center">

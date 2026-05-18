@@ -2,49 +2,58 @@
 
 **Route:** `/dashboard`  
 **Auth required:** INSTRUCTOR role + active subscription  
-**File:** `app/dashboard/page.tsx`
+**File:** `app/dashboard/page.tsx`  
+**Last updated:** May 2026
 
 ---
 
 ## What It Shows
 
-- Today's bookings (time, client name, pickup address)
-- Upcoming bookings (next 7 days)
-- Earnings summary (this week, this month)
-- Subscription status banner:
-  - Trial: days remaining + upgrade CTA
-  - Active: renewal date + current tier
-  - Past due: payment warning
-  - Cancelled: reactivation CTA
-- Quick actions: Add Booking, View Clients, Check Availability
+- Subscription status banner (trial warning, past-due alert, trial-expired block)
+- Today's upcoming bookings (next 5, CONFIRMED only)
+- Stats: Upcoming Lessons, Total Clients, This Month Revenue (MTD with daily avg + % vs last month), Hourly Rate
+- "Clients Needing Attention" — clients with unused package hours, sorted by inactivity
+- Quick Actions: New Booking, Add Client, Edit Profile, Settings
 
 ---
 
-## Subscription Gate
+## Subscription Status Banner
 
-All instructor dashboard routes require an active subscription. If the subscription is expired or cancelled, the instructor is redirected to `/dashboard/subscription` to reactivate.
+Shown at the top of the instructor dashboard when action is needed:
 
-Trial instructors have full access during the trial period.
+| Condition | Banner | CTA |
+|-----------|--------|-----|
+| `TRIAL` + expired | Red — "Trial has expired" | Choose Plan |
+| `TRIAL` + ≤7 days left | Amber — "Trial ends in N days" | Upgrade |
+| `PAST_DUE` | Yellow — "Payment past due" | Fix Now |
+| `ACTIVE` or `TRIAL` with >7 days | No banner | — |
 
 ---
 
 ## Navigation
 
-Desktop: `components/DashboardNav.tsx` — sidebar navigation  
-Mobile: `components/instructor/MobileBottomNav.tsx` — bottom tab bar
+Desktop: `components/DashboardNav.tsx` — top nav with primary links + "More" dropdown  
+Mobile: `components/instructor/MobileBottomNav.tsx` — 5-tab bottom bar
 
-Tabs: Dashboard / Bookings / Clients / Earnings / Settings
+**Desktop primary tabs:** Dashboard / Bookings / Clients / Earnings  
+**Desktop "More" dropdown:** Analytics, Availability, Packages, Payout Wallet, Tax & Payout, Documents, Branding, Subscription, PDA Tests, Bonuses, Profile, Help, Settings
+
+**Mobile tabs:** Home / Bookings / Clients / Earnings / PDA Tests
 
 ---
 
-## Stats
+## Stats Cards
 
-Fetched from `GET /api/analytics?period=week|month|year|all`:
-- `totalBookings` — all time (includes offline bookings in schedule count)
-- `completedBookings`, `cancelledBookings`, `pendingBookings`
-- `grossRevenue` — platform bookings only (offline excluded)
-- `commission`, `netEarnings`
-- `newClients`, `averageRating`, `completionRate`
+All fetched server-side on page load:
+
+| Card | Source |
+|------|--------|
+| Upcoming Lessons | `instructor.bookings` (CONFIRMED, future, next 5) |
+| Total Clients | `prisma.client.count` for this instructor |
+| This Month (MTD) | `booking.aggregate` sum of COMPLETED bookings this month |
+| Hourly Rate | `instructor.hourlyRate` |
+
+Revenue card also shows: daily average this month, daily average last month, % change.
 
 ---
 
@@ -59,6 +68,10 @@ Shows all bookings with:
 - Search by client name
 - Two create buttons: "Platform Booking" (`/dashboard/bookings/new`) and "Offline / Cash" (`/dashboard/bookings/new?offline=true`, PRO+)
 - Source badge on each card: blue "Platform" or grey "Offline"
+- Inline check-in / check-out / confirm actions (no page navigation needed)
+- Expand row for full details + edit mode (pickup address, notes)
+- Reschedule → `/dashboard/bookings/[id]/reschedule`
+- Cancel with confirmation
 
 ---
 
@@ -80,7 +93,7 @@ For past/completed lessons, shows the **Lesson Feedback** section:
 - Edit → `/dashboard/bookings/[id]/edit` (change pickup address and notes)
 
 **Action on PENDING_PAYMENT bookings:**
-- "Send Payment Link" button — calls `POST /api/bookings/send-payment-link` with the booking price pre-filled. Sends the client a wallet top-up email. Button is disabled after sending to prevent double-send.
+- "Send Payment Link" button — calls `POST /api/bookings/send-payment-link`. Sends the client a wallet top-up email. Button disabled after sending to prevent double-send.
 
 ---
 
@@ -138,9 +151,176 @@ Form for logging cash/bank transfer lessons. Fields: client name, phone, email (
 
 ---
 
+## Earnings Page
+
+**Route:** `/dashboard/earnings`  
+**File:** `app/dashboard/earnings/page.tsx`  
+**API:** `GET /api/instructor/earnings`
+
+Shows:
+- Stats: This Week, Last Week, This Month, Scheduled (upcoming confirmed)
+- Collapsible "Scheduled Lessons" section — upcoming confirmed bookings with expected payout
+- Weekly earnings history grouped by week → day → individual lesson
+- Each week shows: hours worked, lesson count, gross, commission deducted, net earned
+- Download Weekly Receipt button (`.txt` file via `GET /api/instructor/receipts/weekly?weekStart=`)
+- Package bookings marked with 📦 badge
+
+---
+
+## Analytics Page
+
+**Route:** `/dashboard/analytics`  
+**File:** `app/dashboard/analytics/page.tsx`  
+**API:** `GET /api/analytics?period=week|month|year|all`
+
+Shows: Net Earnings, Total Bookings, New Clients, Average Rating, Completion Rate, Cancelled count.  
+Period selector: This Week / This Month / This Year / All Time.  
+Performance summary with completion rate bar.
+
+---
+
+## Progress Page (Student Feedback Tracker)
+
+**Route:** `/dashboard/progress`  
+**File:** `app/dashboard/progress/page.tsx`  
+**API:** `GET /api/instructor/lesson-feedback/summary`
+
+Shows:
+- Stats: Lessons Reviewed, Feedback Rate %, Avg Score, Total Lessons
+- Most Common Focus Areas (PDA codes aggregated across all lessons)
+- Most Common Strengths
+- Recent Lesson Feedback list (expandable, links to booking)
+
+If no feedback exists yet, shows a helpful placeholder with instructions.
+
+---
+
+## PDA Tests Page
+
+**Route:** `/dashboard/pda-tests`  
+**File:** `app/dashboard/pda-tests/page.tsx`  
+**APIs:** `GET/POST /api/pda-tests`, `PUT /api/pda-tests/[id]`
+
+Shows all scheduled PDA tests. Schedule form:
+- Student dropdown (from instructor's clients)
+- Test Centre dropdown (grouped by region — Perth Metro / Regional WA, 14 real WA DVS centres)
+- Date, Time, Price (defaults to instructor's `testPackagePrice`)
+
+Scheduling a PDA test creates a `Booking` with `bookingType = 'PDA_TEST'` and blocks availability for 2h45 + buffer.
+
+After the test, instructor can update result: PASS / FAIL.
+
+---
+
+## Availability Page
+
+**Route:** `/dashboard/availability`  
+**File:** `app/dashboard/availability/page.tsx`  
+**API:** `GET/PUT /api/instructor/settings`, `GET/POST/DELETE /api/instructor/availability/exceptions`
+
+Two sections:
+1. **Weekly Working Hours** — toggle days on/off, add multiple time slots per day, day summary strip
+2. **Blocked Dates & Exceptions** — block specific dates (all-day or time range), with optional label
+
+Changes to working hours are saved via `PUT /api/instructor/settings` (same endpoint as Settings page).
+
+---
+
+## Settings Page
+
+**Route:** `/dashboard/settings`  
+**File:** `app/dashboard/settings/page.tsx`  
+**API:** `GET/PUT /api/instructor/settings`
+
+Sections (collapsible):
+- **Pricing** — hourly rate
+- **Service Area** — radius in km
+- **Booking Preferences** — allowed durations, buffer between bookings (10/15/20 min), optional travel time
+- **Working Hours** — same data as Availability page, editable here too
+- **Custom Lesson Packages** — PDA test packages, special lessons with custom duration and price
+- **Google Calendar** — connect/disconnect, sync now
+
+Uses toast notifications (not `alert()`) for save feedback.
+
+---
+
+## Profile Page
+
+**Route:** `/dashboard/profile`  
+**File:** `app/dashboard/profile/page.tsx`  
+**API:** `GET/PUT /api/instructor/profile`
+
+Editable fields:
+- Profile photo (Cloudinary upload)
+- Car photo (Cloudinary upload)
+- Basic info: name, phone, bio
+- Car info: make, model, year
+- Business info: hourly rate (read-only, change in Settings), service radius (read-only), base address, vehicle types (read-only)
+- **Professional Credentials:** license number, insurance number (both editable)
+- **Languages:** tag-based multi-input (add/remove, saved to DB)
+- Service areas (postcodes)
+- Social links: WhatsApp, Instagram, Facebook, years of experience
+
+---
+
+## Branding Page
+
+**Route:** `/dashboard/branding`  
+**File:** `app/dashboard/branding/page.tsx`  
+**Gate:** PRO+ required (BASIC sees upgrade prompt)
+
+Features:
+- Custom booking URL slug (`[slug].drivebook.com.au`) — PRO+
+- Custom domain (`yourdomain.com.au`) — Studio+ with DNS wizard
+- Logo upload (Cloudinary)
+- Brand colours (primary + secondary)
+- Social links (synced with profile)
+- Live preview panel
+- Active URLs summary
+
+---
+
+## Subscription Page
+
+**Route:** `/dashboard/subscription`  
+**File:** `app/dashboard/subscription/page.tsx`
+
+Shows current plan status (TRIAL / ACTIVE / PAST_DUE), days left in trial, renewal date, commission rate.  
+Renders `SubscriptionPlans` component for plan selection/upgrade.  
+Billing history shows current subscription period and amount.
+
+---
+
+## Wallet / Payout Page
+
+**Route:** `/dashboard/wallet`  
+**File:** `app/dashboard/wallet/page.tsx`  
+**API:** `GET /api/instructor/earnings`
+
+Shows: Pending Payout, This Week, This Month, All Time earnings.  
+Recent 10 payout transactions.  
+Links to full Earnings page.
+
+---
+
+## Help Page
+
+**Route:** `/dashboard/help`  
+**File:** `app/dashboard/help/page.tsx`
+
+Static help content covering:
+- Google Calendar integration (keywords, event types, blocking rules)
+- Step-by-step scenarios
+- Troubleshooting guide
+
+---
+
 ## Related
 
 - [BOOKINGS.md](./BOOKINGS.md) — Full booking management reference
 - [OFFLINE_BOOKINGS.md](./OFFLINE_BOOKINGS.md) — Offline booking system (PRO+)
 - [EARNINGS.md](./EARNINGS.md) — Earnings breakdown
 - [SUBSCRIPTION_TIERS.md](./SUBSCRIPTION_TIERS.md) — Tier features and gates
+- [PDA_TESTS.md](./PDA_TESTS.md) — PDA test scheduling and result tracking
+- [SETTINGS.md](./SETTINGS.md) — Settings and availability configuration
+- [INSTRUCTOR_DASH_GAP_ANALYSIS.md](./INSTRUCTOR_DASH_GAP_ANALYSIS.md) — Gap analysis and fix log

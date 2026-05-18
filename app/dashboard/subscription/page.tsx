@@ -169,7 +169,7 @@ export default async function SubscriptionPage() {
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-2">Branded Pages</h3>
                     <p className="text-sm text-gray-900">
-                      {instructor.brandedBookingPage ? 'Enabled' : 'Not configured'}
+                      {instructor.showBrandingOnBookingPage ? 'Enabled' : 'Not configured'}
                     </p>
                   </div>
                 </>

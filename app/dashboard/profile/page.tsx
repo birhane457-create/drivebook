@@ -36,6 +36,7 @@ export default function ProfilePage() {
     facebook: '',
     yearsExperience: '',
   })
+  const [newLanguage, setNewLanguage] = useState('')
 
   useEffect(() => {
     fetchProfile()
@@ -142,6 +143,9 @@ export default function ProfilePage() {
           instagram: formData.instagram || null,
           facebook: formData.facebook || null,
           baseAddress: formData.baseAddress || null,
+          licenseNumber: formData.licenseNumber || null,
+          insuranceNumber: formData.insuranceNumber || null,
+          languages: formData.languages,
         }),
       })
 
@@ -412,16 +416,56 @@ export default function ProfilePage() {
 
               <div>
                 <label className="block text-sm font-medium mb-1">Languages</label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 mb-2">
                   {formData.languages.map((lang) => (
                     <span
                       key={lang}
-                      className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium"
+                      className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1"
                     >
                       {lang}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, languages: formData.languages.filter(l => l !== lang) })}
+                        className="ml-1 text-green-600 hover:text-red-600"
+                      >
+                        ×
+                      </button>
                     </span>
                   ))}
                 </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newLanguage}
+                    onChange={(e) => setNewLanguage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const lang = newLanguage.trim()
+                        if (lang && !formData.languages.includes(lang)) {
+                          setFormData({ ...formData, languages: [...formData.languages, lang] })
+                          setNewLanguage('')
+                        }
+                      }
+                    }}
+                    placeholder="e.g. English, Arabic, Tigrinya"
+                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const lang = newLanguage.trim()
+                      if (lang && !formData.languages.includes(lang)) {
+                        setFormData({ ...formData, languages: [...formData.languages, lang] })
+                        setNewLanguage('')
+                      }
+                    }}
+                    className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                  >
+                    Add
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Press Enter or click Add. Shown on your public profile.</p>
               </div>
             </div>
           </div>
@@ -435,11 +479,12 @@ export default function ProfilePage() {
                 <input
                   type="text"
                   value={formData.licenseNumber}
-                  readOnly
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-600"
+                  onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
+                  placeholder="e.g. DI12345"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
                 />
                 {!formData.licenseNumber && (
-                  <p className="text-xs text-amber-600 mt-1">⚠️ Not provided - complete your profile</p>
+                  <p className="text-xs text-amber-600 mt-1">⚠️ Not provided — complete your profile</p>
                 )}
               </div>
 
@@ -448,21 +493,19 @@ export default function ProfilePage() {
                 <input
                   type="text"
                   value={formData.insuranceNumber}
-                  readOnly
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-600"
+                  onChange={(e) => setFormData({ ...formData, insuranceNumber: e.target.value })}
+                  placeholder="e.g. POL-2024-XXXXX"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
                 />
                 {!formData.insuranceNumber && (
-                  <p className="text-xs text-amber-600 mt-1">⚠️ Not provided - complete your profile</p>
+                  <p className="text-xs text-amber-600 mt-1">⚠️ Not provided — complete your profile</p>
                 )}
               </div>
 
               {(!formData.licenseNumber || !formData.insuranceNumber) && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                   <p className="text-sm text-amber-800">
-                    Complete your professional credentials to increase trust with students.{' '}
-                    <a href="/setup/complete-profile" className="underline font-medium">
-                      Complete Profile
-                    </a>
+                    Complete your professional credentials to increase trust with students.
                   </p>
                 </div>
               )}
