@@ -149,7 +149,7 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
         </button>
 
         <h1 className="text-2xl font-bold mb-1">Reschedule Booking</h1>
-        <p className="text-gray-500 text-sm mb-6">Client: {booking.client.name} · {booking.client.phone}</p>
+        <p className="text-gray-500 text-sm mb-6">Client: {booking.client?.name ?? (booking as any).clientName ?? 'Guest'} · {booking.client?.phone ?? (booking as any).clientPhone ?? '—'}</p>
 
         {/* Past booking warning */}
         {isPast && (

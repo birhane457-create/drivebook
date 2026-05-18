@@ -402,7 +402,7 @@ export default async function DashboardPage() {
             <div className="space-y-4">
               {instructor.bookings.map((booking) => (
                 <div key={booking.id} className="border-l-4 border-blue-600 pl-4 py-2 hover:bg-gray-50 transition">
-                  <p className="font-semibold">{booking.client.name}</p>
+                  <p className="font-semibold">{booking.client?.name ?? (booking as any).clientName ?? 'Guest'}</p>
                   <p className="text-sm text-gray-600">
                     {new Date(booking.startTime).toLocaleString('en-US', {
                       weekday: 'short',

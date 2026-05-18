@@ -392,7 +392,7 @@ export default function EarningsPage() {
                                     </div>
                                     {t.booking && (
                                       <p className="text-xs text-gray-400 mt-0.5">
-                                        {t.booking.client.name} · {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                                        {t.booking.client?.name ?? (t.booking as any).clientName ?? 'Guest'} · {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                                       </p>
                                     )}
                                     <p className="text-xs text-gray-400">Gross ${t.amount.toFixed(2)} · Commission -${t.platformFee.toFixed(2)}</p>
