@@ -16,10 +16,11 @@ export function useBookingDrawer() {
 interface Props {
   primary: string;
   instructorName?: string;
+  isAcceptingBookings?: boolean; // hides "Book Now" button when instructor is inactive
   children?: React.ReactNode; // booking form passed as children for the drawer
 }
 
-export default function SubdomainClientFeatures({ primary, instructorName, children }: Props) {
+export default function SubdomainClientFeatures({ primary, instructorName, isAcceptingBookings = true, children }: Props) {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -65,14 +66,24 @@ export default function SubdomainClientFeatures({ primary, instructorName, child
           <NavTab icon={<Info className="h-5 w-5" />} label="About" onClick={() => scrollTo('section-about')} />
           <NavTab icon={<Briefcase className="h-5 w-5" />} label="Services" onClick={() => scrollTo('section-services')} />
           <NavTab icon={<Phone className="h-5 w-5" />} label="Contact" onClick={() => scrollTo('section-contact')} />
-          <button
-            onClick={openBooking}
-            className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 text-white font-bold"
-            style={{ backgroundColor: primary }}
-          >
-            <CalendarDays className="h-5 w-5" />
-            <span className="text-[11px] font-bold">Book Now</span>
-          </button>
+          {isAcceptingBookings ? (
+            <button
+              onClick={openBooking}
+              className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 text-white font-bold"
+              style={{ backgroundColor: primary }}
+            >
+              <CalendarDays className="h-5 w-5" />
+              <span className="text-[11px] font-bold">Book Now</span>
+            </button>
+          ) : (
+            <a
+              href="/book"
+              className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 bg-gray-200 text-gray-500"
+            >
+              <CalendarDays className="h-5 w-5" />
+              <span className="text-[11px] font-medium">Find Others</span>
+            </a>
+          )}
         </div>
         {/* iPhone safe area */}
         <div style={{ height: 'env(safe-area-inset-bottom)', backgroundColor: 'white' }} />

@@ -73,6 +73,8 @@ export async function POST(req: NextRequest) {
         approvalStatus: true,
         isActive: true,
         subscriptionTier: true,
+        subscriptionStatus: true,
+        trialEndsAt: true,
         lessonPackages: true,
       },
     }) as any;
@@ -87,6 +89,22 @@ export async function POST(req: NextRequest) {
 
     if ((instructor as any).approvalStatus === 'SUSPENDED' || (instructor as any).isActive === false) {
       return NextResponse.json({ error: 'Instructor is not available for bookings' }, { status: 403 });
+    }
+
+    // ── Subscription gate ─────────────────────────────────────────────────────
+    // Inactive instructors cannot accept new bookings from the public.
+    const subStatus = (instructor as any).subscriptionStatus as string | undefined;
+    const trialEndsAt = (instructor as any).trialEndsAt ? new Date((instructor as any).trialEndsAt) : null;
+    const trialExpired = trialEndsAt && trialEndsAt < new Date();
+    const isAcceptingBookings =
+      subStatus === 'ACTIVE' ||
+      (subStatus === 'TRIAL' && !trialExpired);
+
+    if (!isAcceptingBookings) {
+      return NextResponse.json({
+        error: 'This instructor is not currently accepting bookings.',
+        code: 'INSTRUCTOR_INACTIVE',
+      }, { status: 403 });
     }
 
     // Create user account or link to existing

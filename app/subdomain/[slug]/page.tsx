@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { MapPin, Car, Star, Phone, Globe, Clock, CheckCircle, MessageCircle, Instagram, Facebook, Users, Award, Calendar, ShieldCheck, ChevronDown } from 'lucide-react';
+import { MapPin, Car, Star, Phone, Globe, Clock, CheckCircle, MessageCircle, Instagram, Facebook, Users, Award, Calendar, ShieldCheck, ChevronDown, AlertTriangle } from 'lucide-react';
 import BulkBookingForm from '@/components/BulkBookingForm';
 import SubdomainClientFeatures from '@/components/subdomain/SubdomainClientFeatures';
 import SubdomainDesktopNav from '@/components/subdomain/SubdomainDesktopNav';
@@ -116,11 +116,23 @@ export default async function SubdomainBookingPage({
       testPackagePrice: true,
       testPackageDuration: true,
       testPackageIncludes: true,
+      subscriptionStatus: true,
+      trialEndsAt: true,
       // Test package fields — accessed via (instructor as any) until schema is pushed to production
     },
   });
 
   if (!instructor) notFound();
+
+  // ── Subscription gate ─────────────────────────────────────────────────────
+  // Inactive instructors' subdomain pages show a "not accepting bookings" message.
+  // The page still renders (for SEO / existing links) but the booking form is hidden.
+  const subStatus = (instructor as any).subscriptionStatus as string;
+  const trialEndsAt = (instructor as any).trialEndsAt ? new Date((instructor as any).trialEndsAt) : null;
+  const trialExpired = trialEndsAt && trialEndsAt < new Date();
+  const isAcceptingBookings =
+    subStatus === 'ACTIVE' ||
+    (subStatus === 'TRIAL' && !trialExpired);
 
   // Branding — colors apply for all tiers; logo/name white-labelling is PRO/BUSINESS only
   const isPro = instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'BUSINESS';
@@ -727,23 +739,34 @@ export default async function SubdomainBookingPage({
               )}
               <h2 className="text-xl font-bold text-gray-900 mb-0.5">Book Your Lesson</h2>
               <p className="text-sm text-gray-500 mb-6">Takes less than 60 seconds · No account required</p>
-              <SubdomainBookingEntry
-                instructor={{
-                  id: instructor.id,
-                  name: instructor.name,
-                  profileImage: instructor.profileImage,
-                  hourlyRate: instructor.hourlyRate,
-                  averageRating: instructor.averageRating,
-                  totalReviews: instructor.totalReviews,
-                  offersTestPackage: instructor.offersTestPackage ?? false,
-                  testPackagePrice: instructor.testPackagePrice ?? null,
-                  testPackageDuration: instructor.testPackageDuration ?? null,
-                  testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
-                  allowedDurations: allowedDurations,
-                  lessonPackages: activePackages,
-                }}
-                primary={primary}
-              />
+              {isAcceptingBookings ? (
+                <SubdomainBookingEntry
+                  instructor={{
+                    id: instructor.id,
+                    name: instructor.name,
+                    profileImage: instructor.profileImage,
+                    hourlyRate: instructor.hourlyRate,
+                    averageRating: instructor.averageRating,
+                    totalReviews: instructor.totalReviews,
+                    offersTestPackage: instructor.offersTestPackage ?? false,
+                    testPackagePrice: instructor.testPackagePrice ?? null,
+                    testPackageDuration: instructor.testPackageDuration ?? null,
+                    testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
+                    allowedDurations: allowedDurations,
+                    lessonPackages: activePackages,
+                  }}
+                  primary={primary}
+                />
+              ) : (
+                <div className="text-center py-8">
+                  <AlertTriangle className="h-12 w-12 text-amber-400 mx-auto mb-3" />
+                  <p className="font-semibold text-gray-900 mb-1">{instructor.name} is not currently accepting bookings</p>
+                  <p className="text-sm text-gray-500 mb-5">This instructor's account is temporarily inactive. Please check back later or find another instructor.</p>
+                  <a href="/book" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
+                    Find Another Instructor
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Reviews section */}
@@ -803,26 +826,39 @@ export default async function SubdomainBookingPage({
       </footer>
 
       {/* Mobile bottom nav + full-screen booking drawer */}
-      <SubdomainClientFeatures primary={primary} instructorName={instructor.name}>
+      <SubdomainClientFeatures primary={primary} instructorName={instructor.name} isAcceptingBookings={isAcceptingBookings}>
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900">Book a Lesson</h2>
-          <SubdomainBookingEntry
-            instructor={{
-              id: instructor.id,
-              name: instructor.name,
-              profileImage: instructor.profileImage,
-              hourlyRate: instructor.hourlyRate,
-              averageRating: instructor.averageRating,
-              totalReviews: instructor.totalReviews,
-              offersTestPackage: instructor.offersTestPackage ?? false,
-              testPackagePrice: instructor.testPackagePrice ?? null,
-              testPackageDuration: instructor.testPackageDuration ?? null,
-              testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
-              allowedDurations: allowedDurations,
-              lessonPackages: activePackages,
-            }}
-            primary={primary}
-          />
+          {isAcceptingBookings ? (
+            <>
+              <h2 className="text-xl font-bold text-gray-900">Book a Lesson</h2>
+              <SubdomainBookingEntry
+                instructor={{
+                  id: instructor.id,
+                  name: instructor.name,
+                  profileImage: instructor.profileImage,
+                  hourlyRate: instructor.hourlyRate,
+                  averageRating: instructor.averageRating,
+                  totalReviews: instructor.totalReviews,
+                  offersTestPackage: instructor.offersTestPackage ?? false,
+                  testPackagePrice: instructor.testPackagePrice ?? null,
+                  testPackageDuration: instructor.testPackageDuration ?? null,
+                  testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
+                  allowedDurations: allowedDurations,
+                  lessonPackages: activePackages,
+                }}
+                primary={primary}
+              />
+            </>
+          ) : (
+            <div className="text-center py-8">
+              <AlertTriangle className="h-10 w-10 text-amber-400 mx-auto mb-3" />
+              <p className="font-semibold text-gray-900 mb-1">Not accepting bookings</p>
+              <p className="text-sm text-gray-500 mb-4">This instructor's account is temporarily inactive.</p>
+              <a href="/book" className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                Find Another Instructor
+              </a>
+            </div>
+          )}
         </div>
       </SubdomainClientFeatures>
     </div>

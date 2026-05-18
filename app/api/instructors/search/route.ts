@@ -21,9 +21,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Provide location or name' }, { status: 400 });
     }
 
-    // Fetch all approved instructors with location fields
+    // Fetch all approved, active instructors with active subscriptions
+    // Expired/cancelled/past-due instructors are hidden from public search
+    const now = new Date();
     const instructors = await prisma.instructor.findMany({
-      where: isAdmin ? {} : { approvalStatus: 'APPROVED', isActive: true },
+      where: isAdmin ? {} : {
+        approvalStatus: 'APPROVED',
+        isActive: true,
+        OR: [
+          { subscriptionStatus: 'ACTIVE' },
+          // TRIAL: only include if trial hasn't expired
+          {
+            subscriptionStatus: 'TRIAL',
+            trialEndsAt: { gt: now },
+          },
+        ],
+      },
       select: {
         id: true,
         name: true,
