@@ -38,12 +38,41 @@ export default function NewBookingPage() {
   const [offlineError, setOfflineError] = useState<string | null>(null)
   const [offlineSuccess, setOfflineSuccess] = useState(false)
 
+  // Availability slots for offline booking date picker
+  const [offlineSlots, setOfflineSlots] = useState<{ time: string; available: boolean }[]>([])
+  const [loadingOfflineSlots, setLoadingOfflineSlots] = useState(false)
+  const [offlineSlotsMessage, setOfflineSlotsMessage] = useState<string | null>(null)
+
   useEffect(() => {
     if (!isOfflineMode) {
       fetchClients()
       fetchInstructorData()
+    } else {
+      // Need instructor data for slot availability even in offline mode
+      fetchInstructorData()
     }
   }, [isOfflineMode])
+
+  // Fetch available slots when date or duration changes in offline mode
+  useEffect(() => {
+    if (!isOfflineMode || !offlineForm.date || !instructorData?.id) return
+    setLoadingOfflineSlots(true)
+    setOfflineSlots([])
+    setOfflineSlotsMessage(null)
+    setOfflineForm(p => ({ ...p, time: '' }))
+    fetch(`/api/availability/slots?instructorId=${instructorData.id}&date=${offlineForm.date}&duration=${offlineForm.durationMinutes}&bypassDurationCheck=true`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.slots && data.slots.length > 0) {
+          setOfflineSlots(data.slots)
+        } else {
+          setOfflineSlots([])
+          setOfflineSlotsMessage(data.message || 'No available slots on this day')
+        }
+      })
+      .catch(() => setOfflineSlotsMessage('Could not load availability'))
+      .finally(() => setLoadingOfflineSlots(false))
+  }, [isOfflineMode, offlineForm.date, offlineForm.durationMinutes, instructorData?.id])
 
   useEffect(() => {
     if (preselectedClientId && clients.length > 0) {
@@ -170,17 +199,36 @@ export default function NewBookingPage() {
               <div className="grid sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                  <input required type="date" value={offlineForm.date} onChange={e => setOfflineForm(p => ({ ...p, date: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time *</label>
-                  <input required type="time" value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  <input required type="date" value={offlineForm.date} onChange={e => setOfflineForm(p => ({ ...p, date: e.target.value, time: '' }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Duration *</label>
-                  <select value={offlineForm.durationMinutes} onChange={e => setOfflineForm(p => ({ ...p, durationMinutes: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-                    {[30, 60, 90, 120, 150, 180, 240].map(m => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} hr${m > 60 ? 's' : ''}`}</option>)}
+                  <select value={offlineForm.durationMinutes} onChange={e => setOfflineForm(p => ({ ...p, durationMinutes: Number(e.target.value), time: '' }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                    {[30, 60, 90, 120, 150, 165, 180, 240].map(m => <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60>0?` ${m%60}m`:''}`}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Time *</label>
+                  {!offlineForm.date ? (
+                    <div className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50">Select a date first</div>
+                  ) : loadingOfflineSlots ? (
+                    <div className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50 flex items-center gap-2">
+                      <svg className="animate-spin h-3 w-3 text-blue-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                      Checking availability...
+                    </div>
+                  ) : offlineSlots.length > 0 ? (
+                    <select required value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                      <option value="">Pick a slot</option>
+                      {offlineSlots.filter(s => s.available).map(s => (
+                        <option key={s.time} value={s.time}>{s.time}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="space-y-1">
+                      <input required type="time" value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 bg-amber-50" />
+                      {offlineSlotsMessage && <p className="text-xs text-amber-700">⚠ {offlineSlotsMessage} — enter time manually</p>}
+                    </div>
+                  )}
                 </div>
               </div>
 
