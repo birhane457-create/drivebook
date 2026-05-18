@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { safeClientSelect, sanitizeClientForInstructor, logDataAccess } from '@/lib/utils/sanitize'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,12 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.instructorId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Subscription / read-only gate — cannot add new clients when inactive
+    const subCheck = await requireActiveSubscription(session.user.id)
+    if (!subCheck.valid) {
+      return NextResponse.json({ error: subCheck.message, requiresSubscription: true }, { status: 403 })
     }
 
     const body = await req.json()

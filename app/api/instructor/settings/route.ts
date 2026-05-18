@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation'
 
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,12 @@ export async function PUT(req: NextRequest) {
     
     if (!session?.user?.instructorId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Read-only guard — inactive instructors can view but not change settings
+    const subCheck = await requireActiveSubscription(session.user.id)
+    if (!subCheck.valid) {
+      return NextResponse.json({ error: subCheck.message, requiresSubscription: true }, { status: 403 })
     }
 
     const body = await req.json()

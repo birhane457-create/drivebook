@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Calendar, MapPin, Car, Star, ArrowLeft } from 'lucide-react'
+import { Calendar, MapPin, Car, Star, ArrowLeft, AlertTriangle } from 'lucide-react'
 import BulkBookingForm from '@/components/BulkBookingForm'
 
 export default async function PublicBookingPage({ 
@@ -16,6 +16,17 @@ export default async function PublicBookingPage({
     where: { id: params.instructorId },
   }) as any;
   if (!instructor) notFound();
+
+  // ── Subscription gate for public booking ─────────────────────────────────
+  // If the instructor's subscription is inactive, don't show the booking form.
+  // Their profile is still visible (so students know they exist) but they
+  // cannot accept new bookings until they resubscribe.
+  const subStatus = instructor.subscriptionStatus as string;
+  const trialEndsAt = instructor.trialEndsAt ? new Date(instructor.trialEndsAt) : null;
+  const trialExpired = trialEndsAt && trialEndsAt < new Date();
+  const isAcceptingBookings =
+    subStatus === 'ACTIVE' ||
+    (subStatus === 'TRIAL' && !trialExpired);
 
   // Check if branding is enabled for PRO/BUSINESS tier
   const hasBranding = 
@@ -148,51 +159,73 @@ export default async function PublicBookingPage({
 
           {/* Booking Form */}
           <div className="lg:col-span-2">
-            {searchedLocation && (
-              <div className="border-2 rounded-lg p-4 mb-6" style={{ 
-                backgroundColor: `${primaryColor}10`, 
-                borderColor: `${primaryColor}40` 
-              }}>
-                <div className="flex items-start gap-3">
-                  <MapPin className="h-5 w-5 mt-0.5" style={{ color: primaryColor }} />
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      Searching for lessons in: {searchedLocation}
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {instructor.name} services this area. Enter your exact pickup address below.
-                    </p>
-                  </div>
-                </div>
+            {!isAcceptingBookings ? (
+              /* ── Inactive instructor — not accepting bookings ── */
+              <div className="bg-white rounded-xl shadow-md p-8 text-center">
+                <AlertTriangle className="h-14 w-14 text-amber-400 mx-auto mb-4" />
+                <h2 className="text-xl font-bold text-gray-900 mb-2">
+                  {instructor.name} is not currently accepting bookings
+                </h2>
+                <p className="text-gray-500 text-sm mb-6">
+                  This instructor's account is temporarily inactive. Please check back later or find another instructor.
+                </p>
+                <Link
+                  href="/book"
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Find Another Instructor
+                </Link>
               </div>
+            ) : (
+              <>
+                {searchedLocation && (
+                  <div className="border-2 rounded-lg p-4 mb-6" style={{ 
+                    backgroundColor: `${primaryColor}10`, 
+                    borderColor: `${primaryColor}40` 
+                  }}>
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-5 w-5 mt-0.5" style={{ color: primaryColor }} />
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          Searching for lessons in: {searchedLocation}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {instructor.name} services this area. Enter your exact pickup address below.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                    <Calendar className="h-6 w-6" style={{ color: primaryColor }} />
+                    Book Your Lessons
+                  </h2>
+                  <p className="text-gray-600 mb-6">
+                    Choose a package and save up to 12% on bulk bookings
+                  </p>
+                  <BulkBookingForm 
+                    instructorId={instructor.id}
+                    instructorName={instructor.name}
+                    hourlyRate={instructor.hourlyRate}
+                    searchedLocation={searchedLocation}
+                    brandColorPrimary={primaryColor}
+                    brandColorSecondary={secondaryColor}
+                    lessonPackages={activePackages}
+                    serviceAreas={instructor.serviceAreas}
+                    baseAddress={instructor.baseAddress}
+                    serviceRadiusKm={instructor.serviceRadiusKm}
+                    allowedDurations={allowedDurations}
+                    offersTestPackage={instructor.offersTestPackage ?? false}
+                    testPackagePrice={instructor.testPackagePrice ?? undefined}
+                    testPackageDuration={instructor.testPackageDuration ?? undefined}
+                    testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
+                  />
+                </div>
+              </>
             )}
-            
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                <Calendar className="h-6 w-6" style={{ color: primaryColor }} />
-                Book Your Lessons
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Choose a package and save up to 12% on bulk bookings
-              </p>
-              <BulkBookingForm 
-                instructorId={instructor.id}
-                instructorName={instructor.name}
-                hourlyRate={instructor.hourlyRate}
-                searchedLocation={searchedLocation}
-                brandColorPrimary={primaryColor}
-                brandColorSecondary={secondaryColor}
-                lessonPackages={activePackages}
-                serviceAreas={instructor.serviceAreas}
-                baseAddress={instructor.baseAddress}
-                serviceRadiusKm={instructor.serviceRadiusKm}
-                allowedDurations={allowedDurations}
-                offersTestPackage={instructor.offersTestPackage ?? false}
-                testPackagePrice={instructor.testPackagePrice ?? undefined}
-                testPackageDuration={instructor.testPackageDuration ?? undefined}
-                testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
-              />
-            </div>
           </div>
         </div>
       </div>

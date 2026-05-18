@@ -55,6 +55,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
 
+    // ── Subscription gate ─────────────────────────────────────────────────────
+    // Inactive instructors cannot accept new bookings from the public.
+    const subStatus = instructor.subscriptionStatus as string;
+    const trialEndsAt = instructor.trialEndsAt ? new Date(instructor.trialEndsAt) : null;
+    const trialExpired = trialEndsAt && trialEndsAt < new Date();
+    const isAcceptingBookings =
+      subStatus === 'ACTIVE' ||
+      (subStatus === 'TRIAL' && !trialExpired);
+
+    if (!isAcceptingBookings) {
+      return NextResponse.json({
+        error: 'This instructor is not currently accepting bookings.',
+        code: 'INSTRUCTOR_INACTIVE',
+      }, { status: 403 });
+    }
+
     // Rate limiting: limit bookings per client/instructor/IP
     const ip = req.headers.get('x-forwarded-for') || req.ip || 'unknown'
     const identifier = getRateLimitIdentifier(undefined, ip, `public-booking:${data.clientEmail}:${data.instructorId}`)

@@ -1,130 +1,123 @@
 /**
  * Subscription Validation Middleware
- * 
- * Ensures instructors have active subscriptions before accessing platform features
- * 
- * CRITICAL: Prevents free access after trial expires or payment fails
+ *
+ * Policy:
+ * - ACTIVE or TRIAL (not expired) → full access
+ * - TRIAL expired / CANCELLED / EXPIRED / PAST_DUE → READ-ONLY access
+ *   Instructors can view all their historical data but cannot create or modify anything.
+ *   This is required by Australian Privacy Act principles — data must remain accessible.
+ * - No instructor record → fail open (let other middleware handle)
+ *
+ * "Read-only" means:
+ *   ✅ GET all dashboard pages (bookings, clients, earnings, analytics, documents)
+ *   ✅ Download receipts and exports
+ *   ❌ POST/PUT/PATCH/DELETE on any instructor resource
+ *   ❌ Public booking page hidden from search
+ *   ❌ New bookings, new clients, settings changes
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-export async function validateSubscription(req: NextRequest): Promise<NextResponse | null> {
-  const session = await getServerSession(authOptions);
-  
-  // Only check for instructors
-  if (session?.user?.role !== 'INSTRUCTOR') {
-    return null; // Not an instructor, skip validation
-  }
+export type SubscriptionAccess =
+  | { valid: true; readOnly: false }
+  | { valid: true; readOnly: true; reason: string; status: string }
+  | { valid: false; message: string; status?: string };
 
+/**
+ * Check subscription access for an instructor user.
+ * Returns full access, read-only access, or no access.
+ */
+export async function checkSubscriptionAccess(userId: string): Promise<SubscriptionAccess> {
   try {
     const instructor = await prisma.instructor.findUnique({
-      where: { userId: session.user.id },
+      where: { userId },
       select: {
         subscriptionStatus: true,
         trialEndsAt: true,
-        subscriptionTier: true
-      }
+      },
     });
 
     if (!instructor) {
-      return null; // No instructor record, let other middleware handle
+      // No instructor record — fail open, let page-level auth handle it
+      return { valid: true, readOnly: false };
     }
 
-    // Check if trial expired
-    const trialExpired = instructor.trialEndsAt && 
-      new Date(instructor.trialEndsAt) < new Date();
+    const { subscriptionStatus, trialEndsAt } = instructor;
 
-    // Allow access if:
-    // 1. Status is ACTIVE
-    // 2. Status is TRIAL and trial not expired
-    const hasAccess = 
-      instructor.subscriptionStatus === 'ACTIVE' ||
-      (instructor.subscriptionStatus === 'TRIAL' && !trialExpired);
-
-    if (!hasAccess) {
-      // Redirect to subscription page
-      const url = new URL('/dashboard/subscription', req.url);
-      url.searchParams.set('reason', instructor.subscriptionStatus);
-      return NextResponse.redirect(url);
+    // Active trial — check expiry
+    if (subscriptionStatus === 'TRIAL') {
+      const trialExpired = trialEndsAt && new Date(trialEndsAt) < new Date();
+      if (!trialExpired) {
+        return { valid: true, readOnly: false };
+      }
+      // Trial expired → read-only
+      return {
+        valid: true,
+        readOnly: true,
+        reason: 'Your free trial has expired. Subscribe to create new bookings and accept students.',
+        status: 'TRIAL_EXPIRED',
+      };
     }
 
-    return null; // Has access, continue
+    // Paid active subscription
+    if (subscriptionStatus === 'ACTIVE') {
+      return { valid: true, readOnly: false };
+    }
+
+    // All other states → read-only (not blocked)
+    const reasons: Record<string, string> = {
+      PAST_DUE:  'Your payment is past due. Update your payment method to resume full access.',
+      CANCELLED: 'Your subscription is cancelled. Resubscribe to create new bookings.',
+      EXPIRED:   'Your subscription has expired. Renew to resume full access.',
+    };
+
+    return {
+      valid: true,
+      readOnly: true,
+      reason: reasons[subscriptionStatus] ?? 'Your subscription is inactive. Subscribe to resume full access.',
+      status: subscriptionStatus,
+    };
   } catch (error) {
-    console.error('Subscription validation error:', error);
-    // Fail open - don't block on error
-    return null;
+    console.error('Subscription check error:', error);
+    // Fail open — never block on a DB error
+    return { valid: true, readOnly: false };
   }
 }
 
 /**
- * Check if instructor has active subscription
- * Use this in API routes
+ * Convenience: returns true if the instructor has full (non-read-only) access.
+ * Use this in API route POST/PUT/PATCH/DELETE handlers.
+ *
+ * Usage:
+ *   const access = await requireActiveSubscription(session.user.id)
+ *   if (!access.valid) return NextResponse.json({ error: access.message }, { status: 403 })
  */
 export async function requireActiveSubscription(userId: string): Promise<{
   valid: boolean;
   status?: string;
   message?: string;
 }> {
-  try {
-    const instructor = await prisma.instructor.findUnique({
-      where: { userId },
-      select: {
-        subscriptionStatus: true,
-        trialEndsAt: true
-      }
-    });
+  const access = await checkSubscriptionAccess(userId);
 
-    if (!instructor) {
-      return {
-        valid: false,
-        message: 'Instructor not found'
-      };
-    }
-
-    // Check if trial expired
-    const trialExpired = instructor.trialEndsAt && 
-      new Date(instructor.trialEndsAt) < new Date();
-
-    // Check if has access
-    const hasAccess = 
-      instructor.subscriptionStatus === 'ACTIVE' ||
-      (instructor.subscriptionStatus === 'TRIAL' && !trialExpired);
-
-    if (!hasAccess) {
-      return {
-        valid: false,
-        status: instructor.subscriptionStatus,
-        message: getSubscriptionMessage(instructor.subscriptionStatus, trialExpired)
-      };
-    }
-
-    return { valid: true };
-  } catch (error) {
-    console.error('Subscription check error:', error);
-    // Fail open - allow access on error
-    return { valid: true };
+  if (!access.valid) {
+    return { valid: false, message: (access as any).message };
   }
+
+  if (access.readOnly) {
+    return {
+      valid: false,
+      status: access.status,
+      message: access.reason,
+    };
+  }
+
+  return { valid: true };
 }
 
-function getSubscriptionMessage(status: string, trialExpired: boolean | null): string {
-  if (status === 'TRIAL' && trialExpired === true) {
-    return 'Your free trial has expired. Please subscribe to continue.';
-  }
-  
-  if (status === 'PAST_DUE') {
-    return 'Your payment failed. Please update your payment method.';
-  }
-  
-  if (status === 'CANCELLED') {
-    return 'Your subscription has been cancelled. Please resubscribe to continue.';
-  }
-  
-  if (status === 'EXPIRED') {
-    return 'Your subscription has expired. Please renew to continue.';
-  }
-  
-  return 'Active subscription required to access this feature.';
+/**
+ * Legacy: kept for backward compatibility with the old redirect-based approach.
+ * Now returns null (no redirect) — read-only is handled at the layout level.
+ */
+export async function validateSubscription(): Promise<null> {
+  return null;
 }
