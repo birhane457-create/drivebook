@@ -103,6 +103,7 @@ const primaryNav = [
 
 const moreNav = [
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart2 },
+  { href: '/dashboard/availability', label: 'Availability', icon: Calendar },
   { href: '/dashboard/packages', label: 'Packages', icon: Package },
   { href: '/dashboard/wallet', label: 'Payout Wallet', icon: Wallet },
   { href: '/dashboard/settings/payout', label: 'Tax & Payout', icon: Landmark },
@@ -110,7 +111,6 @@ const moreNav = [
   { href: '/dashboard/branding', label: 'Branding', icon: Palette },
   { href: '/dashboard/subscription', label: 'Subscription', icon: CreditCard },
   { href: '/dashboard/pda-tests', label: 'PDA Tests', icon: ClipboardList },
-  { href: '/dashboard/progress', label: 'Progress', icon: TrendingUp },
   { href: '/dashboard/credits', label: 'Bonuses', icon: Star },
   { href: '/dashboard/profile', label: 'Profile', icon: User },
   { href: '/dashboard/help', label: 'Help', icon: HelpCircle },

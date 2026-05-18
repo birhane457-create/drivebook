@@ -1,338 +1,191 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Trophy, Target, TrendingUp, Book, PlayCircle, Lightbulb } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { TrendingUp, Star, Users, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import Link from 'next/link';
 
-interface Recommendation {
-  id: string;
-  title: string;
-  description: string;
-  tipText: string;
-  videoUrl: string | null;
-  thumbnailUrl: string | null;
-  category: string;
-  durationSec: number | null;
-  matchedCodes: number[];
-}
-
-interface PerformanceData {
+interface FeedbackSummary {
+  totalLessonsWithFeedback: number;
   totalLessons: number;
-  lessonsWithFeedback: number;
-  averagePerformance: number | null;
+  averageScore: number | null;
   recentFeedback: Array<{
     id: string;
+    bookingId: string;
+    clientName: string;
     date: string;
-    instructor: string;
     performanceScore: number | null;
-    feedback: string[];
-    strengths: string[];
+    feedbackCodes: number[];
+    strengthCodes: number[];
     notes: string | null;
   }>;
-  strengths: string[];
-  focusAreas: string[];
-  progressChart: Array<{
-    lesson: number;
-    date: string;
-    score: number | null;
-  }>;
+  topFocusAreas: string[];
+  topStrengths: string[];
 }
 
-export default function ProgressPage() {
-  const [data, setData] = useState<PerformanceData | null>(null);
+export default function InstructorProgressPage() {
+  const [data, setData] = useState<FeedbackSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchAll() {
-      try {
-        const [perfRes, recRes] = await Promise.all([
-          fetch('/api/client/my-performance'),
-          fetch('/api/client/recommendations'),
-        ]);
-        if (!perfRes.ok) throw new Error('Failed to fetch performance data');
-        const [perfData, recData] = await Promise.all([perfRes.json(), recRes.json()]);
-        setData(perfData);
-        setRecommendations(recData.recommendations ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchAll();
+    fetch('/api/instructor/lesson-feedback/summary')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your progress...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
-  if (error) {
+  // If API doesn't exist yet, show a useful placeholder
+  if (!data) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
-        <div className="w-full max-w-md border border-red-200 bg-red-50 rounded-lg p-6">
-          <p className="text-red-700">{error}</p>
-        </div>
-      </div>
-    );
-  }
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Student Progress</h1>
+          <p className="text-gray-500 mb-8">Track how your students are progressing based on lesson feedback</p>
 
-  if (!data || data.totalLessons === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Your Progress</h1>
-          <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-            <Book className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-600 text-lg">No lessons completed yet</p>
-            <p className="text-gray-500 text-sm mt-2">
-              Complete your first lesson to start tracking your progress
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+            <TrendingUp className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No feedback data yet</h3>
+            <p className="text-gray-500 text-sm mb-6">
+              After completing lessons, use the lesson feedback form to record student performance.
+              Progress charts will appear here once you have feedback data.
             </p>
+            <Link
+              href="/dashboard/bookings"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
+            >
+              <BookOpen className="h-4 w-4" />
+              Go to Bookings
+            </Link>
+          </div>
+
+          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-5">
+            <h3 className="font-semibold text-blue-900 mb-2">How lesson feedback works</h3>
+            <ul className="text-sm text-blue-800 space-y-1.5">
+              <li>• After each lesson, open the booking and tap "Give Feedback"</li>
+              <li>• Select PDA assessment codes for areas needing improvement</li>
+              <li>• Mark student strengths and give an overall performance score</li>
+              <li>• Students see their progress in their dashboard</li>
+              <li>• You can track improvement trends here over time</li>
+            </ul>
           </div>
         </div>
       </div>
     );
   }
+
+  const feedbackRate = data.totalLessons > 0
+    ? Math.round((data.totalLessonsWithFeedback / data.totalLessons) * 100)
+    : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Your Progress</h1>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Student Progress</h1>
+        <p className="text-gray-500 mb-6">Lesson feedback you've recorded across all students</p>
 
-        {/* How this works — transparency notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8 text-sm text-blue-800">
-  <p className="font-semibold mb-1">How your progress score works</p>
-
-  <p className="mb-2">
-    After each lesson, your instructor records observations using standardised driving assessment codes based on WA Practical Driving Assessment (PDA) criteria.
-    Your score is calculated from these observations — each issue reduces your score depending on its severity.
-  </p>
-
-  <p className="mb-2">
-    This dashboard is designed to help you understand what to focus on between lessons and track your improvement over time.
-    A score of <strong>85 or above</strong> is shown as “Test Ready” — however, this is a guide only.
-  </p>
-
-  <p className="mb-2 font-medium">
-    Always follow your instructor’s advice on when you are ready to take your driving test.
-  </p>
-
-  <p className="text-blue-600 text-xs">
-    Scores depend on instructor input and may not reflect every aspect of your driving ability. DriveBook does not certify test readiness.
-  </p>
-</div>
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-center">
-              <Book className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-              <p className="text-3xl font-bold text-gray-900">{data.totalLessons}</p>
-              <p className="text-gray-600 text-sm">Total Lessons</p>
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: 'Lessons Reviewed', value: data.totalLessonsWithFeedback, icon: <BookOpen className="h-5 w-5 text-blue-600" /> },
+            { label: 'Feedback Rate', value: `${feedbackRate}%`, icon: <TrendingUp className="h-5 w-5 text-green-600" /> },
+            { label: 'Avg Score', value: data.averageScore ? `${data.averageScore}%` : '—', icon: <Star className="h-5 w-5 text-yellow-500" /> },
+            { label: 'Total Lessons', value: data.totalLessons, icon: <Users className="h-5 w-5 text-purple-600" /> },
+          ].map(({ label, value, icon }) => (
+            <div key={label} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <div className="flex items-center gap-2 mb-1">{icon}<p className="text-xs text-gray-500">{label}</p></div>
+              <p className="text-2xl font-bold text-gray-900">{value}</p>
             </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-center">
-              <TrendingUp className="h-8 w-8 text-green-600 mx-auto mb-2" />
-              <p className="text-3xl font-bold text-gray-900">
-                {data.averagePerformance || '—'}
-              </p>
-              <p className="text-gray-600 text-sm">Average Score</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-center">
-              <Trophy className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
-              <p className="text-3xl font-bold text-gray-900">{data.lessonsWithFeedback}</p>
-              <p className="text-gray-600 text-sm">Lessons Reviewed</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-center">
-              <Target className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-              <p className="text-3xl font-bold text-gray-900">
-                {Math.round((data.lessonsWithFeedback / data.totalLessons) * 100)}%
-              </p>
-              <p className="text-gray-600 text-sm">Feedback Rate</p>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Performance Chart - Simple Text representation since recharts not available */}
-        {data.progressChart.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Performance Trend</h2>
-            <div className="space-y-2">
-              {data.progressChart.map((item) => (
-                <div key={item.lesson} className="flex items-center gap-4">
-                  <span className="w-20 text-sm text-gray-600">Lesson {item.lesson}</span>
-                  <div className="flex-1">
-                    {item.score ? (
-                      <div 
-                        className="bg-blue-500 rounded h-6 flex items-center justify-end pr-2 text-white text-xs font-semibold"
-                        style={{ width: `${item.score}%` }}
-                      >
-                        {item.score}%
-                      </div>
-                    ) : (
-                      <div className="text-gray-400 text-sm">No score</div>
-                    )}
-                  </div>
-                  <span className="w-24 text-sm text-gray-500 text-right">{item.date}</span>
-                </div>
-              ))}
+        {/* Common focus areas */}
+        {data.topFocusAreas.length > 0 && (
+          <div className="grid md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="font-semibold text-orange-700 mb-3">Most Common Focus Areas</h3>
+              <div className="flex flex-wrap gap-2">
+                {data.topFocusAreas.map((area, i) => (
+                  <span key={i} className="px-2.5 py-1 bg-orange-50 text-orange-700 text-xs rounded-full border border-orange-200">{area}</span>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="font-semibold text-green-700 mb-3">Most Common Strengths</h3>
+              <div className="flex flex-wrap gap-2">
+                {data.topStrengths.map((s, i) => (
+                  <span key={i} className="px-2.5 py-1 bg-green-50 text-green-700 text-xs rounded-full border border-green-200">{s}</span>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Strengths and Focus Areas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          {/* Strengths */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-bold text-green-700 mb-4">Your Strengths</h3>
-            {data.strengths.length > 0 ? (
-              <ul className="space-y-3">
-                {data.strengths.map((strength, idx) => (
-                  <li key={idx} className="flex items-start">
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-700 text-sm font-medium mr-3 flex-shrink-0">
-                      ✓
-                    </span>
-                    <span className="text-gray-700">{strength}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-500">No strengths recorded yet</p>
-            )}
+        {/* Recent feedback */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Recent Lesson Feedback</h2>
           </div>
-
-          {/* Focus Areas */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-bold text-orange-700 mb-4">Areas to Improve</h3>
-            {data.focusAreas.length > 0 ? (
-              <ul className="space-y-3">
-                {data.focusAreas.map((area, idx) => (
-                  <li key={idx} className="flex items-start">
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-orange-100 text-orange-700 text-sm font-medium mr-3 flex-shrink-0">
-                      •
-                    </span>
-                    <span className="text-gray-700">{area}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-500">No focus areas yet</p>
-            )}
-          </div>
+          {data.recentFeedback.length === 0 ? (
+            <div className="p-10 text-center text-gray-400">
+              <p>No feedback recorded yet</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {data.recentFeedback.map(fb => {
+                const isExpanded = expandedId === fb.id;
+                return (
+                  <div key={fb.id}>
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : fb.id)}
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition text-left"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">{fb.clientName}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {new Date(fb.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {fb.performanceScore !== null && (
+                          <span className={`text-sm font-bold px-2.5 py-1 rounded-full ${
+                            fb.performanceScore >= 85 ? 'bg-green-100 text-green-700' :
+                            fb.performanceScore >= 70 ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>{fb.performanceScore}%</span>
+                        )}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="px-5 pb-4 bg-gray-50 space-y-3 text-sm">
+                        {fb.notes && (
+                          <p className="text-gray-700 bg-blue-50 border-l-4 border-blue-400 px-3 py-2 rounded">
+                            💬 {fb.notes}
+                          </p>
+                        )}
+                        <div className="flex gap-3">
+                          <Link
+                            href={`/dashboard/bookings/${fb.bookingId}`}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            View booking →
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-
-        {/* Watch Before Your Next Lesson */}
-        {recommendations.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <PlayCircle className="h-6 w-6 text-purple-600" />
-              <h2 className="text-xl font-bold text-gray-900">Watch Before Your Next Lesson</h2>
-            </div>
-            <p className="text-sm text-gray-500 mb-4">Based on your instructor&apos;s feedback — personalised to your weak areas.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {recommendations.map((rec) => (
-                <div key={rec.id} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                  {rec.videoUrl ? (
-                    <video
-                      src={rec.videoUrl}
-                      poster={rec.thumbnailUrl ?? undefined}
-                      controls
-                      className="w-full h-40 object-cover bg-gray-900"
-                    />
-                  ) : (
-                    <div className="w-full h-40 bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center">
-                      <PlayCircle className="h-12 w-12 text-purple-400" />
-                    </div>
-                  )}
-                  <div className="p-4">
-                    <p className="font-semibold text-gray-900 mb-1">{rec.title}</p>
-                    <p className="text-sm text-gray-600 mb-2">{rec.description}</p>
-                    <div className="flex items-start gap-2 bg-amber-50 border-l-4 border-amber-400 p-2 rounded text-xs text-amber-800">
-                      <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
-                      <span>{rec.tipText}</span>
-                    </div>
-                    {rec.durationSec && (
-                      <p className="text-xs text-gray-400 mt-2">{rec.durationSec}s video</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recent Feedback */}
-        {data.recentFeedback.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Recent Feedback</h2>
-            <div className="space-y-4">
-              {data.recentFeedback.map((lesson) => (
-                <div key={lesson.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <p className="font-semibold text-gray-900">{lesson.instructor}</p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(lesson.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {lesson.performanceScore && (
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-blue-600">{lesson.performanceScore}%</p>
-                        <p className="text-xs text-gray-500">Score</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {lesson.feedback.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-sm font-semibold text-gray-700 mb-2">Feedback:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {lesson.feedback.map((item, idx) => (
-                          <span key={idx} className="inline-block bg-red-100 text-red-700 text-xs px-3 py-1 rounded-full">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {lesson.strengths.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-sm font-semibold text-gray-700 mb-2">Strengths:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {lesson.strengths.map((strength, idx) => (
-                          <span key={idx} className="inline-block bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full">
-                            {strength}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {lesson.notes && (
-                    <p className="text-sm text-gray-700 bg-blue-50 p-2 rounded">
-                      💬 <span className="font-semibold">Note:</span> {lesson.notes}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -63,8 +63,8 @@ export default async function DashboardPage() {
           <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Credits Remaining</p>
-                <p className="text-2xl md:text-3xl font-bold">${user.wallet.creditsRemaining?.toFixed(2) || '0.00'}</p>
+                <p className="text-gray-500 text-sm">Wallet Balance</p>
+                <p className="text-2xl md:text-3xl font-bold">${(user.wallet.balance ?? 0).toFixed(2)}</p>
               </div>
               <Wallet className="h-12 w-12 text-blue-600" />
             </div>
@@ -73,8 +73,8 @@ export default async function DashboardPage() {
           <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Total Spent</p>
-                <p className="text-2xl md:text-3xl font-bold">${user.wallet.totalSpent?.toFixed(2) || '0.00'}</p>
+                <p className="text-gray-500 text-sm">Completed Lessons</p>
+                <p className="text-2xl md:text-3xl font-bold">{completedBookings}</p>
               </div>
               <DollarSign className="h-12 w-12 text-red-600" />
             </div>
@@ -144,16 +144,16 @@ export default async function DashboardPage() {
             </div>
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                <p className="text-gray-600">Total Paid</p>
-                <p className="font-semibold">${user.wallet.totalPaid?.toFixed(2) || '0.00'}</p>
+                <p className="text-gray-600">Wallet Balance</p>
+                <p className="font-semibold">${(user.wallet.balance ?? 0).toFixed(2)}</p>
               </div>
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                <p className="text-gray-600">Total Spent</p>
-                <p className="font-semibold">${user.wallet.totalSpent?.toFixed(2) || '0.00'}</p>
+                <p className="text-gray-600">Completed Lessons</p>
+                <p className="font-semibold">{completedBookings}</p>
               </div>
               <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
-                <p className="text-gray-600">Credits Available</p>
-                <p className="font-bold text-blue-600">${user.wallet.creditsRemaining?.toFixed(2) || '0.00'}</p>
+                <p className="text-gray-600">Upcoming Lessons</p>
+                <p className="font-bold text-blue-600">{upcomingBookings.length}</p>
               </div>
             </div>
           </div>
@@ -219,7 +219,7 @@ export default async function DashboardPage() {
   const daysElapsedThisMonth = now.getDate()
   const daysInLastMonth = endOfLastMonth.getDate()
 
-  const [instructor, monthlyBookings, totalRevenue, lastMonthRevenue, clientsWithPackages] = await Promise.all([
+  const [instructor, monthlyBookings, totalRevenue, lastMonthRevenue, clientsWithPackages, totalClientCount] = await Promise.all([
     prisma.instructor.findUnique({
       where: { id: session.user.instructorId },
       include: {
@@ -304,6 +304,10 @@ export default async function DashboardPage() {
         updatedAt: 'asc' // Oldest first (most inactive)
       },
       take: 5
+    }),
+    // Real total client count (not capped at 5)
+    prisma.client.count({
+      where: { instructorId: session.user.instructorId }
     })
   ])
 
@@ -342,7 +346,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Total Clients</p>
-              <p className="text-2xl md:text-3xl font-bold">{instructor.clients.length}</p>
+              <p className="text-2xl md:text-3xl font-bold">{totalClientCount}</p>
             </div>
             <Users className="h-12 w-12 text-green-600" />
           </div>
