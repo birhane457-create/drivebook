@@ -830,6 +830,13 @@ async function handleSubscriptionUpdate(
     return;
   }
 
+  // Normalize Stripe status to our DB enum
+  // Stripe uses "canceled" (US spelling), our DB uses "CANCELLED" (double-L)
+  const normalizeStatus = (s: string): string => {
+    const upper = s.toUpperCase();
+    return upper === 'CANCELED' ? 'CANCELLED' : upper;
+  };
+
   await prisma.$transaction(async (tx) => {
     // Record webhook event
     await recordWebhookEvent(idempotencyKey, 'subscription.updated', subscription.id, {
@@ -843,7 +850,7 @@ async function handleSubscriptionUpdate(
       where: { id: instructorId },
       data: {
         subscriptionTier: tier as any,
-        subscriptionStatus: status.toUpperCase() as any,
+        subscriptionStatus: normalizeStatus(status) as any,
         trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
         stripeCustomerId: subscription.customer as string,
       } as any
@@ -858,7 +865,7 @@ async function handleSubscriptionUpdate(
       await tx.subscription.update({
         where: { id: existingSubscription.id },
         data: {
-          status: status.toUpperCase() as any,
+          status: normalizeStatus(status) as any,
           currentPeriodEnd: new Date(current_period_end * 1000),
         }
       });
@@ -868,7 +875,7 @@ async function handleSubscriptionUpdate(
         data: {
           instructorId,
           tier: tier as any,
-          status: status.toUpperCase() as any,
+          status: normalizeStatus(status) as any,
           monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
           billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
           currentPeriodStart: new Date(current_period_start * 1000),
@@ -1022,10 +1029,30 @@ async function handleInvoicePaymentSucceeded(
       subscriptionId: subscription
     });
 
+    // Update subscription record
     await tx.subscription.updateMany({
       where: { stripeSubscriptionId: subscription as string },
       data: { status: 'ACTIVE' }
     });
+
+    // ── Also update instructor.subscriptionStatus ─────────────────────────
+    // This is the critical step that was missing — without it, the instructor
+    // stays stuck at TRIAL after their first real payment or monthly renewal.
+    const subscriptionRecord = await tx.subscription.findFirst({
+      where: { stripeSubscriptionId: subscription as string },
+      select: { instructorId: true }
+    });
+
+    if (subscriptionRecord?.instructorId) {
+      await tx.instructor.update({
+        where: { id: subscriptionRecord.instructorId },
+        data: {
+          subscriptionStatus: 'ACTIVE' as any,
+          trialEndsAt: null, // Clear trial end date — they're now a paying customer
+        }
+      });
+      console.log(`✅ Instructor ${subscriptionRecord.instructorId} status → ACTIVE (invoice paid)`);
+    }
   });
 
   console.log(`✅ Invoice payment succeeded: ${invoice.id}`);
