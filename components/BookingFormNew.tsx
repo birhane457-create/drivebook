@@ -39,6 +39,8 @@ export default function BookingForm({
 }: BookingFormProps) {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [pendingPayment, setPendingPayment] = useState(false)
+  const [pendingMessage, setPendingMessage] = useState('')
   const [bookingId, setBookingId] = useState('')
   const [instructorData, setInstructorData] = useState<{ id: string; hourlyRate: number } | null>(null)
   const [insufficientBalance, setInsufficientBalance] = useState<{
@@ -237,29 +239,19 @@ export default function BookingForm({
         }
         
         setBookingId(data.booking.id)
-        setSuccess(true)
 
-        // If they want to join waiting list (only for public bookings)
-        if (!isInstructorBooking && formData.joinWaitingList) {
-          await fetch('/api/waiting-list', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              instructorId: instructorData.id,
-              clientName: formData.name,
-              clientEmail: formData.email,
-              clientPhone: formData.phone,
-              originalBookingDate: startTime.toISOString(),
-              originalBookingTime: formData.time,
-              earliestDate: new Date().toISOString(),
-              preferredDuration: formData.duration,
-              pickupAddress: formData.address,
-              notes: 'Willing to take earlier cancellation slots'
-            })
-          })
+        // Pending payment — client has no account or insufficient funds
+        // Show a clear informational screen, do NOT auto-redirect
+        if (data.pendingPayment) {
+          setPendingMessage(data.message || 'Booking created. The client needs to top up their wallet to confirm.')
+          setPendingPayment(true)
+          setSuccess(true)
+          return
         }
 
-        // Redirect to bookings page for instructor bookings
+        setSuccess(true)
+
+        // Redirect to bookings page for instructor bookings (confirmed only)
         if (isInstructorBooking) {
           setTimeout(() => {
             window.location.href = '/dashboard/bookings'
@@ -290,6 +282,75 @@ export default function BookingForm({
   }
 
   if (success) {
+    // ── Pending payment — client needs to top up ──────────────────────────
+    if (pendingPayment) {
+      return (
+        <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
+          <div className="text-center mb-6">
+            <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-amber-100 mb-4">
+              <AlertCircle className="h-7 w-7 text-amber-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Booking Created — Awaiting Payment</h3>
+            <p className="text-sm text-gray-500">
+              The booking slot is reserved. The client needs to top up their wallet to confirm it.
+            </p>
+          </div>
+
+          {/* Booking summary */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5 space-y-2 text-sm">
+            <p className="font-semibold text-amber-900">📋 Booking Details</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+              <span className="font-medium">Booking ID:</span>
+              <span className="font-mono text-xs">{bookingId}</span>
+              <span className="font-medium">Date:</span>
+              <span>{new Date(formData.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              <span className="font-medium">Time:</span>
+              <span>{formData.time}</span>
+              <span className="font-medium">Duration:</span>
+              <span>{formData.duration} min</span>
+              <span className="font-medium">Price:</span>
+              <span className="font-semibold text-amber-800">${calculatePrice()}</span>
+              <span className="font-medium">Status:</span>
+              <span className="text-amber-700 font-semibold">⏳ Awaiting Payment</span>
+            </div>
+          </div>
+
+          {/* What happens next */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-5 text-sm">
+            <p className="font-semibold text-blue-900 mb-2">What happens next?</p>
+            <ol className="space-y-1.5 text-blue-800 list-decimal list-inside">
+              <li>An email has been sent to the client with a payment link</li>
+              <li>Once they top up their wallet, the booking confirms automatically</li>
+              <li>You'll receive a notification when payment is received</li>
+              <li>If they don't pay, the booking expires after 2 hours</li>
+            </ol>
+          </div>
+
+          {/* Message from API */}
+          {pendingMessage && (
+            <p className="text-xs text-gray-500 text-center mb-5 italic">{pendingMessage}</p>
+          )}
+
+          {/* Actions */}
+          <div className="space-y-2">
+            <a
+              href={`/dashboard/bookings/${bookingId}`}
+              className="block w-full text-center bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 font-semibold text-sm"
+            >
+              View Booking
+            </a>
+            <a
+              href="/dashboard/bookings"
+              className="block w-full text-center bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-200 text-sm"
+            >
+              Back to Bookings
+            </a>
+          </div>
+        </div>
+      )
+    }
+
+    // ── Confirmed booking ─────────────────────────────────────────────────
     return (
       <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
         <div className="text-center">
@@ -298,7 +359,9 @@ export default function BookingForm({
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Booking Confirmed!</h3>
           <p className="text-sm text-gray-500 mb-4">
-            We've sent a confirmation email to {formData.email}
+            {isInstructorBooking
+              ? 'Booking created and payment deducted from client wallet.'
+              : `We've sent a confirmation email to ${formData.email}`}
           </p>
           
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -317,44 +380,46 @@ export default function BookingForm({
             <p><span className="font-medium">Price:</span> ${calculatePrice()}</p>
           </div>
 
-          {formData.joinWaitingList && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-yellow-800">
-                ✓ You're on the waiting list for earlier slots!
-              </p>
-            </div>
-          )}
-
           <div className="space-y-2">
-            <a
-              href={`/cancel-booking/${bookingId}`}
-              className="block w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200"
-            >
-              Manage Booking
-            </a>
-            <button
-              onClick={() => {
-                setSuccess(false)
-                setFormData({
-                  name: '',
-                  email: '',
-                  phone: '',
-                  address: '',
-                  dropoffAddress: '',
-                  sameAsPickup: true,
-                  date: '',
-                  time: '',
-                  duration: 60,
-                  notes: '',
-                  joinWaitingList: false,
-                  ageDeclaration: false,
-                  termsAccepted: false,
-                })
-              }}
-              className="block w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-            >
-              Book Another Lesson
-            </button>
+            {isInstructorBooking ? (
+              <>
+                <a
+                  href={`/dashboard/bookings/${bookingId}`}
+                  className="block w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
+                >
+                  View Booking
+                </a>
+                <a
+                  href="/dashboard/bookings"
+                  className="block w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 text-sm"
+                >
+                  Back to Bookings
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href={`/cancel-booking/${bookingId}`}
+                  className="block w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200"
+                >
+                  Manage Booking
+                </a>
+                <button
+                  onClick={() => {
+                    setSuccess(false)
+                    setPendingPayment(false)
+                    setFormData({
+                      name: '', email: '', phone: '', address: '', dropoffAddress: '',
+                      sameAsPickup: true, date: '', time: '', duration: 60, notes: '',
+                      joinWaitingList: false, ageDeclaration: false, termsAccepted: false,
+                    })
+                  }}
+                  className="block w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  Book Another Lesson
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
