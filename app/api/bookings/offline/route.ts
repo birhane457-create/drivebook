@@ -40,6 +40,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: subCheck.message, requiresSubscription: true }, { status: 403 });
     }
 
+    // Approval gate — must be APPROVED to create bookings
+    if (instructor.approvalStatus !== 'APPROVED') {
+      return NextResponse.json({
+        error: 'Your account is pending approval. You can create bookings once an admin approves your application.',
+        requiresApproval: true,
+      }, { status: 403 });
+    }
+
     const tier = instructor.subscriptionTier ?? 'BASIC';
     if (tier === 'BASIC') {
       return NextResponse.json({

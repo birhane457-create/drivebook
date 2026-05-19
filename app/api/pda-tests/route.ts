@@ -78,6 +78,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: subCheck.message, requiresSubscription: true }, { status: 403 });
     }
 
+    // Approval gate — must be APPROVED to schedule PDA tests
+    const instructorApproval = await prisma.instructor.findUnique({
+      where: { id: session.user.instructorId },
+      select: { approvalStatus: true }
+    });
+    if (!instructorApproval || instructorApproval.approvalStatus !== 'APPROVED') {
+      return NextResponse.json({
+        error: 'Your account is pending approval. You can schedule PDA tests once an admin approves your application.',
+        requiresApproval: true,
+      }, { status: 403 });
+    }
+
     const body = await req.json();
     const data = scheduleSchema.parse(body);
 

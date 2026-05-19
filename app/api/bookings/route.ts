@@ -51,6 +51,19 @@ export async function POST(req: NextRequest) {
       }, { status: 403 })
     }
 
+    // Approval check — instructor must be APPROVED before creating bookings
+    // They can register and set up their profile while PENDING, but cannot book until approved.
+    const instructorApproval = await prisma.instructor.findUnique({
+      where: { id: session.user.instructorId },
+      select: { approvalStatus: true, isActive: true }
+    })
+    if (!instructorApproval || instructorApproval.approvalStatus !== 'APPROVED') {
+      return NextResponse.json({
+        error: 'Your account is pending approval. You can create bookings once an admin approves your application.',
+        requiresApproval: true,
+      }, { status: 403 })
+    }
+
     // Rate limiting
     const rateLimitId = getRateLimitIdentifier(
       session.user.instructorId,

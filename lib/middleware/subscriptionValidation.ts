@@ -87,6 +87,7 @@ export async function checkSubscriptionAccess(userId: string): Promise<Subscript
 /**
  * Convenience: returns true if the instructor has full (non-read-only) access.
  * Use this in API route POST/PUT/PATCH/DELETE handlers.
+ * NOTE: This checks subscription only. For booking creation, also check approvalStatus separately.
  *
  * Usage:
  *   const access = await requireActiveSubscription(session.user.id)

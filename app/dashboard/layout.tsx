@@ -1,9 +1,11 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import { prisma } from '@/lib/prisma'
 import DashboardNav from '@/components/DashboardNav'
 import MobileBottomNav from '@/components/instructor/MobileBottomNav'
 import ReadOnlyBanner from '@/components/instructor/ReadOnlyBanner'
+import PendingApprovalBanner from '@/components/instructor/PendingApprovalBanner'
 import { checkSubscriptionAccess } from '@/lib/middleware/subscriptionValidation'
 
 export const dynamic = 'force-dynamic'
@@ -30,14 +32,27 @@ export default async function DashboardLayout({
   }
 
   // Check subscription access — determines if read-only banner is shown
-  // We never hard-block here; instructors always retain read access to their data.
   const access = await checkSubscriptionAccess(session.user.id)
   const isReadOnly = access.valid && (access as any).readOnly === true
+
+  // Check approval status — determines if pending approval banner is shown
+  const instructor = session.user.instructorId
+    ? await prisma.instructor.findUnique({
+        where: { id: session.user.instructorId },
+        select: { approvalStatus: true }
+      })
+    : null
+  const approvalStatus = instructor?.approvalStatus ?? 'PENDING'
 
   return (
     <div className="min-h-screen bg-gray-50">
       <DashboardNav />
-      {isReadOnly && (
+      {/* Pending approval banner — shown when not yet approved */}
+      {approvalStatus !== 'APPROVED' && (
+        <PendingApprovalBanner approvalStatus={approvalStatus} />
+      )}
+      {/* Read-only banner — shown when subscription is inactive (only for approved instructors) */}
+      {approvalStatus === 'APPROVED' && isReadOnly && (
         <ReadOnlyBanner
           reason={(access as any).reason}
           status={(access as any).status}
