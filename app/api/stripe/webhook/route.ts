@@ -815,6 +815,21 @@ async function handleSubscriptionUpdate(
     return;
   }
 
+  // Verify instructor exists before proceeding
+  const instructorExists = await prisma.instructor.findUnique({
+    where: { id: instructorId },
+    select: { id: true },
+  });
+  if (!instructorExists) {
+    console.error(`❌ Instructor not found in DB: "${instructorId}" — subscription ${subscription.id} NOT synced.`);
+    console.error('   Check Stripe subscription metadata for typos in instructorId.');
+    await recordWebhookEvent(idempotencyKey, 'subscription.updated', subscription.id, {
+      error: `Instructor not found: ${instructorId}`,
+      subscriptionId: subscription.id,
+    });
+    return;
+  }
+
   await prisma.$transaction(async (tx) => {
     // Record webhook event
     await recordWebhookEvent(idempotencyKey, 'subscription.updated', subscription.id, {
