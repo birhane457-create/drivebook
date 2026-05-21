@@ -63,7 +63,10 @@ export default function BookingLandingPage() {
                 Blog
               </Link>
               <Link href="/terms" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
-                Terms & Conditions
+                Learner Terms
+              </Link>
+              <Link href="/instructor-terms" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
+                Instructor Terms
               </Link>
               <Link href="/privacy" className="block text-gray-700 hover:text-blue-600 text-sm sm:text-base py-2">
                 Privacy Policy

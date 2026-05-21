@@ -67,7 +67,10 @@ export default function HomePage() {
                 Blog
               </Link>
               <Link href="/terms" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
-                Terms & Conditions
+                Learner Terms
+              </Link>
+              <Link href="/instructor-terms" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
+                Instructor Terms
               </Link>
               <Link href="/privacy" className="block text-gray-700 hover:text-purple-600 no-underline font-medium py-2">
                 Privacy Policy
@@ -328,7 +331,8 @@ export default function HomePage() {
           <div>
             <h3 className="font-semibold mb-3">Legal</h3>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><Link href="/terms" className="hover:text-white">Terms of Service</Link></li>
+              <li><Link href="/terms" className="hover:text-white">Learner Terms</Link></li>
+              <li><Link href="/instructor-terms" className="hover:text-white">Instructor Terms</Link></li>
               <li><Link href="/privacy" className="hover:text-white">Privacy Policy</Link></li>
             </ul>
           </div>
@@ -343,7 +347,8 @@ export default function HomePage() {
         </div>
         <div className="border-t border-gray-700 pt-6 text-center text-sm text-gray-400">
           © {new Date().getFullYear()} DriveBook. All rights reserved. ·{' '}
-          <Link href="/terms" className="hover:text-white">Terms</Link> ·{' '}
+          <Link href="/terms" className="hover:text-white">Learner Terms</Link> ·{' '}
+          <Link href="/instructor-terms" className="hover:text-white">Instructor Terms</Link> ·{' '}
           <Link href="/privacy" className="hover:text-white">Privacy</Link>
         </div>
       </footer>

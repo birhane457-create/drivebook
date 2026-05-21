@@ -29,7 +29,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-bold text-gray-900 mb-3">1. Who We Are</h2>
             <p>DriveBook Pty Ltd ("DriveBook", "we", "us") operates the DriveBook platform at <a href="https://drivebook.com.au" className="text-purple-600 hover:underline">drivebook.com.au</a>. We are committed to protecting your personal information in accordance with the <em>Privacy Act 1988</em> (Cth) and the Australian Privacy Principles (APPs).</p>
-            <p className="mt-3">By using DriveBook, you acknowledge and agree to this Privacy Policy and our <Link href="/terms" className="text-purple-600 hover:underline">Terms and Conditions</Link>.</p>
+            <p className="mt-3">By using DriveBook, you acknowledge and agree to this Privacy Policy and our <Link href="/terms" className="text-purple-600 hover:underline">Learner Terms</Link> or <Link href="/instructor-terms" className="text-purple-600 hover:underline">Instructor Terms</Link> (as applicable).</p>
             <p className="mt-3">Questions about this policy? Contact us at <a href="mailto:privacy@drivebook.com.au" className="text-purple-600 hover:underline">privacy@drivebook.com.au</a>.</p>
           </section>
 
@@ -198,7 +198,9 @@ export default function PrivacyPage() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-200 flex flex-wrap gap-4 text-sm text-gray-500">
-          <Link href="/terms" className="text-purple-600 hover:underline">Terms of Service</Link>
+          <Link href="/terms" className="text-purple-600 hover:underline">Learner Terms</Link>
+          <span>·</span>
+          <Link href="/instructor-terms" className="text-purple-600 hover:underline">Instructor Terms</Link>
           <span>·</span>
           <Link href="/contact" className="text-purple-600 hover:underline">Contact Us</Link>
           <span>·</span>

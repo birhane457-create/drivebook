@@ -637,7 +637,7 @@ export default function BookingForm({
             <span className="text-sm text-gray-700">
               I have read and agree to the{' '}
               <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                Terms and Conditions
+                Learner Terms and Conditions
               </a>{' '}
               and{' '}
               <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">

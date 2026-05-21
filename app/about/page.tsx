@@ -162,7 +162,8 @@ export default function AboutPage() {
           <div>
             <h3 className="font-semibold mb-3">Legal</h3>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><Link href="/terms" className="hover:text-white">Terms of Service</Link></li>
+              <li><Link href="/terms" className="hover:text-white">Learner Terms</Link></li>
+              <li><Link href="/instructor-terms" className="hover:text-white">Instructor Terms</Link></li>
               <li><Link href="/privacy" className="hover:text-white">Privacy Policy</Link></li>
             </ul>
           </div>
