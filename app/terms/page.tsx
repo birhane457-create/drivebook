@@ -24,8 +24,14 @@ export default function TermsPage() {
 
         <main className="flex-1 min-w-0">
           <div className="mb-10">
+            <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
+              For Learners / Students Only
+            </div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Learner Terms and Conditions</h1>
-            <p className="text-gray-500 text-sm">Last updated: March 2026 · Version 1.0</p>
+            <p className="text-gray-500 text-sm">Last updated: May 2026 · Version 1.1</p>
+            <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-800">
+              These terms apply to <strong>Learners</strong> booking driving lessons through DriveBook. If you are a driving instructor, please read our <Link href="/instructor-terms" className="underline font-medium">Instructor Terms and Conditions</Link> instead.
+            </div>
           </div>
 
           <div className="space-y-2 text-gray-700 leading-relaxed">
@@ -249,6 +255,8 @@ export default function TermsPage() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-gray-200 flex flex-wrap gap-4 text-sm text-gray-500">
+            <Link href="/instructor-terms" className="text-purple-600 hover:underline">Instructor Terms</Link>
+            <span>·</span>
             <Link href="/privacy" className="text-purple-600 hover:underline">Privacy Policy</Link>
             <span>·</span>
             <Link href="/contact" className="text-purple-600 hover:underline">Contact Us</Link>
