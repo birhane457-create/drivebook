@@ -36,7 +36,7 @@ interface InstructorData {
   totalReviews: number;
   isActive: boolean;
   createdAt: Date;
-  user: { email: string } | null;
+  user: { email: string; createdAt?: string | null; termsAcceptedAt?: string | null } | null;
   _count: { bookings: number };
   bookings: any[];
 }
@@ -161,7 +161,14 @@ export default function AdminInstructorProfilePage() {
                   <p>📧 {instructor.user?.email || instructor.email || 'No email'}</p>
                   <p>📞 {instructor.phone}</p>
                   <p>🆔 License: {instructor.licenseNumber || 'Not provided'}</p>
-                  <p>📅 Joined: {new Date(instructor.createdAt).toLocaleDateString()}</p>
+                  <p>📅 Joined: {instructor.user?.createdAt
+                    ? new Date(instructor.user.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : new Date(instructor.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+                  }</p>
+                  <p>📋 Terms: {instructor.user?.termsAcceptedAt
+                    ? <span className="text-green-600 font-medium">Accepted {new Date(instructor.user.termsAcceptedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    : <span className="text-amber-600">Not recorded</span>
+                  }</p>
                 </div>
               </div>
             </div>

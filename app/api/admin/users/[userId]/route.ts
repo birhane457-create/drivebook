@@ -45,6 +45,7 @@ export async function GET(
         },
         clients: {
           select: {
+            id: true,
             bookings: { select: { id: true } },
           },
         },
@@ -68,6 +69,8 @@ export async function GET(
       instructor: user.instructor || null,
       wallet: user.wallet ? { balance: walletBalance, transactionCount: txCount } : null,
       bookingCount,
+      // Expose the first client record ID for wallet credit operations
+      clientId: user.clients.length > 0 ? user.clients[0].id : null,
     });
   } catch (error) {
     console.error('Admin get user error:', error);

@@ -26,7 +26,8 @@ interface Instructor {
   baseAddress: string | null;
   averageRating: number | null;
   isActive: boolean;
-  user: { email: string } | null;
+  createdAt?: Date | null;
+  user: { email: string; createdAt?: Date | null; termsAcceptedAt?: Date | null } | null;
   _count: { bookings: number; reviews?: number };
 }
 
@@ -190,7 +191,13 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
         const comp = compliance.get(instructor.id);
         const isExpanded = expanded.has(instructor.id);
         const email = instructor.user?.email || null;
-        const joined = '—';
+        const joinedDate = instructor.user?.createdAt || instructor.createdAt;
+        const joined = joinedDate
+          ? new Date(joinedDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+          : '—';
+        const termsAccepted = instructor.user?.termsAcceptedAt
+          ? new Date(instructor.user.termsAcceptedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+          : null;
         const rating = instructor.averageRating ? instructor.averageRating.toFixed(1) : null;
 
         return (
@@ -290,6 +297,12 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                   <p className="text-gray-700">{email || <span className="text-orange-400">No email</span>}</p>
                   <p className="text-gray-700">{instructor.phone || '—'}</p>
                   <p className="text-gray-500">Joined {joined}</p>
+                  <p className="text-gray-500">
+                    Terms: {termsAccepted
+                      ? <span className="text-green-600">{termsAccepted}</span>
+                      : <span className="text-amber-500">Not recorded</span>
+                    }
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-400 uppercase tracking-wide mb-1">Documents</p>

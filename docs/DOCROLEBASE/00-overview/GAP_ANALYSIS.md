@@ -51,6 +51,36 @@ These are not code gaps. They require environment or infrastructure action.
 
 ---
 
+### OPEN-12: Admin Reviews — No Moderation Tools
+
+**Status:** Admin can view all reviews (server-rendered, sorted by date). No flag/hide/respond workflow.  
+**Decision:** Acceptable for launch. Post-launch: add `isFlagged` / `isHidden` fields to Booking and a moderation UI.  
+**File:** `app/admin/reviews/page.tsx`
+
+---
+
+### OPEN-13: No Stripe Connect Status in Admin
+
+**Status:** Admin cannot see whether an instructor has completed Stripe Connect onboarding from the instructor list or detail page.  
+**Decision:** Acceptable for launch. Add a `stripeConnectStatus` field to the instructor detail API response post-launch.  
+**File:** `app/api/admin/instructors/[id]/route.ts`
+
+---
+
+### OPEN-14: Admin Bookings — No Pagination
+
+**Status:** `app/admin/bookings/page.tsx` fetches up to 200 bookings with no pagination.  
+**Decision:** Acceptable for launch. Add cursor-based pagination post-launch when volume warrants it.
+
+---
+
+### OPEN-15: Client Suspend/Deactivate
+
+**Status:** Admin can view client details but cannot suspend or deactivate a client account. No `isActive` flag on `Client`.  
+**Decision:** Deferred. Requires schema change (`Client.isActive`) + middleware enforcement. Low priority for launch.
+
+---
+
 ## Deferred — Future Tier
 
 ### OPEN-01: BUSINESS Tier — Multi-Instructor Management
@@ -70,6 +100,7 @@ These are not code gaps. They require environment or infrastructure action.
 | Progress chart (CSS bars) | Functional. Recharts not installed. | Acceptable for launch. Real chart library is a post-launch enhancement. |
 | Subscription expiry = read-only | Expired/cancelled instructors get read-only dashboard access, not a hard block. | Australian Privacy Act — instructors retain right to access their own data. |
 | Instructor inactive = booking page offline | Public booking page shows "not accepting bookings" when subscription inactive. | Prevents new students booking with an instructor who can't service them. |
+| Admin reviews = server-rendered, no API route | Reviews fetched directly in server component from `Booking.clientRating`. | Sufficient for read-only admin view. No separate API needed until moderation tools are added. |
 
 ---
 
@@ -78,5 +109,5 @@ These are not code gaps. They require environment or infrastructure action.
 | Category | Count |
 |----------|-------|
 | Open — deployment/config | 4 (OPEN-02, OPEN-04, OPEN-05, OPEN-11) |
-| Open — feature gap | 1 (OPEN-10) |
+| Open — feature gap | 6 (OPEN-10, OPEN-12, OPEN-13, OPEN-14, OPEN-15) |
 | Deferred — future tier | 1 (OPEN-01) |

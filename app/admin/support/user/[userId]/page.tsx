@@ -16,6 +16,7 @@ interface UserProfile {
   name: string | null;
   role: string;
   createdAt: string;
+  clientId?: string | null;
   instructor?: {
     id: string;
     name: string;
@@ -102,9 +103,17 @@ export default function AdminUserSupportPage() {
   const addCredit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!creditAmount || !creditReason) return;
+
+    // The wallet credit API expects a Client record ID, not a User ID
+    const clientId = user?.clientId;
+    if (!clientId) {
+      showToast('This user has no client wallet. Only learner accounts have wallets.', 'error');
+      return;
+    }
+
     setBusy('credit');
     try {
-      const res = await fetch(`/api/admin/clients/${userId}/wallet/add-credit`, {
+      const res = await fetch(`/api/admin/clients/${clientId}/wallet/add-credit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: parseFloat(creditAmount), reason: creditReason }),

@@ -20,7 +20,7 @@ export async function GET(
     const instructor = await prisma.instructor.findUnique({
       where: { id: params.id },
       include: {
-        user: { select: { email: true } },
+        user: { select: { email: true, createdAt: true, termsAcceptedAt: true } },
         _count: {
           select: {
             bookings: true,

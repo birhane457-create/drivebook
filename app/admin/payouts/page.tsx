@@ -506,8 +506,19 @@ export default function AdminPayoutsPage() {
     finally { setProcessing(null); }
   };
 
+  const handleHoldPayout = async (payoutId: string) => {
+    if (!confirm('Put this payout on hold? It will not be transferred until released.')) return;
+    setProcessing(payoutId);
+    try {
+      const res = await fetch(`/api/admin/payouts/${payoutId}/hold`, { method: 'POST' });
+      const d = await res.json();
+      if (res.ok) { showToast('success', d.message || 'Payout placed on hold.'); fetchPayouts(); }
+      else showToast('error', d.error || 'Failed to hold payout.');
+    } catch { showToast('error', 'Network error.'); }
+    finally { setProcessing(null); }
+  };
+
   const processAll = async () => {
-    if (!confirm('Process ALL eligible pending payouts? Withheld and disputed transactions are NOT included.')) return;
     setProcessing('all');
     try {
       const res = await fetch('/api/admin/payouts/process-all', { method: 'POST' });
@@ -694,6 +705,11 @@ export default function AdminPayoutsPage() {
                         <button onClick={() => setMarkSentTarget(p)}
                           className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">
                           <Send className="h-3.5 w-3.5" /> Mark Sent
+                        </button>
+                        <button onClick={() => handleHoldPayout(p.id)}
+                          disabled={processing === p.id}
+                          className="mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs rounded-lg hover:bg-amber-600 disabled:opacity-50">
+                          Hold
                         </button>
                       </div>
                     </div>
