@@ -69,15 +69,21 @@ These are static status indicators — they reflect system design, not live chec
 
 ## Actions
 
-- View Staff Dashboard — navigates to `/staff/dashboard`
-- View Audit Logs — navigates to `/admin/audit-logs`
+- View Audit Log — navigates to `/admin/audit-log`
+- Process Payouts — navigates to `/admin/payouts`
 - Refresh Data — re-fetches governance stats
 
 ---
 
 ## Notes
 
-- The `/api/admin/staff-governance/stats` endpoint aggregates data from pending instructor approvals, disputes, refund totals, failed/stuck payouts, and expired documents. It returns real DB counts — not placeholder data.
+- The `/api/admin/staff-governance/stats` endpoint aggregates data from:
+  - Pending instructor approvals (`tasksRequiringApproval`, `pendingApprovals`)
+  - Disputed bookings with `noShowParty = 'both'` (`escalations`, `disputes`)
+  - Refund totals from wallet transactions (`totalRefunds`, `refundsThisWeek`, `refundPercentageOfRevenue`)
+  - Failed and stuck payouts (`slaBreaches`, `failedPayouts`, `stuckPayouts`)
+  - Approved instructors with expired documents (`expiredDocuments`)
+  - `avgResolutionTime` and `tasksReopened` are placeholder values (4.2h / 0) — a task management system is not yet implemented
 - This page is intended for SUPER_ADMIN and platform owner use. Regular ADMIN users may have read-only access depending on role configuration.
 
 ---

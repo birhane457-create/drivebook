@@ -33,9 +33,11 @@ The list uses `InstructorApprovalList` — a client component with inline action
 - Email, phone, suburb
 - Booking count, average rating, hourly rate
 - Action buttons (context-aware per status)
-- Expand chevron → shows compliance expiry dates, document status, stats, bio
+- Expand chevron → shows: contact info (email, phone, joined date, terms accepted date), compliance expiry dates, document status, stats, bio
 
 **Filter tabs:** All / PENDING / APPROVED / REJECTED / SUSPENDED (via `?status=` query param)
+
+The "Pending" tab shows a live count badge (amber) when there are instructors awaiting approval. An amber alert banner also appears at the top of the list when PENDING instructors exist, with a "Review Now →" shortcut. PENDING instructors cannot create bookings until approved.
 
 **Search:** Name, email, phone, suburb — client-side filter
 
@@ -70,6 +72,8 @@ Three tabs: Overview / Bookings / Documents
 - Document status (license, insurance, police check, WWC) with expiry dates
 - Subscription tier, status, hourly rate, payout method
 - ABN number, verification status, withholding tax rate
+- Joined date (from `user.createdAt`)
+- Terms accepted date (`user.termsAcceptedAt`) — shows "Not recorded" in amber if missing (pre-terms instructors)
 - Link to manage ABN verification
 
 **Bookings tab:** All bookings for this instructor with status, client, date, price

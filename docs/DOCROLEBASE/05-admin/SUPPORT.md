@@ -54,7 +54,9 @@ Sends a 24-hour password reset link to the user's email. Admin-initiated — use
 
 **Add Wallet Credit** (CLIENT users only)
 
-Calls `POST /api/admin/clients/[userId]/wallet/add-credit` with amount and reason. Immediately adds credit to the student's wallet. Logged to AuditLog.
+Calls `POST /api/admin/clients/[clientId]/wallet/add-credit` with amount and reason. The `clientId` is the `Client` record ID (not the `User` ID) — returned by `GET /api/admin/users/[userId]` as `clientId`. Immediately adds credit to the student's wallet. Logged to AuditLog.
+
+Only available for users with a `CLIENT` record (learner accounts). Instructor accounts have no wallet and will show an error if attempted.
 
 ### Quick Links
 
@@ -68,9 +70,10 @@ Calls `POST /api/admin/clients/[userId]/wallet/add-credit` with amount and reaso
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `GET /api/admin/users/[userId]` | GET | Full user profile for support panel |
+| `GET /api/admin/users/[userId]` | GET | Full user profile for support panel — includes `clientId` field |
 | `POST /api/admin/contact` | POST | Send email + notification to user |
 | `POST /api/admin/users/[userId]/reset-password` | POST | Admin-initiated password reset |
+| `POST /api/admin/clients/[clientId]/wallet/add-credit` | POST | Add wallet credit (use `clientId` from user profile, not `userId`) |
 
 ---
 

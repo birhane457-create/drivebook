@@ -65,6 +65,8 @@ PENDING
 
 Suspended instructors: cannot accept new bookings, existing confirmed bookings are not affected.
 
+**PENDING booking gate:** Instructors with `approvalStatus = PENDING` cannot create bookings (`POST /api/bookings`), offline bookings (`POST /api/bookings/offline`), or PDA tests (`POST /api/pda-tests`). All three routes return 403 `INSTRUCTOR_NOT_APPROVED`. The instructor dashboard shows a `PendingApprovalBanner` with a setup checklist until approved.
+
 ---
 
 ## Transaction States

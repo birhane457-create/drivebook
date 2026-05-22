@@ -67,6 +67,8 @@ DriveBook is a controlled operational and financial platform connecting driving 
 - Refund after payout requires SUPER_ADMIN and creates an audit entry
 - Payout requires 24-hour buffer after booking completion
 - All cron jobs use concurrency locks to prevent double-execution
+- **Instructor approval gate:** `approvalStatus = PENDING` blocks booking creation (`POST /api/bookings`, `/api/bookings/offline`, `/api/pda-tests`). Instructors must be explicitly approved by admin before they can work.
+- **Terms acceptance:** Instructors must accept Terms & Conditions and Privacy Policy at registration. `User.termsAcceptedAt` is recorded and visible to admin.
 
 ---
 

@@ -1,7 +1,7 @@
 # DriveBook — Launch Plan & Work Tracker
 
-**Last updated:** April 2026  
-**Overall status:** 95% complete — 2 items left (C1, C5) both are env/config, not code  
+**Last updated:** May 2026  
+**Overall status:** 97% complete — 2 items left (C1, C5) both are env/config, not code  
 **Target:** Ready for limited production launch
 
 ---
@@ -12,7 +12,7 @@
 |------|-------|-------|
 | Core Booking Flow | 9/10 | Complete, robust, rate-locked |
 | Payment System | 9/10 | Stripe solid, webhook idempotent |
-| Instructor Dashboard | 9/10 | Booking detail + feedback form added |
+| Instructor Dashboard | 9/10 | Booking detail + feedback form + approval gate |
 | Admin Panel | 10/10 | Most complete part of the system |
 | Auth & Security | 8/10 | Rate limiting gap in production (C1) |
 | Subdomain System | 9/10 | White-label working |
@@ -111,8 +111,10 @@
 **Admin Panel**
 - Full suite: instructors, clients, bookings, payouts, pricing, revenue, audit log
 - Instructor approval, document review, ABN verification
-- Payout processing (Stripe Connect + manual bank transfer)
+- Instructor list: pending count badge, subscription tier/status, joined date, terms accepted date
+- Payout processing (Stripe Connect + manual bank transfer) with Hold button
 - Pricing config (commission rates, package discounts, platform fees, bulk discount toggle)
+- Support centre: wallet credit uses correct `clientId` (not `userId`)
 
 **Notifications**
 - In-app notifications (database-backed)

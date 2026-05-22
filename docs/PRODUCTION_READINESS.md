@@ -1,14 +1,14 @@
 # Production Readiness — Gap Analysis & Fix Plan
 
-**Date:** April 2026  
-**Scope:** Student booking, instructor booking, and core communication flows only.  
-Admin enhancements and Business tier deferred to post-launch.
+**Date:** May 2026  
+**Scope:** Full platform — booking, instructor, admin, payments, compliance.  
+**Status:** Core platform complete. 2 config items remain before go-live (P0.1, P0.2).
 
 ---
 
 ## Current State Summary
 
-The core booking flow (subdomain → package → payment → wallet) is working end-to-end in dev. The following gaps were identified through code inspection and external review. Each item is documented as-is, with a clear fix plan.
+The core booking flow (subdomain → package → payment → wallet) is working end-to-end. All P0, P1, and P2 items from the original April 2026 review are resolved. The following documents the current state.
 
 ---
 
@@ -133,6 +133,24 @@ The existing `POST /api/clients` already creates a `Client` without requiring a 
 | Student can message instructor | No in-platform messaging | Add simple message thread on booking detail page |
 | Instructor can block specific dates | Weekly hours only | Add `AvailabilityException` model + UI |
 | Review moderation (admin) | Display only | Add publish/hide/flag actions to admin reviews page |
+
+---
+
+## May 2026 — Additional Fixes Applied
+
+These items were identified and resolved after the April 2026 review:
+
+| Item | Fix |
+|------|-----|
+| Instructor approval gate | PENDING instructors blocked from creating bookings (`POST /api/bookings`, `/api/bookings/offline`, `/api/pda-tests`). `PendingApprovalBanner` shown on dashboard. |
+| Instructor terms at registration | Mandatory Terms + Privacy Policy checkboxes on `/register`. `termsAcceptedAt` recorded on `User`. |
+| Separate learner/instructor terms | `/terms` (learner), `/instructor-terms` (instructor), `/privacy` (shared). All footers updated. |
+| Pending payment screen | When instructor books for a client with no funds, shows informative amber screen instead of fast redirect. |
+| Admin instructor list — subscription data | `subscriptionTier`, `subscriptionStatus`, `termsAcceptedAt`, joined date now included in Prisma query and displayed. |
+| Admin instructor list — pending badge | Amber count badge on "Pending" filter tab. Alert banner when PENDING instructors exist. |
+| Admin payouts — Hold button | Hold button added to manual-transfer tab. `handleHoldPayout` calls `POST /api/admin/payouts/[payoutId]/hold`. |
+| Admin support — wallet credit ID fix | Support page now uses `clientId` (Client record ID) not `userId` for wallet credit API call. |
+| Admin instructor detail — terms/joined | `termsAcceptedAt` and real joined date shown on instructor detail page. |
 
 ---
 

@@ -155,19 +155,25 @@ Note: If instructor has already been paid, refund requires SUPER_ADMIN override 
 
 ```
 1. Instructor registers (/register)
-   └─ User created, Instructor record created (approvalStatus: PENDING)
+   └─ User created, Instructor record created (approvalStatus: PENDING, isActive: false)
+   └─ Instructor must accept both Terms & Conditions and Privacy Policy at registration
+   └─ termsAcceptedAt timestamp recorded on User record
+   └─ PENDING instructors can log in and set up their profile, but CANNOT create bookings
 2. Instructor uploads documents (/dashboard/settings)
+   └─ PendingApprovalBanner shown on all dashboard pages until approved
 3. Admin reviews documents (/admin/documents/review/[instructorId])
    └─ Traffic light per document (valid / expiring / expired)
    └─ Admin sets expiry dates, uploads replacements if needed
-   └─ POST /api/admin/documents/instructor/[instructorId]/approve
 4. Admin approves instructor (/admin/instructors)
    └─ POST /api/admin/instructors/[id]/approve
-   └─ approvalStatus: APPROVED, isVerified: true
+   └─ approvalStatus: APPROVED, isActive: true
    └─ Approval email sent to instructor
+   └─ PendingApprovalBanner disappears; instructor can now create bookings
 5. Instructor configures payout settings + ABN
 6. Instructor is live and bookable
 ```
+
+**Booking gate:** `POST /api/bookings`, `POST /api/bookings/offline`, and `POST /api/pda-tests` all check `approvalStatus === 'APPROVED'` before allowing creation. PENDING instructors receive a 403 with `INSTRUCTOR_NOT_APPROVED` error code.
 
 ---
 
