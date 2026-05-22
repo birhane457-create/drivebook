@@ -48,8 +48,15 @@ export async function GET(
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    return NextResponse.json(instructor);
-  } catch (error) {
+    // Derive Stripe Connect status from stored fields
+    const stripeConnectStatus = instructor.stripeAccountId
+      ? 'connected'
+      : 'not_connected';
+
+    return NextResponse.json({
+      ...instructor,
+      stripeConnectStatus,
+    });
     console.error('Admin instructor fetch error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch instructor' },

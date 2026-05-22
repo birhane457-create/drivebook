@@ -54,9 +54,20 @@ Sends a 24-hour password reset link to the user's email. Admin-initiated — use
 
 **Add Wallet Credit** (CLIENT users only)
 
-Calls `POST /api/admin/clients/[clientId]/wallet/add-credit` with amount and reason. The `clientId` is the `Client` record ID (not the `User` ID) — returned by `GET /api/admin/users/[userId]` as `clientId`. Immediately adds credit to the student's wallet. Logged to AuditLog.
+Calls `POST /api/admin/clients/[clientId]/wallet/add-credit` with amount and reason. The `clientId` is the `Client` record ID (not the `User` ID) — returned by `GET /api/admin/users/[userId]` as `clientId`. Immediately adds credit to the student's wallet.
+
+- Sends type F receipt email to the student with the `WalletTransaction.id` as the traceable reference
+- Writes `WALLET_CREDITED` to `AuditLog`
 
 Only available for users with a `CLIENT` record (learner accounts). Instructor accounts have no wallet and will show an error if attempted.
+
+**Deduct Wallet Credit** (CLIENT users only)
+
+Calls `POST /api/admin/clients/[clientId]/wallet/deduct-credit` with amount and reason (required). Immediately deducts from the student's wallet.
+
+- Sends type G receipt email to the student showing the `WalletTransaction.id` prominently — student can quote it in a dispute
+- Writes `WALLET_DEDUCTED` to `AuditLog`
+- Returns 400 if balance is insufficient
 
 ### Quick Links
 
@@ -70,10 +81,14 @@ Only available for users with a `CLIENT` record (learner accounts). Instructor a
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `GET /api/admin/users/[userId]` | GET | Full user profile for support panel — includes `clientId` field |
+| `GET /api/admin/users/[userId]` | GET | Full user profile for support panel — includes `clientId`, `recentBookings`, `phone`, `termsAcceptedAt` |
+| `PATCH /api/admin/users/[userId]` | PATCH | Update user name, email, phone — syncs to Instructor/Client records |
 | `POST /api/admin/contact` | POST | Send email + notification to user |
 | `POST /api/admin/users/[userId]/reset-password` | POST | Admin-initiated password reset |
 | `POST /api/admin/clients/[clientId]/wallet/add-credit` | POST | Add wallet credit (use `clientId` from user profile, not `userId`) |
+| `POST /api/admin/clients/[clientId]/wallet/deduct-credit` | POST | Deduct wallet credit (reason required) |
+| `POST /api/admin/instructors/[id]/approve` | POST | Approve instructor directly from support panel |
+| `POST /api/admin/instructors/[id]/suspend` | POST | Suspend instructor (reason required) |
 
 ---
 
@@ -85,7 +100,10 @@ Every support action is logged:
 |--------|---------|
 | `ADMIN_CONTACT_SENT` | Admin sends message to user |
 | `ADMIN_PASSWORD_RESET_SENT` | Admin sends password reset |
-| `WALLET_CREDITED` | Admin adds wallet credit |
+| `WALLET_CREDITED` | Admin adds wallet credit — includes `transactionId`, `amount`, `reason`, `balanceBefore`, `balanceAfter` |
+| `WALLET_DEDUCTED` | Admin deducts wallet credit — includes `transactionId`, `amount`, `reason`, `balanceBefore`, `balanceAfter` |
+
+Both wallet operations also send a receipt email to the student with the `WalletTransaction.id` as the traceable reference. The student can quote this ID in any dispute.
 
 ---
 

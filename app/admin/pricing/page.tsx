@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import AdminNav from '@/components/admin/AdminNav';
 import PricingSettingsForm from '@/components/admin/PricingSettingsForm';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ export default async function AdminPricingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <AdminNav />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Pricing & Package Settings</h1>

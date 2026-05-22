@@ -53,14 +53,15 @@ Each transaction has:
 - `status` — `PENDING` or `CONFIRMED`
 
 **CREDIT sources:**
-- Stripe top-up
-- Package purchase (full package amount credited on payment)
-- Lesson cancellation refund (partial or full, depending on notice period)
-- Admin manual credit
+- Stripe top-up → receipt type D sent
+- Package purchase (full package amount credited on payment) → receipt type A sent
+- Lesson cancellation refund (partial or full, depending on notice period) → receipt type E sent
+- Admin manual credit → receipt type F sent (includes `WalletTransaction.id` for dispute reference)
 
 **DEBIT sources:**
-- Lesson booking (per lesson)
+- Lesson booking (per lesson) → receipt type B sent
 - Lesson price increase on reschedule (duration extended)
+- Admin manual deduction → receipt type G sent (includes `WalletTransaction.id` for dispute reference)
 
 ---
 

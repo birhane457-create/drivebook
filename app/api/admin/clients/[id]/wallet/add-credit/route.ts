@@ -64,8 +64,11 @@ export async function POST(
     // Get or create wallet
     const wallet = await getOrCreateWallet(user.id);
 
-    // ✅ P0 FIX #2: Create wallet transaction (no stored balance update)
-    await prisma.walletTransaction.create({
+    // Read balance BEFORE adding credit (for accurate receipt)
+    const balanceBefore = await getWalletBalance(user.id);
+
+    // Create wallet transaction — the ID becomes the traceable receipt reference
+    const walletTx = await prisma.walletTransaction.create({
       data: {
         walletId: wallet.id,
         type: 'CREDIT',
@@ -78,17 +81,40 @@ export async function POST(
     // Get updated balance
     const newBalance = await getWalletBalance(user.id);
 
-    // Send receipt to student
+    // Audit log — every admin credit must be traceable
     try {
-      const prevBalance = newBalance.balance - amount;
+      await prisma.auditLog.create({
+        data: {
+          action: 'WALLET_CREDITED',
+          actorId: admin.id,
+          actorRole: admin.role,
+          targetType: 'WALLET',
+          targetId: wallet.id,
+          success: true,
+          metadata: {
+            transactionId: walletTx.id,
+            userId: user.id,
+            amount,
+            reason: reason || 'Manual credit added by admin',
+            balanceBefore: balanceBefore.balance,
+            balanceAfter: newBalance.balance,
+          } as any,
+        },
+      });
+    } catch (auditErr) {
+      console.error('Audit log failed for wallet credit:', auditErr);
+    }
+
+    // Send receipt — uses walletTx.id as the unique, DB-backed receipt reference
+    try {
       await sendAdminCreditReceipt({
         clientName: user.name || user.email,
         clientEmail: user.email,
-        receiptId: `admin-credit-${Date.now()}`,
+        receiptId: walletTx.id,
         creditedAt: new Date(),
         amountAdded: amount,
         reason: reason || 'Manual credit added by admin',
-        walletBalanceBefore: prevBalance,
+        walletBalanceBefore: balanceBefore.balance,
         walletBalanceAfter: newBalance.balance,
       });
     } catch (e) {

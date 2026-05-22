@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
+import { sendAdminDeductionReceipt } from '@/lib/services/receipt-email';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -22,65 +23,120 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
 
-    // Find user by client ID or user ID
-    let user = await prisma.user.findUnique({
+    if (!reason || reason.trim().length < 3) {
+      return NextResponse.json({ error: 'Reason is required for deductions' }, { status: 400 });
+    }
+
+    // Resolve user — params.id can be a clientId or userId
+    let userId: string | null = null;
+    let userEmail: string | null = null;
+    let userName: string | null = null;
+
+    const client = await prisma.client.findUnique({
       where: { id: params.id },
-      include: { clients: true }
+      select: { userId: true, user: { select: { id: true, email: true, name: true } } },
     });
 
-    if (!user) {
-      const client = await prisma.client.findUnique({
+    if (client?.userId && client.user) {
+      userId = client.userId;
+      userEmail = client.user.email;
+      userName = client.user.name;
+    } else {
+      // Try as userId directly
+      const user = await prisma.user.findUnique({
         where: { id: params.id },
-        include: { user: { include: { clients: true } } }
+        select: { id: true, email: true, name: true },
       });
-      user = client?.user || null;
+      if (user) {
+        userId = user.id;
+        userEmail = user.email;
+        userName = user.name;
+      }
     }
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!userId || !userEmail) {
+      return NextResponse.json({ error: 'User not found or has no account' }, { status: 404 });
     }
 
-    // Get wallet and current balance
-    const wallet = await getOrCreateWallet(user.id);
-    const currentBalance = await getWalletBalance(user.id);
+    // Get wallet and read balance BEFORE deduction
+    const wallet = await getOrCreateWallet(userId);
+    const balanceBefore = await getWalletBalance(userId);
 
-    // Check if wallet has enough balance
-    if (currentBalance.balance < amount) {
+    if (balanceBefore.balance < amount) {
       return NextResponse.json(
-        { 
+        {
           error: 'Insufficient balance',
-          available: currentBalance.balance,
-          requested: amount
+          available: balanceBefore.balance,
+          requested: amount,
         },
         { status: 400 }
       );
     }
 
-    // ✅ P0 FIX #2: Create debit transaction (no stored balance update)
-    await prisma.walletTransaction.create({
+    // Create debit transaction — the ID is the unique, DB-backed receipt reference
+    const walletTx = await prisma.walletTransaction.create({
       data: {
         walletId: wallet.id,
         amount,
         type: 'DEBIT',
         status: 'CONFIRMED',
-        description: reason || 'Manual deduction by admin',
-      }
+        description: reason.trim(),
+      },
     });
 
     // Get updated balance
-    const newBalance = await getWalletBalance(user.id);
+    const newBalance = await getWalletBalance(userId);
 
-    return NextResponse.json({ 
+    // Audit log — every admin deduction must be traceable
+    try {
+      await prisma.auditLog.create({
+        data: {
+          action: 'WALLET_DEDUCTED',
+          actorId: session.user.id,
+          actorRole: session.user.role,
+          targetType: 'WALLET',
+          targetId: wallet.id,
+          success: true,
+          metadata: {
+            transactionId: walletTx.id,
+            userId,
+            amount,
+            reason: reason.trim(),
+            balanceBefore: balanceBefore.balance,
+            balanceAfter: newBalance.balance,
+          } as any,
+        },
+      });
+    } catch (auditErr) {
+      console.error('Audit log failed for wallet deduction:', auditErr);
+      // Non-critical — don't fail the request
+    }
+
+    // Send receipt to student — uses walletTx.id as the unique receipt reference
+    try {
+      await sendAdminDeductionReceipt({
+        clientName: userName || userEmail,
+        clientEmail: userEmail,
+        transactionId: walletTx.id,
+        deductedAt: new Date(),
+        amountDeducted: amount,
+        reason: reason.trim(),
+        walletBalanceBefore: balanceBefore.balance,
+        walletBalanceAfter: newBalance.balance,
+      });
+    } catch (e) {
+      console.error('Admin deduction receipt email failed:', e);
+    }
+
+    return NextResponse.json({
       success: true,
-      previousBalance: currentBalance.balance,
+      transactionId: walletTx.id,
+      previousBalance: balanceBefore.balance,
       newBalance: newBalance.balance,
-      deducted: amount
+      deducted: amount,
     });
   } catch (error) {
     console.error('Deduct credit error:', error);
-    return NextResponse.json(
-      { error: 'Failed to deduct credit' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to deduct credit' }, { status: 500 });
   }
 }

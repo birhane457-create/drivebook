@@ -367,15 +367,20 @@ async function handleWalletPaymentSuccess(
         include: { user: true },
       });
       if (walletRecord?.user?.email) {
+        const { getWalletBalance } = await import('@/lib/services/wallet-helpers');
         const amountAdded = confirmedTransactions
           .filter((t: any) => t.type === 'CREDIT')
           .reduce((sum: number, t: any) => sum + t.amount, 0);
-        const balanceAfter = walletRecord.balance;
+        // Use computed balance (transaction-based) — stored balance field is not updated
+        const balanceResult = await getWalletBalance(walletRecord.userId);
+        const balanceAfter = balanceResult.balance;
         const balanceBefore = balanceAfter - amountAdded;
         await sendWalletTopUpReceipt({
           clientName: walletRecord.user.name || walletRecord.user.email,
           clientEmail: walletRecord.user.email,
-          receiptId: paymentIntent.id,
+          // Use WalletTransaction.id as receipt ID — DB-backed, unique, traceable
+          // Stripe PI ID is shown separately as stripeRef
+          receiptId: confirmedTx.id,
           paidAt: new Date(),
           amountAdded,
           walletBalanceBefore: balanceBefore,
@@ -674,17 +679,23 @@ async function handleBookingPaymentSuccess(
       const instructor = booking.instructor;
 
       if (isPackage && packageTotalPaid) {
+        const packageHours = (booking as any).packageHours as number;
+        const lockedDiscountPct = (booking as any).lockedDiscountPct as number ?? 0;
+        const lockedHourlyRate = (booking as any).lockedHourlyRate as number ?? instructor.hourlyRate;
+        const subtotalBeforeDiscount = packageHours * lockedHourlyRate;
+        const discountAmount = (subtotalBeforeDiscount * lockedDiscountPct) / 100;
+
         await sendPackagePurchaseReceipt({
           clientName: booking.client.name,
           clientEmail: booking.client.email,
           receiptId: bookingId,
           paidAt: new Date(),
           instructorName: instructor.name,
-          packageHours: (booking as any).packageHours,
-          hourlyRate: instructor.hourlyRate,
-          discountPercent: 0,
-          subtotal: packageTotalPaid,
-          discount: 0,
+          packageHours,
+          hourlyRate: lockedHourlyRate,
+          discountPercent: lockedDiscountPct,
+          subtotal: subtotalBeforeDiscount,
+          discount: discountAmount,
           platformFee: (booking as any).platformFee ?? 0,
           total: packageTotalPaid,
           firstLessonDate: booking.startTime!,
@@ -695,6 +706,7 @@ async function handleBookingPaymentSuccess(
           walletBalance: packageTotalPaid - booking.price,
           stripeRef: paymentIntent.id,
           paymentMethod: 'Card',
+          bookingId,
         }).catch(e => console.error('Package receipt email failed:', e));
       } else {
         await sendSingleLessonReceipt({
@@ -712,6 +724,7 @@ async function handleBookingPaymentSuccess(
           pickupAddress: booking.pickupAddress ?? undefined,
           stripeRef: paymentIntent.id,
           paymentMethod: 'Card',
+          bookingId,
         }).catch(e => console.error('Single lesson receipt email failed:', e));
       }
     }

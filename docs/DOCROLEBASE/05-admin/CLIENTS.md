@@ -78,16 +78,19 @@ Admin can edit all profile fields inline via "Edit Details" mode:
 **Add credit:**
 - Admin enters amount + optional reason
 - Calls `POST /api/admin/clients/[id]/wallet/add-credit`
-- Creates a `CREDIT` wallet transaction
-- Increments `ClientWallet.balance`
+- Creates a `CREDIT` wallet transaction — the `WalletTransaction.id` becomes the receipt reference
+- Sends type F receipt email to the student with the transaction ID
+- Writes `WALLET_CREDITED` to `AuditLog` with `transactionId`, `amount`, `reason`, `balanceBefore`, `balanceAfter`
 
 **Deduct credit:**
-- Admin enters amount + optional reason
+- Admin enters amount + reason (required, min 3 chars)
 - Calls `POST /api/admin/clients/[id]/wallet/deduct-credit`
-- Creates a `DEBIT` wallet transaction
-- Decrements `ClientWallet.balance`
+- Creates a `DEBIT` wallet transaction — the `WalletTransaction.id` becomes the receipt reference
+- Sends type G receipt email to the student showing the transaction ID prominently (for dispute reference)
+- Writes `WALLET_DEDUCTED` to `AuditLog` with `transactionId`, `amount`, `reason`, `balanceBefore`, `balanceAfter`
+- Returns 400 if balance is insufficient
 
-Both operations require a positive amount. Reason defaults to "Manual add/deduct by admin" if not provided.
+Both operations require a positive amount. Reason is optional for credits, required for deductions.
 
 ### Transaction history drawer
 

@@ -37,6 +37,8 @@ interface InstructorData {
   isActive: boolean;
   createdAt: Date;
   user: { email: string; createdAt?: string | null; termsAcceptedAt?: string | null } | null;
+  stripeAccountId?: string | null;
+  stripeConnectStatus?: 'connected' | 'not_connected';
   _count: { bookings: number };
   bookings: any[];
 }
@@ -346,6 +348,17 @@ export default function AdminInstructorProfilePage() {
                     <div>
                       <p className="text-xs text-gray-500">Payout Method</p>
                       <p className="font-semibold text-gray-900">{instructor.payoutMethod?.replace('_', ' ') || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Stripe Connect</p>
+                      {instructor.stripeConnectStatus === 'connected' ? (
+                        <p className="font-semibold text-green-600">✓ Connected</p>
+                      ) : (
+                        <p className="font-semibold text-amber-600">⚠ Not connected</p>
+                      )}
+                      {instructor.stripeConnectStatus !== 'connected' && instructor.payoutMethod === 'bank_transfer' && (
+                        <p className="text-xs text-gray-400 mt-0.5">Using manual bank transfer</p>
+                      )}
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">ABN</p>

@@ -142,7 +142,12 @@ These items were identified and resolved after the April 2026 review:
 
 | Item | Fix |
 |------|-----|
-| Instructor approval gate | PENDING instructors blocked from creating bookings (`POST /api/bookings`, `/api/bookings/offline`, `/api/pda-tests`). `PendingApprovalBanner` shown on dashboard. |
+| Admin deduction receipt | Admin deduct-credit route now sends type G receipt with `WalletTransaction.id` as traceable reference + `WALLET_DEDUCTED` audit log entry |
+| Receipt ID traceability | All receipt IDs are now DB-backed CUIDs (`WalletTransaction.id` or `Booking.id`) — no timestamps, no collisions |
+| Wallet top-up receipt (legacy flow) | `POST /api/client/wallet-add` now sends type D receipt (was missing) |
+| Wallet top-up balance accuracy | Webhook receipt now uses `getWalletBalance()` (transaction-computed) not stale `ClientWallet.balance` field |
+| Package receipt discount | Package receipt now shows real discount from `lockedDiscountPct` and `lockedHourlyRate` (was hardcoded to 0) |
+| Booking receipts — manage link | `bookingId` now passed to all type B, C, A receipts — "Manage booking" link appears in footer |
 | Instructor terms at registration | Mandatory Terms + Privacy Policy checkboxes on `/register`. `termsAcceptedAt` recorded on `User`. |
 | Separate learner/instructor terms | `/terms` (learner), `/instructor-terms` (instructor), `/privacy` (shared). All footers updated. |
 | Pending payment screen | When instructor books for a client with no funds, shows informative amber screen instead of fast redirect. |

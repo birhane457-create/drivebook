@@ -6,6 +6,7 @@ import { walletRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/r
 import { recordWalletCredit } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
+import { sendWalletTopUpReceipt } from '@/lib/services/receipt-email';
 import { z } from 'zod';
 
 
@@ -100,7 +101,24 @@ export async function POST(req: NextRequest) {
     
     // Get updated balance after transaction
     const newBalance = await getWalletBalance(user.id);
-    
+
+    // Send wallet top-up receipt — uses WalletTransaction.id as the traceable receipt reference
+    try {
+      await sendWalletTopUpReceipt({
+        clientName: user.name || user.email,
+        clientEmail: user.email,
+        receiptId: result.walletTx.id,
+        paidAt: new Date(),
+        amountAdded: amount,
+        walletBalanceBefore: previousBalance.balance,
+        walletBalanceAfter: newBalance.balance,
+        stripeRef: paymentIntentId,
+        paymentMethod: paymentIntentId ? 'Card' : undefined,
+      });
+    } catch (receiptErr) {
+      console.error('Wallet top-up receipt email failed:', receiptErr);
+    }
+
     // Verify ledger balance matches
     const ledgerBalance = await getAccountBalance(
       buildAccount(AccountType.CLIENT_WALLET, user.id)

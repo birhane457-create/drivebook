@@ -497,3 +497,62 @@ export async function sendAdminCreditReceipt(data: {
     html,
   });
 }
+
+// ── G: Admin Manual Deduction ─────────────────────────────────────────────────
+export async function sendAdminDeductionReceipt(data: {
+  clientName: string;
+  clientEmail: string;
+  transactionId: string;  // WalletTransaction.id — the DB record, unique, traceable
+  deductedAt: Date;
+  amountDeducted: number;
+  reason: string;
+  walletBalanceBefore: number;
+  walletBalanceAfter: number;
+}) {
+  const rn = receiptNumber(data.transactionId);
+  const html = `<!DOCTYPE html><html><head><style>${styles}</style></head><body>
+  <div class="wrap">
+    <div class="header" style="background:linear-gradient(135deg,#dc2626,#b91c1c);">
+      <h1>&#x1F697; DriveBook &mdash; Wallet Adjustment</h1>
+      <p>Credit Deducted from Your Account</p>
+    </div>
+    <div class="body">
+      <div class="meta">
+        <table>
+          <tr><td>Receipt #</td><td>${rn}</td></tr>
+          <tr><td>Transaction ID</td><td style="font-family:monospace;font-size:12px;">${data.transactionId}</td></tr>
+          <tr><td>Date</td><td>${data.deductedAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} at ${data.deductedAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</td></tr>
+          <tr><td>Account</td><td>${data.clientName}</td></tr>
+          <tr><td>Issued by</td><td>DriveBook Support</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3>Deduction Details</h3>
+        <table class="line-items">
+          <tr><td>Amount deducted</td><td style="color:#dc2626;font-size:18px;font-weight:700;">-${fmt(data.amountDeducted)}</td></tr>
+          <tr><td>Reason</td><td>${data.reason}</td></tr>
+        </table>
+      </div>
+
+      <div class="wallet-box">
+        <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#1d4ed8;margin:0 0 10px;">Wallet Balance</h3>
+        <table>
+          <tr><td>Previous balance</td><td>${fmt(data.walletBalanceBefore)}</td></tr>
+          <tr><td>Deduction</td><td style="color:#dc2626;">-${fmt(data.amountDeducted)}</td></tr>
+          <tr class="balance"><td>New balance</td><td>${fmt(data.walletBalanceAfter)}</td></tr>
+        </table>
+      </div>
+
+      <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">
+        If you believe this deduction was made in error, please contact us at
+        <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> and quote Transaction ID <strong>${data.transactionId}</strong>.
+      </p>
+      ${footer(rn)}`;
+
+  await emailService.sendGenericEmail({
+    to: data.clientEmail,
+    subject: `Wallet Adjustment &mdash; -${fmt(data.amountDeducted)} deducted from your account`,
+    html,
+  });
+}

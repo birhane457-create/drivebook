@@ -233,6 +233,7 @@ export async function POST(request: NextRequest) {
           walletBalanceBefore: walletAfter + c.booking.price,
           walletBalanceAfter: walletAfter,
           bookedBy: 'client',
+          bookingId: c.booking.id,
         });
       } catch (e) {
         console.error('[Receipt] Failed:', e);

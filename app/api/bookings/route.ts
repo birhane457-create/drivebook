@@ -465,6 +465,7 @@ export async function POST(req: NextRequest) {
         walletBalanceBefore: walletAfter + lessonPrice,
         walletBalanceAfter: walletAfter,
         bookedBy: 'instructor',
+        bookingId: booking.id,
       })
     } catch (e) {
       console.error('Receipt email failed:', e)

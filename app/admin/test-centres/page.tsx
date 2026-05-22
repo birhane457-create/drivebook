@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Plus, Edit2, X, Save, MapPin, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import AdminNav from '@/components/admin/AdminNav';
 
 interface TestCentre {
   id: string;
@@ -82,6 +83,7 @@ export default function AdminTestCentresPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <AdminNav />
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
