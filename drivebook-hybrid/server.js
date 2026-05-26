@@ -11,6 +11,7 @@ const { PrismaClient } = require('@prisma/client');
 const voiceRouter = require('./routes/voice-webhook');
 const bookingRouter = require('./routes/booking-api');
 const instructorRouter = require('./routes/instructor-api');
+const mainAppProxyRouter = require('./routes/main-app-proxy');
 const { restrictAccess, hideApiDocs } = require('./middleware/auth');
 
 const app = express();
@@ -52,6 +53,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use('/api', mainAppProxyRouter);
 app.use('/api/voice', voiceRouter);
 app.use('/api/bookings', bookingRouter);
 app.use('/api/instructor', instructorRouter);
@@ -96,8 +98,9 @@ app.get('/', (req, res) => {
       health: 'GET /api/health',
       voice_incoming: 'POST /api/voice/incoming',
       voice_voicemail: 'POST /api/voice/voicemail',
-      booking_create: 'POST /api/bookings',
-      instructor_lookup: 'GET /api/instructor/lookup?phone={phone}'
+      legacy_booking_helper: 'POST /api/bookings',
+      legacy_instructor_lookup: 'GET /api/instructor/lookup?phone={phone}',
+      ai_proxy: 'GET/POST /api/* -> proxied to main DriveBook app'
     },
     docs: {
       integration: './INTEGRATION_GUIDE.md',

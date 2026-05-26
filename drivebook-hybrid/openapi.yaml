@@ -1,8 +1,10 @@
 swagger: '2.0'
 info:
   title: DriveBook Voice Service API
+  version: '2.0.0'
   description: |
     API for AI voice agent to interact with DriveBook platform for booking driving lessons.
+    The hybrid voice service exposes these `/api/*` endpoints and proxies them to the main DriveBook application.
     
     RECOMMENDED AI CONVERSATION FLOW (OPTIMIZED):
     1. Ask user for pickup location
@@ -16,14 +18,7 @@ info:
     
     KEY IMPROVEMENTS:
     - AI does NOT ask for password (backend generates secure password automatically)
-    - Smart recommendations with reasons (top rated, best value, closest, etc.)
-    - Location validation prevents bad addresses
-    - Backend handles all pricing calculations
-    - Intelligent ranking algorithm (rating 40%, distance 25%, price 20%, experience 15%)
-  version: 2.0.0
-  contact:
-    name: DriveBook Support
-host: drivebook-production-12ab.up.railway.app
+host: drivebook.com.au
 basePath: /api
 schemes:
   - https
@@ -48,9 +43,6 @@ paths:
             properties:
               status:
                 type: string
-                example: ok
-              database:
-                type: string
                 example: connected
 
   /instructors/recommendations:
@@ -68,8 +60,7 @@ paths:
           in: query
           type: string
           required: true
-          description: Pickup location
-          example: "Joondalup WA"
+          description: "Pickup location (e.g. Joondalup WA)"
         - name: vehicleType
           in: query
           type: string
@@ -80,14 +71,12 @@ paths:
           in: query
           type: string
           required: false
-          description: Preferred language
-          example: "English"
+          description: "Preferred language (e.g. English)"
         - name: budget
           in: query
           type: number
           required: false
-          description: Maximum hourly rate
-          example: 75
+          description: "Maximum hourly rate (e.g. 75)"
         - name: experienceLevel
           in: query
           type: string
@@ -97,9 +86,8 @@ paths:
           in: query
           type: integer
           required: false
-          description: Number of recommendations to return
+          description: "Number of recommendations to return (default: 3)"
           default: 3
-          example: 3
       responses:
         '200':
           description: Recommended instructors with reasons
@@ -119,41 +107,132 @@ paths:
                       type: number
                     distance:
                       type: number
+                      description: Distance in kilometers
                     rating:
                       type: number
                     reviews:
                       type: integer
-                    totalBookings:
-                      type: integer
-                    vehicleTypes:
-                      type: array
-                      items:
-                        type: string
-                    languages:
-                      type: array
-                      items:
-                        type: string
-                    car:
-                      type: string
-                      example: "Toyota Corolla 2020"
-                    score:
-                      type: integer
-                      description: Recommendation score (0-100)
                     reason:
                       type: string
-                      description: Why this instructor is recommended
-                      example: "Top rated instructor near you"
-                    badges:
-                      type: array
-                      items:
-                        type: string
-                      example: ["Featured", "Top Rated", "Nearby"]
+                    score:
+                      type: integer
               count:
                 type: integer
               message:
                 type: string
-              searchLocation:
-                type: object
+
+  /bookings/search:
+    get:
+      summary: Search bookings by phone, email, or reference
+      description: Find existing bookings when the user provides a phone, email, or booking reference. Useful for reschedule/cancel flows and identity verification.
+      operationId: searchBookings
+      tags:
+        - Bookings
+      parameters:
+        - name: phone
+          in: query
+          type: string
+          required: false
+          description: Phone number used on the booking
+        - name: email
+          in: query
+          type: string
+          required: false
+          description: Email used on the booking
+        - name: reference
+          in: query
+          type: string
+          required: false
+          description: Booking reference or ID
+      responses:
+        '200':
+          description: Matching bookings
+          schema:
+            type: object
+            properties:
+              bookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    bookingId:
+                      type: string
+                    date:
+                      type: string
+                    time:
+                      type: string
+                    status:
+                      type: string
+                    pickupLocation:
+                      type: string
+                    instructor:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                    accountHolderName:
+                      type: string
+                    accountHolderPhone:
+                      type: string
+                    accountHolderEmail:
+                      type: string
+              count:
+                type: integer
+        '400':
+          description: Must provide phone, email, or reference
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /instructors/find:
+    get:
+      summary: Find instructors by name, phone or query
+      description: Flexible search to locate an instructor when the caller does not know an ID. Returns contact info and short profile so AI can present options.
+      operationId: findInstructors
+      tags:
+        - Instructors
+      parameters:
+        - name: query
+          in: query
+          type: string
+          required: true
+          description: Name, phone number, or search query
+        - name: location
+          in: query
+          type: string
+          required: false
+          description: Optional pickup location to prefer nearby instructors
+      responses:
+        '200':
+          description: Matching instructors
+          schema:
+            type: object
+            properties:
+              instructors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    phone:
+                      type: string
+                    hourlyRate:
+                      type: number
+                    distance:
+                      type: number
+                    rating:
+                      type: number
+                    bio:
+                      type: string
+              count:
+                type: integer
 
   /instructors/search:
     get:
@@ -169,8 +248,7 @@ paths:
           in: query
           type: string
           required: true
-          description: Pickup location - address, suburb, or postcode
-          example: "Joondalup WA"
+          description: "Pickup location - address, suburb, or postcode (e.g. Joondalup WA)"
       responses:
         '200':
           description: List of instructors serving the location
@@ -395,14 +473,12 @@ paths:
           in: query
           type: string
           required: true
-          description: Date in YYYY-MM-DD format
-          example: "2026-03-25"
+          description: "Date in YYYY-MM-DD format (e.g. 2026-03-25)"
         - name: duration
           in: query
           type: integer
           required: true
-          description: Lesson duration in minutes (60, 90, or 120)
-          example: 60
+          description: "Lesson duration in minutes: 60, 90, or 120"
       responses:
         '200':
           description: Available slots
@@ -431,6 +507,12 @@ paths:
         Create a new booking or package purchase.
         IMPORTANT: Backend calculates pricing - AI should NOT send pricing fields.
         AI only sends: instructor, package type, schedule, and account details.
+        
+        INSTRUCTOR RESOLUTION:
+        Either `instructorId` or `instructorQuery` must be provided.
+        - `instructorId`: use when you already have the ID from a previous search/recommendations call
+        - `instructorQuery`: use when you only have a name or phone — backend resolves to an ID
+        AI should NEVER ask the caller for an instructor ID directly.
       operationId: createBooking
       tags:
         - Bookings
@@ -441,7 +523,6 @@ paths:
           schema:
             type: object
             required:
-              - instructorId
               - packageType
               - bookingType
               - registrationType
@@ -451,7 +532,18 @@ paths:
             properties:
               instructorId:
                 type: string
-                description: Instructor ID from search results
+                description: |
+                  Instructor ID resolved from API responses.
+                  Use when you have the ID from GET /instructors/recommendations or GET /instructors/search.
+                  Either instructorId or instructorQuery must be provided.
+              instructorQuery:
+                type: string
+                description: |
+                  Optional: instructor name or phone number.
+                  Use when you only have a name (e.g. "Debesay") or phone number.
+                  Backend will resolve to an instructorId automatically.
+                  Either instructorId or instructorQuery must be provided.
+                  Examples: "Debesay", "Debesay Birhane", "0400123456"
               packageType:
                 type: string
                 enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
@@ -590,6 +682,254 @@ paths:
       responses:
         '200':
           description: Voicemail processed
+
+  /verifications/otp:
+    post:
+      summary: Send OTP for identity verification
+      description: |
+        Generate and send a one-time PIN (OTP) to the provided phone or email
+        for actions that require identity verification (reschedule, cancel).
+        Returns a short-lived `verificationId` used to confirm the OTP.
+        Codes expire after 5 minutes, allow up to 3 failed confirmation attempts,
+        require a 60-second resend delay, and are rate-limited to 3 requests per hour.
+      operationId: sendOtp
+      tags:
+        - Verifications
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - purpose
+            properties:
+              purpose:
+                type: string
+                enum: [reschedule, cancel, login]
+                description: Purpose for verification; used for auditing and expiry.
+              phone:
+                type: string
+                description: Phone number to send SMS OTP to
+              email:
+                type: string
+                description: Email to send OTP to (alternative to phone)
+              ttlSeconds:
+                type: integer
+                description: Optional desired TTL for the OTP in seconds (backend may enforce limits)
+      responses:
+        '200':
+          description: OTP sent
+          schema:
+            type: object
+            properties:
+              verificationId:
+                type: string
+              delivery:
+                type: string
+                description: delivery method used (sms|email)
+              expiresIn:
+                type: integer
+                description: seconds until OTP expires (typically 300)
+                example: 300
+              maxAttempts:
+                type: integer
+                description: Maximum number of confirmation attempts allowed for this verification (typically 3)
+                example: 3
+              resendAfterSeconds:
+                type: integer
+                description: Seconds until a new OTP can be requested (typically 60)
+                example: 60
+              rateLimitPerHour:
+                type: integer
+                description: Number of OTP requests allowed per hour for the caller (typically 3)
+                example: 3
+        '400':
+          description: Missing contact
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '429':
+          description: Rate limit exceeded (max 3 OTP requests per hour per phone/email)
+          headers:
+            Retry-After:
+              type: integer
+              description: Seconds until the client may retry
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /verifications/otp/confirm:
+    post:
+      summary: Confirm OTP and issue verification token
+      description: |
+        Confirm the one-time PIN sent to the user. On success returns a
+        short-lived `verificationToken` which clients must present when
+        performing sensitive actions like cancelling or rescheduling a booking.
+      operationId: confirmOtp
+      tags:
+        - Verifications
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - verificationId
+              - code
+            properties:
+              verificationId:
+                type: string
+              code:
+                type: string
+                description: Numeric or alphanumeric OTP code
+      responses:
+        '200':
+          description: Verified
+          schema:
+            type: object
+            properties:
+              verified:
+                type: boolean
+              verificationToken:
+                type: string
+                description: Token to present to sensitive endpoints; short-lived
+              expiresIn:
+                type: integer
+              attemptsLeft:
+                type: integer
+                description: Number of remaining attempts before the verification is locked
+              maxAttempts:
+                type: integer
+                description: Maximum allowed attempts for this verification
+        '400':
+          description: Invalid code
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '429':
+          description: Too many attempts - verification temporarily locked after 3 failed attempts
+          headers:
+            Retry-After:
+              type: integer
+              description: Seconds until the verification attempt window resets
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/bookings/{bookingId}/cancel:
+    post:
+      summary: Cancel a booking (requires verification)
+      description: Cancel a booking after verifying the requestor's identity via `verificationToken`.
+      operationId: cancelBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - verificationToken
+            properties:
+              verificationToken:
+                type: string
+              reason:
+                type: string
+                description: Optional cancellation reason
+      responses:
+        '200':
+          description: Booking cancelled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              refunded:
+                type: boolean
+        '401':
+          description: Verification failed
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/bookings/{bookingId}/reschedule:
+    post:
+      summary: Reschedule a booking (requires verification)
+      description: Reschedule a booking after verifying the requestor's identity via `verificationToken`.
+      operationId: rescheduleBooking
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - verificationToken
+              - date
+              - time
+              - duration
+            properties:
+              verificationToken:
+                type: string
+              date:
+                type: string
+                example: "2026-03-30"
+              time:
+                type: string
+                example: "14:00"
+              duration:
+                type: integer
+                example: 60
+              pickupLocation:
+                type: string
+              notes:
+                type: string
+      responses:
+        '200':
+          description: Booking rescheduled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              newDate:
+                type: string
+              newTime:
+                type: string
+        '401':
+          description: Verification failed
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
 
 tags:
   - name: System

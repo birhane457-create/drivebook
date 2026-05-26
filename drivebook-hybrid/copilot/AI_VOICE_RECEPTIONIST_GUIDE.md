@@ -5,9 +5,10 @@
 **DriveBook** is a comprehensive driving instructor management platform that handles bookings, payments, scheduling, and client management. The AI Voice Receptionist acts as a 24/7 virtual assistant for driving instructors, handling phone inquiries and bookings.
 
 ### AI integration notes
-- Use `docs/AI_PROMPT_TEMPLATE.md` as the primary system prompt guide for the AI.
-- Use `ai-instructions.md` for the endpoint workflow and verification rules.
-- Use `voice-script.md` for caller prompts, alternate phrasing, and Twilio/TwiML timing.
+- Use `copilot/AI_PROMPT_TEMPLATE.md` as the primary system prompt guide for the AI.
+- Use `copilot/ai-instructions.md` for the endpoint workflow and verification rules.
+- Use `copilot/voice-script.md` for caller prompts, alternate phrasing, and Twilio/TwiML timing.
+- The hybrid proxy exposes `/api/*` endpoints on this voice service and forwards them to the main DriveBook application.
 - The AI should avoid asking for instructor IDs or passwords directly from callers.
 - If the caller does not know the instructor, use pickup location plus recommendations instead of forcing instructor lookup.
 
@@ -48,7 +49,10 @@
 
 ### API Endpoint to Get Instructor Info
 ```
-GET /api/public/instructors?search={instructorName}
+GET /api/instructors/recommendations?location={location}
+GET /api/instructors/search?location={location}
+GET /api/instructors/search?name={instructorName}
+GET /api/voice/instructors/lookup?phone={phone}
 ```
 
 ---
@@ -285,9 +289,11 @@ Response:
 
 ### API Endpoints
 ```
-POST /api/bookings/{bookingId}/reschedule
-POST /api/bookings/{bookingId}/cancel
+POST /api/public/bookings/{bookingId}/reschedule
+POST /api/public/bookings/{bookingId}/cancel
 ```
+
+Use `verificationToken` from `POST /api/verifications/otp/confirm` for sensitive actions.
 
 ---
 
@@ -470,99 +476,135 @@ If you don't understand caller after 3 attempts:
 
 ## 12. API ENDPOINTS REFERENCE
 
-### Authentication
-Most public endpoints don't require authentication. Internal endpoints require instructor/client login.
+### OpenAPI contract
+The voice service proxy endpoints are defined in `../openapi.yaml` and mirror the main DriveBook backend contract.
 
-### Key Endpoints for Voice Assistant
+### Voice Service Proxy Endpoints
+These endpoints are exposed under `/api/*` and forwarded to the main DriveBook application.
 
-#### 1. Get Instructor Information
+#### 1. Validate pickup location
 ```http
-GET /api/public/instructors?search={name}
-GET /api/instructor/profile?instructorId={id}
+POST /api/locations/validate
+Body:
+{
+  "pickupLocation": "123 Main St, Joondalup WA"
+}
 ```
 
-#### 2. Check Availability
+#### 2. Get recommended instructors
 ```http
-GET /api/availability/slots?instructorId={id}&date={YYYY-MM-DD}&duration={minutes}
+GET /api/instructors/recommendations?location=Joondalup+WA
 ```
 
-#### 3. Create Booking (Package)
+#### 3. Search instructors
 ```http
-POST /api/public/bookings/bulk
+GET /api/instructors/search?location=Joondalup+WA
+GET /api/instructors/search?name=Debesay
+```
 
+#### 4. Find instructor by phone
+```http
+GET /api/voice/instructors/lookup?phone=0400123456
+```
+
+#### 5. Get availability slots
+```http
+GET /api/availability/slots?instructorId={id}&date=2026-03-25&duration=60
+```
+
+#### 6. Validate lesson availability
+```http
+POST /api/availability
 Body:
 {
   "instructorId": "string",
-  "packageType": "PACKAGE_6" | "PACKAGE_10" | "PACKAGE_15" | "CUSTOM",
-  "hours": number,
-  "includeTestPackage": boolean,
-  "bookingType": "now" | "later",
-  "scheduledBookings": [...], // if bookingType = "now"
-  "registrationType": "myself" | "someone-else",
-  "accountHolderName": "string",
-  "accountHolderEmail": "string",
-  "accountHolderPhone": "string",
-  "accountHolderPassword": "string",
-  "learnerName": "string", // if someone-else
-  "learnerPhone": "string", // optional
-  "learnerRelationship": "string", // if someone-else
-  "pricing": {
-    "subtotal": number,
-    "discount": number,
-    "discountPercentage": number,
-    "testPackage": number,
-    "platformFee": number,
-    "total": number
-  }
-}
-
-Response:
-{
-  "success": true,
-  "bookingId": "string",
-  "clientId": "string",
-  "total": number
+  "date": "2026-03-25",
+  "lessonDuration": 60
 }
 ```
 
-#### 4. Check Email Availability
+#### 7. Get packages
 ```http
-GET /api/auth/check-email?email={email}
-
-Response:
-{
-  "exists": boolean,
-  "email": "string"
-}
+GET /api/packages?instructorId={id}
 ```
 
-#### 5. Get Service Areas
+#### 8. Create a booking
 ```http
-GET /api/instructor/service-areas?instructorId={id}
-```
-
-#### 6. Reschedule Booking
-```http
-POST /api/bookings/{bookingId}/reschedule
-
+POST /api/public/bookings/bulk
 Body:
 {
-  "newStartTime": "ISO 8601 datetime",
-  "newEndTime": "ISO 8601 datetime",
-  "reason": "string"
+  "instructorId": "string",
+  "packageType": "PACKAGE_10",
+  "bookingType": "now",
+  "registrationType": "myself",
+  "accountHolderName": "Sarah Jones",
+  "accountHolderEmail": "sarah@example.com",
+  "accountHolderPhone": "0400123456",
+  "scheduledBookings": [
+    {
+      "date": "2026-03-25",
+      "time": "09:00",
+      "duration": 60,
+      "pickupLocation": "123 Main St, Joondalup WA 6027"
+    }
+  ]
 }
 ```
+Do NOT include `pricing`, `accountHolderPassword`, or other fields that the backend calculates automatically.
 
-#### 7. Cancel Booking
+#### 9. Lookup bookings by phone
 ```http
-POST /api/bookings/{bookingId}/cancel
+GET /api/bookings/lookup?phone=0400123456
+```
 
+#### 10. Send OTP
+```http
+POST /api/verifications/otp
 Body:
 {
-  "reason": "string",
-  "requestRefund": boolean
+  "purpose": "cancel",
+  "phone": "0400123456"
 }
 ```
+
+#### 11. Confirm OTP
+```http
+POST /api/verifications/otp/confirm
+Body:
+{
+  "verificationId": "string",
+  "code": "123456"
+}
+```
+
+#### 12. Cancel booking
+```http
+POST /api/public/bookings/{bookingId}/cancel
+Body:
+{
+  "verificationToken": "string"
+}
+```
+
+#### 13. Reschedule booking
+```http
+POST /api/public/bookings/{bookingId}/reschedule
+Body:
+{
+  "verificationToken": "string",
+  "date": "2026-03-30",
+  "time": "14:00",
+  "duration": 60,
+  "pickupLocation": "123 Main St, Joondalup WA"
+}
+```
+
+### Voice service internal endpoints
+These are legacy or Twilio-specific endpoints retained by the hybrid voice service.
+- `POST /api/voice/incoming` — Twilio incoming call webhook
+- `POST /api/voice/voicemail` — Twilio voicemail callback
+- `POST /api/bookings` — internal legacy booking helper
+- `GET /api/instructor/lookup?phone=` — internal instructor lookup
 
 ---
 

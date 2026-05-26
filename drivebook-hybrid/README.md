@@ -6,6 +6,7 @@ This is a minimal Express.js microservice for handling Twilio voice webhooks.
 
 - Handles incoming Twilio voice calls
 - Provides webhook endpoints for voice interactions
+- Proxies AI booking and availability requests to the main DriveBook app
 - Runs on Railway (not Vercel)
 
 ## What's Deployed
@@ -16,8 +17,14 @@ This is a minimal Express.js microservice for handling Twilio voice webhooks.
 - `GET /api/health` - Health check
 - `POST /api/voice/incoming` - Twilio incoming call webhook
 - `POST /api/voice/voicemail` - Twilio voicemail webhook
-- `POST /api/bookings` - Booking creation (Express route)
-- `GET /api/instructor/lookup` - Instructor lookup by phone
+- `POST /api/bookings` - internal legacy booking helper
+- `GET /api/instructor/lookup` - internal instructor lookup by phone
+- `GET /api/locations/validate` - proxied main app endpoint
+- `GET /api/instructors/recommendations` - proxied main app endpoint
+- `GET /api/instructors/search` - proxied main app endpoint
+- `GET /api/packages` - proxied main app endpoint
+- `GET /api/availability/slots` - proxied main app endpoint
+- `POST /api/public/bookings/bulk` - proxied main app endpoint
 
 ## Important Notes
 
@@ -93,9 +100,10 @@ drivebook-hybrid/
 
 ### Voice Service (this folder) - Railway
 - Express.js microservice
-- Twilio webhooks only
-- No web UI
-- Minimal API surface
+- Twilio webhooks and voice integration
+- Proxies `/api/*` AI booking and availability requests to the main app
+- No public web UI
+- Minimal AI-facing API surface
 - **URL:** https://drivebook-production-12ab.up.railway.app
 
 ## Development
@@ -114,11 +122,22 @@ See `.env.example` for required environment variables.
 
 ## API Routes
 
-All AI voice API routes are now in the main app:
-- `/api/instructors/recommendations` - Main app (Vercel)
+All AI voice API routes are now in the main app and are proxied through this hybrid service:
 - `/api/locations/validate` - Main app (Vercel)
+- `/api/instructors/recommendations` - Main app (Vercel)
+- `/api/instructors/search` - Main app (Vercel)
 - `/api/packages` - Main app (Vercel)
+- `/api/availability/slots` - Main app (Vercel)
+- `/api/availability` - Main app (Vercel)
 - `/api/public/bookings/bulk` - Main app (Vercel)
+- `/api/bookings/lookup` - Main app (Vercel)
+- `/api/verifications/otp` - Main app (Vercel)
+- `/api/verifications/otp/confirm` - Main app (Vercel)
+- `/api/public/bookings/{bookingId}/cancel` - Main app (Vercel)
+- `/api/public/bookings/{bookingId}/reschedule` - Main app (Vercel)
+- `/api/voice/instructors/lookup` - Main app (Vercel)
+
+See `openapi.yaml` for the full API contract.
 
 This service only handles Twilio webhooks.
 
