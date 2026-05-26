@@ -6,10 +6,17 @@ info:
     
     NOTE: These are called by external services, NOT by AI agents.
     
+    CANONICAL WEBHOOK PATH: /api/stripe/webhook
+    LEGACY ALIAS PATH: /api/webhooks/stripe (proxies to canonical)
+    
+    Both paths accept the same Stripe events. The canonical path is the source of truth.
+    The legacy path exists for backward compatibility with older Azure Copilot Studio configs.
+    
     STRIPE WEBHOOK:
     - Confirms payment when user completes Stripe Checkout
     - Updates booking: PENDING_PAYMENT → CONFIRMED
     - Sends confirmation SMS/email
+    - Handles subscription events (instructor billing)
   version: 2.0.0
   contact:
     name: DriveBook Support

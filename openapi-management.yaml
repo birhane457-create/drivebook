@@ -114,6 +114,13 @@ paths:
       summary: Cancel booking
       description: |
         Cancels booking and processes refund per policy.
+        Uses the public cancel endpoint — no authentication required.
+        
+        AI: Before calling this endpoint, you MUST:
+        1. Call GET /bookings/{bookingId}/cancellation-policy to get the refund amount
+        2. Read back the refund to the caller: "Cancelling now will give you a [X]% refund of $[amount]."
+        3. Wait for explicit verbal confirmation ("yes") before proceeding
+        Never cancel without the caller's explicit confirmation.
         
         RATE LIMIT: 3/hour per booking
       operationId: cancelBooking
@@ -145,25 +152,132 @@ paths:
             properties:
               success:
                 type: boolean
-              bookingId:
-                type: string
-              status:
-                type: string
-              refundAmount:
-                type: number
-              refundPercentage:
-                type: number
-              message:
-                type: string
+              booking:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                    example: "CANCELLED"
+              refund:
+                type: object
+                properties:
+                  percentage:
+                    type: number
+                    description: Refund percentage (0, 50, or 100)
+                  amount:
+                    type: number
+                    description: Dollar amount refunded to wallet
 
   /bookings/{bookingId}/reschedule:
-    post:
-      summary: Reschedule booking
+    patch:
+      summary: Reschedule booking (instructor-authenticated)
       description: |
-        Reschedules to new date/time. Same policy applies.
+        Reschedules to new date/time. Requires an authenticated instructor session (NextAuth JWT).
+        
+        If rescheduling within 24 hours of the current booking time, the system
+        returns `requiresConfirmation: true` with a warning. The AI must confirm
+        with the instructor before proceeding by resending with `confirmedPenaltyWaiver: true`.
+        
+        NOTE: For AI voice agent / client self-service use, prefer the public endpoint below.
         
         RATE LIMIT: 3/hour per booking
-      operationId: rescheduleBooking
+      operationId: rescheduleBookingAuthenticated
+      tags:
+        - Bookings
+      parameters:
+        - name: bookingId
+          in: path
+          type: string
+          required: true
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - startTime
+              - endTime
+            properties:
+              startTime:
+                type: string
+                format: date-time
+                description: New start time in ISO 8601 format
+                example: "2026-03-20T10:00:00.000Z"
+              endTime:
+                type: string
+                format: date-time
+                description: New end time in ISO 8601 format
+                example: "2026-03-20T11:00:00.000Z"
+              reason:
+                type: string
+                description: Reason for rescheduling (optional)
+              confirmedPenaltyWaiver:
+                type: boolean
+                description: Required when rescheduling within 24h of current booking time
+      responses:
+        '200':
+          description: Rescheduled successfully, or confirmation required
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              booking:
+                type: object
+              penaltyWaived:
+                type: boolean
+                description: True if rescheduled within 24h window
+              requiresConfirmation:
+                type: boolean
+                description: True if within 24h window and confirmation not yet given
+              hoursUntil:
+                type: number
+                description: Hours until current booking (present when requiresConfirmation is true)
+              warning:
+                type: string
+                description: Warning message to show instructor (present when requiresConfirmation is true)
+        '409':
+          description: New time slot conflicts with another booking
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/bookings/{bookingId}/reschedule:
+    post:
+      summary: Reschedule booking (public — AI voice / client self-service)
+      description: |
+        Public reschedule endpoint. No instructor auth session required.
+        
+        AI: Before calling this endpoint, you MUST:
+        1. Check slot availability via GET /availability/slots
+        2. Read back the change to the caller: "I'll move your lesson from [old date/time] to [new date/time]. Shall I go ahead?"
+        3. Wait for explicit verbal confirmation ("yes") before proceeding
+        Never reschedule without the caller's explicit confirmation.
+        
+        SECURITY:
+        - When `verificationToken` is provided (recommended), the caller's identity is
+          verified against the token issued by POST /api/verifications/otp/confirm.
+          Token format stored in DB: `verified:{token}`. One-time use, 10-minute TTL.
+        - Without a token the reschedule still proceeds (for simple voice flows where
+          OTP was confirmed earlier in the call).
+        
+        SLOT CONFLICT:
+        - Checks for double-booking against the instructor's existing bookings.
+        - The current booking is excluded from the conflict check.
+        - If 409 returned: ask caller for a different time and retry.
+        
+        DURATION:
+        - If `duration` is omitted, the existing booking duration is preserved.
+        
+        RATE LIMIT: 3/hour per booking
+        
+        AI: Use this endpoint for all voice-initiated reschedule requests.
+        Always complete OTP verification first, then pass `verificationToken` here.
+      operationId: rescheduleBookingPublic
       tags:
         - Bookings
       parameters:
@@ -182,10 +296,33 @@ paths:
             properties:
               newDate:
                 type: string
+                description: New date in YYYY-MM-DD format
+                example: "2026-03-25"
               newTime:
                 type: string
+                description: New time in HH:MM (24-hour) format
+                example: "10:00"
+              duration:
+                type: integer
+                description: Duration in minutes. Defaults to existing booking duration if omitted.
+                example: 60
               reason:
                 type: string
+                description: Human-readable reason for rescheduling
+                example: "Client requested earlier time"
+              verificationToken:
+                type: string
+                description: |
+                  Short-lived token from POST /api/verifications/otp/confirm.
+                  Strongly recommended. Omit only when OTP was confirmed earlier in the same call.
+              phone:
+                type: string
+                description: Client phone number. Required when verificationToken is provided.
+                example: "0400123456"
+              email:
+                type: string
+                description: Client email. Alternative to phone for token lookup.
+                example: "sarah@example.com"
       responses:
         '200':
           description: Rescheduled successfully
@@ -194,69 +331,88 @@ paths:
             properties:
               success:
                 type: boolean
-              bookingId:
-                type: string
+                example: true
+              booking:
+                type: object
+                description: Updated booking record
               oldStartTime:
                 type: string
+                format: date-time
+                description: Previous start time (ISO 8601)
+                example: "2026-03-20T09:00:00.000Z"
               newStartTime:
                 type: string
-              feeApplied:
-                type: number
-              message:
+                format: date-time
+                description: New start time (ISO 8601)
+                example: "2026-03-25T10:00:00.000Z"
+        '400':
+          description: Validation error or booking not reschedulable
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '403':
+          description: Verification token invalid, expired, or mismatched
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '404':
+          description: Booking not found
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '409':
+          description: New time slot conflicts with another booking
+          schema:
+            type: object
+            properties:
+              error:
                 type: string
 
   /instructors/lookup:
     get:
-      summary: Find instructor by name/phone (OPTIONAL)
+      summary: Find instructor by phone (VOICE SERVICE)
       description: |
-        Finds instructor if user has preference.
-        Use when user says "I want to book with Debesay"
+        Finds instructor if user has preference or to identify which instructor's line was called.
+        Use when user says "I want to book with Debesay" — search by name via /instructors/search instead.
+        
+        NOTE: Actual path is /api/voice/instructors/lookup, requires VOICE_SERVICE_API_KEY.
         
         If not found, use recommendations instead.
       operationId: lookupInstructor
       tags:
         - Instructors
       parameters:
-        - name: query
+        - name: phone
           in: query
           type: string
           required: true
-          description: Instructor name or phone
+          description: Instructor phone number
       responses:
         '200':
           description: Instructor found
           schema:
             type: object
             properties:
-              found:
+              id:
+                type: string
+              name:
+                type: string
+              hourlyRate:
+                type: number
+              available:
                 type: boolean
-              instructor:
-                type: object
-                properties:
-                  id:
-                    type: string
-                  name:
-                    type: string
-                  hourlyRate:
-                    type: number
-                  rating:
-                    type: number
-                  vehicleTypes:
-                    type: array
-                    items:
-                      type: string
-                  languages:
-                    type: array
-                    items:
-                      type: string
         '404':
           description: Not found
           schema:
             type: object
             properties:
-              found:
-                type: boolean
-              message:
+              error:
                 type: string
 
 tags:
