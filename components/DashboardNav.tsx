@@ -11,6 +11,8 @@ import {
 import { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 
+// ── Notification types ────────────────────────────────────────────────────────
+
 const TYPE_ICON: Record<string, string> = {
   BOOKING_REQUEST: '📅',
   BOOKING_CONFIRMED: '✅',
@@ -94,38 +96,131 @@ function NotificationBell() {
   );
 }
 
-const primaryNav = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home },
-  { href: '/dashboard/bookings', label: 'Bookings', icon: Calendar },
-  { href: '/dashboard/clients', label: 'Clients', icon: Users },
-  { href: '/dashboard/earnings', label: 'Earnings', icon: DollarSign },
-];
+// ── Nav groups ────────────────────────────────────────────────────────────────
 
-const moreNav = [
-  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart2 },
-  { href: '/dashboard/availability', label: 'Availability', icon: Calendar },
-  { href: '/dashboard/packages', label: 'Packages', icon: Package },
-  { href: '/dashboard/wallet', label: 'Payout Wallet', icon: Wallet },
-  { href: '/dashboard/settings/payout', label: 'Tax & Payout', icon: Landmark },
-  { href: '/dashboard/documents', label: 'Documents', icon: FileText },
-  { href: '/dashboard/branding', label: 'Branding', icon: Palette },
-  { href: '/dashboard/subscription', label: 'Subscription', icon: CreditCard },
-  { href: '/dashboard/pda-tests', label: 'PDA Tests', icon: ClipboardList },
-  { href: '/dashboard/credits', label: 'Bonuses', icon: Star },
-  { href: '/dashboard/profile', label: 'Profile', icon: User },
-  { href: '/dashboard/help', label: 'Help', icon: HelpCircle },
-  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
-];
+const navGroups = {
+  core: {
+    label: null, // always visible, no dropdown
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: Home },
+      { href: '/dashboard/bookings', label: 'Bookings', icon: Calendar },
+      { href: '/dashboard/clients', label: 'Clients', icon: Users },
+      { href: '/dashboard/earnings', label: 'Earnings', icon: DollarSign },
+    ],
+  },
+  business: {
+    label: 'Business',
+    items: [
+      { href: '/dashboard/expenses', label: 'Business Records', icon: TrendingUp },
+      { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart2 },
+      { href: '/dashboard/wallet', label: 'Payout Wallet', icon: Wallet },
+      { href: '/dashboard/settings/payout', label: 'Tax & Payout', icon: Landmark },
+    ],
+  },
+  operations: {
+    label: 'Operations',
+    items: [
+      { href: '/dashboard/availability', label: 'Availability', icon: Calendar },
+      { href: '/dashboard/packages', label: 'Packages', icon: Package },
+      { href: '/dashboard/pda-tests', label: 'PDA Tests', icon: ClipboardList },
+      { href: '/dashboard/documents', label: 'Documents', icon: FileText },
+    ],
+  },
+  account: {
+    label: 'Account',
+    items: [
+      { href: '/dashboard/branding', label: 'Branding', icon: Palette },
+      { href: '/dashboard/subscription', label: 'Subscription', icon: CreditCard },
+      { href: '/dashboard/profile', label: 'Profile', icon: User },
+      { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+      { href: '/dashboard/help', label: 'Help', icon: HelpCircle },
+    ],
+  },
+} as const;
+
+type GroupKey = keyof typeof navGroups;
+
+// ── Dropdown component ────────────────────────────────────────────────────────
+
+function NavDropdown({
+  groupKey,
+  label,
+  items,
+  isActive,
+  open,
+  onToggle,
+  onClose,
+  dropRef,
+}: {
+  groupKey: string;
+  label: string;
+  items: readonly { href: string; label: string; icon: any }[];
+  isActive: (href: string) => boolean;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  dropRef: React.RefObject<HTMLDivElement>;
+}) {
+  const groupActive = items.some(i => isActive(i.href));
+
+  return (
+    <div className="relative" ref={dropRef}>
+      <button
+        onClick={onToggle}
+        className={
+          'flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ' +
+          (groupActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100')
+        }
+      >
+        {label}
+        <ChevronDown className={'w-3.5 h-3.5 transition-transform ' + (open ? 'rotate-180' : '')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
+          {items.map(item => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={
+                  'flex items-center gap-3 px-4 py-2 text-sm transition-colors ' +
+                  (isActive(item.href) ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50')
+                }
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main nav ──────────────────────────────────────────────────────────────────
 
 export default function DashboardNav() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
+  const [openGroup, setOpenGroup] = useState<GroupKey | null>(null);
+
+  // One ref per dropdown group
+  const refs: Record<GroupKey, React.RefObject<HTMLDivElement>> = {
+    core: useRef<HTMLDivElement>(null),
+    business: useRef<HTMLDivElement>(null),
+    operations: useRef<HTMLDivElement>(null),
+    account: useRef<HTMLDivElement>(null),
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+      const clickedInsideAny = Object.values(refs).some(
+        r => r.current && r.current.contains(e.target as Node)
+      );
+      if (!clickedInsideAny) setOpenGroup(null);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -136,25 +231,35 @@ export default function DashboardNav() {
     return pathname?.startsWith(href);
   };
 
-  const moreIsActive = moreNav.some(item => isActive(item.href));
+  const toggleGroup = (key: GroupKey) => {
+    setOpenGroup(prev => (prev === key ? null : key));
+  };
 
   return (
     <nav className="bg-white shadow-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
+
+          {/* Logo */}
           <div className="flex items-center">
             <Link href="/dashboard" className="text-xl font-bold text-blue-600">DriveBook</Link>
             <span className="ml-3 px-2 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded">Instructor</span>
           </div>
 
-          <div className="hidden md:flex items-center space-x-1">
-            {primaryNav.map((item) => {
+          {/* Desktop nav */}
+          <div className="hidden md:flex items-center gap-0.5">
+
+            {/* Core — always visible links */}
+            {navGroups.core.items.map(item => {
               const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ' + (isActive(item.href) ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100')}
+                  className={
+                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ' +
+                    (isActive(item.href) ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100')
+                  }
                 >
                   <Icon className="w-4 h-4" />
                   {item.label}
@@ -162,37 +267,28 @@ export default function DashboardNav() {
               );
             })}
 
-            <div className="relative" ref={moreRef}>
-              <button
-                onClick={() => setMoreOpen(!moreOpen)}
-                className={'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ' + (moreIsActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100')}
-              >
-                More
-                <ChevronDown className={'w-4 h-4 transition-transform ' + (moreOpen ? 'rotate-180' : '')} />
-              </button>
-              {moreOpen && (
-                <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
-                  {moreNav.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setMoreOpen(false)}
-                        className={'flex items-center gap-3 px-4 py-2 text-sm transition-colors ' + (isActive(item.href) ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50')}
-                      >
-                        <Icon className="w-4 h-4" />
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            {/* Grouped dropdowns */}
+            {(['business', 'operations', 'account'] as GroupKey[]).map(key => {
+              const group = navGroups[key];
+              if (!group.label) return null;
+              return (
+                <NavDropdown
+                  key={key}
+                  groupKey={key}
+                  label={group.label}
+                  items={group.items}
+                  isActive={isActive}
+                  open={openGroup === key}
+                  onToggle={() => toggleGroup(key)}
+                  onClose={() => setOpenGroup(null)}
+                  dropRef={refs[key]}
+                />
+              );
+            })}
 
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors ml-2"
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors ml-1"
             >
               <LogOut className="w-4 h-4" />
               Logout
@@ -200,6 +296,7 @@ export default function DashboardNav() {
             <NotificationBell />
           </div>
 
+          {/* Mobile toggle */}
           <div className="md:hidden flex items-center gap-1">
             <NotificationBell />
             <button
@@ -212,28 +309,47 @@ export default function DashboardNav() {
         </div>
       </div>
 
+      {/* Mobile menu — sectioned */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-200 bg-white">
-          <div className="px-2 pt-2 pb-3 space-y-1">
-            {[...primaryNav, ...moreNav].map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={'flex items-center gap-3 px-3 py-2 rounded-md text-base font-medium ' + (isActive(item.href) ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100')}
-                >
-                  <Icon className="w-5 h-5" />
-                  {item.label}
-                </Link>
-              );
-            })}
+        <div className="md:hidden border-t border-gray-200 bg-white max-h-[80vh] overflow-y-auto">
+          {(['core', 'business', 'operations', 'account'] as GroupKey[]).map(key => {
+            const group = navGroups[key];
+            return (
+              <div key={key}>
+                {group.label && (
+                  <div className="px-4 pt-3 pb-1">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{group.label}</p>
+                  </div>
+                )}
+                <div className="px-2 pb-1">
+                  {group.items.map(item => {
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={
+                          'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium ' +
+                          (isActive(item.href) ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100')
+                        }
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+                {key !== 'account' && <div className="mx-4 border-t border-gray-100" />}
+              </div>
+            );
+          })}
+          <div className="px-2 pb-3 pt-1">
             <button
               onClick={() => { setMobileMenuOpen(false); signOut({ callbackUrl: '/login' }); }}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-4 h-4" />
               Logout
             </button>
           </div>

@@ -20,6 +20,11 @@ model User {
   termsAcceptedAt  DateTime?
   termsVersion     String?
   ageDeclaration   Boolean   @default(false)
+  // Email verification
+  emailVerified        Boolean   @default(false)
+  emailVerifiedAt      DateTime?
+  verificationToken    String?
+  verificationTokenExpiry DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -63,6 +68,10 @@ model Instructor {
   vehicleTypes         String?
   languages            String?
   baseAddress          String?
+  baseAddressLat       Float?   // alias: baseLatitude
+  baseAddressLng       Float?   // alias: baseLongitude
+  baseLatitude         Float?
+  baseLongitude        Float?
   serviceRadiusKm      Float?
   isActive             Boolean @default(true)
   isVerified           Boolean @default(false)
@@ -148,6 +157,37 @@ model Instructor {
   bookings      Booking[]
   clients       Client[]
   subscriptions Subscription[]
+  expenses      InstructorExpense[]
+}
+
+model InstructorExpense {
+  id           String     @id @default(cuid())
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  instructorId String
+  date         DateTime
+  category     String     // FUEL_VEHICLE | INSURANCE | TRAINING | EQUIPMENT | SUBSCRIPTION | OTHER
+  description  String
+  amount       Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// Scheduled commission rate changes — admin sets a future effective date
+// Cron applies the change on effectiveDate and notifies all instructors
+model PlatformRateChange {
+  id              String    @id @default(cuid())
+  tier            String    // BASIC | PRO | STUDIO | BUSINESS | ALL
+  field           String    // basicCommissionRate | proCommissionRate | businessCommissionRate
+  currentRate     Float
+  newRate         Float
+  effectiveDate   DateTime
+  reason          String    // shown to instructors in the notification
+  status          String    @default("PENDING") // PENDING | APPLIED | CANCELLED
+  notifiedAt      DateTime?
+  appliedAt       DateTime?
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model Booking {
@@ -197,6 +237,7 @@ model Booking {
   rescheduleCount       Int        @default(0)
   deletedAt             DateTime?
   deletedBy             String?
+  cancelledAt           DateTime?  // when the booking was cancelled
   noShowParty           String?
   googleCalendarEventId String?
   lessonFeedback        Int[]      @default([])
@@ -208,6 +249,17 @@ model Booking {
   clientRating          Int?
   clientReview          String?
   reviewGivenAt         DateTime?
+  // Check-in / Check-out tracking
+  checkInTime           DateTime?
+  checkInLocation       String?
+  checkInBy             String?    // 'instructor' | 'client'
+  checkInPhoto          String?
+  checkOutTime          DateTime?
+  checkOutLocation      String?
+  checkOutBy            String?    // 'instructor' | 'client'
+  checkOutPhoto         String?
+  actualDuration        Int?       // minutes
+  smsCheckOutSent       Boolean    @default(false)
   source                String     @default("platform") // 'platform' | 'offline'
   offlinePaymentMethod  String?    // 'cash' | 'bank_transfer' | 'other'
   offlineAmountPaid     Float?     // instructor's record only — not platform revenue
@@ -264,6 +316,7 @@ model WalletTransaction {
   type        String
   description String?
   status      String       @default("PENDING")
+  metadata    Json?        // optional: stripe fee tracking, admin notes, etc.
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -443,6 +496,7 @@ model AvailabilityException {
   id           String   @id @default(cuid())
   instructorId String
   label        String?  // e.g. "Cash lesson - John", "Holiday", "Personal"
+  reason       String?  // internal reason code: 'google_calendar_event' | 'pda_test' | etc.
   exceptionDate DateTime
   startTime    String   // "HH:mm"
   endTime      String   // "HH:mm"

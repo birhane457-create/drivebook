@@ -136,7 +136,7 @@ export default function DocumentCompliancePage() {
     }
   };
 
-  const formatDate = (dateStr: string | null) => {
+  const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return 'Not set';
     return new Date(dateStr).toLocaleDateString('en-AU');
   };

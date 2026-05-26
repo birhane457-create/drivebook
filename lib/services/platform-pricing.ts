@@ -4,9 +4,6 @@ export interface PricingSettings {
   basicCommissionRate: number;
   proCommissionRate: number;
   businessCommissionRate: number;
-  basicNewStudentBonus: number;
-  proNewStudentBonus: number;
-  businessNewStudentBonus: number;
   platformFeePercentage: number;
   package6Discount: number;
   package10Discount: number;
@@ -30,9 +27,6 @@ const DEFAULTS: PricingSettings = {
   basicCommissionRate: 15,
   proCommissionRate: 12,
   businessCommissionRate: 10,
-  basicNewStudentBonus: 8,
-  proNewStudentBonus: 10,
-  businessNewStudentBonus: 12,
   platformFeePercentage: 3.6,
   package6Discount: 5,
   package10Discount: 10,
@@ -65,9 +59,6 @@ export async function getPlatformPricing(): Promise<PricingSettings> {
       basicCommissionRate: record.basicCommissionRate,
       proCommissionRate: record.proCommissionRate,
       businessCommissionRate: record.businessCommissionRate,
-      basicNewStudentBonus: record.basicNewStudentBonus,
-      proNewStudentBonus: record.proNewStudentBonus,
-      businessNewStudentBonus: record.businessNewStudentBonus,
       platformFeePercentage: record.platformFeePercentage,
       package6Discount: record.package6Discount,
       package10Discount: record.package10Discount,

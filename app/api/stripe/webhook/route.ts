@@ -812,7 +812,29 @@ async function handleSubscriptionUpdate(
   const { metadata, status } = subscription;
   const current_period_end = (subscription as any).current_period_end;
   const trial_end = (subscription as any).trial_end;
-  const { instructorId, tier } = metadata;
+  const { instructorId } = metadata;
+
+  // Derive tier from metadata first, then fall back to price ID lookup
+  // This handles Billing Portal upgrades where metadata may not be updated
+  let tier: string | undefined = metadata.tier || undefined;
+  if (!tier && subscription.items?.data?.[0]?.price?.id) {
+    const priceId = subscription.items.data[0].price.id;
+    // Map price IDs to tiers
+    const priceToTier: Record<string, string> = {
+      [process.env.STRIPE_BASIC_MONTHLY_PRICE_ID || '']: 'BASIC',
+      [process.env.STRIPE_BASIC_ANNUAL_PRICE_ID || '']: 'BASIC',
+      [process.env.STRIPE_PRO_MONTHLY_PRICE_ID || '']: 'PRO',
+      [process.env.STRIPE_PRO_ANNUAL_PRICE_ID || '']: 'PRO',
+      [process.env.STRIPE_STUDIO_MONTHLY_PRICE_ID || '']: 'STUDIO',
+      [process.env.STRIPE_STUDIO_ANNUAL_PRICE_ID || '']: 'STUDIO',
+      [process.env.STRIPE_BUSINESS_MONTHLY_PRICE_ID || '']: 'BUSINESS',
+      [process.env.STRIPE_BUSINESS_ANNUAL_PRICE_ID || '']: 'BUSINESS',
+    };
+    tier = priceToTier[priceId] || undefined;
+    if (tier) {
+      console.log(`ℹ️ Derived tier '${tier}' from price ID ${priceId} (metadata was missing)`);
+    }
+  }
 
   if (!instructorId || !tier) {
     console.error('❌ Missing metadata in subscription:', subscription.id);
@@ -878,7 +900,10 @@ async function handleSubscriptionUpdate(
       await tx.subscription.update({
         where: { id: existingSubscription.id },
         data: {
+          tier: tier as any,
           status: normalizeStatus(status) as any,
+          monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
+          billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
           currentPeriodEnd: new Date(current_period_end * 1000),
         }
       });
@@ -923,16 +948,17 @@ async function handleSubscriptionUpdate(
     if (instructor?.user) {
       await emailService.sendGenericEmail({
         to: instructor.user.email,
-        subject: 'Subscription Activated',
+        subject: `${plan.name} subscription activated — DriveBook`,
         html: `
           <h2>Your ${plan.name} subscription is now active!</h2>
           <p>Thank you for subscribing to DriveBook.</p>
           <p><strong>Plan Details:</strong></p>
           <ul>
             <li>Tier: ${plan.name}</li>
-            <li>Commission: ${plan.commissionRate}%</li>
-            <li>New Student Bonus: ${plan.newStudentBonus}%</li>
+            <li>Commission rate: ${plan.commissionRate}%</li>
+            <li>Monthly price: $${plan.monthlyPrice}/month</li>
           </ul>
+          <p>Your commission rate applies to all new bookings from today.</p>
         `
       });
     }

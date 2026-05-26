@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const adminName = session.user.name || 'DriveBook Support';
+    const adminName = (session.user as any).name || 'DriveBook Support';
     const results: string[] = [];
 
     // Send email

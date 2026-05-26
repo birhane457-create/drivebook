@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { SUBSCRIPTION_PLANS, getTrialEndDate, calculateCommission } from '@/lib/config/subscriptions';
+import { SUBSCRIPTION_PLANS, getTrialEndDate } from '@/lib/config/subscriptions';
 
 
 export const dynamic = 'force-dynamic';
@@ -52,7 +52,6 @@ export async function GET(req: NextRequest) {
         tier: user.instructor.subscriptionTier,
         status: user.instructor.subscriptionStatus,
         commissionRate: plan.commissionRate,
-        newStudentBonus: plan.newStudentBonus,
         trialEndsAt: user.instructor.trialEndsAt,
         customDomain: user.instructor.customDomain,
         brandedBookingPage: user.instructor.brandedBookingPage,

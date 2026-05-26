@@ -13,13 +13,8 @@ export default async function InstructorsPage() {
       isActive: true,
       approvalStatus: 'APPROVED'
     },
-    include: {
-      serviceAreas: {
-        where: { isActive: true }
-      }
-    },
     orderBy: {
-      createdAt: 'desc'
+      id: 'desc'
     }
   })
 
@@ -58,7 +53,17 @@ export default async function InstructorsPage() {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {instructors.map((instructor) => (
-              <InstructorCard key={instructor.id} instructor={instructor} />
+              <InstructorCard
+                key={instructor.id}
+                instructor={{
+                  ...instructor,
+                  vehicleTypes: instructor.vehicleTypes
+                    ? instructor.vehicleTypes.split(',').map(v => v.trim()).filter(Boolean)
+                    : ['Manual', 'Automatic'],
+                  serviceRadiusKm: instructor.serviceRadiusKm ?? undefined,
+                  averageRating: instructor.averageRating ?? undefined,
+                }}
+              />
             ))}
           </div>
         )}

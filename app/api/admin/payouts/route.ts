@@ -149,6 +149,7 @@ export async function GET(req: NextRequest) {
     const byInstructor = new Map<string, any>();
     for (const t of eligibleTransactions) {
       const iid = t.instructorId;
+      if (!t.booking) continue; // skip orphaned transactions
       if (!byInstructor.has(iid)) {
         byInstructor.set(iid, {
           instructorId: iid,
@@ -213,6 +214,7 @@ export async function GET(req: NextRequest) {
     const withheldByInstructor = new Map<string, any>();
     for (const t of cancelledTransactions) {
       const iid = t.instructorId;
+      if (!t.booking) continue; // skip orphaned transactions
       if (!withheldByInstructor.has(iid)) {
         withheldByInstructor.set(iid, {
           instructorId: iid,

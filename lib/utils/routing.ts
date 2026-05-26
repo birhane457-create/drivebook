@@ -68,8 +68,8 @@ export async function getInstructorPosition(
 
   // Otherwise, use base location (first booking of day)
   return {
-    lat: instructor.baseLatitude,
-    lng: instructor.baseLongitude,
+    lat: instructor.baseLatitude ?? 0,
+    lng: instructor.baseLongitude ?? 0,
     source: 'base',
     label: 'from base',
     isFirstBookingOfDay: true
@@ -159,8 +159,8 @@ export async function getDailyRoute(
 
   // Calculate route segments
   const route = [];
-  let currentLat = instructor.baseLatitude;
-  let currentLng = instructor.baseLongitude;
+  let currentLat = instructor.baseLatitude ?? 0;
+  let currentLng = instructor.baseLongitude ?? 0;
   let totalDistance = 0;
   let totalTravelTime = 0;
 
@@ -177,7 +177,7 @@ export async function getDailyRoute(
       
       route.push({
         bookingId: booking.id,
-        clientName: booking.client.name,
+        clientName: booking.client?.name ?? booking.clientName ?? 'Client',
         startTime: booking.startTime,
         endTime: booking.endTime,
         pickupAddress: booking.pickupAddress,
@@ -205,16 +205,16 @@ export async function getDailyRoute(
   const returnDistance = calculateDistance(
     currentLat,
     currentLng,
-    instructor.baseLatitude,
-    instructor.baseLongitude
+    instructor.baseLatitude ?? 0,
+    instructor.baseLongitude ?? 0
   );
   const returnTime = Math.ceil((returnDistance / 40) * 60);
 
   return {
     baseAddress: instructor.baseAddress,
     baseLocation: {
-      lat: instructor.baseLatitude,
-      lng: instructor.baseLongitude
+      lat: instructor.baseLatitude ?? 0,
+      lng: instructor.baseLongitude ?? 0
     },
     route,
     totalDistance: totalDistance + returnDistance,

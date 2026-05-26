@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
 import { getCommissionRate } from '@/lib/services/platform-pricing';
@@ -7,6 +9,12 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth required — only the booking owner (client or instructor) can create a payment intent
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { bookingId, transactionId, amount } = await req.json();
 
     // Handle both booking payments AND wallet/package purchases
@@ -23,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ✅ Handle booking payment (book now)
-    return handleBookingPaymentIntent(bookingId, amount);
+    return handleBookingPaymentIntent(bookingId, amount, session.user);
   } catch (error) {
     console.error('Error creating payment intent:', error);
     return NextResponse.json(
@@ -91,7 +99,7 @@ async function handleWalletPaymentIntent(transactionId: string, amount?: number)
 /**
  * Create payment intent for booking payment (book now)
  */
-async function handleBookingPaymentIntent(bookingId: string, amount?: number) {
+async function handleBookingPaymentIntent(bookingId: string, amount?: number, sessionUser?: { id: string; role: string }) {
   try {
     // Get booking details
     const booking = await prisma.booking.findUnique({
@@ -103,6 +111,21 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number) {
 
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+
+    // Ownership check: only the client linked to this booking can pay for it
+    // (or an admin — admins have no clientId so we check role)
+    if (sessionUser) {
+      const isAdmin = sessionUser.role === 'ADMIN' || sessionUser.role === 'SUPER_ADMIN';
+      if (!isAdmin && booking.clientId) {
+        const client = await prisma.client.findUnique({
+          where: { id: booking.clientId },
+          select: { userId: true },
+        });
+        if (client?.userId !== sessionUser.id) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+      }
     }
 
     if (booking.isPaid) {

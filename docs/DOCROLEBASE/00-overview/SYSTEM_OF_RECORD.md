@@ -29,7 +29,7 @@ For every domain, there is exactly one authoritative source of truth. When data 
 | What | Why |
 |------|-----|
 | `Instructor.commissionRate` | Does not exist — always derived from `PlatformSettings` |
-| `Instructor.newStudentBonus` | Does not exist — always derived from `PlatformSettings` |
+| `Instructor.newStudentBonus` | Removed in May 2026 — no longer exists anywhere |
 | UI-displayed balances | Always fetched from DB — never cached client-side for financial decisions |
 | Stripe metadata | Informational only — DB is authoritative for platform state |
 

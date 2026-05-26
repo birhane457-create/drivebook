@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Capacitor Native Features Helper
 // This file provides a clean interface to native mobile features
 

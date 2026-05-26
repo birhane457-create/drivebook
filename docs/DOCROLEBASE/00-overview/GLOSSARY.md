@@ -39,7 +39,7 @@ Terms used throughout DriveBook documentation and codebase.
 
 **Package Booking** — A bulk purchase of multiple lessons (e.g. 6, 10, or 15 hours). Stripe charges the full package amount; the wallet is credited with the total and debited per lesson.
 
-**isFirstBooking** — Flag on a booking indicating it's the first lesson between this client and instructor. Affects commission rate (10% instead of standard rate).
+**isFirstBooking** — Flag on a booking indicating it's the first lesson between this client and instructor. Recorded for analytics. Does not affect commission rate (the `newStudentBonus` was removed in May 2026).
 
 **isNonRefundable** — Set to `true` when an instructor reschedules a booking within the 24-hour window. Means 0% refund on cancellation regardless of notice.
 
@@ -55,11 +55,9 @@ Terms used throughout DriveBook documentation and codebase.
 
 **Commission** — The percentage of a lesson price taken by the platform. Varies by instructor subscription tier. Configured via `/admin/pricing` and stored in `PlatformSettings`.
 
-**Platform Fee** — The portion of the lesson price retained by DriveBook (= `price x commissionRate`).
+**Platform Fee** — The portion of the lesson price retained by DriveBook (= `price × commissionRate`).
 
 **Instructor Payout** — The portion paid to the instructor (= `price - platformFee`). Locked at booking creation time.
-
-**New Student Bonus** — A reduced commission rate applied to the first booking between a client and instructor. Configured per tier.
 
 **GST** — Goods and Services Tax (10%). Applied to lesson prices. Governed by Australian tax law.
 
@@ -138,7 +136,7 @@ Terms used throughout DriveBook documentation and codebase.
 
 ## Subscriptions
 
-**Tier** — The instructor's subscription level: `BASIC`, `PRO`, or `BUSINESS`.
+**Tier** — The instructor's subscription level: `BASIC`, `PRO`, `STUDIO`, or `BUSINESS`.
 
 **Trial** — A free period before payment is required. BASIC/PRO: 14 days. BUSINESS: 30 days.
 

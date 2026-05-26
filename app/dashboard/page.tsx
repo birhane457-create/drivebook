@@ -36,7 +36,7 @@ export default async function DashboardPage() {
 
     const upcomingBookings = await prisma.booking.findMany({
       where: {
-        userId: user.id,
+        client: { userId: user.id },
         status: 'CONFIRMED',
         startTime: { gte: new Date() }
       },
@@ -47,7 +47,7 @@ export default async function DashboardPage() {
 
     const completedBookings = await prisma.booking.count({
       where: {
-        userId: user.id,
+        client: { userId: user.id },
         status: 'COMPLETED'
       }
     })
@@ -121,15 +121,15 @@ export default async function DashboardPage() {
               <div className="space-y-4">
                 {upcomingBookings.map((booking) => (
                   <div key={booking.id} className="border-l-4 border-blue-600 pl-4 py-2 hover:bg-gray-50 transition">
-                    <p className="font-semibold">{booking.instructor.name}</p>
+                    <p className="font-semibold">{(booking as any).instructor?.name ?? 'Instructor'}</p>
                     <p className="text-sm text-gray-600">
-                      {new Date(booking.startTime).toLocaleString('en-US', {
+                      {booking.startTime ? new Date(booking.startTime).toLocaleString('en-AU', {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
                         minute: '2-digit'
-                      })}
+                      }) : 'TBD'}
                     </p>
                     <p className="text-sm text-gray-500">{booking.duration} hours</p>
                   </div>
@@ -454,13 +454,13 @@ export default async function DashboardPage() {
                 <div key={booking.id} className="border-l-4 border-blue-600 pl-4 py-2 hover:bg-gray-50 transition">
                   <p className="font-semibold">{booking.client?.name ?? (booking as any).clientName ?? 'Guest'}</p>
                   <p className="text-sm text-gray-600">
-                    {new Date(booking.startTime).toLocaleString('en-US', {
+                    {booking.startTime ? new Date(booking.startTime).toLocaleString('en-AU', {
                       weekday: 'short',
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
                       minute: '2-digit'
-                    })}
+                    }) : 'TBD'}
                   </p>
                   {booking.pickupAddress && (
                     <p className="text-sm text-gray-500">{booking.pickupAddress}</p>
@@ -497,7 +497,7 @@ export default async function DashboardPage() {
                   <div key={pkg.id} className={`p-3 rounded-lg border-l-4 ${isInactive ? 'border-red-500 bg-red-50' : 'border-blue-500 bg-blue-50'}`}>
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{pkg.client.name}</p>
+                        <p className="font-semibold text-gray-900">{pkg.client?.name ?? 'Client'}</p>
                         <p className="text-sm text-gray-700">
                           {pkg.packageHoursRemaining} hours unused (${packageValue.toFixed(0)} value)
                         </p>
@@ -507,7 +507,7 @@ export default async function DashboardPage() {
                         </p>
                       </div>
                       <Link 
-                        href={`/dashboard/clients/${pkg.client.id}`}
+                        href={`/dashboard/clients/${pkg.client?.id ?? ''}`}
                         className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
                       >
                         Remind

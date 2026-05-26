@@ -41,7 +41,7 @@ export async function recordStripeFeeFromWebhook(event: Stripe.Event) {
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2026-01-28.clover',
+      apiVersion: '2026-02-25.clover',
     });
 
     // Get the charge to access balance_transaction
@@ -154,7 +154,7 @@ export async function getActualStripeFee(paymentIntentId: string): Promise<numbe
   // If not stored, fetch from Stripe
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2026-01-28.clover',
+      apiVersion: '2026-02-25.clover',
     });
 
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);

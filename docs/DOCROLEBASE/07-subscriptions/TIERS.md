@@ -15,7 +15,6 @@
 | Annual price | $290 | $790 | $1,290 | $1,990 |
 | Trial days | 14 | 14 | 14 | 30 |
 | Commission rate | 15% | 12% | 11% | 10% |
-| New student bonus | 8% | 10% | 10% | 12% |
 | Max instructors | 1 | 1 | 1 | 999 |
 | Offline bookings | ✗ | ✓ | ✓ | ✓ |
 | Branded booking page | ✗ | ✓ | ✓ | ✓ |

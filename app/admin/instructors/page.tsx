@@ -50,7 +50,6 @@ export default async function AdminInstructorsPage({
       baseAddress: true,
       averageRating: true,
       isActive: true,
-      createdAt: true,
       user: {
         select: {
           id: true,
@@ -59,7 +58,7 @@ export default async function AdminInstructorsPage({
           termsAcceptedAt: true,
         }
       },
-      _count: { select: { bookings: true, reviews: true } },
+      _count: { select: { bookings: true } },
     },
     orderBy: [
       // PENDING first, then by creation date

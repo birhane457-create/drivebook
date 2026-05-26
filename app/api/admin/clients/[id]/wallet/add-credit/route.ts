@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 import { sendAdminCreditReceipt } from '@/lib/services/receipt-email';
@@ -11,15 +12,9 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession();
-    
-    // Check admin role
-    const admin = await prisma.user.findUnique({
-      where: { email: session?.user?.email || '' },
-      select: { role: true, id: true }
-    });
+    const session = await getServerSession(authOptions);
 
-    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'SUPER_ADMIN')) {
+    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -86,8 +81,8 @@ export async function POST(
       await prisma.auditLog.create({
         data: {
           action: 'WALLET_CREDITED',
-          actorId: admin.id,
-          actorRole: admin.role,
+          actorId: session.user.id,
+          actorRole: session.user.role,
           targetType: 'WALLET',
           targetId: wallet.id,
           success: true,

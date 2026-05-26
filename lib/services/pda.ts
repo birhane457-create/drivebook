@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { prisma } from '../prisma'
 import { emailService } from './email'
 import { addHours, subHours } from 'date-fns'

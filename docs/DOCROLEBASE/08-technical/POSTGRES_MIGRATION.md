@@ -230,3 +230,90 @@ Push to main → Vercel auto-deploys
 - Sydney region available
 
 More than sufficient for launch and early growth.
+
+---
+
+## ⚠️ Schema Change Policy — Production Safety Rules
+
+**Last updated:** May 2026
+
+### NEVER use `prisma db push` on a production database
+
+`prisma db push --accept-data-loss` is dangerous in production. It:
+- Bypasses the migration history entirely
+- Can silently DROP columns or tables if the schema diverges
+- Leaves no audit trail of what changed
+- Cannot be rolled back
+
+**What happened in May 2026:** `prisma db push` was used to add the `InstructorExpense` table. The database was in dev/test mode with no real data, so no data was lost. However, this approach must never be used once real user data exists.
+
+---
+
+### Correct approach for all future schema changes
+
+#### Step 1 — Write additive SQL only
+
+Every migration must be **additive** — it can only:
+- `CREATE TABLE` (new tables)
+- `ALTER TABLE ... ADD COLUMN` (new columns with defaults or nullable)
+- `CREATE INDEX` (new indexes)
+
+It must **never**:
+- `DROP TABLE`
+- `DROP COLUMN`
+- `ALTER COLUMN` (type changes)
+- `TRUNCATE`
+
+#### Step 2 — Create the migration file manually
+
+```bash
+# Create the directory with a timestamp
+mkdir prisma/migrations/YYYYMMDDHHMMSS_description
+
+# Write the SQL in migration.sql
+# Only additive changes — see rules above
+```
+
+#### Step 3 — Apply with `migrate deploy` (not `migrate dev`)
+
+```bash
+# On production / Vercel:
+npx prisma migrate deploy
+```
+
+`migrate deploy` applies pending migrations without resetting anything. It is safe for production.
+
+`migrate dev` is for local development only — it can prompt to reset the database.
+
+#### Step 4 — Regenerate the Prisma client
+
+```bash
+npx prisma generate
+```
+
+---
+
+### Migration history
+
+| Migration | Date | What it does |
+|-----------|------|-------------|
+| `20260328041651_init` | Mar 2026 | Initial schema — all 19 tables |
+| `20260329085455_add_domain_verified_studio_tier` | Mar 2026 | Domain verification + Studio tier fields |
+| `20260415125750_add_test_centre` | Apr 2026 | `TestCentre` model |
+| `20260522230959_add_instructor_expenses` | May 2026 | `InstructorExpense` model (applied via `db push` — dev mode, no data loss) |
+
+---
+
+### Deploying to production after a schema change
+
+1. Merge the migration SQL file into `main`
+2. Vercel build runs `npx prisma generate` automatically
+3. Before the first request hits the new code, run: `npx prisma migrate deploy`
+4. This can be done via a Vercel build command or a one-off script
+
+**Recommended Vercel build command:**
+```
+npx prisma migrate deploy && npx prisma generate && next build
+```
+
+This ensures migrations are applied before the new code goes live.

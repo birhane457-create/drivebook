@@ -32,11 +32,14 @@ Shown at the top of the instructor dashboard when action is needed:
 
 ## Navigation
 
-Desktop: `components/DashboardNav.tsx` — top nav with primary links + "More" dropdown  
+Desktop: `components/DashboardNav.tsx` — grouped dropdown nav  
 Mobile: `components/instructor/MobileBottomNav.tsx` — 5-tab bottom bar
 
-**Desktop primary tabs:** Dashboard / Bookings / Clients / Earnings  
-**Desktop "More" dropdown:** Analytics, Availability, Packages, Payout Wallet, Tax & Payout, Documents, Branding, Subscription, PDA Tests, Bonuses, Profile, Help, Settings
+**Desktop layout (May 2026 redesign):**
+- Core (always visible): Dashboard / Bookings / Clients / Earnings
+- Business dropdown: Business Records, Analytics, Payout Wallet, Tax & Payout
+- Operations dropdown: Availability, Packages, PDA Tests, Documents
+- Account dropdown: Branding, Subscription, Profile, Settings, Help
 
 **Mobile tabs:** Home / Bookings / Clients / Earnings / PDA Tests
 
@@ -280,14 +283,32 @@ Features:
 
 ---
 
+## Business Records Page
+
+**Route:** `/dashboard/expenses`  
+**File:** `app/dashboard/expenses/page.tsx`  
+**APIs:** `GET/POST /api/instructor/expenses`, `DELETE /api/instructor/expenses/[id]`
+
+Shows income (read-only, from analytics API) alongside self-entered expenses. Allows instructors to track business costs for their own records.
+
+**Expense categories:** Fuel/Vehicle, Insurance, Training, Equipment, Subscription, Other
+
+**CSV export:** Raw data only. No tax calculations, no profit/loss labels. Prominent disclaimer: "This is a record of your expenses only. It is not tax advice. Consult a registered tax agent."
+
+**Legal boundary:** This page never calculates tax liability, labels anything as "deductible", or gives financial advice. It is a data entry and export tool only.
+
+---
+
 ## Subscription Page
 
 **Route:** `/dashboard/subscription`  
 **File:** `app/dashboard/subscription/page.tsx`
 
-Shows current plan status (TRIAL / ACTIVE / PAST_DUE), days left in trial, renewal date, commission rate.  
-Renders `SubscriptionPlans` component for plan selection/upgrade.  
-Billing history shows current subscription period and amount.
+Shows current plan status (TRIAL / ACTIVE / PAST_DUE), days left in trial, renewal date, commission rate from DB (not hardcoded), and any pending rate change notice.
+
+Renders `SubscriptionPlans` component for plan selection/upgrade with proper confirmation dialogs (no `confirm()` calls).
+
+After returning from Stripe Billing Portal (`?portal_return=true`), automatically syncs subscription state from Stripe.
 
 ---
 

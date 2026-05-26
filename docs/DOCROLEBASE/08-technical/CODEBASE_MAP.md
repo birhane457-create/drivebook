@@ -88,18 +88,25 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 
 ## SUBSCRIPTIONS
 
-**What it does:** Instructor subscription tiers (BASIC/PRO/BUSINESS), Stripe billing, trial periods.
+**What it does:** Instructor subscription tiers (BASIC/PRO/STUDIO/BUSINESS), Stripe billing, trial periods, scheduled rate changes.
 
 | Layer | File |
 |-------|------|
 | Subscription page | `app/dashboard/subscription/page.tsx` |
 | Subscription API | `app/api/instructor/subscription/route.ts` |
+| Billing portal API | `app/api/instructor/subscription/billing-portal/route.ts` |
+| Post-portal sync | `app/api/instructor/subscription/sync/route.ts` |
 | Mobile subscription | `app/api/instructor/subscription/mobile/route.ts` |
+| Rate changes API | `app/api/admin/rate-changes/route.ts` |
+| Rate changes delete | `app/api/admin/rate-changes/[id]/route.ts` |
+| Apply rate changes cron | `app/api/cron/apply-rate-changes/route.ts` |
+| Rate change scheduler UI | `components/admin/RateChangeScheduler.tsx` |
+| Subscription plans UI | `components/SubscriptionPlans.tsx` |
 | Subscription config | `lib/config/subscriptions.ts` |
 | Platform settings config | `lib/config/platform-settings.ts` |
 | Stripe service | `lib/services/stripe.ts` |
-| DB model | `Subscription` in schema |
-| Doc | `docs/SUBSCRIPTION_SYSTEM.md` |
+| DB models | `Subscription`, `PlatformRateChange` in schema |
+| Docs | `docs/DOCROLEBASE/07-subscriptions/` |
 
 ---
 
@@ -260,7 +267,33 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 
 ---
 
-## ANALYTICS & RECONCILIATION
+## BUSINESS RECORDS & EXPENSES
+
+**What it does:** Instructors track business expenses (fuel, insurance, training, etc.) alongside income from analytics. CSV export for accountant use. No tax advice given.
+
+| Layer | File |
+|-------|------|
+| Expenses page | `app/dashboard/expenses/page.tsx` |
+| Expenses API | `app/api/instructor/expenses/route.ts` |
+| Expense delete | `app/api/instructor/expenses/[id]/route.ts` |
+| DB model | `InstructorExpense` in schema |
+| Doc | `docs/DOCROLEBASE/03-instructor/BUSINESS_RECORDS.md` |
+
+---
+
+## ADMIN SUPPORT CENTRE
+
+**What it does:** Admin can view and manage any user account — edit profile, reset password, add/deduct wallet credit, approve/suspend instructor.
+
+| Layer | File |
+|-------|------|
+| Support list | `app/admin/support/page.tsx` |
+| User detail | `app/admin/support/user/[userId]/page.tsx` |
+| User PATCH API | `app/api/admin/users/[userId]/route.ts` |
+| Password reset API | `app/api/admin/users/[userId]/reset-password/route.ts` |
+| Contact user API | `app/api/admin/contact/route.ts` |
+
+---
 
 **What it does:** Platform analytics, Stripe reconciliation cron, mobile analytics.
 
@@ -311,10 +344,14 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 
 ## KEY RULES (don't break these)
 
-- `commissionRate` and `newStudentBonus` are NEVER stored on `Instructor` — always derived from `PlatformSettings`
+- `commissionRate` is NEVER stored on `Instructor` — always derived from `PlatformSettings`
+- `newStudentBonus` was removed in May 2026 — do not re-add it
 - Ledger is append-only — `LedgerEntry` records are never mutated
 - Never mark a payout PAID unless money actually moved
 - ABN verification uses ABR GUID lookup — `lib/utils/abn-validation.ts`
 - Timezone: `Australia/Perth` (AWST, UTC+8)
 - Currency: AUD, `$` symbol only
 - Governing law: Western Australia
+- Rate changes must go through the Rate Change Scheduler — never update `PlatformSettings` commission rates directly without scheduling
+- `prisma db push` is dev-only — production schema changes must use `prisma migrate deploy`
+- Dead-code services (`governance`, `staff`, `pda`, `ledger.ts`, `fraudDetection`) have `@ts-nocheck` — do not call them from production paths

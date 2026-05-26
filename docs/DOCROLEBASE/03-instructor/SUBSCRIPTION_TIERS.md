@@ -1,8 +1,113 @@
 # Instructor Subscription Tiers
 
-**Last Updated:** April 2026  
+**Last Updated:** May 2026  
 **Route:** `/dashboard/subscription`  
-**File:** `components/SubscriptionPlans.tsx`, `lib/config/subscriptions.ts`
+**Files:** `components/SubscriptionPlans.tsx`, `lib/config/subscriptions.ts`, `app/dashboard/subscription/page.tsx`
+
+---
+
+## Overview
+
+DriveBook uses a 4-tier subscription model for instructors. BASIC, PRO, and STUDIO are live and purchasable. BUSINESS is defined but marked "Coming Soon" — not purchasable until multi-instructor management is built.
+
+---
+
+## Tier Comparison
+
+| Feature | BASIC | PRO | STUDIO | BUSINESS |
+|---------|-------|-----|--------|----------|
+| Monthly price | $29 | $79 | $129 | $199 |
+| Annual price | $290 | $790 | $1,290 | $1,990 |
+| Trial days | 14 | 14 | 14 | 30 |
+| Commission rate | 15% | 12% | 11% | 10% |
+| Public booking page | ✅ | ✅ | ✅ | ✅ |
+| Custom slug | ❌ | ✅ | ✅ | ✅ |
+| Branded booking page | ❌ | ✅ | ✅ | ✅ |
+| Custom domain | ❌ | ❌ | ✅ | ✅ |
+| Offline booking tracking | ❌ | ✅ | ✅ | ✅ |
+| Business Records (expenses) | ✅ | ✅ | ✅ | ✅ |
+| Priority support | ❌ | ✅ | ✅ | ✅ |
+| Multiple instructors | ❌ | ❌ | ❌ | ✅ |
+| API access | ❌ | ❌ | ❌ | ✅ |
+| UI status | Live | Live | Live | Coming Soon |
+
+---
+
+## Trial Period
+
+All tiers include a free trial (BASIC/PRO/STUDIO: 14 days, BUSINESS: 30 days).
+
+**Trial is per-instructor, not per-tier.** Changing tiers during a trial preserves the original trial end date — it is never reset. An instructor gets one trial window regardless of how many times they switch tiers.
+
+During trial: full access to all tier features, no payment method required upfront.
+
+---
+
+## Commission Rates
+
+Commission rates are configurable via `/admin/pricing` → `PlatformSettings` in DB. The values in `lib/config/subscriptions.ts` are defaults — DB values take precedence at runtime.
+
+Admins can schedule rate changes in advance via the Rate Change Scheduler on `/admin/pricing`. Instructors are notified by email and in-app notification before the effective date.
+
+```
+instructorPayout = lessonAmount × (1 - commissionRate)
+```
+
+Note: The `newStudentBonus` concept was removed in May 2026. Commission is now a flat rate per tier with no first-booking modifier.
+
+---
+
+## Upgrade / Downgrade Flow
+
+**Trial instructors:** Tier change is immediate via `POST /api/instructor/subscription`. A confirmation dialog is shown first.
+
+**Active paid instructors:** Redirected to Stripe Billing Portal. On return, `POST /api/instructor/subscription/sync` pulls the latest state from Stripe and updates the DB immediately.
+
+See `docs/DOCROLEBASE/07-subscriptions/UPGRADE_FLOW.md` for full details.
+
+---
+
+## Stripe Integration
+
+Each tier has monthly and annual Stripe Price IDs configured via environment variables:
+
+```
+STRIPE_BASIC_MONTHLY_PRICE_ID=
+STRIPE_BASIC_ANNUAL_PRICE_ID=
+STRIPE_PRO_MONTHLY_PRICE_ID=
+STRIPE_PRO_ANNUAL_PRICE_ID=
+STRIPE_STUDIO_MONTHLY_PRICE_ID=
+STRIPE_STUDIO_ANNUAL_PRICE_ID=
+STRIPE_BUSINESS_MONTHLY_PRICE_ID=   (not yet active)
+STRIPE_BUSINESS_ANNUAL_PRICE_ID=    (not yet active)
+```
+
+Subscription APIs:
+- `POST /api/instructor/subscription` — create or change plan (trial flow)
+- `POST /api/instructor/subscription/billing-portal` — open Stripe Billing Portal (active flow)
+- `POST /api/instructor/subscription/sync` — sync from Stripe after portal return
+
+---
+
+## Feature Access Gates
+
+| Gate | Where enforced |
+|------|---------------|
+| Branded booking page | `app/subdomain/[slug]/page.tsx` |
+| Custom domain | `app/subdomain/[slug]/page.tsx` |
+| Branding settings | `app/dashboard/branding/page.tsx` — upgrade wall for BASIC |
+| Custom slug | `app/api/instructor/branding/route.ts` |
+| Offline booking tracking | `POST /api/bookings/offline` — 403 with `upgradeRequired: true` for BASIC |
+
+---
+
+## Related
+
+- `docs/DOCROLEBASE/07-subscriptions/` — Full subscription reference (tiers, billing, upgrade flow)
+- `lib/config/subscriptions.ts` — Tier definitions and defaults
+- `components/SubscriptionPlans.tsx` — UI component with dialogs
+- `app/dashboard/subscription/page.tsx` — Subscription management page
+- `docs/SUBDOMAIN_SYSTEM.md` — Domain and branding by tier
 
 ---
 
@@ -149,16 +254,16 @@ During trial:
 
 ---
 
-## Commission & Bonus Rates
+## Commission Rates
 
-Commission and bonus rates are configurable via `/admin/pricing` → `PlatformSettings` in DB. The values in `lib/config/subscriptions.ts` are defaults — the DB values take precedence at runtime.
+Commission rates are configurable via `/admin/pricing` → `PlatformSettings` in DB. The values in `lib/config/subscriptions.ts` are defaults — DB values take precedence at runtime.
 
 ```
-instructorPayout = lessonAmount - commission - newStudentBonus
-platformRevenue  = platformFee + commission + newStudentBonus
+instructorPayout = lessonAmount × (1 - commissionRate)
+platformRevenue  = platformFee + commission
 ```
 
-`newStudentBonus` only applies to the first booking a student makes with that instructor.
+Note: The `newStudentBonus` concept was removed in May 2026. Commission is now a flat rate per tier with no first-booking modifier.
 
 ---
 
@@ -177,10 +282,10 @@ STRIPE_BUSINESS_MONTHLY_PRICE_ID=   (not yet active)
 STRIPE_BUSINESS_ANNUAL_PRICE_ID=    (not yet active)
 ```
 
-Subscription management:
-- `POST /api/instructor/subscription` — create or change plan
-- `POST /api/instructor/subscription/billing-portal` — open Stripe Billing Portal
-- `POST /api/instructor/subscription/change-plan` — upgrade/downgrade
+Subscription APIs:
+- `POST /api/instructor/subscription` — create or change plan (trial flow)
+- `POST /api/instructor/subscription/billing-portal` — open Stripe Billing Portal (active flow)
+- `POST /api/instructor/subscription/sync` — sync from Stripe after portal return
 
 ---
 

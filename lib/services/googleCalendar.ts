@@ -133,7 +133,6 @@ export class GoogleCalendarService {
               startTime: blockStart.toTimeString().slice(0, 5),
               endTime: blockEnd.toTimeString().slice(0, 5),
               reason: isPDATest ? 'pda_test' : 'google_calendar_event',
-              isRecurring: false
             }
           })
         } catch (error) {

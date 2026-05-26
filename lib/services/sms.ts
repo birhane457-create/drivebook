@@ -129,25 +129,6 @@ class SMSService {
     });
   }
 
-  // Booking confirmation
-  async sendBookingConfirmation(data: {
-    clientPhone: string;
-    instructorPhone: string;
-    clientName: string;
-    instructorName: string;
-    startTime: Date;
-    price: number;
-  }) {
-    const clientMessage = `Booking confirmed! Your lesson with ${data.instructorName} is on ${data.startTime.toLocaleDateString()} at ${data.startTime.toLocaleTimeString()}. Price: $${data.price}`;
-    
-    const instructorMessage = `New booking from ${data.clientName} on ${data.startTime.toLocaleDateString()} at ${data.startTime.toLocaleTimeString()}. Price: $${data.price}`;
-    
-    await Promise.all([
-      this.sendSMS({ to: data.clientPhone, message: clientMessage }),
-      this.sendSMS({ to: data.instructorPhone, message: instructorMessage }),
-    ]);
-  }
-
   // Dispute alert
   async sendDisputeAlert(data: {
     adminPhone: string;

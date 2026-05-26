@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import SubscriptionPlans from '@/components/SubscriptionPlans';
 import { SUBSCRIPTION_PLANS, isTrialExpired, SubscriptionTier } from '@/lib/config/subscriptions';
+import { getCommissionRate } from '@/lib/services/platform-pricing';
 
 export default async function SubscriptionPage() {
   const session = await getServerSession(authOptions);
@@ -33,8 +34,37 @@ export default async function SubscriptionPage() {
     ? Math.max(0, Math.ceil((new Date(instructor.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
 
-  // Derive from config — not stored in DB
   const plan = SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier];
+
+  // Get live commission rate from DB (not hardcoded from config)
+  const commissionRate = await getCommissionRate(instructor.subscriptionTier || 'BASIC');
+
+  // Check for any pending rate change affecting this tier
+  // Uses raw SQL to avoid dependency on Prisma client regeneration
+  const fieldMap: Record<string, string> = {
+    BASIC: 'basicCommissionRate',
+    PRO: 'proCommissionRate',
+    STUDIO: 'proCommissionRate',
+    BUSINESS: 'businessCommissionRate',
+  };
+  const field = fieldMap[instructor.subscriptionTier || 'BASIC'] || 'basicCommissionRate';
+
+  let pendingRateChange: { newRate: number; effectiveDate: Date; reason: string } | null = null;
+  try {
+    const rows = await prisma.$queryRaw<Array<{ newRate: number; effectiveDate: Date; reason: string }>>`
+      SELECT "newRate", "effectiveDate", "reason"
+      FROM "PlatformRateChange"
+      WHERE "field" = ${field}
+        AND "status" = 'PENDING'
+        AND "effectiveDate" > NOW()
+      ORDER BY "effectiveDate" ASC
+      LIMIT 1
+    `;
+    pendingRateChange = rows.length > 0 ? rows[0] : null;
+  } catch {
+    // Table may not exist yet or client not regenerated — silently skip
+    pendingRateChange = null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -102,7 +132,7 @@ export default async function SubscriptionPage() {
                   <p>
                     ${currentSubscription.monthlyAmount}/month • 
                     Renews on {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()} •
-                    {plan.commissionRate}% commission per booking
+                    {commissionRate}% commission per booking
                   </p>
                 </div>
               </div>
@@ -141,16 +171,37 @@ export default async function SubscriptionPage() {
         {instructor.subscriptionStatus === 'ACTIVE' && (
           <div className="mt-8 bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Plan Benefits</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Commission Rate</h3>
-                <p className="text-2xl font-bold text-gray-900">{plan.commissionRate}%</p>
-                <p className="text-sm text-gray-500">Per booking</p>
+
+            {/* Pending rate change notice */}
+            {pendingRateChange && (
+              <div className="mb-5 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+                <svg className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="font-semibold text-sm text-blue-900">Upcoming commission rate change</p>
+                  <p className="text-sm text-blue-800 mt-0.5">
+                    Your commission rate will change from <strong>{commissionRate}%</strong> to{' '}
+                    <strong>{pendingRateChange.newRate}%</strong> effective{' '}
+                    <strong>{new Date(pendingRateChange.effectiveDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1 italic">{pendingRateChange.reason}</p>
+                  <p className="text-xs text-blue-600 mt-1">Existing confirmed bookings are not affected — only new bookings from the effective date.</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">New Student Bonus</h3>
-                <p className="text-2xl font-bold text-gray-900">{plan.newStudentBonus}%</p>
-                <p className="text-sm text-gray-500">Extra for first booking with new students</p>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-1">Commission Rate</h3>
+                <p className="text-3xl font-bold text-gray-900">{commissionRate}%</p>
+                <p className="text-sm text-gray-500 mt-1">Platform keeps this per booking</p>
+                <p className="text-sm text-green-600 font-medium mt-1">You keep {(100 - commissionRate).toFixed(0)}%</p>
+                <div className="mt-3 bg-white rounded p-2 text-xs font-mono text-gray-600 border border-gray-200">
+                  <div className="flex justify-between"><span>$70 lesson</span><span>$70.00</span></div>
+                  <div className="flex justify-between text-red-500"><span>Commission ({commissionRate}%)</span><span>-${(70 * commissionRate / 100).toFixed(2)}</span></div>
+                  <div className="flex justify-between text-green-600 font-bold border-t border-gray-100 pt-1 mt-1"><span>Your payout</span><span>${(70 * (1 - commissionRate / 100)).toFixed(2)}</span></div>
+                </div>
               </div>
               {(instructor.subscriptionTier === 'BUSINESS' || instructor.subscriptionTier === 'STUDIO') && (
                 <>

@@ -163,6 +163,7 @@ export async function GET(req: NextRequest) {
 
     // Add bookings to blocked ranges WITH buffer and optional travel time
     bookings.forEach((booking) => {
+      if (!booking.startTime || !booking.endTime) return; // skip malformed bookings
       // Block the actual booking time
       blockedRanges.push({
         start: booking.startTime,

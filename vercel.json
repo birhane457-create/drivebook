@@ -3,7 +3,11 @@
   "crons": [
     {
       "path": "/api/cron/cleanup-expired-bookings",
-      "schedule": "0 0 * * *"
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/apply-rate-changes",
+      "schedule": "5 0 * * *"
     },
     {
       "path": "/api/cron/recheck-abn",

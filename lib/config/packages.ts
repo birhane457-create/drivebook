@@ -18,7 +18,8 @@ const DEFAULT_SETTINGS = {
 };
 
 // Cache for pricing settings (to avoid repeated database calls)
-let cachedSettings: typeof DEFAULT_SETTINGS | null = null;
+type PricingSettings = Omit<typeof DEFAULT_SETTINGS, 'discountPaidBy'> & { discountPaidBy: 'platform' | 'shared' | 'instructor' };
+let cachedSettings: PricingSettings | null = null;
 let cacheTime: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 

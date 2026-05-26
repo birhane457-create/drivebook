@@ -36,7 +36,7 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/payments/create-intent` | — | Create Stripe PaymentIntent |
+| POST | `/api/payments/create-intent` | CLIENT/INSTRUCTOR | Create Stripe PaymentIntent (auth required, ownership verified) |
 | POST | `/api/stripe/webhook` | Stripe sig | Handle Stripe events |
 | POST | `/api/subscriptions/checkout` | INSTRUCTOR | Create Stripe Checkout session |
 
@@ -88,12 +88,15 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 | GET | `/api/instructor/subscription` | INSTRUCTOR | Get subscription |
 | POST | `/api/instructor/subscription` | INSTRUCTOR | Create/update subscription |
 | DELETE | `/api/instructor/subscription` | INSTRUCTOR | Cancel subscription |
-| POST | `/api/instructor/subscription/change-plan` | INSTRUCTOR | Change tier |
 | POST | `/api/instructor/subscription/billing-portal` | INSTRUCTOR | Stripe billing portal |
+| POST | `/api/instructor/subscription/sync` | INSTRUCTOR | Sync subscription from Stripe after portal return |
 | GET/POST/DELETE | `/api/instructor/subscription/mobile` | JWT | Mobile subscription |
 | GET | `/api/instructor/earnings` | INSTRUCTOR | Earnings breakdown |
 | GET | `/api/instructor/payout-settings` | INSTRUCTOR | Get payout method + tax details |
 | POST | `/api/instructor/payout-settings` | INSTRUCTOR | Update payout method + tax details |
+| GET | `/api/instructor/expenses` | INSTRUCTOR | List business expenses |
+| POST | `/api/instructor/expenses` | INSTRUCTOR | Add expense |
+| DELETE | `/api/instructor/expenses/[id]` | INSTRUCTOR | Delete expense |
 
 ### Payout Settings — Request Body
 
@@ -221,6 +224,14 @@ Sets `abnVerified`, `abnStatus`, `withholdingTaxRate` (0 if verified, 47 if revo
 | GET | `/api/admin/transactions/[id]/invoice` | ADMIN | Transaction invoice |
 | POST | `/api/admin/transactions/[id]/refund` | ADMIN | Manual refund |
 | POST | `/api/admin/register` | ADMIN | Register admin user |
+| GET | `/api/admin/users/[userId]` | ADMIN | Get user detail (support centre) |
+| PATCH | `/api/admin/users/[userId]` | ADMIN | Edit user profile (name, phone, email) |
+| POST | `/api/admin/users/[userId]/reset-password` | ADMIN | Reset user password |
+| POST | `/api/admin/contact` | ADMIN | Send email/SMS to user |
+| GET | `/api/admin/rate-changes` | ADMIN | List scheduled rate changes |
+| POST | `/api/admin/rate-changes` | ADMIN | Schedule a rate change |
+| DELETE | `/api/admin/rate-changes/[id]` | ADMIN | Cancel a pending rate change |
+| GET | `/api/admin/audit-log` | ADMIN | Audit log with filters |
 
 ### Ledger — Response
 
@@ -281,10 +292,14 @@ Sets `abnVerified`, `abnStatus`, `withholdingTaxRate` (0 if verified, 47 if revo
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| GET | `/api/cron/cleanup-expired-bookings` | CRON_SECRET | Expire stale `PENDING_PAYMENT` bookings (runs daily) |
-| GET | `/api/cron/recheck-abn` | CRON_SECRET | Recheck all verified ABNs against ABR (runs weekly, Mondays 2am AWST) |
+| GET | `/api/cron/cleanup-expired-bookings` | CRON_SECRET | Expire stale `PENDING_PAYMENT` bookings (every 5 min) |
+| GET | `/api/cron/apply-rate-changes` | CRON_SECRET | Apply scheduled commission rate changes (daily 00:05 UTC) |
+| GET | `/api/cron/lesson-reminders` | CRON_SECRET | Send 24hr lesson reminders to instructors + students (daily 22:00 UTC) |
+| GET | `/api/cron/document-expiry-check` | CRON_SECRET | Notify instructors with expiring documents (weekly, Mondays 02:00 UTC) |
+| GET | `/api/cron/recheck-abn` | CRON_SECRET | Recheck all verified ABNs against ABR (weekly, Mondays 02:00 UTC) |
+| GET | `/api/cron/reconcile-stripe` | CRON_SECRET | Daily Stripe vs DB reconciliation (daily 19:00 UTC) |
 
-Both endpoints require `Authorization: Bearer <CRON_SECRET>`. Triggered automatically by Vercel Cron (configured in `vercel.json`). The ABN recheck clears `abnVerified`, sets `abnStatus = CANCELLED`, and reverts `withholdingTaxRate` to 47% for any instructor whose ABN is no longer active. Creates an `ABN_VERIFICATION_REVOKED` audit entry per affected instructor.
+All cron endpoints require `Authorization: Bearer <CRON_SECRET>`. Configured in `vercel.json`.
 
 ---
 

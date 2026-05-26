@@ -11,9 +11,6 @@ interface Settings {
   basicCommissionRate: number;
   proCommissionRate: number;
   businessCommissionRate: number;
-  basicNewStudentBonus: number;
-  proNewStudentBonus: number;
-  businessNewStudentBonus: number;
   drivingTestPackagePrice: number;
   discountPaidBy: 'platform' | 'shared' | 'instructor';
   cancellationFee: number;
@@ -124,9 +121,8 @@ export default function PricingSettingsForm() {
   const platformFeeAmt = (afterDiscount * s.platformFeePercentage) / 100;
   const clientTotal = afterDiscount + gstAmt + platformFeeAmt;
   const commissionAmt = (afterDiscount * s.proCommissionRate) / 100;
-  const bonusAmt = (afterDiscount * s.proNewStudentBonus) / 100;
-  const instructorPayout = afterDiscount - commissionAmt - bonusAmt;
-  const platformRevenue = platformFeeAmt + commissionAmt + bonusAmt;
+  const instructorPayout = afterDiscount - commissionAmt;
+  const platformRevenue = platformFeeAmt + commissionAmt;
 
   return (
     <form onSubmit={handleSave} className="space-y-5">
@@ -217,13 +213,6 @@ export default function PricingSettingsForm() {
                   value={s[`${key}CommissionRate`]}
                   onChange={v => set({ [`${key}CommissionRate`]: v } as any)}
                   step={0.5} min={0} max={50}
-                />
-              </Field>
-              <Field label="New student bonus (%)">
-                <NumInput
-                  value={s[`${key}NewStudentBonus`]}
-                  onChange={v => set({ [`${key}NewStudentBonus`]: v } as any)}
-                  step={0.5} min={0} max={30}
                 />
               </Field>
             </div>
@@ -342,7 +331,6 @@ export default function PricingSettingsForm() {
             <p className="text-slate-400 font-medium uppercase text-xs tracking-wide mb-2">Revenue split</p>
             <div className="flex justify-between text-slate-300"><span>Platform fee</span><span>${platformFeeAmt.toFixed(2)}</span></div>
             <div className="flex justify-between text-slate-300"><span>Commission ({s.proCommissionRate}%)</span><span>${commissionAmt.toFixed(2)}</span></div>
-            <div className="flex justify-between text-slate-300"><span>New student bonus ({s.proNewStudentBonus}%)</span><span>${bonusAmt.toFixed(2)}</span></div>
             <div className="flex justify-between font-bold text-green-400 border-t border-slate-600 pt-2"><span>Platform revenue</span><span>${platformRevenue.toFixed(2)}</span></div>
             <div className="flex justify-between font-bold text-purple-400"><span>Instructor payout</span><span>${instructorPayout.toFixed(2)}</span></div>
           </div>

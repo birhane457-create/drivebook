@@ -21,7 +21,7 @@
 For each completed booking:
 
 ```
-instructorPayout = booking.price x (1 - commissionRate / 100)
+instructorPayout = booking.price × (1 - commissionRate / 100)
 ```
 
 Commission rate is determined at booking creation time from `PlatformSettings`:
@@ -30,17 +30,12 @@ Commission rate is determined at booking creation time from `PlatformSettings`:
 |------|--------------------|-----------------|
 | BASIC | 15% | 85% |
 | PRO | 12% | 88% |
+| STUDIO | 11% | 89% |
 | BUSINESS | 10% | 90% |
 
-First booking between a client and instructor uses the `newStudentBonus` rate instead:
+The actual `commissionRate` used is stored on the `Booking` and `Transaction` records at creation time and never changes. Admins can schedule rate changes in advance via `/admin/pricing` — existing bookings are never retroactively affected.
 
-| Tier | New Student Bonus | Instructor Keeps |
-|------|-------------------|-----------------|
-| BASIC | 8% | 92% |
-| PRO | 10% | 90% |
-| BUSINESS | 12% | 88% |
-
-The actual `commissionRate` used is stored on the `Booking` and `Transaction` records at creation time and never changes.
+Note: The `newStudentBonus` concept was removed in May 2026. Commission is now a flat rate per tier.
 
 ---
 

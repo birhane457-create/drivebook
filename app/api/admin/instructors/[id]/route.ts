@@ -57,6 +57,7 @@ export async function GET(
       ...instructor,
       stripeConnectStatus,
     });
+  } catch (error) {
     console.error('Admin instructor fetch error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch instructor' },

@@ -129,7 +129,7 @@ model Instructor {
 }
 ```
 
-**Note**: `commissionRate` and `newStudentBonus` are NOT stored on the Instructor model. They are derived at runtime from `SUBSCRIPTION_PLANS[subscriptionTier]` in `lib/config/subscriptions.ts`.
+**Note**: `commissionRate` is NOT stored on the Instructor model. It is derived at runtime from `PlatformSettings` DB record via `lib/services/platform-pricing.ts`. The `newStudentBonus` concept was removed in May 2026.
 
 ---
 
@@ -457,7 +457,7 @@ ClientWallet (1) ──→ (0..*) WalletTransaction
 3. Bookings follow the state machine — no skipping states
 4. Audit logs are append-only — never delete
 5. Soft deletes for bookings — use `deletedAt` / `deletedBy`
-6. `commissionRate` / `newStudentBonus` derived from config, never stored on Instructor
+6. `commissionRate` derived from `PlatformSettings`, never stored on Instructor. `newStudentBonus` removed May 2026.
 
 ---
 

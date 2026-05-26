@@ -40,10 +40,13 @@ DriveBook is a controlled operational and financial platform connecting driving 
 | Payments | Stripe capture, wallet debit, transaction recording |
 | Payouts | Instructor earnings calculation, withholding, transfer |
 | Wallet | Client credit balance — internal payment method |
+| Subscriptions | Instructor tier management, Stripe billing, trial periods, scheduled rate changes |
+| Business Records | Instructor expense tracking for their own business records (no tax advice) |
 | Compliance | Instructor document verification and ABN status |
 | Audit | Immutable log of all critical system actions |
 | Reconciliation | Daily automated check of ledger vs Stripe vs DB |
 | Alerting | Email notifications for financial and compliance failures |
+| Admin Support | Admin can manage any user account — edit profile, reset password, adjust wallet |
 
 ---
 
@@ -61,14 +64,17 @@ DriveBook is a controlled operational and financial platform connecting driving 
 
 ## Key Constraints
 
-- `commissionRate` and `newStudentBonus` are never stored on `Instructor` — always derived from `PlatformSettings`
+- `commissionRate` is never stored on `Instructor` — always derived from `PlatformSettings`
 - `withholdingTaxRate` is set by ABN verification status: verified = 0%, unverified = 47%
 - Transactions are immutable — no updates, only new adjustment records
 - Refund after payout requires SUPER_ADMIN and creates an audit entry
 - Payout requires 24-hour buffer after booking completion
 - All cron jobs use concurrency locks to prevent double-execution
-- **Instructor approval gate:** `approvalStatus = PENDING` blocks booking creation (`POST /api/bookings`, `/api/bookings/offline`, `/api/pda-tests`). Instructors must be explicitly approved by admin before they can work.
+- **Instructor approval gate:** `approvalStatus = PENDING` blocks booking creation. Instructors must be explicitly approved by admin before they can work.
 - **Terms acceptance:** Instructors must accept Terms & Conditions and Privacy Policy at registration. `User.termsAcceptedAt` is recorded and visible to admin.
+- **Subscription gate:** Instructors with expired/cancelled subscriptions get read-only dashboard access. New bookings are blocked. Public booking page shows "not accepting bookings".
+- **Rate changes are scheduled, not immediate:** Commission rate changes go through the Rate Change Scheduler with a future effective date. Instructors are notified in advance. Existing bookings are never retroactively affected.
+- **`newStudentBonus` removed (May 2026):** Commission is now a flat rate per tier. No first-booking modifier.
 
 ---
 

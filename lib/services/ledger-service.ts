@@ -34,7 +34,7 @@ export async function appendLedgerEntry(entry: {
   description?: string;
   metadata?: Record<string, unknown>;
 }) {
-  return prisma.ledgerEntry.create({ data: { ...entry, currency: 'AUD' } });
+  return prisma.ledgerEntry.create({ data: { ...entry, currency: 'AUD', metadata: entry.metadata as any } });
 }
 
 // ─── Update the singleton PlatformLedger ─────────────────────────────────────

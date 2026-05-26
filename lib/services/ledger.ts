@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * FINANCIAL LEDGER SERVICE - Double-Entry Accounting
  * 

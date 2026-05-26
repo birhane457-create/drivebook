@@ -16,7 +16,6 @@ export async function GET(
         status: true,
         startTime: true,
         price: true,
-        originalBookingTime: true
       }
     })
 

@@ -7,7 +7,6 @@ export const SUBSCRIPTION_PLANS = {
     monthlyPrice: Number(process.env.BASIC_MONTHLY_PRICE) || 29,
     annualPrice: Number(process.env.BASIC_ANNUAL_PRICE) || 290,
     commissionRate: Number(process.env.BASIC_COMMISSION_RATE) || 15,
-    newStudentBonus: Number(process.env.BASIC_NEW_STUDENT_BONUS) || 8,
     trialDays: Number(process.env.BASIC_TRIAL_DAYS) || 14,
     features: [
       'Single instructor account',
@@ -18,7 +17,6 @@ export const SUBSCRIPTION_PLANS = {
       'Student reviews',
       'Mobile app access',
       `${Number(process.env.BASIC_COMMISSION_RATE) || 15}% commission per booking`,
-      `${Number(process.env.BASIC_NEW_STUDENT_BONUS) || 8}% bonus for new students`,
     ],
     limits: {
       instructors: 1,
@@ -34,7 +32,6 @@ export const SUBSCRIPTION_PLANS = {
     monthlyPrice: Number(process.env.PRO_MONTHLY_PRICE) || 79,
     annualPrice: Number(process.env.PRO_ANNUAL_PRICE) || 790,
     commissionRate: Number(process.env.PRO_COMMISSION_RATE) || 12,
-    newStudentBonus: Number(process.env.PRO_NEW_STUDENT_BONUS) || 10,
     trialDays: Number(process.env.PRO_TRIAL_DAYS) || 14,
     features: [
       'Everything in Basic',
@@ -46,7 +43,6 @@ export const SUBSCRIPTION_PLANS = {
       'Check-in/Check-out system',
       'Custom service areas',
       `${Number(process.env.PRO_COMMISSION_RATE) || 12}% commission per booking`,
-      `${Number(process.env.PRO_NEW_STUDENT_BONUS) || 10}% bonus for new students`,
       'Priority email support',
     ],
     limits: {
@@ -63,7 +59,6 @@ export const SUBSCRIPTION_PLANS = {
     monthlyPrice: Number(process.env.STUDIO_MONTHLY_PRICE) || 129,
     annualPrice: Number(process.env.STUDIO_ANNUAL_PRICE) || 1290,
     commissionRate: Number(process.env.STUDIO_COMMISSION_RATE) || 11,
-    newStudentBonus: Number(process.env.STUDIO_NEW_STUDENT_BONUS) || 10,
     trialDays: Number(process.env.STUDIO_TRIAL_DAYS) || 14,
     features: [
       'Everything in Pro',
@@ -72,7 +67,6 @@ export const SUBSCRIPTION_PLANS = {
       'Branded booking page on your domain',
       'White-label experience',
       `${Number(process.env.STUDIO_COMMISSION_RATE) || 11}% commission per booking`,
-      `${Number(process.env.STUDIO_NEW_STUDENT_BONUS) || 10}% bonus for new students`,
       'Priority support',
     ],
     limits: {
@@ -89,7 +83,6 @@ export const SUBSCRIPTION_PLANS = {
     monthlyPrice: Number(process.env.BUSINESS_MONTHLY_PRICE) || 199,
     annualPrice: Number(process.env.BUSINESS_ANNUAL_PRICE) || 1990,
     commissionRate: Number(process.env.BUSINESS_COMMISSION_RATE) || 10,
-    newStudentBonus: Number(process.env.BUSINESS_NEW_STUDENT_BONUS) || 12,
     trialDays: Number(process.env.BUSINESS_TRIAL_DAYS) || 30,
     features: [
       'Everything in Pro',
@@ -102,7 +95,6 @@ export const SUBSCRIPTION_PLANS = {
       'Dedicated account manager',
       'Priority phone support',
       `${Number(process.env.BUSINESS_COMMISSION_RATE) || 10}% commission per booking`,
-      `${Number(process.env.BUSINESS_NEW_STUDENT_BONUS) || 12}% bonus for new students`,
       'Custom integrations',
       'Training & onboarding',
     ],
@@ -135,16 +127,12 @@ export function getPlanDetails(tier: SubscriptionTier) {
   return SUBSCRIPTION_PLANS[tier];
 }
 
-export function calculateCommission(amount: number, tier: SubscriptionTier, isNewStudent: boolean = false) {
+export function calculateCommission(amount: number, tier: SubscriptionTier) {
   const plan = SUBSCRIPTION_PLANS[tier];
-  const baseCommission = (amount * plan.commissionRate) / 100;
-  const bonus = isNewStudent ? (amount * plan.newStudentBonus) / 100 : 0;
-  
+  const commission = (amount * plan.commissionRate) / 100;
   return {
-    baseCommission,
-    bonus,
-    totalCommission: baseCommission + bonus,
-    instructorPayout: amount - baseCommission - bonus,
+    commission,
+    instructorPayout: amount - commission,
   };
 }
 
@@ -178,12 +166,4 @@ export const COMMISSION_RATES = {
   PRO: 12,
   STUDIO: 11,
   BUSINESS: 10,
-} as const;
-
-// New student bonus rates
-export const NEW_STUDENT_BONUS = {
-  BASIC: 8,
-  PRO: 10,
-  STUDIO: 10,
-  BUSINESS: 12,
 } as const;

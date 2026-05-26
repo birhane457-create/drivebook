@@ -65,10 +65,17 @@ export async function GET(req: NextRequest) {
       new URL('/client-dashboard?verified=true', req.url)
     );
 
-    // Set session cookie (same as NextAuth)
-    response.cookies.set('next-auth.session-token', sessionToken, {
+    // Set session cookie — must match the name NextAuth uses for the environment
+    // Production (https): __Secure-next-auth.session-token
+    // Development (http):  next-auth.session-token
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieName = isProduction
+      ? '__Secure-next-auth.session-token'
+      : 'next-auth.session-token';
+
+    response.cookies.set(cookieName, sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction,
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60, // 7 days
       path: '/'
