@@ -92,9 +92,12 @@ const inMemoryLimiter = new InMemoryRateLimiter();
  */
 function createRateLimiter(requests: number, window: string) {
   if (!redis) {
-    console.warn('⚠️  Upstash Redis not configured. Using in-memory rate limiting (NOT production-safe!)');
-    console.warn('   Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to .env');
-    
+    // Suppress warnings during Next.js build phase to avoid noisy stderr
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+    if (!isBuildPhase && process.env.NODE_ENV !== 'test') {
+      console.warn('⚠️  Upstash Redis not configured. Using in-memory rate limiting (NOT production-safe!)');
+      console.warn('   Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to .env');
+    }
     // Return in-memory limiter
     const windowMs = parseWindow(window);
     return {
