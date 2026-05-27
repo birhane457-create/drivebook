@@ -9,7 +9,8 @@
     "test:ci": "jest --runInBand --coverage",
     "build": "prisma generate",
     "postinstall": "prisma generate",
-    "vercel-build": "echo 'Vercel build complete'"
+    "vercel-build": "echo 'Vercel build complete'",
+    "check:api-parity": "node scripts/check_api_parity.js"
   },
   "keywords": [],
   "author": "",

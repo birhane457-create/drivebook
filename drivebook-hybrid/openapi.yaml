@@ -121,29 +121,19 @@ paths:
               message:
                 type: string
 
-  /bookings/search:
+  /bookings/lookup:
     get:
-      summary: Search bookings by phone, email, or reference
-      description: Find existing bookings when the user provides a phone, email, or booking reference. Useful for reschedule/cancel flows and identity verification.
-      operationId: searchBookings
+      summary: Look up bookings by phone number
+      description: Find existing bookings when the user provides a phone number. Used for reschedule/cancel flows.
+      operationId: lookupBookings
       tags:
         - Bookings
       parameters:
         - name: phone
           in: query
           type: string
-          required: false
+          required: true
           description: Phone number used on the booking
-        - name: email
-          in: query
-          type: string
-          required: false
-          description: Email used on the booking
-        - name: reference
-          in: query
-          type: string
-          required: false
-          description: Booking reference or ID
       responses:
         '200':
           description: Matching bookings
@@ -176,70 +166,23 @@ paths:
                       type: string
                     accountHolderPhone:
                       type: string
-                    accountHolderEmail:
-                      type: string
               count:
                 type: integer
         '400':
-          description: Must provide phone, email, or reference
+          description: Must provide phone number
           schema:
             type: object
             properties:
               error:
                 type: string
 
-  /instructors/find:
-    get:
-      summary: Find instructors by name, phone or query
-      description: Flexible search to locate an instructor when the caller does not know an ID. Returns contact info and short profile so AI can present options.
-      operationId: findInstructors
-      tags:
-        - Instructors
-      parameters:
-        - name: query
-          in: query
-          type: string
-          required: true
-          description: Name, phone number, or search query
-        - name: location
-          in: query
-          type: string
-          required: false
-          description: Optional pickup location to prefer nearby instructors
-      responses:
-        '200':
-          description: Matching instructors
-          schema:
-            type: object
-            properties:
-              instructors:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    name:
-                      type: string
-                    phone:
-                      type: string
-                    hourlyRate:
-                      type: number
-                    distance:
-                      type: number
-                    rating:
-                      type: number
-                    bio:
-                      type: string
-              count:
-                type: integer
-
   /instructors/search:
     get:
-      summary: Search instructors by location (PRIMARY ENDPOINT)
+      summary: Search instructors by location or name (PRIMARY ENDPOINT)
       description: |
         Find instructors who serve a specific location, sorted by distance and rating.
         This is the MAIN endpoint for the AI to use when a student provides their pickup location.
+        Also supports ?name= for finding a specific instructor by name.
       operationId: searchInstructorsByLocation
       tags:
         - Instructors
@@ -309,40 +252,6 @@ paths:
             properties:
               error:
                 type: string
-
-  /public/instructors:
-    get:
-      summary: Get all approved instructors
-      description: Returns all active instructors. Use /instructors/search for location-based search.
-      operationId: getAllInstructors
-      tags:
-        - Instructors
-      responses:
-        '200':
-          description: List of all instructors
-          schema:
-            type: array
-            items:
-              type: object
-              properties:
-                id:
-                  type: string
-                name:
-                  type: string
-                hourlyRate:
-                  type: number
-                rating:
-                  type: number
-                reviews:
-                  type: integer
-                vehicleTypes:
-                  type: array
-                  items:
-                    type: string
-                languages:
-                  type: array
-                  items:
-                    type: string
 
   /locations/validate:
     post:
@@ -464,6 +373,25 @@ paths:
       operationId: getAvailableSlots
       tags:
         - Availability
+
+  /availability:
+    post:
+      summary: Check availability (general)
+      description: General availability check endpoint proxied to main app.
+      operationId: checkAvailability
+      tags:
+        - Availability
+      parameters:
+        - name: body
+          in: body
+          required: false
+          schema:
+            type: object
+      responses:
+        '200':
+          description: Availability result
+          schema:
+            type: object
       parameters:
         - name: instructorId
           in: query
@@ -826,7 +754,7 @@ paths:
               error:
                 type: string
 
-  /public/bookings/{bookingId}/cancel:
+  /public/bookings/{id}/cancel:
     post:
       summary: Cancel a booking (requires verification)
       description: Cancel a booking after verifying the requestor's identity via `verificationToken`.
@@ -834,7 +762,7 @@ paths:
       tags:
         - Bookings
       parameters:
-        - name: bookingId
+        - name: id
           in: path
           type: string
           required: true
@@ -871,7 +799,7 @@ paths:
               error:
                 type: string
 
-  /public/bookings/{bookingId}/reschedule:
+  /public/bookings/{id}/reschedule:
     post:
       summary: Reschedule a booking (requires verification)
       description: Reschedule a booking after verifying the requestor's identity via `verificationToken`.
@@ -879,7 +807,7 @@ paths:
       tags:
         - Bookings
       parameters:
-        - name: bookingId
+        - name: id
           in: path
           type: string
           required: true

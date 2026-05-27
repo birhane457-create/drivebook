@@ -78,6 +78,7 @@ async function proxyRequest(req, res, targetPath) {
 }
 
 // Public AI routes forwarded to main app
+router.get('/health', (req, res) => proxyRequest(req, res, '/api/health'));
 router.post('/locations/validate', (req, res) => proxyRequest(req, res, '/api/locations/validate'));
 router.get('/instructors/recommendations', (req, res) => proxyRequest(req, res, '/api/instructors/recommendations'));
 router.get('/instructors/search', (req, res) => proxyRequest(req, res, '/api/instructors/search'));
