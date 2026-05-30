@@ -22,6 +22,18 @@ info:
     - Prefer `/instructors/recommendations` for ranked results
     - Validate pickup location with `/locations/validate` before searching
     - Do not collect or transmit passwords; backend creates credentials
+  x-ai-rules:
+    - Never collect credit card numbers, CVV, or banking details
+    - Never ask for or collect passwords — backend auto-generates them
+    - Always validate pickup location before searching for instructors
+    - Always prefer /instructors/recommendations for ranked results
+    - Always present top 3 instructors by name only — never mention IDs
+    - Never calculate pricing manually — use backend pricing only
+    - Always read back a full summary and get verbal confirmation before creating a booking, cancelling, or rescheduling
+    - Use OTP verification before cancellation or rescheduling
+    - After booking, always send checkoutUrl via SMS immediately
+    - Tell caller their slot is held for 10 minutes while they complete payment
+    - If slot is taken (409), offer alternative times — do not give up
 host: drivebook.com.au
 basePath: /api
 schemes:
@@ -186,9 +198,15 @@ paths:
         - name: phone
           in: query
           type: string
-          required: true
-          description: Phone number used on the booking (E.164 recommended)
+          required: false
+          description: Phone number used on the booking (E.164 recommended). Either phone or email must be provided.
           pattern: '^\+?[1-9]\d{1,14}$'
+        - name: email
+          in: query
+          type: string
+          required: false
+          description: Email address used on the booking. Alternative to phone. Either phone or email must be provided.
+          format: email
         - $ref: '#/parameters/X-Request-Id'
       responses:
         '200':
@@ -711,9 +729,26 @@ paths:
                 type: string
               clientId:
                 type: string
+              status:
+                $ref: '#/definitions/BookingStatus'
               total:
                 type: number
                 description: Total amount charged (calculated by backend)
+              isShortNotice:
+                type: boolean
+                description: True if booking requires instructor approval before payment
+              payment:
+                type: object
+                description: Payment details. Present when status is PENDING_PAYMENT (AI flow — no pricing submitted).
+                properties:
+                  checkoutUrl:
+                    type: string
+                    format: uri
+                    description: Stripe checkout URL. AI must send this to the caller via SMS immediately.
+                  reservationExpiresAt:
+                    type: string
+                    format: date-time
+                    description: When the slot reservation expires (typically 10 minutes from booking creation). AI should tell caller their slot is held until this time.
               pricing:
                 type: object
                 description: Pricing breakdown (calculated by backend)
@@ -1221,8 +1256,23 @@ definitions:
         type: string
   BookingStatus:
     type: string
-    description: Status of a booking
-    enum: [pending, confirmed, cancelled, rescheduled, completed]
+    description: |
+      Status of a booking in the DriveBook system.
+      - PENDING: Short-notice booking awaiting instructor approval (no payment yet)
+      - PENDING_PAYMENT: Slot reserved, awaiting payment (expires in 10 minutes)
+      - CONFIRMED: Payment received, booking confirmed
+      - COMPLETED: Lesson completed
+      - CANCELLED: Booking cancelled by client or instructor
+      - EXPIRED: Payment window elapsed without payment (slot released)
+      - NO_SHOW: Lesson time passed with no check-in recorded
+    enum:
+      - PENDING
+      - PENDING_PAYMENT
+      - CONFIRMED
+      - COMPLETED
+      - CANCELLED
+      - EXPIRED
+      - NO_SHOW
   BookingCreated:
     type: object
     properties:
