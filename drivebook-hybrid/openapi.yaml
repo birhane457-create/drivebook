@@ -18,6 +18,10 @@ info:
     
     KEY IMPROVEMENTS:
     - AI does NOT ask for password (backend generates secure password automatically)
+  x-ai-guidance: |
+    - Prefer `/instructors/recommendations` for ranked results
+    - Validate pickup location with `/locations/validate` before searching
+    - Do not collect or transmit passwords; backend creates credentials
 host: drivebook.com.au
 basePath: /api
 schemes:
@@ -26,6 +30,19 @@ consumes:
   - application/json
 produces:
   - application/json
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: "JWT Bearer token in the format 'Bearer <token>' for protected endpoints"
+parameters:
+  X-Request-Id:
+    name: X-Request-Id
+    in: header
+    type: string
+    required: false
+    description: Correlation id for request tracing. Services should propagate this value when calling upstream services.
 
 paths:
   /health:
@@ -59,8 +76,13 @@ paths:
         - name: location
           in: query
           type: string
-          required: true
-          description: "Pickup location (e.g. Joondalup WA)"
+          required: false
+          description: "Pickup location (e.g. Joondalup WA). Either `location` or `name` should be provided."
+        - name: name
+          in: query
+          type: string
+          required: false
+          description: Instructor name search query (optional; either `name` or `location` required)
         - name: vehicleType
           in: query
           type: string
@@ -107,19 +129,51 @@ paths:
                       type: number
                     distance:
                       type: number
-                      description: Distance in kilometers
                     rating:
                       type: number
+                      format: float
+                      example: 4.9
                     reviews:
                       type: integer
                     reason:
                       type: string
+                    spokenSummary:
+                      type: string
+                      description: Short spoken summary suitable for voice assistants
+                      example: "Top rated automatic instructor 3 kilometres away"
                     score:
                       type: integer
               count:
                 type: integer
               message:
                 type: string
+          examples:
+            application/json:
+              recommendations:
+                - id: "instr_123"
+                  name: "Debesay"
+                  hourlyRate: 80
+                  distance: 3.2
+                  rating: 4.9
+                  reviews: 120
+                  reason: "Top rated in your area"
+                  score: 98
+                - id: "instr_456"
+                  name: "Michael"
+                  hourlyRate: 65
+                  distance: 5.1
+                  rating: 4.7
+                  reviews: 80
+                  reason: "Best value"
+                  score: 89
+              count: 2
+              message: "Top matches for Joondalup WA"
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
 
   /bookings/lookup:
     get:
@@ -133,7 +187,9 @@ paths:
           in: query
           type: string
           required: true
-          description: Phone number used on the booking
+          description: Phone number used on the booking (E.164 recommended)
+          pattern: '^\+?[1-9]\d{1,14}$'
+        - $ref: '#/parameters/X-Request-Id'
       responses:
         '200':
           description: Matching bookings
@@ -152,7 +208,7 @@ paths:
                     time:
                       type: string
                     status:
-                      type: string
+                      $ref: '#/definitions/BookingStatus'
                     pickupLocation:
                       type: string
                     instructor:
@@ -171,10 +227,7 @@ paths:
         '400':
           description: Must provide phone number
           schema:
-            type: object
-            properties:
-              error:
-                type: string
+            $ref: '#/definitions/Error'
 
   /instructors/search:
     get:
@@ -186,12 +239,21 @@ paths:
       operationId: searchInstructorsByLocation
       tags:
         - Instructors
+      x-validation-rules:
+        - description: Either 'location' or 'name' parameter must be provided (XOR relationship)
+          rule: "(location && !name) || (!location && name) || (location && name)"
       parameters:
         - name: location
           in: query
           type: string
-          required: true
-          description: "Pickup location - address, suburb, or postcode (e.g. Joondalup WA)"
+          required: false
+          description: "Pickup location - address, suburb, or postcode (e.g. Joondalup WA). Either `location` or `name` should be provided."
+        - name: name
+          in: query
+          type: string
+          required: false
+          description: Instructor name search query
+        - $ref: '#/parameters/X-Request-Id'
       responses:
         '200':
           description: List of instructors serving the location
@@ -201,43 +263,7 @@ paths:
               instructors:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    name:
-                      type: string
-                    hourlyRate:
-                      type: number
-                    distance:
-                      type: number
-                      description: Distance in kilometers
-                    rating:
-                      type: number
-                      description: Average rating (0-5)
-                    reviews:
-                      type: integer
-                    totalBookings:
-                      type: integer
-                    bio:
-                      type: string
-                    vehicleTypes:
-                      type: array
-                      items:
-                        type: string
-                      description: AUTO, MANUAL
-                    languages:
-                      type: array
-                      items:
-                        type: string
-                    profileImage:
-                      type: string
-                    carMake:
-                      type: string
-                    carModel:
-                      type: string
-                    carYear:
-                      type: integer
+                  $ref: '#/definitions/Instructor'
               count:
                 type: integer
               searchLocation:
@@ -245,6 +271,45 @@ paths:
                 properties:
                   displayName:
                     type: string
+          examples:
+            application/json:
+              instructors:
+                - id: "instr_123"
+                  name: "Debesay"
+                  hourlyRate: 80
+                  distance: 3.2
+                  rating: 4.9
+                  reviews: 120
+                  totalBookings: 320
+                  bio: "Patient instructor with 10 years experience"
+                  vehicleTypes: [AUTO]
+                  languages: [English]
+                  profileImage: "https://example.com/image.jpg"
+                  carMake: "Toyota"
+                  carModel: "Corolla"
+                  carYear: 2018
+                  location:
+                    displayName: "Joondalup WA"
+                    lat: -31.745
+                    lng: 115.766
+                - id: "instr_456"
+                  name: "Michael"
+                  hourlyRate: 65
+                  distance: 5.1
+                  rating: 4.7
+                  reviews: 80
+                  totalBookings: 200
+                  bio: "Value-focused instructor"
+                  vehicleTypes: [MANUAL]
+                  languages: [English]
+                  profileImage: "https://example.com/image2.jpg"
+                  carMake: "Hyundai"
+                  carModel: "i30"
+                  carYear: 2016
+                  location:
+                    displayName: "Wanneroo WA"
+                    lat: -31.748
+                    lng: 115.770
         '404':
           description: No instructors serve that area
           schema:
@@ -308,6 +373,16 @@ paths:
                 items:
                   type: string
                 description: Suggestions if location not found
+          examples:
+            application/json:
+              valid: true
+              formattedAddress: "123 Main St, Joondalup WA 6027"
+              lat: -31.745
+              lng: 115.766
+              components:
+                suburb: "Joondalup"
+                state: "WA"
+                postcode: "6027"
 
   /packages:
     get:
@@ -333,27 +408,7 @@ paths:
               packages:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    type:
-                      type: string
-                      enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
-                    hours:
-                      type: integer
-                    price:
-                      type: number
-                      description: Total price after discount
-                    originalPrice:
-                      type: number
-                    discount:
-                      type: number
-                      description: Discount amount
-                    discountPercentage:
-                      type: integer
-                      description: Discount percentage (5, 10, 12)
-                    savings:
-                      type: number
-                      description: Amount saved
+                  $ref: '#/definitions/Package'
               testPackage:
                 type: object
                 properties:
@@ -365,6 +420,29 @@ paths:
                   includes:
                     type: string
                     example: "1-hour pre-test lesson, car rental, test day support"
+          examples:
+            application/json:
+              packages:
+                - type: PACKAGE_6
+                  hours: 6
+                  price: 360
+                  originalPrice: 420
+                  discount: 60
+                  discountPercentage: 14
+                  savings: 60
+                  currency: AUD
+                - type: PACKAGE_10
+                  hours: 10
+                  price: 580
+                  originalPrice: 700
+                  discount: 120
+                  discountPercentage: 17
+                  savings: 120
+                  currency: AUD
+              testPackage:
+                available: true
+                price: 150
+                includes: "1-hour pre-test lesson, car rental, test day support"
 
   /availability/slots:
     get:
@@ -373,6 +451,58 @@ paths:
       operationId: getAvailableSlots
       tags:
         - Availability
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+          description: Instructor ID to get slots for
+        - $ref: '#/parameters/X-Request-Id'
+        - name: date
+          in: query
+          type: string
+          required: true
+          description: Date in YYYY-MM-DD format (e.g. 2026-03-25)
+          format: date
+        - name: duration
+          in: query
+          type: integer
+          required: false
+          description: Lesson duration in minutes (e.g. 60)
+      responses:
+        '200':
+          description: Available slots for an instructor
+          schema:
+            $ref: '#/definitions/AvailabilityResponse'
+          examples:
+            application/json:
+              slots:
+                - slotId: "s1"
+                  instructorId: "instr_123"
+                  time: "09:00"
+                  start: "2026-03-25T09:00:00+08:00"
+                  end: "2026-03-25T10:00:00+08:00"
+                  available: true
+                  seats: 1
+                  recommended: true
+                  score: 95
+                - slotId: "s2"
+                  instructorId: "instr_456"
+                  time: "10:00"
+                  start: "2026-03-25T10:00:00+08:00"
+                  end: "2026-03-25T11:00:00+08:00"
+                  available: false
+                  seats: 0
+              date: "2026-03-25"
+              duration: 60
+              timezone: "Australia/Perth"
+              currency: AUD
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
 
   /availability:
     post:
@@ -381,17 +511,6 @@ paths:
       operationId: checkAvailability
       tags:
         - Availability
-      parameters:
-        - name: body
-          in: body
-          required: false
-          schema:
-            type: object
-      responses:
-        '200':
-          description: Availability result
-          schema:
-            type: object
       parameters:
         - name: instructorId
           in: query
@@ -402,6 +521,7 @@ paths:
           type: string
           required: true
           description: "Date in YYYY-MM-DD format (e.g. 2026-03-25)"
+          format: date
         - name: duration
           in: query
           type: integer
@@ -425,6 +545,7 @@ paths:
                       type: boolean
               date:
                 type: string
+                format: date
               duration:
                 type: integer
 
@@ -441,10 +562,24 @@ paths:
         - `instructorId`: use when you already have the ID from a previous search/recommendations call
         - `instructorQuery`: use when you only have a name or phone — backend resolves to an ID
         AI should NEVER ask the caller for an instructor ID directly.
+        
+        NOTE: Although this path is under `/public`, this endpoint requires Bearer authentication and is intended for trusted service-to-service calls from the hybrid voice service to the main DriveBook API. Present a valid `Authorization: Bearer <token>`.
+        
+        CONDITIONAL VALIDATION (documented):
+        - Either `instructorId` or `instructorQuery` must be present.
+        - If `packageType` is `CUSTOM`, `hours` is required.
+        - If `bookingType` is `now`, `scheduledBookings` must be supplied and each entry must include `date`, `time`, `duration`, and `pickupLocation`.
       operationId: createBooking
       tags:
         - Bookings
+      security:
+        - BearerAuth: []
       parameters:
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safely retrying create booking requests
         - name: body
           in: body
           required: true
@@ -492,14 +627,18 @@ paths:
                 type: string
               accountHolderEmail:
                 type: string
+                format: email
               accountHolderPhone:
                 type: string
                 description: Phone number - password will be auto-generated and sent via SMS/email
+                pattern: '^\+?[1-9]\d{1,14}$'
               learnerName:
                 type: string
                 description: Required if registrationType is someone-else
               learnerPhone:
                 type: string
+                description: Phone number for the learner
+                pattern: '^\+?[1-9]\d{1,14}$'
               learnerRelationship:
                 type: string
                 enum: [child, partner, grandchild, parent, friend, other]
@@ -516,6 +655,7 @@ paths:
                   properties:
                     date:
                       type: string
+                      format: date
                       example: "2026-03-25"
                     time:
                       type: string
@@ -526,10 +666,41 @@ paths:
                     pickupLocation:
                       type: string
                       example: "123 Main St, Joondalup WA 6027"
+                    timezone:
+                      type: string
+                      example: "Australia/Perth"
                     notes:
                       type: string
+            x-examples:
+              immediateBooking:
+                instructorId: "instr_123"
+                packageType: PACKAGE_10
+                bookingType: now
+                registrationType: myself
+                accountHolderName: "Liam Parker"
+                accountHolderEmail: "liam.parker@example.com"
+                accountHolderPhone: "+61400123456"
+                scheduledBookings:
+                  - date: "2026-03-25"
+                    time: "09:00"
+                    duration: 60
+                    pickupLocation: "123 Main St, Joondalup WA 6027"
+                    notes: "Please pick me up at the front of the shopping centre."
+                includeTestPackage: true
+              futurePackagePurchase:
+                instructorQuery: "Michael"
+                packageType: PACKAGE_15
+                bookingType: later
+                registrationType: someone-else
+                accountHolderName: "Sophie Brown"
+                accountHolderEmail: "sophie.brown@example.com"
+                accountHolderPhone: "+61400987654"
+                learnerName: "Ethan Brown"
+                learnerPhone: "+61400111222"
+                learnerRelationship: child
+                includeTestPackage: false
       responses:
-        '200':
+        '201':
           description: Booking created successfully
           schema:
             type: object
@@ -558,19 +729,31 @@ paths:
         '400':
           description: Invalid booking data
           schema:
-            type: object
-            properties:
-              error:
-                type: string
+            $ref: '#/definitions/Error'
+          examples:
+            application/json:
+              error: "Missing scheduledBookings for bookingType 'now'"
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
+        
 
   /voice/incoming:
     post:
       summary: Handle incoming voice call (Twilio webhook)
-      description: Twilio webhook endpoint for incoming calls
+      description: Twilio webhook endpoint for incoming calls. Validate the X-Twilio-Signature header using your Twilio auth token to verify request authenticity.
       operationId: handleIncomingCall
       tags:
         - Voice
       parameters:
+        - name: X-Twilio-Signature
+          in: header
+          type: string
+          required: true
+          description: Signature sent by Twilio. Server must validate this header against the Twilio auth token to verify source authenticity.
         - name: body
           in: body
           required: true
@@ -590,11 +773,16 @@ paths:
   /voice/voicemail:
     post:
       summary: Handle voicemail recording (Twilio webhook)
-      description: Twilio webhook for voicemail callbacks
+      description: Twilio webhook for voicemail callbacks. Validate the X-Twilio-Signature header using your Twilio auth token to verify request authenticity.
       operationId: handleVoicemail
       tags:
         - Voice
       parameters:
+        - name: X-Twilio-Signature
+          in: header
+          type: string
+          required: true
+          description: Signature sent by Twilio. Server must validate this header against the Twilio auth token to verify source authenticity.
         - name: body
           in: body
           required: true
@@ -620,6 +808,12 @@ paths:
         Returns a short-lived `verificationId` used to confirm the OTP.
         Codes expire after 5 minutes, allow up to 3 failed confirmation attempts,
         require a 60-second resend delay, and are rate-limited to 3 requests per hour.
+      x-idempotency:
+        key-generation: Per phone/email + purpose combination
+        behavior: |
+          Requests with the same phone/email and purpose will return the same verification ID
+          if sent within 60 seconds (resend delay). After the resend delay expires, a new OTP
+          is generated and the verification ID is refreshed.
       operationId: sendOtp
       tags:
         - Verifications
@@ -639,8 +833,10 @@ paths:
               phone:
                 type: string
                 description: Phone number to send SMS OTP to
+                pattern: '^\+?[1-9]\d{1,14}$'
               email:
                 type: string
+                format: email
                 description: Email to send OTP to (alternative to phone)
               ttlSeconds:
                 type: integer
@@ -656,6 +852,7 @@ paths:
               delivery:
                 type: string
                 description: delivery method used (sms|email)
+                enum: [sms, email]
               expiresIn:
                 type: integer
                 description: seconds until OTP expires (typically 300)
@@ -690,6 +887,12 @@ paths:
             properties:
               error:
                 type: string
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
 
   /verifications/otp/confirm:
     post:
@@ -698,6 +901,11 @@ paths:
         Confirm the one-time PIN sent to the user. On success returns a
         short-lived `verificationToken` which clients must present when
         performing sensitive actions like cancelling or rescheduling a booking.
+      x-idempotency:
+        key-generation: Per verificationId
+        behavior: |
+          Retrying a successful confirmation with the same verificationId will return
+          the same verificationToken. Tokens are cached for 5 minutes to support safe retries.
       operationId: confirmOtp
       tags:
         - Verifications
@@ -726,7 +934,10 @@ paths:
                 type: boolean
               verificationToken:
                 type: string
-                description: Token to present to sensitive endpoints; short-lived
+                description: |
+                  Token to present to sensitive endpoints such as /bookings/{id}/cancel and /bookings/{id}/reschedule.
+                  Token is short-lived (typically 10-15 minutes) and automatically expires after the TTL.
+                  Do not cache or reuse across different operations.
               expiresIn:
                 type: integer
               attemptsLeft:
@@ -757,25 +968,39 @@ paths:
   /public/bookings/{id}/cancel:
     post:
       summary: Cancel a booking (requires verification)
-      description: Cancel a booking after verifying the requestor's identity via `verificationToken`.
+      description: Cancel a booking after verifying the requestor's identity via the `X-Verification-Token` header (OTP confirmation).
       operationId: cancelBooking
       tags:
         - Bookings
+      security:
+        - BearerAuth: []
+      x-idempotency:
+        key-header: Idempotency-Key
+        behavior: |
+          Use the Idempotency-Key header to safely retry cancellation requests.
+          If a retry arrives with the same key within 24 hours, the service will return
+          the same cancellation response without processing the cancellation again.
       parameters:
         - name: id
           in: path
           type: string
           required: true
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: true
+          description: Short-lived verification token from OTP confirmation
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safely retrying cancel requests
         - name: body
           in: body
-          required: true
+          required: false
           schema:
             type: object
-            required:
-              - verificationToken
             properties:
-              verificationToken:
-                type: string
               reason:
                 type: string
                 description: Optional cancellation reason
@@ -794,36 +1019,48 @@ paths:
         '401':
           description: Verification failed
           schema:
-            type: object
-            properties:
-              error:
-                type: string
+            $ref: '#/definitions/Error'
 
   /public/bookings/{id}/reschedule:
     post:
       summary: Reschedule a booking (requires verification)
-      description: Reschedule a booking after verifying the requestor's identity via `verificationToken`.
+      description: Reschedule a booking after verifying the requestor's identity via the `X-Verification-Token` header (OTP confirmation).
       operationId: rescheduleBooking
       tags:
         - Bookings
+      security:
+        - BearerAuth: []
+      x-idempotency:
+        key-header: Idempotency-Key
+        behavior: |
+          Use the Idempotency-Key header to safely retry reschedule requests.
+          If a retry arrives with the same key within 24 hours, the service will return
+          the same reschedule response without rescheduling again.
       parameters:
         - name: id
           in: path
           type: string
           required: true
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: true
+          description: Short-lived verification token from OTP confirmation
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safely retrying reschedule requests
         - name: body
           in: body
           required: true
           schema:
             type: object
             required:
-              - verificationToken
               - date
               - time
               - duration
             properties:
-              verificationToken:
-                type: string
               date:
                 type: string
                 example: "2026-03-30"
@@ -854,10 +1091,228 @@ paths:
         '401':
           description: Verification failed
           schema:
-            type: object
-            properties:
-              error:
-                type: string
+            $ref: '#/definitions/Error'
+
+definitions:
+  Error:
+    type: object
+    properties:
+      error:
+        type: string
+      code:
+        type: string
+        description: Machine-friendly error code
+      requestId:
+        type: string
+        description: Correlation id propagated from the caller or generated by the service
+      details:
+        type: object
+        description: Optional structured details with additional diagnostic information
+  Instructor:
+    type: object
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      hourlyRate:
+        type: number
+      distance:
+        type: number
+      rating:
+        type: number
+      reviews:
+        type: integer
+      bio:
+        type: string
+      vehicleTypes:
+        type: array
+        items:
+          type: string
+      languages:
+        type: array
+        items:
+          type: string
+      profileImage:
+        type: string
+      totalBookings:
+        type: integer
+      carMake:
+        type: string
+      carModel:
+        type: string
+      carYear:
+        type: integer
+      location:
+        type: object
+        properties:
+          displayName:
+            type: string
+          lat:
+            type: number
+          lng:
+            type: number
+  BookingRequest:
+    type: object
+    properties:
+      instructorId:
+        type: string
+      instructorQuery:
+        type: string
+      packageType:
+        type: string
+      hours:
+        type: number
+      bookingType:
+        type: string
+      registrationType:
+        type: string
+      accountHolderName:
+        type: string
+      accountHolderEmail:
+        type: string
+        format: email
+      accountHolderPhone:
+        type: string
+      scheduledBookings:
+        type: array
+        items:
+          type: object
+          properties:
+            date:
+              type: string
+              format: date
+            time:
+              type: string
+            duration:
+              type: number
+            pickupLocation:
+              type: string
+            timezone:
+              type: string
+  AvailabilityResponse:
+    type: object
+    properties:
+      slots:
+        type: array
+        items:
+          type: object
+          required:
+            - slotId
+            - instructorId
+            - time
+            - start
+            - end
+            - available
+            - seats
+          properties:
+            slotId:
+              type: string
+            instructorId:
+              type: string
+            time:
+              type: string
+              description: Local time (HH:MM)
+            start:
+              type: string
+              format: date-time
+              description: ISO-8601 start datetime
+            end:
+              type: string
+              format: date-time
+              description: ISO-8601 end datetime
+            available:
+              type: boolean
+            seats:
+              type: integer
+      date:
+        type: string
+        format: date
+      duration:
+        type: integer
+      timezone:
+        type: string
+        description: IANA timezone identifier (e.g., Australia/Perth)
+      currency:
+        type: string
+        description: ISO 4217 currency code
+        example: AUD
+      notes:
+        type: string
+  BookingStatus:
+    type: string
+    description: Status of a booking
+    enum: [pending, confirmed, cancelled, rescheduled, completed]
+  BookingCreated:
+    type: object
+    properties:
+      success:
+        type: boolean
+      bookingId:
+        type: string
+      clientId:
+        type: string
+      total:
+        type: number
+      status:
+        $ref: '#/definitions/BookingStatus'
+  OtpResponse:
+    type: object
+    properties:
+      verificationId:
+        type: string
+      delivery:
+        type: string
+      expiresIn:
+        type: integer
+      maxAttempts:
+        type: integer
+      resendAfterSeconds:
+        type: integer
+      rateLimitPerHour:
+        type: integer
+
+  Package:
+    type: object
+    properties:
+      type:
+        type: string
+        enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
+      hours:
+        type: integer
+      price:
+        type: number
+      originalPrice:
+        type: number
+      discount:
+        type: number
+      discountPercentage:
+        type: integer
+      savings:
+        type: number
+      currency:
+        type: string
+        example: AUD
+
+  EmailAddress:
+    type: string
+    format: email
+    description: RFC 5322-compliant email address
+
+  PhoneNumber:
+    type: string
+    pattern: '^\+?[1-9]\d{1,14}$'
+    description: E.164 formatted phone number
+
+  ISO8601Date:
+    type: string
+    format: date
+    description: ISO 8601 calendar date
+
+  ISO8601DateTime:
+    type: string
+    format: date-time
+    description: ISO 8601 date-time with timezone
 
 tags:
   - name: System
