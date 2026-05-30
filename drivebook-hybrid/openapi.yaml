@@ -748,6 +748,8 @@ paths:
       operationId: handleIncomingCall
       tags:
         - Voice
+      produces:
+        - text/xml
       parameters:
         - name: X-Twilio-Signature
           in: header
@@ -768,7 +770,10 @@ paths:
                 type: string
       responses:
         '200':
-          description: TwiML response
+          description: TwiML response (XML)
+          schema:
+            type: string
+            description: TwiML XML document
 
   /voice/voicemail:
     post:
@@ -777,6 +782,8 @@ paths:
       operationId: handleVoicemail
       tags:
         - Voice
+      produces:
+        - text/xml
       parameters:
         - name: X-Twilio-Signature
           in: header
@@ -797,7 +804,10 @@ paths:
                 type: string
       responses:
         '200':
-          description: Voicemail processed
+          description: Voicemail processed (TwiML XML)
+          schema:
+            type: string
+            description: TwiML XML document
 
   /verifications/otp:
     post:
@@ -808,6 +818,10 @@ paths:
         Returns a short-lived `verificationId` used to confirm the OTP.
         Codes expire after 5 minutes, allow up to 3 failed confirmation attempts,
         require a 60-second resend delay, and are rate-limited to 3 requests per hour.
+        
+        AUTHENTICATION: This endpoint is intentionally public (no BearerAuth required).
+        The OTP code itself is the secret — only the recipient of the SMS/email can confirm it.
+        Rate limiting (3 requests/hour per phone/email) prevents abuse.
       x-idempotency:
         key-generation: Per phone/email + purpose combination
         behavior: |
@@ -1063,10 +1077,12 @@ paths:
             properties:
               date:
                 type: string
-                example: "2026-03-30"
+                format: date
+                description: "New date in YYYY-MM-DD format (e.g. 2026-03-30)"
               time:
                 type: string
-                example: "14:00"
+                pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+                description: "New time in HH:MM 24-hour format (e.g. 14:00)"
               duration:
                 type: integer
                 example: 60
@@ -1135,6 +1151,8 @@ definitions:
           type: string
       profileImage:
         type: string
+        format: uri
+        description: URL to the instructor's profile image
       totalBookings:
         type: integer
       carMake:
@@ -1152,44 +1170,6 @@ definitions:
             type: number
           lng:
             type: number
-  BookingRequest:
-    type: object
-    properties:
-      instructorId:
-        type: string
-      instructorQuery:
-        type: string
-      packageType:
-        type: string
-      hours:
-        type: number
-      bookingType:
-        type: string
-      registrationType:
-        type: string
-      accountHolderName:
-        type: string
-      accountHolderEmail:
-        type: string
-        format: email
-      accountHolderPhone:
-        type: string
-      scheduledBookings:
-        type: array
-        items:
-          type: object
-          properties:
-            date:
-              type: string
-              format: date
-            time:
-              type: string
-            duration:
-              type: number
-            pickupLocation:
-              type: string
-            timezone:
-              type: string
   AvailabilityResponse:
     type: object
     properties:
@@ -1326,6 +1306,8 @@ tags:
   - name: Availability
     description: Time slot availability
   - name: Bookings
-    description: Booking creation
+    description: Booking creation, cancellation, and rescheduling
   - name: Voice
-    description: Twilio voice webhooks
+    description: Twilio voice webhooks (native to hybrid service — not proxied)
+  - name: Verifications
+    description: OTP identity verification for sensitive operations
