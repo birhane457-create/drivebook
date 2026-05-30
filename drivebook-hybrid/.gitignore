@@ -41,4 +41,7 @@ prisma/migrations/
 
 # generated code (OpenAPI generator)
 generated-client/
+generated-client-js/
 generated-server/
+openapitools.json
+mock-drivebook-server.js
