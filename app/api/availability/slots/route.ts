@@ -276,7 +276,10 @@ export async function GET(req: NextRequest) {
       new Map(slots.map(slot => [slot.time, slot])).values()
     ).sort((a, b) => a.time.localeCompare(b.time))
 
-    return NextResponse.json({ slots: uniqueSlots, date, duration })
+    // Compute nextAvailable — first slot that is available and not short-notice
+    const nextAvailable = uniqueSlots.find(s => s.available && !s.reason)?.time ?? null
+
+    return NextResponse.json({ slots: uniqueSlots, date, duration, nextAvailable })
   } catch (error) {
     console.error('Get slots error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
