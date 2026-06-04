@@ -25,13 +25,15 @@ export type AlertType =
   | 'PAYOUT_FAILED'
   | 'ABN_REVOKED'
   | 'RECONCILIATION_ISSUES'
-  | 'DISPUTE_OPENED'       // Sprint A: chargeback filed
-  | 'DISPUTE_LOST'         // Sprint A: chargeback confirmed — cash loss
-  | 'REFUND_SYNCED'        // Sprint B: out-of-band refund detected
-  | 'TRANSFER_FAILED'      // Sprint C: Stripe Connect transfer failed
-  | 'BOOKING_AUTO_NO_SHOW'; // cleanup cron auto-no-show alert
+  | 'DISPUTE_OPENED'          // Sprint A: chargeback filed
+  | 'DISPUTE_WON'             // Sprint A: chargeback won — liability cleared
+  | 'DISPUTE_LOST'            // Sprint A: chargeback confirmed — cash loss
+  | 'DISPUTE_EVIDENCE_NEEDED' // Sprint A: manual evidence submission required
+  | 'REFUND_SYNCED'           // Sprint B: out-of-band refund detected
+  | 'TRANSFER_FAILED'         // Sprint C: Stripe Connect transfer failed
+  | 'BOOKING_AUTO_NO_SHOW';   // cleanup cron auto-no-show alert
 
-export type AlertSeverity = 'CRITICAL' | 'WARNING';
+export type AlertSeverity = 'CRITICAL' | 'WARNING' | 'HIGH' | 'LOW';
 
 export interface AlertPayload {
   type: AlertType;

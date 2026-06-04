@@ -151,7 +151,8 @@ export class AvailabilityService {
     )
   }
 
-  async checkDoubleBooking(
+  async inspect the app code base
+  checkDoubleBooking(
     instructorId: string,
     startTime: Date,
     endTime: Date,
