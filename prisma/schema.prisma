@@ -28,9 +28,10 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  clients    Client[]
-  wallet     ClientWallet?
-  instructor Instructor?
+  clients     Client[]
+  wallet      ClientWallet?
+  instructor  Instructor?
+  staffMember StaffMember?
 }
 
 model Client {
@@ -602,4 +603,146 @@ model StripeDispute {
   @@index([bookingId])
   @@index([instructorId])
   @@index([stripePaymentIntentId])
+}
+
+// Staff member — platform operators who handle tasks, support, and governance.
+// Linked 1:1 to a User account (role = STAFF | ADMIN | SUPER_ADMIN).
+model StaffMember {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                   String
+  email                  String   @unique
+  department             String   // FINANCIAL | TECHNICAL | SUPPORT
+  isActive               Boolean  @default(true)
+  isSupervisor           Boolean  @default(false)
+
+  // Workload tracking
+  currentLoad            Int      @default(0)   // active tasks assigned
+  maxCapacity            Int      @default(10)  // max concurrent tasks
+  tasksCompleted         Int      @default(0)
+  avgResolutionTimeHours Float?
+  satisfactionScore      Float?
+  skills                 Json?    // string[]
+
+  // Permissions
+  canApproveRefunds      Boolean  @default(false)
+  canOverridePolicy      Boolean  @default(false)
+  canAccessFinancials    Boolean  @default(false)
+  maxRefundAmount        Float    @default(100)  // max refund without supervisor approval
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  assignedTasks  Task[]      @relation("AssignedTasks")
+  taskNotes      TaskNote[]
+
+  @@index([department, isActive])
+}
+
+// Task — a work item for staff to action (support, financial, technical).
+// Created automatically by fraud detection, dispute webhook, document expiry cron, etc.
+model Task {
+  id           String   @id @default(cuid())
+  type         String   // REFUND_REQUEST | PAYMENT_DISPUTE | COMPLAINT | BOOKING_ISSUE | DOCUMENT_EXPIRY | CALENDAR_SYNC_ERROR | OTHER
+  category     String   // FINANCIAL | TECHNICAL | SUPPORT
+  priority     String   // URGENT | HIGH | NORMAL | LOW
+  status       String   @default("OPEN") // OPEN | ASSIGNED | IN_PROGRESS | WAITING_RESPONSE | ESCALATED | RESOLVED | CLOSED
+
+  title        String
+  description  String
+
+  // Linked entities (optional — not all tasks relate to every entity)
+  instructorId String?
+  clientId     String?
+  bookingId    String?
+  userId       String?
+
+  // Contact info (for external/guest contacts)
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  // Assignment
+  assignedToId String?
+  assignedTo   StaffMember? @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  assignedAt   DateTime?
+  autoAssigned Boolean      @default(false)
+  dueDate      DateTime?
+
+  // Financial
+  financialAmount Float?
+  financialImpact Json?
+  requiresApproval Boolean @default(false)
+
+  // SLA tracking
+  firstResponseAt     DateTime?
+  slaBreached         Boolean   @default(false)
+  slaBreachReason     String?
+  resolutionTimeHours Float?
+
+  // Escalation
+  escalatedAt      DateTime?
+  escalatedTo      String?
+  escalationReason String?
+  escalationCount  Int       @default(0)
+  autoEscalated    Boolean   @default(false)
+
+  // Closure
+  resolution          String?
+  resolvedAt          DateTime?
+  resolvedBy          String?
+  closedAt            DateTime?
+  closedBy            String?
+  linkedEntityVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes TaskNote[]
+
+  @@index([status, priority])
+  @@index([instructorId])
+  @@index([bookingId])
+  @@index([assignedToId])
+}
+
+// TaskNote — internal notes and attachments on a task.
+model TaskNote {
+  id          String      @id @default(cuid())
+  taskId      String
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  staffId     String
+  staff       StaffMember @relation(fields: [staffId], references: [id])
+  note        String
+  isInternal  Boolean     @default(true)
+  attachments Json?       // string[] — URLs to uploaded attachments
+  createdAt   DateTime    @default(now())
+
+  @@index([taskId])
+}
+
+// FinancialLedger — double-entry accounting ledger (append-only).
+// Every booking payment, payout, refund, and adjustment creates entries here.
+// NEVER update or delete rows — immutable audit trail.
+model FinancialLedger {
+  id              String   @id @default(cuid())
+  debitAccount    String   // e.g. PLATFORM_ESCROW:platform
+  creditAccount   String   // e.g. CLIENT_WALLET:userId
+  amount          Float
+  description     String
+  idempotencyKey  String   @unique  // prevents double-entries on retry
+  bookingId       String?
+  transactionId   String?
+  payoutId        String?
+  userId          String?
+  instructorId    String?
+  metadata        Json?
+  createdBy       String   @default("SYSTEM")
+  createdAt       DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([instructorId])
+  @@index([userId])
+  @@index([createdAt])
 }

@@ -9,38 +9,56 @@
 
 export enum BookingStatus {
   PENDING = 'PENDING',
+  PENDING_PAYMENT = 'PENDING_PAYMENT', // created, awaiting Stripe payment
   CONFIRMED = 'CONFIRMED',
   CHECKED_IN = 'CHECKED_IN',
   COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED'
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',   // payment not received within window
+  NO_SHOW = 'NO_SHOW'    // client did not attend
 }
 
 /**
  * Valid state transitions
- * 
- * PENDING → CONFIRMED (payment received)
- * CONFIRMED → CHECKED_IN (lesson started)
- * CONFIRMED → CANCELLED (before lesson)
- * CHECKED_IN → COMPLETED (lesson finished)
- * CHECKED_IN → CANCELLED (emergency cancellation)
- * 
- * Terminal states: COMPLETED, CANCELLED
+ *
+ * PENDING         → PENDING_PAYMENT (payment intent created)
+ * PENDING         → CONFIRMED       (offline/wallet booking — no card needed)
+ * PENDING         → CANCELLED
+ * PENDING_PAYMENT → CONFIRMED       (Stripe payment_intent.succeeded)
+ * PENDING_PAYMENT → CANCELLED       (user cancelled before paying)
+ * PENDING_PAYMENT → EXPIRED         (payment window elapsed)
+ * CONFIRMED       → CHECKED_IN      (lesson started)
+ * CONFIRMED       → CANCELLED       (cancelled before lesson)
+ * CONFIRMED       → NO_SHOW         (client did not attend)
+ * CHECKED_IN      → COMPLETED       (lesson finished)
+ * CHECKED_IN      → CANCELLED       (emergency cancellation)
+ *
+ * Terminal states: COMPLETED, CANCELLED, EXPIRED, NO_SHOW
  */
 export const VALID_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   [BookingStatus.PENDING]: [
+    BookingStatus.PENDING_PAYMENT,
     BookingStatus.CONFIRMED,
     BookingStatus.CANCELLED
   ],
+  [BookingStatus.PENDING_PAYMENT]: [
+    BookingStatus.CONFIRMED,
+    BookingStatus.CANCELLED,
+    BookingStatus.EXPIRED
+  ],
   [BookingStatus.CONFIRMED]: [
     BookingStatus.CHECKED_IN,
-    BookingStatus.CANCELLED
+    BookingStatus.CANCELLED,
+    BookingStatus.NO_SHOW
   ],
   [BookingStatus.CHECKED_IN]: [
     BookingStatus.COMPLETED,
-    BookingStatus.CANCELLED // Emergency only
+    BookingStatus.CANCELLED
   ],
-  [BookingStatus.COMPLETED]: [], // Terminal state
-  [BookingStatus.CANCELLED]: []  // Terminal state
+  [BookingStatus.COMPLETED]: [],  // Terminal
+  [BookingStatus.CANCELLED]: [],  // Terminal
+  [BookingStatus.EXPIRED]: [],    // Terminal
+  [BookingStatus.NO_SHOW]: []     // Terminal
 };
 
 /**
