@@ -13,7 +13,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const bufferCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // 48-hour dispute buffer — lessons must be at least 2 days old before becoming payout-eligible
+    const bufferCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     // Find all instructors with eligible transactions
     const eligible = await prisma.transaction.findMany({

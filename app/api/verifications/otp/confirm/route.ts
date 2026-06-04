@@ -61,16 +61,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Verification code has expired', valid: false, expired: true }, { status: 400 });
     }
 
-    // Parse stored OTP: format is "otp:{verificationId}:{code}"
+    // Parse stored OTP: format is "otp:{verificationId}:{hashedCode}"
     const parts = user.resetToken.split(':');
     if (parts.length !== 3 || parts[0] !== 'otp') {
       failedAttempts.set(data.verificationId, attempts + 1);
       return NextResponse.json({ error: 'Invalid verification code', valid: false }, { status: 400 });
     }
 
-    const [, storedVerificationId, storedCode] = parts;
+    const [, storedVerificationId, storedHash] = parts;
 
-    if (storedVerificationId !== data.verificationId || storedCode !== data.code) {
+    // FIX #5: Hash the submitted code with the same secret and compare hashes.
+    // Use crypto.timingSafeEqual to prevent timing-based enumeration attacks.
+    const otpSecret = process.env.OTP_HASH_SECRET || 'dev-otp-secret-change-in-prod';
+    const submittedHash = crypto.createHmac('sha256', otpSecret).update(data.code).digest('hex');
+
+    const verificationIdMatch = storedVerificationId === data.verificationId;
+    // timingSafeEqual requires equal-length buffers
+    const storedBuf = Buffer.from(storedHash, 'hex');
+    const submittedBuf = Buffer.from(submittedHash, 'hex');
+    const codeMatch = storedBuf.length === submittedBuf.length &&
+      crypto.timingSafeEqual(storedBuf, submittedBuf);
+
+    if (!verificationIdMatch || !codeMatch) {
       failedAttempts.set(data.verificationId, attempts + 1);
       const remaining = 3 - (attempts + 1);
       return NextResponse.json(

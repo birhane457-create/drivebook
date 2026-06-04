@@ -19,6 +19,7 @@ export default async function AdminDashboard() {
   let subMap: Record<string, number> = {};
   let platformRevenueThisMonth = 0;
   let endedConfirmed = 0, expiringDocs = 0, unverifiedABNs = 0;
+  let openDisputes = 0;
 
   try {
     const now = new Date();
@@ -75,6 +76,11 @@ export default async function AdminDashboard() {
     }, {});
     platformRevenueThisMonth = rev._sum?.platformFee ?? 0;
     endedConfirmed = ec; expiringDocs = ed; unverifiedABNs = ua;
+
+    // Open disputes — non-fatal if migration hasn't run yet
+    openDisputes = await (prisma as any).stripeDispute.count({
+      where: { status: { notIn: ['won', 'lost', 'charge_refunded', 'warning_closed'] } },
+    }).catch(() => 0);
   } catch (err) {
     console.error('Admin dashboard query error:', err);
     // Continue with zero values — page still renders
@@ -131,6 +137,16 @@ export default async function AdminDashboard() {
                 </p>
                 <Link href="/admin/instructors" className="text-orange-700 underline text-sm font-semibold shrink-0 ml-3">
                   Verify ABNs →
+                </Link>
+              </div>
+            )}
+            {openDisputes > 0 && (
+              <div className="bg-red-50 border border-red-300 rounded-xl px-4 py-3 flex items-center justify-between">
+                <p className="text-red-800 font-medium text-sm">
+                  ⚠️ {openDisputes} open chargeback{openDisputes > 1 ? 's' : ''} — instructor payout{openDisputes > 1 ? 's' : ''} frozen pending resolution
+                </p>
+                <Link href="/admin/disputes" className="text-red-700 underline text-sm font-semibold shrink-0 ml-3">
+                  Review Disputes →
                 </Link>
               </div>
             )}

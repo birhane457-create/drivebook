@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 import { sendAlert } from '@/lib/services/alert-service';
+import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,9 +66,13 @@ export async function GET(req: NextRequest) {
   try {
     // ── Check 1: Missing payments ─────────────────────────────────────────
     // Pull Stripe payment_intents that succeeded in the window
-    // and verify each has a corresponding LedgerEntry(PAYMENT_COLLECTED)
+    // and verify each has a corresponding LedgerEntry(PAYMENT_COLLECTED).
+    // FIX #7: Auto-confirm clear-cut cases — bookings that are PENDING_PAYMENT
+    // in DB but paid in Stripe, within 24h, with no ledger entry.
+    // Anything ambiguous is still flagged for manual review.
     let hasMore = true;
     let startingAfter: string | undefined;
+    let autoConfirmed = 0;
 
     while (hasMore) {
       const params: Stripe.PaymentIntentListParams = {
@@ -83,6 +88,10 @@ export async function GET(req: NextRequest) {
 
       for (const pi of page.data) {
         if (pi.status !== 'succeeded') continue;
+        // P1-3 FIX: Verify currency belongs to this platform before processing.
+        // A payment_intent from a shared Stripe account using a different currency
+        // must never be auto-confirmed as an AUD booking payment.
+        if (pi.currency !== 'aud') continue;
         paymentsChecked++;
 
         // Check for a LedgerEntry referencing this payment intent
@@ -98,11 +107,72 @@ export async function GET(req: NextRequest) {
         });
 
         if (!ledgerEntry) {
-          flaggedMissingPayments.push({
-            stripePaymentIntentId: pi.id,
-            amount: pi.amount / 100,
-            created: pi.created,
-          });
+          // FIX #7: Auto-confirm if booking is PENDING_PAYMENT, within 24h, unambiguous.
+          // Only auto-fix when ALL conditions are met — anything else goes to manual queue.
+          const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          const booking = bookingId
+            ? await prisma.booking.findUnique({
+                where: { id: bookingId },
+                select: { id: true, status: true, createdAt: true, price: true, instructorPayout: true },
+              })
+            : null;
+
+          const isAutoConfirmable =
+            booking &&
+            booking.status === 'PENDING_PAYMENT' &&
+            booking.createdAt > twentyFourHoursAgo &&
+            Math.abs((pi.amount / 100) - booking.price) < 0.02; // price matches within 2 cents
+
+          if (isAutoConfirmable) {
+            try {
+              await prisma.booking.update({
+                where: { id: booking.id },
+                data: { status: 'CONFIRMED', isPaid: true, paidAt: new Date(), paymentIntentId: pi.id } as any,
+              });
+              // Write the missing ledger entry
+              const { appendLedgerEntry, incrementLedger } = await import('@/lib/services/ledger-service');
+              await appendLedgerEntry({
+                type: 'PAYMENT_COLLECTED',
+                amount: pi.amount / 100,
+                referenceId: booking.id,
+                referenceType: 'BOOKING',
+                description: `Auto-reconciled: Stripe ${pi.id} — booking was PENDING_PAYMENT`,
+                metadata: { autoReconciled: true, stripePaymentIntentId: pi.id, reconReportId: report.id },
+              });
+              await incrementLedger({
+                totalCollected: pi.amount / 100,
+                totalReserved: booking.instructorPayout ?? 0,
+              });
+              // Audit log
+              await (prisma as any).auditLog.create({
+                data: {
+                  action: 'BOOKING_AUTO_RECONCILED',
+                  actorId: 'SYSTEM_CRON',
+                  actorRole: 'SYSTEM',
+                  targetType: 'BOOKING',
+                  targetId: booking.id,
+                  success: true,
+                  metadata: { stripePaymentIntentId: pi.id, amount: pi.amount / 100, reconReportId: report.id },
+                },
+              });
+              autoConfirmed++;
+              console.log(`[RECONCILIATION] Auto-confirmed booking ${booking.id} — Stripe PI ${pi.id}`);
+            } catch (autoErr) {
+              console.error(`[RECONCILIATION] Auto-confirm failed for booking ${bookingId}:`, autoErr);
+              flaggedMissingPayments.push({
+                stripePaymentIntentId: pi.id,
+                amount: pi.amount / 100,
+                created: pi.created,
+              });
+            }
+          } else {
+            // Not auto-confirmable — flag for manual review
+            flaggedMissingPayments.push({
+              stripePaymentIntentId: pi.id,
+              amount: pi.amount / 100,
+              created: pi.created,
+            });
+          }
         }
       }
 
@@ -185,6 +255,7 @@ export async function GET(req: NextRequest) {
           flaggedMissingPayments,
           flaggedMissingTransfers,
           flaggedStuckPayouts,
+          autoConfirmed,
         },
       },
     });
@@ -195,7 +266,8 @@ export async function GET(req: NextRequest) {
         `[RECONCILIATION WARNING] Run ${report.id}: ` +
         `missingPayments=${flaggedMissingPayments.length}, ` +
         `missingTransfers=${flaggedMissingTransfers.length}, ` +
-        `stuckPayouts=${flaggedStuckPayouts.length}`,
+        `stuckPayouts=${flaggedStuckPayouts.length}` +
+        (autoConfirmed > 0 ? `, autoConfirmed=${autoConfirmed}` : ''),
       );
 
       // Alert — non-blocking
@@ -216,10 +288,13 @@ export async function GET(req: NextRequest) {
     } else {
       console.log(
         `[RECONCILIATION OK] Run ${report.id}: ` +
-        `${paymentsChecked} payments checked, ${transfersChecked} transfers checked — no issues`,
+        `${paymentsChecked} payments checked, ${transfersChecked} transfers checked` +
+        (autoConfirmed > 0 ? `, ${autoConfirmed} auto-confirmed` : '') +
+        ' — no issues',
       );
     }
 
+    await pingCronHealth('reconcile-stripe');
     return NextResponse.json({
       success: true,
       reportId: report.id,
@@ -229,6 +304,7 @@ export async function GET(req: NextRequest) {
       transfersChecked,
       missingTransfers: flaggedMissingTransfers.length,
       stuckPayouts: flaggedStuckPayouts.length,
+      autoConfirmed,
     });
   } catch (error) {
     // Mark report FAILED so the lock is released
@@ -242,6 +318,7 @@ export async function GET(req: NextRequest) {
     });
 
     console.error('[RECONCILIATION FAILED]', error);
+    await failCronHealth('reconcile-stripe', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Reconciliation failed' },
       { status: 500 },

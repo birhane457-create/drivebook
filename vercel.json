@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/cleanup-expired-bookings",
-      "schedule": "0 0 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/apply-rate-changes",
@@ -24,6 +24,14 @@
     {
       "path": "/api/cron/document-expiry-check",
       "schedule": "0 2 * * 1"
+    },
+    {
+      "path": "/api/cron/health-check",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/weekly-payouts",
+      "schedule": "0 18 * * 1"
     }
   ]
 }

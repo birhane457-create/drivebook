@@ -41,9 +41,11 @@ export async function GET() {
       gstRegistered: true,
       withholdingTaxRate: true,
       stripeAccountId: true,
+      chargesEnabled: true,
+      payoutsEnabled: true,
       name: true,
     },
-  });
+  } as any);
 
   if (!instructor) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json(instructor);
@@ -142,8 +144,10 @@ export async function POST(req: NextRequest) {
       gstRegistered: true,
       withholdingTaxRate: true,
       stripeAccountId: true,
+      chargesEnabled: true,
+      payoutsEnabled: true,
     },
-  });
+  } as any);
 
   return NextResponse.json({ success: true, settings: updated });
 }

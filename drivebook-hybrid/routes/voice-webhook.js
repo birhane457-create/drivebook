@@ -5,6 +5,8 @@ const config = require('../utils/config');
 const instructorService = require('../services/instructor-service');
 const copilotService = require('../services/copilot-service');
 const messageService = require('../services/message-service');
+const smsService = require('../services/sms-service');
+const voiceSession = require('../services/voice-session-service');
 const logger = require('../utils/logger');
 
 // Twilio signature validation middleware
@@ -16,7 +18,11 @@ const validateTwilioRequest = (req, res, next) => {
   }
 
   const twilioSignature = req.headers['x-twilio-signature'];
-  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  // P2-5 FIX: Behind a reverse proxy req.protocol is always 'http' even if the
+  // actual request came over HTTPS. Twilio signs using the exact https:// URL,
+  // so signature validation fails unless we use x-forwarded-proto.
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  const url = `${proto}://${req.get('host')}${req.originalUrl}`;
   
   if (!twilioSignature) {
     logger.logWarning('Missing Twilio signature', { requestId: req.requestId });
@@ -53,8 +59,43 @@ router.post('/incoming', validateTwilioRequest, async (req, res) => {
 
     logger.logInfo('Incoming call', { from: From, to: To, requestId });
 
-    const instructor = await instructorService.findInstructorByPhone(To);
+    // ── Session recovery ─────────────────────────────────────────────────────
+    // If the caller has an active session (e.g. their previous call dropped
+    // mid-booking), greet them with context and resend their payment link so
+    // they don't need to start from scratch.
+    const existingSession = voiceSession.getSession(From);
     const twiml = new twilio.twiml.VoiceResponse();
+
+    if (existingSession) {
+      logger.logInfo('Voice session recovery triggered', {
+        phone: From,
+        lastAction: existingSession.lastAction,
+        bookingId: existingSession.bookingId,
+        requestId,
+      });
+
+      // Resend payment link in the background — non-blocking so TwiML responds fast
+      if (
+        existingSession.checkoutUrl &&
+        (existingSession.lastAction === 'BOOKING_CREATED' ||
+          existingSession.lastAction === 'PAYMENT_LINK_SENT')
+      ) {
+        smsService
+          .resendPaymentLink(From, existingSession.checkoutUrl)
+          .catch((smsErr) =>
+            logger.logError(smsErr, { requestId, context: 'session-recovery-sms' })
+          );
+
+        // Mark as resent so we don't flood on subsequent call-backs
+        voiceSession.saveSession(From, { lastAction: 'PAYMENT_LINK_SENT' });
+      }
+
+      twiml.say(voiceSession.buildRecoveryPrompt(existingSession));
+      return res.type('text/xml').send(twiml.toString());
+    }
+
+    // ── Normal call flow ──────────────────────────────────────────────────────
+    const instructor = await instructorService.findInstructorByPhone(To);
 
     if (instructor) {
       // Attempt to connect to Copilot agent

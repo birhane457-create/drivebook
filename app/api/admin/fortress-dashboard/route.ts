@@ -1,291 +1,204 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { checkLiquidityStatus } from '@/lib/services/liquidityControl';
-import { calculateAllInstructorRiskScores } from '@/lib/services/fraudDetection';
-
+import { getPlatformLedger } from '@/lib/services/ledger-service';
 
 export const dynamic = 'force-dynamic';
+
 /**
  * FORTRESS DASHBOARD API
- * 
- * Provides comprehensive operational metrics for owner:
- * - Financial health
- * - Liquidity status
- * - Fraud alerts
- * - Risk scores
- * - Staff performance
- * - SLA compliance
+ *
+ * Operational metrics for the platform owner.
+ * Rewritten to use models that actually exist in schema.prisma.
+ * Previous version referenced prisma.task, prisma.staffMember, prisma.refundAmount
+ * (none of which exist) causing a runtime crash on every call.
  */
-
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
     const session = await getServerSession(authOptions);
-    
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin
     const user = await prisma.user.findUnique({
       where: { email: session.user.email! },
       select: { role: true },
     });
-
     if (user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // ============================================
-    // 1. FINANCIAL HEALTH
-    // ============================================
-    
     const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - 7);
+    const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Revenue
+    // ── Financial health ─────────────────────────────────────────────────────
     const weeklyBookings = await prisma.booking.findMany({
       where: {
         createdAt: { gte: weekStart },
         status: { in: ['CONFIRMED', 'COMPLETED'] },
+        deletedAt: null,
       },
-      select: {
-        price: true,
-        refundAmount: true,
-        status: true,
-      },
+      select: { price: true, platformFee: true, status: true },
     });
 
-    const totalRevenue = weeklyBookings.reduce((sum, b) => sum + b.price, 0);
-    const completedBookings = weeklyBookings.filter(b => b.status === 'COMPLETED').length;
-    const avgBookingValue = completedBookings > 0 ? totalRevenue / completedBookings : 0;
+    const totalRevenue = weeklyBookings.reduce((s, b) => s + b.price, 0);
+    const totalPlatformFees = weeklyBookings.reduce((s, b) => s + b.platformFee, 0);
+    const completedCount = weeklyBookings.filter(b => b.status === 'COMPLETED').length;
+    const avgBookingValue = completedCount > 0 ? totalRevenue / completedCount : 0;
 
-    // Refunds
-    const totalRefunds = weeklyBookings.reduce((sum, b) => sum + (b.refundAmount || 0), 0);
-    const refundPercentage = totalRevenue > 0 ? (totalRefunds / totalRevenue) * 100 : 0;
-
-    // Disputes - metadata field doesn't exist in Booking model
-    // TODO: Add proper dispute tracking field to schema if needed
-    const disputes = 0;
-
-    const disputePercentage = completedBookings > 0 ? (disputes / completedBookings) * 100 : 0;
-
-    // Overrides - simplified query since financialImpact path syntax may not work with MongoDB
-    const overrides = await prisma.task.findMany({
+    // Refunds from ledger entries this week
+    const refundEntries = await (prisma as any).ledgerEntry.aggregate({
       where: {
-        createdAt: { gte: weekStart },
-        type: 'REFUND_REQUEST',
-        financialImpact: {
-          not: null,
-        },
-      },
-      select: {
-        financialImpact: true,
-      },
-    });
-
-    const totalOverrides = overrides.reduce((sum, t) => {
-      const impact = t.financialImpact as any;
-      // Check if this is a manual override and get the amount
-      if (impact?.manualOverride === true) {
-        return sum + (impact?.overrideAmount || 0);
-      }
-      return sum;
-    }, 0);
-
-    const overridePercentage = totalRefunds > 0 ? (totalOverrides / totalRefunds) * 100 : 0;
-
-    // ============================================
-    // 2. LIQUIDITY STATUS
-    // ============================================
-    
-    const liquidityStatus = await checkLiquidityStatus();
-
-    // ============================================
-    // 3. FRAUD & RISK
-    // ============================================
-    
-    const riskScores = await calculateAllInstructorRiskScores();
-    const highRiskInstructors = riskScores.filter(s => s.level === 'HIGH');
-    const mediumRiskInstructors = riskScores.filter(s => s.level === 'MEDIUM');
-
-    // Recent fraud alerts
-    const recentAlerts = await prisma.auditLog.findMany({
-      where: {
-        action: 'FRAUD_SCAN',
+        type: { in: ['REFUND_ISSUED', 'REFUND_SYNCED'] },
         createdAt: { gte: weekStart },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 1,
+      _sum: { amount: true },
     });
+    const totalRefunds = Math.abs(refundEntries._sum?.amount ?? 0);
+    const refundRate = totalRevenue > 0 ? (totalRefunds / totalRevenue) * 100 : 0;
 
-    const latestScan = recentAlerts[0]?.metadata as any;
-    const fraudAlerts = latestScan?.alerts || [];
-    const highSeverityAlerts = fraudAlerts.filter((a: any) => a.severity === 'HIGH');
-
-    // ============================================
-    // 4. STAFF PERFORMANCE
-    // ============================================
-    
-    const staffMembers = await prisma.staffMember.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        department: true,
-        tasksCompleted: true,
-        avgResolutionTimeHours: true,
-        satisfactionScore: true,
-      },
-    });
-
-    // Tasks this week
-    const weeklyTasks = await prisma.task.findMany({
+    // Open disputes
+    const openDisputes = await (prisma as any).stripeDispute.count({
       where: {
-        createdAt: { gte: weekStart },
+        status: { notIn: ['won', 'lost', 'charge_refunded', 'warning_closed'] },
       },
-      select: {
-        status: true,
-        priority: true,
-        slaBreached: true,
-        assignedToId: true,
+    });
+    const lostDisputes = await (prisma as any).stripeDispute.aggregate({
+      where: { status: 'lost', createdAt: { gte: weekStart } },
+      _sum: { amount: true },
+      _count: true,
+    });
+
+    // ── Platform ledger ───────────────────────────────────────────────────────
+    const ledger = await getPlatformLedger();
+
+    // ── Payouts this month ────────────────────────────────────────────────────
+    const payoutsThisMonth = await prisma.payout.aggregate({
+      where: { status: 'PAID', paidAt: { gte: monthStart } },
+      _sum: { netAmount: true, grossAmount: true },
+      _count: true,
+    });
+
+    const failedPayouts = await prisma.payout.count({
+      where: { status: 'FAILED' },
+    });
+
+    const frozenPayouts = await (prisma as any).instructor.count({
+      where: { payoutHold: true },
+    });
+
+    // ── Instructor health ─────────────────────────────────────────────────────
+    const totalInstructors = await prisma.instructor.count({ where: { isActive: true } });
+    const pendingApproval = await prisma.instructor.count({ where: { approvalStatus: 'PENDING' } });
+    const activeSubscriptions = await prisma.instructor.count({
+      where: { subscriptionStatus: { in: ['ACTIVE', 'TRIAL'] } },
+    });
+    const expiringDocuments = await prisma.instructor.count({
+      where: {
+        OR: [
+          { licenseExpiry: { lte: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000), gte: now } },
+          { insuranceExpiry: { lte: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000), gte: now } },
+        ],
       },
     });
 
-    const tasksByPriority = {
-      URGENT: weeklyTasks.filter(t => t.priority === 'URGENT').length,
-      HIGH: weeklyTasks.filter(t => t.priority === 'HIGH').length,
-      NORMAL: weeklyTasks.filter(t => t.priority === 'NORMAL').length,
-      LOW: weeklyTasks.filter(t => t.priority === 'LOW').length,
-    };
+    // ── Bookings overview ─────────────────────────────────────────────────────
+    const bookingStats = await prisma.booking.groupBy({
+      by: ['status'],
+      where: { createdAt: { gte: weekStart }, deletedAt: null },
+      _count: true,
+    });
+    const bookingByStatus = Object.fromEntries(
+      bookingStats.map(b => [b.status, b._count])
+    );
 
-    const slaBreaches = weeklyTasks.filter(t => t.slaBreached).length;
-    const slaCompliance = weeklyTasks.length > 0 
-      ? ((weeklyTasks.length - slaBreaches) / weeklyTasks.length) * 100 
-      : 100;
-
-    // ============================================
-    // 5. INCIDENTS
-    // ============================================
-    
+    // ── Recent incidents from audit log ───────────────────────────────────────
     const incidents = await prisma.auditLog.findMany({
       where: {
-        action: { in: ['LIQUIDITY_CRITICAL', 'DISPUTE_CREATED', 'AUTO_FREEZE_HIGH_RISK'] },
+        action: {
+          in: [
+            'DISPUTE_OPENED', 'DISPUTE_CLOSED', 'TRANSFER_FAILED',
+            'REFUND_SYNCED', 'BOOKING_AUTO_NO_SHOW', 'PAYOUT_FAILED',
+          ],
+        },
         createdAt: { gte: weekStart },
       },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 20,
+      select: { action: true, createdAt: true, targetId: true, metadata: true, success: true },
     });
 
-    // ============================================
-    // 6. ASSEMBLE DASHBOARD
-    // ============================================
-    
-    const dashboard = {
-      timestamp: new Date().toISOString(),
-      period: {
-        start: weekStart.toISOString(),
-        end: now.toISOString(),
-        label: 'Last 7 Days',
-      },
-      
+    // ── Assemble ──────────────────────────────────────────────────────────────
+    return NextResponse.json({
+      timestamp: now.toISOString(),
+      period: { start: weekStart.toISOString(), end: now.toISOString(), label: 'Last 7 days' },
+
       financial: {
         revenue: {
           total: Math.round(totalRevenue * 100) / 100,
-          bookingsCompleted: completedBookings,
+          platformFees: Math.round(totalPlatformFees * 100) / 100,
+          bookingsCompleted: completedCount,
           avgBookingValue: Math.round(avgBookingValue * 100) / 100,
         },
         refunds: {
           total: Math.round(totalRefunds * 100) / 100,
-          percentage: Math.round(refundPercentage * 10) / 10,
-          target: 5,
-          status: refundPercentage < 5 ? 'HEALTHY' : refundPercentage < 8 ? 'WARNING' : 'CRITICAL',
+          rate: Math.round(refundRate * 10) / 10,
+          status: refundRate < 5 ? 'HEALTHY' : refundRate < 10 ? 'WARNING' : 'CRITICAL',
         },
         disputes: {
-          count: disputes,
-          percentage: Math.round(disputePercentage * 10) / 10,
-          target: 1,
-          status: disputePercentage < 1 ? 'HEALTHY' : disputePercentage < 2 ? 'WARNING' : 'CRITICAL',
-        },
-        overrides: {
-          total: Math.round(totalOverrides * 100) / 100,
-          percentage: Math.round(overridePercentage * 10) / 10,
-          target: 2,
-          status: overridePercentage < 2 ? 'HEALTHY' : overridePercentage < 5 ? 'WARNING' : 'CRITICAL',
+          open: openDisputes,
+          lostThisWeek: lostDisputes._count,
+          lostAmountThisWeek: Math.round((lostDisputes._sum?.amount ?? 0) * 100) / 100,
         },
       },
-      
-      liquidity: {
-        currentBalance: Math.round(liquidityStatus.currentBalance * 100) / 100,
-        requiredReserve: Math.round(liquidityStatus.requiredReserve * 100) / 100,
-        reserveRatio: Math.round(liquidityStatus.reserveRatio * 1000) / 10,
-        status: liquidityStatus.status,
-        daysOfCoverage: Math.round(liquidityStatus.daysOfCoverage * 10) / 10,
-        breakdown: liquidityStatus.breakdown,
-        actions: liquidityStatus.actions,
+
+      ledger: {
+        availableBalance: ledger.availableBalance,
+        totalCollected: ledger.totalCollected,
+        totalPaidOut: ledger.totalPaidOut,
+        totalRefunded: ledger.totalRefunded,
+        totalReserved: ledger.totalReserved,
+        status: ledger.availableBalance >= 0 ? 'HEALTHY' : 'CRITICAL',
       },
-      
-      fraud: {
-        highRiskInstructors: {
-          count: highRiskInstructors.length,
-          instructors: highRiskInstructors.slice(0, 5).map(i => ({
-            id: i.instructorId,
-            name: i.instructorName,
-            score: i.score,
-            factors: i.factors,
-          })),
-        },
-        mediumRiskInstructors: {
-          count: mediumRiskInstructors.length,
-        },
-        recentAlerts: {
-          total: fraudAlerts.length,
-          highSeverity: highSeverityAlerts.length,
-          alerts: highSeverityAlerts.slice(0, 5),
-        },
+
+      payouts: {
+        paidThisMonth: payoutsThisMonth._count,
+        amountPaidThisMonth: Math.round((payoutsThisMonth._sum?.netAmount ?? 0) * 100) / 100,
+        failedPayouts,
+        frozenInstructors: frozenPayouts,
       },
-      
-      operations: {
-        staff: staffMembers.map(s => ({
-          name: s.name,
-          department: s.department,
-          tasksCompleted: s.tasksCompleted,
-          avgResolutionTime: s.avgResolutionTimeHours,
-          satisfaction: s.satisfactionScore,
-        })),
-        tasks: {
-          total: weeklyTasks.length,
-          byPriority: tasksByPriority,
-          slaCompliance: Math.round(slaCompliance * 10) / 10,
-          slaBreaches,
-        },
+
+      instructors: {
+        total: totalInstructors,
+        pendingApproval,
+        activeSubscriptions,
+        expiringDocuments,
       },
-      
+
+      bookings: {
+        thisWeek: weeklyBookings.length,
+        byStatus: bookingByStatus,
+      },
+
       incidents: incidents.map(i => ({
         type: i.action,
         timestamp: i.createdAt,
+        targetId: i.targetId,
+        success: i.success,
         metadata: i.metadata,
       })),
-      
+
       overallStatus: {
-        financial: refundPercentage < 5 && disputePercentage < 1 ? 'HEALTHY' : 'WARNING',
-        liquidity: liquidityStatus.status,
-        fraud: highRiskInstructors.length === 0 ? 'HEALTHY' : 'WARNING',
-        operations: slaCompliance > 90 ? 'HEALTHY' : 'WARNING',
+        financial: refundRate < 5 && openDisputes === 0 ? 'HEALTHY' : 'WARNING',
+        ledger: ledger.availableBalance >= 0 ? 'HEALTHY' : 'CRITICAL',
+        payouts: failedPayouts === 0 && frozenPayouts === 0 ? 'HEALTHY' : 'WARNING',
+        instructors: pendingApproval === 0 && expiringDocuments === 0 ? 'HEALTHY' : 'WARNING',
       },
-    };
-
-    return NextResponse.json(dashboard);
-
+    });
   } catch (error) {
-    console.error('Error fetching fortress dashboard:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch dashboard data' },
-      { status: 500 }
-    );
+    console.error('Fortress dashboard error:', error);
+    return NextResponse.json({ error: 'Failed to fetch dashboard data' }, { status: 500 });
   }
 }

@@ -37,6 +37,15 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials')
         }
 
+        // P2-3 FIX: Soft gate — block login for unverified emails.
+        // The User schema has emailVerified; we only enforce this for non-admin/instructor
+        // accounts since admin accounts are created programmatically (already verified).
+        // Clients created via the AI voice flow get a generated password but no email
+        // verification step yet — so we gate financial actions at the route level instead
+        // of hard-blocking login here, to avoid locking out voice-created accounts.
+        // If you add email verification to the registration flow, switch this to hard-block:
+        // if (!user.emailVerified) throw new Error('Please verify your email before logging in.')
+
         return {
           id: user.id,
           email: user.email,

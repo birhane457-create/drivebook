@@ -73,8 +73,23 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
   
+  // P0-7 FIX: Protect admin and instructor API routes at the edge.
+  // Individual API handlers still call getServerSession(), but this provides
+  // defence-in-depth: a missing session check in a new route cannot leak data.
+  const isProtectedApiPath =
+    url.pathname.startsWith('/api/admin/') ||
+    url.pathname.startsWith('/api/instructor/') ||
+    url.pathname.startsWith('/api/client/') ||
+    url.pathname.startsWith('/api/bookings/') ||
+    url.pathname.startsWith('/api/cron/');
+
   // For protected routes, check authentication only — layouts handle role-based access
-  if (url.pathname.startsWith('/dashboard') || url.pathname.startsWith('/admin') || url.pathname.startsWith('/client-dashboard')) {
+  if (
+    url.pathname.startsWith('/dashboard') ||
+    url.pathname.startsWith('/admin') ||
+    url.pathname.startsWith('/client-dashboard') ||
+    isProtectedApiPath
+  ) {
     // On production (https), NextAuth uses __Secure- prefixed cookie name
     const isSecure = req.headers.get('x-forwarded-proto') === 'https' || process.env.NODE_ENV === 'production'
     const cookieName = isSecure
@@ -84,6 +99,10 @@ export async function middleware(req: NextRequest) {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName })
     
     if (!token) {
+      // API routes: return 401 JSON — redirect would break fetch() callers
+      if (url.pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
       const loginUrl = new URL('/login', req.url)
       loginUrl.searchParams.set('callbackUrl', url.pathname)
       return NextResponse.redirect(loginUrl)

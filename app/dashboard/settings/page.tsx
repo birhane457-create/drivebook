@@ -45,6 +45,7 @@ export default function SettingsPage() {
     enableTravelTime: boolean
     travelTimeMinutes: number
     lessonPackages: LessonPackage[]
+    acceptingBookings: boolean
   }>({
     hourlyRate: 60,
     serviceRadiusKm: 20,
@@ -62,7 +63,8 @@ export default function SettingsPage() {
     bookingBufferMinutes: 15,
     enableTravelTime: false,
     travelTimeMinutes: 10,
-    lessonPackages: []
+    lessonPackages: [],
+    acceptingBookings: true,
   })
 
   // Load settings on mount
@@ -113,7 +115,8 @@ export default function SettingsPage() {
             bookingBufferMinutes: data.bookingBufferMinutes || 15,
             enableTravelTime: data.enableTravelTime || false,
             travelTimeMinutes: data.travelTimeMinutes || 10,
-            lessonPackages: data.lessonPackages || []
+            lessonPackages: data.lessonPackages || [],
+            acceptingBookings: data.acceptingBookings !== false, // default true
           })
         }
       } catch (error) {
@@ -658,6 +661,44 @@ export default function SettingsPage() {
           </div>
 
           <GoogleCalendarSettings />
+
+          {/* FIX #14: Booking pause toggle — instructor self-service */}
+          <div className={`rounded-lg shadow p-6 border-2 ${!formData.acceptingBookings ? 'bg-amber-50 border-amber-300' : 'bg-white border-transparent'}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  {formData.acceptingBookings ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-amber-500" />
+                  )}
+                  Accepting New Bookings
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {formData.acceptingBookings
+                    ? 'Students can currently book lessons with you.'
+                    : 'New bookings are paused. Existing confirmed bookings are unaffected.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, acceptingBookings: !prev.acceptingBookings }))}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2
+                  ${formData.acceptingBookings ? 'bg-green-500' : 'bg-gray-300'}`}
+                aria-label={formData.acceptingBookings ? 'Pause bookings' : 'Resume bookings'}
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform
+                    ${formData.acceptingBookings ? 'translate-x-6' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+            {!formData.acceptingBookings && (
+              <p className="mt-3 text-sm text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
+                ⚠️ New bookings are paused. Save settings to apply this change.
+              </p>
+            )}
+          </div>
 
           <button
             type="submit"

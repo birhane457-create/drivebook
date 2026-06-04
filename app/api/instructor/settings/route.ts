@@ -38,7 +38,9 @@ const settingsSchema = z.object({
     price: z.number().min(0),
     description: z.string(),
     isActive: z.boolean()
-  })).optional()
+  })).optional(),
+  // FIX #14: Self-service booking pause toggle
+  acceptingBookings: z.boolean().optional(),
 })
 
 export async function PUT(req: NextRequest) {
@@ -87,6 +89,8 @@ export async function PUT(req: NextRequest) {
     if (data.enableTravelTime !== undefined) updateData.enableTravelTime = data.enableTravelTime
     if (data.travelTimeMinutes !== undefined) updateData.travelTimeMinutes = data.travelTimeMinutes
     if (data.lessonPackages !== undefined) updateData.lessonPackages = data.lessonPackages
+    // FIX #14: Allow instructors to pause/resume new bookings self-service
+    if (data.acceptingBookings !== undefined) updateData.acceptingBookings = data.acceptingBookings
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
@@ -151,7 +155,8 @@ export async function GET(req: NextRequest) {
         bookingBufferMinutes: true,
         enableTravelTime: true,
         travelTimeMinutes: true,
-        lessonPackages: true
+        lessonPackages: true,
+        acceptingBookings: true,
       }
     })
 

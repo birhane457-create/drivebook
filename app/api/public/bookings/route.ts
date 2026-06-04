@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { emailService } from '@/lib/services/email'
@@ -8,6 +7,9 @@ import { paymentService } from '@/lib/services/payment'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { bookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
+
+// Maximum Idempotency-Key length accepted (UUID = 36 chars; allow generous headroom)
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +39,27 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = publicBookingSchema.parse(body)
+
+    //  Idempotency-Key deduplication 
+    // Callers (browser double-click, Twilio retry, AI retry) may send the same
+    // request multiple times. If we already processed this key + email pair,
+    // replay the stored response  no duplicate booking, no double-charge.
+    const idempotencyKey = req.headers.get('Idempotency-Key')?.trim() ?? null
+    if (idempotencyKey) {
+      if (idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+        return NextResponse.json({ error: 'Idempotency-Key too long' }, { status: 400 })
+      }
+      const existing = await (prisma as any).bookingIdempotencyKey.findUnique({
+        where: { key: idempotencyKey },
+      })
+      if (existing) {
+        // Scope guard: key must belong to the same email to prevent cross-account replay
+        if (existing.email !== data.clientEmail) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match account' }, { status: 409 })
+        }
+        return NextResponse.json(existing.response, { status: 201 })
+      }
+    }
 
     const startTime = new Date(data.startTime)
     const endTime = new Date(data.endTime)
@@ -69,6 +92,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: 'This instructor is not currently accepting bookings.',
         code: 'INSTRUCTOR_INACTIVE',
+      }, { status: 403 });
+    }
+
+    // FIX #14: Instructor self-service pause check.
+    if ((instructor as any).acceptingBookings === false) {
+      return NextResponse.json({
+        error: 'This instructor is not currently accepting new bookings.',
+        code: 'INSTRUCTOR_PAUSED',
       }, { status: 403 });
     }
 
@@ -167,31 +198,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ✅ CHECK SLOT AVAILABILITY BEFORE CREATING BOOKING
-    // This prevents creating PENDING bookings for unavailable slots
-    const conflictingBooking = await prisma.booking.findFirst({
-      where: {
-        instructorId: data.instructorId,
-        status: { in: ['PENDING', 'CONFIRMED'] },
-        OR: [
-          // New booking starts during existing booking
-          { startTime: { lte: startTime }, endTime: { gt: startTime } },
-          // New booking ends during existing booking
-          { startTime: { lt: endTime }, endTime: { gte: endTime } },
-          // New booking completely contains existing booking
-          { startTime: { gte: startTime }, endTime: { lte: endTime } }
-        ]
-      }
-    });
-
-    if (conflictingBooking) {
-      return NextResponse.json({ 
-        error: 'This time slot is no longer available. Please select a different time.',
-        code: 'SLOT_UNAVAILABLE'
-      }, { status: 409 });
-    }
-
-    // Calculate travel time from previous booking to this one
+    // Calculate travel time and commission before the transaction (read-only operations)
     const travelTime = await calculateTravelTimeToNextBooking(
       data.instructorId,
       startTime,
@@ -199,35 +206,87 @@ export async function POST(req: NextRequest) {
       prisma
     )
 
-    // Calculate commission for this booking (for display purposes)
     const commission = await paymentService.calculateCommission(
       data.instructorId,
       client.id,
       bookingPrice
     )
 
-    // Create booking with commission details
-    // Status is PENDING until payment succeeds (webhook will confirm)
-    const booking = await prisma.booking.create({
-      data: {
-        instructorId: data.instructorId,
-        clientId: client.id,
-        bookingType: 'LESSON',
-        status: 'PENDING', // Will be CONFIRMED by webhook on payment success
-        startTime,
-        endTime,
-        pickupAddress: data.pickupAddress,
-        price: bookingPrice,
-        platformFee: commission.platformFee,
-        instructorPayout: commission.instructorPayout,
-        commissionRate: commission.commissionRate,
-        isFirstBooking: commission.isFirstBooking,
-        notes: data.notes,
-        createdBy: 'client',
-        originalStartTime: startTime,
-        travelTimeMinutes: travelTime
-      } as any // Type assertion for new payment fields
-    })
+    // FIX #3: Wrap conflict check + create inside a $transaction.
+    // Previously: findFirst ran outside the transaction, leaving a race window where
+    // two concurrent requests could both pass the read check before either write lands.
+    // Now the conflict check and booking.create are serialized in a single DB operation.
+    // P2-8 FIX: Idempotency key upsert also moved inside the transaction so a crash
+    // between booking.create and the key store cannot create duplicate bookings on retry.
+    let booking: any
+    try {
+      booking = await prisma.$transaction(async (tx) => {
+        const conflictingBooking = await tx.booking.findFirst({
+          where: {
+            instructorId: data.instructorId,
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+            OR: [
+              { startTime: { lte: startTime }, endTime: { gt: startTime } },
+              { startTime: { lt: endTime }, endTime: { gte: endTime } },
+              { startTime: { gte: startTime }, endTime: { lte: endTime } },
+            ],
+          },
+        })
+
+        if (conflictingBooking) {
+          throw Object.assign(new Error('SLOT_UNAVAILABLE'), { code: 'SLOT_UNAVAILABLE' })
+        }
+
+        const newBooking = await tx.booking.create({
+          data: {
+            instructorId: data.instructorId,
+            clientId: client.id,
+            bookingType: 'LESSON',
+            status: 'PENDING',
+            startTime,
+            endTime,
+            pickupAddress: data.pickupAddress,
+            price: bookingPrice,
+            platformFee: commission.platformFee,
+            instructorPayout: commission.instructorPayout,
+            commissionRate: commission.commissionRate,
+            isFirstBooking: commission.isFirstBooking,
+            notes: data.notes,
+            createdBy: 'client',
+            originalStartTime: startTime,
+            travelTimeMinutes: travelTime,
+          } as any,
+        })
+
+        // P2-8 FIX: Persist idempotency key atomically with booking creation.
+        if (idempotencyKey) {
+          await (tx as any).bookingIdempotencyKey.upsert({
+            where: { key: idempotencyKey },
+            update: {},
+            create: {
+              key: idempotencyKey,
+              email: data.clientEmail,
+              bookingId: newBooking.id,
+              response: {
+                success: true,
+                booking: newBooking,
+                redirectTo: `/booking/${newBooking.id}/payment`,
+              },
+            },
+          })
+        }
+
+        return newBooking
+      })
+    } catch (err: any) {
+      if (err?.code === 'SLOT_UNAVAILABLE') {
+        return NextResponse.json({
+          error: 'This time slot is no longer available. Please select a different time.',
+          code: 'SLOT_UNAVAILABLE',
+        }, { status: 409 })
+      }
+      throw err
+    }
 
     // Note: Transaction will be created automatically when booking is completed (checked out)
 
@@ -270,11 +329,38 @@ export async function POST(req: NextRequest) {
       pickupAddress: data.pickupAddress
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    // Audit log — dispute evidence for "I never made that booking"
+    try {
+      await (prisma as any).auditLog.create({
+        data: {
+          action: 'BOOKING_CREATED',
+          actorId: userId ?? 'GUEST',
+          actorRole: 'CLIENT',
+          targetType: 'BOOKING',
+          targetId: booking.id,
+          success: true,
+          metadata: {
+            instructorId: data.instructorId,
+            clientName: data.clientName,
+            clientPhone: data.clientPhone,
+            startTime: startTime.toISOString(),
+            price: bookingPrice,
+            source: 'public_single',
+          },
+        },
+      })
+    } catch (auditErr) {
+      console.error('Audit log failed for public booking creation:', auditErr)
+    }
+
+    const responsePayload = {
+      success: true,
       booking,
-      redirectTo: `/booking/${booking.id}/payment` // Redirect to payment page
-    }, { status: 201 })
+      redirectTo: `/booking/${booking.id}/payment`,
+    }
+    // (Idempotency key was already persisted inside the $transaction above)
+
+    return NextResponse.json(responsePayload, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 })

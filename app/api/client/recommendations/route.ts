@@ -14,14 +14,28 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.clientId) {
+    // Auth boundary fix: do not use session.user.clientId for data access.
+    // clientId in the JWT is always clients[0] — wrong for users who have booked
+    // with multiple instructors (multiple Client records, different clientIds).
+    // Resolve by userId instead, which is stable and unambiguous.
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Resolve all Client records owned by this user (one per instructor they've booked with)
+    const clientRecords = await prisma.client.findMany({
+      where: { userId: session.user.id },
+      select: { id: true },
+    });
+    if (!clientRecords.length) {
+      return NextResponse.json({ recommendations: [] });
+    }
+    const clientIds = clientRecords.map((c) => c.id);
 
     // Get last 5 lessons with feedback (PostgreSQL: filter non-empty arrays in JS)
     const recentBookings = await prisma.booking.findMany({
       where: {
-        clientId: session.user.clientId,
+        clientId: { in: clientIds },
         status: { in: ['COMPLETED', 'CONFIRMED'] },
       },
       orderBy: { endTime: 'desc' },

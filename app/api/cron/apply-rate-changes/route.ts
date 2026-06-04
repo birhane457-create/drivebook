@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
+import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest) {
     `;
 
     if (pendingChanges.length === 0) {
+      await pingCronHealth('apply-rate-changes');
       return NextResponse.json({ applied: 0, message: 'No rate changes due' });
     }
 
@@ -96,6 +98,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    await pingCronHealth('apply-rate-changes');
     return NextResponse.json({
       applied,
       errors,
@@ -103,6 +106,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error('apply-rate-changes cron error:', error);
+    await failCronHealth('apply-rate-changes', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

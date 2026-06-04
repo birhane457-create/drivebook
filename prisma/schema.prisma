@@ -122,8 +122,17 @@ model Instructor {
   enableTravelTime     Boolean @default(false)
   travelTimeMinutes    Int?
   lessonPackages       Json?
+  // FIX #14: Self-service booking pause toggle.
+  // Instructors can pause new bookings without contacting admin or letting
+  // their subscription lapse. Defaults to true (accepting bookings).
+  acceptingBookings    Boolean @default(true)
 
   payoutMethod       String    @default("stripe_connect")
+  payoutHold         Boolean   @default(false)   // true when a chargeback is open — blocks buildPayout
+  payoutHoldReason   String?                     // set by handleDisputeOpened, cleared on win/resolution
+  // Stripe Connect onboarding state — populated by account.updated webhook
+  chargesEnabled     Boolean   @default(false)   // true when instructor can accept charges (onboarding complete)
+  payoutsEnabled     Boolean   @default(false)   // true when instructor can receive payouts (bank linked)
   bankBsb            String?
   bankAccount        String?
   bankAccountName    String?
@@ -148,7 +157,7 @@ model Instructor {
   facebook        String?
   yearsExperience Int?
 
-  // PDA / Driving Test Package — instructor-controlled
+  // PDA / Driving Test Package â€” instructor-controlled
   offersTestPackage    Boolean  @default(false)
   testPackagePrice     Float?
   testPackageDuration  Int?     // minutes
@@ -172,7 +181,7 @@ model InstructorExpense {
   updatedAt    DateTime   @updatedAt
 }
 
-// Scheduled commission rate changes — admin sets a future effective date
+// Scheduled commission rate changes â€” admin sets a future effective date
 // Cron applies the change on effectiveDate and notifies all instructors
 model PlatformRateChange {
   id              String    @id @default(cuid())
@@ -212,6 +221,7 @@ model Booking {
   paymentCaptured       Boolean    @default(false)
   paymentCapturedAt     DateTime?
   paymentIntentId       String?
+  paymentToken          String?    // cryptographically random token for secure payment link â€” required to access payment page
   pickupAddress         String?
   pickupLatitude        Float?
   pickupLongitude       Float?
@@ -228,8 +238,8 @@ model Booking {
   packageTotalPaid      Float?
   packageExpiryDate     DateTime?
   packageStatus         String?
-  lockedHourlyRate      Float?     // Rate at time of package purchase — never changes
-  lockedDiscountPct     Float?     // Discount % at time of package purchase — never changes
+  lockedHourlyRate      Float?     // Rate at time of package purchase â€” never changes
+  lockedDiscountPct     Float?     // Discount % at time of package purchase â€” never changes
   createdBy             String?
   originalStartTime     DateTime?
   isNonRefundable       Boolean    @default(false)
@@ -262,8 +272,8 @@ model Booking {
   smsCheckOutSent       Boolean    @default(false)
   source                String     @default("platform") // 'platform' | 'offline'
   offlinePaymentMethod  String?    // 'cash' | 'bank_transfer' | 'other'
-  offlineAmountPaid     Float?     // instructor's record only — not platform revenue
-  clientEmail           String?    // stored for offline bookings — used for email reminders
+  offlineAmountPaid     Float?     // instructor's record only â€” not platform revenue
+  clientEmail           String?    // stored for offline bookings â€” used for email reminders
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 
@@ -317,6 +327,7 @@ model WalletTransaction {
   description String?
   status      String       @default("PENDING")
   metadata    Json?        // optional: stripe fee tracking, admin notes, etc.
+  bookingId   String?      // set when this transaction is tied to a specific booking (e.g. reschedule debit/credit)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -534,4 +545,61 @@ model TestCentre {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Idempotency deduplication for booking creation.
+// Stores the first successful response for each Idempotency-Key so retries
+// (browser double-click, Twilio retry, network timeout, AI retry) return the
+// same response without creating a duplicate booking.
+// Keys are scoped per email to prevent cross-account collisions.
+// Cleanup: keys older than 24 hours are purged by the cleanup cron.
+model BookingIdempotencyKey {
+  key         String   @id                  // raw Idempotency-Key header value
+  email       String                        // account holder email â€” scope guard
+  bookingId   String                        // booking created for this key
+  response    Json                          // full response body to replay on retry
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])                      // for efficient cleanup cron query
+  @@index([email])                          // for cross-account collision check
+}
+
+// Cron health tracking — each cron pings this table on completion.
+// The health-check cron reads it and alerts if any job has not run recently.
+model CronHealth {
+  id          String    @id @default(cuid())
+  jobName     String    @unique            // e.g. "cleanup-expired-bookings"
+  lastRunAt   DateTime                     // when the job last completed successfully
+  lastStatus  String    @default("OK")    // OK | FAILED
+  lastError   String?                     // error message if FAILED
+  runCount    Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+
+  @@index([jobName])
+}
+
+// Sprint A: Stripe dispute tracking
+// Persists dispute state so we can freeze payouts, track outcomes, and
+// recover losses via the ADJUSTMENT system already in payout-service.
+model StripeDispute {
+  id                  String    @id @default(cuid())
+  stripeDisputeId     String    @unique          // dp_xxx from Stripe
+  stripeChargeId      String                     // ch_xxx
+  stripePaymentIntentId String?                  // pi_xxx — for booking lookup
+  bookingId           String?                    // resolved from PI metadata
+  instructorId        String?                    // resolved from booking
+  amount              Float                      // disputed amount in AUD
+  currency            String    @default("AUD")
+  reason              String                     // fraud | duplicate | product_not_received | etc.
+  status              String                     // warning_needs_response | needs_response | under_review | won | lost | charge_refunded
+  payoutFrozen        Boolean   @default(false)  // true when we hold the instructor's next payout
+  adjustmentCreated   Boolean   @default(false)  // true when ADJUSTMENT ledger entry written (lost disputes)
+  resolvedAt          DateTime?
+  metadata            Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([bookingId])
+  @@index([instructorId])
+  @@index([stripePaymentIntentId])
 }

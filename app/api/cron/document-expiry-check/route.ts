@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { notifyDocumentExpiring } from '@/lib/services/notifications';
+import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,8 +15,9 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: NextRequest) {
   try {
+    // Also fix the CRON_SECRET guard — fail closed when unset
     const authHeader = req.headers.get('authorization');
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -72,9 +74,11 @@ export async function GET(req: NextRequest) {
     }
 
     console.log(`✅ Document expiry check: ${sent} reminders sent, ${failed} failed`);
+    await pingCronHealth('document-expiry-check');
     return NextResponse.json({ success: true, sent, failed, instructorsChecked: instructors.length });
   } catch (error) {
     console.error('Document expiry cron error:', error);
+    await failCronHealth('document-expiry-check', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

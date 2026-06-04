@@ -83,6 +83,15 @@ export async function PUT(
       );
     }
 
+    // P0-6 FIX: Mirror the instructor route's isNonRefundable logic.
+    // If the current lesson is inside the 48h penalty window, rescheduling
+    // must mark the booking non-refundable so a subsequent cancellation
+    // can't exploit the new (future) date for a "full refund".
+    const HOURS_48 = 48 * 60 * 60 * 1000;
+    const isInsidePenaltyWindow = (bookingTime.getTime() - now.getTime()) < HOURS_48;
+    // Also preserve originalStartTime on first client reschedule
+    const originalStartTime = booking.originalStartTime ?? booking.startTime;
+
     // Get wallet and current balance
     const wallet = await getOrCreateWallet(user.id);
     const walletBalance = await getWalletBalance(user.id);
@@ -188,6 +197,11 @@ export async function PUT(
       updateData.originalStartTime = booking.startTime
     }
 
+    // P0-6 FIX: Set isNonRefundable when rescheduling inside the 48h penalty window
+    if (isInsidePenaltyWindow) {
+      updateData.isNonRefundable = true;
+    }
+
     // Append to reschedule history
     const historyEntry = {
       previousStart: booking.startTime,
@@ -236,6 +250,30 @@ export async function PUT(
         );
       }
     } catch (e) { console.error('Reschedule notification failed:', e); }
+
+    // FIX #13: Audit log on client reschedule.
+    try {
+      await (prisma as any).auditLog.create({
+        data: {
+          action: 'BOOKING_RESCHEDULED',
+          actorId: user.id,
+          actorRole: 'CLIENT',
+          targetType: 'BOOKING',
+          targetId: bookingId,
+          success: true,
+          metadata: {
+            oldStartTime: booking.startTime?.toISOString() ?? null,
+            oldEndTime: booking.endTime?.toISOString() ?? null,
+            newStartTime: newStartTime.toISOString(),
+            newEndTime: newEndTime.toISOString(),
+            priceDifference,
+            rescheduledBy: 'client',
+          },
+        },
+      })
+    } catch (auditErr) {
+      console.error('Audit log failed for client reschedule:', auditErr)
+    }
 
     return NextResponse.json({
       success: true,

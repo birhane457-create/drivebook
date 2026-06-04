@@ -83,6 +83,17 @@ info:
     - X-RateLimit-Reset: Time when limit resets (Unix timestamp)
     
     When exceeded, returns 429 Too Many Requests with Retry-After header.
+    
+    WEBHOOK INTEGRATIONS:
+    Stripe payment webhooks are documented in openapi-webhooks.yaml.
+    Canonical path: /api/stripe/webhook
+    Legacy alias: /api/webhooks/stripe (backward compat)
+    Both accept the same Stripe events. Webhooks are called by Stripe, NOT by the AI agent.
+    
+    SECURITY DEFINITIONS:
+    - BearerAuth: JWT session token for authenticated instructor/admin endpoints
+    - VerificationToken: Short-lived OTP token for public cancel/reschedule (X-Verification-Token header)
+    - VoiceServiceKey: Internal API key for voice service endpoints (X-Voice-Service-Key header)
   version: 2.0.0
   contact:
     name: DriveBook Support
@@ -94,6 +105,125 @@ consumes:
   - application/json
 produces:
   - application/json
+
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: "JWT Bearer token in the format 'Bearer <token>' for authenticated endpoints (instructor/admin sessions)"
+  VerificationToken:
+    type: apiKey
+    name: X-Verification-Token
+    in: header
+    description: |
+      Short-lived OTP verification token issued by POST /verifications/otp/confirm.
+      Required for sensitive public operations: cancel booking, reschedule booking.
+      Token is single-use and expires after 10 minutes.
+      Flow: POST /verifications/otp → POST /verifications/otp/confirm → use token here.
+  VoiceServiceKey:
+    type: apiKey
+    name: X-Voice-Service-Key
+    in: header
+    description: "Internal API key for voice service to call protected voice endpoints (VOICE_SERVICE_API_KEY env var)"
+
+x-status-transitions:
+  description: |
+    Booking status state machine. Transitions are enforced server-side.
+    
+    PENDING_PAYMENT → CONFIRMED   (Stripe webhook: payment_intent.succeeded)
+    PENDING_PAYMENT → EXPIRED     (cron: cleanup every 5 min, after 10 min window)
+    PENDING         → CONFIRMED   (instructor approves short-notice booking)
+    PENDING         → CANCELLED   (instructor declines, or client cancels)
+    CONFIRMED       → COMPLETED   (instructor marks lesson done)
+    CONFIRMED       → CANCELLED   (client or instructor cancels)
+    CONFIRMED       → NO_SHOW     (lesson time passed, no check-in recorded)
+    
+    Terminal states (no further transitions): EXPIRED, COMPLETED, CANCELLED, NO_SHOW
+    
+    Post-CONFIRMED actions (not status transitions, but important to document):
+      - SMS confirmation sent to client
+      - Receipt email sent to client (package or single-lesson)
+      - In-app notification sent to instructor
+      - Wallet: package total credited, first lesson debited
+      - LedgerEntry recorded for payout eligibility
+    
+    Note: PAID is an internal payout-tracking status on the instructor's ledger,
+    not a booking lifecycle state. It is not returned by public or voice endpoints.
+    
+    Short-notice bookings (isShortNotice=true):
+      - Created with status PENDING (not PENDING_PAYMENT)
+      - No payment taken until instructor approves
+      - Instructor has configurable window to approve/decline
+      - AI should say: "Your booking is pending instructor approval."
+
+x-ai-rules:
+  - Never read checkoutUrl aloud over a voice call — always send it via SMS
+  - Never attempt to collect card numbers, CVV, or bank details over voice
+  - Never read out a URL character by character — send it silently via SMS
+  - Always send checkoutUrl via SMS immediately after booking is created
+  - The AI's job ends when the SMS is sent — payment happens on Stripe's secure page
+  - Use GET /public/bookings/{id}/payment-status?token= to check if payment succeeded
+  - Use GET /public/bookings/{id}/timeline?token= to answer "What happened to my booking?"
+  - Never infer canPay from status alone — use the canPay field in payment-status response
+  thresholdMinutes: 120
+  description: |
+    A booking is short-notice when any scheduled lesson starts within
+    thresholdMinutes (120) of the current time at booking creation.
+    The AI/frontend determines this and sets isShortNotice=true in the scheduledBookings array.
+    Short-notice bookings:
+      - status: PENDING (not PENDING_PAYMENT)
+      - total: 0 (no payment until instructor approves)
+      - checkoutUrl: not returned
+      - instructor receives urgent push notification
+    AI should tell the caller: "This booking requires instructor approval before payment."
+
+x-webhooks:
+  payment-succeeded:
+    source: Stripe
+    event: payment_intent.succeeded
+    transition: PENDING_PAYMENT → CONFIRMED (strict — no other source status allowed)
+    description: |
+      Stripe calls /api/stripe/webhook (canonical) after payment_intent.succeeded.
+      
+      STRICT STATE MACHINE — only PENDING_PAYMENT → CONFIRMED is valid:
+        PENDING_PAYMENT → CONFIRMED: normal payment path
+        EXPIRED (delayed payment): auto-refund via Stripe, booking cancelled, admin flagged
+        CONFIRMED / COMPLETED: idempotent replay — skip wallet ops, return 200
+        CANCELLED / NO_SHOW / any other: rejected, logged, return 200
+      
+      On successful CONFIRMED transition:
+        1. booking.status → CONFIRMED, booking.isPaid = true
+        2. Wallet credited with package total, debited for first lesson
+        3. LedgerEntry recorded
+        4. In-app notification sent to instructor
+        5. SMS confirmation sent to client
+        6. Receipt email sent to client
+      
+      On EXPIRED delayed payment:
+        1. Stripe full refund issued automatically
+        2. Booking status → CANCELLED with audit note
+        3. Admin flagged in logs — manual action required if refund fails
+        4. Client receives no booking confirmation
+      
+      Idempotency key: Stripe event ID (prevents double-processing).
+      /api/webhooks/stripe is a legacy alias that proxies to the canonical path.
+  payment-expired:
+    source: Stripe
+    event: checkout.session.expired
+    transition: PENDING_PAYMENT → EXPIRED
+    description: |
+      Stripe calls webhook when checkout session expires without payment.
+      Slot is released automatically.
+  booking-expired:
+    source: Internal Scheduler
+    schedule: Every 5 minutes (cron at /api/cron/cleanup-expired-bookings)
+    transition: PENDING_PAYMENT → EXPIRED
+    description: |
+      Safety net cron — expires bookings where (createdAt + 10 min) < now().
+      Runs every 5 min in case Stripe webhook is delayed or missed.
+      If a delayed Stripe payment arrives after this cron, the webhook
+      auto-refunds and cancels — no double-booking is possible.
 
 paths:
   /health:
@@ -275,6 +405,22 @@ paths:
           default: 20
           maximum: 50
           description: Number of results per page, max 50 (default 20)
+        - name: language
+          in: query
+          type: string
+          required: false
+          description: |
+            Filter by language spoken (e.g. "Mandarin", "Arabic", "English").
+            Case-insensitive partial match against instructor's languages field.
+            AI: use when caller says "I need an instructor who speaks Mandarin".
+        - name: vehicleType
+          in: query
+          type: string
+          required: false
+          enum: [AUTO, MANUAL]
+          description: |
+            Filter by vehicle type. AUTO or MANUAL.
+            AI: use when caller says "I want an automatic car".
       responses:
         '200':
           description: List of instructors serving the location
@@ -677,12 +823,16 @@ paths:
                 type: string
               accountHolderPhone:
                 type: string
-                description: Phone number - password will be auto-generated and sent via SMS/email
+                pattern: '^\+?[\d\s\-\(\)]{7,15}$'
+                description: Phone number — password will be auto-generated and sent via SMS/email
+                x-format: PhoneNumber
               learnerName:
                 type: string
                 description: Required if registrationType is someone-else
               learnerPhone:
                 type: string
+                pattern: '^\+?[\d\s\-\(\)]{7,15}$'
+                x-format: PhoneNumber
               learnerRelationship:
                 type: string
                 enum: [child, partner, grandchild, parent, friend, other]
@@ -732,8 +882,9 @@ paths:
               checkoutUrl:
                 type: string
                 description: |
-                  Payment page URL. Present when called from AI voice flow (no pricing submitted).
-                  Web flow uses Stripe Elements instead — call /api/payments/create-intent separately.
+                  Payment page URL — format: /booking/{id}/payment?token={paymentToken}
+                  The token is a UUID generated at booking creation. Both the bookingId and
+                  token are required to access the payment page and payment summary endpoint.
                   AI should send this URL via SMS: "Click the link I just texted you to complete your booking securely"
               total:
                 type: number
@@ -802,9 +953,13 @@ paths:
     get:
       summary: Find bookings by phone number
       description: |
-        Returns all active bookings (PENDING_PAYMENT or CONFIRMED) for a phone number.
-        Only returns future bookings. Useful for rescheduling or cancellation flows.
-        AI can use this when user says "I need to change my lesson" or "Cancel my booking".
+        Returns all active bookings (PENDING_PAYMENT, CONFIRMED, PENDING) for a phone number.
+        Only returns future bookings. Used by AI for rescheduling or cancellation flows.
+        
+        NOTE: instructor.phone is intentionally omitted from this response.
+        The caller has not yet verified their identity via OTP at this stage.
+        Full booking details (including price and instructor phone) are available
+        via GET /public/bookings/{id} after OTP verification.
       operationId: lookupBookings
       tags:
         - Bookings
@@ -814,6 +969,8 @@ paths:
           type: string
           required: true
           description: Client phone number (e.g., "0400123456")
+          pattern: '^\+?[\d\s\-\(\)]{7,15}$'
+          x-format: PhoneNumber
       responses:
         '200':
           description: Bookings found
@@ -829,7 +986,7 @@ paths:
                       type: string
                     status:
                       type: string
-                      enum: [PENDING_PAYMENT, CONFIRMED]
+                      enum: [PENDING, PENDING_PAYMENT, CONFIRMED]
                     startTime:
                       type: string
                       format: date-time
@@ -840,10 +997,11 @@ paths:
                     instructor:
                       type: object
                       properties:
+                        id:
+                          type: string
                         name:
                           type: string
-                        phone:
-                          type: string
+                        # phone omitted — caller not yet OTP-verified
                     expiresAt:
                       type: string
                       format: date-time
@@ -916,28 +1074,696 @@ paths:
         '404':
           description: Booking not found
 
-  /bookings/{bookingId}/cancel:
-    post:
-      summary: Cancel a booking
+  /bookings/{id}:
+    get:
+      summary: Get booking by ID (authenticated)
       description: |
-        Cancels a booking and processes refund according to cancellation policy.
-        AI should call /cancellation-policy first to inform user of fees.
+        Returns full booking details. Requires an active instructor or admin session.
+        Instructors can only retrieve their own bookings. Admins can retrieve any booking.
         
-        CONVERSATION FLOW:
-        1. AI: "Let me check the cancellation policy..." (call /cancellation-policy)
-        2. AI: "Your lesson is X hours away. Cancelling will result in Y% refund. Shall I proceed?"
-        3. User confirms
-        4. AI: "Cancelling now..." (call this endpoint)
-        5. AI: "Done! You'll receive $X refund within 5-7 business days."
+        AI voice agent: use GET /bookings/lookup?phone= instead (no auth required).
+      operationId: getBooking
+      tags:
+        - Bookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID
+      responses:
+        '200':
+          description: Booking details
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+              status:
+                type: string
+                description: See x-status-transitions for valid values and transitions
+                enum: [PENDING, PENDING_PAYMENT, CONFIRMED, COMPLETED, CANCELLED, EXPIRED, NO_SHOW]
+              startTime:
+                type: string
+                format: date-time
+              endTime:
+                type: string
+                format: date-time
+              duration:
+                type: number
+                description: Duration in hours
+              price:
+                type: number
+              pickupAddress:
+                type: string
+              notes:
+                type: string
+              isShortNotice:
+                type: boolean
+                description: See x-short-notice for short-notice booking behaviour
+              isPackageBooking:
+                type: boolean
+              packageHours:
+                type: number
+              packageHoursRemaining:
+                type: number
+              client:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+                  phone:
+                    type: string
+              createdAt:
+                type: string
+                format: date-time
+        '401':
+          description: Unauthorized — session required
+          schema:
+            $ref: '#/definitions/Error'
+        '403':
+          description: Forbidden — booking belongs to a different instructor
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/payment-summary:
+    get:
+      summary: Get payment summary for booking (public — requires paymentToken)
+      description: |
+        Lightweight endpoint used exclusively by the payment page (/booking/{id}/payment).
+        Returns only the fields needed to render the booking summary and start Stripe Checkout.
         
-        REFUND PROCESSING:
-        - Refund goes to wallet balance immediately
-        - Can be used for future bookings or withdrawn
-        - Original payment method refund takes 5-7 business days
+        SECURITY:
+        Both bookingId (path) AND paymentToken (query ?token=) must match.
+        paymentToken is a UUID generated at booking creation, included in the SMS checkoutUrl.
+        Only the SMS recipient knows both values.
+        This prevents booking details from being exposed if the bookingId leaks via logs,
+        browser history, screenshots, or SMS forwarding.
+        
+        Returns 404 (not 403) when token is missing or wrong — prevents bookingId enumeration.
+        
+        BACKEND VALIDATION (enforced server-side, not just UI countdown):
+        - Token must match booking.paymentToken
+        - Server checks createdAt + 10 min > now() regardless of client countdown
+        
+        RESUME PAYMENT:
+        SMS link stays valid until expiresAt. Returning users with the original link
+        get the same summary and can complete payment — no new booking needed.
+        POST /payments/create-intent reuses the existing PaymentIntent.
+        
+        BOOKING STATUS FLOW:
+        POST /public/bookings/bulk → PENDING_PAYMENT → SMS with checkoutUrl?token=...
+        GET /public/bookings/{id}/payment-summary?token=... → render payment page
+        POST /payments/create-intent (with paymentToken) → Stripe Elements form
+        User pays → payment_intent.succeeded → webhook → CONFIRMED
+        SMS confirmation + email receipt sent automatically
+      operationId: getPaymentSummary
+      tags:
+        - Bookings
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID from POST /public/bookings/bulk response (bookingId field)
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: |
+            paymentToken generated at booking creation. Included in the SMS checkoutUrl.
+            Required — returns 404 without it to prevent bookingId enumeration.
+      responses:
+        '200':
+          description: Payment summary
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                type: string
+                enum: [PENDING_PAYMENT, EXPIRED, CANCELLED, CONFIRMED]
+                description: CONFIRMED means already paid — redirect to confirmation page
+              isPaid:
+                type: boolean
+                description: True if payment already completed — redirect to confirmation page
+              date:
+                type: string
+                format: date
+              time:
+                type: string
+                description: Lesson start time in 12-hour format (e.g. "9:00 AM")
+              startTime:
+                $ref: '#/definitions/ISO8601DateTime'
+              endTime:
+                $ref: '#/definitions/ISO8601DateTime'
+              duration:
+                type: integer
+                description: Duration in minutes (e.g. 60)
+              pickupLocation:
+                type: string
+              isPackageBooking:
+                type: boolean
+              packageHours:
+                type: integer
+                description: Total package hours. Present only for package bookings.
+              total:
+                type: number
+                description: Total amount to pay in AUD
+              currency:
+                type: string
+                example: AUD
+              hourlyRate:
+                type: number
+              discountPct:
+                type: number
+              instructor:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  profileImage:
+                    type: string
+                    format: uri
+                  rating:
+                    type: number
+                  reviews:
+                    type: integer
+              expiresAt:
+                $ref: '#/definitions/ISO8601DateTime'
+                description: |
+                  When the slot reservation expires (10 minutes after booking creation).
+                  SMS link is valid until this time — returning users can complete payment.
+              reservationExpired:
+                type: boolean
+                description: True if server-side check shows slot has expired.
+        '401':
+          description: Token missing
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found, or token does not match (returns 404 to prevent enumeration)
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/payment-status:
+    get:
+      summary: Get payment status for booking (public — requires paymentToken)
+      description: |
+        Lean polling endpoint for AI voice agents and mobile apps.
+        Returns only booking status and a human-readable paymentStatus field.
+        No booking details or PII returned.
+        
+        AI USAGE:
+        "I can see your payment is still processing. Please wait a moment."
+        "Your booking is now confirmed — you'll receive an SMS shortly."
+        
+        Designed for polling every 3-5 seconds after the user says they've paid.
+        Rate limited to 30 requests per minute per IP.
+        
+        paymentStatus values:
+        - pending: slot reserved, payment not yet received (PENDING_PAYMENT)
+        - awaiting_approval: short-notice booking waiting for instructor approval (PENDING)
+        - succeeded: payment received, booking confirmed (CONFIRMED)
+        - expired: slot expired before payment (EXPIRED)
+        - cancelled: booking cancelled (CANCELLED)
+      operationId: getPaymentStatus
+      tags:
+        - Bookings
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: paymentToken from the SMS link (same token used for payment-summary)
+      responses:
+        '200':
+          description: Payment status
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                type: string
+                enum: [PENDING, PENDING_PAYMENT, CONFIRMED, CANCELLED, EXPIRED]
+              paymentStatus:
+                type: string
+                enum: [pending, awaiting_approval, succeeded, expired, cancelled]
+                description: Human-readable payment status for AI/mobile consumers
+              isPaid:
+                type: boolean
+              canPay:
+                type: boolean
+                description: |
+                  True only when the booking can still be paid right now.
+                  Derived server-side — frontend and AI should use this field directly
+                  rather than inferring it from status + isPaid + expiresAt.
+                  true: status=PENDING_PAYMENT, not paid, not expired
+                  false: any other status (CONFIRMED, EXPIRED, CANCELLED, etc.)
+              expiresAt:
+                $ref: '#/definitions/ISO8601DateTime'
+        '401':
+          description: Token missing
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found or token mismatch
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/timeline:
+    get:
+      summary: Get booking event timeline (public — requires paymentToken)
+      description: |
+        Returns a chronological list of events for a booking.
+        Designed for AI voice agents to answer "What happened to my booking?" without
+        exposing internal table data or financial details.
+        
+        Security: requires paymentToken (same as payment-summary and payment-status).
+        Returns 404 on token mismatch.
+        
+        AI USAGE:
+        Caller: "What happened to my booking?"
+        AI: Fetch timeline → read events in order → summarise in plain English.
+        Example: "Your booking was created at 9am, payment was received at 9:03am,
+        and your lesson was confirmed for Tuesday 25 March at 10am."
+      operationId: getBookingTimeline
+      tags:
+        - Bookings
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: paymentToken from the SMS link
+      responses:
+        '200':
+          description: Booking timeline
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                type: string
+                enum: [PENDING, PENDING_PAYMENT, CONFIRMED, COMPLETED, CANCELLED, EXPIRED, NO_SHOW]
+              events:
+                type: array
+                description: Chronologically ordered list of booking events
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum:
+                        - BOOKING_CREATED
+                        - AWAITING_PAYMENT
+                        - SLOT_EXPIRED
+                        - PAYMENT_COMPLETED
+                        - BOOKING_CONFIRMED
+                        - BOOKING_CANCELLED
+                        - LESSON_STARTED
+                        - LESSON_ENDED
+                        - BOOKING_COMPLETED
+                        - NO_SHOW
+                        - REVIEW_SUBMITTED
+                    time:
+                      $ref: '#/definitions/ISO8601DateTime'
+                    description:
+                      type: string
+                      description: Human-readable event description for AI to read aloud
+        '401':
+          description: Token missing
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found or token mismatch
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}:
+    get:
+      summary: Get booking details by ID (public)
+      description: |
+        Retrieve booking details without an instructor session.
+        Caller authenticates via phone match (limited) or OTP token (full).
+        
+        SECURITY MODEL:
+        - X-Verification-Token header: full details, token NOT consumed (read-only)
+        - phone query param: limited details (status, times, instructor name only)
+        
+        The verificationToken query param is NOT supported — tokens must be sent
+        via header only to prevent them appearing in server logs or browser history.
+        
+        AI USAGE:
+        - After booking: confirm status is PENDING_PAYMENT or CONFIRMED
+        - "When is my lesson?": return startTime + instructor name
+        - "Did my payment go through?": check status field
+        - Before reschedule/cancel: confirm booking exists and is eligible
+      operationId: getPublicBooking
+      tags:
+        - Bookings
+      security:
+        - VerificationToken: []
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID from lookup or creation response
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: false
+          description: Short-lived token from POST /verifications/otp/confirm. Grants full details. NOT consumed by this call.
+        - name: phone
+          in: query
+          type: string
+          required: false
+          description: Client phone number. Must match booking's clientPhone. Returns limited details only (no price, no PII).
+      responses:
+        '200':
+          description: Booking details (full or limited depending on auth method)
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                type: string
+                enum: [PENDING, PENDING_PAYMENT, CONFIRMED, COMPLETED, CANCELLED, EXPIRED, NO_SHOW]
+                description: See x-status-transitions for valid transitions
+              startTime:
+                type: string
+                format: date-time
+              endTime:
+                type: string
+                format: date-time
+              duration:
+                type: integer
+                description: Duration in minutes
+              pickupLocation:
+                type: string
+              price:
+                type: number
+                description: Present only when accessed via verificationToken
+              isShortNotice:
+                type: boolean
+                description: See x-short-notice
+              expiresAt:
+                type: string
+                format: date-time
+                description: Present only for PENDING_PAYMENT — when the slot reservation expires
+              isPackageBooking:
+                type: boolean
+                description: Present only when accessed via verificationToken
+              package:
+                type: object
+                description: Present only when accessed via verificationToken and isPackageBooking=true
+                properties:
+                  hours:
+                    type: integer
+                  hoursRemaining:
+                    type: number
+              instructor:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: Present only when accessed via verificationToken
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                    description: Present only when accessed via verificationToken
+                  hourlyRate:
+                    type: number
+                    description: Present only when accessed via verificationToken
+              client:
+                type: object
+                description: Present only when accessed via verificationToken
+                properties:
+                  name:
+                    type: string
+                  phone:
+                    type: string
+              createdAt:
+                type: string
+                format: date-time
+                description: Present only when accessed via verificationToken
+              updatedAt:
+                type: string
+                format: date-time
+                description: Present only when accessed via verificationToken
+        '401':
+          description: No authentication provided
+          schema:
+            $ref: '#/definitions/Error'
+        '403':
+          description: Phone mismatch or token belongs to different client
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/cancel:
+    post:
+      summary: Cancel a booking (public — OTP verified)
+      description: |
+        Cancels a booking after verifying the caller's identity via OTP.
+        This is the endpoint used by the AI voice agent.
+        
+        REQUIRED FLOW (AI must complete OTP before calling this):
+        1. Call POST /verifications/otp with { phone, purpose: "cancel" }
+        2. Ask caller for the 6-digit code
+        3. Call POST /verifications/otp/confirm → get verificationToken
+        4. Inform caller of refund amount and get verbal "yes"
+        5. Call this endpoint with verificationToken in body
+        
+        REFUND POLICY:
+        - 48+ hours before lesson: 100% refund
+        - 24–48 hours before: 50% refund
+        - Less than 24 hours: No refund
         
         RATE LIMITING:
         - 3 requests per hour per booking ID
-        - Error: "Too many cancellation attempts. Please contact support."
+      operationId: cancelPublicBooking
+      tags:
+        - Bookings
+      security:
+        - VerificationToken: []
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: false
+          description: Short-lived token from POST /verifications/otp/confirm (recommended)
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safe retries (24-hour window)
+        - name: body
+          in: body
+          required: false
+          schema:
+            type: object
+            properties:
+              reason:
+                type: string
+                description: Optional cancellation reason
+      responses:
+        '200':
+          description: Booking cancelled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              booking:
+                type: object
+              refund:
+                type: object
+                properties:
+                  percentage:
+                    type: number
+                    description: Refund percentage (0, 50, or 100)
+                  amount:
+                    type: number
+                    description: Refund amount in AUD
+                  stripeRefundId:
+                    type: string
+                    description: Stripe refund ID if refund was successfully issued. Null if no refund applies or refund failed.
+                  requiresManualAction:
+                    type: boolean
+                    description: |
+                      True when a refund was due but Stripe refund failed.
+                      AI should tell caller: "The automatic refund failed — our team will process it manually within 1 business day."
+                  error:
+                    type: string
+                    description: Stripe error message if refund failed. Null otherwise.
+        '401':
+          description: Verification token invalid or expired
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/reschedule:
+    post:
+      summary: Reschedule a booking (public — OTP verified)
+      description: |
+        Reschedules a booking to a new date/time after verifying the caller's identity via OTP.
+        This is the endpoint used by the AI voice agent.
+        
+        REQUIRED FLOW (AI must complete OTP before calling this):
+        1. Call POST /verifications/otp with { phone, purpose: "reschedule" }
+        2. Ask caller for the 6-digit code
+        3. Call POST /verifications/otp/confirm → get verificationToken
+        4. Ask for new date and time
+        5. Call GET /availability/slots to confirm slot is open
+        6. Read back the change and get verbal "yes"
+        7. Call this endpoint with verificationToken in body
+        
+        SLOT CONFLICT:
+        - 409 response means the slot is taken — ask user for a different time and retry from step 5
+        
+        RATE LIMITING:
+        - 3 requests per hour per booking ID
+      operationId: reschedulePublicBooking
+      tags:
+        - Bookings
+      security:
+        - VerificationToken: []
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: false
+          description: Short-lived token from POST /verifications/otp/confirm (recommended)
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safe retries (24-hour window)
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - newDate
+              - newTime
+            properties:
+              newDate:
+                type: string
+                format: date
+                description: "New date in YYYY-MM-DD format (e.g. 2026-03-30)"
+                example: "2026-03-30"
+              newTime:
+                type: string
+                pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+                description: "New time in HH:MM 24-hour format (e.g. 14:00)"
+                example: "14:00"
+              duration:
+                type: integer
+                description: Duration in minutes (defaults to existing booking duration)
+                example: 60
+              reason:
+                type: string
+                description: Optional reason for rescheduling
+              verificationToken:
+                type: string
+                description: Short-lived token from POST /verifications/otp/confirm
+              phone:
+                type: string
+                description: Client phone number — required when verificationToken is provided
+              email:
+                type: string
+                description: Client email — alternative to phone for token lookup
+      responses:
+        '200':
+          description: Booking rescheduled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              booking:
+                type: object
+              oldStartTime:
+                type: string
+                format: date-time
+              newStartTime:
+                type: string
+                format: date-time
+        '400':
+          description: Invalid request or past time
+          schema:
+            $ref: '#/definitions/Error'
+        '401':
+          description: Verification token invalid or expired
+          schema:
+            $ref: '#/definitions/Error'
+        '403':
+          description: Verification token does not match booking owner
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found
+          schema:
+            $ref: '#/definitions/Error'
+        '409':
+          description: Slot conflict — instructor already has a booking at that time
+          schema:
+            $ref: '#/definitions/Error'
+
+  /bookings/{bookingId}/cancel:
+    post:
+      summary: Cancel a booking (authenticated — instructor/admin)
+      description: |
+        Cancels a booking. Used by authenticated instructor or admin sessions.
+        For AI voice agent use, see POST /public/bookings/{id}/cancel instead.
+        
+        REFUND POLICY:
+        - 48+ hours before lesson: 100% refund
+        - 24–48 hours before: 50% refund
+        - Less than 24 hours: No refund
       operationId: cancelBooking
       tags:
         - Bookings
@@ -948,19 +1774,13 @@ paths:
           required: true
         - name: body
           in: body
-          required: true
+          required: false
           schema:
             type: object
-            required:
-              - reason
             properties:
               reason:
                 type: string
-                enum: [student_request, weather, safety, medical, other]
-                description: Reason for cancellation
-              notes:
-                type: string
-                description: Additional notes (optional)
+                description: Reason for cancellation (optional)
       responses:
         '200':
           description: Booking cancelled successfully
@@ -969,55 +1789,34 @@ paths:
             properties:
               success:
                 type: boolean
-              bookingId:
-                type: string
-              status:
-                type: string
-                example: "CANCELLED"
-              refundAmount:
-                type: number
-                description: Amount refunded to wallet
-              refundPercentage:
-                type: number
-              message:
-                type: string
-                example: "Booking cancelled. $42.50 refunded to your wallet."
-        '400':
-          description: Cancellation not allowed or invalid request
-          schema:
-            type: object
-            properties:
-              error:
-                type: string
-              policy:
+              booking:
                 type: object
-                description: Policy details explaining why cancellation failed
+              refund:
+                type: object
+                properties:
+                  percentage:
+                    type: number
+                  amount:
+                    type: number
+        '400':
+          description: Cancellation not allowed
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found
+          schema:
+            $ref: '#/definitions/Error'
 
   /bookings/{bookingId}/reschedule:
-    post:
-      summary: Reschedule a booking
+    patch:
+      summary: Reschedule a booking (authenticated — instructor only)
       description: |
-        Reschedules a booking to a new date/time. Same cancellation policy applies.
-        If rescheduling within 24 hours, 50% fee may apply (check policy first).
+        Reschedules a booking. Requires an active instructor session.
+        For AI voice agent use, see POST /public/bookings/{id}/reschedule instead.
         
-        AI CONVERSATION FLOW:
-        1. User: "I need to reschedule my lesson"
-        2. AI: "When would you like to reschedule to?"
-        3. User: "Next Tuesday at 10am"
-        4. AI: Validates new slot availability
-        5. AI: Checks cancellation policy for current booking
-        6. AI: "Rescheduling will have a 50% fee. Shall I proceed?"
-        7. User confirms
-        8. AI: Calls this endpoint
-        
-        POLICY NOTES:
-        - Rescheduling >48h before: Free
-        - Rescheduling 24-48h before: 50% fee
-        - Rescheduling <24h before: Not allowed (must cancel and rebook)
-        
-        RATE LIMITING:
-        - 3 requests per hour per booking ID
-        - Error: "Too many reschedule attempts. Please contact support."
+        Checks for slot conflicts and tracks reschedule history.
+        If rescheduling within 24 hours of the current booking start, marks the
+        booking as non-refundable and increments the instructor's policy exception count.
       operationId: rescheduleBooking
       tags:
         - Bookings
@@ -1032,74 +1831,83 @@ paths:
           schema:
             type: object
             required:
-              - newDate
-              - newTime
+              - startTime
+              - endTime
             properties:
-              newDate:
+              startTime:
                 type: string
-                format: date
-                example: "2026-03-20"
-              newTime:
+                format: date-time
+                description: New start time (ISO 8601)
+              endTime:
                 type: string
-                example: "10:00"
+                format: date-time
+                description: New end time (ISO 8601)
               reason:
                 type: string
                 description: Reason for rescheduling (optional)
+              confirmedPenaltyWaiver:
+                type: boolean
+                description: Required when rescheduling within 24h of current start time
       responses:
         '200':
-          description: Booking rescheduled successfully
+          description: Booking rescheduled successfully, or confirmation required
           schema:
             type: object
             properties:
               success:
                 type: boolean
-              bookingId:
-                type: string
-              oldStartTime:
-                type: string
-                format: date-time
-              newStartTime:
-                type: string
-                format: date-time
-              feeApplied:
+              booking:
+                type: object
+              penaltyWaived:
+                type: boolean
+              requiresConfirmation:
+                type: boolean
+                description: True when inside 24h window and confirmedPenaltyWaiver was not sent
+              hoursUntil:
                 type: number
-                description: Fee charged for rescheduling (0, 50, or 100%)
-              message:
+              warning:
                 type: string
-                example: "Lesson rescheduled successfully with no fee."
         '400':
-          description: Rescheduling not allowed or slot unavailable
+          description: Invalid request or slot conflict
           schema:
-            type: object
-            properties:
-              error:
-                type: string
-              availableSlots:
-                type: array
-                items:
-                  type: string
-                description: Alternative available time slots
+            $ref: '#/definitions/Error'
+        '401':
+          description: Unauthorized — instructor session required
+          schema:
+            $ref: '#/definitions/Error'
+        '409':
+          description: Slot conflict
+          schema:
+            $ref: '#/definitions/Error'
 
   /instructors/lookup:
     get:
-      summary: Find instructor by phone number (VOICE SERVICE)
+      summary: Find instructor by phone number (VOICE SERVICE — internal auth)
       description: |
         Finds an instructor by their phone number.
-        Used by the AI voice receptionist to identify which instructor's line was called.
+        Used by the AI voice receptionist to identify which instructor's Twilio line was called.
         
-        NOTE: This endpoint is at /api/voice/instructors/lookup and requires
-        voice service authentication (VOICE_SERVICE_API_KEY header).
+        ACTUAL PATH: /api/voice/instructors/lookup (not /api/instructors/lookup)
+        AUTH: Requires X-Voice-Service-Key header (VOICE_SERVICE_API_KEY env var) — not a user session.
+        
+        The `phone` field in the response is the instructor's registered phone number.
+        This is intentionally returned so the voice service can:
+        - Confirm which instructor's line was called
+        - Route the call to the correct AI copilot endpoint
+        - Display the instructor's contact info to the caller if needed
         
         If not found, use /instructors/recommendations instead.
       operationId: lookupInstructor
       tags:
         - Instructors
+      security:
+        - VoiceServiceKey: []
       parameters:
         - name: phone
           in: query
           type: string
           required: true
-          description: Instructor phone number (e.g., "0400123456")
+          description: Instructor's registered phone number (e.g., "0400123456")
       responses:
         '200':
           description: Instructor found
@@ -1112,8 +1920,13 @@ paths:
                 type: string
               phone:
                 type: string
+                description: |
+                  Instructor's registered phone number. Intentionally returned — used by voice
+                  service to confirm routing and display contact info. Not a security concern
+                  as this endpoint requires internal voice service authentication.
               email:
                 type: string
+                description: Instructor's email (from linked user account)
               hourlyRate:
                 type: number
               serviceAreas:
@@ -1128,16 +1941,18 @@ paths:
                 type: object
               copilotAgentEndpoint:
                 type: string
+                description: Optional custom AI endpoint for this instructor's dedicated voice line
               available:
                 type: boolean
+                description: True if instructor is APPROVED and has ACTIVE or TRIAL subscription
+        '401':
+          description: Missing or invalid voice service API key
+          schema:
+            $ref: '#/definitions/Error'
         '404':
           description: Instructor not found
           schema:
-            type: object
-            properties:
-              error:
-                type: string
-                example: "Instructor not found"
+            $ref: '#/definitions/Error'
 
   /verifications/otp:
     post:
@@ -1492,6 +2307,32 @@ paths:
                 type: string
                 example: "Test endpoint not available in production"
 
+definitions:
+  Error:
+    type: object
+    properties:
+      error:
+        type: string
+        description: Human-readable error message
+      code:
+        type: string
+        description: |
+          Machine-readable error code.
+          Known codes:
+          - SLOT_TAKEN: The requested time slot is no longer available.
+          - INSTRUCTOR_NOT_FOUND: Instructor not found.
+          - BOOKING_NOT_FOUND: Booking ID does not exist.
+          - BOOKING_NOT_CANCELLABLE: Booking status does not allow cancellation.
+          - BOOKING_NOT_RESCHEDULABLE: Booking status does not allow rescheduling.
+          - VERIFICATION_REQUIRED: OTP verification required before this action.
+          - VERIFICATION_EXPIRED: Verification token has expired.
+          - VERIFICATION_INVALID: Verification token does not match.
+          - RATE_LIMIT_EXCEEDED: Too many requests. Check Retry-After header.
+          - VALIDATION_ERROR: Request body failed validation.
+      details:
+        type: object
+        description: Optional structured details with additional diagnostic information
+
 tags:
   - name: System
     description: System health and status
@@ -1504,9 +2345,9 @@ tags:
   - name: Availability
     description: Time slot availability
   - name: Bookings
-    description: Booking creation and management
+    description: Booking creation, cancellation, and rescheduling
   - name: Verification
-    description: OTP identity verification for sensitive actions
+    description: OTP identity verification for sensitive actions (cancel, reschedule)
   - name: Webhooks
     description: External webhook integrations (Stripe)
   - name: Testing

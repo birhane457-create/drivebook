@@ -33,16 +33,31 @@ function buildTargetUrl(req, targetPath) {
   return url.toString();
 }
 
+// P1-8 FIX: Use an explicit allowlist of headers to forward rather than a denylist.
+// Forwarding all headers blindly lets a caller inject x-forwarded-for, authorization,
+// x-internal-user-id, or any header the main app trusts from "internal" sources.
+const ALLOWED_FORWARD_HEADERS = new Set([
+  'content-type',
+  'idempotency-key',
+  'x-verification-token',
+  'x-request-id',
+  'accept',
+  'accept-language',
+  'x-twilio-signature',
+]);
+
 function buildForwardHeaders(req) {
   const headers = {};
   Object.entries(req.headers || {}).forEach(([key, value]) => {
     if (!value) return;
     const lowerKey = key.toLowerCase();
-    if (['host', 'content-length', 'connection'].includes(lowerKey)) return;
-    headers[key] = value;
+    if (ALLOWED_FORWARD_HEADERS.has(lowerKey)) {
+      headers[lowerKey] = value;
+    }
   });
 
-  headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.ip;
+  // Always set x-forwarded-for from the actual socket IP, never from a header the caller supplied
+  headers['x-forwarded-for'] = req.socket?.remoteAddress || req.ip || 'unknown';
   if (req.requestId) {
     headers['x-request-id'] = req.requestId;
   }
@@ -80,6 +95,9 @@ async function proxyRequest(req, res, targetPath) {
       data: options.body ? JSON.parse(options.body) : undefined,
       validateStatus: () => true,
       responseType: 'text',
+      // FIX #9: Explicit timeout so slow upstream calls don't hang Twilio sessions.
+      // Twilio's own TwiML timeout is 10s — give the backend 8s to respond.
+      timeout: 8000,
     };
 
     const response = await axios(axiosOptions);
@@ -184,6 +202,38 @@ router.post('/public/bookings/bulk', (req, res) => {
       logger.logError(err, { requestId: req.requestId });
       return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
     }
+
+    // FIX #4: Send payment link SMS immediately at booking creation time.
+    // This is independent of whether the voice call stays connected.
+    // Without this, a call disconnect after booking creation means the caller
+    // never receives their payment URL and the booking expires silently.
+    const phone = req.body && req.body.accountHolderPhone;
+    if (data && data.checkoutUrl && phone) {
+      const smsService = require('../services/sms-service');
+      const msg = `Your DriveBook lesson is reserved for 10 minutes. Complete payment here: ${data.checkoutUrl}`;
+      smsService.sendSms(phone, msg).catch((smsErr) => {
+        logger.logError(smsErr, { requestId: req.requestId, context: 'booking-creation-sms' });
+      });
+
+      // SPRINT 3: Persist voice session so a call-back within 10 minutes triggers
+      // recovery instead of starting a fresh booking flow.
+      if (data.bookingId) {
+        const voiceSession = require('../services/voice-session-service');
+        const instructorId =
+          (req.body && req.body.instructorId) || null;
+        // instructorName may be resolved earlier by the AI; pass it if available
+        const instructorName =
+          (req.body && req.body._resolvedInstructorName) || null;
+        voiceSession.saveSession(phone, {
+          lastAction: 'BOOKING_CREATED',
+          bookingId: data.bookingId,
+          checkoutUrl: data.checkoutUrl,
+          instructorId,
+          instructorName,
+        });
+      }
+    }
+
     return res.status(response && response.status ? response.status : 200).json(data);
   });
 });
@@ -221,6 +271,8 @@ router.post('/verifications/otp/confirm', (req, res) => {
     return res.status(response && response.status ? response.status : 200).json(data);
   });
 });
+
+router.get('/public/bookings/:id', (req, res) => proxyRequest(req, res, `/api/public/bookings/${req.params.id}`));
 
 router.post('/public/bookings/:id/cancel', (req, res) => {
   const verificationToken = req.headers['x-verification-token'];

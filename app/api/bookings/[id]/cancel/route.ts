@@ -71,44 +71,59 @@ export async function POST(
     }
 
     // Single atomic transaction — wallet credit + booking update + transaction update
-    const updated = await prisma.$transaction(async (tx) => {
-      // Wallet refund if applicable
-      if (refundAmount > 0 && booking.client?.userId) {
-        const wallet = await tx.clientWallet.findUnique({ where: { userId: booking.client.userId } })
-        if (wallet) {
-          await tx.clientWallet.update({
-            where: { id: wallet.id },
-            data: { balance: { increment: refundAmount } },
-          })
-          await tx.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              amount: refundAmount,
-              type: 'CREDIT',
-              description: `Booking cancelled — ${refundPercentage}% refund`,
-              status: 'CONFIRMED',
-            },
-          })
+    // FIX #1: Use updateMany with atomic status guard to prevent double-cancel under concurrency.
+    // FIX #2: Never write to ClientWallet.balance directly — always insert a WalletTransaction
+    //         so getWalletBalance() (ledger-derived) remains the single source of truth.
+    let updated: any
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        // Atomically claim this cancellation — only succeeds if status is still cancellable
+        const guard = await tx.booking.updateMany({
+          where: {
+            id: params.id,
+            status: { notIn: ['CANCELLED', 'COMPLETED', 'EXPIRED', 'NO_SHOW'] },
+          },
+          data: {
+            status: 'CANCELLED',
+            notes: `${booking.notes || ''}\n\nCancelled ${now.toISOString()}. Refund: ${refundPercentage}% ($${refundAmount.toFixed(2)})`.trim(),
+          },
+        })
+
+        // If count === 0, another request already cancelled it — roll back cleanly
+        if (guard.count === 0) {
+          throw Object.assign(new Error('ALREADY_CANCELLED'), { code: 'ALREADY_CANCELLED' })
         }
+
+        // Wallet refund — insert a transaction record only (no stored balance write)
+        if (refundAmount > 0 && booking.client?.userId) {
+          const wallet = await tx.clientWallet.findUnique({ where: { userId: booking.client.userId } })
+          if (wallet) {
+            await tx.walletTransaction.create({
+              data: {
+                walletId: wallet.id,
+                amount: refundAmount,
+                type: 'CREDIT',
+                description: `Booking cancelled — ${refundPercentage}% refund`,
+                status: 'CONFIRMED',
+              },
+            })
+          }
+        }
+
+        // Update transaction status
+        await (tx as any).transaction.updateMany({
+          where: { bookingId: params.id },
+          data: { status: 'CANCELLED' },
+        })
+
+        return await tx.booking.findUnique({ where: { id: params.id } })
+      })
+    } catch (err: any) {
+      if (err?.code === 'ALREADY_CANCELLED') {
+        return NextResponse.json({ error: 'Booking has already been cancelled' }, { status: 400 })
       }
-
-      // Update booking status
-      const updatedBooking = await tx.booking.update({
-        where: { id: params.id },
-        data: {
-          status: 'CANCELLED',
-          notes: `${booking.notes || ''}\n\nCancelled ${now.toISOString()}. Refund: ${refundPercentage}% ($${refundAmount.toFixed(2)})`.trim(),
-        },
-      })
-
-      // Update transaction status
-      await (tx as any).transaction.updateMany({
-        where: { bookingId: params.id },
-        data: { status: 'CANCELLED' },
-      })
-
-      return updatedBooking
-    })
+      throw err
+    }
 
     // Audit log
     await prisma.auditLog.create({

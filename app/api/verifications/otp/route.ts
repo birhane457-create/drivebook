@@ -27,32 +27,73 @@ const schema = z.object({
   purpose: z.enum(['cancel', 'reschedule', 'login']).default('cancel'),
 }).refine(d => d.phone || d.email, { message: 'phone or email required' });
 
-// Simple in-memory rate limiter (per phone/email, resets on cold start)
-// For production: use Redis via Upstash
-const rateLimitMap = new Map<string, { count: number; windowStart: number; lastSent: number }>();
+// ── OTP rate limiter ─────────────────────────────────────────────────────────
+// FIX #6: Replace in-memory Map with Upstash Redis rate limiter when configured.
+// Upstash is already the standard rate-limit backend for bookings (lib/ratelimit.ts).
+// Falls back to in-memory when UPSTASH_REDIS_REST_URL is not set (local dev).
 
-function checkRateLimit(key: string): { allowed: boolean; retryAfter?: number } {
+const isUpstashConfigured = !!(
+  process.env.UPSTASH_REDIS_REST_URL &&
+  process.env.UPSTASH_REDIS_REST_TOKEN &&
+  !process.env.UPSTASH_REDIS_REST_URL.includes('your-database')
+);
+
+// In-memory fallback — only used when Upstash is not configured
+const memRateLimitMap = new Map<string, { count: number; windowStart: number; lastSent: number }>();
+
+async function checkOtpRateLimit(key: string): Promise<{ allowed: boolean; retryAfter?: number }> {
   const now = Date.now();
   const windowMs = 60 * 60 * 1000; // 1 hour
-  const resendDelayMs = 60 * 1000; // 60 seconds
+  const resendDelayMs = 60 * 1000;  // 60 seconds
   const maxPerHour = 3;
 
-  const entry = rateLimitMap.get(key);
-  if (!entry || now - entry.windowStart > windowMs) {
-    rateLimitMap.set(key, { count: 1, windowStart: now, lastSent: now });
-    return { allowed: true };
+  if (isUpstashConfigured) {
+    // Redis-backed — survives cold starts and multiple instances
+    try {
+      const { Redis } = await import('@upstash/redis');
+      const { Ratelimit } = await import('@upstash/ratelimit');
+      const redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL!,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+      });
+
+      // Sliding window: 3 requests per hour
+      const limiter = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(maxPerHour, '1 h'),
+      });
+      const { success, reset } = await limiter.limit(`otp:${key}`);
+      if (!success) {
+        return { allowed: false, retryAfter: Math.ceil((reset - now) / 1000) };
+      }
+
+      // Resend delay: store last-sent in Redis with 60s TTL
+      const resendKey = `otp-resend:${key}`;
+      const lastSent = await redis.get<number>(resendKey);
+      if (lastSent && now - lastSent < resendDelayMs) {
+        return { allowed: false, retryAfter: Math.ceil((resendDelayMs - (now - lastSent)) / 1000) };
+      }
+      await redis.set(resendKey, now, { ex: 60 });
+
+      return { allowed: true };
+    } catch (err) {
+      console.error('[OTP RATE LIMIT] Redis check failed, falling back to in-memory:', err);
+      // Fall through to in-memory
+    }
   }
 
-  // Check resend delay
+  // In-memory fallback
+  const entry = memRateLimitMap.get(key);
+  if (!entry || now - entry.windowStart > windowMs) {
+    memRateLimitMap.set(key, { count: 1, windowStart: now, lastSent: now });
+    return { allowed: true };
+  }
   if (now - entry.lastSent < resendDelayMs) {
     return { allowed: false, retryAfter: Math.ceil((resendDelayMs - (now - entry.lastSent)) / 1000) };
   }
-
-  // Check hourly limit
   if (entry.count >= maxPerHour) {
     return { allowed: false, retryAfter: Math.ceil((windowMs - (now - entry.windowStart)) / 1000) };
   }
-
   entry.count++;
   entry.lastSent = now;
   return { allowed: true };
@@ -64,7 +105,7 @@ export async function POST(req: NextRequest) {
     const data = schema.parse(body);
 
     const identifier = data.phone || data.email!;
-    const rateCheck = checkRateLimit(identifier);
+    const rateCheck = await checkOtpRateLimit(identifier);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: 'Too many OTP requests. Please wait before trying again.', retryAfter: rateCheck.retryAfter },
@@ -90,13 +131,19 @@ export async function POST(req: NextRequest) {
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     const verificationId = crypto.randomUUID();
 
-    // Store OTP in user record if found, otherwise store in a temporary map
+    // FIX #5: Hash the OTP before storing — plain-text OTP in DB is a data-leak risk.
+    // We store HMAC-SHA256(otp, OTP_HASH_SECRET) so a DB read never reveals the code.
+    // Falls back to a per-instance secret if OTP_HASH_SECRET is not set (dev only).
+    const otpSecret = process.env.OTP_HASH_SECRET || 'dev-otp-secret-change-in-prod';
+    const otpHash = crypto.createHmac('sha256', otpSecret).update(otp).digest('hex');
+
+    // Store hashed OTP in user record if found, otherwise store in a temporary map
     // Using resetToken field as OTP storage (same pattern as password reset)
     if (user) {
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          resetToken: `otp:${verificationId}:${otp}`,
+          resetToken: `otp:${verificationId}:${otpHash}`,
           resetTokenExpiry: otpExpiry,
         },
       });

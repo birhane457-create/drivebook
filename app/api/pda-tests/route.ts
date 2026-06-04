@@ -159,6 +159,33 @@ export async function POST(req: NextRequest) {
       include: { client: true },
     });
 
+    // Audit log — PDA tests are instructor-managed but must be traceable
+    try {
+      await (prisma as any).auditLog.create({
+        data: {
+          action: 'BOOKING_CREATED',
+          actorId: session.user.id!,
+          actorRole: 'INSTRUCTOR',
+          targetType: 'BOOKING',
+          targetId: booking.id,
+          success: true,
+          metadata: {
+            bookingType: 'PDA_TEST',
+            clientId: data.clientId,
+            clientName: client.name,
+            testDate: data.testDate,
+            testTime: data.testTime,
+            centreName,
+            centreAddress,
+            price,
+            source: 'platform',
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.error('Audit log failed for PDA test creation:', auditErr);
+    }
+
     return NextResponse.json({ success: true, booking }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

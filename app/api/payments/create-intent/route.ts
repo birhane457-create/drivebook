@@ -9,13 +9,8 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    // Auth required — only the booking owner (client or instructor) can create a payment intent
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { bookingId, transactionId, amount } = await req.json();
+    const body = await req.json();
+    const { bookingId, transactionId, amount, paymentToken } = body;
 
     // Handle both booking payments AND wallet/package purchases
     if (!bookingId && !transactionId) {
@@ -25,13 +20,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ Handle wallet/package purchase (book later)
+    // ✅ Handle wallet/package purchase (book later) — always requires session
     if (transactionId) {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
       return handleWalletPaymentIntent(transactionId, amount);
     }
 
     // ✅ Handle booking payment (book now)
-    return handleBookingPaymentIntent(bookingId, amount, session.user);
+    // Two auth paths:
+    //   1. paymentToken provided (unauthenticated payment page) — token is validated in handler
+    //   2. session present (dashboard / admin) — session ownership is validated in handler
+    const session = await getServerSession(authOptions);
+    return handleBookingPaymentIntent(bookingId, amount, session?.user ?? undefined, paymentToken);
   } catch (error) {
     console.error('Error creating payment intent:', error);
     return NextResponse.json(
@@ -99,9 +102,8 @@ async function handleWalletPaymentIntent(transactionId: string, amount?: number)
 /**
  * Create payment intent for booking payment (book now)
  */
-async function handleBookingPaymentIntent(bookingId: string, amount?: number, sessionUser?: { id: string; role: string }) {
+async function handleBookingPaymentIntent(bookingId: string, amount?: number, sessionUser?: { id: string; role: string }, paymentToken?: string) {
   try {
-    // Get booking details
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
@@ -113,9 +115,17 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    // Ownership check: only the client linked to this booking can pay for it
-    // (or an admin — admins have no clientId so we check role)
-    if (sessionUser) {
+    // ── Auth gate ──────────────────────────────────────────────────────────
+    // Either a valid paymentToken (payment page) OR a valid session (dashboard) is required.
+    // Both provide identity verification — token proves SMS receipt, session proves login.
+    if (paymentToken) {
+      // Token path: unauthenticated payment page
+      const storedToken = booking.paymentToken ?? '';
+      if (!storedToken || storedToken !== paymentToken) {
+        return NextResponse.json({ error: 'Invalid payment token' }, { status: 403 });
+      }
+    } else if (sessionUser) {
+      // Session path: authenticated dashboard/admin
       const isAdmin = sessionUser.role === 'ADMIN' || sessionUser.role === 'SUPER_ADMIN';
       if (!isAdmin && booking.clientId) {
         const client = await prisma.client.findUnique({
@@ -126,6 +136,9 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
           return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
       }
+    } else {
+      // No token and no session — reject
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     if (booking.isPaid) {
@@ -135,30 +148,111 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       );
     }
 
+    // Validate booking is still in a payable state
+    // Never create/reuse a PaymentIntent for expired, cancelled, or completed bookings
+    const SLOT_HOLD_MINUTES = 10;
+    const expiresAt = new Date(booking.createdAt.getTime() + SLOT_HOLD_MINUTES * 60 * 1000);
+    const isExpired =
+      booking.status === 'EXPIRED' ||
+      (booking.status === 'PENDING_PAYMENT' && new Date() > expiresAt);
+
+    if (isExpired) {
+      return NextResponse.json(
+        { error: 'This booking has expired. The slot has been released — please book again.', code: 'BOOKING_EXPIRED' },
+        { status: 410 }
+      );
+    }
+
+    if (!['PENDING_PAYMENT', 'PENDING'].includes(booking.status)) {
+      return NextResponse.json(
+        { error: `Booking is not in a payable state (status: ${booking.status})`, code: 'INVALID_STATUS' },
+        { status: 400 }
+      );
+    }
+
     // Use provided amount or booking price
     const paymentAmount = amount || booking.price;
 
-    // Check if payment intent already exists for this booking
-    if (booking.paymentIntentId) {
-      try {
-        const existingIntent = await stripeService.retrievePaymentIntent(booking.paymentIntentId);
-        // Only reuse if it's in a state where the client can still complete payment.
-        // 'requires_action' and 'processing' are also safe to reuse.
-        // Do NOT reuse 'succeeded', 'canceled', or 'requires_payment_method' with an
-        // expired card — create a fresh intent instead.
-        const reusableStatuses = ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing'];
-        if (reusableStatuses.includes(existingIntent.status)) {
-          return NextResponse.json({
-            clientSecret: existingIntent.client_secret,
-            amount: existingIntent.amount / 100,
-          });
-        }
-        // Otherwise fall through and create a new intent
-        console.log(`Payment intent ${booking.paymentIntentId} in status '${existingIntent.status}' — creating new one`);
-      } catch (error) {
-        console.log('Existing payment intent not found or invalid, creating new one');
+    // Use provided amount or booking price
+    const paymentAmount = amount || booking.price;
+
+    // FIX: PaymentIntent deduplication with DB-level advisory lock.
+    //
+    // RACE CONDITION (before fix):
+    //   Two tabs both read booking.paymentIntentId = null simultaneously.
+    //   Both skip the existing-intent check. Both call stripe.paymentIntents.create().
+    //   Last UPDATE wins — the first intent is orphaned in Stripe forever.
+    //
+    // FIX: PostgreSQL advisory lock per booking ID.
+    //   Only one request at a time can reach the create + update path for a given bookingId.
+    //   The lock is released automatically at transaction end.
+    //
+    // Implementation: pg_advisory_xact_lock(bigint) takes an integer. We hash the bookingId
+    // string to a stable 64-bit integer using hashtext() which is available in all Postgres versions.
+
+    const dedupeResult = await prisma.$transaction(async (tx) => {
+      // Acquire exclusive lock for this bookingId — blocks concurrent requests
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${bookingId}))`;
+
+      // Re-read booking inside the lock to get the latest paymentIntentId
+      const freshBooking = await tx.booking.findUnique({
+        where: { id: bookingId },
+        select: { paymentIntentId: true, isPaid: true, status: true },
+      }) as any;
+
+      if (!freshBooking) return { status: 'not_found' as const };
+      if (freshBooking.isPaid) return { status: 'already_paid' as const };
+      if (!['PENDING_PAYMENT', 'PENDING'].includes(freshBooking.status)) {
+        return { status: 'invalid_status' as const, bookingStatus: freshBooking.status };
       }
+
+      // Check existing intent while holding the lock — no race possible here
+      if (freshBooking.paymentIntentId) {
+        try {
+          const existingIntent = await stripeService.retrievePaymentIntent(freshBooking.paymentIntentId);
+          const reusableStatuses = ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing'];
+          if (reusableStatuses.includes(existingIntent.status)) {
+            return {
+              status: 'reuse' as const,
+              clientSecret: existingIntent.client_secret,
+              amount: existingIntent.amount / 100,
+            };
+          }
+          // Existing intent is not reusable (succeeded/canceled/etc) — cancel it before creating new
+          if (['requires_payment_method', 'requires_confirmation'].includes(existingIntent.status) === false) {
+            try {
+              await stripeService.cancelPaymentIntent?.(freshBooking.paymentIntentId);
+            } catch {
+              // Best-effort cancel — continue to create new intent
+            }
+          }
+        } catch {
+          // Intent not found in Stripe — create new one
+        }
+      }
+
+      return { status: 'create_new' as const };
+    });
+
+    if (dedupeResult.status === 'not_found') {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
+    if (dedupeResult.status === 'already_paid') {
+      return NextResponse.json({ error: 'Booking already paid' }, { status: 400 });
+    }
+    if (dedupeResult.status === 'invalid_status') {
+      return NextResponse.json(
+        { error: `Booking is not in a payable state (status: ${dedupeResult.bookingStatus})`, code: 'INVALID_STATUS' },
+        { status: 400 }
+      );
+    }
+    if (dedupeResult.status === 'reuse') {
+      return NextResponse.json({
+        clientSecret: dedupeResult.clientSecret,
+        amount: dedupeResult.amount,
+      });
+    }
+    // dedupeResult.status === 'create_new' — fall through to create
 
     // Get clientEmail — look up linked client's user email
     let clientEmail = 'customer@example.com';

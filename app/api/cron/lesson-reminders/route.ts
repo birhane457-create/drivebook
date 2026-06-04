@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { notifyLessonReminderInstructor, notifyLessonReminderStudent } from '@/lib/services/notifications';
 import { emailService } from '@/lib/services/email';
+import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +23,11 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: NextRequest) {
   try {
+    // P1-9 FIX: Both conditions must be checked together.
+    // If CRON_SECRET is unset the previous guard (process.env.CRON_SECRET && ...)
+    // short-circuits to false and lets anyone trigger this cron unauthenticated.
     const authHeader = req.headers.get('authorization');
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -140,9 +144,11 @@ export async function GET(req: NextRequest) {
     }
 
     console.log(`✅ Lesson reminders: ${sent} sent, ${failed} failed, ${bookings.length} total`);
+    await pingCronHealth('lesson-reminders');
     return NextResponse.json({ success: true, sent, failed, total: bookings.length });
   } catch (error) {
     console.error('Lesson reminders cron error:', error);
+    await failCronHealth('lesson-reminders', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

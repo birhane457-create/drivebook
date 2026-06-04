@@ -21,7 +21,11 @@ export type LedgerEntryType =
   | 'PAYOUT_PAID'        // instructor receives net payout
   | 'TAX_WITHHELD'       // ATO withholding recorded
   | 'REFUND_ISSUED'      // refund back to student
-  | 'ADJUSTMENT';        // manual correction / post-payout deduction
+  | 'ADJUSTMENT'         // manual correction / post-payout deduction
+  | 'DISPUTE_OPENED'     // chargeback filed — amount at risk
+  | 'DISPUTE_WON'        // dispute resolved in platform's favour — reverses DISPUTE_OPENED
+  | 'DISPUTE_LOST'       // chargeback confirmed — platform absorbs loss + Stripe fee
+  | 'REFUND_SYNCED';     // refund originated in Stripe Dashboard (not via app refund route)
 
 // ─── Append a ledger entry (never mutates existing entries) ───────────────────
 

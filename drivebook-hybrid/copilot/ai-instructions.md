@@ -22,6 +22,7 @@ Provide the AI with a clear, step-by-step operational workflow so it can handle 
 | `POST /verifications/otp` | ✅ Implemented | `/api/verifications/otp` |
 | `POST /verifications/otp/confirm` | ✅ Implemented | `/api/verifications/otp/confirm` |
 | `POST /public/bookings/{id}/reschedule` | ✅ Implemented | `/api/public/bookings/{id}/reschedule` — OTP token optional but recommended |
+| `GET /public/bookings/{id}` | ✅ Implemented | `/api/public/bookings/{id}` — phone param (limited) or OTP token (full) |
 
 ## Available API Endpoints (Actual)
 
@@ -37,6 +38,7 @@ Provide the AI with a clear, step-by-step operational workflow so it can handle 
 - `POST /api/verifications/otp` — send OTP to phone/email
 - `POST /api/verifications/otp/confirm` — verify OTP, return short-lived token
 - `POST /api/public/bookings/{bookingId}/reschedule` — reschedule booking (no auth, OTP token recommended)
+- `GET /api/public/bookings/{bookingId}` — get booking status/details (phone param or OTP token)
 - `GET /api/health` — health check
 
 ## AI Workflow: New Booking (Current Implementation)
@@ -69,6 +71,19 @@ Provide the AI with a clear, step-by-step operational workflow so it can handle 
     - Response includes `checkoutUrl` — send this via SMS
 11. Tell user: "Done. I'm texting you a secure payment link now. Click it to complete your booking. Your time slot is held for 10 minutes."
 
+## AI Workflow: Check Booking Status
+
+1. Ask for phone number
+2. Call `GET /api/bookings/lookup?phone=...`
+3. If booking found, read back the status:
+   - `PENDING_PAYMENT` → "Your booking is reserved but payment hasn't been completed yet. Your slot expires in 10 minutes."
+   - `CONFIRMED` → "Your booking is confirmed with [Instructor] on [Date] at [Time]."
+   - `PENDING` → "Your booking is awaiting instructor approval."
+   - `CANCELLED` → "This booking has been cancelled."
+   - `COMPLETED` → "This lesson has already been completed."
+4. For full details (price, package info), complete OTP first then call:
+   `GET /api/public/bookings/{bookingId}` with `X-Verification-Token` header
+
 ## AI Workflow: Cancel Booking (Current Implementation)
 
 1. Ask for phone number
@@ -76,17 +91,25 @@ Provide the AI with a clear, step-by-step operational workflow so it can handle 
 3. Read back the booking details and confirm with the user:
    > "I found a booking with Debesay on Tuesday 25 March at 9am. Is that the one you want to cancel?"
    - If multiple bookings found, list them and ask which one
-4. Send OTP for identity verification:
+   - If booking status is `PENDING_PAYMENT` (never paid): skip OTP — booking can be cancelled without identity verification (no money at stake)
+4. For **CONFIRMED** bookings (already paid): Send OTP for identity verification:
    - Call `POST /api/verifications/otp` with `{ phone, purpose: "cancel" }`
    - Response: `{ verificationId, expiresAt }`
-5. Ask user for the 6-digit code
-6. Call `POST /api/verifications/otp/confirm` with `{ verificationId, code, phone }`
+   - Ask user for the 6-digit code
+   - Call `POST /api/verifications/otp/confirm` with `{ verificationId, code, phone }`
    - Response: `{ valid: true, verificationToken }`
-7. Inform user of refund policy and get final confirmation:
-   > "Cancelling now will give you a 100% refund of $790. Are you sure you want to cancel?"
-   - **Do NOT cancel until the student says yes**
-8. Call `POST /api/public/bookings/{bookingId}/cancel` with `{ reason: "student_request" }`
-9. Confirm cancellation and refund amount to user
+5. Inform user of refund policy based on lesson time:
+   - 48+ hours away → "You'll receive a full refund"
+   - 24–48 hours → "You'll receive a 50% refund"
+   - Under 24 hours → "No refund applies — less than 24 hours notice"
+   - Get verbal "yes" before proceeding — **Do NOT cancel until the student confirms**
+6. Call `POST /api/public/bookings/{bookingId}/cancel`:
+   - For paid bookings: send `X-Verification-Token` header + `{ phone, reason: "student_request" }`
+   - For unpaid PENDING_PAYMENT bookings: just `{ reason: "student_request" }` (no token needed)
+7. Check the response:
+   - `refund.stripeRefundId` is set → refund issued: "Done. Your booking is cancelled and a $X refund has been processed to your card."
+   - `refund.requiresManualAction: true` → refund failed: "Your booking is cancelled. Unfortunately the automatic refund failed — our team will process it manually within 1 business day."
+   - `refund.amount === 0` → no refund: "Done. Your booking is cancelled. No refund applies."
 
 ## AI Workflow: Reschedule Booking (Current Implementation)
 

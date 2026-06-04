@@ -140,6 +140,30 @@ export async function POST(req: NextRequest) {
       } as any,
     });
 
+    // Audit log — offline bookings must be traceable for dispute resolution
+    try {
+      await (prisma as any).auditLog.create({
+        data: {
+          action: 'BOOKING_CREATED',
+          actorId: session.user.id!,
+          actorRole: 'INSTRUCTOR',
+          targetType: 'BOOKING',
+          targetId: booking.id,
+          success: true,
+          metadata: {
+            clientName: data.clientName,
+            clientPhone: data.clientPhone || null,
+            startTime: startTime.toISOString(),
+            price: data.offlineAmountPaid ?? 0,
+            paymentMethod: data.offlinePaymentMethod ?? null,
+            source: 'offline',
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.error('Audit log failed for offline booking creation:', auditErr);
+    }
+
     return NextResponse.json({ success: true, booking }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

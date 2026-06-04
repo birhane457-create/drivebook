@@ -11,13 +11,15 @@ interface PayoutSettings {
   bankAccount: string;
   bankAccountName: string;
   abn: string;
-  abnHolderName: string;  // name as registered with ABR (may differ from profile name)
+  abnHolderName: string;
   abnVerified: boolean;
   abnStatus: string | null;
   abnEntityName: string | null;
   gstRegistered: boolean;
   withholdingTaxRate: number;
   stripeAccountId: string | null;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
   name: string;
 }
 
@@ -58,6 +60,8 @@ export default function PayoutSettingsPage() {
     gstRegistered: false,
     withholdingTaxRate: 47,
     stripeAccountId: null,
+    chargesEnabled: false,
+    payoutsEnabled: false,
     name: '',
   });
   const [loading, setLoading] = useState(true);
@@ -317,13 +321,74 @@ export default function PayoutSettingsPage() {
           {s.payoutMethod === 'stripe_connect' && (
             <div className="space-y-3">
               {s.stripeAccountId ? (
-                <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-green-50 text-green-700 border border-green-200">
-                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">Stripe account connected</p>
-                    <p className="text-xs text-green-600 mt-0.5">Payouts are processed automatically. Account: {s.stripeAccountId.slice(0, 16)}...</p>
-                  </div>
-                </div>
+                (() => {
+                  const fullyOnboarded = s.chargesEnabled && s.payoutsEnabled;
+                  const partiallyOnboarded = s.stripeAccountId && !fullyOnboarded;
+                  return (
+                    <div className="space-y-3">
+                      {fullyOnboarded ? (
+                        <div className="flex items-start gap-3 p-4 rounded-lg bg-green-50 border border-green-200">
+                          <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-semibold text-green-800">Stripe account ready — automatic payouts active</p>
+                            <p className="text-xs text-green-600 mt-1">
+                              Your earnings are paid automatically every Tuesday at 2:00 AM.
+                              Lessons must be completed at least 48 hours before the payout run.
+                            </p>
+                            <p className="text-xs text-green-500 mt-1 font-mono">
+                              Account: {s.stripeAccountId.slice(0, 20)}…
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-semibold text-amber-800">Stripe setup incomplete — payouts are on hold</p>
+                              <p className="text-xs text-amber-700 mt-1">
+                                Stripe needs a bit more information before you can receive payments.
+                                This usually takes 2–3 minutes to complete.
+                              </p>
+                            </div>
+                          </div>
+                          {/* Step-by-step status */}
+                          <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Onboarding progress</p>
+                            {[
+                              { label: 'Account created', done: true },
+                              { label: 'Identity verified (charges enabled)', done: s.chargesEnabled },
+                              { label: 'Bank account linked (payouts enabled)', done: s.payoutsEnabled },
+                            ].map((step) => (
+                              <div key={step.label} className="flex items-center gap-3">
+                                {step.done ? (
+                                  <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                ) : (
+                                  <div className="h-4 w-4 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                                )}
+                                <span className={`text-sm ${step.done ? 'text-gray-700' : 'text-gray-400'}`}>
+                                  {step.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStripeConnect}
+                            disabled={connectingStripe}
+                            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg font-medium text-sm transition-colors"
+                          >
+                            {connectingStripe ? (
+                              <><Loader2 className="h-4 w-4 animate-spin" /> Opening Stripe…</>
+                            ) : (
+                              <><ExternalLink className="h-4 w-4" /> Continue Stripe setup →</>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-start gap-2 text-sm p-3 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
@@ -333,6 +398,7 @@ export default function PayoutSettingsPage() {
                       <p className="text-xs text-blue-700 mt-1">
                         You'll be taken to Stripe's secure page to enter your bank details directly.
                         DriveBook never sees your account number — Stripe verifies it for you.
+                        Once set up, earnings are paid automatically every Tuesday.
                       </p>
                     </div>
                   </div>

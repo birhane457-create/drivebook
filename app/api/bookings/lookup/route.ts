@@ -55,11 +55,10 @@ export async function GET(req: NextRequest) {
         startTime: booking.startTime?.toISOString(),
         duration: booking.duration,
         pickupLocation: booking.pickupAddress,
-        price: booking.price,
         instructor: {
           id: booking.instructor.id,
           name: booking.instructor.name,
-          phone: booking.instructor.phone
+          // phone intentionally omitted — caller has not yet verified identity via OTP
         }
       }))
     })

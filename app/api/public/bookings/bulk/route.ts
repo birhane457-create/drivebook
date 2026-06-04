@@ -1,11 +1,16 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { bulkBookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { notifyShortNoticeBookingRequest, notifyClientBookingPendingApproval, notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
-import { calculatePackagePriceDynamic, HOUR_PACKAGES } from '@/lib/config/packages';
+import { calculatePackagePriceDynamic } from '@/lib/config/packages';
+import crypto from 'crypto';
+
+// P0-2 FIX: Define constant here (was missing — caused key.length > undefined to always be false)
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 const bulkBookingSchema = z.object({
   // Either instructorId or instructorQuery must be provided.
@@ -54,8 +59,9 @@ const bulkBookingSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log('Bulk booking body:', JSON.stringify(body, null, 2));
     const data = bulkBookingSchema.parse(body);
+    // P2-1 FIX: Do not log full request body — it contains PII (name, email, phone)
+    console.log('Bulk booking request:', { packageType: data.packageType, hours: data.hours, instructorId: data.instructorId ?? data.instructorQuery, bookingType: data.bookingType });
 
     // Rate limiting: limit bulk bookings per client/email/IP
     const ip = req.headers.get('x-forwarded-for') || (req as any).ip || 'unknown';
@@ -74,7 +80,26 @@ export async function POST(req: NextRequest) {
     // ── Resolve instructorId from instructorQuery if needed ───────────────────
     // AI callers may send instructorQuery (name or phone) instead of instructorId.
     // We resolve it here so the rest of the handler always works with a concrete ID.
-    let resolvedInstructorId = data.instructorId;
+    //  Idempotency-Key deduplication
+    // Twilio retries, AI retries, browser double-clicks reuse the same key.
+    // On match, replay stored response without creating a duplicate booking.
+    const idempotencyKey = req.headers.get('Idempotency-Key')?.trim() ?? null;
+    if (idempotencyKey) {
+      if (idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+        return NextResponse.json({ error: 'Idempotency-Key too long' }, { status: 400 });
+      }
+      const existing = await (prisma as any).bookingIdempotencyKey.findUnique({
+        where: { key: idempotencyKey },
+      });
+      if (existing) {
+        if (existing.email !== data.accountHolderEmail) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match account' }, { status: 409 });
+        }
+        return NextResponse.json(existing.response, { status: 201 });
+      }
+    }
+
+        let resolvedInstructorId = data.instructorId;
 
     if (!resolvedInstructorId && data.instructorQuery) {
       const query = data.instructorQuery.trim();
@@ -129,6 +154,7 @@ export async function POST(req: NextRequest) {
         subscriptionStatus: true,
         trialEndsAt: true,
         lessonPackages: true,
+        acceptingBookings: true,
       },
     }) as any;
 
@@ -160,6 +186,15 @@ export async function POST(req: NextRequest) {
       }, { status: 403 });
     }
 
+    // FIX #14: Instructor self-service pause check.
+    // acceptingBookings defaults to true — false means the instructor has paused new bookings.
+    if ((instructor as any).acceptingBookings === false) {
+      return NextResponse.json({
+        error: 'This instructor is not currently accepting new bookings.',
+        code: 'INSTRUCTOR_PAUSED',
+      }, { status: 403 });
+    }
+
     // Create user account or link to existing
     let userId: string | undefined;
     
@@ -172,10 +207,8 @@ export async function POST(req: NextRequest) {
       // AI voice flow does not send a password — backend generates and sends via SMS/email
       let password = data.accountHolderPassword;
       if (!password || password.length < 6) {
-        // Auto-generate a secure 10-char password
-        password = Math.random().toString(36).slice(2, 7).toUpperCase() +
-                   Math.random().toString(36).slice(2, 7) +
-                   Math.floor(Math.random() * 90 + 10);
+        // P0-3 FIX: Use cryptographically secure random bytes instead of Math.random()
+        password = randomBytes(12).toString('base64url');
       }
       const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await prisma.user.create({
@@ -186,7 +219,35 @@ export async function POST(req: NextRequest) {
         }
       });
       userId = newUser.id;
-      // TODO: Send auto-generated password to user via SMS/email
+      // P0-3 FIX: Deliver the auto-generated password before returning so the new
+      // account is actually accessible. Use both email and SMS for redundancy.
+      const isAutoGenerated = !data.accountHolderPassword || data.accountHolderPassword.length < 6;
+      if (isAutoGenerated) {
+        try {
+          const { emailService } = await import('@/lib/services/email');
+          await emailService.sendGenericEmail({
+            to: data.accountHolderEmail,
+            subject: 'Your DriveBook account credentials',
+            html: `
+              <p>Hi ${data.accountHolderName},</p>
+              <p>Your DriveBook account has been created. Your temporary password is:</p>
+              <p style="font-size:20px;font-weight:bold;letter-spacing:2px;">${password}</p>
+              <p>Please log in and change your password at <a href="${process.env.NEXTAUTH_URL}/login">${process.env.NEXTAUTH_URL}/login</a></p>
+            `,
+          });
+        } catch (emailErr) {
+          console.error('Failed to send auto-generated password email:', emailErr);
+        }
+        try {
+          const { smsService } = await import('@/lib/services/sms');
+          await smsService.sendSMS({
+            to: data.accountHolderPhone,
+            message: `Your DriveBook password: ${password} — login at ${process.env.NEXTAUTH_URL}/login`,
+          });
+        } catch (smsErr) {
+          console.error('Failed to send auto-generated password SMS:', smsErr);
+        }
+      }
     } else {
       // Existing user — just link booking to their account, no password change
       userId = existingUser.id;
@@ -295,33 +356,44 @@ export async function POST(req: NextRequest) {
     const firstLessonPlatformFee = parseFloat((firstLessonPrice * PLATFORM_FEE_RATE).toFixed(2));
     const firstLessonPayout = parseFloat((firstLessonPrice - firstLessonPlatformFee).toFixed(2));
 
-    // For "book later" with no scheduled slots: no specific time is being claimed.
     // ── Book Later: wallet-only, no booking created ───────────────────────────
-    // Student pays → wallet credited → books individual lessons from dashboard
+    // P1-1 FIX: Do NOT create a WalletTransaction here — payment hasn't happened yet.
+    // Creating PENDING here then returning success: true causes two problems:
+    //   1. The client UI may show "you have credit" before payment is confirmed
+    //   2. The 10-minute cleanup cron expires the PENDING transaction, leaving
+    //      the user with no credit even after a successful payment
+    // Correct flow: create a Stripe PaymentIntent, redirect to checkout, and only
+    // credit the wallet in the Stripe webhook (payment_intent.succeeded).
     if (data.bookingType === 'later') {
-      // Get or create wallet for this user
-      let wallet = await prisma.clientWallet.upsert({
-        where: { userId: userId! },
-        update: {},
-        create: { userId: userId! },
-      });
+      try {
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
 
-      const walletTransaction = await prisma.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          amount: verifiedTotal,
-          type: 'CREDIT',
-          description: `Package purchase: ${data.hours} hrs with ${instructor.name}`,
-          status: 'PENDING',
-        },
-      });
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: Math.round(verifiedTotal * 100),
+          currency: 'aud',
+          metadata: {
+            type: 'wallet_credit',
+            userId: userId!,
+            instructorId: resolvedInstructorId,
+            hours: String(data.hours),
+            packageType: data.packageType,
+          },
+          automatic_payment_methods: { enabled: true },
+        });
 
-      return NextResponse.json({
-        success: true,
-        transactionId: walletTransaction.id,
-        total: verifiedTotal,
-        bookingType: 'later',
-      }, { status: 201 });
+        return NextResponse.json({
+          success: true,
+          bookingType: 'later',
+          total: verifiedTotal,
+          checkoutClientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          // Wallet is credited in the Stripe webhook after payment_intent.succeeded
+        }, { status: 201 });
+      } catch (stripeErr) {
+        console.error('Stripe PaymentIntent creation failed for book-later:', stripeErr);
+        return NextResponse.json({ error: 'Failed to initialise payment' }, { status: 500 });
+      }
     }
     // ── Book Now: create booking + slot claim ─────────────────────────────────
     const hasScheduledSlot = data.scheduledBookings && data.scheduledBookings.length > 0;
@@ -355,7 +427,7 @@ export async function POST(req: NextRequest) {
           if (conflict) throw new Error('SLOT_TAKEN');
         }
 
-        return tx.booking.create({
+        const newBooking = await tx.booking.create({
           data: {
             instructorId: resolvedInstructorId,
             clientId: clientId,
@@ -376,12 +448,51 @@ export async function POST(req: NextRequest) {
             packageTotalPaid: verifiedTotal,
             lockedHourlyRate: instructor.hourlyRate,
             lockedDiscountPct: serverPricing.discountPercentage,
+            // Secure payment token — required alongside bookingId to access payment page
+            paymentToken: crypto.randomUUID(),
           } as any,
         });
+
+        // P2-8 FIX: Persist idempotency key inside the same transaction as booking.create.
+        // Previously stored outside/after the transaction — a crash between create and upsert
+        // would allow a retry with the same key to create a second booking.
+        // The @unique constraint on key means a concurrent duplicate throws P2002 (caught below).
+        if (idempotencyKey) {
+          const checkoutUrl = !isShortNotice
+            ? `${process.env.NEXTAUTH_URL}/booking/${newBooking.id}/payment?token=${(newBooking as any).paymentToken}`
+            : undefined;
+          const idemResponse: Record<string, any> = {
+            success: true,
+            bookingId: newBooking.id,
+            isShortNotice,
+            total: isShortNotice ? 0 : verifiedTotal,
+            status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
+            ...(checkoutUrl ? { checkoutUrl } : {}),
+          };
+          await (tx as any).bookingIdempotencyKey.upsert({
+            where: { key: idempotencyKey },
+            update: {},
+            create: {
+              key: idempotencyKey,
+              email: data.accountHolderEmail,
+              bookingId: newBooking.id,
+              response: idemResponse,
+            },
+          });
+        }
+
+        return newBooking;
       });
     } catch (err: any) {
       if (err.message === 'SLOT_TAKEN') {
         return NextResponse.json({ error: 'This time slot is no longer available. Please choose another.' }, { status: 409 });
+      }
+      if (err.code === 'P2002' && err.meta?.target?.includes('key')) {
+        // Concurrent duplicate idempotency key — replay stored response
+        const stored = await (prisma as any).bookingIdempotencyKey.findUnique({
+          where: { key: idempotencyKey! },
+        });
+        if (stored) return NextResponse.json(stored.response, { status: 201 });
       }
       throw err;
     }
@@ -419,18 +530,45 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    // FIX #12: Audit log on public booking creation — previously missing.
+    // Required for dispute resolution ("I never made that booking").
+    try {
+      await (prisma as any).auditLog.create({
+        data: {
+          action: 'BOOKING_CREATED',
+          actorId: userId ?? 'GUEST',
+          actorRole: 'CLIENT',
+          targetType: 'BOOKING',
+          targetId: booking.id,
+          success: true,
+          metadata: {
+            instructorId: resolvedInstructorId,
+            clientName,
+            clientPhone,
+            startTime: startTime?.toISOString() ?? null,
+            price: booking.price,
+            isShortNotice,
+            source: 'public_bulk',
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.error('Audit log failed for booking creation:', auditErr);
+    }
+
+    // Persist idempotency response so retries get same result
+    const responsePayload: Record<string, any> = {
       success: true,
       bookingId: booking.id,
       isShortNotice,
       total: isShortNotice ? 0 : verifiedTotal,
       status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
-      // Generate Stripe Checkout URL for AI voice flow (no pricing submitted = AI caller)
-      // Web flow uses /api/payments/create-intent + Stripe Elements instead
-      ...((!data.pricing && !isShortNotice) && {
-        checkoutUrl: `${process.env.NEXTAUTH_URL}/booking/${booking.id}/payment`,
-      }),
-    }, { status: 201 });
+      ...(((!data.pricing && !isShortNotice) && {
+        checkoutUrl: `${process.env.NEXTAUTH_URL}/booking/${booking.id}/payment?token=${(booking as any).paymentToken}`,
+      })),
+    };
+    // (Idempotency key was already persisted inside the $transaction above)
+    return NextResponse.json(responsePayload, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('Bulk booking Zod error:', JSON.stringify(error.issues, null, 2));

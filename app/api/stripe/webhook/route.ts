@@ -8,6 +8,8 @@ import { webhookRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '
 import { notifyPaymentReceived } from '@/lib/services/notifications';
 import { getNotifChannels } from '@/lib/config/platform-settings';
 import { recordPaymentCollected } from '@/lib/services/payout-service';
+import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
+import { sendAlert } from '@/lib/services/alert-service';
 import Stripe from 'stripe';
 
 
@@ -191,6 +193,26 @@ async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): P
     // STRIPE CONNECT EVENTS
     case 'account.updated':
       await handleConnectAccountUpdated(event.data.object as Stripe.Account, idempotencyKey);
+      break;
+
+    // Sprint A: Dispute / chargeback handling
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+      await handleDisputeOpened(event.data.object as Stripe.Dispute, idempotencyKey);
+      break;
+
+    case 'charge.dispute.closed':
+      await handleDisputeClosed(event.data.object as Stripe.Dispute, idempotencyKey);
+      break;
+
+    // Sprint B: Out-of-band refund sync (refunded directly from Stripe Dashboard)
+    case 'charge.refunded':
+      await handleChargeRefunded(event.data.object as Stripe.Charge, idempotencyKey);
+      break;
+
+    // Sprint C: Stripe Connect transfer failure recovery
+    case 'transfer.failed':
+      await handleTransferFailed(event.data.object as Stripe.Transfer, idempotencyKey);
       break;
 
     default:
@@ -435,38 +457,63 @@ async function handleBookingPaymentSuccess(
       throw new Error(`Booking not found: ${bookingId}`);
     }
 
-    // ── Handle EXPIRED booking recovery ──────────────────────────────────────
-    // Race: cron expired the booking at 10:00, webhook arrived at 10:01.
-    // Stripe already charged the client — we MUST honour the payment.
+    // ── Handle EXPIRED booking — DO NOT revive, issue refund instead ────────────
+    // If the booking expired before Stripe confirmed payment, the slot may have been
+    // released and taken by another student. Reviving the booking risks a double-booking.
+    // Safe policy: issue a full refund via Stripe and flag for admin review.
     if (booking.status === 'EXPIRED') {
-      console.warn(`⚠️ Booking ${bookingId} was EXPIRED — reviving to CONFIRMED (payment received)`);
-      // Check if the slot was taken by another booking while this one was expired
-      if (booking.startTime && booking.endTime) {
-        const conflict = await tx.booking.findFirst({
-          where: {
-            id: { not: bookingId },
-            instructorId: booking.instructorId,
-            status: { in: ['CONFIRMED', 'PENDING_PAYMENT'] },
-            OR: [
-              { startTime: { lte: booking.startTime }, endTime: { gt: booking.startTime } },
-              { startTime: { lt: booking.endTime }, endTime: { gte: booking.endTime } },
-              { startTime: { gte: booking.startTime }, endTime: { lte: booking.endTime } },
-            ],
+      console.error(`🚨 Delayed payment on expired booking ${bookingId} — issuing automatic refund`);
+      
+      // Issue automatic full refund via Stripe
+      try {
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+        await stripe.refunds.create({
+          payment_intent: paymentIntent.id,
+          reason: 'duplicate', // closest Stripe reason code
+          metadata: {
+            bookingId,
+            reason: 'Booking expired before payment confirmed — automatic refund',
           },
-          select: { id: true },
         });
-        if (conflict) {
-          // Slot was taken — still confirm (Stripe charged) but flag for admin
-          console.error(`🚨 DOUBLE BOOKING: Booking ${bookingId} revived but slot already taken by ${conflict.id}. Admin review required.`);
-          // Fall through — confirm the booking, admin must resolve manually
-        }
+        console.log(`✅ Auto-refund issued for expired booking ${bookingId}`);
+      } catch (refundErr) {
+        // Refund failed — must flag for manual admin action
+        console.error(`🚨 CRITICAL: Auto-refund FAILED for expired booking ${bookingId}. Manual action required.`, refundErr);
       }
-      // Fall through — the update below will set it to CONFIRMED
-    } else if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
-      // Already processed (idempotent replay) — skip wallet ops but don't error
+
+      // Mark booking as requiring admin review regardless of refund success
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'CANCELLED',
+          notes: `EXPIRED_PAYMENT: Stripe charged after slot expiry. Auto-refund attempted at ${new Date().toISOString()}. PaymentIntent: ${paymentIntent.id}. Admin review required.`,
+        } as any,
+      });
+
+      await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
+        bookingId,
+        outcome: 'expired_auto_refunded',
+        note: 'Booking was EXPIRED when payment arrived — refund issued, booking cancelled',
+      });
+
+      // Non-fatal: transaction will complete, booking is cancelled
+      return;
+    }
+
+    // ── Already confirmed (idempotent replay) ────────────────────────────────
+    if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
       console.log(`ℹ️ Booking ${bookingId} already ${booking.status} — skipping wallet ops`);
       await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
         bookingId, note: 'already_confirmed'
+      });
+      return;
+    }
+
+    // ── Strict state machine: only PENDING_PAYMENT → CONFIRMED ───────────────
+    if (booking.status !== 'PENDING_PAYMENT') {
+      console.error(`🚨 Webhook rejected: booking ${bookingId} is in status '${booking.status}' — cannot confirm`);
+      await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
+        bookingId, error: `Rejected: invalid source status '${booking.status}'`
       });
       return;
     }
@@ -1157,7 +1204,588 @@ async function handleInvoicePaymentFailed(
 }
 
 // ============================================================================
-// HELPER FUNCTIONS
+// SPRINT A — DISPUTE / CHARGEBACK HANDLING
+// ============================================================================
+
+/**
+ * charge.dispute.created / charge.dispute.updated
+ *
+ * Actions:
+ *  1. Create LedgerEntry(DISPUTE_OPENED) — marks the disputed amount as at-risk
+ *  2. Freeze payout eligibility for this instructor (disputeHold flag)
+ *  3. Create admin alert + audit log
+ *
+ * We handle both created and updated with the same handler because Stripe can
+ * fire updated before created in rare retry scenarios.
+ */
+async function handleDisputeOpened(
+  dispute: Stripe.Dispute,
+  idempotencyKey: string,
+): Promise<void> {
+  const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id;
+  const amount = dispute.amount / 100;
+  const reason = dispute.reason;
+  const status = dispute.status;
+
+  // Resolve booking from the charge
+  const booking = await prisma.booking.findFirst({
+    where: { paymentIntentId: { not: null } },
+    select: { id: true, instructorId: true, price: true, clientName: true },
+  });
+
+  // Try to resolve via charge → payment intent → booking
+  let bookingId: string | null = null;
+  let instructorId: string | null = null;
+  try {
+    const charge = await stripe.charges.retrieve(chargeId);
+    const piId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+    if (piId) {
+      const pi = await stripe.paymentIntents.retrieve(piId);
+      bookingId = pi.metadata?.bookingId ?? null;
+      if (bookingId) {
+        const b = await prisma.booking.findUnique({
+          where: { id: bookingId },
+          select: { instructorId: true, clientName: true },
+        });
+        instructorId = b?.instructorId ?? null;
+      }
+    }
+  } catch (lookupErr) {
+    console.error('[DISPUTE] charge lookup failed (non-critical):', lookupErr);
+  }
+
+  await recordWebhookEvent(idempotencyKey, 'charge.dispute.created', dispute.id, {
+    chargeId,
+    bookingId,
+    instructorId,
+    amount,
+    reason,
+    status,
+  });
+
+  // Persist StripeDispute record — gives admin a dedicated dispute queue
+  try {
+    await (prisma as any).stripeDispute.upsert({
+      where: { stripeDisputeId: dispute.id },
+      update: { status, payoutFrozen: !!instructorId },
+      create: {
+        stripeDisputeId: dispute.id,
+        stripeChargeId: chargeId,
+        bookingId,
+        instructorId,
+        amount,
+        reason,
+        status,
+        payoutFrozen: !!instructorId,
+      },
+    });
+  } catch (dbErr) {
+    console.error('[DISPUTE] StripeDispute upsert failed (non-critical):', dbErr);
+  }
+
+  // Append ledger entry — amount at risk
+  await appendLedgerEntry({
+    type: 'DISPUTE_OPENED',
+    amount: -amount, // negative = platform liability
+    referenceId: bookingId ?? dispute.id,
+    referenceType: 'BOOKING',
+    instructorId: instructorId ?? undefined,
+    description: `Stripe dispute ${dispute.id} — ${reason} — $${amount.toFixed(2)} at risk`,
+    metadata: {
+      stripeDisputeId: dispute.id,
+      chargeId,
+      reason,
+      status,
+      bookingId,
+    },
+  });
+
+  // Freeze payout eligibility for this instructor
+  if (instructorId) {
+    try {
+      await (prisma as any).instructor.update({
+        where: { id: instructorId },
+        data: { payoutHold: true, payoutHoldReason: `Stripe dispute ${dispute.id} opened` },
+      });
+    } catch (holdErr) {
+      // payoutHold field may not exist in older schema versions — log and continue
+      console.error('[DISPUTE] Could not set payoutHold (field may not exist):', holdErr);
+    }
+  }
+
+  // Audit log
+  try {
+    await (prisma as any).auditLog.create({
+      data: {
+        action: 'DISPUTE_OPENED',
+        actorId: 'STRIPE',
+        actorRole: 'SYSTEM',
+        targetType: 'BOOKING',
+        targetId: bookingId ?? dispute.id,
+        success: true,
+        metadata: { stripeDisputeId: dispute.id, amount, reason, chargeId, instructorId },
+      },
+    });
+  } catch (auditErr) {
+    console.error('[DISPUTE] Audit log failed (non-critical):', auditErr);
+  }
+
+  // Alert operations
+  void sendAlert({
+    type: 'DISPUTE_OPENED',
+    severity: 'CRITICAL',
+    message: `Chargeback filed: $${amount.toFixed(2)} — reason: ${reason}. Instructor payout frozen.`,
+    entityId: dispute.id,
+    metadata: {
+      stripeDisputeId: dispute.id,
+      chargeId,
+      bookingId,
+      instructorId,
+      amount,
+      reason,
+      status,
+    },
+  });
+
+  console.log(`🚨 Dispute opened: ${dispute.id} — $${amount.toFixed(2)} — ${reason}`);
+}
+
+/**
+ * charge.dispute.closed
+ *
+ * Stripe fires this when the bank makes a final decision.
+ * status = 'won'  → platform keeps the money — release the payout hold
+ * status = 'lost' → chargeback confirmed — create ADJUSTMENT to recover from instructor's
+ *                   next payout (same mechanism as post-payout refunds)
+ */
+async function handleDisputeClosed(
+  dispute: Stripe.Dispute,
+  idempotencyKey: string,
+): Promise<void> {
+  const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id;
+  const amount = dispute.amount / 100;
+  const status = dispute.status; // 'won' | 'lost' | 'needs_response' etc
+
+  // Resolve bookingId + instructorId the same way as handleDisputeOpened
+  let bookingId: string | null = null;
+  let instructorId: string | null = null;
+  try {
+    const charge = await stripe.charges.retrieve(chargeId);
+    const piId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+    if (piId) {
+      const pi = await stripe.paymentIntents.retrieve(piId);
+      bookingId = pi.metadata?.bookingId ?? null;
+      if (bookingId) {
+        const b = await prisma.booking.findUnique({
+          where: { id: bookingId },
+          select: { instructorId: true },
+        });
+        instructorId = b?.instructorId ?? null;
+      }
+    }
+  } catch (lookupErr) {
+    console.error('[DISPUTE CLOSED] charge lookup failed:', lookupErr);
+  }
+
+  await recordWebhookEvent(idempotencyKey, 'charge.dispute.closed', dispute.id, {
+    chargeId, bookingId, instructorId, amount, status,
+  });
+
+  if (status === 'won') {
+    // Dispute resolved in our favour — reverse the DISPUTE_OPENED ledger entry
+    await appendLedgerEntry({
+      type: 'DISPUTE_WON',
+      amount: amount, // positive = risk removed
+      referenceId: bookingId ?? dispute.id,
+      referenceType: 'BOOKING',
+      instructorId: instructorId ?? undefined,
+      description: `Dispute ${dispute.id} WON — $${amount.toFixed(2)} liability cleared`,
+      metadata: { stripeDisputeId: dispute.id, chargeId, bookingId },
+    });
+
+    // Release the payout hold
+    if (instructorId) {
+      try {
+        await (prisma as any).instructor.update({
+          where: { id: instructorId },
+          data: { payoutHold: false, payoutHoldReason: null },
+        });
+      } catch { /* field may not exist */ }
+    }
+
+    void sendAlert({
+      type: 'DISPUTE_OPENED',
+      severity: 'WARNING',
+      message: `Dispute ${dispute.id} WON — $${amount.toFixed(2)} recovered. Payout hold released.`,
+      entityId: dispute.id,
+      metadata: { stripeDisputeId: dispute.id, bookingId, instructorId, amount },
+    });
+
+    console.log(`✅ Dispute WON: ${dispute.id} — $${amount.toFixed(2)} recovered`);
+
+  } else if (status === 'lost') {
+    // Chargeback confirmed — platform absorbs the loss
+    // Stripe also charges a dispute fee (~$15–$25 AUD); use dispute.balance_transactions
+    const stripeFee = dispute.balance_transactions?.reduce(
+      (sum, bt) => sum + Math.abs(bt.fee) / 100, 0
+    ) ?? 0;
+    const totalLoss = amount + stripeFee;
+
+    await appendLedgerEntry({
+      type: 'DISPUTE_LOST',
+      amount: -totalLoss, // confirmed outflow
+      referenceId: bookingId ?? dispute.id,
+      referenceType: 'BOOKING',
+      instructorId: instructorId ?? undefined,
+      description: `Dispute ${dispute.id} LOST — $${amount.toFixed(2)} + $${stripeFee.toFixed(2)} fee`,
+      metadata: { stripeDisputeId: dispute.id, chargeId, bookingId, amount, stripeFee, totalLoss },
+    });
+
+    // If the instructor was already paid out, create an ADJUSTMENT to recover from next payout
+    if (instructorId && bookingId) {
+      try {
+        const tx = await prisma.transaction.findFirst({
+          where: { bookingId, status: 'SETTLED' },
+          select: { instructorPayout: true },
+        });
+        if (tx?.instructorPayout) {
+          await appendLedgerEntry({
+            type: 'ADJUSTMENT',
+            amount: -tx.instructorPayout,
+            referenceId: bookingId,
+            referenceType: 'ADJUSTMENT',
+            instructorId,
+            description: `Dispute ${dispute.id} LOST — recovering instructor payout from future earnings`,
+            metadata: { stripeDisputeId: dispute.id, postPayout: true },
+          });
+        }
+      } catch (adjErr) {
+        console.error('[DISPUTE LOST] Could not create recovery adjustment:', adjErr);
+      }
+    }
+
+    void sendAlert({
+      type: 'DISPUTE_LOST',
+      severity: 'CRITICAL',
+      message: `Dispute ${dispute.id} LOST — $${totalLoss.toFixed(2)} cash loss (inc. $${stripeFee.toFixed(2)} Stripe fee). Recovery adjustment created.`,
+      entityId: dispute.id,
+      metadata: { stripeDisputeId: dispute.id, bookingId, instructorId, amount, stripeFee, totalLoss },
+    });
+
+    console.log(`🚨 Dispute LOST: ${dispute.id} — $${totalLoss.toFixed(2)} total loss`);
+  }
+
+  // Always audit log the close
+  try {
+    await (prisma as any).auditLog.create({
+      data: {
+        action: 'DISPUTE_CLOSED',
+        actorId: 'STRIPE',
+        actorRole: 'SYSTEM',
+        targetType: 'BOOKING',
+        targetId: bookingId ?? dispute.id,
+        success: true,
+        metadata: { stripeDisputeId: dispute.id, outcome: status, amount, chargeId },
+      },
+    });
+  } catch (auditErr) {
+    console.error('[DISPUTE CLOSED] Audit log failed:', auditErr);
+  }
+
+  // Update the StripeDispute record with the outcome
+  try {
+    await (prisma as any).stripeDispute.updateMany({
+      where: { stripeDisputeId: dispute.id },
+      data: {
+        status,
+        resolvedAt: new Date(),
+        payoutFrozen: false,
+        adjustmentCreated: status === 'lost' && !!instructorId && !!bookingId,
+      },
+    });
+  } catch (dbErr) {
+    console.error('[DISPUTE CLOSED] StripeDispute update failed (non-critical):', dbErr);
+  }
+}
+
+// ============================================================================
+// SPRINT B — OUT-OF-BAND REFUND SYNC
+// ============================================================================
+
+/**
+ * charge.refunded
+ *
+ * Fires when a refund is issued — either via the DriveBook refund route (already
+ * handled) or directly from the Stripe Dashboard (previously invisible to the DB).
+ *
+ * We use the idempotency key to skip refunds already processed through the app.
+ * For new out-of-band refunds we:
+ *  1. Create LedgerEntry(REFUND_SYNCED)
+ *  2. Update the booking status to CANCELLED if it was CONFIRMED
+ *  3. Update the Transaction to REFUNDED
+ *  4. Notify admin
+ */
+async function handleChargeRefunded(
+  charge: Stripe.Charge,
+  idempotencyKey: string,
+): Promise<void> {
+  const chargeId = charge.id;
+  const piId = typeof charge.payment_intent === 'string'
+    ? charge.payment_intent
+    : charge.payment_intent?.id;
+
+  if (!piId) {
+    await recordWebhookEvent(idempotencyKey, 'charge.refunded', chargeId, {
+      note: 'No payment_intent on charge — skipped',
+    });
+    return;
+  }
+
+  // Total refunded amount across all refunds on this charge
+  const refundedAmount = charge.amount_refunded / 100;
+  const isFullRefund = charge.refunded; // true when fully refunded
+
+  // Resolve booking
+  let bookingId: string | null = null;
+  try {
+    const pi = await stripe.paymentIntents.retrieve(piId);
+    bookingId = pi.metadata?.bookingId ?? null;
+  } catch (lookupErr) {
+    console.error('[REFUND SYNC] PI lookup failed:', lookupErr);
+  }
+
+  if (!bookingId) {
+    // Wallet top-up refund or subscription — not a booking, still record it
+    await recordWebhookEvent(idempotencyKey, 'charge.refunded', chargeId, {
+      note: 'No bookingId in PI metadata — non-booking refund',
+      piId,
+      refundedAmount,
+    });
+    return;
+  }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { id: true, status: true, instructorId: true, price: true, instructorPayout: true },
+  });
+
+  if (!booking) {
+    await recordWebhookEvent(idempotencyKey, 'charge.refunded', chargeId, {
+      note: 'Booking not found',
+      bookingId,
+    });
+    return;
+  }
+
+  await recordWebhookEvent(idempotencyKey, 'charge.refunded', chargeId, {
+    bookingId,
+    piId,
+    refundedAmount,
+    isFullRefund,
+    bookingStatus: booking.status,
+  });
+
+  // Check if this refund was already processed through the app's refund route
+  // (which creates a REFUND_ISSUED ledger entry). If so, skip — avoid double ledger.
+  const existingLedger = await (prisma as any).ledgerEntry.findFirst({
+    where: { type: 'REFUND_ISSUED', referenceId: bookingId },
+  });
+  if (existingLedger) {
+    console.log(`ℹ️ [REFUND SYNC] Booking ${bookingId} already has REFUND_ISSUED entry — skipping duplicate`);
+    return;
+  }
+
+  // Out-of-band refund — sync it
+  await appendLedgerEntry({
+    type: 'REFUND_SYNCED',
+    amount: -refundedAmount,
+    referenceId: bookingId,
+    referenceType: 'BOOKING',
+    instructorId: booking.instructorId ?? undefined,
+    description: `Out-of-band refund from Stripe Dashboard — $${refundedAmount.toFixed(2)} on charge ${chargeId}`,
+    metadata: { stripeChargeId: chargeId, piId, refundedAmount, isFullRefund },
+  });
+
+  await incrementLedger({ totalRefunded: refundedAmount });
+
+  // Update booking status if it was CONFIRMED
+  if (isFullRefund && (booking.status === 'CONFIRMED' || booking.status === 'PENDING_PAYMENT')) {
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'CANCELLED' } as any,
+    });
+  }
+
+  // Update transaction record
+  await (prisma as any).transaction.updateMany({
+    where: { bookingId, status: 'SETTLED' },
+    data: { status: 'REFUNDED', processedAt: new Date() },
+  });
+
+  // Audit log
+  try {
+    await (prisma as any).auditLog.create({
+      data: {
+        action: 'REFUND_SYNCED',
+        actorId: 'STRIPE',
+        actorRole: 'SYSTEM',
+        targetType: 'BOOKING',
+        targetId: bookingId,
+        success: true,
+        metadata: { stripeChargeId: chargeId, piId, refundedAmount, isFullRefund },
+      },
+    });
+  } catch (auditErr) {
+    console.error('[REFUND SYNC] Audit log failed:', auditErr);
+  }
+
+  void sendAlert({
+    type: 'REFUND_SYNCED',
+    severity: 'WARNING',
+    message: `Out-of-band refund detected: $${refundedAmount.toFixed(2)} on booking ${bookingId} (issued directly in Stripe Dashboard)`,
+    entityId: bookingId,
+    metadata: { stripeChargeId: chargeId, piId, refundedAmount, isFullRefund, bookingStatus: booking.status },
+  });
+
+  console.log(`⚠️ [REFUND SYNC] Out-of-band refund on booking ${bookingId}: $${refundedAmount.toFixed(2)}`);
+}
+
+// ============================================================================
+// SPRINT C — STRIPE CONNECT TRANSFER FAILURE RECOVERY
+// ============================================================================
+
+/**
+ * transfer.failed
+ *
+ * Fires when a Stripe Connect transfer to an instructor's account fails
+ * (e.g. debit card transfer rejected, Connect account deactivated, etc.)
+ *
+ * Actions:
+ *  1. Revert the Payout status from PAID → FAILED
+ *  2. Reverse the PAYOUT_PAID ledger entry (re-credit the platform)
+ *  3. Alert operations + notify instructor
+ */
+async function handleTransferFailed(
+  transfer: Stripe.Transfer,
+  idempotencyKey: string,
+): Promise<void> {
+  const transferId = transfer.id;
+  const amount = transfer.amount / 100;
+  const instructorId = transfer.metadata?.instructorId ?? null;
+  const payoutId = transfer.metadata?.payoutId ?? null;
+
+  await recordWebhookEvent(idempotencyKey, 'transfer.failed', transferId, {
+    transferId,
+    amount,
+    instructorId,
+    payoutId,
+    failureCode: (transfer as any).failure_code,
+    failureMessage: (transfer as any).failure_message,
+  });
+
+  // Revert the Payout record back to FAILED
+  if (payoutId) {
+    const reverted = await prisma.payout.updateMany({
+      where: { id: payoutId, status: 'PAID' },
+      data: {
+        status: 'FAILED',
+        failureReason: `Transfer ${transferId} failed: ${(transfer as any).failure_message ?? 'unknown'}`,
+        stripeTransferId: null,
+      },
+    });
+
+    if (reverted.count > 0) {
+      // Reverse the PAYOUT_PAID ledger entry — re-credit the platform balance
+      await appendLedgerEntry({
+        type: 'ADJUSTMENT',
+        amount: amount, // positive = re-crediting the platform
+        referenceId: payoutId,
+        referenceType: 'PAYOUT',
+        instructorId: instructorId ?? undefined,
+        description: `Transfer ${transferId} FAILED — reversing PAYOUT_PAID for payout ${payoutId}`,
+        metadata: {
+          stripeTransferId: transferId,
+          payoutId,
+          failureCode: (transfer as any).failure_code,
+          failureMessage: (transfer as any).failure_message,
+        },
+      });
+
+      await incrementLedger({
+        totalPaidOut: -amount,  // reverse the payout
+        totalReserved: amount,  // return to reserved — still owed to instructor
+      });
+
+      console.log(`🔄 [TRANSFER FAILED] Payout ${payoutId} reverted to FAILED — $${amount.toFixed(2)} re-credited to platform`);
+    }
+  }
+
+  // Audit log
+  try {
+    await (prisma as any).auditLog.create({
+      data: {
+        action: 'TRANSFER_FAILED',
+        actorId: 'STRIPE',
+        actorRole: 'SYSTEM',
+        targetType: 'PAYOUT',
+        targetId: payoutId ?? transferId,
+        success: false,
+        errorMessage: (transfer as any).failure_message ?? 'Transfer failed',
+        metadata: {
+          stripeTransferId: transferId,
+          payoutId,
+          instructorId,
+          amount,
+          failureCode: (transfer as any).failure_code,
+        },
+      },
+    });
+  } catch (auditErr) {
+    console.error('[TRANSFER FAILED] Audit log failed:', auditErr);
+  }
+
+  // Alert operations — this needs immediate human action
+  void sendAlert({
+    type: 'TRANSFER_FAILED',
+    severity: 'CRITICAL',
+    message: `Stripe Connect transfer FAILED: $${amount.toFixed(2)} to instructor ${instructorId ?? 'unknown'}. Payout ${payoutId ?? transferId} reverted to FAILED. Retry required.`,
+    entityId: payoutId ?? transferId,
+    metadata: {
+      stripeTransferId: transferId,
+      payoutId,
+      instructorId,
+      amount,
+      failureCode: (transfer as any).failure_code,
+      failureMessage: (transfer as any).failure_message,
+    },
+  });
+
+  // Notify the instructor their payout failed
+  if (instructorId) {
+    try {
+      const instructor = await prisma.instructor.findUnique({
+        where: { id: instructorId },
+        select: { phone: true, userId: true },
+      });
+      if (instructor?.phone) {
+        const { smsService } = await import('@/lib/services/sms');
+        await smsService.sendSMS({
+          to: instructor.phone,
+          message: `DriveBook: Your payout of $${amount.toFixed(2)} could not be processed. Our team has been alerted and will contact you shortly. Ref: ${payoutId ?? transferId}`,
+        });
+      }
+    } catch (notifErr) {
+      console.error('[TRANSFER FAILED] Instructor notification failed:', notifErr);
+    }
+  }
+
+  console.log(`🚨 [TRANSFER FAILED] Transfer ${transferId} — $${amount.toFixed(2)} — instructor: ${instructorId}`);
+}
+
 // ============================================================================
 
 /**
@@ -1210,6 +1838,9 @@ async function handleConnectAccountUpdated(
     where: { id: instructorId },
     data: {
       stripeAccountId: account.id,
+      // Store Connect onboarding state — used by buildPayout eligibility gate
+      chargesEnabled,
+      payoutsEnabled,
       // Switch to stripe_connect automatically once onboarding is complete
       ...(chargesEnabled && payoutsEnabled ? { payoutMethod: 'stripe_connect' } : {}),
     } as any,

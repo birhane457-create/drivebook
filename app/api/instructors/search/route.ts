@@ -12,6 +12,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const location = searchParams.get('location') || '';
     const nameQuery = searchParams.get('name') || '';
+    const languageFilter = searchParams.get('language') || '';
+    const vehicleTypeFilter = searchParams.get('vehicleType') || '';
     // ?admin=true — skip approved-only filter, return extra fields
     // SECURITY: Only allow admin bypass if the request comes from an authenticated admin
     // This is a server-side API route — we check the session here
@@ -72,7 +74,16 @@ export async function GET(req: NextRequest) {
     // --- Name-only search (no geocoding needed) ---
     if (nameQuery && !location) {
       const nl = nameQuery.toLowerCase();
-      const matched = instructors.filter(i => i.name.toLowerCase().includes(nl));
+      let matched = instructors.filter(i => i.name.toLowerCase().includes(nl));
+      // Apply optional language/vehicleType filters
+      if (languageFilter) {
+        const lf = languageFilter.toLowerCase();
+        matched = matched.filter(i => i.languages?.toLowerCase().includes(lf));
+      }
+      if (vehicleTypeFilter) {
+        const vf = vehicleTypeFilter.toUpperCase();
+        matched = matched.filter(i => i.vehicleTypes?.toUpperCase().includes(vf));
+      }
       const total = matched.length;
       const paginated = matched.slice((page - 1) * limit, page * limit);
       return NextResponse.json({
@@ -91,10 +102,18 @@ export async function GET(req: NextRequest) {
     if (!searchPoint) {
       // Nominatim couldn't resolve — fall back to text match on serviceAreas/baseAddress
       const tokens = location.toLowerCase().split(/[\s,]+/).filter(t => t.length >= 3);
-      const fallback = instructors.filter(i => {
+      let fallback = instructors.filter(i => {
         const hay = `${i.serviceAreas || ''} ${i.baseAddress || ''}`.toLowerCase();
         return tokens.some(t => hay.includes(t));
       });
+      if (languageFilter) {
+        const lf = languageFilter.toLowerCase();
+        fallback = fallback.filter(i => i.languages?.toLowerCase().includes(lf));
+      }
+      if (vehicleTypeFilter) {
+        const vf = vehicleTypeFilter.toUpperCase();
+        fallback = fallback.filter(i => i.vehicleTypes?.toUpperCase().includes(vf));
+      }
       const total = fallback.length;
       const paginated = fallback.slice((page - 1) * limit, page * limit);
       return NextResponse.json({
@@ -114,6 +133,15 @@ export async function GET(req: NextRequest) {
     await Promise.all(
       instructors.map(async (i) => {
         if (!i.baseAddress) return;
+        // Apply optional language/vehicleType filters before geocoding (cheap check first)
+        if (languageFilter) {
+          const lf = languageFilter.toLowerCase();
+          if (!i.languages?.toLowerCase().includes(lf)) return;
+        }
+        if (vehicleTypeFilter) {
+          const vf = vehicleTypeFilter.toUpperCase();
+          if (!i.vehicleTypes?.toUpperCase().includes(vf)) return;
+        }
         const base = await geocode(i.baseAddress);
         if (!base) return;
         const radius = i.serviceRadiusKm ?? DEFAULT_RADIUS_KM;

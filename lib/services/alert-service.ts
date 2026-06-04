@@ -10,17 +10,26 @@
  *   ABN_REVOKED           — weekly cron revoked an instructor's ABN (CRITICAL)
  *   RECONCILIATION_ISSUES — daily cron found missing payments/transfers or stuck payouts (WARNING)
  *
- * Throttle: same alert type + entityId won't fire more than once per hour.
- * Throttle state is in-memory — resets on cold start. Good enough for v1.
+ * FIX #15: Webhook alerting — set ALERT_WEBHOOK_URL to receive alerts in Slack, Discord,
+ *   or any webhook endpoint (e.g. PagerDuty) alongside the email.
+ *
+ * FIX #11: Throttle state persisted in DB (SystemFlag) so it survives cold starts.
+ *   Falls back to in-memory if DB write fails — never blocks the alert itself.
  */
 
 import { emailService } from '@/lib/services/email';
+import { prisma } from '@/lib/prisma';
 
 export type AlertType =
   | 'NEGATIVE_BALANCE'
   | 'PAYOUT_FAILED'
   | 'ABN_REVOKED'
-  | 'RECONCILIATION_ISSUES';
+  | 'RECONCILIATION_ISSUES'
+  | 'DISPUTE_OPENED'       // Sprint A: chargeback filed
+  | 'DISPUTE_LOST'         // Sprint A: chargeback confirmed — cash loss
+  | 'REFUND_SYNCED'        // Sprint B: out-of-band refund detected
+  | 'TRANSFER_FAILED'      // Sprint C: Stripe Connect transfer failed
+  | 'BOOKING_AUTO_NO_SHOW'; // cleanup cron auto-no-show alert
 
 export type AlertSeverity = 'CRITICAL' | 'WARNING';
 
@@ -32,21 +41,78 @@ export interface AlertPayload {
   metadata?: Record<string, unknown>;
 }
 
-// ── In-memory throttle ────────────────────────────────────────────────────────
-// key: `${type}:${entityId}` → last sent timestamp
-const throttleCache = new Map<string, number>();
+// ── In-memory fallback throttle (used if DB throttle fails) ──────────────────
+const memThrottleCache = new Map<string, number>();
 const THROTTLE_MS = 60 * 60 * 1000; // 1 hour
 
-function isThrottled(type: AlertType, entityId?: string): boolean {
-  const key = `${type}:${entityId ?? 'global'}`;
-  const last = throttleCache.get(key);
-  if (!last) return false;
-  return Date.now() - last < THROTTLE_MS;
+// ── DB-persisted throttle ─────────────────────────────────────────────────────
+// FIX #11: Throttle state was in-memory and reset on every cold start.
+// Cron invocations on Vercel always cold-start — the throttle was meaningless.
+// Now we persist last-sent timestamps in the DB via AuditLog metadata lookup,
+// with an in-memory fallback if the DB write fails.
+
+async function isThrottledDb(key: string): Promise<boolean> {
+  try {
+    const cutoff = new Date(Date.now() - THROTTLE_MS);
+    const recent = await (prisma as any).auditLog.findFirst({
+      where: {
+        action: 'ALERT_SENT',
+        targetId: key,
+        createdAt: { gte: cutoff },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return !!recent;
+  } catch {
+    // DB unavailable — fall back to in-memory
+    const last = memThrottleCache.get(key);
+    if (!last) return false;
+    return Date.now() - last < THROTTLE_MS;
+  }
 }
 
-function markSent(type: AlertType, entityId?: string) {
+async function markSentDb(type: AlertType, entityId?: string): Promise<void> {
   const key = `${type}:${entityId ?? 'global'}`;
-  throttleCache.set(key, Date.now());
+  // Persist to DB
+  try {
+    await (prisma as any).auditLog.create({
+      data: {
+        action: 'ALERT_SENT',
+        actorId: 'SYSTEM',
+        actorRole: 'SYSTEM',
+        targetType: 'ALERT',
+        targetId: key,
+        success: true,
+        metadata: { alertType: type, entityId: entityId ?? null },
+      },
+    });
+  } catch {
+    // Fallback — in-memory
+    memThrottleCache.set(key, Date.now());
+  }
+}
+
+// ── Webhook delivery ──────────────────────────────────────────────────────────
+// FIX #15: Post to ALERT_WEBHOOK_URL (Slack, Discord, PagerDuty, etc.)
+// Compatible with Slack Incoming Webhooks format out of the box.
+
+async function sendWebhook(payload: AlertPayload): Promise<void> {
+  const webhookUrl = process.env.ALERT_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const icon = payload.severity === 'CRITICAL' ? '🚨' : '⚠️';
+  const text = `${icon} *[${payload.severity}] DriveBook: ${payload.type.replace(/_/g, ' ')}*\n${payload.message}${payload.entityId ? `\nEntity: \`${payload.entityId}\`` : ''}`;
+
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  } catch (err) {
+    console.error('[ALERT WEBHOOK FAILED]', err);
+    // Never throw — webhook failure must not block core flows
+  }
 }
 
 // ── Format helpers ────────────────────────────────────────────────────────────
@@ -96,24 +162,34 @@ function buildEmailHtml(payload: AlertPayload): string {
 
 export async function sendAlert(payload: AlertPayload): Promise<void> {
   const adminEmail = process.env.ADMIN_EMAIL;
-  if (!adminEmail) {
-    console.warn(`[ALERT] ADMIN_EMAIL not set — alert not sent: ${payload.type} ${payload.message}`);
+  const key = `${payload.type}:${payload.entityId ?? 'global'}`;
+
+  if (!adminEmail && !process.env.ALERT_WEBHOOK_URL) {
+    console.warn(`[ALERT] Neither ADMIN_EMAIL nor ALERT_WEBHOOK_URL set — alert not sent: ${payload.type} ${payload.message}`);
     return;
   }
 
-  if (isThrottled(payload.type, payload.entityId)) {
-    console.log(`[ALERT] Throttled (${payload.type}:${payload.entityId ?? 'global'}) — skipping duplicate`);
+  // FIX #11: Check DB-persisted throttle (survives cold starts)
+  if (await isThrottledDb(key)) {
+    console.log(`[ALERT] Throttled (${key}) — skipping duplicate`);
     return;
   }
 
   try {
-    const subject = `[${payload.severity}] DriveBook: ${payload.message}`;
-    const html = buildEmailHtml(payload);
+    // Send email if configured
+    if (adminEmail) {
+      const subject = `[${payload.severity}] DriveBook: ${payload.message}`;
+      const html = buildEmailHtml(payload);
+      await emailService.sendGenericEmail({ to: adminEmail, subject, html });
+    }
 
-    await emailService.sendGenericEmail({ to: adminEmail, subject, html });
-    markSent(payload.type, payload.entityId);
+    // FIX #15: Send to webhook (Slack / Discord / PagerDuty) if configured
+    await sendWebhook(payload);
 
-    console.log(`[ALERT SENT] ${payload.severity} ${payload.type} → ${adminEmail}`);
+    // Persist throttle state to DB
+    await markSentDb(payload.type, payload.entityId);
+
+    console.log(`[ALERT SENT] ${payload.severity} ${payload.type}${adminEmail ? ` → ${adminEmail}` : ''}${process.env.ALERT_WEBHOOK_URL ? ' + webhook' : ''}`);
   } catch (err) {
     // Never throw — alert failure must not block core flows
     console.error(`[ALERT FAILED] Could not send alert ${payload.type}:`, err);

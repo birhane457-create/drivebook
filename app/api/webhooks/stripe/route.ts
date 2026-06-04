@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Legacy webhook path — proxies to the canonical Stripe webhook handler.
  *

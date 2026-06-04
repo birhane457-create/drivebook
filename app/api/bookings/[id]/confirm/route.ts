@@ -63,36 +63,79 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Check if slot is still available
-    if (booking.startTime && booking.endTime) {
-      const conflictingBooking = await prisma.booking.findFirst({
-        where: {
-          id: { not: bookingId },
-          instructorId: booking.instructorId,
-          status: { in: ['CONFIRMED', 'COMPLETED'] },
-          OR: [
-            { startTime: { lte: booking.startTime }, endTime: { gt: booking.startTime } },
-            { startTime: { lt: booking.endTime }, endTime: { gte: booking.endTime } },
-            { startTime: { gte: booking.startTime }, endTime: { lte: booking.endTime } }
-          ]
+    // P0-5 FIX: Wrap conflict check + status update in a single $transaction.
+    // Previously: findFirst ran outside the transaction, leaving a race window where
+    // two concurrent confirmations could both pass the read check before either write
+    // lands, resulting in a double-booked slot.
+    // Now we use updateMany with a status guard — if count === 0 the booking was
+    // already confirmed or cancelled by a concurrent request.
+    let updatedBooking: Awaited<ReturnType<typeof prisma.booking.findUnique>>;
+    try {
+      updatedBooking = await prisma.$transaction(async (tx) => {
+        // Conflict check inside the transaction
+        if (booking.startTime && booking.endTime) {
+          const conflictingBooking = await tx.booking.findFirst({
+            where: {
+              id: { not: bookingId },
+              instructorId: booking.instructorId,
+              status: { in: ['CONFIRMED', 'COMPLETED'] },
+              OR: [
+                { startTime: { lte: booking.startTime }, endTime: { gt: booking.startTime } },
+                { startTime: { lt: booking.endTime }, endTime: { gte: booking.endTime } },
+                { startTime: { gte: booking.startTime }, endTime: { lte: booking.endTime } },
+              ],
+            },
+          });
+          if (conflictingBooking) {
+            throw Object.assign(new Error('SLOT_CONFLICT'), { code: 'SLOT_CONFLICT' });
+          }
         }
-      });
 
-      if (conflictingBooking) {
-        return NextResponse.json({ 
-          error: 'Time slot is no longer available. Another booking has been confirmed for this time.' 
+        // Status guard: only advance if still PENDING/PENDING_PAYMENT
+        const guard = await tx.booking.updateMany({
+          where: { id: bookingId, status: { in: ['PENDING', 'PENDING_PAYMENT'] } },
+          data: { status: 'CONFIRMED', updatedAt: new Date() },
+        });
+        if (guard.count === 0) {
+          throw Object.assign(new Error('ALREADY_CONFIRMED_OR_STALE'), { code: 'ALREADY_CONFIRMED_OR_STALE' });
+        }
+
+        return tx.booking.findUnique({ where: { id: bookingId } });
+      });
+    } catch (txErr: any) {
+      if (txErr?.code === 'SLOT_CONFLICT') {
+        return NextResponse.json({
+          error: 'Time slot is no longer available. Another booking has been confirmed for this time.',
         }, { status: 409 });
       }
+      if (txErr?.code === 'ALREADY_CONFIRMED_OR_STALE') {
+        return NextResponse.json({
+          error: `Booking is already confirmed or was modified by a concurrent request.`,
+        }, { status: 409 });
+      }
+      throw txErr;
     }
 
-    // Confirm the booking
-    const updatedBooking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: 'CONFIRMED',
-        updatedAt: new Date()
-      }
-    });
+    // Audit log — manual confirmation by instructor/admin must be traceable
+    try {
+      await prisma.auditLog.create({
+        data: {
+          action: 'BOOKING_CONFIRMED',
+          actorId: user.id,
+          actorRole: isAdmin ? 'ADMIN' : 'INSTRUCTOR',
+          targetType: 'BOOKING',
+          targetId: bookingId,
+          success: true,
+          metadata: {
+            previousStatus: booking.status,
+            confirmedBy: isAdmin ? 'admin' : 'instructor',
+            manualConfirmation: true,
+          } as any,
+        },
+      });
+    } catch (auditErr) {
+      console.error('Audit log failed for manual booking confirmation:', auditErr);
+    }
 
     const notifChannels = getNotifChannels('BOOKING_CONFIRMED');
 
@@ -148,9 +191,9 @@ export async function POST(
 
   } catch (error) {
     console.error('Confirm booking error:', error);
+    // P2-2 FIX: Do not expose internal error details (Prisma constraint names etc.) to client
     return NextResponse.json({ 
-      error: 'Failed to confirm booking',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error',
     }, { status: 500 });
   }
 }

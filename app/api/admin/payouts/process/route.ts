@@ -3,8 +3,17 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { buildPayout, executePayout } from '@/lib/services/payout-service';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
+
+// P1-10 FIX: Validate request body — transactionIds must be cuid strings, capped at 500,
+// and no unbounded findMany risk. Cross-instructor check is handled in buildPayout which
+// filters by instructorId, but explicit validation here prevents DB amplification.
+const processPayoutSchema = z.object({
+  instructorId: z.string().cuid(),
+  transactionIds: z.array(z.string().cuid()).max(500).optional(),
+});
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,8 +22,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { instructorId, transactionIds } = await req.json();
-    if (!instructorId) return NextResponse.json({ error: 'instructorId required' }, { status: 400 });
+    const body = await req.json();
+    const parsed = processPayoutSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request', issues: parsed.error.issues }, { status: 400 });
+    }
+    const { instructorId, transactionIds } = parsed.data;
 
     // Layer 4: ABN verification gate
     // Payout blocked if instructor has an ABN on file but it hasn't been verified yet.

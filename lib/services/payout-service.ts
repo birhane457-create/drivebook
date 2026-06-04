@@ -110,6 +110,29 @@ export async function buildPayout(
   const transactions = await prisma.transaction.findMany({ where });
   if (!transactions.length) throw new Error('No eligible transactions for payout');
 
+  // P1-2 FIX: Prisma cannot filter on JSON metadata keys in aggregate().
+  // Using findMany + JS filter to correctly exclude already-recovered adjustments
+  // that were previously being double-deducted in subsequent payout runs.
+  const allAdjustments = await (prisma as any).ledgerEntry.findMany({
+    where: { type: 'ADJUSTMENT', instructorId },
+  });
+  const unrecoveredAdjustments = allAdjustments.filter(
+    (e: { metadata: unknown }) => !(e.metadata as Record<string, unknown>)?.recovered
+  );
+  const adjustmentDeduction = parseFloat(
+    Math.abs(
+      Math.min(0, unrecoveredAdjustments.reduce(
+        (sum: number, e: { amount: number }) => sum + e.amount, 0
+      ))
+    ).toFixed(2)
+  );
+  if (adjustmentDeduction > 0) {
+    console.log(
+      `[PAYOUT] Instructor ${instructorId} has $${adjustmentDeduction.toFixed(2)} in unrecovered ` +
+      `post-payout adjustments — deducting from gross payout`
+    );
+  }
+
   // Ledger initialization warning
   try {
     const ledger = await getPlatformLedger();
@@ -136,14 +159,60 @@ export async function buildPayout(
 
   const instructor = await prisma.instructor.findUnique({
     where: { id: instructorId },
-    select: { payoutMethod: true, stripeAccountId: true, withholdingTaxRate: true, gstRegistered: true },
+    select: {
+      payoutMethod: true,
+      stripeAccountId: true,
+      withholdingTaxRate: true,
+      gstRegistered: true,
+      payoutHold: true,
+      payoutHoldReason: true,
+      chargesEnabled: true,
+      payoutsEnabled: true,
+    } as any,
   });
   if (!instructor) throw new Error('Instructor not found');
 
+  // ── Eligibility gate ──────────────────────────────────────────────────────
+  // All four checks must pass before a payout record is created.
+
+  // 1. Dispute freeze
+  if ((instructor as any).payoutHold) {
+    throw new Error(
+      `Payout blocked: instructor has an active dispute hold (${(instructor as any).payoutHoldReason ?? 'see admin'}). ` +
+      `Resolve the dispute before processing.`
+    );
+  }
+
+  // 2. Stripe Connect — must have a connected account
+  if (instructor.payoutMethod === 'stripe_connect') {
+    if (!instructor.stripeAccountId) {
+      throw new Error(
+        `Payout blocked: instructor has not completed Stripe Connect onboarding. ` +
+        `No stripeAccountId on file.`
+      );
+    }
+    // 3. Charges enabled — Stripe has verified the account
+    if (!(instructor as any).chargesEnabled) {
+      throw new Error(
+        `Payout blocked: instructor's Stripe Connect account is not fully verified ` +
+        `(chargesEnabled = false). Onboarding may be incomplete.`
+      );
+    }
+    // 4. Payouts enabled — bank account linked and Stripe has approved payouts
+    if (!(instructor as any).payoutsEnabled) {
+      throw new Error(
+        `Payout blocked: instructor's Stripe Connect account cannot receive payouts yet ` +
+        `(payoutsEnabled = false). They may need to add a bank account in their Stripe dashboard.`
+      );
+    }
+  }
+
   const grossAmount = parseFloat(transactions.reduce((s, t) => s + t.instructorPayout, 0).toFixed(2));
-  const taxWithheld = parseFloat(((grossAmount * (instructor.withholdingTaxRate ?? 0)) / 100).toFixed(2));
-  const netAmount = parseFloat((grossAmount - taxWithheld).toFixed(2));
-  const gstAmount = instructor.gstRegistered ? parseFloat((grossAmount / 11).toFixed(2)) : 0;
+  // FIX #8: Subtract pending adjustment deductions from gross before tax calculation
+  const grossAfterAdjustment = Math.max(0, parseFloat((grossAmount - adjustmentDeduction).toFixed(2)));
+  const taxWithheld = parseFloat(((grossAfterAdjustment * (instructor.withholdingTaxRate ?? 0)) / 100).toFixed(2));
+  const netAmount = parseFloat((grossAfterAdjustment - taxWithheld).toFixed(2));
+  const gstAmount = instructor.gstRegistered ? parseFloat((grossAfterAdjustment / 11).toFixed(2)) : 0;
   const payoutRef = `PAYOUT-${instructorId.slice(-6).toUpperCase()}-${Date.now()}`;
 
   // Atomic create - @unique on idempotencyKey prevents concurrent duplicates
@@ -175,6 +244,7 @@ export async function buildPayout(
       netAmount,
       transactionCount: transactions.length,
       instructorId,
+      adjustmentDeduction: adjustmentDeduction > 0 ? adjustmentDeduction : undefined,
     });
 
     return { payoutId: payout.id, idempotencyKey, alreadyPaid: false };
@@ -300,6 +370,11 @@ export async function executePayout(
         }),
       ]);
 
+      // P2-7 FIX: Verify ledger didn't go negative after payout (concurrent payout race).
+      // assertSufficientBalance() runs before the Stripe transfer but a concurrent payout
+      // could have consumed the same balance in the window between the check and the transfer.
+      await assertNonNegativeBalance();
+
       await logTransition(payoutId, adminUserId, 'PAYOUT_PAID', {
         payoutRef: payout.payoutRef,
         grossAmount: payout.grossAmount,
@@ -308,6 +383,25 @@ export async function executePayout(
         stripeTransferId: transfer.id,
         transactionCount: txCount,
       });
+
+      // FIX #8: Mark unrecovered ADJUSTMENT entries for this instructor as recovered
+      // so they are not double-deducted in future payouts.
+      try {
+        const unrecovered = await (prisma as any).ledgerEntry.findMany({
+          where: { type: 'ADJUSTMENT', instructorId: payout.instructorId },
+        });
+        for (const adj of unrecovered) {
+          const meta = (adj.metadata as any) ?? {};
+          if (!meta.recovered) {
+            await (prisma as any).ledgerEntry.update({
+              where: { id: adj.id },
+              data: { metadata: { ...meta, recovered: true, recoveredByPayoutId: payoutId } },
+            });
+          }
+        }
+      } catch (adjErr) {
+        console.error('[PAYOUT] Failed to mark adjustments recovered (non-critical):', adjErr);
+      }
 
       if (instructor?.phone) {
         try {

@@ -72,17 +72,13 @@ export async function POST(req: NextRequest) {
     // Get current balance before transaction
     const previousBalance = await getWalletBalance(user.id);
 
-    // FIXED: Use transaction wrapper for atomicity + LEDGER (DUAL-WRITE)
+    // P0-4 FIX: recordWalletCredit uses the global prisma client (not tx) — calling it
+    // inside $transaction creates a split-brain: if walletTransaction.create rolls back,
+    // the ledger entry is already committed via a different DB connection. Move the
+    // ledger write outside the transaction and derive a stable idempotency key from
+    // paymentIntentId (not Date.now()) so it is truly idempotent on retry.
+    // Also store the walletTx id upfront for the ledger call below.
     const result = await prisma.$transaction(async (tx) => {
-      // NEW: Record in double-entry ledger
-      await recordWalletCredit({
-        walletTransactionId: `manual-${Date.now()}`,
-        userId: user.id,
-        amount,
-        stripePaymentIntentId: paymentIntentId,
-        createdBy: session.user.id
-      });
-      
       // ✅ P0 FIX #2: Create transaction record (no stored balance update)
       const walletTx = await tx.walletTransaction.create({
         data: {
@@ -97,6 +93,16 @@ export async function POST(req: NextRequest) {
       // Note: Audit logging removed - AuditLog model not in schema
       
       return { walletTx };
+    });
+
+    // P0-4 FIX: Ledger write happens AFTER the transaction commits, using the committed
+    // walletTx.id as the idempotency key so it is safe to retry.
+    await recordWalletCredit({
+      walletTransactionId: result.walletTx.id,
+      userId: user.id,
+      amount,
+      stripePaymentIntentId: paymentIntentId,
+      createdBy: session.user.id
     });
     
     // Get updated balance after transaction

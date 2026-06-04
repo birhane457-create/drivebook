@@ -159,6 +159,33 @@ export async function PATCH(
         console.error('Calendar update failed:', e)
       }
     }
+
+  // FIX #13: Audit log on reschedule — required for dispute evidence and refund
+  // policy anchor (originalStartTime). Previously there was no audit trail for reschedules.
+  try {
+    await prisma.auditLog.create({
+      data: {
+        action: 'BOOKING_RESCHEDULED',
+        actorId: session.user.id!,
+        actorRole: 'INSTRUCTOR',
+        targetType: 'BOOKING',
+        targetId: params.id,
+        success: true,
+        metadata: {
+          oldStartTime: booking.startTime?.toISOString() ?? null,
+          oldEndTime: booking.endTime?.toISOString() ?? null,
+          newStartTime: newStart.toISOString(),
+          newEndTime: newEnd.toISOString(),
+          reason: data.reason ?? null,
+          isInsidePenaltyWindow,
+          rescheduledBy: 'instructor',
+        } as any,
+      },
+    })
+  } catch (auditErr) {
+    console.error('Audit log failed for reschedule:', auditErr)
+  }
+
   // Notifications for reschedule
   try {
     const reschedChannels = getNotifChannels('BOOKING_RESCHEDULED');

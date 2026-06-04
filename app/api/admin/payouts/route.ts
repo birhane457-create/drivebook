@@ -257,6 +257,11 @@ export async function GET(req: NextRequest) {
       // Manual transfer queues
       pendingTransferPayouts: pendingTransferPayouts.map((p) => {
         const inst = manualInstructorMap.get(p.instructorId);
+        // P1-7 FIX: Mask bank account — full BSB+account is enough for fraud.
+        // Full details available only via explicit "reveal" action in admin dashboard.
+        const maskedAccount = inst?.bankAccount
+          ? '****' + inst.bankAccount.slice(-3)
+          : null;
         return {
           id: p.id,
           payoutRef: p.payoutRef,
@@ -264,7 +269,7 @@ export async function GET(req: NextRequest) {
           instructorName: inst?.name ?? 'Unknown',
           instructorPhone: inst?.phone ?? null,
           bankBsb: inst?.bankBsb ?? null,
-          bankAccount: inst?.bankAccount ?? null,
+          bankAccount: maskedAccount,
           bankAccountName: inst?.bankAccountName ?? null,
           grossAmount: p.grossAmount,
           taxWithheld: p.taxWithheld,
@@ -276,6 +281,9 @@ export async function GET(req: NextRequest) {
       }),
       sentPayouts: sentPayouts.map((p) => {
         const inst = manualInstructorMap.get(p.instructorId);
+        const maskedAccount = inst?.bankAccount
+          ? '****' + inst.bankAccount.slice(-3)
+          : null;
         return {
           id: p.id,
           payoutRef: p.payoutRef,
@@ -283,7 +291,7 @@ export async function GET(req: NextRequest) {
           instructorName: inst?.name ?? 'Unknown',
           instructorPhone: inst?.phone ?? null,
           bankBsb: inst?.bankBsb ?? null,
-          bankAccount: inst?.bankAccount ?? null,
+          bankAccount: maskedAccount,
           bankAccountName: inst?.bankAccountName ?? null,
           grossAmount: p.grossAmount,
           taxWithheld: p.taxWithheld,

@@ -134,6 +134,7 @@ export default function AdminNav() {
         { name: 'Credits', href: '/admin/credits', icon: '💳' },
         { name: 'Revenue', href: '/admin/revenue', icon: '💰' },
         { name: 'Payouts', href: '/admin/payouts', icon: '💸' },
+        { name: 'Disputes', href: '/admin/disputes', icon: '⚠️' },
         { name: 'Pricing', href: '/admin/pricing', icon: '🏷️' },
       ]
     },

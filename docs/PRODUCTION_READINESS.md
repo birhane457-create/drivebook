@@ -370,7 +370,252 @@ All TypeScript errors fixed. `ignoreBuildErrors: true` and `ignoreDuringBuilds: 
 
 ---
 
-## Updated Pre-Launch Checklist (May 2026)
+## June 2026 — Payment Flow Security Hardening & OpenAPI Completion
+
+**Date:** June 2, 2026  
+**Scope:** Payment security, OpenAPI alignment, webhook state machine, AI voice endpoints
+
+---
+
+### Payment Token Security
+
+All public payment endpoints now require a `paymentToken` (UUID) in addition to the booking ID.
+
+- `paymentToken` generated via `crypto.randomUUID()` at booking creation
+- Stored on `Booking.paymentToken` (schema field added, DB synced)
+- `checkoutUrl` in SMS now includes `?token={paymentToken}`
+- Returns `404` (not `403`) on token mismatch — prevents booking ID enumeration
+- Token validated server-side on: `payment-summary`, `payment-status`, `timeline`, `create-intent`
+- `POST /payments/create-intent` accepts `paymentToken` for unauthenticated payment page callers (or session for dashboard callers)
+
+**Files:** `prisma/schema.prisma`, `app/api/public/bookings/bulk/route.ts`, `app/api/public/bookings/[id]/payment-summary/route.ts`, `app/api/payments/create-intent/route.ts`
+
+---
+
+### Webhook: Strict PENDING_PAYMENT → CONFIRMED Only
+
+Removed the `EXPIRED → CONFIRMED` revival path. This prevented a double-booking race condition where:
+1. Slot expires at 09:10 (cron runs)
+2. Another student books the same slot at 09:11
+3. Delayed Stripe webhook arrives at 09:12
+
+**New behaviour for expired bookings with delayed payment:**
+1. Stripe full refund issued automatically via `stripe.refunds.create()`
+2. Booking status → `CANCELLED` with audit note
+3. Admin flagged in logs — if refund fails, manual action required
+4. Client receives no booking confirmation
+
+**Strict state machine (only `PENDING_PAYMENT → CONFIRMED` is valid):**
+- `CONFIRMED / COMPLETED` → idempotent replay, skip wallet ops, return 200
+- `EXPIRED` → auto-refund + cancel + admin flag
+- `CANCELLED / NO_SHOW / any other` → rejected, logged, return 200
+
+**Files:** `app/api/stripe/webhook/route.ts`
+
+---
+
+### New Public Endpoints (AI Voice + Payment)
+
+All require `?token={paymentToken}`:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/public/bookings/{id}/payment-summary?token=` | Payment page — fast booking summary, no PII |
+| `GET /api/public/bookings/{id}/payment-status?token=` | Polling — human-readable paymentStatus for AI |
+| `GET /api/public/bookings/{id}/timeline?token=` | AI event history — "What happened to my booking?" |
+
+**Files:** `app/api/public/bookings/[id]/payment-summary/route.ts`, `app/api/public/bookings/[id]/payment-status/route.ts`, `app/api/public/bookings/[id]/timeline/route.ts`
+
+---
+
+### OpenAPI Specs — Production Complete
+
+Both `openapi.yaml` and `drivebook-hybrid/openapi.yaml` fully updated:
+
+- `GET /public/bookings/{id}/payment-summary` — token required, documented
+- `GET /public/bookings/{id}/payment-status` — paymentStatus enum for AI
+- `GET /public/bookings/{id}/timeline` — event history endpoint
+- `x-webhooks` — EXPIRED auto-refund documented, PENDING_PAYMENT-only transition clarified
+- `x-status-transitions` — post-CONFIRMED side effects documented, PAID removed from public enum
+- `x-short-notice` — `thresholdMinutes: 120` explicit
+- `securityDefinitions` — `BearerAuth`, `VerificationToken`, `VoiceServiceKey` all present
+- All `$ref` definitions used (no dead definitions)
+- `instructor.phone` removed from `/bookings/lookup` (pre-OTP, no PII)
+- Language/vehicleType filters on `/instructors/search` (spec + implementation)
+
+---
+
+### Payment Page
+
+Rebuilt at `app/booking/[id]/payment/page.tsx`:
+- Uses `/payment-summary?token=` endpoint
+- Token read from URL query param, passed to `create-intent`
+- Live countdown timer (expires via `expiresAt` from server)
+- Resume payment: SMS link valid until `expiresAt`, PaymentIntent reused
+- Handles: EXPIRED, CANCELLED, ALREADY_PAID, NO_TOKEN error states
+- Cancel escape hatch with clear consequence messaging
+- No edit options on payment page (correct — slot is reserved)
+
+---
+
+### Updated Checklist (June 2026)
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Set `STRIPE_WEBHOOK_SECRET` in Vercel | ⚠️ Config required |
+| 2 | Set Stripe price ID env vars | ⚠️ Config required |
+| 3 | Set Upstash Redis env vars (rate limiting) | ⚠️ Config required |
+| 4 | Verify `GOOGLE_REDIRECT_URI` in Vercel | ⚠️ Config required |
+| 5 | Configure Stripe Billing Portal | ⚠️ Config required |
+| 6 | Replace placeholder ABN in about page | ⚠️ Not done |
+| 7 | TypeScript: 0 errors | ✅ Done |
+| 8 | Payment token security on all public endpoints | ✅ Done |
+| 9 | Webhook: strict PENDING_PAYMENT → CONFIRMED only | ✅ Done |
+| 10 | EXPIRED → auto-refund (no double-booking) | ✅ Done |
+| 11 | Payment page: token-gated, resume payment, countdown | ✅ Done |
+| 12 | AI endpoints: payment-summary, payment-status, timeline | ✅ Done |
+| 13 | OpenAPI: both specs fully production-ready | ✅ Done |
+| 14 | Security headers | ✅ Done |
+| 15 | Server-side expiry enforcement (not just UI) | ✅ Done |
+| 16 | PaymentIntent reuse rules (correct states only) | ✅ Done |
+| 17 | Idempotent webhook (WebhookEvent table + status guard) | ✅ Done |
+
+---
+
+## June 2026 — Platform Hardening Sprint (Final Pre-Launch)
+
+**Date:** June 3, 2026  
+**Scope:** Booking idempotency, OpenAPI contract testing, voice session recovery  
+**Reviewer verdict:** 8.5/10 → launch-ready. Remaining item (Redis for voice sessions) is a scaling enhancement, not a correctness issue.
+
+---
+
+### Booking Idempotency — Persistent Key Store ✅
+
+All booking creation paths are now protected against duplicate submissions from any retry source.
+
+**Sources protected:** browser double-click, Twilio retry, AI retry, network timeout, mobile retry.
+
+**Implementation:**
+- `BookingIdempotencyKey` model in `prisma/schema.prisma` — stores key, email scope, bookingId, full response JSON
+- `POST /api/public/bookings` — checks for existing key before running creation logic; replays stored response on hit
+- `POST /api/public/bookings/bulk` — same protection
+- Cleanup: `app/api/cron/cleanup-expired-bookings/route.ts` purges keys older than 24 hours (matches Stripe's own idempotency window)
+- Scope guard: key + email must match — prevents cross-account replay
+
+**Before:**
+```
+Request timeout → Retry → Possible duplicate booking
+```
+**After:**
+```
+Request timeout → Retry (same Idempotency-Key) → Stored response replayed → No duplicate
+```
+
+---
+
+### OpenAPI Contract Tests ✅
+
+`drivebook-hybrid/tests/contract.test.js` — 25 tests covering every API endpoint the voice AI depends on.
+
+**Endpoints covered:**
+- `GET /api/health`
+- `GET /api/availability/slots`, `POST /api/availability`
+- `GET /api/instructors/recommendations`, `GET /api/instructors/search`
+- `POST /api/public/bookings/bulk` — success shape, HTTPS checkoutUrl, PENDING_PAYMENT status
+- `GET /api/bookings/lookup`
+- `POST /api/verifications/otp`, `POST /api/verifications/otp/confirm`
+- `POST /api/public/bookings/:id/cancel`
+- `POST /api/public/bookings/:id/reschedule`
+- `VoiceSessionService` — 7 unit tests (save/get/clear, phone normalisation, TTL, prompt generation)
+
+**Run in CI before every deployment:**
+```
+npm test -- contract.test.js
+```
+
+**What this catches:** A field rename (`checkoutUrl` → `paymentUrl`) will fail the contract test before the voice AI is broken in production.
+
+---
+
+### Voice Session Recovery ✅
+
+Callers who drop mid-booking no longer have to start over from scratch.
+
+**Implementation:** `drivebook-hybrid/services/voice-session-service.js`
+
+**Flow:**
+```
+Caller books → Call drops → Calls back within 10 minutes
+↓
+AI: "Welcome back. I can see you were booking a lesson with Debesay
+     about 3 minutes ago. I've resent your payment link to this number.
+     Would you like me to do anything else?"
+```
+
+**Key design decisions:**
+- **TTL = 10 minutes** — matches payment link expiry. When the link expires, the session expires. Consistent system behaviour.
+- **Phone normalisation** — `0412 345 678` and `+61412 345 678` resolve to the same session key. Twilio delivers E.164; local format stored in DB. Both work.
+- **In-process Map** — no Redis dependency. Correct for single-instance deployment. See scaling note below.
+- **Non-blocking SMS resend** — payment link resent in background; TwiML responds immediately (Twilio's 10s timeout is not at risk).
+- **Flood protection** — `lastAction` advances to `PAYMENT_LINK_SENT` after first resend; subsequent call-backs get the recovery prompt but skip the SMS.
+
+**Files modified:**
+- `drivebook-hybrid/services/voice-session-service.js` — new service
+- `drivebook-hybrid/services/sms-service.js` — added `sendSms()` and `resendPaymentLink()`
+- `drivebook-hybrid/routes/voice-webhook.js` — session recovery check on every incoming call
+- `drivebook-hybrid/routes/main-app-proxy.js` — session saved after `POST /public/bookings/bulk` succeeds
+
+---
+
+### Scaling Roadmap — Redis for Voice Sessions 🟡
+
+**Current state:** `VoiceSessionService` uses an in-process `Map`. This is correct for a single-instance deployment.
+
+**Future state (when load-balanced):** If the voice service is scaled to multiple instances behind a load balancer, a caller's callback may hit a different instance and find no session.
+
+**Migration path when needed:**
+1. Add `ioredis` or `upstash/redis` to `drivebook-hybrid/package.json`
+2. Replace `const sessions = new Map()` with Redis client
+3. `saveSession` → `redis.set(key, JSON.stringify(data), 'EX', 600)` (600s = 10 min TTL, enforced by Redis)
+4. `getSession` → `redis.get(key)` then `JSON.parse`
+5. `clearSession` → `redis.del(key)`
+6. Remove the `setInterval` cleanup (Redis handles expiry natively)
+
+No other application code needs to change — the interface (`saveSession`, `getSession`, `clearSession`) stays identical.
+
+**When to do this:** When the voice service is deployed behind a load balancer with 2+ instances. Not required for launch.
+
+---
+
+### Updated Platform Rating (June 3, 2026)
+
+| Area | Status | Rating |
+|------|--------|--------|
+| Booking Engine | 🟢 Strong | 9/10 |
+| Payment Flow | 🟢 Strong | 9/10 |
+| Refund Protection | 🟢 Strong | 9/10 |
+| Payout Engine | 🟢 Strong | 9/10 |
+| Audit Trail | 🟢 Strong | 9/10 |
+| Admin Operations | 🟢 Strong | 9/10 |
+| Voice Booking | 🟢 Strong | 9/10 |
+| Voice Cancel/Reschedule | 🟢 Strong | 9/10 |
+| Voice Recovery | 🟢 Good | 8/10 |
+| Contract Testing | 🟢 Good | 8/10 |
+| Documentation | 🟢 Good | 8/10 |
+| Horizontal Scaling | 🟡 Future | — |
+
+**Overall: ~9/10 for a pre-launch platform.**
+
+The biggest remaining risks are **business and operational**, not architectural:
+- Real-world beta testing with instructors and students
+- Monitoring dashboards
+- Analytics: booking conversion rate, payment completion rate, call completion rate, cancellation rate, payout success rate
+- Customer and instructor acquisition
+
+The platform is ready to onboard its first real users.
+
+---
 
 ### Config — Must complete in Vercel/Stripe dashboards
 

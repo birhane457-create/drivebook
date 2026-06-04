@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isValidABNFormat } from '@/lib/utils/abn-validation';
 import { sendAlert } from '@/lib/services/alert-service';
+import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,6 +95,7 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(`ABN recheck complete: ${results.checked} checked, ${results.revoked} revoked, ${results.errors} errors`);
+  await pingCronHealth('recheck-abn');
   return NextResponse.json({ success: true, ...results });
 }
 

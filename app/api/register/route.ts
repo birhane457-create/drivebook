@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { emailService } from '@/lib/services/email'
+// P1-4 FIX: Rate limit registration — prevents email enumeration and DB flooding
+import { checkRateLimitStrict, getRateLimitIdentifier, authRateLimit } from '@/lib/ratelimit'
 
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +12,10 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   name: z.string().min(2),
-  phone: z.string(),
+  // P1-5 FIX: Validate phone format — rejects empty strings, SQL-adjacent values, and 1000-char inputs
+  phone: z.string()
+    .transform(s => s.replace(/\s+/g, ''))
+    .refine(p => /^\+?\d{9,15}$/.test(p), 'Invalid phone number'),
   baseAddress: z.string(),
   hourlyRate: z.number(),
   vehicleTypes: z.array(z.enum(['AUTO', 'MANUAL'])),
@@ -24,6 +29,18 @@ const registerSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // P1-4 FIX: Rate limit by IP — 5 registrations per 15 minutes prevents email
+    // enumeration (via "Email already registered" error) and DB flooding
+    const ip = req.headers.get('x-forwarded-for') || 'unknown';
+    const rateLimitId = getRateLimitIdentifier(undefined, ip, 'register');
+    const rateLimitResult = await checkRateLimitStrict(authRateLimit, rateLimitId);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: 'Too many registration attempts. Please try again later.' },
+        { status: 429, headers: rateLimitResult.headers }
+      );
+    }
+
     const body = await req.json()
     const data = registerSchema.parse(body)
 
@@ -195,13 +212,13 @@ export async function POST(req: NextRequest) {
                     <span class="label">Email:</span> ${user.email}
                   </div>
                   <div class="info-row">
-                    <span class="label">Phone:</span> ${instructorData.phone}
+                    <span class="label">Phone:</span> ****${instructorData.phone.slice(-4)}
                   </div>
                   <div class="info-row">
                     <span class="label">Location:</span> ${instructorData.baseAddress}
                   </div>
                   <div class="info-row">
-                    <span class="label">Hourly Rate:</span> $${instructorData.hourlyRate}
+                    <span class="label">Hourly Rate:</span> [see dashboard]
                   </div>
                   <div class="info-row">
                     <span class="label">Vehicle Types:</span> ${instructorData.vehicleTypes || 'N/A'}
