@@ -1,0 +1,64 @@
+{
+  "name": "BinLocation",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "Unique bin code e.g. A-01-02-03"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Warehouse/store location"
+    },
+    "zone": {
+      "type": "string",
+      "description": "Zone name e.g. RECEIVING, BULK, PICK, SHIPPING"
+    },
+    "aisle": {
+      "type": "string"
+    },
+    "rack": {
+      "type": "string"
+    },
+    "shelf": {
+      "type": "string"
+    },
+    "bin": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "storage",
+        "receiving",
+        "staging",
+        "shipping",
+        "cross_dock",
+        "pallet"
+      ],
+      "default": "storage"
+    },
+    "max_weight_kg": {
+      "type": "number"
+    },
+    "max_volume_m3": {
+      "type": "number"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "putaway_priority": {
+      "type": "number",
+      "default": 0
+    },
+    "current_lp": {
+      "type": "string",
+      "description": "Current license plate number"
+    }
+  },
+  "required": [
+    "code",
+    "location_id"
+  ]
+}

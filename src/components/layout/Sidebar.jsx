@@ -3,7 +3,9 @@ import {
   LayoutDashboard, Package, Warehouse, ShoppingCart, Users, 
   Truck, ArrowLeftRight, ClipboardList, BarChart3, Bell,
   Settings, LogOut, ChevronLeft, ChevronRight, Store,
-  Brain, ClipboardCheck, Star, Award, Building2, PieChart
+  Brain, ClipboardCheck, Star, Award, Building2, PieChart,
+  Grid3x3, Factory, DollarSign, CheckSquare, Smartphone,
+  Route, Globe2, Server, Crown, Layers
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -12,6 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 const menuGroups = [
+  {
+    label: 'Executive',
+    items: [
+      { path: '/executive', icon: Crown, label: 'Exec Dashboard', roles: ['super_admin'] },
+    ]
+  },
   {
     label: 'Operations',
     items: [
@@ -24,11 +32,24 @@ const menuGroups = [
     ]
   },
   {
+    label: 'Warehouse',
+    items: [
+      { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
+      { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
+      { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
+    ]
+  },
+  {
+    label: 'Manufacturing',
+    items: [
+      { path: '/manufacturing', icon: Factory, label: 'Manufacturing', roles: ['super_admin', 'warehouse_manager'] },
+    ]
+  },
+  {
     label: 'Intelligence',
     items: [
       { path: '/analytics', icon: PieChart, label: 'Inv. Analytics', roles: ['super_admin', 'warehouse_manager'] },
       { path: '/forecasting', icon: Brain, label: 'AI Forecasting', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
     ]
   },
   {
@@ -41,11 +62,21 @@ const menuGroups = [
     ]
   },
   {
-    label: 'Finance & Reports',
+    label: 'Finance',
     items: [
+      { path: '/financials', icon: DollarSign, label: 'Financials', roles: ['super_admin'] },
+      { path: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
       { path: '/sales', icon: ClipboardList, label: 'Sales History', roles: ['super_admin', 'store_manager', 'cashier'] },
       { path: '/reports', icon: BarChart3, label: 'Reports', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
       { path: '/alerts', icon: Bell, label: 'Alerts', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
+    ]
+  },
+  {
+    label: 'Commerce & Logistics',
+    items: [
+      { path: '/multi-channel', icon: Globe2, label: 'Multi-Channel', roles: ['super_admin', 'store_manager'] },
+      { path: '/transportation', icon: Route, label: 'Transportation', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/3pl', icon: Server, label: '3PL Management', roles: ['super_admin'] },
     ]
   },
   {

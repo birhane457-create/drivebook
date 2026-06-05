@@ -1,0 +1,92 @@
+{
+  "name": "AccountsReceivable",
+  "type": "object",
+  "properties": {
+    "invoice_number": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "sale_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "sent",
+        "partial",
+        "paid",
+        "overdue",
+        "void"
+      ],
+      "default": "draft"
+    },
+    "invoice_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "subtotal": {
+      "type": "number",
+      "default": 0
+    },
+    "tax_amount": {
+      "type": "number",
+      "default": 0
+    },
+    "discount_amount": {
+      "type": "number",
+      "default": 0
+    },
+    "total_amount": {
+      "type": "number",
+      "default": 0
+    },
+    "amount_paid": {
+      "type": "number",
+      "default": 0
+    },
+    "balance_due": {
+      "type": "number",
+      "default": 0
+    },
+    "currency_code": {
+      "type": "string",
+      "default": "USD"
+    },
+    "credit_limit": {
+      "type": "number",
+      "default": 0
+    },
+    "cost_center_id": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "payment_terms": {
+      "type": "string",
+      "enum": [
+        "immediate",
+        "net_7",
+        "net_15",
+        "net_30",
+        "net_60",
+        "net_90"
+      ],
+      "default": "net_30"
+    }
+  },
+  "required": [
+    "customer_id",
+    "total_amount"
+  ]
+}

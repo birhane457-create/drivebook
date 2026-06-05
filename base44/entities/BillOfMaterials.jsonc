@@ -1,0 +1,93 @@
+{
+  "name": "BillOfMaterials",
+  "type": "object",
+  "properties": {
+    "bom_number": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "finished_product_id": {
+      "type": "string",
+      "description": "The product being produced"
+    },
+    "finished_product_name": {
+      "type": "string"
+    },
+    "output_quantity": {
+      "type": "number",
+      "default": 1,
+      "description": "How many units produced per run"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "manufacture",
+        "kit",
+        "assembly"
+      ],
+      "default": "manufacture"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "obsolete"
+      ],
+      "default": "active"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "is_optional": {
+            "type": "boolean",
+            "default": false
+          },
+          "scrap_rate": {
+            "type": "number",
+            "default": 0,
+            "description": "Expected waste %"
+          }
+        }
+      }
+    },
+    "labor_cost": {
+      "type": "number",
+      "default": 0
+    },
+    "overhead_cost": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "default": "1.0"
+    }
+  },
+  "required": [
+    "name",
+    "finished_product_id"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "name": "GeneralLedger",
+  "type": "object",
+  "properties": {
+    "entry_number": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "sale",
+        "purchase",
+        "adjustment",
+        "transfer",
+        "production",
+        "payroll",
+        "tax",
+        "other"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "reference_id": {
+      "type": "string"
+    },
+    "reference_type": {
+      "type": "string"
+    },
+    "debit_account": {
+      "type": "string"
+    },
+    "credit_account": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "currency_code": {
+      "type": "string",
+      "default": "USD"
+    },
+    "cost_center_id": {
+      "type": "string"
+    },
+    "company_id": {
+      "type": "string"
+    },
+    "posted_by": {
+      "type": "string"
+    },
+    "is_posted": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "date",
+    "type",
+    "amount"
+  ]
+}

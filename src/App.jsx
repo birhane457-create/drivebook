@@ -29,6 +29,15 @@ import CycleCounting from '@/pages/CycleCounting';
 import SupplierScorecard from '@/pages/SupplierScorecard';
 import LoyaltyProgram from '@/pages/LoyaltyProgram';
 import EnterpriseSettings from '@/pages/EnterpriseSettings';
+import WarehouseExecution from '@/pages/WarehouseExecution';
+import Manufacturing from '@/pages/Manufacturing';
+import Financials from '@/pages/Financials';
+import ApprovalWorkflow from '@/pages/ApprovalWorkflow';
+import MobileWarehouse from '@/pages/MobileWarehouse';
+import TransportationManagement from '@/pages/TransportationManagement';
+import MultiChannel from '@/pages/MultiChannel';
+import ThreePL from '@/pages/ThreePL';
+import ExecutiveDashboard from '@/pages/ExecutiveDashboard';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -78,6 +87,15 @@ const AuthenticatedApp = () => {
           <Route path="/supplier-scorecard" element={<SupplierScorecard />} />
           <Route path="/loyalty" element={<LoyaltyProgram />} />
           <Route path="/enterprise-settings" element={<EnterpriseSettings />} />
+          <Route path="/warehouse-execution" element={<WarehouseExecution />} />
+          <Route path="/manufacturing" element={<Manufacturing />} />
+          <Route path="/financials" element={<Financials />} />
+          <Route path="/approvals" element={<ApprovalWorkflow />} />
+          <Route path="/mobile-warehouse" element={<MobileWarehouse />} />
+          <Route path="/transportation" element={<TransportationManagement />} />
+          <Route path="/multi-channel" element={<MultiChannel />} />
+          <Route path="/3pl" element={<ThreePL />} />
+          <Route path="/executive" element={<ExecutiveDashboard />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>

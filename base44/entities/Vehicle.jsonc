@@ -1,0 +1,64 @@
+{
+  "name": "Vehicle",
+  "type": "object",
+  "properties": {
+    "plate_number": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "description": "e.g. Truck #1, Van A"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "van",
+        "truck",
+        "motorcycle",
+        "car",
+        "forklift"
+      ],
+      "default": "van"
+    },
+    "capacity_kg": {
+      "type": "number"
+    },
+    "capacity_m3": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "on_route",
+        "maintenance",
+        "inactive"
+      ],
+      "default": "available"
+    },
+    "assigned_driver": {
+      "type": "string"
+    },
+    "fuel_type": {
+      "type": "string",
+      "enum": [
+        "petrol",
+        "diesel",
+        "electric",
+        "hybrid"
+      ],
+      "default": "diesel"
+    },
+    "last_service_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "plate_number",
+    "name"
+  ]
+}

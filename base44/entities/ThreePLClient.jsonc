@@ -1,0 +1,80 @@
+{
+  "name": "ThreePLClient",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "contact_person": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "billing_model": {
+      "type": "string",
+      "enum": [
+        "per_pallet",
+        "per_sqft",
+        "per_unit",
+        "flat_rate"
+      ],
+      "default": "per_pallet"
+    },
+    "storage_rate": {
+      "type": "number",
+      "default": 0,
+      "description": "Rate per unit/pallet/sqft per month"
+    },
+    "pick_pack_rate": {
+      "type": "number",
+      "default": 0,
+      "description": "Rate per pick line"
+    },
+    "receiving_rate": {
+      "type": "number",
+      "default": 0
+    },
+    "freight_markup": {
+      "type": "number",
+      "default": 0,
+      "description": "Freight markup %"
+    },
+    "billing_cycle": {
+      "type": "string",
+      "enum": [
+        "weekly",
+        "bi_weekly",
+        "monthly"
+      ],
+      "default": "monthly"
+    },
+    "portal_access": {
+      "type": "boolean",
+      "default": true
+    },
+    "dedicated_location_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "code"
+  ]
+}

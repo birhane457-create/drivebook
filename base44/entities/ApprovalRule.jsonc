@@ -1,0 +1,72 @@
+{
+  "name": "ApprovalRule",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "purchase_order",
+        "stock_transfer",
+        "credit_limit",
+        "price_override",
+        "discount",
+        "write_off",
+        "production_order"
+      ],
+      "default": "purchase_order"
+    },
+    "condition_field": {
+      "type": "string",
+      "description": "e.g. total_amount, discount_percent"
+    },
+    "condition_operator": {
+      "type": "string",
+      "enum": [
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "eq"
+      ],
+      "default": "gt"
+    },
+    "condition_value": {
+      "type": "number"
+    },
+    "levels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "number"
+          },
+          "approver_role": {
+            "type": "string"
+          },
+          "approver_name": {
+            "type": "string"
+          },
+          "timeout_hours": {
+            "type": "number",
+            "default": 24
+          }
+        }
+      }
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}

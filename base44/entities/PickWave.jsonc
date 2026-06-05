@@ -1,0 +1,110 @@
+{
+  "name": "PickWave",
+  "type": "object",
+  "properties": {
+    "wave_number": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "wave",
+        "zone",
+        "batch",
+        "single"
+      ],
+      "default": "wave"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "released",
+        "in_progress",
+        "completed",
+        "cancelled"
+      ],
+      "default": "planned"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "zone": {
+      "type": "string"
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "default": "normal"
+    },
+    "order_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "bin_id": {
+            "type": "string"
+          },
+          "bin_code": {
+            "type": "string"
+          },
+          "quantity_required": {
+            "type": "number"
+          },
+          "quantity_picked": {
+            "type": "number",
+            "default": 0
+          },
+          "is_picked": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    "total_lines": {
+      "type": "number",
+      "default": 0
+    },
+    "completed_lines": {
+      "type": "number",
+      "default": 0
+    },
+    "scheduled_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "completed_date": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "location_id"
+  ]
+}

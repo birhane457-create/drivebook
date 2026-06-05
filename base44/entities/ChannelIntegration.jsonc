@@ -1,0 +1,70 @@
+{
+  "name": "ChannelIntegration",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "shopify",
+        "woocommerce",
+        "amazon",
+        "ebay",
+        "manual"
+      ],
+      "default": "shopify"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "error",
+        "setup"
+      ],
+      "default": "setup"
+    },
+    "api_url": {
+      "type": "string"
+    },
+    "api_key": {
+      "type": "string"
+    },
+    "sync_inventory": {
+      "type": "boolean",
+      "default": true
+    },
+    "sync_orders": {
+      "type": "boolean",
+      "default": true
+    },
+    "sync_products": {
+      "type": "boolean",
+      "default": false
+    },
+    "last_sync": {
+      "type": "string"
+    },
+    "orders_synced": {
+      "type": "number",
+      "default": 0
+    },
+    "errors": {
+      "type": "number",
+      "default": 0
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Fulfillment location"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "channel"
+  ]
+}

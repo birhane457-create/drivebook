@@ -1,0 +1,105 @@
+{
+  "name": "ProductionOrder",
+  "type": "object",
+  "properties": {
+    "order_number": {
+      "type": "string"
+    },
+    "bom_id": {
+      "type": "string"
+    },
+    "bom_name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "production",
+        "assembly",
+        "kitting",
+        "work_order"
+      ],
+      "default": "production"
+    },
+    "finished_product_id": {
+      "type": "string"
+    },
+    "finished_product_name": {
+      "type": "string"
+    },
+    "quantity_planned": {
+      "type": "number"
+    },
+    "quantity_produced": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled"
+      ],
+      "default": "draft"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "scheduled_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "scheduled_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "actual_start": {
+      "type": "string"
+    },
+    "actual_end": {
+      "type": "string"
+    },
+    "components_consumed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "quantity_required": {
+            "type": "number"
+          },
+          "quantity_consumed": {
+            "type": "number",
+            "default": 0
+          }
+        }
+      }
+    },
+    "labor_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "total_cost": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "finished_product_id",
+    "quantity_planned"
+  ]
+}

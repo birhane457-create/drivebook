@@ -1,0 +1,72 @@
+{
+  "name": "LicensePlate",
+  "type": "object",
+  "properties": {
+    "lp_number": {
+      "type": "string",
+      "description": "License plate number (unique)"
+    },
+    "bin_id": {
+      "type": "string",
+      "description": "Current bin location"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "in_transit",
+        "empty",
+        "closed"
+      ],
+      "default": "active"
+    },
+    "pallet_type": {
+      "type": "string",
+      "enum": [
+        "euro",
+        "us_standard",
+        "custom",
+        "none"
+      ],
+      "default": "none"
+    },
+    "weight_kg": {
+      "type": "number"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "batch_number": {
+            "type": "string"
+          },
+          "expiry_date": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lp_number"
+  ]
+}

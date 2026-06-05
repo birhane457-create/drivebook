@@ -1,0 +1,96 @@
+{
+  "name": "ApprovalRequest",
+  "type": "object",
+  "properties": {
+    "request_number": {
+      "type": "string"
+    },
+    "rule_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "purchase_order",
+        "stock_transfer",
+        "credit_limit",
+        "price_override",
+        "discount",
+        "write_off",
+        "production_order"
+      ]
+    },
+    "reference_id": {
+      "type": "string"
+    },
+    "reference_number": {
+      "type": "string"
+    },
+    "requested_by": {
+      "type": "string"
+    },
+    "requested_by_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "cancelled",
+        "escalated"
+      ],
+      "default": "pending"
+    },
+    "current_level": {
+      "type": "number",
+      "default": 1
+    },
+    "total_levels": {
+      "type": "number",
+      "default": 1
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "number"
+          },
+          "approver_name": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected",
+              "pending"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "action_date": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "amount": {
+      "type": "number"
+    },
+    "description": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "reference_id"
+  ]
+}
