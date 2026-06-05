@@ -1,0 +1,53 @@
+{
+  "name": "StockTransfer",
+  "type": "object",
+  "properties": {
+    "transfer_number": {
+      "type": "string"
+    },
+    "from_location_id": {
+      "type": "string"
+    },
+    "to_location_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "in_transit",
+        "received",
+        "cancelled"
+      ],
+      "default": "pending"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "approved_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "from_location_id",
+    "to_location_id"
+  ]
+}

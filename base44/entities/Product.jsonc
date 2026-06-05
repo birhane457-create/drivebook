@@ -1,0 +1,73 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Product name"
+    },
+    "sku": {
+      "type": "string",
+      "description": "Stock Keeping Unit"
+    },
+    "barcode": {
+      "type": "string",
+      "description": "Product barcode"
+    },
+    "category": {
+      "type": "string",
+      "description": "Product category"
+    },
+    "brand": {
+      "type": "string",
+      "description": "Product brand"
+    },
+    "unit_cost": {
+      "type": "number",
+      "description": "Cost price per unit"
+    },
+    "selling_price": {
+      "type": "number",
+      "description": "Selling price per unit"
+    },
+    "tax_rate": {
+      "type": "number",
+      "default": 0,
+      "description": "Tax rate percentage"
+    },
+    "reorder_level": {
+      "type": "number",
+      "default": 10,
+      "description": "Minimum stock before reorder alert"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Product image URL"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "description": {
+      "type": "string",
+      "description": "Product description"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "piece",
+        "kg",
+        "liter",
+        "box",
+        "pack",
+        "meter"
+      ],
+      "default": "piece"
+    }
+  },
+  "required": [
+    "name",
+    "sku",
+    "selling_price"
+  ]
+}

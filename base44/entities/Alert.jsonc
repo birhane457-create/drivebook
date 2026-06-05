@@ -1,0 +1,47 @@
+{
+  "name": "Alert",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "low_stock",
+        "reorder",
+        "expiry",
+        "transfer_approval",
+        "purchase_order"
+      ],
+      "description": "Alert type"
+    },
+    "title": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "critical"
+      ],
+      "default": "info"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false
+    },
+    "reference_id": {
+      "type": "string"
+    },
+    "reference_type": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "title",
+    "message"
+  ]
+}

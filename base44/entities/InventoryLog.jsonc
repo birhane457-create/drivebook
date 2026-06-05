@@ -1,0 +1,57 @@
+{
+  "name": "InventoryLog",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "location_name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "purchase_receive",
+        "sale",
+        "transfer_out",
+        "transfer_in",
+        "adjustment",
+        "damage",
+        "return"
+      ],
+      "description": "Type of inventory movement"
+    },
+    "quantity_change": {
+      "type": "number",
+      "description": "Positive for additions, negative for deductions"
+    },
+    "quantity_before": {
+      "type": "number"
+    },
+    "quantity_after": {
+      "type": "number"
+    },
+    "reference_id": {
+      "type": "string",
+      "description": "Related document ID (sale, PO, transfer)"
+    },
+    "reference_type": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "product_id",
+    "location_id",
+    "type",
+    "quantity_change"
+  ]
+}

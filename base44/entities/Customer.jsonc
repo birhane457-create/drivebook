@@ -1,0 +1,39 @@
+{
+  "name": "Customer",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Customer full name"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "loyalty_points": {
+      "type": "number",
+      "default": 0
+    },
+    "credit_balance": {
+      "type": "number",
+      "default": 0,
+      "description": "Store credit balance"
+    },
+    "total_purchases": {
+      "type": "number",
+      "default": 0
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

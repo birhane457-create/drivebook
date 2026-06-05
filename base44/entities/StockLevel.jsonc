@@ -1,0 +1,40 @@
+{
+  "name": "StockLevel",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string",
+      "description": "Reference to Product"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Reference to Location"
+    },
+    "quantity": {
+      "type": "number",
+      "default": 0,
+      "description": "Current stock quantity"
+    },
+    "reserved_quantity": {
+      "type": "number",
+      "default": 0,
+      "description": "Reserved for pending orders"
+    },
+    "damaged_quantity": {
+      "type": "number",
+      "default": 0,
+      "description": "Damaged stock count"
+    },
+    "batch_number": {
+      "type": "string"
+    },
+    "expiry_date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "product_id",
+    "location_id"
+  ]
+}

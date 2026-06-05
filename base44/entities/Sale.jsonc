@@ -1,0 +1,106 @@
+{
+  "name": "Sale",
+  "type": "object",
+  "properties": {
+    "sale_number": {
+      "type": "string",
+      "description": "Unique sale/invoice number"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Store where sale occurred"
+    },
+    "customer_id": {
+      "type": "string",
+      "description": "Optional customer reference"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "unit_price": {
+            "type": "number"
+          },
+          "discount": {
+            "type": "number",
+            "default": 0
+          },
+          "tax": {
+            "type": "number",
+            "default": 0
+          },
+          "total": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "subtotal": {
+      "type": "number"
+    },
+    "tax_total": {
+      "type": "number",
+      "default": 0
+    },
+    "discount_total": {
+      "type": "number",
+      "default": 0
+    },
+    "grand_total": {
+      "type": "number"
+    },
+    "payments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "credit_card",
+              "bank_transfer",
+              "store_credit"
+            ]
+          },
+          "amount": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "refunded",
+        "partial_refund"
+      ],
+      "default": "completed"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sale_number",
+    "location_id",
+    "grand_total"
+  ]
+}

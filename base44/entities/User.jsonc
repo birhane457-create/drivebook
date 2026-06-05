@@ -1,0 +1,30 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "super_admin",
+        "warehouse_manager",
+        "store_manager",
+        "cashier",
+        "inventory_staff"
+      ],
+      "default": "cashier",
+      "description": "User role in the system"
+    },
+    "assigned_location": {
+      "type": "string",
+      "description": "ID of the warehouse or store the user is assigned to"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

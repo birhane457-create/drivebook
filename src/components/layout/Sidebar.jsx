@@ -1,0 +1,120 @@
+import { Link, useLocation } from 'react-router-dom';
+import { 
+  LayoutDashboard, Package, Warehouse, ShoppingCart, Users, 
+  Truck, ArrowLeftRight, ClipboardList, BarChart3, Bell,
+  Settings, LogOut, ChevronLeft, ChevronRight, Store
+} from 'lucide-react';
+import { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+
+const menuItems = [
+  { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'cashier', 'inventory_staff'] },
+  { path: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['super_admin', 'store_manager', 'cashier'] },
+  { path: '/products', icon: Package, label: 'Products', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
+  { path: '/inventory', icon: Warehouse, label: 'Inventory', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
+  { path: '/purchases', icon: Truck, label: 'Purchases', roles: ['super_admin', 'warehouse_manager'] },
+  { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
+  { path: '/customers', icon: Users, label: 'Customers', roles: ['super_admin', 'store_manager', 'cashier'] },
+  { path: '/suppliers', icon: Store, label: 'Suppliers', roles: ['super_admin', 'warehouse_manager'] },
+  { path: '/sales', icon: ClipboardList, label: 'Sales History', roles: ['super_admin', 'store_manager', 'cashier'] },
+  { path: '/reports', icon: BarChart3, label: 'Reports', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
+  { path: '/alerts', icon: Bell, label: 'Alerts', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
+  { path: '/settings', icon: Settings, label: 'Settings', roles: ['super_admin'] },
+];
+
+export default function Sidebar({ user, alertCount = 0 }) {
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
+  const userRole = user?.role || 'cashier';
+
+  const filteredMenu = menuItems.filter(item => item.roles.includes(userRole));
+
+  return (
+    <aside className={cn(
+      "h-screen bg-sidebar text-sidebar-foreground flex flex-col border-r border-sidebar-border transition-all duration-300 fixed left-0 top-0 z-40",
+      collapsed ? "w-[68px]" : "w-[240px]"
+    )}>
+      {/* Logo */}
+      <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
+        {!collapsed && (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Warehouse className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <span className="font-bold text-lg tracking-tight">WMS Pro</span>
+          </div>
+        )}
+        {collapsed && (
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center mx-auto">
+            <Warehouse className="w-4 h-4 text-primary-foreground" />
+          </div>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+        {filteredMenu.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                isActive
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              )}
+            >
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && item.path === '/alerts' && alertCount > 0 && (
+                <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
+                  {alertCount}
+                </Badge>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* User & Collapse */}
+      <div className="border-t border-sidebar-border p-3">
+        {!collapsed && (
+          <div className="flex items-center gap-3 mb-3 px-2">
+            <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-semibold">
+              {user?.full_name?.[0] || 'U'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{user?.full_name || 'User'}</p>
+              <p className="text-xs text-sidebar-foreground/50 capitalize">{userRole.replace('_', ' ')}</p>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </Button>
+          {!collapsed && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+              onClick={() => base44.auth.logout()}
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}

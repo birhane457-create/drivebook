@@ -1,0 +1,36 @@
+{
+  "name": "Location",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Location name"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "warehouse",
+        "store"
+      ],
+      "description": "Type of location"
+    },
+    "address": {
+      "type": "string",
+      "description": "Physical address"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "manager_name": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}
