@@ -23,6 +23,12 @@ import SalesHistory from '@/pages/SalesHistory';
 import Reports from '@/pages/Reports';
 import Alerts from '@/pages/Alerts';
 import Settings from '@/pages/Settings';
+import InventoryAnalytics from '@/pages/InventoryAnalytics';
+import AIForecasting from '@/pages/AIForecasting';
+import CycleCounting from '@/pages/CycleCounting';
+import SupplierScorecard from '@/pages/SupplierScorecard';
+import LoyaltyProgram from '@/pages/LoyaltyProgram';
+import EnterpriseSettings from '@/pages/EnterpriseSettings';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -66,6 +72,12 @@ const AuthenticatedApp = () => {
           <Route path="/reports" element={<Reports />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/analytics" element={<InventoryAnalytics />} />
+          <Route path="/forecasting" element={<AIForecasting />} />
+          <Route path="/cycle-counting" element={<CycleCounting />} />
+          <Route path="/supplier-scorecard" element={<SupplierScorecard />} />
+          <Route path="/loyalty" element={<LoyaltyProgram />} />
+          <Route path="/enterprise-settings" element={<EnterpriseSettings />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>

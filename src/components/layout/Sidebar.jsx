@@ -2,7 +2,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Warehouse, ShoppingCart, Users, 
   Truck, ArrowLeftRight, ClipboardList, BarChart3, Bell,
-  Settings, LogOut, ChevronLeft, ChevronRight, Store
+  Settings, LogOut, ChevronLeft, ChevronRight, Store,
+  Brain, ClipboardCheck, Star, Award, Building2, PieChart
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -10,19 +11,50 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-const menuItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'cashier', 'inventory_staff'] },
-  { path: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['super_admin', 'store_manager', 'cashier'] },
-  { path: '/products', icon: Package, label: 'Products', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
-  { path: '/inventory', icon: Warehouse, label: 'Inventory', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
-  { path: '/purchases', icon: Truck, label: 'Purchases', roles: ['super_admin', 'warehouse_manager'] },
-  { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
-  { path: '/customers', icon: Users, label: 'Customers', roles: ['super_admin', 'store_manager', 'cashier'] },
-  { path: '/suppliers', icon: Store, label: 'Suppliers', roles: ['super_admin', 'warehouse_manager'] },
-  { path: '/sales', icon: ClipboardList, label: 'Sales History', roles: ['super_admin', 'store_manager', 'cashier'] },
-  { path: '/reports', icon: BarChart3, label: 'Reports', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
-  { path: '/alerts', icon: Bell, label: 'Alerts', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
-  { path: '/settings', icon: Settings, label: 'Settings', roles: ['super_admin'] },
+const menuGroups = [
+  {
+    label: 'Operations',
+    items: [
+      { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'cashier', 'inventory_staff'] },
+      { path: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['super_admin', 'store_manager', 'cashier'] },
+      { path: '/products', icon: Package, label: 'Products', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
+      { path: '/inventory', icon: Warehouse, label: 'Inventory', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
+      { path: '/purchases', icon: Truck, label: 'Purchases', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
+    ]
+  },
+  {
+    label: 'Intelligence',
+    items: [
+      { path: '/analytics', icon: PieChart, label: 'Inv. Analytics', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/forecasting', icon: Brain, label: 'AI Forecasting', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
+    ]
+  },
+  {
+    label: 'Relationships',
+    items: [
+      { path: '/customers', icon: Users, label: 'Customers', roles: ['super_admin', 'store_manager', 'cashier'] },
+      { path: '/loyalty', icon: Star, label: 'Loyalty Program', roles: ['super_admin', 'store_manager'] },
+      { path: '/suppliers', icon: Store, label: 'Suppliers', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/supplier-scorecard', icon: Award, label: 'Supplier Scores', roles: ['super_admin', 'warehouse_manager'] },
+    ]
+  },
+  {
+    label: 'Finance & Reports',
+    items: [
+      { path: '/sales', icon: ClipboardList, label: 'Sales History', roles: ['super_admin', 'store_manager', 'cashier'] },
+      { path: '/reports', icon: BarChart3, label: 'Reports', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
+      { path: '/alerts', icon: Bell, label: 'Alerts', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
+    ]
+  },
+  {
+    label: 'System',
+    items: [
+      { path: '/settings', icon: Settings, label: 'Settings', roles: ['super_admin'] },
+      { path: '/enterprise-settings', icon: Building2, label: 'Enterprise', roles: ['super_admin'] },
+    ]
+  },
 ];
 
 export default function Sidebar({ user, alertCount = 0 }) {
@@ -30,7 +62,10 @@ export default function Sidebar({ user, alertCount = 0 }) {
   const [collapsed, setCollapsed] = useState(false);
   const userRole = user?.role || 'cashier';
 
-  const filteredMenu = menuItems.filter(item => item.roles.includes(userRole));
+  const filteredGroups = menuGroups.map(group => ({
+    ...group,
+    items: group.items.filter(item => item.roles.includes(userRole))
+  })).filter(group => group.items.length > 0);
 
   return (
     <aside className={cn(
@@ -55,30 +90,39 @@ export default function Sidebar({ user, alertCount = 0 }) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {filteredMenu.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-            >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
-              {!collapsed && item.path === '/alerts' && alertCount > 0 && (
-                <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
-                  {alertCount}
-                </Badge>
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
+        {filteredGroups.map((group) => (
+          <div key={group.label} className="mb-2">
+            {!collapsed && (
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/30 px-3 pt-2 pb-1">
+                {group.label}
+              </p>
+            )}
+            {group.items.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
+                    isActive
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <item.icon className="w-4 h-4 flex-shrink-0" />
+                  {!collapsed && <span>{item.label}</span>}
+                  {!collapsed && item.path === '/alerts' && alertCount > 0 && (
+                    <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
+                      {alertCount}
+                    </Badge>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* User & Collapse */}

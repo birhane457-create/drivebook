@@ -1,0 +1,38 @@
+{
+  "name": "Currency",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "ISO currency code e.g. USD, EUR"
+    },
+    "name": {
+      "type": "string"
+    },
+    "symbol": {
+      "type": "string"
+    },
+    "exchange_rate": {
+      "type": "number",
+      "default": 1,
+      "description": "Rate against base currency"
+    },
+    "is_base": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "decimal_places": {
+      "type": "number",
+      "default": 2
+    }
+  },
+  "required": [
+    "code",
+    "name",
+    "symbol"
+  ]
+}

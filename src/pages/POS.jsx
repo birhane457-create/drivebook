@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Search, Plus, Minus, X, CreditCard, Banknote, Building2, Gift, ShoppingCart, User, Percent } from 'lucide-react';
+import { Search, Plus, Minus, X, CreditCard, ShoppingCart, User, Percent } from 'lucide-react';
+import OfflineStatusBar, { useOfflinePOS } from '@/components/pos/OfflinePOSManager';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -26,25 +27,45 @@ export default function POS() {
   const searchRef = useRef(null);
   const queryClient = useQueryClient();
 
-  const { data: products = [] } = useQuery({
+  const { isOnline, queue, syncing, cachedProducts, cachedStock, cacheData, queueSale, syncQueue } = useOfflinePOS({
+    locationId,
+    onSaleCompleted: () => { queryClient.invalidateQueries({ queryKey: ['stock-levels'] }); queryClient.invalidateQueries({ queryKey: ['sales'] }); },
+  });
+
+  const { data: fetchedProducts = [] } = useQuery({
     queryKey: ['products-active'],
     queryFn: () => base44.entities.Product.filter({ is_active: true }),
+    enabled: isOnline,
   });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
     queryFn: () => base44.entities.Location.list(),
+    enabled: isOnline,
   });
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => base44.entities.Customer.list(),
+    enabled: isOnline,
   });
 
-  const { data: stockLevels = [] } = useQuery({
+  const { data: fetchedStock = [] } = useQuery({
     queryKey: ['stock-levels'],
     queryFn: () => base44.entities.StockLevel.list(),
+    enabled: isOnline,
   });
+
+  // Use live data when online, cached when offline
+  const products = isOnline ? fetchedProducts : cachedProducts;
+  const stockLevels = isOnline ? fetchedStock : cachedStock;
+
+  // Cache products and stock for offline use whenever we have fresh data
+  useEffect(() => {
+    if (isOnline && fetchedProducts.length > 0) {
+      cacheData(fetchedProducts, fetchedStock);
+    }
+  }, [isOnline, fetchedProducts, fetchedStock]);
 
   const stores = locations.filter(l => l.type === 'store');
 
@@ -200,10 +221,11 @@ export default function POS() {
       {/* Cart */}
       <div className="flex flex-col h-screen bg-card">
         <div className="p-4 border-b">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <h2 className="font-bold text-lg">Cart</h2>
             <Badge variant="secondary">{cart.length} items</Badge>
           </div>
+          <OfflineStatusBar isOnline={isOnline} queue={queue} syncing={syncing} onSync={syncQueue} />
           {/* Customer selector */}
           <Select value={selectedCustomer?.id || ''} onValueChange={(id) => setSelectedCustomer(customers.find(c => c.id === id) || null)}>
             <SelectTrigger className="mt-2">

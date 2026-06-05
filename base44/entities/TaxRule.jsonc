@@ -1,0 +1,60 @@
+{
+  "name": "TaxRule",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "e.g. Standard GST, Reduced VAT"
+    },
+    "code": {
+      "type": "string",
+      "description": "e.g. GST10, VAT20"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "GST",
+        "VAT",
+        "Sales Tax",
+        "None"
+      ],
+      "default": "GST"
+    },
+    "rate": {
+      "type": "number",
+      "description": "Percentage rate e.g. 10 for 10%"
+    },
+    "applies_to": {
+      "type": "string",
+      "enum": [
+        "all",
+        "goods",
+        "services",
+        "food",
+        "electronics",
+        "clothing"
+      ],
+      "default": "all"
+    },
+    "is_compound": {
+      "type": "boolean",
+      "default": false,
+      "description": "Tax applied on top of other taxes"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "company_id": {
+      "type": "string"
+    },
+    "country": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "code",
+    "rate"
+  ]
+}

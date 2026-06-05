@@ -1,0 +1,61 @@
+{
+  "name": "Company",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Company legal name"
+    },
+    "code": {
+      "type": "string",
+      "description": "Short company code"
+    },
+    "address": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "tax_id": {
+      "type": "string",
+      "description": "VAT/GST registration number"
+    },
+    "currency_code": {
+      "type": "string",
+      "default": "USD"
+    },
+    "fiscal_year_start": {
+      "type": "string",
+      "description": "MM-DD format"
+    },
+    "logo_url": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "accounting_api_key": {
+      "type": "string",
+      "description": "API key for accounting integration"
+    },
+    "accounting_system": {
+      "type": "string",
+      "enum": [
+        "none",
+        "quickbooks",
+        "xero",
+        "sage",
+        "zoho"
+      ],
+      "default": "none"
+    }
+  },
+  "required": [
+    "name",
+    "code"
+  ]
+}

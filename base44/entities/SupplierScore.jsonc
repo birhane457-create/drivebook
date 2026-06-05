@@ -1,0 +1,55 @@
+{
+  "name": "SupplierScore",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string"
+    },
+    "supplier_name": {
+      "type": "string"
+    },
+    "period": {
+      "type": "string",
+      "description": "e.g. 2025-Q1"
+    },
+    "on_time_delivery_rate": {
+      "type": "number",
+      "description": "Percentage 0-100"
+    },
+    "quality_score": {
+      "type": "number",
+      "description": "0-100"
+    },
+    "price_competitiveness": {
+      "type": "number",
+      "description": "0-100"
+    },
+    "responsiveness_score": {
+      "type": "number",
+      "description": "0-100"
+    },
+    "fill_rate": {
+      "type": "number",
+      "description": "Percentage of ordered quantity delivered"
+    },
+    "total_orders": {
+      "type": "number",
+      "default": 0
+    },
+    "defect_rate": {
+      "type": "number",
+      "description": "Percentage of defective items"
+    },
+    "overall_score": {
+      "type": "number",
+      "description": "Calculated composite score 0-100"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "supplier_id",
+    "period"
+  ]
+}

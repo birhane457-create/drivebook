@@ -1,0 +1,44 @@
+{
+  "name": "LoyaltyTier",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "e.g. Bronze, Silver, Gold, Platinum"
+    },
+    "min_points": {
+      "type": "number",
+      "description": "Minimum points to qualify"
+    },
+    "min_spend": {
+      "type": "number",
+      "description": "Minimum lifetime spend to qualify"
+    },
+    "discount_percent": {
+      "type": "number",
+      "default": 0,
+      "description": "Automatic discount for tier members"
+    },
+    "points_multiplier": {
+      "type": "number",
+      "default": 1,
+      "description": "Points earned multiplier (e.g. 2x)"
+    },
+    "benefits": {
+      "type": "string",
+      "description": "Description of tier benefits"
+    },
+    "color": {
+      "type": "string",
+      "default": "#6B7280"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name",
+    "min_points"
+  ]
+}
