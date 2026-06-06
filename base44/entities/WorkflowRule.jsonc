@@ -1,0 +1,112 @@
+{
+  "name": "WorkflowRule",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "trigger_type": {
+      "type": "string",
+      "enum": [
+        "low_stock",
+        "high_value_order",
+        "shipment_delivered",
+        "customer_tier_change",
+        "po_created",
+        "sale_completed",
+        "scheduled",
+        "manual"
+      ],
+      "default": "low_stock"
+    },
+    "trigger_config": {
+      "type": "object",
+      "properties": {
+        "threshold": {
+          "type": "number"
+        },
+        "cron": {
+          "type": "string"
+        },
+        "entity": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "eq",
+              "neq",
+              "contains"
+            ]
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "create_po",
+              "send_alert",
+              "require_approval",
+              "send_email",
+              "apply_discount",
+              "update_field",
+              "create_task"
+            ]
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "run_count": {
+      "type": "number",
+      "default": 0
+    },
+    "last_run": {
+      "type": "string"
+    },
+    "error_count": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "name",
+    "trigger_type"
+  ]
+}

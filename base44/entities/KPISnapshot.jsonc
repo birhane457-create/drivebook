@@ -1,0 +1,77 @@
+{
+  "name": "KPISnapshot",
+  "type": "object",
+  "properties": {
+    "period": {
+      "type": "string",
+      "description": "e.g. 2025-W24, 2025-06, 2025-Q2"
+    },
+    "period_type": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly",
+        "quarterly"
+      ],
+      "default": "monthly"
+    },
+    "otif_pct": {
+      "type": "number",
+      "description": "On-Time In-Full %"
+    },
+    "inventory_accuracy_pct": {
+      "type": "number"
+    },
+    "fill_rate_pct": {
+      "type": "number"
+    },
+    "perfect_order_pct": {
+      "type": "number"
+    },
+    "gmroi": {
+      "type": "number",
+      "description": "Gross Margin Return on Investment"
+    },
+    "warehouse_productivity": {
+      "type": "number",
+      "description": "Units picked per hour"
+    },
+    "total_revenue": {
+      "type": "number",
+      "default": 0
+    },
+    "gross_profit": {
+      "type": "number",
+      "default": 0
+    },
+    "inventory_value": {
+      "type": "number",
+      "default": 0
+    },
+    "total_orders": {
+      "type": "number",
+      "default": 0
+    },
+    "avg_order_value": {
+      "type": "number",
+      "default": 0
+    },
+    "customer_count": {
+      "type": "number",
+      "default": 0
+    },
+    "po_count": {
+      "type": "number",
+      "default": 0
+    },
+    "defect_rate_pct": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "period",
+    "period_type"
+  ]
+}

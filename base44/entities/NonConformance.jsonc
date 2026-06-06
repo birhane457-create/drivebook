@@ -1,0 +1,87 @@
+{
+  "name": "NonConformance",
+  "type": "object",
+  "properties": {
+    "ncr_number": {
+      "type": "string"
+    },
+    "inspection_id": {
+      "type": "string"
+    },
+    "product_id": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "defect",
+        "damage",
+        "shortage",
+        "wrong_item",
+        "expired",
+        "other"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "minor",
+        "major",
+        "critical"
+      ],
+      "default": "minor"
+    },
+    "quantity_affected": {
+      "type": "number",
+      "default": 0
+    },
+    "description": {
+      "type": "string"
+    },
+    "root_cause": {
+      "type": "string"
+    },
+    "disposition": {
+      "type": "string",
+      "enum": [
+        "rework",
+        "return_to_supplier",
+        "scrap",
+        "use_as_is",
+        "pending"
+      ],
+      "default": "pending"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "under_review",
+        "resolved",
+        "closed"
+      ],
+      "default": "open"
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "resolution_date": {
+      "type": "string"
+    },
+    "capa_required": {
+      "type": "boolean",
+      "default": false
+    },
+    "cost_impact": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "product_id",
+    "type"
+  ]
+}

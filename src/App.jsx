@@ -38,6 +38,15 @@ import TransportationManagement from '@/pages/TransportationManagement';
 import MultiChannel from '@/pages/MultiChannel';
 import ThreePL from '@/pages/ThreePL';
 import ExecutiveDashboard from '@/pages/ExecutiveDashboard';
+import WorkflowAutomation from '@/pages/WorkflowAutomation';
+import MasterData from '@/pages/MasterData';
+import PricingEngine from '@/pages/PricingEngine';
+import InventoryOptimization from '@/pages/InventoryOptimization';
+import QualityManagement from '@/pages/QualityManagement';
+import AssetManagement from '@/pages/AssetManagement';
+import APIHub from '@/pages/APIHub';
+import DocumentManagement from '@/pages/DocumentManagement';
+import DataWarehouse from '@/pages/DataWarehouse';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -96,6 +105,15 @@ const AuthenticatedApp = () => {
           <Route path="/multi-channel" element={<MultiChannel />} />
           <Route path="/3pl" element={<ThreePL />} />
           <Route path="/executive" element={<ExecutiveDashboard />} />
+          <Route path="/workflow" element={<WorkflowAutomation />} />
+          <Route path="/master-data" element={<MasterData />} />
+          <Route path="/pricing" element={<PricingEngine />} />
+          <Route path="/optimization" element={<InventoryOptimization />} />
+          <Route path="/quality" element={<QualityManagement />} />
+          <Route path="/assets" element={<AssetManagement />} />
+          <Route path="/api-hub" element={<APIHub />} />
+          <Route path="/documents" element={<DocumentManagement />} />
+          <Route path="/data-warehouse" element={<DataWarehouse />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>

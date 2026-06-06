@@ -1,0 +1,55 @@
+{
+  "name": "VendorCatalog",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string"
+    },
+    "supplier_name": {
+      "type": "string"
+    },
+    "product_id": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "vendor_sku": {
+      "type": "string"
+    },
+    "vendor_description": {
+      "type": "string"
+    },
+    "unit_cost": {
+      "type": "number"
+    },
+    "min_order_qty": {
+      "type": "number",
+      "default": 1
+    },
+    "lead_time_days": {
+      "type": "number",
+      "default": 7
+    },
+    "currency_code": {
+      "type": "string",
+      "default": "USD"
+    },
+    "last_price_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "is_preferred": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "supplier_id",
+    "product_id"
+  ]
+}

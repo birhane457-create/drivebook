@@ -1,0 +1,82 @@
+{
+  "name": "ReplenishmentPlan",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "current_stock": {
+      "type": "number",
+      "default": 0
+    },
+    "safety_stock": {
+      "type": "number",
+      "default": 0
+    },
+    "reorder_point": {
+      "type": "number",
+      "default": 0
+    },
+    "eoq": {
+      "type": "number",
+      "default": 0,
+      "description": "Economic Order Quantity"
+    },
+    "annual_demand": {
+      "type": "number",
+      "default": 0
+    },
+    "ordering_cost": {
+      "type": "number",
+      "default": 50
+    },
+    "holding_cost_pct": {
+      "type": "number",
+      "default": 25,
+      "description": "% of unit cost per year"
+    },
+    "lead_time_days": {
+      "type": "number",
+      "default": 7
+    },
+    "demand_variability": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "optimal",
+        "low",
+        "critical",
+        "overstock",
+        "dead_stock"
+      ],
+      "default": "optimal"
+    },
+    "recommended_order_qty": {
+      "type": "number",
+      "default": 0
+    },
+    "days_of_supply": {
+      "type": "number",
+      "default": 0
+    },
+    "last_calculated": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "product_id",
+    "location_id"
+  ]
+}

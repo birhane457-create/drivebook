@@ -1,0 +1,112 @@
+{
+  "name": "QualityInspection",
+  "type": "object",
+  "properties": {
+    "inspection_number": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "incoming",
+        "in_process",
+        "outgoing",
+        "supplier_audit",
+        "periodic"
+      ],
+      "default": "incoming"
+    },
+    "reference_id": {
+      "type": "string"
+    },
+    "reference_type": {
+      "type": "string",
+      "enum": [
+        "purchase_order",
+        "production_order",
+        "stock_transfer",
+        "manual"
+      ]
+    },
+    "product_id": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "supplier_id": {
+      "type": "string"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "quantity_inspected": {
+      "type": "number",
+      "default": 0
+    },
+    "quantity_accepted": {
+      "type": "number",
+      "default": 0
+    },
+    "quantity_rejected": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_progress",
+        "passed",
+        "failed",
+        "conditional_pass"
+      ],
+      "default": "pending"
+    },
+    "inspector": {
+      "type": "string"
+    },
+    "checklist_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "na"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "defect_description": {
+      "type": "string"
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "completed_date": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "product_id"
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "name": "Asset",
+  "type": "object",
+  "properties": {
+    "asset_number": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "forklift",
+        "vehicle",
+        "scanner",
+        "printer",
+        "conveyor",
+        "racking",
+        "computer",
+        "other"
+      ],
+      "default": "other"
+    },
+    "serial_number": {
+      "type": "string"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "maintenance",
+        "repair",
+        "retired",
+        "reserved"
+      ],
+      "default": "active"
+    },
+    "purchase_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "purchase_cost": {
+      "type": "number",
+      "default": 0
+    },
+    "current_value": {
+      "type": "number",
+      "default": 0
+    },
+    "depreciation_method": {
+      "type": "string",
+      "enum": [
+        "straight_line",
+        "declining_balance",
+        "none"
+      ],
+      "default": "straight_line"
+    },
+    "useful_life_years": {
+      "type": "number",
+      "default": 5
+    },
+    "next_maintenance_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "maintenance_interval_days": {
+      "type": "number",
+      "default": 90
+    },
+    "maintenance_cost_ytd": {
+      "type": "number",
+      "default": 0
+    },
+    "utilization_pct": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}

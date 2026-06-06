@@ -1,0 +1,51 @@
+{
+  "name": "WebhookEndpoint",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "secret": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "last_triggered": {
+      "type": "string"
+    },
+    "success_count": {
+      "type": "number",
+      "default": 0
+    },
+    "failure_count": {
+      "type": "number",
+      "default": 0
+    },
+    "last_status_code": {
+      "type": "number"
+    },
+    "retry_on_failure": {
+      "type": "boolean",
+      "default": true
+    },
+    "headers": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "name",
+    "url"
+  ]
+}

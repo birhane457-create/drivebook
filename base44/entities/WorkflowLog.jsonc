@@ -1,0 +1,40 @@
+{
+  "name": "WorkflowLog",
+  "type": "object",
+  "properties": {
+    "rule_id": {
+      "type": "string"
+    },
+    "rule_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failed",
+        "skipped"
+      ],
+      "default": "success"
+    },
+    "trigger_data": {
+      "type": "string"
+    },
+    "actions_executed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "duration_ms": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "rule_id",
+    "status"
+  ]
+}

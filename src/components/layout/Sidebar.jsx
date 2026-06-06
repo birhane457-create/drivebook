@@ -5,7 +5,8 @@ import {
   Settings, LogOut, ChevronLeft, ChevronRight, Store,
   Brain, ClipboardCheck, Star, Award, Building2, PieChart,
   Grid3x3, Factory, DollarSign, CheckSquare, Smartphone,
-  Route, Globe2, Server, Crown, Layers
+  Route, Globe2, Server, Crown, Layers, Zap, Database,
+  Tag, TrendingUp, Shield, Webhook, FileText, Wrench
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -77,6 +78,25 @@ const menuGroups = [
       { path: '/multi-channel', icon: Globe2, label: 'Multi-Channel', roles: ['super_admin', 'store_manager'] },
       { path: '/transportation', icon: Route, label: 'Transportation', roles: ['super_admin', 'warehouse_manager'] },
       { path: '/3pl', icon: Server, label: '3PL Management', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'Automation & Data',
+    items: [
+      { path: '/workflow', icon: Zap, label: 'Workflow Engine', roles: ['super_admin'] },
+      { path: '/master-data', icon: Database, label: 'Master Data', roles: ['super_admin'] },
+      { path: '/pricing', icon: Tag, label: 'Pricing Engine', roles: ['super_admin', 'store_manager'] },
+      { path: '/optimization', icon: TrendingUp, label: 'Inv. Optimization', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/data-warehouse', icon: Shield, label: 'Data Warehouse', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'Quality & Assets',
+    items: [
+      { path: '/quality', icon: CheckSquare, label: 'Quality (QMS)', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/assets', icon: Wrench, label: 'Asset Management', roles: ['super_admin'] },
+      { path: '/documents', icon: FileText, label: 'Documents', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/api-hub', icon: Webhook, label: 'API Hub', roles: ['super_admin'] },
     ]
   },
   {

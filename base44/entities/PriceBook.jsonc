@@ -1,0 +1,92 @@
+{
+  "name": "PriceBook",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "wholesale",
+        "contract",
+        "promotional",
+        "tier_based"
+      ],
+      "default": "standard"
+    },
+    "currency_code": {
+      "type": "string",
+      "default": "USD"
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date"
+    },
+    "valid_to": {
+      "type": "string",
+      "format": "date"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "percent_off",
+              "markup",
+              "override"
+            ]
+          },
+          "value": {
+            "type": "number"
+          },
+          "min_qty": {
+            "type": "number",
+            "default": 1
+          },
+          "margin_floor": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "customer_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "loyalty_tiers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "code"
+  ]
+}

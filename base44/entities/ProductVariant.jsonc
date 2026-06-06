@@ -1,0 +1,47 @@
+{
+  "name": "ProductVariant",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "barcode": {
+      "type": "string"
+    },
+    "attributes": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "e.g. {color: Red, size: L}"
+    },
+    "unit_cost": {
+      "type": "number"
+    },
+    "selling_price": {
+      "type": "number"
+    },
+    "stock_quantity": {
+      "type": "number",
+      "default": 0
+    },
+    "image_url": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "weight_kg": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "product_id",
+    "sku"
+  ]
+}
