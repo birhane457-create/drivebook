@@ -1,0 +1,91 @@
+{
+  "name": "MarketplacePlugin",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "slug": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "default": "1.0.0"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "integration",
+        "analytics",
+        "automation",
+        "ui_widget",
+        "workflow",
+        "reporting",
+        "compliance"
+      ],
+      "default": "integration"
+    },
+    "publisher": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "icon_url": {
+      "type": "string"
+    },
+    "install_count": {
+      "type": "number",
+      "default": 0
+    },
+    "rating": {
+      "type": "number",
+      "default": 0
+    },
+    "price_model": {
+      "type": "string",
+      "enum": [
+        "free",
+        "paid",
+        "freemium"
+      ],
+      "default": "free"
+    },
+    "price_usd": {
+      "type": "number",
+      "default": 0
+    },
+    "is_installed": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_verified": {
+      "type": "boolean",
+      "default": false
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "changelog": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "slug",
+    "category"
+  ]
+}

@@ -55,6 +55,14 @@ import SchedulerEngine from '@/pages/SchedulerEngine';
 import CommunicationHub from '@/pages/CommunicationHub';
 import MonitoringDashboard from '@/pages/MonitoringDashboard';
 import SupplierPortal from '@/pages/SupplierPortal';
+import AICopilot from '@/pages/AICopilot';
+import KnowledgeBase from '@/pages/KnowledgeBase';
+import EventBus from '@/pages/EventBus';
+import Observability from '@/pages/Observability';
+import DevOps from '@/pages/DevOps';
+import SecurityCenter from '@/pages/SecurityCenter';
+import CustomerPortal from '@/pages/CustomerPortal';
+import AppMarketplace from '@/pages/AppMarketplace';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -130,6 +138,14 @@ const AuthenticatedApp = () => {
           <Route path="/comms-hub" element={<CommunicationHub />} />
           <Route path="/monitoring" element={<MonitoringDashboard />} />
           <Route path="/supplier-portal" element={<SupplierPortal />} />
+          <Route path="/ai-copilot" element={<AICopilot />} />
+          <Route path="/knowledge-base" element={<KnowledgeBase />} />
+          <Route path="/event-bus" element={<EventBus />} />
+          <Route path="/observability" element={<Observability />} />
+          <Route path="/devops" element={<DevOps />} />
+          <Route path="/security" element={<SecurityCenter />} />
+          <Route path="/customer-portal" element={<CustomerPortal />} />
+          <Route path="/marketplace" element={<AppMarketplace />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>

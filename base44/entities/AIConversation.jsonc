@@ -1,0 +1,53 @@
+{
+  "name": "AIConversation",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "module": {
+      "type": "string",
+      "enum": [
+        "general",
+        "inventory",
+        "purchasing",
+        "financial",
+        "executive",
+        "reports"
+      ],
+      "default": "general"
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "context_snapshot": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "is_pinned": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "module"
+  ]
+}

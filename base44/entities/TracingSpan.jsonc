@@ -1,0 +1,54 @@
+{
+  "name": "TracingSpan",
+  "type": "object",
+  "properties": {
+    "trace_id": {
+      "type": "string"
+    },
+    "span_id": {
+      "type": "string"
+    },
+    "parent_span_id": {
+      "type": "string"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "service": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "error",
+        "timeout"
+      ],
+      "default": "ok"
+    },
+    "duration_ms": {
+      "type": "number"
+    },
+    "start_time": {
+      "type": "string"
+    },
+    "end_time": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "http_status": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "trace_id",
+    "operation",
+    "service"
+  ]
+}

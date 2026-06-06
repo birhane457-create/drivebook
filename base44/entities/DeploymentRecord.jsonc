@@ -1,0 +1,67 @@
+{
+  "name": "DeploymentRecord",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "development",
+        "staging",
+        "production",
+        "hotfix"
+      ],
+      "default": "development"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "success",
+        "failed",
+        "rolled_back"
+      ],
+      "default": "pending"
+    },
+    "commit_sha": {
+      "type": "string"
+    },
+    "branch": {
+      "type": "string"
+    },
+    "deployed_by": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "duration_seconds": {
+      "type": "number"
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rollback_version": {
+      "type": "string"
+    },
+    "health_check_passed": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "environment"
+  ]
+}

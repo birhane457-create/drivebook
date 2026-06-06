@@ -7,7 +7,8 @@ import {
   Grid3x3, Factory, DollarSign, CheckSquare, Smartphone,
   Route, Globe2, Server, Crown, Layers, Zap, Database,
   Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
-  GitBranch, Clock, Bell as BellIcon, Activity, Lock, ShieldCheck
+  GitBranch, Clock, Activity, Lock, ShieldCheck,
+  Bot, BookOpen, Bus, Eye, Code2, Key, UserCheck, Puzzle
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -108,9 +109,32 @@ const menuGroups = [
       { path: '/audit-compliance', icon: ShieldCheck, label: 'Audit & Compliance', roles: ['super_admin'] },
       { path: '/business-rules', icon: GitBranch, label: 'Rules Engine', roles: ['super_admin'] },
       { path: '/scheduler', icon: Clock, label: 'Scheduler', roles: ['super_admin'] },
-      { path: '/comms-hub', icon: BellIcon, label: 'Comms Hub', roles: ['super_admin'] },
+      { path: '/comms-hub', icon: Bell, label: 'Comms Hub', roles: ['super_admin'] },
       { path: '/monitoring', icon: Activity, label: 'Monitoring', roles: ['super_admin'] },
       { path: '/supplier-portal', icon: Shield, label: 'Supplier Portal', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'AI & Intelligence',
+    items: [
+      { path: '/ai-copilot', icon: Bot, label: 'AI Copilot', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
+      { path: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', roles: ['super_admin', 'warehouse_manager'] },
+    ]
+  },
+  {
+    label: 'Architecture',
+    items: [
+      { path: '/event-bus', icon: Zap, label: 'Event Bus', roles: ['super_admin'] },
+      { path: '/observability', icon: Eye, label: 'Observability', roles: ['super_admin'] },
+      { path: '/devops', icon: GitBranch, label: 'DevOps', roles: ['super_admin'] },
+      { path: '/security', icon: Key, label: 'Security Center', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'Customer & Commerce',
+    items: [
+      { path: '/customer-portal', icon: UserCheck, label: 'Customer Portal', roles: ['super_admin', 'store_manager'] },
+      { path: '/marketplace', icon: Puzzle, label: 'App Marketplace', roles: ['super_admin'] },
     ]
   },
   {
