@@ -1,0 +1,74 @@
+{
+  "name": "AuditEvent",
+  "type": "object",
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "description": "e.g. user.login, product.update, po.approved"
+    },
+    "entity_type": {
+      "type": "string"
+    },
+    "entity_id": {
+      "type": "string"
+    },
+    "actor_id": {
+      "type": "string"
+    },
+    "actor_name": {
+      "type": "string"
+    },
+    "actor_ip": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "create",
+        "update",
+        "delete",
+        "read",
+        "login",
+        "logout",
+        "approve",
+        "reject",
+        "export"
+      ]
+    },
+    "old_value": {
+      "type": "string"
+    },
+    "new_value": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "user_agent": {
+      "type": "string"
+    },
+    "risk_score": {
+      "type": "number",
+      "default": 0,
+      "description": "0-100 anomaly risk"
+    },
+    "is_sensitive": {
+      "type": "boolean",
+      "default": false
+    },
+    "compliance_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "e.g. SOX, GDPR, ISO27001"
+    }
+  },
+  "required": [
+    "event_type",
+    "action"
+  ]
+}

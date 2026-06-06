@@ -47,6 +47,14 @@ import AssetManagement from '@/pages/AssetManagement';
 import APIHub from '@/pages/APIHub';
 import DocumentManagement from '@/pages/DocumentManagement';
 import DataWarehouse from '@/pages/DataWarehouse';
+import PlatformAdmin from '@/pages/PlatformAdmin';
+import AuditCompliance from '@/pages/AuditCompliance';
+import IAMPage from '@/pages/IAMPage';
+import BusinessRulesEngine from '@/pages/BusinessRulesEngine';
+import SchedulerEngine from '@/pages/SchedulerEngine';
+import CommunicationHub from '@/pages/CommunicationHub';
+import MonitoringDashboard from '@/pages/MonitoringDashboard';
+import SupplierPortal from '@/pages/SupplierPortal';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -114,6 +122,14 @@ const AuthenticatedApp = () => {
           <Route path="/api-hub" element={<APIHub />} />
           <Route path="/documents" element={<DocumentManagement />} />
           <Route path="/data-warehouse" element={<DataWarehouse />} />
+          <Route path="/platform-admin" element={<PlatformAdmin />} />
+          <Route path="/audit-compliance" element={<AuditCompliance />} />
+          <Route path="/iam" element={<IAMPage />} />
+          <Route path="/business-rules" element={<BusinessRulesEngine />} />
+          <Route path="/scheduler" element={<SchedulerEngine />} />
+          <Route path="/comms-hub" element={<CommunicationHub />} />
+          <Route path="/monitoring" element={<MonitoringDashboard />} />
+          <Route path="/supplier-portal" element={<SupplierPortal />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>

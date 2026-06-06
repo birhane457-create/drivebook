@@ -1,0 +1,67 @@
+{
+  "name": "PermissionRole",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "parent_role": {
+      "type": "string"
+    },
+    "level": {
+      "type": "number",
+      "default": 1,
+      "description": "Hierarchy level (1=highest)"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "read",
+                "create",
+                "update",
+                "delete",
+                "approve",
+                "export",
+                "admin"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "data_scope": {
+      "type": "string",
+      "enum": [
+        "global",
+        "company",
+        "location",
+        "own"
+      ],
+      "default": "location"
+    },
+    "is_system": {
+      "type": "boolean",
+      "default": false
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "code"
+  ]
+}

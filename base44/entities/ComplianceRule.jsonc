@@ -1,0 +1,82 @@
+{
+  "name": "ComplianceRule",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "framework": {
+      "type": "string",
+      "enum": [
+        "SOX",
+        "GDPR",
+        "ISO27001",
+        "PCI_DSS",
+        "HIPAA",
+        "custom"
+      ],
+      "default": "ISO27001"
+    },
+    "control_id": {
+      "type": "string",
+      "description": "e.g. SOX-302, ISO-A.9.1"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "access_control",
+        "data_protection",
+        "audit_logging",
+        "change_management",
+        "incident_response",
+        "business_continuity"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "compliant",
+        "non_compliant",
+        "partial",
+        "not_applicable",
+        "under_review"
+      ],
+      "default": "under_review"
+    },
+    "evidence_required": {
+      "type": "boolean",
+      "default": true
+    },
+    "last_reviewed": {
+      "type": "string",
+      "format": "date"
+    },
+    "next_review": {
+      "type": "string",
+      "format": "date"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "default": "medium"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "framework"
+  ]
+}

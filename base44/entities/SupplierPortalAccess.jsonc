@@ -1,0 +1,48 @@
+{
+  "name": "SupplierPortalAccess",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string"
+    },
+    "supplier_name": {
+      "type": "string"
+    },
+    "portal_email": {
+      "type": "string"
+    },
+    "access_token": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "view_pos",
+          "confirm_delivery",
+          "upload_invoice",
+          "view_scorecard"
+        ]
+      }
+    },
+    "last_login": {
+      "type": "string"
+    },
+    "login_count": {
+      "type": "number",
+      "default": 0
+    },
+    "invited_date": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "supplier_id",
+    "portal_email"
+  ]
+}

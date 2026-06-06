@@ -1,0 +1,65 @@
+{
+  "name": "NotificationTemplate",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "event": {
+      "type": "string",
+      "description": "e.g. low_stock, order_approved, delivery_completed"
+    },
+    "channels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "email",
+          "sms",
+          "push",
+          "in_app",
+          "whatsapp"
+        ]
+      }
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string",
+      "description": "Supports {{variable}} tokens"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "send_count": {
+      "type": "number",
+      "default": 0
+    },
+    "last_sent": {
+      "type": "string"
+    },
+    "recipients": {
+      "type": "string",
+      "enum": [
+        "actor",
+        "approvers",
+        "managers",
+        "all_admins",
+        "custom"
+      ],
+      "default": "managers"
+    },
+    "custom_recipients": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "name",
+    "event"
+  ]
+}

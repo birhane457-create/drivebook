@@ -1,0 +1,107 @@
+{
+  "name": "BusinessRule",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "pricing",
+        "discount",
+        "approval",
+        "fulfillment",
+        "shipping",
+        "tax",
+        "loyalty",
+        "credit"
+      ],
+      "default": "pricing"
+    },
+    "priority": {
+      "type": "number",
+      "default": 0,
+      "description": "Higher = evaluated first"
+    },
+    "version": {
+      "type": "string",
+      "default": "1.0"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "testing",
+        "active",
+        "archived"
+      ],
+      "default": "draft"
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "logic": {
+            "type": "string",
+            "enum": [
+              "AND",
+              "OR"
+            ],
+            "default": "AND"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "test_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "last_deployed": {
+      "type": "string"
+    },
+    "run_count": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "name",
+    "category"
+  ]
+}

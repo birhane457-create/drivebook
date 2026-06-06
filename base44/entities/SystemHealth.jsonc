@@ -1,0 +1,54 @@
+{
+  "name": "SystemHealth",
+  "type": "object",
+  "properties": {
+    "component": {
+      "type": "string",
+      "description": "e.g. database, api, sync_engine, scheduler"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "degraded",
+        "down",
+        "maintenance"
+      ],
+      "default": "healthy"
+    },
+    "uptime_pct": {
+      "type": "number",
+      "default": 100
+    },
+    "avg_latency_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "error_rate_pct": {
+      "type": "number",
+      "default": 0
+    },
+    "last_check": {
+      "type": "string"
+    },
+    "incidents_30d": {
+      "type": "number",
+      "default": 0
+    },
+    "sla_target_pct": {
+      "type": "number",
+      "default": 99.9
+    },
+    "queue_depth": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "component",
+    "status"
+  ]
+}

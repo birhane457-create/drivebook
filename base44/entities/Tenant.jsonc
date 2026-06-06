@@ -1,0 +1,98 @@
+{
+  "name": "Tenant",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "slug": {
+      "type": "string",
+      "description": "Unique URL-safe identifier"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "starter",
+        "professional",
+        "enterprise",
+        "enterprise_plus"
+      ],
+      "default": "professional"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "suspended",
+        "trial",
+        "cancelled"
+      ],
+      "default": "trial"
+    },
+    "admin_email": {
+      "type": "string"
+    },
+    "max_users": {
+      "type": "number",
+      "default": 10
+    },
+    "max_locations": {
+      "type": "number",
+      "default": 5
+    },
+    "storage_gb": {
+      "type": "number",
+      "default": 10
+    },
+    "feature_flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "modules_enabled": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "trial_ends": {
+      "type": "string",
+      "format": "date"
+    },
+    "billing_cycle": {
+      "type": "string",
+      "enum": [
+        "monthly",
+        "annual"
+      ],
+      "default": "monthly"
+    },
+    "mrr": {
+      "type": "number",
+      "default": 0
+    },
+    "country": {
+      "type": "string"
+    },
+    "timezone": {
+      "type": "string",
+      "default": "UTC"
+    },
+    "sso_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "mfa_required": {
+      "type": "boolean",
+      "default": false
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "slug"
+  ]
+}

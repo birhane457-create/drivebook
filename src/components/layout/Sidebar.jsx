@@ -6,7 +6,8 @@ import {
   Brain, ClipboardCheck, Star, Award, Building2, PieChart,
   Grid3x3, Factory, DollarSign, CheckSquare, Smartphone,
   Route, Globe2, Server, Crown, Layers, Zap, Database,
-  Tag, TrendingUp, Shield, Webhook, FileText, Wrench
+  Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
+  GitBranch, Clock, Bell as BellIcon, Activity, Lock, ShieldCheck
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -97,6 +98,19 @@ const menuGroups = [
       { path: '/assets', icon: Wrench, label: 'Asset Management', roles: ['super_admin'] },
       { path: '/documents', icon: FileText, label: 'Documents', roles: ['super_admin', 'warehouse_manager'] },
       { path: '/api-hub', icon: Webhook, label: 'API Hub', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'Platform Layer',
+    items: [
+      { path: '/platform-admin', icon: Building2, label: 'Platform Admin', roles: ['super_admin'] },
+      { path: '/iam', icon: Lock, label: 'IAM & Roles', roles: ['super_admin'] },
+      { path: '/audit-compliance', icon: ShieldCheck, label: 'Audit & Compliance', roles: ['super_admin'] },
+      { path: '/business-rules', icon: GitBranch, label: 'Rules Engine', roles: ['super_admin'] },
+      { path: '/scheduler', icon: Clock, label: 'Scheduler', roles: ['super_admin'] },
+      { path: '/comms-hub', icon: BellIcon, label: 'Comms Hub', roles: ['super_admin'] },
+      { path: '/monitoring', icon: Activity, label: 'Monitoring', roles: ['super_admin'] },
+      { path: '/supplier-portal', icon: Shield, label: 'Supplier Portal', roles: ['super_admin'] },
     ]
   },
   {

@@ -1,0 +1,55 @@
+{
+  "name": "FeatureFlag",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "e.g. enable_3pl, show_ai_forecasting"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "is_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "rollout_pct": {
+      "type": "number",
+      "default": 0,
+      "description": "% of tenants to enable for"
+    },
+    "plans": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Which plans get this feature"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "all",
+        "production",
+        "staging",
+        "dev"
+      ],
+      "default": "all"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "owner": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "name"
+  ]
+}

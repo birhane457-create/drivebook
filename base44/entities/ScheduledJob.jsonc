@@ -1,0 +1,75 @@
+{
+  "name": "ScheduledJob",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "inventory_optimization",
+        "forecast_generation",
+        "repricing",
+        "data_warehouse_refresh",
+        "kpi_snapshot",
+        "low_stock_alert",
+        "report_email",
+        "po_auto_create",
+        "custom"
+      ],
+      "default": "custom"
+    },
+    "cron": {
+      "type": "string",
+      "description": "Cron expression e.g. 0 2 * * *"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "last_run": {
+      "type": "string"
+    },
+    "next_run": {
+      "type": "string"
+    },
+    "last_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failed",
+        "running",
+        "skipped"
+      ],
+      "default": "success"
+    },
+    "run_count": {
+      "type": "number",
+      "default": 0
+    },
+    "error_count": {
+      "type": "number",
+      "default": 0
+    },
+    "avg_duration_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "notify_on_failure": {
+      "type": "string"
+    },
+    "timeout_minutes": {
+      "type": "number",
+      "default": 30
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}
