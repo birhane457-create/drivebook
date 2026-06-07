@@ -1,0 +1,87 @@
+{
+  "name": "Release",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "major",
+        "minor",
+        "patch",
+        "hotfix",
+        "beta"
+      ],
+      "default": "minor"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "in_progress",
+        "in_review",
+        "released",
+        "rolled_back"
+      ],
+      "default": "planned"
+    },
+    "release_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "planned_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "highlights": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "breaking_changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "bug_fixes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "affected_modules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": true
+    },
+    "beta_tenants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rollout_percentage": {
+      "type": "number",
+      "default": 100
+    }
+  },
+  "required": [
+    "version",
+    "title"
+  ]
+}

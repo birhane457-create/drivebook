@@ -1,0 +1,93 @@
+{
+  "name": "HealthScore",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "overall_score": {
+      "type": "number",
+      "default": 0
+    },
+    "adoption_score": {
+      "type": "number",
+      "default": 0
+    },
+    "engagement_score": {
+      "type": "number",
+      "default": 0
+    },
+    "support_score": {
+      "type": "number",
+      "default": 0
+    },
+    "financial_score": {
+      "type": "number",
+      "default": 0
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "at_risk",
+        "critical"
+      ],
+      "default": "healthy"
+    },
+    "active_users": {
+      "type": "number",
+      "default": 0
+    },
+    "total_licenses": {
+      "type": "number",
+      "default": 0
+    },
+    "modules_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "last_login_days_ago": {
+      "type": "number",
+      "default": 0
+    },
+    "open_tickets": {
+      "type": "number",
+      "default": 0
+    },
+    "nps_score": {
+      "type": "number"
+    },
+    "mrr": {
+      "type": "number",
+      "default": 0
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "csm_name": {
+      "type": "string"
+    },
+    "last_qbr_date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "tenant_name"
+  ]
+}

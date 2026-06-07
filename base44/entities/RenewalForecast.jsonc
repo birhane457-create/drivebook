@@ -1,0 +1,60 @@
+{
+  "name": "RenewalForecast",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "renewal_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "current_arr": {
+      "type": "number",
+      "default": 0
+    },
+    "forecast_arr": {
+      "type": "number",
+      "default": 0
+    },
+    "churn_probability": {
+      "type": "number",
+      "default": 0
+    },
+    "expansion_probability": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "on_track",
+        "at_risk",
+        "churned",
+        "renewed",
+        "expanded"
+      ],
+      "default": "on_track"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "next_action": {
+      "type": "string"
+    },
+    "next_action_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "renewal_date"
+  ]
+}

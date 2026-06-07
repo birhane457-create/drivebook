@@ -9,7 +9,7 @@ import {
   Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
-  CreditCard, Palette, Lightbulb
+  CreditCard, Palette, Lightbulb, Rocket
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -119,6 +119,8 @@ const menuGroups = [
     label: 'AI & Intelligence',
     items: [
       { path: '/insights', icon: Lightbulb, label: 'AI Insight Hub', roles: ['super_admin', 'warehouse_manager'] },
+      { path: '/aiops', icon: Brain, label: 'AIOps', roles: ['super_admin'] },
+      { path: '/benchmarking', icon: PieChart, label: 'Benchmarking', roles: ['super_admin'] },
       { path: '/ai-copilot', icon: Bot, label: 'AI Copilot', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
       { path: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', roles: ['super_admin', 'warehouse_manager'] },
     ]
@@ -142,6 +144,7 @@ const menuGroups = [
   {
     label: 'Customer Success',
     items: [
+      { path: '/customer-success', icon: Users, label: 'CS Center', roles: ['super_admin'] },
       { path: '/onboarding', icon: CheckSquare, label: 'Onboarding Center', roles: ['super_admin'] },
       { path: '/data-migration', icon: Database, label: 'Data Migration', roles: ['super_admin'] },
     ]
@@ -152,6 +155,7 @@ const menuGroups = [
       { path: '/billing', icon: CreditCard, label: 'Billing Platform', roles: ['super_admin'] },
       { path: '/white-label', icon: Palette, label: 'White Label', roles: ['super_admin'] },
       { path: '/developer-portal', icon: Code2, label: 'Developer Portal', roles: ['super_admin'] },
+      { path: '/releases', icon: Rocket, label: 'Release Management', roles: ['super_admin'] },
     ]
   },
   {

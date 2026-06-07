@@ -1,0 +1,59 @@
+{
+  "name": "AIUsage",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "feature": {
+      "type": "string",
+      "enum": [
+        "copilot",
+        "forecasting",
+        "insight_hub",
+        "document_extraction",
+        "image_generation",
+        "tts"
+      ],
+      "default": "copilot"
+    },
+    "model": {
+      "type": "string"
+    },
+    "tokens_in": {
+      "type": "number",
+      "default": 0
+    },
+    "tokens_out": {
+      "type": "number",
+      "default": 0
+    },
+    "cost_usd": {
+      "type": "number",
+      "default": 0
+    },
+    "latency_ms": {
+      "type": "number"
+    },
+    "success": {
+      "type": "boolean",
+      "default": true
+    },
+    "user_rating": {
+      "type": "number"
+    },
+    "prompt_hash": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "feature"
+  ]
+}
