@@ -1,0 +1,82 @@
+{
+  "name": "OAuthApp",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "client_secret_hash": {
+      "type": "string"
+    },
+    "redirect_uris": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "grant_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "authorization_code",
+          "client_credentials",
+          "refresh_token"
+        ]
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "development",
+        "review",
+        "production",
+        "suspended"
+      ],
+      "default": "development"
+    },
+    "logo_url": {
+      "type": "string"
+    },
+    "homepage_url": {
+      "type": "string"
+    },
+    "owner_id": {
+      "type": "string"
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false
+    },
+    "api_call_count": {
+      "type": "number",
+      "default": 0
+    },
+    "last_used": {
+      "type": "string"
+    },
+    "webhook_url": {
+      "type": "string"
+    },
+    "rate_limit_per_min": {
+      "type": "number",
+      "default": 60
+    }
+  },
+  "required": [
+    "name",
+    "client_id"
+  ]
+}

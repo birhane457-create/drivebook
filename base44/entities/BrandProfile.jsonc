@@ -1,0 +1,83 @@
+{
+  "name": "BrandProfile",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "brand_name": {
+      "type": "string"
+    },
+    "logo_url": {
+      "type": "string"
+    },
+    "favicon_url": {
+      "type": "string"
+    },
+    "primary_color": {
+      "type": "string",
+      "default": "#6366f1"
+    },
+    "secondary_color": {
+      "type": "string",
+      "default": "#8b5cf6"
+    },
+    "accent_color": {
+      "type": "string",
+      "default": "#22c55e"
+    },
+    "font_heading": {
+      "type": "string",
+      "default": "Inter"
+    },
+    "font_body": {
+      "type": "string",
+      "default": "Inter"
+    },
+    "custom_domain": {
+      "type": "string"
+    },
+    "custom_email_from": {
+      "type": "string"
+    },
+    "custom_email_from_name": {
+      "type": "string"
+    },
+    "support_email": {
+      "type": "string"
+    },
+    "support_url": {
+      "type": "string"
+    },
+    "privacy_url": {
+      "type": "string"
+    },
+    "terms_url": {
+      "type": "string"
+    },
+    "login_background_url": {
+      "type": "string"
+    },
+    "email_header_html": {
+      "type": "string"
+    },
+    "email_footer_html": {
+      "type": "string"
+    },
+    "hide_powered_by": {
+      "type": "boolean",
+      "default": false
+    },
+    "custom_css": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "tenant_id",
+    "brand_name"
+  ]
+}

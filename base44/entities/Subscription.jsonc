@@ -1,0 +1,97 @@
+{
+  "name": "Subscription",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "plan_id": {
+      "type": "string"
+    },
+    "plan_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "trialing",
+        "active",
+        "past_due",
+        "cancelled",
+        "paused",
+        "unpaid"
+      ],
+      "default": "trialing"
+    },
+    "billing_cycle": {
+      "type": "string",
+      "enum": [
+        "monthly",
+        "annual"
+      ],
+      "default": "monthly"
+    },
+    "seat_count": {
+      "type": "number",
+      "default": 1
+    },
+    "seat_limit": {
+      "type": "number",
+      "default": 5
+    },
+    "trial_ends_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "current_period_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "current_period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "amount_per_cycle": {
+      "type": "number",
+      "default": 0
+    },
+    "currency": {
+      "type": "string",
+      "default": "USD"
+    },
+    "payment_method": {
+      "type": "string"
+    },
+    "stripe_subscription_id": {
+      "type": "string"
+    },
+    "cancel_at_period_end": {
+      "type": "boolean",
+      "default": false
+    },
+    "cancelled_at": {
+      "type": "string"
+    },
+    "mrr": {
+      "type": "number",
+      "default": 0
+    },
+    "usage_metrics": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "addons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "tenant_id",
+    "plan_id"
+  ]
+}

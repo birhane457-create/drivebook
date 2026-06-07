@@ -1,0 +1,87 @@
+{
+  "name": "Plan",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "starter",
+        "growth",
+        "professional",
+        "enterprise"
+      ],
+      "default": "starter"
+    },
+    "price_monthly": {
+      "type": "number",
+      "default": 0
+    },
+    "price_annual": {
+      "type": "number",
+      "default": 0
+    },
+    "seat_limit": {
+      "type": "number",
+      "default": 5
+    },
+    "storage_gb": {
+      "type": "number",
+      "default": 10
+    },
+    "api_calls_per_month": {
+      "type": "number",
+      "default": 10000
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "is_popular": {
+      "type": "boolean",
+      "default": false
+    },
+    "trial_days": {
+      "type": "number",
+      "default": 14
+    },
+    "overage_per_seat": {
+      "type": "number",
+      "default": 0
+    },
+    "support_level": {
+      "type": "string",
+      "enum": [
+        "community",
+        "email",
+        "priority",
+        "dedicated"
+      ],
+      "default": "email"
+    }
+  },
+  "required": [
+    "name",
+    "code"
+  ]
+}

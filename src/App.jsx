@@ -63,6 +63,9 @@ import DevOps from '@/pages/DevOps';
 import SecurityCenter from '@/pages/SecurityCenter';
 import CustomerPortal from '@/pages/CustomerPortal';
 import AppMarketplace from '@/pages/AppMarketplace';
+import BillingPlatform from '@/pages/BillingPlatform';
+import WhiteLabel from '@/pages/WhiteLabel';
+import DeveloperPortal from '@/pages/DeveloperPortal';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -146,6 +149,9 @@ const AuthenticatedApp = () => {
           <Route path="/security" element={<SecurityCenter />} />
           <Route path="/customer-portal" element={<CustomerPortal />} />
           <Route path="/marketplace" element={<AppMarketplace />} />
+          <Route path="/billing" element={<BillingPlatform />} />
+          <Route path="/white-label" element={<WhiteLabel />} />
+          <Route path="/developer-portal" element={<DeveloperPortal />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>

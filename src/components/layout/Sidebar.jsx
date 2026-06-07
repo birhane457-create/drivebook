@@ -8,7 +8,8 @@ import {
   Route, Globe2, Server, Crown, Layers, Zap, Database,
   Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
   GitBranch, Clock, Activity, Lock, ShieldCheck,
-  Bot, BookOpen, Bus, Eye, Code2, Key, UserCheck, Puzzle
+  Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
+  CreditCard, Palette
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -135,6 +136,14 @@ const menuGroups = [
     items: [
       { path: '/customer-portal', icon: UserCheck, label: 'Customer Portal', roles: ['super_admin', 'store_manager'] },
       { path: '/marketplace', icon: Puzzle, label: 'App Marketplace', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'SaaS Platform',
+    items: [
+      { path: '/billing', icon: CreditCard, label: 'Billing Platform', roles: ['super_admin'] },
+      { path: '/white-label', icon: Palette, label: 'White Label', roles: ['super_admin'] },
+      { path: '/developer-portal', icon: Code2, label: 'Developer Portal', roles: ['super_admin'] },
     ]
   },
   {
