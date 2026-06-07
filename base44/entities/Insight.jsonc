@@ -1,0 +1,82 @@
+{
+  "name": "Insight",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "revenue",
+        "inventory",
+        "margin",
+        "supplier",
+        "cashflow",
+        "operations",
+        "anomaly"
+      ],
+      "default": "revenue"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "critical",
+        "positive"
+      ],
+      "default": "info"
+    },
+    "impact_value": {
+      "type": "number"
+    },
+    "impact_unit": {
+      "type": "string"
+    },
+    "drivers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_dismissed": {
+      "type": "boolean",
+      "default": false
+    },
+    "generated_by": {
+      "type": "string",
+      "default": "ai"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "data_snapshot": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "title",
+    "category",
+    "severity"
+  ]
+}

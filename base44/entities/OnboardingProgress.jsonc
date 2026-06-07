@@ -1,0 +1,46 @@
+{
+  "name": "OnboardingProgress",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "health_score": {
+      "type": "number",
+      "default": 0
+    },
+    "completed_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skipped_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "current_step": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "assigned_csm": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id"
+  ]
+}

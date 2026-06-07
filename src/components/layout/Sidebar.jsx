@@ -9,7 +9,7 @@ import {
   Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
-  CreditCard, Palette
+  CreditCard, Palette, Lightbulb
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -118,6 +118,7 @@ const menuGroups = [
   {
     label: 'AI & Intelligence',
     items: [
+      { path: '/insights', icon: Lightbulb, label: 'AI Insight Hub', roles: ['super_admin', 'warehouse_manager'] },
       { path: '/ai-copilot', icon: Bot, label: 'AI Copilot', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
       { path: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', roles: ['super_admin', 'warehouse_manager'] },
     ]
@@ -136,6 +137,13 @@ const menuGroups = [
     items: [
       { path: '/customer-portal', icon: UserCheck, label: 'Customer Portal', roles: ['super_admin', 'store_manager'] },
       { path: '/marketplace', icon: Puzzle, label: 'App Marketplace', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'Customer Success',
+    items: [
+      { path: '/onboarding', icon: CheckSquare, label: 'Onboarding Center', roles: ['super_admin'] },
+      { path: '/data-migration', icon: Database, label: 'Data Migration', roles: ['super_admin'] },
     ]
   },
   {

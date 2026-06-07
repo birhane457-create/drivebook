@@ -1,0 +1,88 @@
+{
+  "name": "DataMigrationJob",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "csv",
+        "excel",
+        "json",
+        "legacy_erp",
+        "legacy_wms",
+        "api"
+      ],
+      "default": "csv"
+    },
+    "target_entity": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "mapping",
+        "validating",
+        "running",
+        "completed",
+        "failed",
+        "rolled_back"
+      ],
+      "default": "pending"
+    },
+    "file_url": {
+      "type": "string"
+    },
+    "field_mapping": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "total_rows": {
+      "type": "number",
+      "default": 0
+    },
+    "processed_rows": {
+      "type": "number",
+      "default": 0
+    },
+    "success_rows": {
+      "type": "number",
+      "default": 0
+    },
+    "error_rows": {
+      "type": "number",
+      "default": 0
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "validation_warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "rollback_available": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "name",
+    "source_type",
+    "target_entity"
+  ]
+}

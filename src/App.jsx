@@ -64,6 +64,9 @@ import SecurityCenter from '@/pages/SecurityCenter';
 import CustomerPortal from '@/pages/CustomerPortal';
 import AppMarketplace from '@/pages/AppMarketplace';
 import BillingPlatform from '@/pages/BillingPlatform';
+import AIInsightHub from '@/pages/AIInsightHub';
+import OnboardingCenter from '@/pages/OnboardingCenter';
+import DataMigration from '@/pages/DataMigration';
 import WhiteLabel from '@/pages/WhiteLabel';
 import DeveloperPortal from '@/pages/DeveloperPortal';
 
@@ -152,6 +155,9 @@ const AuthenticatedApp = () => {
           <Route path="/billing" element={<BillingPlatform />} />
           <Route path="/white-label" element={<WhiteLabel />} />
           <Route path="/developer-portal" element={<DeveloperPortal />} />
+          <Route path="/insights" element={<AIInsightHub />} />
+          <Route path="/onboarding" element={<OnboardingCenter />} />
+          <Route path="/data-migration" element={<DataMigration />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>
