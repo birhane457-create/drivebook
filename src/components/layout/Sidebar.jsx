@@ -9,7 +9,7 @@ import {
   Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
-  CreditCard, Palette, Lightbulb, Rocket
+  CreditCard, Palette, Lightbulb, Rocket, Heart
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -144,7 +144,7 @@ const menuGroups = [
   {
     label: 'Customer Success',
     items: [
-      { path: '/customer-success', icon: Users, label: 'CS Center', roles: ['super_admin'] },
+      { path: '/customer-success', icon: Heart, label: 'CS Center', roles: ['super_admin'] },
       { path: '/onboarding', icon: CheckSquare, label: 'Onboarding Center', roles: ['super_admin'] },
       { path: '/data-migration', icon: Database, label: 'Data Migration', roles: ['super_admin'] },
     ]

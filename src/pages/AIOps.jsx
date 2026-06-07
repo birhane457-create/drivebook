@@ -5,167 +5,148 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import PageHeader from '@/components/shared/PageHeader';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line,
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { Brain, DollarSign, Zap, TrendingDown, AlertTriangle, CheckCircle, Star } from 'lucide-react';
+import { Brain, DollarSign, Zap, TrendingUp, AlertTriangle, Star, Clock, CheckCircle } from 'lucide-react';
 
-const COST_TREND = [
-  { day: 'Jun 1', copilot: 2.4, forecasting: 1.1, insight_hub: 0.8, other: 0.3 },
-  { day: 'Jun 2', copilot: 3.1, forecasting: 0.9, insight_hub: 1.2, other: 0.4 },
-  { day: 'Jun 3', copilot: 2.8, forecasting: 1.4, insight_hub: 0.6, other: 0.2 },
-  { day: 'Jun 4', copilot: 1.9, forecasting: 1.0, insight_hub: 0.9, other: 0.5 },
-  { day: 'Jun 5', copilot: 3.6, forecasting: 1.8, insight_hub: 1.1, other: 0.3 },
-  { day: 'Jun 6', copilot: 2.2, forecasting: 1.2, insight_hub: 0.7, other: 0.6 },
-  { day: 'Jun 7', copilot: 2.9, forecasting: 1.5, insight_hub: 1.0, other: 0.4 },
+const DAILY_USAGE = [
+  { date: 'Jun 1', tokens: 124000, cost: 1.86, calls: 312 },
+  { date: 'Jun 2', tokens: 98000,  cost: 1.47, calls: 245 },
+  { date: 'Jun 3', tokens: 87000,  cost: 1.31, calls: 218 },
+  { date: 'Jun 4', tokens: 152000, cost: 2.28, calls: 380 },
+  { date: 'Jun 5', tokens: 190000, cost: 2.85, calls: 475 },
+  { date: 'Jun 6', tokens: 178000, cost: 2.67, calls: 445 },
+  { date: 'Jun 7', tokens: 210000, cost: 3.15, calls: 525 },
 ];
 
-const MODEL_PERF = [
-  { model: 'GPT-4o Mini', calls: 1842, avg_latency: 820, avg_rating: 4.1, cost: 9.20, success_rate: 99.1 },
-  { model: 'GPT-4o', calls: 234, avg_latency: 2100, avg_rating: 4.7, cost: 28.40, success_rate: 99.6 },
-  { model: 'Claude Sonnet', calls: 89, avg_latency: 1840, avg_rating: 4.8, cost: 18.90, success_rate: 100 },
-  { model: 'Gemini Flash', calls: 412, avg_latency: 680, avg_rating: 3.9, cost: 4.10, success_rate: 98.3 },
+const BY_FEATURE = [
+  { feature: 'AI Copilot',         tokens: 480000, cost: 7.20, calls: 1200, avg_latency: 1240, success_rate: 98.2, avg_rating: 4.3 },
+  { feature: 'AI Insight Hub',     tokens: 210000, cost: 3.15, calls: 280,  avg_latency: 2100, success_rate: 99.1, avg_rating: 4.6 },
+  { feature: 'AI Forecasting',     tokens: 180000, cost: 2.70, calls: 95,   avg_latency: 4200, success_rate: 97.4, avg_rating: 4.2 },
+  { feature: 'Doc Extraction',     tokens: 95000,  cost: 1.43, calls: 380,  avg_latency: 980,  success_rate: 96.0, avg_rating: 4.0 },
+  { feature: 'Image Generation',   tokens: 40000,  cost: 0.60, calls: 40,   avg_latency: 8100, success_rate: 100,  avg_rating: 4.7 },
 ];
 
-const FEATURE_USAGE = [
-  { name: 'AI Copilot', value: 42, color: '#6366f1' },
-  { name: 'Forecasting', value: 24, color: '#8b5cf6' },
-  { name: 'Insight Hub', value: 18, color: '#22c55e' },
-  { name: 'Doc Extract', value: 10, color: '#f59e0b' },
-  { name: 'Other', value: 6, color: '#94a3b8' },
+const BY_TENANT = [
+  { name: 'Acme Corp',         tokens: 420000, cost: 6.30, fill: '#6366f1' },
+  { name: 'Global Traders',    tokens: 285000, cost: 4.28, fill: '#8b5cf6' },
+  { name: 'TechStart Ltd',     tokens: 180000, cost: 2.70, fill: '#a78bfa' },
+  { name: 'Riverside Medical', tokens: 120000, cost: 1.80, fill: '#c4b5fd' },
 ];
 
-const TOP_PROMPTS = [
-  { prompt: 'Analyze current inventory levels and identify reorder recommendations', feature: 'copilot', calls: 284, avg_rating: 4.6, avg_tokens: 1240 },
-  { prompt: 'Generate demand forecast for next 30 days by category', feature: 'forecasting', calls: 198, avg_rating: 4.4, avg_tokens: 2100 },
-  { prompt: 'Summarize financial performance vs prior month', feature: 'copilot', calls: 156, avg_rating: 4.7, avg_tokens: 980 },
-  { prompt: 'Identify top 10 slow-moving SKUs and suggest clearance actions', feature: 'insight_hub', calls: 134, avg_rating: 4.2, avg_tokens: 1560 },
-  { prompt: 'Extract line items from uploaded supplier invoice PDF', feature: 'doc_extract', calls: 89, avg_rating: 4.5, avg_tokens: 340 },
+const MODELS = [
+  { model: 'gpt-4o-mini',        calls: 1800, avg_tokens: 420, cost_per_1k: 0.0015, avg_latency: 890,  quality: 4.1 },
+  { model: 'gpt-4o',             calls: 340,  avg_tokens: 1240, cost_per_1k: 0.015, avg_latency: 1800, quality: 4.7 },
+  { model: 'claude-sonnet',      calls: 60,   avg_tokens: 2100, cost_per_1k: 0.012, avg_latency: 1400, quality: 4.8 },
 ];
 
-const BUDGET = { monthly_limit: 500, spent: 289.40, remaining: 210.60, projected: 412.80 };
+const BUDGET = { monthly_limit: 150, spent: 93.40, period: 'June 2026' };
 
-const FEATURE_COLORS = { copilot: '#6366f1', forecasting: '#8b5cf6', insight_hub: '#22c55e', doc_extract: '#f59e0b', other: '#94a3b8' };
-
-function StarRating({ value }) {
-  return (
-    <span className="flex items-center gap-0.5 text-xs">
-      <Star className="w-3 h-3 text-yellow-500 fill-yellow-400" />
-      {value.toFixed(1)}
-    </span>
-  );
-}
+const COLORS = ['#6366f1','#8b5cf6','#a78bfa','#c4b5fd'];
 
 export default function AIOps() {
   const [period, setPeriod] = useState('7d');
 
-  const totalCost = COST_TREND.reduce((s, d) => s + d.copilot + d.forecasting + d.insight_hub + d.other, 0);
-  const totalCalls = MODEL_PERF.reduce((s, m) => s + m.calls, 0);
-  const avgRating = (MODEL_PERF.reduce((s, m) => s + m.avg_rating * m.calls, 0) / totalCalls).toFixed(1);
+  const totalTokens = DAILY_USAGE.reduce((s, d) => s + d.tokens, 0);
+  const totalCost = DAILY_USAGE.reduce((s, d) => s + d.cost, 0);
+  const totalCalls = DAILY_USAGE.reduce((s, d) => s + d.calls, 0);
   const budgetPct = Math.round((BUDGET.spent / BUDGET.monthly_limit) * 100);
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="AIOps — AI Operations" subtitle="Cost tracking · Token usage · Model performance · Prompt analytics · Quality scoring">
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-            <SelectItem value="90d">Last 90 days</SelectItem>
-          </SelectContent>
-        </Select>
-      </PageHeader>
+      <PageHeader title="AI Operations (AIOps)" subtitle="Token usage · Cost tracking · Model analytics · Response quality · Budget management" />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* KPI row */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
-          { label: 'Total AI Cost (7d)', value: `$${totalCost.toFixed(2)}`, color: 'text-purple-600', icon: DollarSign },
-          { label: 'Total API Calls', value: totalCalls.toLocaleString(), color: 'text-blue-600', icon: Zap },
-          { label: 'Avg Quality Score', value: `${avgRating}/5`, color: 'text-green-600', icon: Star },
-          { label: 'Budget Used', value: `${budgetPct}%`, color: budgetPct > 80 ? 'text-red-600' : 'text-orange-600', icon: TrendingDown },
-        ].map(k => (
-          <Card key={k.label}><CardContent className="p-4 flex items-center gap-3">
-            <k.icon className={`w-8 h-8 ${k.color}`} />
-            <div><p className="text-xs text-muted-foreground">{k.label}</p><p className={`text-2xl font-bold ${k.color}`}>{k.value}</p></div>
-          </CardContent></Card>
+          { label: 'Total Tokens (7d)', value: `${(totalTokens/1000).toFixed(0)}K`,   color: 'text-purple-600', icon: Brain },
+          { label: 'Total Cost (7d)',   value: `$${totalCost.toFixed(2)}`,             color: 'text-green-600',  icon: DollarSign },
+          { label: 'Total Calls (7d)', value: totalCalls.toLocaleString(),             color: 'text-blue-600',   icon: Zap },
+          { label: 'Avg Latency',      value: '1.4s',                                  color: 'text-orange-600', icon: Clock },
+          { label: 'Success Rate',     value: '98.1%',                                 color: 'text-green-600',  icon: CheckCircle },
+        ].map(s => (
+          <Card key={s.label}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <s.icon className={`w-7 h-7 ${s.color}`} />
+              <div><p className="text-xs text-muted-foreground">{s.label}</p><p className={`text-xl font-bold ${s.color}`}>{s.value}</p></div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {/* Budget Bar */}
-      <Card className={`border-2 ${budgetPct > 80 ? 'border-orange-300' : 'border-border'}`}>
+      <Card className={`border-2 ${budgetPct > 80 ? 'border-orange-300 bg-orange-50' : 'border-border'}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <span className="font-semibold text-sm">Monthly AI Budget</span>
-              <span className="text-xs text-muted-foreground ml-2">${BUDGET.spent.toFixed(2)} spent of ${BUDGET.monthly_limit}</span>
+              <p className="font-semibold text-sm">Monthly AI Budget — {BUDGET.period}</p>
+              <p className="text-xs text-muted-foreground">${BUDGET.spent.toFixed(2)} spent of ${BUDGET.monthly_limit} limit</p>
             </div>
-            <div className="text-right text-xs">
-              <span className="text-muted-foreground">Projected: </span>
-              <span className={BUDGET.projected > BUDGET.monthly_limit ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}>${BUDGET.projected.toFixed(2)}</span>
-              {BUDGET.projected > BUDGET.monthly_limit && <Badge className="ml-2 text-[10px] bg-red-100 text-red-700">Over budget</Badge>}
-            </div>
+            <span className={`text-2xl font-bold ${budgetPct > 80 ? 'text-orange-600' : 'text-green-600'}`}>{budgetPct}%</span>
           </div>
-          <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
-            <div className="h-3 rounded-full bg-purple-500 transition-all" style={{ width: `${Math.min(budgetPct, 100)}%` }} />
+          <div className="w-full bg-muted rounded-full h-3">
+            <div className={`h-3 rounded-full transition-all ${budgetPct > 80 ? 'bg-orange-500' : 'bg-green-500'}`} style={{ width: `${budgetPct}%` }} />
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground mt-1">
-            <span>0%</span><span>${BUDGET.remaining.toFixed(2)} remaining</span><span>100%</span>
-          </div>
+          {budgetPct > 80 && <p className="text-xs text-orange-600 mt-1.5 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Approaching monthly limit. Consider increasing budget or optimizing prompts.</p>}
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="costs">
+      <Tabs defaultValue="usage">
         <TabsList>
-          <TabsTrigger value="costs">Cost Breakdown</TabsTrigger>
-          <TabsTrigger value="models">Model Performance</TabsTrigger>
-          <TabsTrigger value="prompts">Top Prompts</TabsTrigger>
-          <TabsTrigger value="usage">Feature Usage</TabsTrigger>
+          <TabsTrigger value="usage">Usage Trends</TabsTrigger>
+          <TabsTrigger value="features">By Feature</TabsTrigger>
+          <TabsTrigger value="models">Model Comparison</TabsTrigger>
+          <TabsTrigger value="tenants">By Tenant</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="costs">
+        <TabsContent value="usage" className="mt-4 space-y-4">
           <Card>
-            <CardHeader><CardTitle className="text-sm">Daily AI Cost by Feature ($)</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Token Usage</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={COST_TREND}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
-                    <Tooltip formatter={(v, n) => [`$${v.toFixed(2)}`, n]} />
-                    <Legend />
-                    <Bar dataKey="copilot" name="AI Copilot" stackId="a" fill="#6366f1" />
-                    <Bar dataKey="forecasting" name="Forecasting" stackId="a" fill="#8b5cf6" />
-                    <Bar dataKey="insight_hub" name="Insight Hub" stackId="a" fill="#22c55e" />
-                    <Bar dataKey="other" name="Other" stackId="a" fill="#94a3b8" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={DAILY_USAGE}>
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
+                  <Tooltip formatter={v => [`${(v/1000).toFixed(0)}K tokens`]} />
+                  <Bar dataKey="tokens" fill="#6366f1" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Cost ($)</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={DAILY_USAGE}>
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
+                  <Tooltip formatter={v => [`$${v}`]} />
+                  <Line dataKey="cost" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="models">
+        <TabsContent value="features" className="mt-4">
           <div className="space-y-3">
-            {MODEL_PERF.sort((a, b) => b.calls - a.calls).map(m => (
-              <Card key={m.model}>
+            {BY_FEATURE.map(f => (
+              <Card key={f.feature}>
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-2 flex-1">
-                      <Brain className="w-4 h-4 text-purple-600" />
-                      <span className="font-semibold text-sm">{m.model}</span>
-                      {m.success_rate === 100 && <Badge className="text-[10px] bg-green-100 text-green-700"><CheckCircle className="w-2.5 h-2.5 mr-0.5" />Perfect uptime</Badge>}
-                    </div>
-                    <div className="grid grid-cols-4 gap-6 text-xs">
-                      <div><p className="text-muted-foreground">Calls</p><p className="font-bold">{m.calls.toLocaleString()}</p></div>
-                      <div><p className="text-muted-foreground">Avg Latency</p><p className="font-bold">{m.avg_latency}ms</p></div>
-                      <div><p className="text-muted-foreground">Quality</p><StarRating value={m.avg_rating} /></div>
-                      <div><p className="text-muted-foreground">Cost (7d)</p><p className="font-bold">${m.cost.toFixed(2)}</p></div>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="font-medium text-sm">{f.feature}</p>
+                    <div className="flex gap-4 text-xs">
+                      <span className="text-muted-foreground">Tokens: <strong className="text-foreground">{(f.tokens/1000).toFixed(0)}K</strong></span>
+                      <span className="text-muted-foreground">Cost: <strong className="text-green-600">${f.cost.toFixed(2)}</strong></span>
+                      <span className="text-muted-foreground">Calls: <strong className="text-foreground">{f.calls}</strong></span>
+                      <span className="text-muted-foreground">Latency: <strong className="text-foreground">{f.avg_latency}ms</strong></span>
+                      <span className="text-muted-foreground">Success: <strong className={f.success_rate < 98 ? 'text-orange-600' : 'text-green-600'}>{f.success_rate}%</strong></span>
+                      <span className="flex items-center gap-0.5 text-yellow-600"><Star className="w-3 h-3" /><strong>{f.avg_rating}</strong></span>
                     </div>
                   </div>
-                  <div className="mt-2 w-full bg-muted rounded-full h-1.5">
-                    <div className="h-1.5 rounded-full bg-purple-500" style={{ width: `${(m.calls / totalCalls) * 100}%` }} />
+                  <div className="mt-2 bg-muted rounded-full h-1.5">
+                    <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: `${(f.tokens / 480000) * 100}%` }} />
                   </div>
                 </CardContent>
               </Card>
@@ -173,56 +154,62 @@ export default function AIOps() {
           </div>
         </TabsContent>
 
-        <TabsContent value="prompts">
-          <div className="space-y-2">
-            {TOP_PROMPTS.map((p, i) => (
-              <Card key={i}>
-                <CardContent className="p-3">
-                  <div className="flex items-start gap-3">
-                    <span className="text-lg font-bold text-muted-foreground w-6 text-center flex-shrink-0">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{p.prompt}</p>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                        <span style={{ color: FEATURE_COLORS[p.feature] || '#94a3b8' }}>● {p.feature.replace('_',' ')}</span>
-                        <span>{p.calls} calls</span>
-                        <span>~{p.avg_tokens} tokens</span>
-                        <StarRating value={p.avg_rating} />
-                      </div>
+        <TabsContent value="models" className="mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {MODELS.map(m => (
+              <Card key={m.model}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-purple-500" />
+                    <code className="font-mono text-xs">{m.model}</code>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {[
+                    { label: 'Total Calls',   value: m.calls.toLocaleString() },
+                    { label: 'Avg Tokens',    value: m.avg_tokens.toLocaleString() },
+                    { label: 'Cost/1K tokens',value: `$${m.cost_per_1k}` },
+                    { label: 'Avg Latency',   value: `${m.avg_latency}ms` },
+                    { label: 'Quality Score', value: <span className="flex items-center gap-1"><Star className="w-3 h-3 text-yellow-500" />{m.quality}</span> },
+                  ].map(row => (
+                    <div key={row.label} className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">{row.label}</span>
+                      <strong>{row.value}</strong>
                     </div>
-                  </div>
+                  ))}
                 </CardContent>
               </Card>
             ))}
           </div>
         </TabsContent>
 
-        <TabsContent value="usage">
+        <TabsContent value="tenants" className="mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
-              <CardHeader><CardTitle className="text-sm">Calls by Feature</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Token Distribution by Tenant</CardTitle></CardHeader>
               <CardContent>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={FEATURE_USAGE} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        {FEATURE_USAGE.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={BY_TENANT} dataKey="tokens" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name.split(' ')[0]} ${(percent*100).toFixed(0)}%`} labelLine={false}>
+                      {BY_TENANT.map((e, i) => <Cell key={i} fill={COLORS[i]} />)}
+                    </Pie>
+                    <Tooltip formatter={v => [`${(v/1000).toFixed(0)}K tokens`]} />
+                  </PieChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
-            <div className="space-y-2">
-              {FEATURE_USAGE.map(f => (
-                <div key={f.name} className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: f.color }} />
-                  <span className="text-sm flex-1">{f.name}</span>
-                  <div className="flex-1 bg-muted rounded-full h-2">
-                    <div className="h-2 rounded-full" style={{ width: `${f.value}%`, background: f.color }} />
-                  </div>
-                  <span className="text-xs font-bold w-8 text-right">{f.value}%</span>
-                </div>
+            <div className="space-y-3">
+              {BY_TENANT.map((t, i) => (
+                <Card key={t.name}>
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i] }} />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">{(t.tokens/1000).toFixed(0)}K tokens</p>
+                    </div>
+                    <p className="font-bold text-green-600 text-sm">${t.cost.toFixed(2)}</p>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </div>

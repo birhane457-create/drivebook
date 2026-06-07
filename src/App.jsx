@@ -67,10 +67,11 @@ import BillingPlatform from '@/pages/BillingPlatform';
 import AIInsightHub from '@/pages/AIInsightHub';
 import OnboardingCenter from '@/pages/OnboardingCenter';
 import DataMigration from '@/pages/DataMigration';
-import CustomerSuccessCenter from '@/pages/CustomerSuccessCenter';
+import CustomerSuccess from '@/pages/CustomerSuccess';
 import ReleaseManagement from '@/pages/ReleaseManagement';
 import AIOps from '@/pages/AIOps';
-import EnterpriseBenchmarking from '@/pages/EnterpriseBenchmarking';
+import Benchmarking from '@/pages/Benchmarking';
+
 import WhiteLabel from '@/pages/WhiteLabel';
 import DeveloperPortal from '@/pages/DeveloperPortal';
 
@@ -162,10 +163,11 @@ const AuthenticatedApp = () => {
           <Route path="/insights" element={<AIInsightHub />} />
           <Route path="/onboarding" element={<OnboardingCenter />} />
           <Route path="/data-migration" element={<DataMigration />} />
-          <Route path="/customer-success" element={<CustomerSuccessCenter />} />
+          <Route path="/customer-success" element={<CustomerSuccess />} />
           <Route path="/releases" element={<ReleaseManagement />} />
           <Route path="/aiops" element={<AIOps />} />
-          <Route path="/benchmarking" element={<EnterpriseBenchmarking />} />
+          <Route path="/benchmarking" element={<Benchmarking />} />
+
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>
