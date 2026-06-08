@@ -10,7 +10,7 @@ import {
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
   CreditCard, Palette, Lightbulb, Rocket, Heart, FlaskConical, PlayCircle,
-  Target, TestTube, Briefcase
+  Target, TestTube, Briefcase, ChevronDown
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -18,182 +18,268 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-const menuGroups = [
-  {
-    label: 'Executive',
-    items: [
-      { path: '/executive', icon: Crown, label: 'Exec Dashboard', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Operations',
-    items: [
-      { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'cashier', 'inventory_staff'] },
-      { path: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['super_admin', 'store_manager', 'cashier'] },
-      { path: '/products', icon: Package, label: 'Products', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
-      { path: '/inventory', icon: Warehouse, label: 'Inventory', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
-      { path: '/purchases', icon: Truck, label: 'Purchases', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
-    ]
-  },
-  {
-    label: 'Warehouse',
-    items: [
-      { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
-      { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
-      { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting', roles: ['super_admin', 'warehouse_manager', 'inventory_staff'] },
-    ]
-  },
-  {
-    label: 'Manufacturing',
-    items: [
-      { path: '/manufacturing', icon: Factory, label: 'Manufacturing', roles: ['super_admin', 'warehouse_manager'] },
-    ]
-  },
-  {
-    label: 'Intelligence',
-    items: [
-      { path: '/analytics', icon: PieChart, label: 'Inv. Analytics', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/forecasting', icon: Brain, label: 'AI Forecasting', roles: ['super_admin', 'warehouse_manager'] },
-    ]
-  },
-  {
-    label: 'Relationships',
-    items: [
-      { path: '/customers', icon: Users, label: 'Customers', roles: ['super_admin', 'store_manager', 'cashier'] },
-      { path: '/loyalty', icon: Star, label: 'Loyalty Program', roles: ['super_admin', 'store_manager'] },
-      { path: '/suppliers', icon: Store, label: 'Suppliers', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/supplier-scorecard', icon: Award, label: 'Supplier Scores', roles: ['super_admin', 'warehouse_manager'] },
-    ]
-  },
-  {
-    label: 'Finance',
-    items: [
-      { path: '/financials', icon: DollarSign, label: 'Financials', roles: ['super_admin'] },
-      { path: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
-      { path: '/sales', icon: ClipboardList, label: 'Sales History', roles: ['super_admin', 'store_manager', 'cashier'] },
-      { path: '/reports', icon: BarChart3, label: 'Reports', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
-      { path: '/alerts', icon: Bell, label: 'Alerts', roles: ['super_admin', 'warehouse_manager', 'store_manager', 'inventory_staff'] },
-    ]
-  },
-  {
-    label: 'Commerce & Logistics',
-    items: [
-      { path: '/multi-channel', icon: Globe2, label: 'Multi-Channel', roles: ['super_admin', 'store_manager'] },
-      { path: '/transportation', icon: Route, label: 'Transportation', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/3pl', icon: Server, label: '3PL Management', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Automation & Data',
-    items: [
-      { path: '/workflow', icon: Zap, label: 'Workflow Engine', roles: ['super_admin'] },
-      { path: '/master-data', icon: Database, label: 'Master Data', roles: ['super_admin'] },
-      { path: '/pricing', icon: Tag, label: 'Pricing Engine', roles: ['super_admin', 'store_manager'] },
-      { path: '/optimization', icon: TrendingUp, label: 'Inv. Optimization', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/data-warehouse', icon: Shield, label: 'Data Warehouse', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Quality & Assets',
-    items: [
-      { path: '/quality', icon: CheckSquare, label: 'Quality (QMS)', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/assets', icon: Wrench, label: 'Asset Management', roles: ['super_admin'] },
-      { path: '/documents', icon: FileText, label: 'Documents', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/api-hub', icon: Webhook, label: 'API Hub', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Platform Layer',
-    items: [
-      { path: '/platform-admin', icon: Building2, label: 'Platform Admin', roles: ['super_admin'] },
-      { path: '/iam', icon: Lock, label: 'IAM & Roles', roles: ['super_admin'] },
-      { path: '/audit-compliance', icon: ShieldCheck, label: 'Audit & Compliance', roles: ['super_admin'] },
-      { path: '/business-rules', icon: GitBranch, label: 'Rules Engine', roles: ['super_admin'] },
-      { path: '/scheduler', icon: Clock, label: 'Scheduler', roles: ['super_admin'] },
-      { path: '/comms-hub', icon: Bell, label: 'Comms Hub', roles: ['super_admin'] },
-      { path: '/monitoring', icon: Activity, label: 'Monitoring', roles: ['super_admin'] },
-      { path: '/supplier-portal', icon: Shield, label: 'Supplier Portal', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'AI & Intelligence',
-    items: [
-      { path: '/insights', icon: Lightbulb, label: 'AI Insight Hub', roles: ['super_admin', 'warehouse_manager'] },
-      { path: '/aiops', icon: Brain, label: 'AIOps', roles: ['super_admin'] },
-      { path: '/benchmarking', icon: PieChart, label: 'Benchmarking', roles: ['super_admin'] },
-      { path: '/ai-copilot', icon: Bot, label: 'AI Copilot', roles: ['super_admin', 'warehouse_manager', 'store_manager'] },
-      { path: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', roles: ['super_admin', 'warehouse_manager'] },
-    ]
-  },
-  {
-    label: 'Architecture',
-    items: [
-      { path: '/event-bus', icon: Zap, label: 'Event Bus', roles: ['super_admin'] },
-      { path: '/observability', icon: Eye, label: 'Observability', roles: ['super_admin'] },
-      { path: '/devops', icon: GitBranch, label: 'DevOps', roles: ['super_admin'] },
-      { path: '/security', icon: Key, label: 'Security Center', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Customer & Commerce',
-    items: [
-      { path: '/customer-portal', icon: UserCheck, label: 'Customer Portal', roles: ['super_admin', 'store_manager'] },
-      { path: '/marketplace', icon: Puzzle, label: 'App Marketplace', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Customer Success',
-    items: [
-      { path: '/customer-success', icon: Heart, label: 'CS Center', roles: ['super_admin'] },
-      { path: '/onboarding', icon: CheckSquare, label: 'Onboarding Center', roles: ['super_admin'] },
-      { path: '/data-migration', icon: Database, label: 'Data Migration', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'SaaS Platform',
-    items: [
-      { path: '/billing', icon: CreditCard, label: 'Billing Platform', roles: ['super_admin'] },
-      { path: '/white-label', icon: Palette, label: 'White Label', roles: ['super_admin'] },
-      { path: '/developer-portal', icon: Code2, label: 'Developer Portal', roles: ['super_admin'] },
-      { path: '/releases', icon: Rocket, label: 'Release Management', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Launch',
-    items: [
-      { path: '/launch-readiness', icon: Target, label: 'Launch Readiness', roles: ['super_admin'] },
-      { path: '/test-automation', icon: TestTube, label: 'Test Automation', roles: ['super_admin'] },
-      { path: '/documentation', icon: BookOpen, label: 'Documentation Portal', roles: ['super_admin'] },
-      { path: '/implementation-toolkit', icon: Briefcase, label: 'Implementation Toolkit', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'Go-To-Market',
-    items: [
-      { path: '/demo-environment', icon: FlaskConical, label: 'Demo Environment', roles: ['super_admin'] },
-      { path: '/demo-script', icon: PlayCircle, label: 'Demo Script', roles: ['super_admin'] },
-      { path: '/investor-metrics', icon: BarChart3, label: 'Investor Metrics', roles: ['super_admin'] },
-    ]
-  },
-  {
-    label: 'System',
-    items: [
-      { path: '/settings', icon: Settings, label: 'Settings', roles: ['super_admin'] },
-      { path: '/enterprise-settings', icon: Building2, label: 'Enterprise', roles: ['super_admin'] },
-    ]
-  },
-];
+// Role-based menu groups — only the relevant section is shown per role
+const ROLE_MENUS = {
+  // CEO / super admin sees everything, organised by domain
+  super_admin: [
+    {
+      label: 'Executive',
+      items: [
+        { path: '/executive', icon: Crown, label: 'Exec Dashboard' },
+        { path: '/insights', icon: Lightbulb, label: 'AI Insights' },
+        { path: '/benchmarking', icon: PieChart, label: 'Benchmarking' },
+        { path: '/customer-success', icon: Heart, label: 'Customer Success' },
+        { path: '/investor-metrics', icon: BarChart3, label: 'Investor Metrics' },
+      ]
+    },
+    {
+      label: 'Operations',
+      items: [
+        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/pos', icon: ShoppingCart, label: 'Point of Sale' },
+        { path: '/products', icon: Package, label: 'Products' },
+        { path: '/inventory', icon: Warehouse, label: 'Inventory' },
+        { path: '/purchases', icon: Truck, label: 'Purchases' },
+        { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
+        { path: '/approvals', icon: CheckSquare, label: 'Approvals' },
+      ]
+    },
+    {
+      label: 'Warehouse',
+      items: [
+        { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution' },
+        { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH' },
+        { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting' },
+        { path: '/optimization', icon: TrendingUp, label: 'Optimization' },
+      ]
+    },
+    {
+      label: 'Finance',
+      items: [
+        { path: '/financials', icon: DollarSign, label: 'Financials' },
+        { path: '/sales', icon: ClipboardList, label: 'Sales History' },
+        { path: '/reports', icon: BarChart3, label: 'Reports' },
+        { path: '/billing', icon: CreditCard, label: 'Billing Platform' },
+      ]
+    },
+    {
+      label: 'Relationships',
+      items: [
+        { path: '/customers', icon: Users, label: 'Customers' },
+        { path: '/loyalty', icon: Star, label: 'Loyalty' },
+        { path: '/suppliers', icon: Store, label: 'Suppliers' },
+        { path: '/supplier-portal', icon: Shield, label: 'Supplier Portal' },
+        { path: '/supplier-scorecard', icon: Award, label: 'Supplier Scores' },
+        { path: '/customer-portal', icon: UserCheck, label: 'Customer Portal' },
+      ]
+    },
+    {
+      label: 'Commerce & Logistics',
+      items: [
+        { path: '/multi-channel', icon: Globe2, label: 'Multi-Channel' },
+        { path: '/transportation', icon: Route, label: 'Transportation' },
+        { path: '/3pl', icon: Server, label: '3PL' },
+        { path: '/manufacturing', icon: Factory, label: 'Manufacturing' },
+      ]
+    },
+    {
+      label: 'AI & Intelligence',
+      items: [
+        { path: '/ai-copilot', icon: Bot, label: 'AI Copilot' },
+        { path: '/forecasting', icon: Brain, label: 'AI Forecasting' },
+        { path: '/aiops', icon: Zap, label: 'AIOps' },
+        { path: '/analytics', icon: PieChart, label: 'Analytics' },
+        { path: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base' },
+      ]
+    },
+    {
+      label: 'Platform',
+      items: [
+        { path: '/platform-admin', icon: Building2, label: 'Platform Admin' },
+        { path: '/iam', icon: Lock, label: 'IAM & Roles' },
+        { path: '/audit-compliance', icon: ShieldCheck, label: 'Compliance' },
+        { path: '/monitoring', icon: Activity, label: 'Monitoring' },
+        { path: '/security', icon: Key, label: 'Security' },
+        { path: '/devops', icon: GitBranch, label: 'DevOps' },
+        { path: '/event-bus', icon: Webhook, label: 'Event Bus' },
+        { path: '/observability', icon: Eye, label: 'Observability' },
+        { path: '/scheduler', icon: Clock, label: 'Scheduler' },
+      ]
+    },
+    {
+      label: 'SaaS & GTM',
+      items: [
+        { path: '/white-label', icon: Palette, label: 'White Label' },
+        { path: '/marketplace', icon: Puzzle, label: 'Marketplace' },
+        { path: '/developer-portal', icon: Code2, label: 'Dev Portal' },
+        { path: '/releases', icon: Rocket, label: 'Releases' },
+        { path: '/onboarding', icon: CheckSquare, label: 'Onboarding' },
+        { path: '/data-migration', icon: Database, label: 'Data Migration' },
+        { path: '/demo-environment', icon: FlaskConical, label: 'Demo Env' },
+        { path: '/demo-script', icon: PlayCircle, label: 'Demo Script' },
+      ]
+    },
+    {
+      label: 'Launch',
+      items: [
+        { path: '/launch-readiness', icon: Target, label: 'Launch Readiness' },
+        { path: '/test-automation', icon: TestTube, label: 'Test Automation' },
+        { path: '/documentation', icon: BookOpen, label: 'Documentation' },
+        { path: '/implementation-toolkit', icon: Briefcase, label: 'Impl. Toolkit' },
+        { path: '/data-seeder', icon: Database, label: 'Data Seeder' },
+      ]
+    },
+    {
+      label: 'System',
+      items: [
+        { path: '/workflow', icon: Zap, label: 'Workflow Engine' },
+        { path: '/business-rules', icon: GitBranch, label: 'Rules Engine' },
+        { path: '/pricing', icon: Tag, label: 'Pricing Engine' },
+        { path: '/master-data', icon: Database, label: 'Master Data' },
+        { path: '/documents', icon: FileText, label: 'Documents' },
+        { path: '/assets', icon: Wrench, label: 'Assets' },
+        { path: '/quality', icon: CheckSquare, label: 'Quality (QMS)' },
+        { path: '/api-hub', icon: Webhook, label: 'API Hub' },
+        { path: '/data-warehouse', icon: Shield, label: 'Data Warehouse' },
+        { path: '/comms-hub', icon: Bell, label: 'Comms Hub' },
+        { path: '/settings', icon: Settings, label: 'Settings' },
+        { path: '/enterprise-settings', icon: Building2, label: 'Enterprise' },
+        { path: '/alerts', icon: Bell, label: 'Alerts' },
+      ]
+    },
+  ],
+
+  // Warehouse Manager
+  warehouse_manager: [
+    {
+      label: 'Overview',
+      items: [
+        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/alerts', icon: Bell, label: 'Alerts' },
+      ]
+    },
+    {
+      label: 'Warehouse',
+      items: [
+        { path: '/inventory', icon: Warehouse, label: 'Inventory' },
+        { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution' },
+        { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH' },
+        { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting' },
+        { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
+        { path: '/optimization', icon: TrendingUp, label: 'Optimization' },
+      ]
+    },
+    {
+      label: 'Procurement',
+      items: [
+        { path: '/purchases', icon: Truck, label: 'Purchases' },
+        { path: '/suppliers', icon: Store, label: 'Suppliers' },
+        { path: '/supplier-scorecard', icon: Award, label: 'Supplier Scores' },
+        { path: '/approvals', icon: CheckSquare, label: 'Approvals' },
+      ]
+    },
+    {
+      label: 'Intelligence',
+      items: [
+        { path: '/analytics', icon: PieChart, label: 'Analytics' },
+        { path: '/forecasting', icon: Brain, label: 'AI Forecasting' },
+        { path: '/ai-copilot', icon: Bot, label: 'AI Copilot' },
+        { path: '/insights', icon: Lightbulb, label: 'AI Insights' },
+      ]
+    },
+    {
+      label: 'Products',
+      items: [
+        { path: '/products', icon: Package, label: 'Products' },
+        { path: '/manufacturing', icon: Factory, label: 'Manufacturing' },
+        { path: '/reports', icon: BarChart3, label: 'Reports' },
+      ]
+    },
+  ],
+
+  // Store Manager
+  store_manager: [
+    {
+      label: 'Overview',
+      items: [
+        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/alerts', icon: Bell, label: 'Alerts' },
+      ]
+    },
+    {
+      label: 'Sales',
+      items: [
+        { path: '/pos', icon: ShoppingCart, label: 'Point of Sale' },
+        { path: '/sales', icon: ClipboardList, label: 'Sales History' },
+        { path: '/customers', icon: Users, label: 'Customers' },
+        { path: '/loyalty', icon: Star, label: 'Loyalty' },
+        { path: '/customer-portal', icon: UserCheck, label: 'Customer Portal' },
+      ]
+    },
+    {
+      label: 'Inventory',
+      items: [
+        { path: '/inventory', icon: Warehouse, label: 'Inventory' },
+        { path: '/products', icon: Package, label: 'Products' },
+        { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
+      ]
+    },
+    {
+      label: 'Reports',
+      items: [
+        { path: '/reports', icon: BarChart3, label: 'Reports' },
+        { path: '/approvals', icon: CheckSquare, label: 'Approvals' },
+      ]
+    },
+  ],
+
+  // Cashier
+  cashier: [
+    {
+      label: 'Sales',
+      items: [
+        { path: '/pos', icon: ShoppingCart, label: 'Point of Sale' },
+        { path: '/sales', icon: ClipboardList, label: 'Sales History' },
+        { path: '/customers', icon: Users, label: 'Customers' },
+      ]
+    },
+    {
+      label: 'Info',
+      items: [
+        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/alerts', icon: Bell, label: 'Alerts' },
+      ]
+    },
+  ],
+
+  // Inventory Staff
+  inventory_staff: [
+    {
+      label: 'Warehouse',
+      items: [
+        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/inventory', icon: Warehouse, label: 'Inventory' },
+        { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution' },
+        { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH' },
+        { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting' },
+        { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
+        { path: '/alerts', icon: Bell, label: 'Alerts' },
+      ]
+    },
+  ],
+};
 
 export default function Sidebar({ user, alertCount = 0 }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState({});
   const userRole = user?.role || 'cashier';
 
-  const filteredGroups = menuGroups.map(group => ({
-    ...group,
-    items: group.items.filter(item => item.roles.includes(userRole))
-  })).filter(group => group.items.length > 0);
+  const menuGroups = ROLE_MENUS[userRole] || ROLE_MENUS.cashier;
+
+  const toggleGroup = (label) => {
+    setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
 
   return (
     <aside className={cn(
@@ -201,16 +287,15 @@ export default function Sidebar({ user, alertCount = 0 }) {
       collapsed ? "w-[68px]" : "w-[240px]"
     )}>
       {/* Logo */}
-      <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
-        {!collapsed && (
+      <div className="h-16 flex items-center px-4 border-b border-sidebar-border flex-shrink-0">
+        {!collapsed ? (
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <Warehouse className="w-4 h-4 text-primary-foreground" />
             </div>
             <span className="font-bold text-lg tracking-tight">WMS Pro</span>
           </div>
-        )}
-        {collapsed && (
+        ) : (
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center mx-auto">
             <Warehouse className="w-4 h-4 text-primary-foreground" />
           </div>
@@ -218,51 +303,58 @@ export default function Sidebar({ user, alertCount = 0 }) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
-        {filteredGroups.map((group) => (
-          <div key={group.label} className="mb-2">
-            {!collapsed && (
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/30 px-3 pt-2 pb-1">
-                {group.label}
-              </p>
-            )}
-            {group.items.map((item) => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
+      <nav className="flex-1 py-3 px-2 overflow-y-auto">
+        {menuGroups.map((group) => {
+          const isGroupCollapsed = collapsedGroups[group.label];
+          return (
+            <div key={group.label} className="mb-1">
+              {!collapsed && (
+                <button
+                  onClick={() => toggleGroup(group.label)}
+                  className="w-full flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/30 px-3 pt-3 pb-1 hover:text-sidebar-foreground/50 transition-colors"
                 >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
-                  {!collapsed && <span>{item.label}</span>}
-                  {!collapsed && item.path === '/alerts' && alertCount > 0 && (
-                    <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
-                      {alertCount}
-                    </Badge>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+                  {group.label}
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", isGroupCollapsed && "-rotate-90")} />
+                </button>
+              )}
+              {!isGroupCollapsed && group.items.map((item) => {
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
+                      isActive
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                    {!collapsed && item.path === '/alerts' && alertCount > 0 && (
+                      <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
+                        {alertCount}
+                      </Badge>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          );
+        })}
       </nav>
 
       {/* User & Collapse */}
-      <div className="border-t border-sidebar-border p-3">
+      <div className="border-t border-sidebar-border p-3 flex-shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3 mb-3 px-2">
-            <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-semibold">
+            <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-semibold flex-shrink-0">
               {user?.full_name?.[0] || 'U'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.full_name || 'User'}</p>
-              <p className="text-xs text-sidebar-foreground/50 capitalize">{userRole.replace('_', ' ')}</p>
+              <p className="text-xs text-sidebar-foreground/50 capitalize">{userRole.replace(/_/g, ' ')}</p>
             </div>
           </div>
         )}

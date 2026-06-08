@@ -81,6 +81,8 @@ import ImplementationToolkit from '@/pages/ImplementationToolkit';
 
 import WhiteLabel from '@/pages/WhiteLabel';
 import DeveloperPortal from '@/pages/DeveloperPortal';
+import Home from '@/pages/Home';
+import DataSeeder from '@/pages/DataSeeder';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -107,6 +109,7 @@ const AuthenticatedApp = () => {
 
   return (
     <Routes>
+      <Route path="/home" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -181,6 +184,7 @@ const AuthenticatedApp = () => {
           <Route path="/test-automation" element={<TestAutomation />} />
           <Route path="/documentation" element={<DocumentationPortal />} />
           <Route path="/implementation-toolkit" element={<ImplementationToolkit />} />
+          <Route path="/data-seeder" element={<DataSeeder />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>
