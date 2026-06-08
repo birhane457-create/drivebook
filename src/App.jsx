@@ -74,6 +74,10 @@ import Benchmarking from '@/pages/Benchmarking';
 import DemoEnvironment from '@/pages/DemoEnvironment';
 import DemoScript from '@/pages/DemoScript';
 import InvestorMetrics from '@/pages/InvestorMetrics';
+import LaunchReadiness from '@/pages/LaunchReadiness';
+import TestAutomation from '@/pages/TestAutomation';
+import DocumentationPortal from '@/pages/DocumentationPortal';
+import ImplementationToolkit from '@/pages/ImplementationToolkit';
 
 import WhiteLabel from '@/pages/WhiteLabel';
 import DeveloperPortal from '@/pages/DeveloperPortal';
@@ -173,6 +177,10 @@ const AuthenticatedApp = () => {
           <Route path="/demo-environment" element={<DemoEnvironment />} />
           <Route path="/demo-script" element={<DemoScript />} />
           <Route path="/investor-metrics" element={<InvestorMetrics />} />
+          <Route path="/launch-readiness" element={<LaunchReadiness />} />
+          <Route path="/test-automation" element={<TestAutomation />} />
+          <Route path="/documentation" element={<DocumentationPortal />} />
+          <Route path="/implementation-toolkit" element={<ImplementationToolkit />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>

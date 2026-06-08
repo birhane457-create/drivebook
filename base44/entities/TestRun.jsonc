@@ -1,0 +1,83 @@
+{
+  "name": "TestRun",
+  "type": "object",
+  "properties": {
+    "suite_id": {
+      "type": "string"
+    },
+    "suite_name": {
+      "type": "string"
+    },
+    "triggered_by": {
+      "type": "string"
+    },
+    "trigger_type": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "scheduled",
+        "ci",
+        "deployment"
+      ],
+      "default": "manual"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "pass",
+        "fail",
+        "partial",
+        "aborted"
+      ],
+      "default": "queued"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "total_cases": {
+      "type": "number",
+      "default": 0
+    },
+    "passed": {
+      "type": "number",
+      "default": 0
+    },
+    "failed": {
+      "type": "number",
+      "default": 0
+    },
+    "skipped": {
+      "type": "number",
+      "default": 0
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "dev",
+        "staging",
+        "production"
+      ],
+      "default": "staging"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "artifacts_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "suite_id"
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "name": "TestSuite",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "smoke",
+        "regression",
+        "workflow",
+        "api",
+        "ai",
+        "e2e",
+        "performance"
+      ],
+      "default": "smoke"
+    },
+    "module": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "last_run_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_run_status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "partial",
+        "skipped"
+      ],
+      "default": "pass"
+    },
+    "total_cases": {
+      "type": "number",
+      "default": 0
+    },
+    "pass_count": {
+      "type": "number",
+      "default": 0
+    },
+    "fail_count": {
+      "type": "number",
+      "default": 0
+    },
+    "avg_duration_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}

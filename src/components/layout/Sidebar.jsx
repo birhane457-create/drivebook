@@ -9,7 +9,8 @@ import {
   Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
-  CreditCard, Palette, Lightbulb, Rocket, Heart, FlaskConical, PlayCircle
+  CreditCard, Palette, Lightbulb, Rocket, Heart, FlaskConical, PlayCircle,
+  Target, TestTube, Briefcase
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -156,6 +157,15 @@ const menuGroups = [
       { path: '/white-label', icon: Palette, label: 'White Label', roles: ['super_admin'] },
       { path: '/developer-portal', icon: Code2, label: 'Developer Portal', roles: ['super_admin'] },
       { path: '/releases', icon: Rocket, label: 'Release Management', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'Launch',
+    items: [
+      { path: '/launch-readiness', icon: Target, label: 'Launch Readiness', roles: ['super_admin'] },
+      { path: '/test-automation', icon: TestTube, label: 'Test Automation', roles: ['super_admin'] },
+      { path: '/documentation', icon: BookOpen, label: 'Documentation Portal', roles: ['super_admin'] },
+      { path: '/implementation-toolkit', icon: Briefcase, label: 'Implementation Toolkit', roles: ['super_admin'] },
     ]
   },
   {
