@@ -9,7 +9,7 @@ import {
   Tag, TrendingUp, Shield, Webhook, FileText, Wrench,
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
-  CreditCard, Palette, Lightbulb, Rocket, Heart
+  CreditCard, Palette, Lightbulb, Rocket, Heart, FlaskConical, PlayCircle
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -156,6 +156,14 @@ const menuGroups = [
       { path: '/white-label', icon: Palette, label: 'White Label', roles: ['super_admin'] },
       { path: '/developer-portal', icon: Code2, label: 'Developer Portal', roles: ['super_admin'] },
       { path: '/releases', icon: Rocket, label: 'Release Management', roles: ['super_admin'] },
+    ]
+  },
+  {
+    label: 'Go-To-Market',
+    items: [
+      { path: '/demo-environment', icon: FlaskConical, label: 'Demo Environment', roles: ['super_admin'] },
+      { path: '/demo-script', icon: PlayCircle, label: 'Demo Script', roles: ['super_admin'] },
+      { path: '/investor-metrics', icon: BarChart3, label: 'Investor Metrics', roles: ['super_admin'] },
     ]
   },
   {

@@ -71,6 +71,9 @@ import CustomerSuccess from '@/pages/CustomerSuccess';
 import ReleaseManagement from '@/pages/ReleaseManagement';
 import AIOps from '@/pages/AIOps';
 import Benchmarking from '@/pages/Benchmarking';
+import DemoEnvironment from '@/pages/DemoEnvironment';
+import DemoScript from '@/pages/DemoScript';
+import InvestorMetrics from '@/pages/InvestorMetrics';
 
 import WhiteLabel from '@/pages/WhiteLabel';
 import DeveloperPortal from '@/pages/DeveloperPortal';
@@ -167,7 +170,9 @@ const AuthenticatedApp = () => {
           <Route path="/releases" element={<ReleaseManagement />} />
           <Route path="/aiops" element={<AIOps />} />
           <Route path="/benchmarking" element={<Benchmarking />} />
-
+          <Route path="/demo-environment" element={<DemoEnvironment />} />
+          <Route path="/demo-script" element={<DemoScript />} />
+          <Route path="/investor-metrics" element={<InvestorMetrics />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>
