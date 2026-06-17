@@ -46,7 +46,8 @@ debug.log
 next-env.d.ts
 
 # prisma
-prisma/migrations/
+# Migrations MUST be committed to git for production deployment
+# prisma/migrations/  # REMOVED - migrations must be version controlled
 *.db
 *.db-journal
 
