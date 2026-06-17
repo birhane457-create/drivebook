@@ -179,10 +179,54 @@ export default function ConfirmationPage({ params }: { params: { instructorId: s
             {bookingState.remainingHours > 0 && (
               <div className="mt-4 bg-blue-50 border border-blue-200 rounded p-3">
                 <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> You have {bookingState.remainingHours.toFixed(1)} hours remaining to schedule later
+                  <strong>Note:</strong> You have {bookingState.remainingHours.toFixed(1)} extra hours to schedule later from your dashboard
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Scheduled PDA Test */}
+        {bookingState.pdaTestBooking && (
+          <div className="bg-amber-50 rounded-lg border border-amber-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Scheduled PDA Test</h3>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm text-gray-600">Test Package</p>
+                  <p className="font-medium text-gray-900">{bookingState.pdaTestBooking.configName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Price</p>
+                  <p className="font-semibold text-amber-700">${bookingState.pdaTestBooking.price.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 border-t pt-3">
+                <div>
+                  <p className="text-sm text-gray-600">Date</p>
+                  <p className="font-medium text-gray-900">{bookingState.pdaTestBooking.testDate}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Time</p>
+                  <p className="font-medium text-gray-900">{bookingState.pdaTestBooking.testTime}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Duration</p>
+                  <p className="font-medium text-gray-900">
+                    {Math.floor(bookingState.pdaTestBooking.durationMinutes / 60)}h
+                    {bookingState.pdaTestBooking.durationMinutes % 60 > 0 ? ` ${bookingState.pdaTestBooking.durationMinutes % 60}m` : ''}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t pt-3">
+                <p className="text-sm text-gray-600">Test Centre</p>
+                <p className="font-medium text-gray-900">{bookingState.pdaTestBooking.testCentreName}</p>
+                <p className="text-sm text-gray-600">{bookingState.pdaTestBooking.testCentreAddress}</p>
+              </div>
+            </div>
           </div>
         )}
 

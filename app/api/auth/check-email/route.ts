@@ -1,34 +1,41 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { normalizeEmail } from '@/lib/auth-email'
+import { authRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
 
+export const dynamic = 'force-dynamic'
 
-export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const email = searchParams.get('email');
-
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    const ip = req.headers.get('x-forwarded-for')
+    const rateLimitId = getRateLimitIdentifier(undefined, ip, 'check-email')
+    const rateLimitResult = await checkRateLimitStrict(authRateLimit, rateLimitId)
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: rateLimitResult.error },
+        { status: 429, headers: rateLimitResult.headers }
+      )
     }
 
-    // Normalize email: lowercase and trim
-    const normalizedEmail = email.toLowerCase().trim();
+    const { searchParams } = new URL(req.url)
+    const email = searchParams.get('email')
 
-    // Check if user exists in database
+    if (!email) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    }
+
+    const normalizedEmail = normalizeEmail(email)
+
     const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedEmail }
-    });
+      where: { email: normalizedEmail },
+    })
 
     return NextResponse.json({
       exists: !!existingUser,
-      email: normalizedEmail
-    });
+      email: normalizedEmail,
+    })
   } catch (error) {
-    console.error('Error checking email:', error);
-    return NextResponse.json(
-      { error: 'Failed to check email' },
-      { status: 500 }
-    );
+    console.error('Error checking email:', error)
+    return NextResponse.json({ error: 'Failed to check email' }, { status: 500 })
   }
 }

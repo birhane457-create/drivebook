@@ -26,6 +26,7 @@ import crypto from 'crypto';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 import { smsService } from '@/lib/services/sms';
+import { emailService } from '@/lib/services/email';
 import { appendLedgerEntry, incrementLedger, assertSufficientBalance, assertNonNegativeBalance, getPlatformLedger } from '@/lib/services/ledger-service';
 import { sendAlert } from '@/lib/services/alert-service';
 
@@ -168,7 +169,7 @@ export async function buildPayout(
       payoutHoldReason: true,
       chargesEnabled: true,
       payoutsEnabled: true,
-    } as any,
+    },
   });
   if (!instructor) throw new Error('Instructor not found');
 
@@ -176,9 +177,9 @@ export async function buildPayout(
   // All four checks must pass before a payout record is created.
 
   // 1. Dispute freeze
-  if ((instructor as any).payoutHold) {
+  if (instructor.payoutHold) {
     throw new Error(
-      `Payout blocked: instructor has an active dispute hold (${(instructor as any).payoutHoldReason ?? 'see admin'}). ` +
+      `Payout blocked: instructor has an active dispute hold (${instructor.payoutHoldReason ?? 'see admin'}). ` +
       `Resolve the dispute before processing.`
     );
   }
@@ -192,14 +193,14 @@ export async function buildPayout(
       );
     }
     // 3. Charges enabled — Stripe has verified the account
-    if (!(instructor as any).chargesEnabled) {
+    if (!instructor.chargesEnabled) {
       throw new Error(
         `Payout blocked: instructor's Stripe Connect account is not fully verified ` +
         `(chargesEnabled = false). Onboarding may be incomplete.`
       );
     }
     // 4. Payouts enabled — bank account linked and Stripe has approved payouts
-    if (!(instructor as any).payoutsEnabled) {
+    if (!instructor.payoutsEnabled) {
       throw new Error(
         `Payout blocked: instructor's Stripe Connect account cannot receive payouts yet ` +
         `(payoutsEnabled = false). They may need to add a bank account in their Stripe dashboard.`
@@ -304,7 +305,7 @@ export async function executePayout(
 
   const instructor = await prisma.instructor.findUnique({
     where: { id: payout.instructorId },
-    select: { name: true, phone: true },
+    select: { name: true, phone: true, user: { select: { email: true } } },
   });
 
   const txCount = payout.transactions.length;
@@ -386,10 +387,13 @@ export async function executePayout(
 
       // FIX #8: Mark unrecovered ADJUSTMENT entries for this instructor as recovered
       // so they are not double-deducted in future payouts.
+      // Then send instructor notification email about deductions.
       try {
         const unrecovered = await (prisma as any).ledgerEntry.findMany({
           where: { type: 'ADJUSTMENT', instructorId: payout.instructorId },
         });
+        const adjustmentDetails: Array<{ bookingId: string; amount: number }> = [];
+        
         for (const adj of unrecovered) {
           const meta = (adj.metadata as any) ?? {};
           if (!meta.recovered) {
@@ -397,6 +401,36 @@ export async function executePayout(
               where: { id: adj.id },
               data: { metadata: { ...meta, recovered: true, recoveredByPayoutId: payoutId } },
             });
+            // Track for email notification
+            if ((meta as any).referenceId && (meta as any).referenceId.startsWith('clx') || (meta as any).referenceId.startsWith('cm')) {
+              adjustmentDetails.push({
+                bookingId: (meta as any).referenceId,
+                amount: Math.abs(adj.amount),
+              });
+            }
+          }
+        }
+
+        // Send instructor deduction email if there were adjustments
+        if (adjustmentDetails.length > 0 && instructor?.user?.email) {
+          try {
+            const totalDeducted = adjustmentDetails.reduce((sum, d) => sum + d.amount, 0);
+            const html = `<h2>Wallet Adjustment Applied</h2>
+              <p>Hi ${instructor.name},</p>
+              <p>Your DriveBook payout has been adjusted to recover the following refund deductions:</p>
+              <ul>
+                ${adjustmentDetails.map(d => `<li>Booking ${d.bookingId}: -$${d.amount.toFixed(2)}</li>`).join('')}
+              </ul>
+              <p><strong>Total deducted from payout:</strong> $${totalDeducted.toFixed(2)}</p>
+              <p>These adjustments are made in accordance with our cancellation policy. If you believe this is in error, please contact support.</p>`;
+            
+            await emailService.sendGenericEmail({
+              to: instructor.user.email,
+              subject: `Payout Adjustment — $${totalDeducted.toFixed(2)} deducted (${payout.payoutRef})`,
+              html,
+            }).catch(e => console.error('Adjustment deduction email failed (non-critical):', e));
+          } catch (e) {
+            console.error('[PAYOUT] Failed to send adjustment email (non-critical):', e);
           }
         }
       } catch (adjErr) {

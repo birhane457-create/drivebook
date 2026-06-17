@@ -15,9 +15,12 @@ export const dynamic = 'force-dynamic';
 const walletAddSchema = z.object({
   amount: z.number()
     .positive('Amount must be positive')
+    .min(10, 'Minimum top-up is $10')
     .max(10000, 'Maximum amount is $10,000 per transaction')
     .multipleOf(0.01, 'Amount must have at most 2 decimal places'),
-  paymentIntentId: z.string().optional()
+  paymentIntentId: z.string()
+    .min(3, 'Invalid payment intent')
+    .startsWith('pi_', 'Invalid payment intent format')
 });
 
 export async function POST(req: NextRequest) {
@@ -68,6 +71,76 @@ export async function POST(req: NextRequest) {
 
     // Create wallet if it doesn't exist
     const wallet = await getOrCreateWallet(user.id);
+
+    // P0 FIX #3: Verify paymentIntentId actually succeeded via Stripe API
+    // Don't accept any paymentIntentId without Stripe confirmation
+    // This prevents fraud where attacker could call wallet-add with a fake/pending intent ID
+    try {
+      const stripeService = require('@/lib/services/stripe').stripeService;
+      const paymentIntent = await stripeService.retrievePaymentIntent(paymentIntentId);
+      
+      if (!paymentIntent) {
+        return NextResponse.json(
+          { error: 'Payment intent not found' },
+          { status: 400 }
+        );
+      }
+
+      if (paymentIntent.status !== 'succeeded') {
+        return NextResponse.json(
+          { error: `Payment not confirmed (status: ${paymentIntent.status})` },
+          { status: 400 }
+        );
+      }
+
+      // Verify amount matches what Stripe has
+      const expectedCents = Math.round(amount * 100);
+      if (paymentIntent.amount_received !== expectedCents) {
+        return NextResponse.json(
+          { error: 'Payment amount mismatch' },
+          { status: 400 }
+        );
+      }
+    } catch (stripeErr) {
+      console.error('Stripe verification failed:', stripeErr);
+      return NextResponse.json(
+        { error: 'Payment verification failed' },
+        { status: 400 }
+      );
+    }
+    
+    // P0 FIX #4: Idempotency check - don't credit twice for same paymentIntentId
+    // If this endpoint is called twice with same paymentIntentId, only credit once
+    const existingTransaction = await prisma.walletTransaction.findFirst({
+      where: {
+        walletId: wallet.id,
+        description: {
+          contains: paymentIntentId
+        },
+        status: 'CONFIRMED',
+        type: 'CREDIT'
+      }
+    });
+
+    if (existingTransaction) {
+      // Already credited this payment intent
+      console.warn(`Duplicate wallet-add call for paymentIntentId=${paymentIntentId}`);
+      const newBalance = await getWalletBalance(user.id);
+      return NextResponse.json({
+        success: true,
+        duplicate: true,
+        wallet: {
+          balance: newBalance.balance,
+          totalPaid: newBalance.totalPaid,
+          creditsRemaining: newBalance.balance
+        },
+        transaction: {
+          id: existingTransaction.id,
+          amount: existingTransaction.amount,
+          createdAt: existingTransaction.createdAt
+        }
+      });
+    }
     
     // Get current balance before transaction
     const previousBalance = await getWalletBalance(user.id);

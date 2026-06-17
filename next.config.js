@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    // These are pre-existing lint issues across the codebase.
-    // TypeScript strict checking (tsc --noEmit) is used instead for type safety.
-    ignoreDuringBuilds: true,
+    // Lint runs during builds — only errors (not warnings) will fail the build.
+    // Run `npx next lint` locally to see all warnings.
+    ignoreDuringBuilds: false,
   },
   images: {
     domains: ['localhost', 'res.cloudinary.com'],

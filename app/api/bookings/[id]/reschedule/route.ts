@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { availabilityService } from '@/lib/services/availability'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { z } from 'zod'
 import { notifyBookingRescheduled, notifyClientBookingRescheduled } from '@/lib/services/notifications'
@@ -81,17 +80,7 @@ export async function PATCH(
       }, { status: 200 })
     }
 
-    // Check availability (exclude this booking from conflict check)
-    const hasConflict = await availabilityService.checkDoubleBooking(
-      session.user.instructorId,
-      newStart,
-      newEnd,
-      params.id
-    )
-
-    if (hasConflict) {
-      return NextResponse.json({ error: 'New time slot conflicts with another booking' }, { status: 409 })
-    }
+    // Note: slot conflict check is performed inside the $transaction below (TOCTOU-safe)
 
     // Build reschedule history entry
     const historyEntry = {
@@ -122,14 +111,28 @@ export async function PATCH(
       updateData.isNonRefundable = true
     }
 
+    // ── TOCTOU-safe availability check inside the transaction ────────────────
     const updated = await prisma.$transaction(async (tx) => {
+      // Re-check for conflicts inside the transaction — prevents race conditions
+      // where two concurrent reschedules to the same slot both pass the pre-check
+      const slotConflict = await tx.booking.findFirst({
+        where: {
+          id: { not: params.id },
+          instructorId: session.user.instructorId,
+          status: { in: ['PENDING', 'CONFIRMED', 'PENDING_PAYMENT'] },
+          deletedAt: null,
+          startTime: { lt: newEnd },
+          endTime: { gt: newStart },
+        } as any,
+      })
+      if (slotConflict) throw new Error('SLOT_TAKEN')
+
       const updatedBooking = await tx.booking.update({
         where: { id: params.id },
         data: updateData,
         include: { client: true, instructor: { include: { user: true } } }
       })
 
-      // Increment instructor's policy exception count if they waived the penalty
       if (isInsidePenaltyWindow) {
         await tx.instructor.update({
           where: { id: session.user.instructorId },
@@ -138,6 +141,9 @@ export async function PATCH(
       }
 
       return updatedBooking
+    }).catch((err: Error) => {
+      if (err.message === 'SLOT_TAKEN') throw err
+      throw err
     })
 
     // Update Google Calendar if connected
@@ -208,6 +214,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })
+    }
+    if (error instanceof Error && error.message === 'SLOT_TAKEN') {
+      return NextResponse.json({ error: 'New time slot conflicts with another booking' }, { status: 409 })
     }
     console.error('Reschedule error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

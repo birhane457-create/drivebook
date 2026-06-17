@@ -11,7 +11,6 @@ interface Settings {
   basicCommissionRate: number;
   proCommissionRate: number;
   businessCommissionRate: number;
-  drivingTestPackagePrice: number;
   discountPaidBy: 'platform' | 'shared' | 'instructor';
   cancellationFee: number;
   lateCancellationWindowHours: number;
@@ -30,9 +29,9 @@ type Toast = { type: 'success' | 'error'; message: string } | null;
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-slate-300 mb-1">{label}</label>
       {children}
-      {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -42,11 +41,11 @@ function NumInput({ value, onChange, step = 1, min = 0, max = 9999, prefix }: {
 }) {
   return (
     <div className="relative">
-      {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">{prefix}</span>}
+      {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">{prefix}</span>}
       <input
         type="number" step={step} min={min} max={max} value={value}
         onChange={e => onChange(parseFloat(e.target.value) || 0)}
-        className={`w-full border border-gray-300 rounded-lg py-2 pr-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${prefix ? 'pl-7' : 'pl-3'}`}
+        className={`w-full border border-slate-700 rounded-lg py-2 pr-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${prefix ? 'pl-7' : 'pl-3'}`}
       />
     </div>
   );
@@ -54,7 +53,7 @@ function NumInput({ value, onChange, step = 1, min = 0, max = 9999, prefix }: {
 
 function Section({ icon, title, color, children }: { icon: React.ReactNode; title: string; color: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-6">
       <h2 className={`text-base font-semibold flex items-center gap-2 mb-5 ${color}`}>
         {icon}{title}
       </h2>
@@ -110,7 +109,7 @@ export default function PricingSettingsForm() {
   }
 
   if (loading || !s) {
-    return <div className="flex items-center justify-center h-64 text-gray-400">Loading settings...</div>;
+    return <div className="flex items-center justify-center h-64 text-slate-500">Loading settings...</div>;
   }
 
   // Live preview calc (10-lesson package, PRO tier)
@@ -147,7 +146,7 @@ export default function PricingSettingsForm() {
       {/* Package Discounts */}
       <Section icon={<Package className="h-5 w-5" />} title="Package Discounts" color="text-green-700">
         {/* Master toggle */}
-        <div className="flex items-center gap-3 mb-5 p-3 bg-green-50 rounded-lg border border-green-200">
+        <div className="flex items-center gap-3 mb-5 p-3 bg-green-900/20 rounded-lg border border-green-700/50">
           <button
             type="button"
             onClick={() => {
@@ -164,14 +163,14 @@ export default function PricingSettingsForm() {
                 ? 'bg-green-600' : 'bg-gray-300'
             }`}
           >
-            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${
+            <span className={`inline-block h-5 w-5 rounded-full bg-slate-900 shadow transform transition-transform mt-0.5 ${
               s.package6Discount > 0 || s.package10Discount > 0 || s.package15Discount > 0
                 ? 'translate-x-5' : 'translate-x-0.5'
             }`} />
           </button>
           <div>
-            <span className="text-sm font-medium text-gray-700">Enable bulk discounts</span>
-            <p className="text-xs text-gray-500">Turning off sets all rates to 0% — clients pay full hourly rate for any package size</p>
+            <span className="text-sm font-medium text-slate-300">Enable bulk discounts</span>
+            <p className="text-xs text-slate-400">Turning off sets all rates to 0% — clients pay full hourly rate for any package size</p>
           </div>
         </div>
         <div className="grid sm:grid-cols-3 gap-4 mb-4">
@@ -189,7 +188,7 @@ export default function PricingSettingsForm() {
           <select
             value={s.discountPaidBy}
             onChange={e => set({ discountPaidBy: e.target.value as Settings['discountPaidBy'] })}
-            className="w-full max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+            className="w-full max-w-sm border border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
           >
             <option value="platform">Platform — lower commission to cover it</option>
             <option value="shared">Shared — client saves, instructor gets slightly less</option>
@@ -202,12 +201,12 @@ export default function PricingSettingsForm() {
       <Section icon={<TrendingUp className="h-5 w-5" />} title="Commission Rates by Subscription Tier" color="text-purple-700">
         <div className="grid sm:grid-cols-3 gap-5">
           {([
-            { key: 'basic', label: 'Basic', border: 'border-gray-200', bg: '' },
-            { key: 'pro', label: 'Pro', border: 'border-blue-200', bg: 'bg-blue-50' },
-            { key: 'business', label: 'Business', border: 'border-purple-200', bg: 'bg-purple-50' },
+            { key: 'basic', label: 'Basic', border: 'border-slate-700', bg: '' },
+            { key: 'pro', label: 'Pro', border: 'border-blue-700/50', bg: 'bg-blue-900/20' },
+            { key: 'business', label: 'Business', border: 'border-purple-200', bg: 'bg-violet-900/20' },
           ] as const).map(({ key, label, border, bg }) => (
             <div key={key} className={`border-2 ${border} ${bg} rounded-xl p-4 space-y-3`}>
-              <p className="font-semibold text-sm text-gray-800">{label}</p>
+              <p className="font-semibold text-sm text-slate-200">{label}</p>
               <Field label="Commission (%)">
                 <NumInput
                   value={s[`${key}CommissionRate`]}
@@ -257,9 +256,9 @@ export default function PricingSettingsForm() {
                 onClick={() => set({ gstEnabled: !s.gstEnabled })}
                 className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${s.gstEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
               >
-                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${s.gstEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                <span className={`inline-block h-5 w-5 rounded-full bg-slate-900 shadow transform transition-transform mt-0.5 ${s.gstEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
-              <span className="text-sm font-medium text-gray-700">GST / Tax enabled</span>
+              <span className="text-sm font-medium text-slate-300">GST / Tax enabled</span>
             </div>
             {s.gstEnabled && (
               <Field label="GST rate (%)" hint="Applied to the booking subtotal">
@@ -277,9 +276,9 @@ export default function PricingSettingsForm() {
                 onClick={() => set({ peakSurchargeEnabled: !s.peakSurchargeEnabled })}
                 className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${s.peakSurchargeEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
               >
-                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${s.peakSurchargeEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                <span className={`inline-block h-5 w-5 rounded-full bg-slate-900 shadow transform transition-transform mt-0.5 ${s.peakSurchargeEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
-              <span className="text-sm font-medium text-gray-700">Peak hour surcharge enabled</span>
+              <span className="text-sm font-medium text-slate-300">Peak hour surcharge enabled</span>
             </div>
             {s.peakSurchargeEnabled && (
               <Field label="Peak surcharge (%)" hint="Applied during peak hours (weekday evenings, weekends)">
@@ -287,15 +286,6 @@ export default function PricingSettingsForm() {
               </Field>
             )}
           </div>
-        </div>
-      </Section>
-
-      {/* Driving Test Package */}
-      <Section icon={<Zap className="h-5 w-5" />} title="Driving Test Package" color="text-teal-700">
-        <div className="max-w-xs">
-          <Field label="Package price ($)" hint="Includes vehicle, pickup/dropoff, 45-min warm-up lesson">
-            <NumInput value={s.drivingTestPackagePrice} onChange={v => set({ drivingTestPackagePrice: v })} step={5} min={0} max={1000} prefix="$" />
-          </Field>
         </div>
       </Section>
 
@@ -346,7 +336,7 @@ export default function PricingSettingsForm() {
           <Save className="h-4 w-4" />
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
-        <p className="text-xs text-gray-500">Changes apply to new bookings only. Existing bookings are unaffected.</p>
+        <p className="text-xs text-slate-400">Changes apply to new bookings only. Existing bookings are unaffected.</p>
       </div>
     </form>
   );

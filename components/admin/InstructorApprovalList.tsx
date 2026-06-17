@@ -43,13 +43,13 @@ interface ComplianceStatus {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    APPROVED: 'bg-green-100 text-green-800',
-    PENDING: 'bg-yellow-100 text-yellow-800',
-    REJECTED: 'bg-red-100 text-red-800',
+    APPROVED: 'bg-green-900/40 text-green-300',
+    PENDING: 'bg-yellow-900/40 text-yellow-300',
+    REJECTED: 'bg-red-900/40 text-red-300',
     SUSPENDED: 'bg-orange-100 text-orange-800',
   };
   return (
-    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${map[status] || 'bg-gray-100 text-gray-700'}`}>
+    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${map[status] || 'bg-slate-900 text-slate-300'}`}>
       {status}
     </span>
   );
@@ -70,17 +70,17 @@ function ReasonModal({ title, onConfirm, onClose }: {
   const [reason, setReason] = useState('');
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-slate-900 rounded-2xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+          <h3 className="font-semibold text-slate-100">{title}</h3>
+          <button onClick={onClose}><X className="w-5 h-5 text-slate-500" /></button>
         </div>
         <textarea
           value={reason}
           onChange={e => setReason(e.target.value)}
           placeholder="Enter reason (min 10 characters)..."
           rows={3}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full border border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 resize-none"
         />
         <div className="flex gap-2 mt-4">
           <button onClick={() => reason.length >= 10 && onConfirm(reason)}
@@ -88,7 +88,7 @@ function ReasonModal({ title, onConfirm, onClose }: {
             className="flex-1 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-40">
             Confirm
           </button>
-          <button onClick={onClose} className="flex-1 py-2 border border-gray-200 text-sm rounded-lg hover:bg-gray-50">
+          <button onClick={onClose} className="flex-1 py-2 border border-slate-700 text-sm rounded-lg hover:bg-slate-950">
             Cancel
           </button>
         </div>
@@ -181,10 +181,10 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
       {/* Search */}
       <input value={search} onChange={e => setSearch(e.target.value)}
         placeholder="Search by name, email, suburb..."
-        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500" />
+        className="w-full px-4 py-2.5 border border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500" />
 
       {filtered.length === 0 && (
-        <div className="text-center py-16 text-gray-400 text-sm">No instructors found</div>
+        <div className="text-center py-16 text-slate-500 text-sm">No instructors found</div>
       )}
 
       {filtered.map(instructor => {
@@ -201,14 +201,14 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
         const rating = instructor.averageRating ? instructor.averageRating.toFixed(1) : null;
 
         return (
-          <div key={instructor.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div key={instructor.id} className="bg-slate-900 rounded-2xl border border-slate-800 shadow-sm overflow-hidden">
             {/* Main row */}
             <div className="flex items-center gap-3 px-4 py-3">
               {/* Avatar */}
               <div className="shrink-0">
                 {instructor.profileImage
                   ? <img src={instructor.profileImage} alt={instructor.name} className="w-10 h-10 rounded-full object-cover" />
-                  : <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+                  : <div className="w-10 h-10 rounded-full bg-blue-900/40 flex items-center justify-center text-blue-700 font-bold text-sm">
                       {instructor.name.charAt(0)}
                     </div>
                 }
@@ -217,18 +217,18 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
               {/* Name + meta */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-gray-900 text-sm">{instructor.name}</span>
+                  <span className="font-semibold text-slate-100 text-sm">{instructor.name}</span>
                   <StatusBadge status={instructor.approvalStatus} />
                   {instructor.subscriptionTier && instructor.subscriptionTier !== 'BASIC' && (
                     <span className={`px-1.5 py-0.5 text-xs font-bold rounded ${
-                      instructor.subscriptionTier === 'BUSINESS' ? 'bg-purple-100 text-purple-700' :
+                      instructor.subscriptionTier === 'BUSINESS' ? 'bg-violet-900/40 text-violet-300' :
                       instructor.subscriptionTier === 'STUDIO' ? 'bg-indigo-100 text-indigo-700' :
-                      'bg-blue-100 text-blue-700'
+                      'bg-blue-900/40 text-blue-300'
                     }`}>{instructor.subscriptionTier}</span>
                   )}
                   <ComplianceDot status={comp?.status} />
                 </div>
-                <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
+                <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400 flex-wrap">
                   {email
                     ? <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{email}</span>
                     : <span className="text-orange-400">No email linked</span>
@@ -239,10 +239,10 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
               </div>
 
               {/* Stats chips */}
-              <div className="hidden sm:flex items-center gap-3 text-xs text-gray-500 shrink-0">
+              <div className="hidden sm:flex items-center gap-3 text-xs text-slate-400 shrink-0">
                 <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{instructor._count.bookings}</span>
                 {rating && <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-yellow-400" />{rating}</span>}
-                <span className="font-semibold text-gray-700">${instructor.hourlyRate}/hr</span>
+                <span className="font-semibold text-slate-300">${instructor.hourlyRate}/hr</span>
               </div>
 
               {/* Actions */}
@@ -254,7 +254,7 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                       <CheckCircle className="w-3.5 h-3.5" />Approve
                     </button>
                     <button onClick={() => setModal({ type: 'reject', id: instructor.id })}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 text-red-600 text-xs rounded-lg hover:bg-red-100 border border-red-200">
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-red-900/20 text-red-600 text-xs rounded-lg hover:bg-red-900/40 border border-red-700/50">
                       <XCircle className="w-3.5 h-3.5" />Reject
                     </button>
                   </>
@@ -267,37 +267,37 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                 )}
                 {(instructor.approvalStatus === 'SUSPENDED' || instructor.approvalStatus === 'REJECTED') && (
                   <button onClick={() => doReactivate(instructor.id)} disabled={loading === instructor.id}
-                    className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-600 text-xs rounded-lg hover:bg-blue-100 border border-blue-200">
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-900/20 text-blue-600 text-xs rounded-lg hover:bg-blue-900/40 border border-blue-700/50">
                     <CheckCircle className="w-3.5 h-3.5" />Reactivate
                   </button>
                 )}
                 <Link href={`/admin/instructors/${instructor.id}`}
-                  className="px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200">
+                  className="px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-900/20 rounded-lg border border-blue-700/50">
                   Profile
                 </Link>
                 <Link href={`/admin/documents/review/${instructor.id}`}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-purple-600 hover:bg-purple-50 rounded-lg border border-purple-200">
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-purple-600 hover:bg-violet-900/20 rounded-lg border border-purple-200">
                   Docs
                 </Link>
                 <button onClick={() => setExpanded(prev => {
                   const s = new Set(prev);
                   s.has(instructor.id) ? s.delete(instructor.id) : s.add(instructor.id);
                   return s;
-                })} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                  {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                })} className="p-1.5 hover:bg-slate-900 rounded-lg">
+                  {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
                 </button>
               </div>
             </div>
 
             {/* Expanded detail */}
             {isExpanded && (
-              <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="border-t border-slate-800 px-4 py-3 bg-slate-950 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div>
-                  <p className="text-gray-400 uppercase tracking-wide mb-1">Contact</p>
-                  <p className="text-gray-700">{email || <span className="text-orange-400">No email</span>}</p>
-                  <p className="text-gray-700">{instructor.phone || '—'}</p>
-                  <p className="text-gray-500">Joined {joined}</p>
-                  <p className="text-gray-500">
+                  <p className="text-slate-500 uppercase tracking-wide mb-1">Contact</p>
+                  <p className="text-slate-300">{email || <span className="text-orange-400">No email</span>}</p>
+                  <p className="text-slate-300">{instructor.phone || '—'}</p>
+                  <p className="text-slate-400">Joined {joined}</p>
+                  <p className="text-slate-400">
                     Terms: {termsAccepted
                       ? <span className="text-green-600">{termsAccepted}</span>
                       : <span className="text-amber-500">Not recorded</span>
@@ -305,15 +305,15 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-400 uppercase tracking-wide mb-1">Documents</p>
-                  <p className="text-gray-700">License: {instructor.licenseNumber || 'Not provided'}</p>
-                  <p className="text-gray-700">Insurance: {instructor.insuranceNumber || 'Not provided'}</p>
+                  <p className="text-slate-500 uppercase tracking-wide mb-1">Documents</p>
+                  <p className="text-slate-300">License: {instructor.licenseNumber || 'Not provided'}</p>
+                  <p className="text-slate-300">Insurance: {instructor.insuranceNumber || 'Not provided'}</p>
                   <p className={instructor.documentsVerified ? 'text-green-600' : 'text-orange-500'}>
                     {instructor.documentsVerified ? '✓ Verified' : 'Not verified'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-400 uppercase tracking-wide mb-1">Compliance</p>
+                  <p className="text-slate-500 uppercase tracking-wide mb-1">Compliance</p>
                   {comp ? (
                     <>
                       <p>License: {comp.licenseExpiry ? new Date(comp.licenseExpiry).toLocaleDateString('en-AU') : '—'}</p>
@@ -321,15 +321,15 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                       <p>Police: {comp.policeCheckExpiry ? new Date(comp.policeCheckExpiry).toLocaleDateString('en-AU') : '—'}</p>
                       <p>WWC: {comp.wwcCheckExpiry ? new Date(comp.wwcCheckExpiry).toLocaleDateString('en-AU') : '—'}</p>
                     </>
-                  ) : <p className="text-gray-400">No data</p>}
+                  ) : <p className="text-slate-500">No data</p>}
                 </div>
                 <div>
-                  <p className="text-gray-400 uppercase tracking-wide mb-1">Stats</p>
+                  <p className="text-slate-500 uppercase tracking-wide mb-1">Stats</p>
                   <p>{instructor._count.bookings} bookings</p>
                   <p>{instructor._count.reviews} reviews</p>
                   {rating && <p>⭐ {rating} avg</p>}
                   <p>${instructor.hourlyRate}/hr</p>
-                  {instructor.serviceAreas && <p className="text-gray-500 truncate">{instructor.serviceAreas}</p>}
+                  {instructor.serviceAreas && <p className="text-slate-400 truncate">{instructor.serviceAreas}</p>}
                 </div>
                 {comp && comp.issues.length > 0 && (
                   <div className="col-span-2 sm:col-span-4">
@@ -341,8 +341,8 @@ export default function InstructorApprovalList({ instructors }: { instructors: I
                 )}
                 {instructor.bio && (
                   <div className="col-span-2 sm:col-span-4">
-                    <p className="text-gray-400 uppercase tracking-wide mb-1">Bio</p>
-                    <p className="text-gray-600 line-clamp-3">{instructor.bio}</p>
+                    <p className="text-slate-500 uppercase tracking-wide mb-1">Bio</p>
+                    <p className="text-slate-400 line-clamp-3">{instructor.bio}</p>
                   </div>
                 )}
               </div>

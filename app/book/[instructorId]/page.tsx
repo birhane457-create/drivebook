@@ -39,7 +39,6 @@ export default async function PublicBookingPage({
 
   const searchedLocation = searchParams.location || null;
 
-  const activePackages = ((instructor.lessonPackages as any[]) || []).filter((p: any) => p.isActive !== false);
   const allowedDurations: number[] = Array.isArray((instructor as any).allowedDurations)
     ? (instructor as any).allowedDurations as number[]
     : [];
@@ -136,12 +135,18 @@ export default async function PublicBookingPage({
                       ${instructor.hourlyRate}/hr
                     </p>
                   </div>
-                  {activePackages.map((pkg: any) => (
-                    <div key={pkg.id} className="bg-indigo-50 rounded-lg px-3 py-2">
-                      <p className="text-xs text-gray-500 truncate">{pkg.name}</p>
-                      <p className="text-base font-bold text-indigo-700">${pkg.price.toFixed(2)}</p>
+                  <div className="bg-green-50 rounded-lg px-3 py-2">
+                    <p className="text-xs text-gray-500">Bulk packages</p>
+                    <p className="text-base font-bold text-green-700">6 / 10 / 15 hrs</p>
+                  </div>
+                  {instructor.offersTestPackage && (
+                    <div className="bg-purple-50 rounded-lg px-3 py-2 col-span-2">
+                      <p className="text-xs text-gray-500">PDA test pack</p>
+                      <p className="text-base font-bold text-purple-700">
+                        {instructor.testPackagePrice ? `$${instructor.testPackagePrice.toFixed(2)}` : 'Available'}
+                      </p>
                     </div>
-                  ))}
+                  )}
                 </div>
 
                 {/* Service Areas */}
@@ -213,7 +218,6 @@ export default async function PublicBookingPage({
                     searchedLocation={searchedLocation}
                     brandColorPrimary={primaryColor}
                     brandColorSecondary={secondaryColor}
-                    lessonPackages={activePackages}
                     serviceAreas={instructor.serviceAreas}
                     baseAddress={instructor.baseAddress}
                     serviceRadiusKm={instructor.serviceRadiusKm}

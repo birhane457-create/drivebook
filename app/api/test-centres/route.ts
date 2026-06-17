@@ -1,19 +1,30 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
-// GET — list all active test centres (accessible to authenticated instructors)
-export async function GET() {
+// GET - List all active test centres
+export async function GET(req: NextRequest) {
   try {
-    const centres = await prisma.testCentre.findMany({
+    const testCentres = await prisma.testCentre.findMany({
       where: { isActive: true },
-      orderBy: [{ region: 'asc' }, { name: 'asc' }],
-      select: { id: true, name: true, address: true, suburb: true, region: true, lat: true, lng: true },
-    });
-    return NextResponse.json(centres);
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        suburb: true,
+        state: true,
+        region: true
+      },
+      orderBy: { name: 'asc' }
+    })
+
+    return NextResponse.json({ testCentres })
   } catch (error) {
-    console.error('Test centres fetch error:', error);
-    return NextResponse.json({ error: 'Failed to fetch test centres' }, { status: 500 });
+    console.error('Error fetching test centres:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch test centres' },
+      { status: 500 }
+    )
   }
 }

@@ -34,7 +34,7 @@ export default function ClientMobileBottomNav() {
       ),
     },
     {
-      name: 'My Bookings',
+      name: 'Bookings',
       href: '/client-dashboard/bookings',
       badge: pendingReviews,
       icon: (
@@ -73,8 +73,8 @@ export default function ClientMobileBottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg md:hidden z-50">
-      <div className="flex justify-around items-center h-16">
+    <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-xl border-t border-white/10 shadow-2xl lg:hidden z-50">
+      <div className="flex justify-around items-center h-16 px-2">
         {navItems.map((item) => {
           const active = isActive(item.href);
           return (
@@ -82,19 +82,18 @@ export default function ClientMobileBottomNav() {
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
-                active ? 'text-blue-600' : 'text-gray-600 hover:text-gray-900'
+                active ? 'text-sky-400' : 'text-slate-300 hover:text-white'
               }`}
             >
-              <div className={`relative ${active ? 'scale-110' : ''} transition-transform`}>
+              <div className={`relative flex items-center justify-center ${active ? 'scale-105' : ''} transition-transform`}>
                 {item.icon}
-                {/* Pending reviews badge */}
                 {item.badge != null && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold leading-none">
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold leading-none">
                     {item.badge > 9 ? '9+' : item.badge}
                   </span>
                 )}
               </div>
-              <span className={`text-xs mt-1 ${active ? 'font-semibold' : ''}`}>{item.name}</span>
+              <span className={`text-[11px] mt-1 ${active ? 'font-semibold' : ''}`}>{item.name}</span>
             </Link>
           );
         })}

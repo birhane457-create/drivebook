@@ -2,7 +2,9 @@
 
 **Route:** `/dashboard/availability`  
 **Auth required:** INSTRUCTOR role  
-**APIs:** `GET /api/instructor/availability`, `POST /api/instructor/availability`
+**APIs:** `GET /api/instructor/settings`, `PUT /api/instructor/settings`, `GET/POST/DELETE /api/instructor/availability/exceptions`
+
+**Public booking flow:** `GET /api/instructors/[id]/availability` returns available slots for the public booking page.
 
 ---
 

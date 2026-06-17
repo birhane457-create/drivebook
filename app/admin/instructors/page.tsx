@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import InstructorApprovalList from '@/components/admin/InstructorApprovalList';
 import AdminNav from '@/components/admin/AdminNav';
 import InstructorStatusFilter from '@/components/admin/InstructorStatusFilter';
+import AdminInstructorRisk from '@/components/admin/AdminInstructorRisk';
 
 export default async function AdminInstructorsPage({
   searchParams,
@@ -68,22 +69,22 @@ export default async function AdminInstructorsPage({
   }) as any;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Instructor Management</h1>
-          <p className="mt-1 text-sm text-gray-600">Review and manage instructor applications</p>
+          <h1 className="text-2xl font-bold text-slate-100">Instructor Management</h1>
+          <p className="mt-1 text-sm text-slate-400">Review and manage instructor applications</p>
         </div>
 
         {/* Pending approval alert */}
         {pendingCount > 0 && status !== 'pending' && (
-          <div className="mb-4 bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-center gap-3">
+          <div className="mb-4 bg-amber-900/20 border border-amber-300 rounded-xl p-4 flex items-center gap-3">
             <span className="text-2xl font-bold text-amber-600">{pendingCount}</span>
             <div className="flex-1">
-              <p className="text-amber-900 font-semibold text-sm">
+              <p className="text-amber-200 font-semibold text-sm">
                 {pendingCount === 1 ? '1 instructor awaiting approval' : `${pendingCount} instructors awaiting approval`}
               </p>
               <p className="text-amber-700 text-xs mt-0.5">
@@ -100,6 +101,13 @@ export default async function AdminInstructorsPage({
         )}
 
         <InstructorStatusFilter currentStatus={status} pendingCount={pendingCount} />
+
+        {/* Risk Monitor — full view, shown when viewing approved instructors */}
+        {(status === 'all' || status === 'approved') && (
+          <div className="mt-6 mb-6">
+            <AdminInstructorRisk />
+          </div>
+        )}
 
         <InstructorApprovalList instructors={instructors} />
       </div>

@@ -1,41 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 225 73% 57%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 225 73% 57%;
+    --radius: 0.75rem;
+  }
+}
 
 /* Improve touch targets for mobile */
 @layer base {
   * {
     -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
   }
-  
+
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
-  
+
   body {
     @apply antialiased;
+    background-color: #020617; /* slate-950 — dark by default, pages override as needed */
+    color: hsl(var(--foreground));
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   }
-  
-  /* Better scrolling on mobile */
-  * {
-    -webkit-overflow-scrolling: touch;
-  }
-  
+
   /* Improve form inputs on mobile */
   input,
   textarea,
   select {
-    @apply text-base;
     font-size: 16px; /* Prevents zoom on iOS */
   }
-  
-  /* Better button touch targets */
-  button,
-  a {
+
+  /* Better button touch targets — only for interactive elements, not inline text */
+  button {
     min-height: 44px;
     min-width: 44px;
     @apply inline-flex items-center justify-center;
+  }
+}
+
+
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r;
+    --tw-gradient-from: hsl(var(--primary));
+    --tw-gradient-to: hsl(var(--accent));
+  }
+
+  .font-heading {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   }
 }
 
@@ -57,4 +95,26 @@
     padding-left: max(0px, env(safe-area-inset-left));
     padding-right: max(0px, env(safe-area-inset-right));
   }
+}
+
+/* Ensure inputs/selects/textareas are readable on dark backgrounds.
+   Any input without an explicit bg-* class gets dark styling. */
+input:not([class*='bg-']):not([type='checkbox']):not([type='radio']):not([type='color']),
+textarea:not([class*='bg-']),
+select:not([class*='bg-']) {
+  background-color: rgb(15 23 42);  /* slate-900 */
+  color: rgb(226 232 240);          /* slate-200 */
+  border-color: rgb(51 65 85);      /* slate-700 */
+}
+
+/* Light pages (terms/privacy) restore white inputs inside white containers */
+.bg-white input:not([class*='bg-']):not([type='checkbox']):not([type='radio']),
+.bg-white textarea:not([class*='bg-']),
+.bg-white select:not([class*='bg-']),
+[class*='from-slate-50'] input:not([class*='bg-']):not([type='checkbox']):not([type='radio']),
+[class*='from-slate-50'] textarea:not([class*='bg-']),
+[class*='from-slate-50'] select:not([class*='bg-']) {
+  background-color: rgb(255 255 255);
+  color: rgb(15 23 42);
+  border-color: rgb(209 213 219);
 }

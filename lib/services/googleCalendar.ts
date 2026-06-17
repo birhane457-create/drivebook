@@ -1,6 +1,7 @@
 import { google } from 'googleapis'
 import { prisma } from '../prisma'
 import { addMinutes, parseISO } from 'date-fns'
+import { signOAuthState } from '../oauth-state'
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -20,7 +21,7 @@ export class GoogleCalendarService {
     return oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
-      state: instructorId, // Pass instructor ID to callback
+      state: signOAuthState(instructorId),
       prompt: 'consent' // Force consent to get refresh token
     })
   }

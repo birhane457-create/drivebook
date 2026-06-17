@@ -79,7 +79,7 @@ export default function AdminEditBookingPage({ params }: { params: { id: string 
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-slate-950 text-slate-100">
         <AdminNav />
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="text-center">Loading...</div>
@@ -93,13 +93,13 @@ export default function AdminEditBookingPage({ params }: { params: { id: string 
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
       
       <div className="max-w-4xl mx-auto px-4 py-8">
         <button
           onClick={() => router.push('/admin/bookings')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
+          className="flex items-center gap-2 text-slate-400 hover:text-slate-100 mb-4"
         >
           <ArrowLeft className="h-5 w-5" />
           Back to Admin Bookings
@@ -107,17 +107,17 @@ export default function AdminEditBookingPage({ params }: { params: { id: string 
 
         <h1 className="text-3xl font-bold mb-6">Edit Booking (Admin)</h1>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-800">
+            <div className="text-sm text-blue-300">
               <p className="font-semibold mb-1">Admin Editing:</p>
               <p>You are editing this booking as an administrator. Changes will be saved and notifications will be sent to the client and instructor.</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-slate-900 rounded-lg border border-slate-800 p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4">Client Information</h2>
           <div className="space-y-2 text-sm">
             <p><span className="font-medium">Name:</span> {booking.client.name}</p>

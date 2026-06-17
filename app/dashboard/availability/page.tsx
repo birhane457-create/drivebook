@@ -194,7 +194,8 @@ export default function AvailabilityPage() {
   const activeDays = DAYS.filter(d => workingHours[d].length > 0)
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 px-4 py-8">
+      <div className="max-w-3xl mx-auto space-y-8">
 
       {/* Toast */}
       {toast && (
@@ -208,8 +209,8 @@ export default function AvailabilityPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Availability</h1>
-          <p className="text-sm text-gray-500 mt-1">Set your regular working hours and block out specific dates</p>
+          <h1 className="text-2xl font-bold text-slate-100">Availability</h1>
+          <p className="text-sm text-slate-400 mt-1">Set your regular working hours and block out specific dates</p>
         </div>
         <button
           onClick={handleSave}
@@ -222,14 +223,14 @@ export default function AvailabilityPage() {
       </div>
 
       {/* Weekly hours */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-          <Clock className="h-5 w-5 text-blue-600" />
-          <h2 className="font-semibold text-gray-900">Weekly Working Hours</h2>
+      <div className="bg-slate-950 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-2">
+          <Clock className="h-5 w-5 text-cyan-400" />
+          <h2 className="font-semibold text-slate-100">Weekly Working Hours</h2>
         </div>
 
         {/* Day summary strip */}
-        <div className="flex gap-1.5 px-6 py-3 border-b border-gray-50 bg-gray-50">
+        <div className="flex gap-1.5 px-6 py-3 border-b border-slate-800 bg-slate-950">
           {DAYS.map(day => (
             <button
               key={day}
@@ -238,14 +239,14 @@ export default function AvailabilityPage() {
               className={`flex-1 py-1.5 rounded text-xs font-semibold transition-colors
                 ${workingHours[day].length > 0
                   ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-200 text-gray-400 hover:border-blue-300'}`}
+                  : 'bg-slate-800 border border-slate-700 text-slate-400 hover:border-cyan-400'}`}
             >
               {DAY_SHORT[day]}
             </button>
           ))}
         </div>
 
-        <div className="divide-y divide-gray-50">
+        <div className="divide-y divide-slate-800">
           {DAYS.map(day => {
             const slots = workingHours[day]
             const isOn = slots.length > 0
@@ -258,20 +259,20 @@ export default function AvailabilityPage() {
                       type="button"
                       onClick={() => toggleDay(day)}
                       className={`relative inline-flex h-5 w-9 rounded-full transition-colors shrink-0
-                        ${isOn ? 'bg-blue-600' : 'bg-gray-300'}`}
+                        ${isOn ? 'bg-blue-600' : 'bg-slate-700'}`}
                     >
                       <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5
                         ${isOn ? 'translate-x-4' : 'translate-x-0.5'}`} />
                     </button>
-                    <span className="text-sm font-medium text-gray-800 w-24">{DAY_LABELS[day]}</span>
-                    {!isOn && <span className="text-xs text-gray-400">Unavailable</span>}
+                    <span className="text-sm font-medium text-slate-100 w-24">{DAY_LABELS[day]}</span>
+                    {!isOn && <span className="text-xs text-slate-400">Unavailable</span>}
                   </div>
                   {isOn && (
                     <button
                       onClick={() => addSlot(day)}
-                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+                      className="text-xs text-sky-300 hover:text-sky-200 flex items-center gap-1 font-medium"
                     >
-                      <Plus className="h-3.5 w-3.5" /> Add slot
+                      <Plus className="h-3.5 w-3.5 text-sky-300" /> Add slot
                     </button>
                   )}
                 </div>
@@ -280,18 +281,18 @@ export default function AvailabilityPage() {
                   <div className="space-y-2 ml-12">
                     {slots.map((slot, idx) => (
                       <div key={idx} className="flex items-center gap-2">
-                        <input
+                                <input
                           type="time"
                           value={slot.start}
                           onChange={e => updateSlot(day, idx, 'start', e.target.value)}
-                          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="border border-slate-700 rounded-lg px-3 py-1.5 text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                         />
-                        <span className="text-gray-400 text-sm">–</span>
+                        <span className="text-slate-400 text-sm">–</span>
                         <input
                           type="time"
                           value={slot.end}
                           onChange={e => updateSlot(day, idx, 'end', e.target.value)}
-                          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="border border-slate-700 rounded-lg px-3 py-1.5 text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                         />
                         {slots.length > 1 && (
                           <button
@@ -311,7 +312,7 @@ export default function AvailabilityPage() {
         </div>
 
         {/* Summary */}
-        <div className="px-6 py-3 bg-blue-50 border-t border-blue-100 text-xs text-blue-700">
+        <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 text-xs text-slate-400">
           {activeDays.length === 0
             ? 'No working days set — students cannot book you'
             : `Working ${activeDays.length} day${activeDays.length !== 1 ? 's' : ''} per week: ${activeDays.map(d => DAY_SHORT[d]).join(', ')}`}
@@ -319,35 +320,35 @@ export default function AvailabilityPage() {
       </div>
 
       {/* Exceptions / blocked dates */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-          <CalendarOff className="h-5 w-5 text-orange-500" />
-          <h2 className="font-semibold text-gray-900">Blocked Dates & Exceptions</h2>
+      <div className="bg-slate-950 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-2">
+          <CalendarOff className="h-5 w-5 text-orange-400" />
+          <h2 className="font-semibold text-slate-100">Blocked Dates & Exceptions</h2>
         </div>
 
         {/* Add form */}
-        <div className="px-6 py-5 border-b border-gray-100 space-y-4">
-          <p className="text-sm text-gray-500">Block a specific date or time range — e.g. holidays, personal appointments, cash lessons.</p>
+        <div className="px-6 py-5 border-b border-slate-800 space-y-4">
+          <p className="text-sm text-slate-400">Block a specific date or time range — e.g. holidays, personal appointments, cash lessons.</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Date *</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Date *</label>
               <input
                 type="date"
                 value={newEx.exceptionDate}
                 min={new Date().toISOString().split('T')[0]}
                 onChange={e => setNewEx(p => ({ ...p, exceptionDate: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-700 rounded-lg px-3 py-2 text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Label (optional)</label>
               <input
                 type="text"
                 value={newEx.label}
                 onChange={e => setNewEx(p => ({ ...p, label: e.target.value }))}
                 placeholder="e.g. Holiday, Cash lesson"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-700 rounded-lg px-3 py-2 text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
               />
             </div>
           </div>
@@ -357,33 +358,33 @@ export default function AvailabilityPage() {
               type="button"
               onClick={() => setNewEx(p => ({ ...p, allDay: !p.allDay }))}
               className={`relative inline-flex h-5 w-9 rounded-full transition-colors
-                ${newEx.allDay ? 'bg-orange-500' : 'bg-gray-300'}`}
+                ${newEx.allDay ? 'bg-orange-500' : 'bg-slate-700'}`}
             >
               <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5
                 ${newEx.allDay ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </button>
-            <span className="text-sm text-gray-700">All day</span>
+            <span className="text-sm text-slate-300">All day</span>
           </div>
 
           {!newEx.allDay && (
             <div className="flex items-center gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">From</label>
                 <input
                   type="time"
                   value={newEx.startTime}
                   onChange={e => setNewEx(p => ({ ...p, startTime: e.target.value }))}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500"
+                  className="border border-slate-700 rounded-lg px-3 py-1.5 text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 />
               </div>
-              <span className="text-gray-400 mt-5">–</span>
+              <span className="text-slate-400 mt-5">–</span>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">To</label>
                 <input
                   type="time"
                   value={newEx.endTime}
                   onChange={e => setNewEx(p => ({ ...p, endTime: e.target.value }))}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500"
+                  className="border border-slate-700 rounded-lg px-3 py-1.5 text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 />
               </div>
             </div>
@@ -407,11 +408,11 @@ export default function AvailabilityPage() {
 
         {/* Existing exceptions */}
         {exceptions.length === 0 ? (
-          <div className="px-6 py-8 text-center text-sm text-gray-400">
+          <div className="px-6 py-8 text-center text-sm text-slate-400">
             No blocked dates — you&apos;re available on all working days
           </div>
         ) : (
-          <ul className="divide-y divide-gray-50">
+          <ul className="divide-y divide-slate-800">
             {exceptions.map(ex => {
               const dateStr = new Date(ex.exceptionDate).toLocaleDateString('en-AU', {
                 weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
@@ -419,15 +420,15 @@ export default function AvailabilityPage() {
               return (
                 <li key={ex.id} className="flex items-center justify-between px-6 py-3">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{dateStr}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm font-medium text-slate-100">{dateStr}</p>
+                    <p className="text-xs text-slate-400">
                       {ex.allDay ? 'All day' : `${ex.startTime} – ${ex.endTime}`}
                       {ex.label ? ` · ${ex.label}` : ''}
                     </p>
                   </div>
                   <button
                     onClick={() => handleDeleteException(ex.id)}
-                    className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                    className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-950 transition-colors"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -437,7 +438,7 @@ export default function AvailabilityPage() {
           </ul>
         )}
       </div>
-
     </div>
+  </div>
   )
 }

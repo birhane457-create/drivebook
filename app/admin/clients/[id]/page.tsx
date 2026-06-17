@@ -35,13 +35,13 @@ function Drawer({ open, onClose, title, children }: {
   return (
     <>
       {open && <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />}
-      <div className={`fixed top-0 right-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`fixed top-0 right-0 h-full w-full max-w-lg bg-slate-900 shadow-2xl z-50 flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="flex items-center gap-3 px-4 py-4 border-b shrink-0">
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition md:hidden">
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-900 transition md:hidden">
+            <ArrowLeft className="w-5 h-5 text-slate-400" />
           </button>
-          <h2 className="text-lg font-bold text-gray-900 flex-1">{title}</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition hidden md:flex">
+          <h2 className="text-lg font-bold text-slate-100 flex-1">{title}</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-900 transition hidden md:flex">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -53,13 +53,13 @@ function Drawer({ open, onClose, title, children }: {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    COMPLETED: 'bg-green-100 text-green-700',
-    CONFIRMED: 'bg-blue-100 text-blue-700',
-    CANCELLED: 'bg-red-100 text-red-700',
-    PENDING: 'bg-yellow-100 text-yellow-700',
+    COMPLETED: 'bg-green-900/40 text-green-300',
+    CONFIRMED: 'bg-blue-900/40 text-blue-300',
+    CANCELLED: 'bg-red-900/40 text-red-300',
+    PENDING: 'bg-yellow-900/40 text-yellow-300',
   };
   return (
-    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${map[status] || 'bg-gray-100 text-gray-600'}`}>
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${map[status] || 'bg-slate-900 text-slate-400'}`}>
       {status}
     </span>
   );
@@ -83,28 +83,28 @@ function BookingActions({ b, onCancel, onComplete, onReschedule, onDelete, loadi
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(o => !o)} disabled={loading}
-        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-40">
+        className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 disabled:opacity-40">
         <MoreVertical className="w-4 h-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-8 w-44 bg-white border border-gray-200 rounded-xl shadow-lg z-10 py-1 text-sm">
+        <div className="absolute right-0 top-8 w-44 bg-slate-900 border border-slate-700 rounded-xl shadow-lg z-10 py-1 text-sm">
           {active && <>
             <button onClick={() => { setOpen(false); onReschedule(); }}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-gray-700">
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-950 text-slate-300">
               <RefreshCw className="w-3.5 h-3.5 text-blue-500" />Reschedule
             </button>
             <button onClick={() => { setOpen(false); onComplete(); }}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-gray-700">
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-950 text-slate-300">
               <CheckCircle className="w-3.5 h-3.5 text-green-500" />Mark Complete
             </button>
             <button onClick={() => { setOpen(false); onCancel(); }}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-gray-700">
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-950 text-slate-300">
               <Ban className="w-3.5 h-3.5 text-orange-500" />Cancel + Refund
             </button>
-            <div className="border-t border-gray-100 my-1" />
+            <div className="border-t border-slate-800 my-1" />
           </>}
           <button onClick={() => { setOpen(false); onDelete(); }}
-            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-red-500">
+            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-900/20 text-red-500">
             <Trash2 className="w-3.5 h-3.5" />Remove record
           </button>
         </div>
@@ -296,7 +296,7 @@ export default function AdminClientDetailsPage() {
   ) || [];
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50"><AdminNav />
+    <div className="min-h-screen bg-slate-950 text-slate-100"><AdminNav />
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
@@ -304,10 +304,10 @@ export default function AdminClientDetailsPage() {
   );
 
   if (!client) return (
-    <div className="min-h-screen bg-gray-50"><AdminNav />
+    <div className="min-h-screen bg-slate-950 text-slate-100"><AdminNav />
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
         <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-        <p className="text-gray-600">Client not found</p>
+        <p className="text-slate-400">Client not found</p>
       </div>
     </div>
   );
@@ -316,16 +316,16 @@ export default function AdminClientDetailsPage() {
     ? Math.min((client.wallet.totalSpent / client.wallet.totalPaid) * 100, 100) : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
 
       {/* â”€â”€ Transaction Drawer (read-only) â”€â”€ */}
       <Drawer open={txDrawer} onClose={() => setTxDrawer(false)}
         title={`Transaction History (${filteredTx.length})`}>
         <div className="px-4 py-3 border-b flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
+          <Filter className="w-4 h-4 text-slate-500" />
           <select value={txFilter} onChange={e => setTxFilter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500">
+            className="text-sm border border-slate-700 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500">
             <option value="all">All</option>
             <option value="credit">Credits</option>
             <option value="debit">Debits</option>
@@ -333,13 +333,13 @@ export default function AdminClientDetailsPage() {
         </div>
         <div className="divide-y">
           {filteredTx.length === 0
-            ? <p className="text-center text-gray-400 py-16 text-sm">No transactions</p>
+            ? <p className="text-center text-slate-500 py-16 text-sm">No transactions</p>
             : filteredTx.map(tx => (
               <div key={tx.id} className="px-5 py-4 flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{tx.description || 'No description'}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{new Date(tx.createdAt).toLocaleString()}</p>
-                  <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${tx.type === 'CREDIT' || tx.type === 'REFUND' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                  <p className="text-sm font-medium text-slate-100 truncate">{tx.description || 'No description'}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{new Date(tx.createdAt).toLocaleString()}</p>
+                  <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${tx.type === 'CREDIT' || tx.type === 'REFUND' ? 'bg-green-900/20 text-green-600' : 'bg-red-900/20 text-red-600'}`}>
                     {tx.type}
                   </span>
                 </div>
@@ -359,7 +359,7 @@ export default function AdminClientDetailsPage() {
         <div className="px-4 py-3 border-b">
           {showAddBooking ? (
             <div className="space-y-3 pb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">New Booking</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">New Booking</p>
 
               {/* ── Step 1: Instructor ── */}
               {!newInstructorId ? (
@@ -367,7 +367,7 @@ export default function AdminClientDetailsPage() {
                   {/* Current instructor shortcut */}
                   {client.currentInstructor && (
                     <button onClick={() => { setNewInstructorId(client.currentInstructor!.id); setSelectedInstructor(client.currentInstructor!); }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm hover:bg-blue-100 transition">
+                      className="w-full flex items-center justify-between px-3 py-2.5 bg-blue-900/20 border border-blue-700/50 rounded-xl text-sm hover:bg-blue-900/40 transition">
                       <div className="text-left">
                         <p className="text-blue-700 font-semibold">{client.currentInstructor.name}</p>
                         <p className="text-xs text-blue-400">Current instructor  ${client.currentInstructor.hourlyRate}/hr</p>
@@ -379,40 +379,40 @@ export default function AdminClientDetailsPage() {
                   <div className="flex gap-2">
                     <input value={instructorSearch}
                       onChange={e => { setInstructorSearch(e.target.value); setLocationSearch(""); if (e.target.value.length > 1) searchInstructors(e.target.value, "name"); else clearInstructors(); }}
-                      placeholder="Name..." className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                      placeholder="Name..." className="flex-1 px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                     <input value={locationSearch}
                       onChange={e => { setLocationSearch(e.target.value); setInstructorSearch(""); }}
                       onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (locationSearch.length > 1) searchInstructors(locationSearch, "location"); } }}
-                      placeholder="Suburb / postcode " className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                      placeholder="Suburb / postcode " className="flex-1 px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  {instrLoading && <p className="text-xs text-gray-400 animate-pulse">Searching...</p>}
+                  {instrLoading && <p className="text-xs text-slate-500 animate-pulse">Searching...</p>}
                   {/* Results as cards */}
                   {instructors.length > 0 && (
                     <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                       {instructors.map(i => (
                         <button key={i.id} onClick={() => { setNewInstructorId(i.id); setSelectedInstructor({ id: i.id, name: i.name, hourlyRate: i.hourlyRate }); clearInstructors(); setInstructorSearch(""); setLocationSearch(""); }}
-                          className="w-full flex items-center justify-between px-3 py-2.5 bg-white border border-gray-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition text-left">
+                          className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl hover:border-blue-400 hover:bg-blue-900/20 transition text-left">
                           <div>
-                            <p className="text-sm font-semibold text-gray-800">{i.name}</p>
+                            <p className="text-sm font-semibold text-slate-200">{i.name}</p>
                             <div className="flex items-center gap-2 mt-0.5">
-                              {i.serviceAreas && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{i.serviceAreas.split(",")[0].trim()}</span>}
+                              {i.serviceAreas && <span className="text-xs bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">{i.serviceAreas.split(",")[0].trim()}</span>}
                               {i.distance != null && <span className="text-xs text-green-600">{i.distance} km</span>}
                             </div>
                           </div>
-                          <span className="text-sm font-bold text-gray-700 shrink-0">${i.hourlyRate}/hr</span>
+                          <span className="text-sm font-bold text-slate-300 shrink-0">${i.hourlyRate}/hr</span>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="flex items-center justify-between px-3 py-2.5 bg-green-50 border border-green-200 rounded-xl text-sm">
+                <div className="flex items-center justify-between px-3 py-2.5 bg-green-900/20 border border-green-700/50 rounded-xl text-sm">
                   <div>
-                    <p className="font-semibold text-green-800">{selectedInstructor?.name || newInstructorId}</p>
+                    <p className="font-semibold text-green-300">{selectedInstructor?.name || newInstructorId}</p>
                     <p className="text-xs text-green-600">${selectedInstructor?.hourlyRate}/hr</p>
                   </div>
                   <button onClick={() => { setNewInstructorId(""); setSelectedInstructor(null); setAvailSlots([]); setNewTime(""); setNewDate(""); }}
-                    className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50">Change</button>
+                    className="text-xs text-slate-500 hover:text-red-500 px-2 py-1 rounded hover:bg-red-900/20">Change</button>
                 </div>
               )}
 
@@ -422,9 +422,9 @@ export default function AdminClientDetailsPage() {
                   <input type="date" value={newDate}
                     onChange={e => { setNewDate(e.target.value); setNewTime(""); if (e.target.value) fetchAvailSlots(newInstructorId, e.target.value, newDuration); }}
                     min={new Date().toISOString().split("T")[0]}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                    className="px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                   <select value={newDuration} onChange={e => { setNewDuration(e.target.value); setNewTime(""); if (newDate) fetchAvailSlots(newInstructorId, newDate, e.target.value); }}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    className="px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                     <option value="60">1 hr</option>
                     <option value="90">1.5 hr</option>
                     <option value="120">2 hr</option>
@@ -438,14 +438,14 @@ export default function AdminClientDetailsPage() {
               {newInstructorId && newDate && (
                 <div>
                   {availLoading ? (
-                    <p className="text-xs text-gray-400 animate-pulse py-2">Loading available slots...</p>
+                    <p className="text-xs text-slate-500 animate-pulse py-2">Loading available slots...</p>
                   ) : availSlots.length === 0 ? (
                     <p className="text-xs text-orange-500 py-2">No available slots on this date</p>
                   ) : (
                     <div className="grid grid-cols-4 gap-1.5">
                       {availSlots.map(slot => (
                         <button key={slot} onClick={() => setNewTime(slot)}
-                          className={`py-1.5 text-xs font-medium rounded-lg border transition ${newTime === slot ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:border-blue-400"}`}>
+                          className={`py-1.5 text-xs font-medium rounded-lg border transition ${newTime === slot ? "bg-blue-600 text-white border-blue-600" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-blue-400"}`}>
                           {slot}
                         </button>
                       ))}
@@ -460,7 +460,7 @@ export default function AdminClientDetailsPage() {
                 const balance = client.wallet.creditsRemaining;
                 const ok = balance >= cost;
                 return (
-                  <div className={`px-3 py-2 rounded-lg text-xs ${ok ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                  <div className={`px-3 py-2 rounded-lg text-xs ${ok ? "bg-green-900/20 border border-green-700/50" : "bg-red-900/20 border border-red-700/50"}`}>
                     <div className="flex justify-between">
                       <span className={ok ? "text-green-700" : "text-red-700"}>Lesson cost: <strong>${cost.toFixed(2)}</strong></span>
                       <span className={ok ? "text-green-600" : "text-red-600"}>Balance: <strong>${balance.toFixed(2)}</strong></span>
@@ -472,7 +472,7 @@ export default function AdminClientDetailsPage() {
 
               <input value={newNotes} onChange={e => setNewNotes(e.target.value)}
                 placeholder="Notes (optional)"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
 
               <div className="flex gap-2">
                 <button onClick={handleAddBooking} disabled={actionLoading || !newInstructorId || !newDate || !newTime}
@@ -480,15 +480,15 @@ export default function AdminClientDetailsPage() {
                   {actionLoading ? "Creating..." : "Create Booking"}
                 </button>
                 <button onClick={() => { setShowAddBooking(false); setNewInstructorId(""); setSelectedInstructor(null); setInstructorSearch(""); setLocationSearch(""); setAvailSlots([]); setNewDate(""); setNewTime(""); setNewNotes(""); clearInstructors(); }}
-                  className="flex-1 py-2 border border-gray-200 text-sm rounded-lg hover:bg-gray-50">Cancel</button>
+                  className="flex-1 py-2 border border-slate-700 text-sm rounded-lg hover:bg-slate-800/50">Cancel</button>
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-gray-400" />
+                <Filter className="w-4 h-4 text-slate-500" />
                 <select value={bookingFilter} onChange={e => setBookingFilter(e.target.value)}
-                  className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500">
+                  className="text-sm border border-slate-700 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500">
                   <option value="all">All</option>
                   <option value="confirmed">Confirmed</option>
                   <option value="completed">Completed</option>
@@ -506,17 +506,17 @@ export default function AdminClientDetailsPage() {
 
         <div className="divide-y">
           {filteredBookings.length === 0
-            ? <p className="text-center text-gray-400 py-16 text-sm">No bookings</p>
+            ? <p className="text-center text-slate-500 py-16 text-sm">No bookings</p>
             : filteredBookings.map(b => (
               <div key={b.id} className="px-5 py-3">
                 {/* Main row */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{b.instructor?.name || 'Unknown'}</p>
-                    <p className="text-xs text-gray-500">{b.startTime ? new Date(b.startTime).toLocaleString() : 'No date'}</p>
+                    <p className="text-sm font-semibold text-slate-100 truncate">{b.instructor?.name || 'Unknown'}</p>
+                    <p className="text-xs text-slate-400">{b.startTime ? new Date(b.startTime).toLocaleString() : 'No date'}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <StatusBadge status={b.status} />
-                      <span className="text-xs font-semibold text-gray-700">${b.price?.toFixed(2)}</span>
+                      <span className="text-xs font-semibold text-slate-300">${b.price?.toFixed(2)}</span>
                     </div>
                   </div>
                   <BookingActions
@@ -531,13 +531,13 @@ export default function AdminClientDetailsPage() {
 
                 {/* Inline reschedule form */}
                 {rescheduleId === b.id && (
-                  <div className="mt-2 bg-blue-50 rounded-lg p-3 space-y-2">
+                  <div className="mt-2 bg-blue-900/20 rounded-lg p-3 space-y-2">
                     <p className="text-xs font-semibold text-blue-700">Reschedule to:</p>
                     <div className="flex gap-2">
                       <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)}
-                        className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                        className="flex-1 px-2 py-1.5 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                       <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)}
-                        className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                        className="flex-1 px-2 py-1.5 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => handleReschedule(b)} disabled={actionLoading}
@@ -545,7 +545,7 @@ export default function AdminClientDetailsPage() {
                         {actionLoading ? 'Savingâ€¦' : 'Confirm'}
                       </button>
                       <button onClick={() => setRescheduleId(null)}
-                        className="flex-1 py-1.5 border border-gray-200 text-xs rounded-lg hover:bg-gray-50">
+                        className="flex-1 py-1.5 border border-slate-700 text-xs rounded-lg hover:bg-slate-800/50">
                         Cancel
                       </button>
                     </div>
@@ -563,14 +563,14 @@ export default function AdminClientDetailsPage() {
           <ChevronLeft className="w-4 h-4" />Back to Clients
         </Link>
 
-        {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
-        {success && <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">{success}</div>}
+        {error && <div className="mb-4 p-3 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-700">{error}</div>}
+        {success && <div className="mb-4 p-3 bg-green-900/20 border border-green-700/50 rounded-lg text-sm text-green-700">{success}</div>}
 
         {/* Client info card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="bg-slate-900 rounded-xl border border-slate-800-sm border border-slate-700 p-6 mb-6">
           {editMode ? (
             <div className="space-y-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Edit Details</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Edit Details</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {([
                   { label: 'Name', value: editName, set: setEditName },
@@ -579,9 +579,9 @@ export default function AdminClientDetailsPage() {
                   { label: 'Notes', value: editNotes, set: setEditNotes },
                 ] as { label: string; value: string; set: (v: string) => void }[]).map(f => (
                   <div key={f.label}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{f.label}</label>
                     <input value={f.value} onChange={e => f.set(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                   </div>
                 ))}
               </div>
@@ -591,35 +591,35 @@ export default function AdminClientDetailsPage() {
                   <Save className="w-4 h-4" />{actionLoading ? 'Savingâ€¦' : 'Save Changes'}
                 </button>
                 <button onClick={() => setEditMode(false)}
-                  className="px-4 py-2 border border-gray-200 text-sm rounded-lg hover:bg-gray-50">Cancel</button>
+                  className="px-4 py-2 border border-slate-700 text-sm rounded-lg hover:bg-slate-800/50">Cancel</button>
               </div>
             </div>
           ) : (
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                <div className="w-14 h-14 rounded-full bg-blue-900/40 flex items-center justify-center shrink-0">
                   <User className="w-7 h-7 text-blue-600" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">{client.user.name}</h1>
+                  <h1 className="text-xl font-bold text-slate-100">{client.user.name}</h1>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                    <span className="flex items-center gap-1 text-sm text-gray-500">
+                    <span className="flex items-center gap-1 text-sm text-slate-400">
                       <Mail className="w-3.5 h-3.5" />{client.user.email}
                     </span>
                     {client.user.phone && (
-                      <span className="flex items-center gap-1 text-sm text-gray-500">
+                      <span className="flex items-center gap-1 text-sm text-slate-400">
                         <Phone className="w-3.5 h-3.5" />{client.user.phone}
                       </span>
                     )}
                   </div>
                   {client.user.notes && (
-                    <p className="flex items-center gap-1 text-xs text-gray-400 mt-1">
+                    <p className="flex items-center gap-1 text-xs text-slate-500 mt-1">
                       <StickyNote className="w-3 h-3" />{client.user.notes}
                     </p>
                   )}
-                  <p className="text-xs text-gray-400 mt-1">Joined {new Date(client.user.createdAt).toLocaleDateString()}</p>
+                  <p className="text-xs text-slate-500 mt-1">Joined {new Date(client.user.createdAt).toLocaleDateString()}</p>
                   {client.currentInstructor && (
-                    <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 bg-blue-50 rounded-lg w-fit">
+                    <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 bg-blue-900/20 rounded-lg w-fit">
                       <User className="w-3 h-3 text-blue-500" />
                       <span className="text-xs text-blue-700 font-medium">Instructor: {client.currentInstructor.name}</span>
                       <span className="text-xs text-blue-400">\/hr</span>
@@ -628,7 +628,7 @@ export default function AdminClientDetailsPage() {
                 </div>
               </div>
               <button onClick={() => setEditMode(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-sm rounded-lg hover:bg-gray-50 text-gray-700 shrink-0">
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-sm rounded-lg hover:bg-slate-800 text-slate-700 shrink-0">
                 <Edit2 className="w-3.5 h-3.5" />Edit
               </button>
             </div>
@@ -638,39 +638,39 @@ export default function AdminClientDetailsPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Total Paid', value: `$${client.wallet.totalPaid.toFixed(2)}`, color: 'text-gray-900', border: 'border-blue-400' },
+            { label: 'Total Paid', value: `$${client.wallet.totalPaid.toFixed(2)}`, color: 'text-slate-100', border: 'border-blue-400' },
             { label: 'Total Spent', value: `$${client.wallet.totalSpent.toFixed(2)}`, color: 'text-orange-600', border: 'border-orange-400' },
             { label: 'Balance', value: `$${client.wallet.creditsRemaining.toFixed(2)}`, color: client.wallet.creditsRemaining > 0 ? 'text-green-600' : 'text-red-600', border: client.wallet.creditsRemaining > 0 ? 'border-green-400' : 'border-red-400' },
             { label: 'Bookings', value: String(client.bookings.length), color: 'text-purple-600', border: 'border-purple-400' },
           ].map(s => (
-            <div key={s.label} className={`bg-white rounded-xl border-t-4 ${s.border} shadow-sm p-4`}>
-              <p className="text-xs text-gray-500 mb-1">{s.label}</p>
+            <div key={s.label} className={`bg-slate-900 rounded-xl border-t-4 ${s.border} shadow-sm p-4`}>
+              <p className="text-xs text-slate-400 mb-1">{s.label}</p>
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
             </div>
           ))}
         </div>
 
         {/* Usage bar */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+        <div className="bg-slate-900 rounded-xl border border-slate-800-sm border border-slate-700 p-5 mb-6">
           <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-600">Credit usage</span>
-            <span className="font-semibold text-gray-900">{usagePct.toFixed(1)}%</span>
+            <span className="text-slate-400">Credit usage</span>
+            <span className="font-semibold text-slate-100">{usagePct.toFixed(1)}%</span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${usagePct > 80 ? 'bg-red-500' : usagePct > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
+          <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${usagePct > 80 ? 'bg-red-900/200' : usagePct > 50 ? 'bg-yellow-500' : 'bg-green-900/200'}`}
               style={{ width: `${usagePct}%` }} />
           </div>
         </div>
 
         {/* Credit actions */}
         {creditMode ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
-            <h3 className="font-semibold text-gray-900 mb-3">{creditMode === 'add' ? 'Add Credit' : 'Deduct Credit'}</h3>
+          <div className="bg-slate-900 rounded-xl border border-slate-800-sm border border-slate-700 p-5 mb-6">
+            <h3 className="font-semibold text-slate-100 mb-3">{creditMode === 'add' ? 'Add Credit' : 'Deduct Credit'}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
               <input type="number" step="0.01" min="0" value={amount} onChange={e => setAmount(e.target.value)}
-                placeholder="Amount ($)" className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                placeholder="Amount ($)" className="px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
               <input value={reason} onChange={e => setReason(e.target.value)}
-                placeholder="Reason (optional)" className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                placeholder="Reason (optional)" className="px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="flex gap-2">
               <button onClick={handleCredit} disabled={actionLoading}
@@ -678,7 +678,7 @@ export default function AdminClientDetailsPage() {
                 {actionLoading ? 'Processingâ€¦' : 'Confirm'}
               </button>
               <button onClick={() => { setCreditMode(null); setAmount(''); setReason(''); }}
-                className="flex-1 py-2 border border-gray-200 text-sm rounded-lg hover:bg-gray-50">Cancel</button>
+                className="flex-1 py-2 border border-slate-700 text-sm rounded-lg hover:bg-slate-800/50">Cancel</button>
             </div>
           </div>
         ) : (
@@ -697,27 +697,27 @@ export default function AdminClientDetailsPage() {
         {/* Drawer triggers */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button onClick={() => setTxDrawer(true)}
-            className="flex items-center justify-between p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition text-left">
+            className="flex items-center justify-between p-4 bg-slate-900 rounded-xl shadow-sm border border-slate-700 hover:border-blue-400 hover:bg-blue-900/20 transition text-left">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-blue-900/40 flex items-center justify-center">
                 <CreditCard className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-900">Transaction History</p>
-                <p className="text-xs text-gray-400">{client.wallet.transactions.length} records Â· read only</p>
+                <p className="text-sm font-semibold text-slate-100">Transaction History</p>
+                <p className="text-xs text-slate-500">{client.wallet.transactions.length} records Â· read only</p>
               </div>
             </div>
             <span className="text-xs text-blue-600 font-medium">View</span>
           </button>
           <button onClick={() => setBookingDrawer(true)}
-            className="flex items-center justify-between p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-left">
+            className="flex items-center justify-between p-4 bg-slate-900 rounded-xl shadow-sm border border-slate-700 hover:border-purple-400 hover:bg-violet-900/20 transition text-left">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-violet-900/40 flex items-center justify-center">
                 <Calendar className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-900">Bookings</p>
-                <p className="text-xs text-gray-400">{client.bookings.length} total Â· manage</p>
+                <p className="text-sm font-semibold text-slate-100">Bookings</p>
+                <p className="text-xs text-slate-500">{client.bookings.length} total Â· manage</p>
               </div>
             </div>
             <span className="text-xs text-purple-600 font-medium">Manage</span>

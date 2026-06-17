@@ -158,8 +158,10 @@ export const earningsAPI = {
     api.get(`/api/instructor/earnings/statement/mobile${period ? `?period=${period}` : ''}`),
   getTransactions: (limit?: number, offset?: number) =>
     api.get('/api/instructor/earnings/transactions/mobile', { params: { limit, offset } }),
-  getPendingPayouts: () => api.get('/api/instructor/payouts/pending/mobile'),
-  getPayoutHistory: () => api.get('/api/instructor/payouts/history/mobile'),
-  requestPayout: (amount: number, method: string) =>
-    api.post('/api/instructor/payouts/request/mobile', { amount, method }),
+  getEarningsThisWeek: () => api.get('/api/instructor/earnings/this-week'),
+  // Note: Payout endpoints below are not yet implemented - marked for future implementation
+  // getPendingPayouts: () => api.get('/api/instructor/payouts/pending/mobile'),
+  // getPayoutHistory: () => api.get('/api/instructor/payouts/history/mobile'),
+  // requestPayout: (amount: number, method: string) =>
+  //   api.post('/api/instructor/payouts/request/mobile', { amount, method }),
 };

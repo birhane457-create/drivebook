@@ -142,12 +142,12 @@ export default function RegistrationForm() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 text-white">
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-white/95 mb-2">
           {isLoggedIn ? 'Confirm Your Details' : 'Create Your Account'}
         </h2>
-        <p className="text-gray-600">
+        <p className="text-white/70">
           {isLoggedIn 
             ? 'Your information has been pre-filled from your account'
             : 'Register to manage your bookings and track your progress'
@@ -156,8 +156,8 @@ export default function RegistrationForm() {
       </div>
 
       {isLoggedIn && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-sm text-green-800">
+        <div className="bg-green-900/10 border border-green-500/20 rounded-lg p-4">
+          <p className="text-sm text-green-200">
             ✓ You're logged in! Your details are pre-filled. You can edit them if needed.
           </p>
         </div>
@@ -165,7 +165,7 @@ export default function RegistrationForm() {
 
       {/* Who is this for? */}
       <div className="space-y-4">
-        <label className="block text-lg font-semibold text-gray-900">
+        <label className="block text-lg font-semibold text-white/90">
           Who are you registering for?
         </label>
 
@@ -176,8 +176,8 @@ export default function RegistrationForm() {
             className={`
               w-full flex items-start gap-4 p-5 border-2 rounded-xl text-left transition-all
               ${bookingState.registrationType === 'myself'
-                ? 'border-blue-600 bg-blue-50'
-                : 'border-gray-200 hover:border-blue-300'
+                ? 'border-purple-500/50 bg-white/5'
+                : 'border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10'
               }
             `}
           >
@@ -190,8 +190,8 @@ export default function RegistrationForm() {
               )}
             </div>
             <div>
-              <div className="font-semibold text-gray-900 mb-1">Myself</div>
-              <div className="text-sm text-gray-600">I am the learner</div>
+              <div className="font-semibold text-white/90 mb-1">Myself</div>
+              <div className="text-sm text-white/70">I am the learner</div>
             </div>
           </button>
 
@@ -201,8 +201,8 @@ export default function RegistrationForm() {
             className={`
               w-full flex items-start gap-4 p-5 border-2 rounded-xl text-left transition-all
               ${bookingState.registrationType === 'someone-else'
-                ? 'border-blue-600 bg-blue-50'
-                : 'border-gray-200 hover:border-blue-300'
+                ? 'border-purple-500/50 bg-white/5'
+                : 'border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10'
               }
             `}
           >
@@ -215,8 +215,8 @@ export default function RegistrationForm() {
               )}
             </div>
             <div>
-              <div className="font-semibold text-gray-900 mb-1">Someone else</div>
-              <div className="text-sm text-gray-600">
+              <div className="font-semibold text-white/90 mb-1">Someone else</div>
+              <div className="text-sm text-white/70">
                 e.g., child, partner, grandchild, parent, friend
               </div>
             </div>
@@ -226,12 +226,12 @@ export default function RegistrationForm() {
 
       {/* Account Holder Details */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">
+        <h3 className="text-lg font-semibold text-white/90">
           {bookingState.registrationType === 'myself' ? 'Your Details' : 'Your Details (Account Holder)'}
         </h3>
 
         <div>
-          <label htmlFor="accountHolderName" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="accountHolderName" className="block text-sm font-medium text-white/80 mb-1">
             Full Name *
           </label>
           <input
@@ -239,8 +239,8 @@ export default function RegistrationForm() {
             id="accountHolderName"
             value={bookingState.accountHolderName}
             onChange={(e) => handleAccountHolderChange('accountHolderName', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.accountHolderName ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+              errors.accountHolderName ? 'border-red-500' : 'border-white/10'
             }`}
             placeholder="Enter your full name"
           />
@@ -250,7 +250,7 @@ export default function RegistrationForm() {
         </div>
 
         <div>
-          <label htmlFor="accountHolderEmail" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="accountHolderEmail" className="block text-sm font-medium text-white/80 mb-1">
             Email *
           </label>
           <input
@@ -258,16 +258,16 @@ export default function RegistrationForm() {
             id="accountHolderEmail"
             value={bookingState.accountHolderEmail}
             onChange={(e) => handleAccountHolderChange('accountHolderEmail', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.accountHolderEmail ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+              errors.accountHolderEmail ? 'border-red-500' : 'border-white/10'
             }`}
             placeholder="your.email@example.com"
           />
           {checkingEmail && (
-            <p className="mt-1 text-sm text-gray-500">Checking email...</p>
+            <p className="mt-1 text-sm text-white/60">Checking email...</p>
           )}
           {emailCheckStatus === 'available' && !checkingEmail && (
-            <p className="mt-1 text-sm text-green-600">✓ Email is available</p>
+            <p className="mt-1 text-sm text-green-300">✓ Email is available</p>
           )}
           {errors.accountHolderEmail && (
             <p className="mt-1 text-sm text-red-600">{errors.accountHolderEmail}</p>
@@ -276,32 +276,32 @@ export default function RegistrationForm() {
 
         {/* Email Already Exists Warning */}
         {showEmailWarning && emailCheckStatus === 'exists' && !isLoggedIn && (
-          <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+          <div className="bg-yellow-900/10 border-2 border-yellow-400/20 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-6 w-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-6 w-6 text-yellow-300 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h4 className="font-semibold text-yellow-900 mb-2">
+                <h4 className="font-semibold text-yellow-100 mb-2">
                   This email already has an account
                 </h4>
-                <p className="text-sm text-yellow-800 mb-3">
+                <p className="text-sm text-yellow-200 mb-3">
                   An account with <strong>{bookingState.accountHolderEmail}</strong> already exists in our system.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <a
                     href="/login"
-                    className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-semibold text-center transition-colors"
+                    className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-white px-4 py-2 rounded-lg font-semibold text-center transition-colors"
                   >
                     Login to Existing Account
                   </a>
                   <button
                     type="button"
                     onClick={() => setShowEmailWarning(false)}
-                    className="flex-1 bg-white hover:bg-gray-50 text-yellow-900 px-4 py-2 rounded-lg font-semibold border-2 border-yellow-400 transition-colors"
+                    className="flex-1 bg-white/10 hover:bg-white/20 text-yellow-100 px-4 py-2 rounded-lg font-semibold border-2 border-yellow-400/40 transition-colors"
                   >
                     Continue Anyway
                   </button>
                 </div>
-                <p className="text-xs text-yellow-700 mt-2">
+                <p className="text-xs text-yellow-200 mt-2">
                   ⚠️ If you continue, you won't be able to create a new account with this email. Please use a different email or login to your existing account.
                 </p>
               </div>
@@ -310,7 +310,7 @@ export default function RegistrationForm() {
         )}
 
         <div>
-          <label htmlFor="accountHolderPhone" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="accountHolderPhone" className="block text-sm font-medium text-white/80 mb-1">
             Phone *
           </label>
           <input
@@ -318,8 +318,8 @@ export default function RegistrationForm() {
             id="accountHolderPhone"
             value={bookingState.accountHolderPhone}
             onChange={(e) => handleAccountHolderChange('accountHolderPhone', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.accountHolderPhone ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+              errors.accountHolderPhone ? 'border-red-500' : 'border-white/10'
             }`}
             placeholder="0400 000 000"
           />
@@ -329,7 +329,7 @@ export default function RegistrationForm() {
         </div>
 
         <div>
-          <label htmlFor="accountHolderPassword" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="accountHolderPassword" className="block text-sm font-medium text-white/80 mb-1">
             Password *
           </label>
           <input
@@ -337,8 +337,8 @@ export default function RegistrationForm() {
             id="accountHolderPassword"
             value={bookingState.accountHolderPassword}
             onChange={(e) => handleAccountHolderChange('accountHolderPassword', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.accountHolderPassword ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+              errors.accountHolderPassword ? 'border-red-500' : 'border-white/10'
             }`}
             placeholder="At least 6 characters"
           />
@@ -348,7 +348,7 @@ export default function RegistrationForm() {
         </div>
 
         <div>
-          <label htmlFor="accountHolderConfirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="accountHolderConfirmPassword" className="block text-sm font-medium text-white/80 mb-1">
             Confirm Password *
           </label>
           <input
@@ -356,8 +356,8 @@ export default function RegistrationForm() {
             id="accountHolderConfirmPassword"
             value={bookingState.accountHolderConfirmPassword}
             onChange={(e) => handleAccountHolderChange('accountHolderConfirmPassword', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.accountHolderConfirmPassword ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+              errors.accountHolderConfirmPassword ? 'border-red-500' : 'border-white/10'
             }`}
             placeholder="Re-enter your password"
           />
@@ -369,11 +369,11 @@ export default function RegistrationForm() {
 
       {/* Learner Details (if someone else) */}
       {bookingState.registrationType === 'someone-else' && (
-        <div className="space-y-4 border-t pt-6">
-          <h3 className="text-lg font-semibold text-gray-900">Learner's Details</h3>
+        <div className="space-y-4 border-t border-white/10 pt-6">
+          <h3 className="text-lg font-semibold text-white/90">Learner's Details</h3>
 
           <div>
-            <label htmlFor="learnerName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="learnerName" className="block text-sm font-medium text-white/80 mb-1">
               Learner's Full Name *
             </label>
             <input
@@ -381,8 +381,8 @@ export default function RegistrationForm() {
               id="learnerName"
               value={bookingState.learnerName}
               onChange={(e) => handleLearnerChange('learnerName', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                errors.learnerName ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+                errors.learnerName ? 'border-red-500' : 'border-white/10'
               }`}
               placeholder="Enter learner's full name"
             />
@@ -392,7 +392,7 @@ export default function RegistrationForm() {
           </div>
 
           <div>
-            <label htmlFor="learnerPhone" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="learnerPhone" className="block text-sm font-medium text-white/80 mb-1">
               Learner's Phone (Optional)
             </label>
             <input
@@ -400,21 +400,21 @@ export default function RegistrationForm() {
               id="learnerPhone"
               value={bookingState.learnerPhone}
               onChange={(e) => handleLearnerChange('learnerPhone', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 border border-white/10 rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               placeholder="0400 000 000"
             />
           </div>
 
           <div>
-            <label htmlFor="learnerRelationship" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="learnerRelationship" className="block text-sm font-medium text-white/80 mb-1">
               Relationship *
             </label>
             <select
               id="learnerRelationship"
               value={bookingState.learnerRelationship}
               onChange={(e) => handleLearnerChange('learnerRelationship', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                errors.learnerRelationship ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+                errors.learnerRelationship ? 'border-red-500' : 'border-white/10'
               }`}
             >
               <option value="">Select relationship</option>
@@ -433,13 +433,13 @@ export default function RegistrationForm() {
       )}
 
       {/* Info Box */}
-      <div className="bg-blue-50 rounded-lg p-4">
+      <div className="bg-white/5 rounded-lg border border-white/10 p-4">
         <div className="flex gap-3">
-          <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-5 h-5 text-purple-300 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
-          <div className="text-sm text-blue-900">
-            <p className="font-semibold mb-1">Account Access</p>
+          <div className="text-sm text-white/80">
+            <p className="font-semibold mb-1 text-white/90">Account Access</p>
             <p>
               {bookingState.registrationType === 'myself'
                 ? 'You will be able to login and manage your bookings anytime from your dashboard.'

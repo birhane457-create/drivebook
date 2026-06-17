@@ -31,8 +31,9 @@ Each area is rated on a 1–5 scale:
 
 **Gaps:**
 - No MFA (multi-factor authentication) — acceptable for launch, add post-launch
-- Email verification is not enforced at login — unverified users can still log in
-- No account lockout after N failed login attempts (rate limiting partially covers this)
+- Email verification is enforced for instructors (June 2026): unverified instructors cannot log in (web + mobile)
+- Account lockout: `authRateLimit` (5 / 15 min per IP) on check-email, forgot-password, reset-password, set-password, mobile-login (June 16, 2026)
+- Web NextAuth credentials login not separately rate-limited at route level (middleware TBD)
 - Password reset flow exists for instructors but not self-service for clients
 
 **Risk level:** Low-Medium. The core auth is solid. The gaps are UX/hardening items, not broken auth.

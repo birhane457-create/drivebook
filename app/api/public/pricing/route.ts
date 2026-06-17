@@ -15,7 +15,6 @@ export async function GET() {
       package6Discount: settings.package6Discount,
       package10Discount: settings.package10Discount,
       package15Discount: settings.package15Discount,
-      drivingTestPackagePrice: settings.drivingTestPackagePrice,
     });
   } catch (error) {
     // Return defaults if DB unavailable — never block the booking flow
@@ -24,7 +23,6 @@ export async function GET() {
       package6Discount: 5,
       package10Discount: 10,
       package15Discount: 12,
-      drivingTestPackagePrice: 225,
     });
   }
 }

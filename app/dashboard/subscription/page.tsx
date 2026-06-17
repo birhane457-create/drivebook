@@ -67,11 +67,11 @@ export default async function SubscriptionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Subscription & Billing</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-3xl font-bold text-slate-100">Subscription & Billing</h1>
+          <p className="mt-2 text-slate-400">
             Choose the plan that works best for your driving instruction business
           </p>
         </div>
@@ -169,8 +169,8 @@ export default async function SubscriptionPage() {
 
         {/* Current Plan Details */}
         {instructor.subscriptionStatus === 'ACTIVE' && (
-          <div className="mt-8 bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Plan Benefits</h2>
+          <div className="mt-8 bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
+            <h2 className="text-lg font-semibold text-slate-100 mb-4">Your Plan Benefits</h2>
 
             {/* Pending rate change notice */}
             {pendingRateChange && (
@@ -192,34 +192,34 @@ export default async function SubscriptionPage() {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-1">Commission Rate</h3>
-                <p className="text-3xl font-bold text-gray-900">{commissionRate}%</p>
-                <p className="text-sm text-gray-500 mt-1">Platform keeps this per booking</p>
-                <p className="text-sm text-green-600 font-medium mt-1">You keep {(100 - commissionRate).toFixed(0)}%</p>
-                <div className="mt-3 bg-white rounded p-2 text-xs font-mono text-gray-600 border border-gray-200">
+              <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4">
+                <h3 className="text-sm font-medium text-slate-300 mb-1">Commission Rate</h3>
+                <p className="text-3xl font-bold text-slate-100">{commissionRate}%</p>
+                <p className="text-sm text-slate-400 mt-1">Platform keeps this per booking</p>
+                <p className="text-sm text-emerald-400 font-medium mt-1">You keep {(100 - commissionRate).toFixed(0)}%</p>
+                <div className="mt-3 bg-slate-900 rounded-2xl p-2 text-xs font-mono text-slate-300 border border-slate-700">
                   <div className="flex justify-between"><span>$70 lesson</span><span>$70.00</span></div>
-                  <div className="flex justify-between text-red-500"><span>Commission ({commissionRate}%)</span><span>-${(70 * commissionRate / 100).toFixed(2)}</span></div>
-                  <div className="flex justify-between text-green-600 font-bold border-t border-gray-100 pt-1 mt-1"><span>Your payout</span><span>${(70 * (1 - commissionRate / 100)).toFixed(2)}</span></div>
+                  <div className="flex justify-between text-rose-400"><span>Commission ({commissionRate}%)</span><span>-${(70 * commissionRate / 100).toFixed(2)}</span></div>
+                  <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-800 pt-1 mt-1"><span>Your payout</span><span>${(70 * (1 - commissionRate / 100)).toFixed(2)}</span></div>
                 </div>
               </div>
               {(instructor.subscriptionTier === 'BUSINESS' || instructor.subscriptionTier === 'STUDIO') && (
                 <>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Booking Slug</h3>
-                    <p className="text-sm text-gray-900">
+                    <h3 className="text-sm font-medium text-slate-400 mb-2">Booking Slug</h3>
+                    <p className="text-sm text-slate-100">
                       {instructor.customSlug ? `${instructor.customSlug}.drivebook.com.au` : 'Not configured'}
                     </p>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Custom Domain</h3>
-                    <p className="text-sm text-gray-900">
+                    <h3 className="text-sm font-medium text-slate-400 mb-2">Custom Domain</h3>
+                    <p className="text-sm text-slate-100">
                       {instructor.customDomain || 'Not configured'}
                     </p>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Branded Pages</h3>
-                    <p className="text-sm text-gray-900">
+                    <h3 className="text-sm font-medium text-slate-400 mb-2">Branded Pages</h3>
+                    <p className="text-sm text-slate-100">
                       {instructor.showBrandingOnBookingPage ? 'Enabled' : 'Not configured'}
                     </p>
                   </div>
@@ -231,27 +231,27 @@ export default async function SubscriptionPage() {
 
         {/* Billing History */}
         {currentSubscription && (
-          <div className="mt-8 bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Billing History</h2>
+          <div className="mt-8 bg-slate-900 rounded-3xl shadow-sm border border-slate-800">
+            <div className="px-6 py-4 border-b border-slate-800">
+              <h2 className="text-lg font-semibold text-slate-100">Billing History</h2>
             </div>
             <div className="p-6">
               <div className="space-y-4">
-                <div className="flex justify-between items-center py-3 border-b border-gray-100">
+                <div className="flex justify-between items-center py-3 border-b border-slate-800">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-slate-100">
                       {SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier].name} Plan
                     </p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-slate-400">
                       {new Date(currentSubscription.currentPeriodStart).toLocaleDateString()} - 
                       {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-slate-100">
                       ${currentSubscription.monthlyAmount}
                     </p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-slate-400">
                       {currentSubscription.status}
                     </p>
                   </div>

@@ -57,12 +57,12 @@ export default function ClientReviewsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-8 text-slate-100">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="bg-white rounded-lg shadow p-6 space-y-4">
-            <div className="h-6 bg-gray-200 rounded"></div>
-            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+          <div className="h-8 bg-slate-800 rounded w-1/4"></div>
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 space-y-4">
+            <div className="h-6 bg-slate-800 rounded"></div>
+            <div className="h-6 bg-slate-800 rounded w-3/4"></div>
           </div>
         </div>
       </div>
@@ -70,18 +70,19 @@ export default function ClientReviewsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">My Reviews</h1>
+    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
+      <div className="max-w-4xl mx-auto px-4 py-8 text-slate-100">
+        <h1 className="text-3xl font-bold text-slate-100 mb-6">My Reviews</h1>
 
       {/* Tabs */}
-      <div className="bg-white rounded-lg shadow-md mb-6">
-        <div className="flex border-b border-gray-200">
+      <div className="bg-slate-900 rounded-xl border border-slate-800 mb-6">
+        <div className="flex border-b border-slate-700">
           <button
             onClick={() => setActiveTab('pending')}
             className={`flex-1 px-6 py-4 font-semibold transition ${
               activeTab === 'pending'
-                ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'border-b-2 border-blue-500 text-blue-400 bg-blue-900/20'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
             }`}
           >
             Pending Reviews ({pendingReviews.length})
@@ -90,24 +91,24 @@ export default function ClientReviewsPage() {
             onClick={() => setActiveTab('completed')}
             className={`flex-1 px-6 py-4 font-semibold transition ${
               activeTab === 'completed'
-                ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'border-b-2 border-blue-500 text-blue-400 bg-blue-900/20'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
             }`}
           >
             My Reviews ({reviews.length})
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-5">
           {activeTab === 'pending' ? (
             pendingReviews.length > 0 ? (
               <div className="space-y-4">
                 {pendingReviews.map((pending) => (
-                  <div key={pending.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                  <div key={pending.id} className="border border-slate-700 rounded-lg p-4 hover:shadow-md transition">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-semibold text-gray-900">{pending.instructorName}</h3>
-                        <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                        <h3 className="font-semibold text-slate-100">{pending.instructorName}</h3>
+                        <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
                           <Calendar className="w-4 h-4" />
                           Lesson on {new Date(pending.bookingDate).toLocaleDateString()}
                         </p>
@@ -128,19 +129,19 @@ export default function ClientReviewsPage() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <Star className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No pending reviews</p>
-                <p className="text-sm text-gray-400 mt-2">Complete a lesson to leave a review</p>
+                <Star className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400">No pending reviews</p>
+                <p className="text-sm text-slate-500 mt-2">Complete a lesson to leave a review</p>
               </div>
             )
           ) : (
             reviews.length > 0 ? (
               <div className="space-y-4">
                 {reviews.map((review) => (
-                  <div key={review.id} className="border border-gray-200 rounded-lg p-4">
+                  <div key={review.id} className="border border-slate-700 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="font-semibold text-gray-900">{review.instructorName}</h3>
+                        <h3 className="font-semibold text-slate-100">{review.instructorName}</h3>
                         <div className="flex items-center gap-1 mt-1">
                           {[...Array(5)].map((_, i) => (
                             <Star
@@ -152,12 +153,12 @@ export default function ClientReviewsPage() {
                           ))}
                         </div>
                       </div>
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-slate-400">
                         {new Date(review.date).toLocaleDateString()}
                       </span>
                     </div>
-                    <p className="text-gray-700">{review.comment}</p>
-                    <p className="text-sm text-gray-500 mt-2 flex items-center gap-1">
+                    <p className="text-slate-300">{review.comment}</p>
+                    <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
                       Lesson on {new Date(review.bookingDate).toLocaleDateString()}
                     </p>
@@ -166,9 +167,9 @@ export default function ClientReviewsPage() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <Star className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No reviews yet</p>
-                <p className="text-sm text-gray-400 mt-2">Your reviews will appear here after you submit them</p>
+                <Star className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400">No reviews yet</p>
+                <p className="text-sm text-slate-500 mt-2">Your reviews will appear here after you submit them</p>
               </div>
             )
           )}
@@ -185,6 +186,7 @@ export default function ClientReviewsPage() {
           onSuccess={loadReviews}
         />
       )}
+    </div>
     </div>
   );
 }

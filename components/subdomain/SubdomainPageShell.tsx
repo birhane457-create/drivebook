@@ -15,14 +15,7 @@ interface InstructorProps {
   testPackagePrice: number | null;
   testPackageDuration: number | null;
   testPackageIncludes: string[];
-  lessonPackages?: Array<{
-    id: string;
-    name: string;
-    durationMinutes: number;
-    price: number;
-    description: string;
-    isActive: boolean;
-  }>;
+  // legacy lessonPackages removed
 }
 
 interface SubdomainPageShellProps {

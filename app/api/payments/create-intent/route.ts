@@ -173,9 +173,6 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
     // Use provided amount or booking price
     const paymentAmount = amount || booking.price;
 
-    // Use provided amount or booking price
-    const paymentAmount = amount || booking.price;
-
     // FIX: PaymentIntent deduplication with DB-level advisory lock.
     //
     // RACE CONDITION (before fix):
@@ -218,14 +215,8 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
               amount: existingIntent.amount / 100,
             };
           }
-          // Existing intent is not reusable (succeeded/canceled/etc) — cancel it before creating new
-          if (['requires_payment_method', 'requires_confirmation'].includes(existingIntent.status) === false) {
-            try {
-              await stripeService.cancelPaymentIntent?.(freshBooking.paymentIntentId);
-            } catch {
-              // Best-effort cancel — continue to create new intent
-            }
-          }
+          // Existing intent is not reusable (succeeded/canceled/etc) — we'll create a new one
+          // (Stripe payment intents cannot be cancelled, only refunded if succeeded)
         } catch {
           // Intent not found in Stripe — create new one
         }

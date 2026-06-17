@@ -38,6 +38,22 @@ export async function POST(
       });
     }
 
+    // Log audit entry
+    await prisma.auditLog.create({
+      data: {
+        action: 'DOCUMENTS_APPROVED',
+        actorId: session.user.id,
+        actorRole: session.user.role,
+        targetType: 'Instructor',
+        targetId: params.instructorId,
+        metadata: {
+          instructorName: instructor?.name,
+          instructorPhone: instructor?.phone,
+        },
+        success: true,
+      },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Approve documents error:', error);

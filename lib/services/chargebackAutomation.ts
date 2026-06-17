@@ -220,17 +220,94 @@ export async function handleChargebackResolution(
   }
 }
 
-// ─── Evidence submission (future — Stripe API) ───────────────────────────────
+// ─── Evidence submission ─────────────────────────────────────────────────────
 
+/**
+ * Submits dispute evidence to Stripe and alerts the admin.
+ *
+ * Evidence gathered automatically from the booking record:
+ *   - Service date (startTime)
+ *   - Customer name and contact
+ *   - Booking confirmation reference
+ *   - Instructor name
+ *
+ * Admin should supplement with lesson notes and any communication screenshots
+ * via the Stripe Dashboard before the deadline.
+ */
 export async function processChargebackDefense(disputeId: string): Promise<void> {
-  // TODO: Submit evidence to Stripe via stripe.disputes.update()
-  // For now: log and alert admin to handle manually in Stripe dashboard
-  console.warn(`⚠️ processChargebackDefense called for ${disputeId} — manual evidence submission required`);
+  const dispute = await db.stripeDispute.findUnique({
+    where: { stripeDisputeId: disputeId },
+  })
 
-  await sendAlert({
-    type: 'DISPUTE_EVIDENCE_NEEDED',
-    severity: 'HIGH',
-    message: `Dispute ${disputeId} requires evidence submission. Log in to Stripe Dashboard to respond.`,
-    metadata: { disputeId, action: 'manual_evidence_required' },
-  });
+  if (!dispute) {
+    console.warn(`[chargeback] processChargebackDefense: dispute ${disputeId} not found in DB`)
+    return
+  }
+
+  // Gather evidence from booking
+  let evidenceText = `DriveBook dispute response for ${disputeId}.\n`
+
+  if (dispute.bookingId) {
+    const booking = await prisma.booking.findUnique({
+      where: { id: dispute.bookingId },
+      include: {
+        client: { select: { name: true, email: true, phone: true } },
+        instructor: { select: { name: true, phone: true } },
+      },
+    }).catch(() => null)
+
+    if (booking) {
+      const serviceDate = booking.startTime
+        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        : 'Date not recorded'
+
+      evidenceText += `\nService Details:\n`
+      evidenceText += `- Service date: ${serviceDate}\n`
+      evidenceText += `- Student: ${booking.client?.name ?? 'Unknown'}\n`
+      evidenceText += `- Student email: ${booking.client?.email ?? 'Unknown'}\n`
+      evidenceText += `- Instructor: ${booking.instructor?.name ?? 'Unknown'}\n`
+      evidenceText += `- Booking ID: ${booking.id}\n`
+      evidenceText += `- Amount charged: $${booking.price.toFixed(2)} AUD\n`
+      evidenceText += `- Payment confirmed: ${booking.isPaid ? 'Yes' : 'No'}\n`
+      evidenceText += `\nThe customer agreed to DriveBook's terms of service at registration. `
+      evidenceText += `The lesson was scheduled and confirmed by both parties. `
+      evidenceText += `Please see Stripe Dashboard for any additional documentation.`
+    }
+  }
+
+  // Submit to Stripe
+  try {
+    const Stripe = (await import('stripe')).default
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2024-06-20' as any,
+    })
+
+    await stripe.disputes.update(disputeId, {
+      evidence: {
+        product_description: 'Driving lesson booking via DriveBook platform',
+        service_documentation: evidenceText,
+        uncategorized_text: evidenceText,
+      },
+      submit: false, // Don't auto-submit — admin reviews first in Stripe Dashboard
+    })
+
+    console.log(`[chargeback] Evidence staged for ${disputeId} — admin must review and submit in Stripe Dashboard`)
+
+    await sendAlert({
+      type: 'DISPUTE_EVIDENCE_STAGED',
+      severity: 'HIGH',
+      message: `Dispute ${disputeId}: Evidence staged in Stripe Dashboard. Review and submit before the deadline.`,
+      metadata: { disputeId, action: 'evidence_staged', bookingId: dispute.bookingId },
+    })
+  } catch (stripeErr) {
+    console.error(`[chargeback] Failed to stage evidence for ${disputeId}:`, stripeErr)
+
+    // Fall back to manual alert if Stripe call fails
+    await sendAlert({
+      type: 'DISPUTE_EVIDENCE_NEEDED',
+      severity: 'CRITICAL',
+      message: `Dispute ${disputeId} requires MANUAL evidence submission — automated staging failed. Log in to Stripe Dashboard immediately.`,
+      metadata: { disputeId, action: 'manual_evidence_required', error: String(stripeErr) },
+    })
+  }
 }

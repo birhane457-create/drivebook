@@ -121,7 +121,7 @@ export default function ClientReschedulePage() {
 
   if (loading || status === 'loading') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
       </div>
     );
@@ -129,7 +129,7 @@ export default function ClientReschedulePage() {
 
   if (error || !booking) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center px-4">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
           <p className="text-gray-700 mb-4">{error || 'Booking not found.'}</p>
@@ -141,7 +141,7 @@ export default function ClientReschedulePage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center px-4">
         <div className="text-center">
           <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-3" />
           <h2 className="text-xl font-bold text-gray-900 mb-1">Lesson Rescheduled</h2>
@@ -159,9 +159,9 @@ export default function ClientReschedulePage() {
   const priceDiff = newPrice !== null ? newPrice - booking.price : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-24">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-white/95 border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
           <Link href={`/client-dashboard/bookings/${bookingId}`} className="p-2 hover:bg-gray-100 rounded-lg transition">
             <ArrowLeft className="w-5 h-5 text-gray-600" />

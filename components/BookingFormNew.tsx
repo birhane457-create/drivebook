@@ -285,23 +285,23 @@ export default function BookingForm({
     // ── Pending payment — client needs to top up ──────────────────────────
     if (pendingPayment) {
       return (
-        <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
+        <div className="bg-slate-900/80 border border-white/10 rounded-3xl shadow-lg p-6 sm:p-8">
           <div className="text-center mb-6">
-            <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-amber-100 mb-4">
-              <AlertCircle className="h-7 w-7 text-amber-600" />
+            <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-amber-500/20 mb-4">
+              <AlertCircle className="h-7 w-7 text-amber-400" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-1">Booking Created — Awaiting Payment</h3>
-            <p className="text-sm text-gray-500">
+            <h3 className="text-lg font-bold text-white mb-1">Booking Created — Awaiting Payment</h3>
+            <p className="text-sm text-slate-400">
               The booking slot is reserved. The client needs to top up their wallet to confirm it.
             </p>
           </div>
 
           {/* Booking summary */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5 space-y-2 text-sm">
-            <p className="font-semibold text-amber-900">📋 Booking Details</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-5 space-y-2 text-sm">
+            <p className="font-semibold text-amber-200">📋 Booking Details</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-300">
               <span className="font-medium">Booking ID:</span>
-              <span className="font-mono text-xs">{bookingId}</span>
+              <span className="font-mono text-xs text-slate-400">{bookingId}</span>
               <span className="font-medium">Date:</span>
               <span>{new Date(formData.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
               <span className="font-medium">Time:</span>
@@ -309,16 +309,16 @@ export default function BookingForm({
               <span className="font-medium">Duration:</span>
               <span>{formData.duration} min</span>
               <span className="font-medium">Price:</span>
-              <span className="font-semibold text-amber-800">${calculatePrice()}</span>
+              <span className="font-semibold text-amber-300">${calculatePrice()}</span>
               <span className="font-medium">Status:</span>
-              <span className="text-amber-700 font-semibold">⏳ Awaiting Payment</span>
+              <span className="text-amber-300 font-semibold">⏳ Awaiting Payment</span>
             </div>
           </div>
 
           {/* What happens next */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-5 text-sm">
-            <p className="font-semibold text-blue-900 mb-2">What happens next?</p>
-            <ol className="space-y-1.5 text-blue-800 list-decimal list-inside">
+          <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-4 mb-5 text-sm">
+            <p className="font-semibold text-sky-200 mb-2">What happens next?</p>
+            <ol className="space-y-1.5 text-sky-300 list-decimal list-inside">
               <li>An email has been sent to the client with a payment link</li>
               <li>Once they top up their wallet, the booking confirms automatically</li>
               <li>You'll receive a notification when payment is received</li>
@@ -328,20 +328,20 @@ export default function BookingForm({
 
           {/* Message from API */}
           {pendingMessage && (
-            <p className="text-xs text-gray-500 text-center mb-5 italic">{pendingMessage}</p>
+            <p className="text-xs text-slate-400 text-center mb-5 italic">{pendingMessage}</p>
           )}
 
           {/* Actions */}
           <div className="space-y-2">
             <a
               href={`/dashboard/bookings/${bookingId}`}
-              className="block w-full text-center bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 font-semibold text-sm"
+              className="block w-full text-center bg-sky-600 text-white px-4 py-2.5 rounded-lg hover:bg-sky-700 font-semibold text-sm transition-colors"
             >
               View Booking
             </a>
             <a
               href="/dashboard/bookings"
-              className="block w-full text-center bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-200 text-sm"
+              className="block w-full text-center bg-white/10 text-white px-4 py-2.5 rounded-lg hover:bg-white/20 text-sm transition-colors"
             >
               Back to Bookings
             </a>
@@ -352,32 +352,32 @@ export default function BookingForm({
 
     // ── Confirmed booking ─────────────────────────────────────────────────
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
+      <div className="bg-slate-900/80 border border-white/10 rounded-3xl shadow-lg p-6 sm:p-8">
         <div className="text-center">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-            <CheckCircle2 className="h-6 w-6 text-green-600" />
+          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-500/20 mb-4">
+            <CheckCircle2 className="h-6 w-6 text-emerald-400" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Booking Confirmed!</h3>
-          <p className="text-sm text-gray-500 mb-4">
+          <h3 className="text-lg font-medium text-white mb-2">Booking Confirmed!</h3>
+          <p className="text-sm text-slate-400 mb-4">
             {isInstructorBooking
               ? 'Booking created and payment deducted from client wallet.'
               : `We've sent a confirmation email to ${formData.email}`}
           </p>
           
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <p className="text-sm font-medium text-blue-900 mb-2">Your Booking ID:</p>
-            <p className="text-2xl font-bold text-blue-600 font-mono">{bookingId}</p>
-            <p className="text-xs text-blue-700 mt-2">
+          <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-4 mb-4">
+            <p className="text-sm font-medium text-sky-200 mb-2">Your Booking ID:</p>
+            <p className="text-2xl font-bold text-sky-300 font-mono">{bookingId}</p>
+            <p className="text-xs text-sky-300/70 mt-2">
               Save this ID to manage your booking
             </p>
           </div>
 
-          <div className="space-y-2 text-sm text-left bg-gray-50 rounded-lg p-4 mb-4">
-            <p><span className="font-medium">Date:</span> {new Date(formData.date).toLocaleDateString()}</p>
-            <p><span className="font-medium">Time:</span> {formData.time}</p>
-            <p><span className="font-medium">Duration:</span> {formData.duration} minutes</p>
-            <p><span className="font-medium">Pickup:</span> {formData.address}</p>
-            <p><span className="font-medium">Price:</span> ${calculatePrice()}</p>
+          <div className="space-y-2 text-sm text-left bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
+            <p><span className="font-medium text-slate-300">Date:</span> <span className="text-slate-400">{new Date(formData.date).toLocaleDateString()}</span></p>
+            <p><span className="font-medium text-slate-300">Time:</span> <span className="text-slate-400">{formData.time}</span></p>
+            <p><span className="font-medium text-slate-300">Duration:</span> <span className="text-slate-400">{formData.duration} minutes</span></p>
+            <p><span className="font-medium text-slate-300">Pickup:</span> <span className="text-slate-400">{formData.address}</span></p>
+            <p><span className="font-medium text-slate-300">Price:</span> <span className="text-sky-300 font-semibold">${calculatePrice()}</span></p>
           </div>
 
           <div className="space-y-2">
@@ -385,13 +385,13 @@ export default function BookingForm({
               <>
                 <a
                   href={`/dashboard/bookings/${bookingId}`}
-                  className="block w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
+                  className="block w-full bg-sky-600 text-white px-4 py-2 rounded-lg hover:bg-sky-700 text-sm font-semibold transition-colors"
                 >
                   View Booking
                 </a>
                 <a
                   href="/dashboard/bookings"
-                  className="block w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 text-sm"
+                  className="block w-full bg-white/10 text-white px-4 py-2 rounded-lg hover:bg-white/20 text-sm transition-colors"
                 >
                   Back to Bookings
                 </a>
@@ -400,7 +400,7 @@ export default function BookingForm({
               <>
                 <a
                   href={`/cancel-booking/${bookingId}`}
-                  className="block w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200"
+                  className="block w-full bg-white/10 text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors"
                 >
                   Manage Booking
                 </a>
@@ -414,7 +414,7 @@ export default function BookingForm({
                       joinWaitingList: false, ageDeclaration: false, termsAccepted: false,
                     })
                   }}
-                  className="block w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  className="block w-full bg-sky-600 text-white px-4 py-2 rounded-lg hover:bg-sky-700 transition-colors"
                 >
                   Book Another Lesson
                 </button>
@@ -427,8 +427,8 @@ export default function BookingForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg p-6 sm:p-8 space-y-6">
-      <h2 className="text-2xl font-bold mb-6">
+    <form onSubmit={handleSubmit} className="bg-slate-900/80 border border-white/10 rounded-3xl shadow-lg p-6 sm:p-8 space-y-6">
+      <h2 className="text-2xl font-bold text-white mb-6">
         {existingBooking ? 'Update Booking' : 'Book a Lesson'}
       </h2>
 
@@ -437,7 +437,7 @@ export default function BookingForm({
         <>
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 <User className="inline h-4 w-4 mr-1" />
                 Full Name
               </label>
@@ -446,13 +446,13 @@ export default function BookingForm({
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                 placeholder="John Smith"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 <Mail className="inline h-4 w-4 mr-1" />
                 Email
               </label>
@@ -461,14 +461,14 @@ export default function BookingForm({
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                 placeholder="john@example.com"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium text-slate-300 mb-2">
               <Phone className="inline h-4 w-4 mr-1" />
               Phone Number
             </label>
@@ -477,7 +477,7 @@ export default function BookingForm({
               required
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+              className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
               placeholder="0412 345 678"
             />
           </div>
@@ -485,7 +485,7 @@ export default function BookingForm({
       )}
 
       <div>
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-sm font-medium text-slate-300 mb-2">
           <MapPin className="inline h-4 w-4 mr-1" />
           Pickup Address
         </label>
@@ -494,23 +494,23 @@ export default function BookingForm({
           required
           value={formData.address}
           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+          className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
           placeholder="123 Main St, Perth WA 6000"
         />
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="block text-sm font-medium">
-            <MapPin className="inline h-4 w-4 mr-1 text-red-500" />
+          <label className="block text-sm font-medium text-slate-300">
+            <MapPin className="inline h-4 w-4 mr-1 text-red-400" />
             Dropoff Address
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none hover:text-slate-300">
             <input
               type="checkbox"
               checked={formData.sameAsPickup}
               onChange={(e) => setFormData({ ...formData, sameAsPickup: e.target.checked, dropoffAddress: '' })}
-              className="rounded"
+              className="rounded bg-slate-950/60 border border-white/10 accent-sky-500"
             />
             Same as pickup
           </label>
@@ -520,24 +520,24 @@ export default function BookingForm({
             type="text"
             value={formData.dropoffAddress}
             onChange={(e) => setFormData({ ...formData, dropoffAddress: e.target.value })}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+            className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             placeholder="456 End St, Perth WA 6000"
           />
         )}
         {formData.sameAsPickup && (
-          <p className="text-sm text-gray-400 italic">Dropoff at same location as pickup</p>
+          <p className="text-sm text-slate-500 italic">Dropoff at same location as pickup</p>
         )}
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-sm font-medium text-slate-300 mb-2">
           <Clock className="inline h-4 w-4 mr-1" />
           Duration
         </label>
         <select
           value={formData.duration}
           onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value), time: '' })}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+          className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
         >
           <option value="30">30 minutes</option>
           <option value="60">1 hour</option>
@@ -547,7 +547,7 @@ export default function BookingForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-sm font-medium text-slate-300 mb-2">
           <Calendar className="inline h-4 w-4 mr-1" />
           Date &amp; Time
         </label>
@@ -560,51 +560,51 @@ export default function BookingForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">Notes (Optional)</label>
+        <label className="block text-sm font-medium text-slate-300 mb-2">Notes (Optional)</label>
         <textarea
           value={formData.notes}
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           rows={3}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+          className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none"
           placeholder="Any special requirements or notes..."
         />
       </div>
 
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
         <label className="flex items-start gap-3 cursor-pointer">
           <input
             type="checkbox"
             checked={formData.joinWaitingList}
             onChange={(e) => setFormData({ ...formData, joinWaitingList: e.target.checked })}
-            className="mt-1"
+            className="mt-1 bg-slate-950/60 border border-white/10 rounded accent-sky-500"
           />
           <div className="text-sm">
-            <p className="font-medium text-yellow-900">Join Waiting List</p>
-            <p className="text-yellow-700">
+            <p className="font-medium text-amber-200">Join Waiting List</p>
+            <p className="text-amber-300/80">
               Get notified if an earlier slot becomes available due to cancellations
             </p>
           </div>
         </label>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-4">
         <div className="flex justify-between items-center">
-          <span className="text-lg font-semibold">Total Price:</span>
-          <span className="text-3xl font-bold text-blue-600">
+          <span className="text-lg font-semibold text-white">Total Price:</span>
+          <span className="text-3xl font-bold text-sky-300">
             <DollarSign className="inline h-6 w-6" />
             {calculatePrice()}
           </span>
         </div>
         {instructorData && (
-          <p className="text-xs text-blue-700 mt-2">
+          <p className="text-xs text-sky-300/70 mt-2">
             ${instructorData.hourlyRate}/hour × {formData.duration / 60} hour(s)
           </p>
         )}
       </div>
 
       {!existingBooking && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-          <p className="text-xs text-gray-600">
+        <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+          <p className="text-xs text-slate-400">
             <AlertCircle className="inline h-3 w-3 mr-1" />
             Cancellation Policy: 48+ hours (100% refund) • 24-48 hours (50% refund) • Less than 24 hours (No refund)
           </p>
@@ -620,9 +620,9 @@ export default function BookingForm({
               required
               checked={formData.ageDeclaration}
               onChange={(e) => setFormData({ ...formData, ageDeclaration: e.target.checked })}
-              className="mt-0.5 rounded"
+              className="mt-0.5 rounded bg-slate-950/60 border border-white/10 accent-sky-500"
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm text-slate-300">
               I confirm that I am at least 16 years old and hold a valid learner's permit or driver's licence that allows me to undertake driving lessons.
             </span>
           </label>
@@ -632,15 +632,15 @@ export default function BookingForm({
               required
               checked={formData.termsAccepted}
               onChange={(e) => setFormData({ ...formData, termsAccepted: e.target.checked })}
-              className="mt-0.5 rounded"
+              className="mt-0.5 rounded bg-slate-950/60 border border-white/10 accent-sky-500"
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm text-slate-300">
               I have read and agree to the{' '}
-              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:text-sky-200">
                 Learner Terms and Conditions
               </a>{' '}
               and{' '}
-              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:text-sky-200">
                 Privacy Policy
               </a>.
             </span>
@@ -650,21 +650,21 @@ export default function BookingForm({
 
       {/* Insufficient balance panel */}
       {insufficientBalance && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-red-800">Insufficient wallet balance</p>
-              <p className="text-sm text-red-700 mt-1">
+              <p className="font-semibold text-red-200">Insufficient wallet balance</p>
+              <p className="text-sm text-red-300 mt-1">
                 {insufficientBalance.clientName} has <strong>${insufficientBalance.currentBalance.toFixed(2)}</strong> but needs <strong>${insufficientBalance.required.toFixed(2)}</strong> for this lesson.
               </p>
-              <p className="text-sm text-red-700">
+              <p className="text-sm text-red-300">
                 They need to top up <strong>${insufficientBalance.topUpAmount.toFixed(2)}</strong> (includes 3.6% platform fee).
               </p>
             </div>
           </div>
           {linkSent ? (
-            <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
+            <div className="flex items-center gap-2 text-emerald-300 text-sm font-medium">
               <CheckCircle2 className="h-4 w-4" />
               Payment link sent to {insufficientBalance.clientEmail}
             </div>
@@ -674,21 +674,21 @@ export default function BookingForm({
                 type="button"
                 onClick={sendPaymentLink}
                 disabled={sendingLink}
-                className="flex-1 min-w-[200px] bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                className="flex-1 min-w-[200px] bg-sky-600 text-white px-4 py-2 rounded-lg hover:bg-sky-700 disabled:opacity-50 text-sm font-medium transition-colors"
               >
                 {sendingLink ? 'Sending...' : `Send Payment Link — $${insufficientBalance.topUpAmount.toFixed(2)}`}
               </button>
               <button
                 type="button"
                 onClick={() => { setInsufficientBalance(null); setLinkSent(false) }}
-                className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                className="px-3 py-2 border border-white/10 bg-white/5 text-white rounded-lg hover:bg-white/10 text-sm transition-colors"
               >
                 Dismiss
               </button>
             </div>
           )}
           {linkSent && (
-            <p className="text-xs text-gray-500">Once the client tops up, retry the booking.</p>
+            <p className="text-xs text-slate-400">Once the client tops up, retry the booking.</p>
           )}
         </div>
       )}
@@ -696,7 +696,7 @@ export default function BookingForm({
       <button
         type="submit"
         disabled={loading || !formData.time || !instructorData || (!isInstructorBooking && !existingBooking && (!formData.ageDeclaration || !formData.termsAccepted))}
-        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-sky-600 text-white py-3 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {loading ? 'Processing...' : existingBooking ? 'Update Booking' : 'Confirm Booking'}
       </button>

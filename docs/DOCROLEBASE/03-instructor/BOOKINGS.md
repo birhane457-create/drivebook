@@ -21,6 +21,12 @@ Each booking card shows a source badge: blue "Platform" or grey "Offline".
 
 ## Create Booking
 
+**Route:** `/dashboard/bookings/new`  
+**Files:** 
+- `app/dashboard/bookings/new/page.tsx` (page container)
+- `components/BookingFormNew.tsx` (form component)
+- `components/SlotPicker.tsx` (calendar + time picker)
+
 Instructors can create bookings on behalf of clients from `/dashboard/bookings/new`.
 
 **API:** `POST /api/bookings`
@@ -28,6 +34,49 @@ Instructors can create bookings on behalf of clients from `/dashboard/bookings/n
 **Security:** Price is always calculated server-side (`instructor.hourlyRate × durationHours`). Client-submitted price is ignored.
 
 **Concurrency:** Slot conflict is checked both before and inside `$transaction` to prevent TOCTOU race conditions.
+
+### Form Styling (Dark Theme)
+
+The add booking form uses a **dark theme** consistent with the instructor dashboard:
+- Page background: `bg-slate-950` (dark slate)
+- Form containers: `bg-slate-900/80` with `border-white/10`
+- Input fields: `bg-slate-950/60` with `border-white/10`
+- Text: `text-white` (headings), `text-slate-300` (labels), `text-slate-400` (hints)
+- Primary buttons: `bg-sky-600` with hover states
+- Focus rings: `focus:ring-sky-500`
+
+**Components:**
+- Success screen: Dark themed success confirmation with booking ID
+- Pending payment screen: Dark amber alert showing payment required
+- Calendar picker (SlotPicker): Dark themed day/time selection
+- Error alerts: Red themed error messages
+- Form sections: Properly organized steps with clear visual hierarchy
+
+### Platform Booking Flow (Step 1: Select Client)
+
+1. Select client from dropdown
+2. Shows selected client details (name, phone, email, address)
+
+### Platform Booking Flow (Step 2: Select Date & Time)
+
+Uses SlotPicker component to show:
+- Week navigator (prev/next week buttons)
+- 7-day calendar grid with selectable dates
+- Available time slots for selected date
+- Short-notice slots marked with ⚡ (require approval)
+- Price calculation based on duration × hourly rate
+
+### Offline Booking Form (PRO+ only)
+
+Separate form for logging cash/bank transfer lessons:
+- Client name, phone, email (optional, used for platform client guard)
+- Date & time (with slot availability checking)
+- Duration selector (30 min to 4 hours)
+- Payment method (cash, bank transfer, other)
+- Amount paid (optional)
+- Pickup address & notes
+
+**Platform Client Guard:** If email provided matches a student with DriveBook account linked to instructor, booking is blocked with clear error message.
 
 ### Client has sufficient wallet balance
 

@@ -27,19 +27,36 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search');
     const from = searchParams.get('from');
     const to = searchParams.get('to');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
+    const skip = (page - 1) * limit
 
-    const where: any = {};
-    if (status && status !== 'all') where.status = status;
+    const where: any = { deletedAt: null }
+    if (status && status !== 'all') where.status = status
     if (from || to) {
-      where.startTime = {};
-      if (from) where.startTime.gte = new Date(from);
-      if (to) where.startTime.lte = new Date(to + 'T23:59:59');
+      where.startTime = {}
+      if (from) where.startTime.gte = new Date(from)
+      if (to) where.startTime.lte = new Date(to + 'T23:59:59')
     }
+    // Push search into Prisma where — avoids the 200-row cap miss
+    if (search) {
+      where.OR = [
+        { clientName: { contains: search, mode: 'insensitive' } },
+        { client: { name: { contains: search, mode: 'insensitive' } } },
+        { client: { email: { contains: search, mode: 'insensitive' } } },
+        { instructor: { name: { contains: search, mode: 'insensitive' } } },
+        { id: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    // Get total count for pagination
+    const total = await prisma.booking.count({ where })
 
     const bookings = await prisma.booking.findMany({
       where,
       orderBy: { startTime: 'desc' },
-      take: 200,
+      take: limit,
+      skip,
       select: {
         id: true, startTime: true, endTime: true, status: true,
         bookingType: true, price: true, platformFee: true, instructorPayout: true,
@@ -49,26 +66,14 @@ export async function GET(req: NextRequest) {
         instructor: { select: { id: true, name: true, phone: true } },
         client: { select: { id: true, name: true, email: true, phone: true } },
       },
-    });
+    })
 
-    // Client-side search filter (MongoDB doesn't support case-insensitive contains easily)
-    const filtered = search
-      ? bookings.filter(b => {
-          const q = search.toLowerCase();
-          return (
-            (b.clientName || '').toLowerCase().includes(q) ||
-            (b.client?.name || '').toLowerCase().includes(q) ||
-            (b.client?.email || '').toLowerCase().includes(q) ||
-            (b.instructor?.name || '').toLowerCase().includes(q) ||
-            b.id.toLowerCase().includes(q)
-          );
-        })
-      : bookings;
+    const filtered = bookings // search already applied in DB
 
     const now = new Date();
     // Stats
     const stats = {
-      total: bookings.length,
+      total: total,
       confirmed: bookings.filter(b => b.status === 'CONFIRMED').length,
       pending: bookings.filter(b => b.status === 'PENDING').length,
       completed: bookings.filter(b => b.status === 'COMPLETED').length,
@@ -78,7 +83,17 @@ export async function GET(req: NextRequest) {
       endedConfirmed: bookings.filter(b => b.status === 'CONFIRMED' && b.endTime != null && new Date(b.endTime) <= now).length,
     };
 
-    return NextResponse.json({ bookings: filtered, stats });
+    return NextResponse.json({
+      bookings: filtered,
+      stats,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasMore: page < Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     console.error('Admin bookings GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -153,7 +168,7 @@ export async function POST(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
   try {
-    const { clientId, instructorId, startTime, endTime, notes, price } = await req.json();
+    const { clientId, instructorId, startTime, endTime, notes } = await req.json();
 
     if (!clientId || !instructorId || !startTime || !endTime) {
       return NextResponse.json({ error: 'clientId, instructorId, startTime, endTime are required' }, { status: 400 });
@@ -172,7 +187,8 @@ export async function POST(req: NextRequest) {
     if (!client.userId) return NextResponse.json({ error: 'Client has no DriveBook account' }, { status: 422 });
 
     const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60);
-    const lessonPrice = price ?? parseFloat((instructor.hourlyRate * durationHours).toFixed(2));
+    // Always calculate server-side — never accept client-supplied price
+    const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2));
     const platformFee = parseFloat((lessonPrice * 0.036).toFixed(2));
     const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC');
     const commissionRate = commissionRatePct / 100;

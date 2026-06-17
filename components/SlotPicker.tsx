@@ -86,17 +86,17 @@ export default function SlotPicker({
           type="button"
           onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
           disabled={weekOffset === 0}
-          className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-1.5 rounded-lg border border-white/10 bg-slate-900/40 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed text-slate-400 transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-sm font-medium text-gray-600">
+        <span className="text-sm font-medium text-slate-300">
           {weekOffset === 0 ? 'This week' : weekOffset === 1 ? 'Next week' : `+${weekOffset} weeks`}
         </span>
         <button
           type="button"
           onClick={() => setWeekOffset(w => w + 1)}
-          className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50"
+          className="p-1.5 rounded-lg border border-white/10 bg-slate-900/40 hover:bg-white/5 text-slate-400 transition-colors"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -118,8 +118,8 @@ export default function SlotPicker({
                 ${isSelected
                   ? 'text-white border-transparent'
                   : isPast
-                  ? 'text-gray-300 border-gray-100 cursor-not-allowed'
-                  : 'text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                  ? 'text-slate-500 border-white/5 cursor-not-allowed'
+                  : 'text-slate-300 border-white/10 hover:border-sky-400 hover:bg-sky-500/10'
                 }`}
               style={isSelected ? { backgroundColor: primaryColor, borderColor: primaryColor } : {}}
             >
@@ -134,16 +134,16 @@ export default function SlotPicker({
       {selectedDate && (
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <Clock className="h-4 w-4 text-gray-400" />
-            <span className="text-sm font-medium text-gray-700">
+            <Clock className="h-4 w-4 text-slate-400" />
+            <span className="text-sm font-medium text-slate-300">
               {formatDateLabel(selectedDate)}
             </span>
           </div>
 
           {loadingSlots ? (
-            <div className="text-center py-6 text-gray-400 text-sm">Loading available times...</div>
+            <div className="text-center py-6 text-slate-400 text-sm">Loading available times...</div>
           ) : noAvailability ? (
-            <div className="text-center py-6 text-gray-400 text-sm">
+            <div className="text-center py-6 text-slate-400 text-sm">
               No availability on this day — try another date
             </div>
           ) : (
@@ -156,12 +156,12 @@ export default function SlotPicker({
                     key={slot.time}
                     type="button"
                     onClick={() => handleTimeSelect(slot.time)}
-                    className={`py-2 rounded-lg text-sm font-medium border transition-all
+                    className={`py-2 px-1 rounded-lg text-sm font-semibold border-2 transition-all
                       ${isChosen
                         ? 'text-white border-transparent'
                         : isShortNotice
-                        ? 'text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-100'
-                        : 'text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                        ? 'text-amber-100 border-amber-600 bg-amber-700/30 hover:bg-amber-700/50'
+                        : 'text-slate-100 border-slate-600 bg-slate-700 hover:border-sky-400 hover:bg-slate-600'
                       }`}
                     style={isChosen ? { backgroundColor: isShortNotice ? '#d97706' : primaryColor, borderColor: isShortNotice ? '#d97706' : primaryColor } : {}}
                     title={isShortNotice ? 'Last-minute slot — requires instructor approval' : undefined}
@@ -175,13 +175,13 @@ export default function SlotPicker({
           )}
 
           {selected?.date === selectedDate && selected?.time && (
-            <p className="text-sm mt-2 font-medium" style={{ color: primaryColor }}>
+            <p className="text-sm mt-2 font-medium text-sky-300">
               ✓ {formatDateLabel(selectedDate)} at {selected.time}
             </p>
           )}
 
           {slots.some(s => s.reason === 'short_notice') && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+            <p className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mt-2">
               ⚡ Amber slots are within 2 hours and require instructor approval before confirming.
             </p>
           )}
@@ -189,7 +189,7 @@ export default function SlotPicker({
       )}
 
       {!selectedDate && (
-        <p className="text-sm text-gray-400 text-center py-4">Select a day to see available times</p>
+        <p className="text-sm text-slate-400 text-center py-4">Select a day to see available times</p>
       )}
     </div>
   );

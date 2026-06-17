@@ -57,7 +57,7 @@ When the student clicks "Book Your Lesson →", a **full-screen overlay** opens 
 - `components/subdomain/SubdomainBookingWizard.tsx` — multi-step wizard
 
 **Wizard steps:**
-1. Package — standard (6/10/15 hrs) + instructor add-on packages (fixed price, no platform discount)
+1. Package — standard (6/10/15 hrs) or custom hours
 2. Test Package — only if `instructor.offersTestPackage = true`
 3. When to Book — Book Now or Book Later
 4. Schedule — only if Book Now (date/time/duration, duration from `instructor.allowedDurations`)
@@ -143,16 +143,13 @@ const trustBadges = [
 
 ---
 
-## Instructor Add-On Packages
+## PDA Test Pack (Instructor Settings)
 
-Instructor custom packages (e.g. PDA test package) are shown in the Services & Pricing card on the left column. They display:
-- Package name
-- Duration
-- Description (includes/features)
-- Fixed price
-- "Save $X vs hourly" only if instructor priced it below the hourly equivalent
+The only instructor-configured add-on is the **PDA test pack**, enabled via instructor dashboard settings.
 
-No platform bulk discount is applied to instructor packages — they have a fixed price set by the instructor.
+- Shown only if `instructor.offersTestPackage = true`
+- Scheduled through the wizard’s “Test Package” step
+- **No other special services / instructor add-on packages are supported**
 
 ---
 

@@ -13,7 +13,6 @@ const DEFAULT_SETTINGS = {
   basicNewStudentBonus: 8,
   proNewStudentBonus: 10,
   businessNewStudentBonus: 12,
-  drivingTestPackagePrice: 225,
   discountPaidBy: 'shared' as const
 };
 
@@ -50,7 +49,6 @@ export async function getPricingSettings() {
         basicNewStudentBonus: settings.basicNewStudentBonus,
         proNewStudentBonus: settings.proNewStudentBonus,
         businessNewStudentBonus: settings.businessNewStudentBonus,
-        drivingTestPackagePrice: settings.drivingTestPackagePrice,
         discountPaidBy: settings.discountPaidBy as 'platform' | 'shared' | 'instructor',
       };
       cachedSettings = mapped;
@@ -93,18 +91,6 @@ export const HOUR_PACKAGES = {
   }
 } as const;
 
-export const DRIVING_TEST_PACKAGE = {
-  price: DEFAULT_SETTINGS.drivingTestPackagePrice,
-  name: 'Driving Test Package',
-  description: '2.5hr Test Package',
-  features: [
-    'Use instructor\'s vehicle for test',
-    'Pick up & Drop off included',
-    '45 minute pre-test warm up lesson',
-    'Test center drop-off and pickup'
-  ]
-};
-
 export const PLATFORM_FEE_PERCENTAGE = DEFAULT_SETTINGS.platformFeePercentage; // 3.6% platform processing fee
 
 // Dynamic package getter that uses database settings
@@ -114,7 +100,7 @@ export async function getHourPackages() {
   return {
     CUSTOM: {
       hours: 0,
-      discount: 0,
+      discount: 0, // Discount determined dynamically based on hours
       name: 'Custom Hours',
       description: 'Choose your own number of hours'
     },
@@ -139,20 +125,14 @@ export async function getHourPackages() {
   };
 }
 
-export async function getDrivingTestPackage() {
+// Helper function to determine discount for custom hours based on thresholds
+export async function getDiscountForCustomHours(hours: number): Promise<number> {
   const settings = await getPricingSettings();
   
-  return {
-    price: settings.drivingTestPackagePrice,
-    name: 'Driving Test Package',
-    description: '2.5hr Test Package',
-    features: [
-      'Use instructor\'s vehicle for test',
-      'Pick up & Drop off included',
-      '45 minute pre-test warm up lesson',
-      'Test center drop-off and pickup'
-    ]
-  };
+  if (hours >= 15) return settings.package15Discount;
+  if (hours >= 10) return settings.package10Discount;
+  if (hours >= 6) return settings.package6Discount;
+  return 0;
 }
 
 export type PackageType = keyof typeof HOUR_PACKAGES;
@@ -162,26 +142,30 @@ export async function calculatePackagePriceDynamic(
   hourlyRate: number,
   hours: number,
   packageType: PackageType,
-  includeTestPackage: boolean = false
+  includeTestPackage = false,
+  testPackagePrice = 0
 ) {
   const settings = await getPricingSettings();
   const packages = await getHourPackages();
-  const testPackage = await getDrivingTestPackage();
   
   const pkg = packages[packageType];
   
+  // For CUSTOM type, determine discount based on hour thresholds
+  let discountPercentage = pkg.discount;
+  if (packageType === 'CUSTOM') {
+    discountPercentage = await getDiscountForCustomHours(hours);
+  }
+  
+  const testPackageAmount = includeTestPackage ? testPackagePrice : 0;
+
   // Calculate base price
-  const subtotal = hourlyRate * hours;
+  const subtotal = hourlyRate * hours + testPackageAmount;
   
   // Calculate discount
-  const discountPercentage = pkg.discount;
-  const discount = (subtotal * discountPercentage) / 100;
-  
-  // Test package
-  const testPackageAmount = includeTestPackage ? testPackage.price : 0;
+  const discount = (hourlyRate * hours * discountPercentage) / 100;
   
   // Subtotal after discount
-  const afterDiscount = subtotal - discount + testPackageAmount;
+  const afterDiscount = subtotal - discount;
   
   // Platform fee
   const platformFee = (afterDiscount * settings.platformFeePercentage) / 100;
@@ -207,31 +191,34 @@ export async function calculatePackagePriceDynamic(
 export function calculatePackagePrice(
   hourlyRate: number,
   hours: number,
-  packageType: PackageType,
-  includeTestPackage: boolean = false
+  packageType: PackageType
 ): {
   subtotal: number;
   discount: number;
   discountPercentage: number;
-  testPackage: number;
   platformFee: number;
   total: number;
   installments: number; // 4 payments
 } {
   const pkg = HOUR_PACKAGES[packageType];
   
+  // For CUSTOM type, determine discount based on hour thresholds
+  let discountPercentage = pkg.discount;
+  if (packageType === 'CUSTOM') {
+    if (hours >= 15) discountPercentage = DEFAULT_SETTINGS.package15Discount;
+    else if (hours >= 10) discountPercentage = DEFAULT_SETTINGS.package10Discount;
+    else if (hours >= 6) discountPercentage = DEFAULT_SETTINGS.package6Discount;
+    else discountPercentage = 0;
+  }
+  
   // Calculate base price
   const subtotal = hourlyRate * hours;
   
   // Calculate discount
-  const discountPercentage = pkg.discount;
   const discount = (subtotal * discountPercentage) / 100;
   
-  // Test package
-  const testPackage = includeTestPackage ? DRIVING_TEST_PACKAGE.price : 0;
-  
   // Subtotal after discount
-  const afterDiscount = subtotal - discount + testPackage;
+  const afterDiscount = subtotal - discount;
   
   // Platform fee (3.6% of total)
   const platformFee = (afterDiscount * PLATFORM_FEE_PERCENTAGE) / 100;
@@ -246,7 +233,6 @@ export function calculatePackagePrice(
     subtotal,
     discount,
     discountPercentage,
-    testPackage,
     platformFee,
     total,
     installments

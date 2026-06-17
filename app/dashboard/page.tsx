@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { Calendar, Users, DollarSign, Car, TrendingUp, Clock, Wallet, Package, CreditCard, Settings, AlertTriangle, Star } from 'lucide-react'
 import Link from 'next/link'
+import { EarningsThisWeekCard } from '@/components/instructor/EarningsThisWeekCard'
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
@@ -249,7 +250,7 @@ export default async function DashboardPage() {
     prisma.booking.count({
       where: {
         instructorId: session.user.instructorId,
-        status: { in: ['CONFIRMED', 'COMPLETED'] }, // ✅ Exclude PENDING (failed payments)
+        status: { in: ['CONFIRMED', 'COMPLETED'] },
         startTime: {
           gte: startOfMonth,
           lte: endOfMonth
@@ -269,7 +270,6 @@ export default async function DashboardPage() {
         price: true
       }
     }),
-    // Last month revenue for comparison
     prisma.booking.aggregate({
       where: {
         instructorId: session.user.instructorId,
@@ -283,16 +283,17 @@ export default async function DashboardPage() {
         price: true
       }
     }),
-    // Clients with unused package hours
     prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
         isPackageBooking: true,
         packageHoursRemaining: { gt: 0 },
-        packageStatus: 'active',
         status: { in: ['CONFIRMED', 'COMPLETED'] }
       },
-      include: {
+      select: {
+        id: true,
+        updatedAt: true,
+        packageHoursRemaining: true,
         client: {
           select: {
             id: true,
@@ -301,11 +302,10 @@ export default async function DashboardPage() {
         }
       },
       orderBy: {
-        updatedAt: 'asc' // Oldest first (most inactive)
+        updatedAt: 'asc'
       },
       take: 5
     }),
-    // Real total client count (not capped at 5)
     prisma.client.count({
       where: { instructorId: session.user.instructorId }
     })
@@ -333,10 +333,16 @@ export default async function DashboardPage() {
   const subStatus = instructor.subscriptionStatus
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-7 py-4 sm:py-8">
-      <div className="mb-4 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back, {instructor.name}!</h1>
-        <p className="text-sm sm:text-base text-gray-600">Here's what's happening with your driving school today.</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 shadow-2xl shadow-slate-950/30 mb-8">
+        <div className="relative overflow-hidden px-6 py-8 sm:px-8 sm:py-10">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(124,58,237,0.16),transparent_35%)] opacity-80" />
+          <div className="relative">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300/80 mb-3">Instructor Portal</p>
+            <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Welcome back, {instructor.name}!</h1>
+            <p className="max-w-2xl text-sm text-slate-300">Here's what's happening with your driving school today.</p>
+          </div>
+        </div>
       </div>
 
       {/* Subscription status banner */}
@@ -378,111 +384,132 @@ export default async function DashboardPage() {
       )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 p-5 shadow-lg shadow-slate-950/20 transition hover:bg-slate-900/90">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Upcoming Lessons</p>
-              <p className="text-2xl md:text-3xl font-bold">{instructor.bookings.length}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Upcoming Lessons</p>
+              <p className="text-3xl font-semibold text-white">{instructor.bookings.length}</p>
             </div>
-            <Calendar className="h-12 w-12 text-blue-600" />
+            <Calendar className="h-12 w-12 text-sky-400" />
           </div>
         </div>
 
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 p-5 shadow-lg shadow-slate-950/20 transition hover:bg-slate-900/90">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Total Clients</p>
-              <p className="text-2xl md:text-3xl font-bold">{totalClientCount}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Total Clients</p>
+              <p className="text-3xl font-semibold text-white">{totalClientCount}</p>
             </div>
-            <Users className="h-12 w-12 text-green-600" />
+            <Users className="h-12 w-12 text-emerald-400" />
           </div>
         </div>
 
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
-          <div className="flex items-center justify-between mb-2">
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 p-5 shadow-lg shadow-slate-950/20 transition hover:bg-slate-900/90">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex-1">
-              <p className="text-gray-500 text-sm">This Month (MTD)</p>
-              <p className="text-2xl md:text-3xl font-bold">${thisMonthRevenue.toFixed(0)}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">This Month (MTD)</p>
+              <p className="text-3xl font-semibold text-white">${thisMonthRevenue.toFixed(0)}</p>
               <div className="mt-2 space-y-1">
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-slate-400">
                   ${dailyAverageThisMonth.toFixed(0)}/day avg ({daysElapsedThisMonth} days)
                 </p>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-slate-400">
                   Last month: ${dailyAverageLastMonth.toFixed(0)}/day
                 </p>
                 {percentageChange !== 0 && (
-                  <p className={`text-xs font-semibold ${percentageChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <p className={`text-xs font-semibold ${percentageChange > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {percentageChange > 0 ? '↑' : '↓'} {Math.abs(percentageChange).toFixed(1)}% vs last month
                   </p>
                 )}
               </div>
             </div>
-            <TrendingUp className={`h-12 w-12 ${percentageChange >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+            <TrendingUp className={`h-12 w-12 ${percentageChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}`} />
           </div>
         </div>
 
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm">Hourly Rate</p>
-              <p className="text-3xl font-bold">${instructor.hourlyRate}</p>
-            </div>
-            <DollarSign className="h-12 w-12 text-purple-600" />
-          </div>
-        </div>
+        <EarningsThisWeekCard />
       </div>
 
       <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Upcoming Lessons</h2>
-            <Link href="/dashboard/bookings" className="text-blue-600 hover:text-blue-800 text-sm">
+        <div className="rounded-3xl border border-white/10 bg-slate-900/80 shadow-lg shadow-slate-950/20 p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Upcoming Lessons</h2>
+              <p className="text-sm text-slate-400">Next bookings on your calendar</p>
+            </div>
+            <Link href="/dashboard/bookings" className="text-sky-300 hover:text-white text-sm font-medium">
               View All
             </Link>
           </div>
           {instructor.bookings.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Clock className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+            <div className="text-center py-8 text-slate-400">
+              <Clock className="h-12 w-12 mx-auto mb-2 text-slate-500" />
               <p>No upcoming lessons</p>
-              <Link href="/dashboard/bookings/new" className="text-blue-600 hover:underline text-sm">
+              <Link href="/dashboard/bookings/new" className="text-sky-300 hover:text-white text-sm">
                 Create a booking
               </Link>
             </div>
           ) : (
-            <div className="space-y-4">
-              {instructor.bookings.map((booking) => (
-                <div key={booking.id} className="border-l-4 border-blue-600 pl-4 py-2 hover:bg-gray-50 transition">
-                  <p className="font-semibold">{booking.client?.name ?? (booking as any).clientName ?? 'Guest'}</p>
-                  <p className="text-sm text-gray-600">
-                    {booking.startTime ? new Date(booking.startTime).toLocaleString('en-AU', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    }) : 'TBD'}
-                  </p>
-                  {booking.pickupAddress && (
-                    <p className="text-sm text-gray-500">{booking.pickupAddress}</p>
-                  )}
+            <div className="space-y-0">
+              {instructor.bookings.map((booking, index) => (
+                <div 
+                  key={booking.id} 
+                  className={`border-t border-white/10 px-4 py-3 hover:bg-slate-900/80 transition-colors ${
+                    index % 2 === 0 ? 'bg-slate-950/40' : 'bg-slate-950/80'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-white text-sm">
+                      {booking.client?.name ?? (booking as any).clientName ?? 'Guest'}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>
+                        {booking.startTime && booking.endTime ? (
+                          <>
+                            {new Date(booking.startTime).toLocaleString('en-AU', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })} - {new Date(booking.endTime).toLocaleString('en-AU', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </>
+                        ) : 'TBD'}
+                      </span>
+                      {booking.duration && (
+                        <>
+                          <span className="text-slate-500">·</span>
+                          <span className="text-sky-300 font-medium">
+                            {booking.duration} min
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Clients Needing Attention</h2>
-            <Link href="/dashboard/packages" className="text-blue-600 hover:text-blue-800 text-sm">
+        <div className="rounded-3xl border border-white/10 bg-slate-900/80 shadow-lg shadow-slate-950/20 p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Clients Needing Attention</h2>
+              <p className="text-sm text-slate-400">Clients with unused hours or overdue follow-up</p>
+            </div>
+            <Link href="/dashboard/packages" className="text-sky-300 hover:text-white text-sm font-medium">
               View All Packages
             </Link>
           </div>
           {clientsWithPackages.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Users className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+            <div className="text-center py-8 text-slate-400">
+              <Users className="h-12 w-12 mx-auto mb-2 text-slate-500" />
               <p>No clients with unused hours</p>
-              <Link href="/dashboard/packages" className="text-blue-600 hover:underline text-sm">
+              <Link href="/dashboard/packages" className="text-sky-300 hover:text-white text-sm">
                 View packages
               </Link>
             </div>
@@ -494,21 +521,21 @@ export default async function DashboardPage() {
                 const packageValue = (pkg.packageHoursRemaining || 0) * instructor.hourlyRate
                 
                 return (
-                  <div key={pkg.id} className={`p-3 rounded-lg border-l-4 ${isInactive ? 'border-red-500 bg-red-50' : 'border-blue-500 bg-blue-50'}`}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{pkg.client?.name ?? 'Client'}</p>
-                        <p className="text-sm text-gray-700">
+                  <div key={pkg.id} className={`rounded-3xl border border-white/10 p-4 ${isInactive ? 'bg-rose-500/10 border-rose-400/20' : 'bg-slate-950/60'}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-white">{pkg.client?.name ?? 'Client'}</p>
+                        <p className="text-sm text-slate-400">
                           {pkg.packageHoursRemaining} hours unused (${packageValue.toFixed(0)} value)
                         </p>
-                        <p className="text-xs text-gray-600 mt-1">
+                        <p className="text-xs text-slate-500 mt-1">
                           Last booked: {daysSinceUpdate} days ago
-                          {isInactive && <span className="ml-2 text-red-600 font-semibold">⚠️ Inactive</span>}
+                          {isInactive && <span className="ml-2 text-rose-300 font-semibold">⚠️ Inactive</span>}
                         </p>
                       </div>
                       <Link 
                         href={`/dashboard/clients/${pkg.client?.id ?? ''}`}
-                        className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+                        className="inline-flex items-center justify-center rounded-full bg-sky-500 px-3 py-1 text-xs font-semibold text-white hover:bg-sky-400 transition"
                       >
                         Remind
                       </Link>
@@ -521,36 +548,36 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow p-4 md:p-6 text-white">
-        <h3 className="text-lg sm:text-xl font-bold mb-2">Quick Actions</h3>
+      <div className="mt-6 rounded-3xl border border-white/10 bg-gradient-to-r from-sky-600 to-violet-600 shadow-2xl shadow-slate-950/30 p-4 md:p-6 text-white">
+        <h3 className="text-lg sm:text-xl font-semibold mb-2">Quick Actions</h3>
         <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4">
           <Link 
             href="/dashboard/bookings/new"
-            className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+            className="bg-white/10 hover:bg-white/20 p-4 rounded-3xl transition"
           >
-            <Calendar className="h-6 w-6 mb-2" />
-            <p className="font-semibold">New Booking</p>
+            <Calendar className="h-6 w-6 mb-2 text-white" />
+            <p className="font-semibold text-white">New Booking</p>
           </Link>
           <Link 
             href="/dashboard/clients"
-            className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+            className="bg-white/10 hover:bg-white/20 p-4 rounded-3xl transition"
           >
-            <Users className="h-6 w-6 mb-2" />
-            <p className="font-semibold">Add Client</p>
+            <Users className="h-6 w-6 mb-2 text-white" />
+            <p className="font-semibold text-white">Add Client</p>
           </Link>
           <Link 
             href="/dashboard/profile"
-            className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+            className="bg-white/10 hover:bg-white/20 p-4 rounded-3xl transition"
           >
-            <Car className="h-6 w-6 mb-2" />
-            <p className="font-semibold">Edit Profile</p>
+            <Car className="h-6 w-6 mb-2 text-white" />
+            <p className="font-semibold text-white">Edit Profile</p>
           </Link>
           <Link 
             href="/dashboard/settings"
-            className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+            className="bg-white/10 hover:bg-white/20 p-4 rounded-3xl transition"
           >
-            <Settings className="h-6 w-6 mb-2" />
-            <p className="font-semibold">Settings</p>
+            <Settings className="h-6 w-6 mb-2 text-white" />
+            <p className="font-semibold text-white">Settings</p>
           </Link>
         </div>
       </div>

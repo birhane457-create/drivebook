@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, ChevronDown, X, Menu, LayoutDashboard, LogOut } from 'lucide-react';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 
 const TYPE_ICON: Record<string, string> = {
@@ -27,11 +27,6 @@ function NotificationBell() {
   const ref = useRef<HTMLDivElement>(null);
   const { notifications, unreadCount, fetchNotifications, markAllRead, markOneRead: markRead } = useNotifications();
 
-  const markOneRead = async (id: string) => {
-    await markRead(id);
-    setOpen(false);
-  };
-
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -44,7 +39,7 @@ function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => { if (!open) fetchNotifications(); setOpen(!open); }}
-        className="relative p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition"
+        className="relative p-2 rounded-lg text-slate-400 hover:bg-slate-900/5 hover:text-white transition"
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
@@ -54,29 +49,29 @@ function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <span className="font-semibold text-gray-900">Notifications</span>
+        <div className="absolute right-0 mt-2 w-80 bg-slate-900 rounded-xl shadow-2xl border border-slate-700 z-50">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+            <span className="font-semibold text-slate-100">Notifications</span>
             {unreadCount > 0 && (
-              <button onClick={markAllRead} className="text-xs text-blue-600 hover:underline">Mark all read</button>
+              <button onClick={markAllRead} className="text-xs text-blue-400 hover:text-blue-300 transition">Mark all read</button>
             )}
           </div>
-          <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
+          <div className="max-h-72 overflow-y-auto divide-y divide-slate-800">
             {notifications.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-6">No notifications yet</p>
+              <p className="text-sm text-slate-500 text-center py-6">No notifications yet</p>
             ) : (
               notifications.map(n => (
                 <Link
                   key={n.id}
                   href={n.link || '/admin'}
-                  onClick={() => markOneRead(n.id)}
-                  className={`flex gap-3 items-start px-4 py-3 hover:bg-gray-50 transition ${!n.isRead ? 'bg-blue-50' : ''}`}
+                  onClick={() => markRead(n.id)}
+                  className={`flex gap-3 items-start px-4 py-3 hover:bg-slate-800 transition ${!n.isRead ? 'bg-slate-800/60' : ''}`}
                 >
                   <span className="text-lg flex-shrink-0">{TYPE_ICON[n.type] || '🔔'}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{n.title}</p>
-                    <p className="text-xs text-gray-500 truncate">{n.message}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{timeAgo(n.createdAt)}</p>
+                    <p className="text-sm font-medium text-slate-100">{n.title}</p>
+                    <p className="text-xs text-slate-400 truncate">{n.message}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{timeAgo(n.createdAt)}</p>
                   </div>
                   {!n.isRead && <div className="mt-2 h-2 w-2 rounded-full bg-blue-500 flex-shrink-0" />}
                 </Link>
@@ -95,42 +90,24 @@ export default function AdminNav() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
-  const toggleDropdown = (groupName: string) => {
-    setOpenDropdown(openDropdown === groupName ? null : groupName);
-  };
-
-  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (navRef.current && !navRef.current.contains(event.target as Node)) {
-        setOpenDropdown(null);
-      }
+    const handler = (e: MouseEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) setOpenDropdown(null);
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const navGroups = [
     {
-      name: 'Overview',
-      icon: '📊',
-      href: '/admin',
-      items: []
-    },
-    {
-      name: 'Users',
-      icon: '�',
-      items: [
-        { name: 'Instructors', href: '/admin/instructors', icon: '�' },
-        { name: 'Clients', href: '/admin/clients', icon: '�' },
-        { name: 'Staff Tasks', href: '/staff/dashboard', icon: '�' },
+      name: 'Users', icon: '👥', items: [
+        { name: 'Instructors', href: '/admin/instructors', icon: '🧑‍🏫' },
+        { name: 'Clients', href: '/admin/clients', icon: '👤' },
+        { name: 'Staff Tasks', href: '/staff/dashboard', icon: '📋' },
       ]
     },
     {
-      name: 'Finance',
-      icon: '💰',
-      items: [
+      name: 'Finance', icon: '💰', items: [
         { name: 'Credits', href: '/admin/credits', icon: '💳' },
         { name: 'Revenue', href: '/admin/revenue', icon: '💰' },
         { name: 'Payouts', href: '/admin/payouts', icon: '💸' },
@@ -139,9 +116,7 @@ export default function AdminNav() {
       ]
     },
     {
-      name: 'Operations',
-      icon: '📋',
-      items: [
+      name: 'Operations', icon: '📋', items: [
         { name: 'Documents', href: '/admin/documents', icon: '📄' },
         { name: 'Bookings', href: '/admin/bookings', icon: '📅' },
         { name: 'Audit Log', href: '/admin/audit-log', icon: '🔍' },
@@ -149,107 +124,91 @@ export default function AdminNav() {
       ]
     },
     {
-      name: 'Engagement',
-      icon: '⭐',
-      items: [
+      name: 'Engagement', icon: '⭐', items: [
         { name: 'Reviews', href: '/admin/reviews', icon: '⭐' },
         { name: 'Support', href: '/admin/support', icon: '💬' },
       ]
     },
-    {
-      name: 'Settings',
-      icon: '⚙️',
-      href: '/admin/settings',
-      items: []
-    },
+    { name: 'Settings', icon: '⚙️', href: '/admin/settings', items: [] },
+    { name: 'Copilot', icon: '🤖', href: '/admin/copilot', items: [] },
   ];
 
-  // Flatten for mobile menu
-  const allNavItems = navGroups.flatMap(group => 
-    group.items.length > 0 ? group.items : [{ name: group.name, href: group.href!, icon: group.icon }]
+  const allNavItems = navGroups.flatMap(g =>
+    g.items.length > 0 ? g.items : [{ name: g.name, href: g.href!, icon: g.icon }]
   );
 
   const isActive = (href: string) => {
-    if (href === '/admin') {
-      return pathname === href;
-    }
-    if (href === '/staff/dashboard') {
-      return pathname?.startsWith('/staff');
-    }
+    if (href === '/admin') return pathname === href;
+    if (href === '/staff/dashboard') return pathname?.startsWith('/staff');
     return pathname?.startsWith(href);
   };
 
-  const isGroupActive = (group: typeof navGroups[0]) => {
-    if (group.href) {
-      return isActive(group.href);
-    }
-    return group.items.some(item => isActive(item.href));
-  };
+  const isGroupActive = (g: typeof navGroups[0]) =>
+    g.href ? isActive(g.href) : g.items.some(i => isActive(i.href));
 
   return (
-    <nav className="bg-white shadow-sm border-b" ref={navRef}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+    <nav className="bg-slate-900 border-b border-slate-800 sticky top-0 z-50" ref={navRef}>
+      <div className="max-w-7xl mx-auto px-3 lg:px-4 xl:px-8">
+        <div className="flex justify-between h-14">
+
+          {/* Logo */}
           <div className="flex items-center">
-            <Link href="/admin" className="text-xl sm:text-2xl font-bold text-gray-900">
-              🏢 Admin
+            <Link href="/admin" className="flex items-center gap-2 no-underline">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-blue-600/40">
+                A
+              </div>
+              <span className="text-base font-bold text-slate-100">Admin</span>
+              <span className="hidden xl:inline-block px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-xs font-semibold text-red-300 ml-1">
+                Internal
+              </span>
             </Link>
           </div>
 
-          {/* Desktop Navigation with Dropdowns */}
-          <div className="hidden md:flex items-center space-x-1">
+          {/* Desktop nav — lg+ only so tablets get the mobile menu */}
+          <div className="hidden lg:flex items-center gap-0.5">
             {navGroups.map((group) => (
               <div key={group.name} className="relative">
                 {group.items.length === 0 ? (
-                  // Direct link (no dropdown)
                   <Link
                     href={group.href!}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-1 px-2 xl:px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive(group.href!)
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        ? 'bg-blue-900/40 text-blue-300'
+                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/5'
                     }`}
                   >
-                    <span className="mr-1">{group.icon}</span>
-                    {group.name}
+                    <span className="text-sm">{group.icon}</span>
+                    <span>{group.name}</span>
                   </Link>
                 ) : (
-                  // Dropdown menu
                   <>
                     <button
-                      onClick={() => toggleDropdown(group.name)}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
+                      onClick={() => setOpenDropdown(openDropdown === group.name ? null : group.name)}
+                      className={`flex items-center gap-1 px-2 xl:px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                         isGroupActive(group)
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          ? 'bg-blue-900/40 text-blue-300'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/5'
                       }`}
                     >
-                      <span className="mr-1">{group.icon}</span>
-                      {group.name}
-                      <svg 
-                        className={`ml-1 h-4 w-4 transition-transform ${openDropdown === group.name ? 'rotate-180' : ''}`} 
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <span className="text-sm">{group.icon}</span>
+                      <span>{group.name}</span>
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${openDropdown === group.name ? 'rotate-180' : ''}`} />
                     </button>
-                    
+
                     {openDropdown === group.name && (
-                      <div className="absolute left-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50">
+                      <div className="absolute left-0 mt-1 w-48 bg-slate-900 rounded-xl shadow-2xl border border-slate-700 py-1.5 z-50">
                         {group.items.map((item) => (
                           <Link
                             key={item.href}
                             href={item.href}
                             onClick={() => setOpenDropdown(null)}
-                            className={`block px-4 py-2 text-sm transition-colors ${
+                            className={`flex items-center gap-2.5 px-4 py-2 text-sm transition-colors rounded-md mx-1 ${
                               isActive(item.href)
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'text-gray-700 hover:bg-gray-100'
+                                ? 'bg-blue-900/40 text-blue-300'
+                                : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/5'
                             }`}
                           >
-                            <span className="mr-2">{item.icon}</span>
+                            <span>{item.icon}</span>
                             {item.name}
                           </Link>
                         ))}
@@ -261,65 +220,70 @@ export default function AdminNav() {
             ))}
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-4">
+          {/* Right side */}
+          <div className="flex items-center gap-1">
             <NotificationBell />
             <Link
               href="/dashboard"
-              className="hidden sm:block text-sm text-gray-600 hover:text-gray-900"
+              className="hidden lg:flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-100 hover:bg-slate-900/5 transition no-underline"
             >
-              👤 Instructor View
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="hidden xl:inline">Instructor View</span>
             </Link>
             <a
               href="/api/auth/signout"
-              className="text-sm text-red-600 hover:text-red-800"
+              className="flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 transition"
             >
-              Sign Out
+              <LogOut className="w-4 h-4" />
+              <span className="hidden xl:inline">Sign Out</span>
             </a>
 
-            {/* Mobile menu button */}
+            {/* Mobile/tablet hamburger */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900/5 transition"
             >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {isMobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Navigation Menu */}
+        {/* Mobile/tablet menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 py-3">
-            <div className="grid grid-cols-2 gap-2">
+          <div className="lg:hidden border-t border-slate-800 py-3 max-h-[80vh] overflow-y-auto">
+            <div className="grid grid-cols-2 gap-1.5 px-1">
               {allNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive(item.href)
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-blue-900/40 text-blue-300'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/5'
                   }`}
                 >
-                  <span className="mr-2">{item.icon}</span>
+                  <span>{item.icon}</span>
                   {item.name}
                 </Link>
               ))}
             </div>
-            <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="mt-2 pt-2 border-t border-slate-800 px-1 flex gap-1.5">
               <Link
                 href="/dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="block px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+                className="flex-1 flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-100 hover:bg-slate-900/5 rounded-lg no-underline transition"
               >
-                👤 Switch to Instructor View
+                <LayoutDashboard className="w-4 h-4" />
+                Instructor View
               </Link>
+              <a
+                href="/api/auth/signout"
+                className="flex-1 flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </a>
             </div>
           </div>
         )}

@@ -10,9 +10,56 @@
 
 - Welcome message with student name
 - Wallet balance (quick view)
-- Upcoming bookings (next 3)
-- Progress summary (lessons completed, hours logged)
+- Current instructor card (name, rating, contact, package info)
+- Three stat cards: Lessons Taken, Package Hours, Performance Score
+- **Three booking sections:**
+  - Upcoming Lessons (CONFIRMED bookings)
+  - **Awaiting Payment** (PENDING_PAYMENT bookings) ⭐ NEW
+  - Completed Lessons (COMPLETED, NO_SHOW bookings)
 - Quick action buttons: Book a Lesson, Top Up Wallet, View Progress
+
+---
+
+## Booking Sections (3 Categories)
+
+### Upcoming Lessons
+- **Filter:** `status === 'upcoming'` (CONFIRMED bookings with future start time)
+- **Actions:** Reschedule, Cancel, Contact Instructor
+- **Color:** Green indicator
+
+### Awaiting Payment ⭐ NEW
+- **Filter:** `status === 'awaiting_payment'` (PENDING_PAYMENT bookings)
+- **Context:** Booking created but student hasn't completed payment yet
+- **Duration:** 10-minute hold on slot
+- **Visual Design:**
+  - Amber/orange accent color (different from green & gray)
+  - Border-2 border-amber-600/50 with bg-amber-900/20
+  - Red badge: "Payment required to confirm this booking"
+  - Wallet icon indicator
+- **Action Buttons (3 options):**
+  1. **Pay Now** (Primary, blue) → Routes to `/booking/{id}/confirmation?tab=payment`
+  2. **Reschedule** (Secondary, blue outline) → Opens RescheduleModal
+  3. **Cancel** (Red outline) → Opens CancelDialog
+- **User Workflow:**
+  - Booking created with PENDING_PAYMENT status
+  - Email sent with payment link
+  - **Dashboard displays booking in "Awaiting Payment" section**
+  - Student can pay from dashboard or via email link
+  - After payment → booking moves to "Upcoming Lessons"
+
+### Completed Lessons
+- **Filter:** `status === 'completed'` (COMPLETED, NO_SHOW bookings)
+- **Actions:** Leave Review, Rebook
+- **Color:** Gray indicator
+
+---
+
+## Stat Cards (3 Summary Metrics)
+
+1. **Lessons Taken** — Past completed bookings
+   - Shows count + "upcoming/pending" count (includes awaiting-payment)
+2. **Package Hours** — Remaining hours in current package
+3. **Performance** — Average performance score across all lessons
 
 ---
 

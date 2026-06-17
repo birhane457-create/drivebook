@@ -18,7 +18,7 @@ const cartItemSchema = z.object({
   duration: z.number().min(0.5).max(8),
   price: z.number().nonnegative(), // client hint only — server recalculates
   pickupLocation: z.string().min(0).max(300).optional(),
-  service: z.string().min(0).max(500).optional()
+  service: z.string().min(0).max(500).optional(),
 });
 
 const requestSchema = z.object({
@@ -50,6 +50,23 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // Reject legacy special-service payloads
+    for (const item of body.cart || []) {
+      if (
+        Object.prototype.hasOwnProperty.call(item, 'specialServiceId') ||
+        Object.prototype.hasOwnProperty.call(item, 'specialServiceName') ||
+        Object.prototype.hasOwnProperty.call(item, 'specialServiceType') ||
+        Object.prototype.hasOwnProperty.call(item, 'customPackageId') ||
+        Object.prototype.hasOwnProperty.call(item, 'customPackagePrice')
+      ) {
+        return NextResponse.json(
+          { error: 'Instructor special services are not supported. Book standard hourly lessons or use platform bulk packages (6/10/15h).' },
+          { status: 400 }
+        );
+      }
+    }
+
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
@@ -155,7 +172,7 @@ export async function POST(request: NextRequest) {
             createdBy: 'client',
             originalStartTime: startTime,
             isPaid: true,
-            paidAt: new Date()
+            paidAt: new Date(),
           } as any
         });
 

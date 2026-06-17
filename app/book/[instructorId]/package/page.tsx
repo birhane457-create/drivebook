@@ -12,13 +12,29 @@ export default function PackageSelectionPage() {
   const { instructor } = bookingState;
 
   useEffect(() => {
-    if (!instructor) {
-      router.push('/book');
-    }
+    // Only redirect if instructor is definitely missing AND we've waited for recovery
+    // The layout loads instructor from localStorage, so give it time
+    const timer = setTimeout(() => {
+      if (!instructor) {
+        router.push('/book');
+      }
+    }, 500); // Wait 500ms for localStorage recovery
+    
+    return () => clearTimeout(timer);
   }, [instructor, router]);
 
+  // While instructor is loading, show the layout (loading state)
   if (!instructor) {
-    return null;
+    return (
+      <MultiStepBookingLayout currentStep={2}>
+        <div className="space-y-6 text-white flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
+            <p className="text-white/70">Loading package options...</p>
+          </div>
+        </div>
+      </MultiStepBookingLayout>
+    );
   }
 
   const handleBack = () => {
@@ -26,18 +42,18 @@ export default function PackageSelectionPage() {
   };
 
   const handleContinue = () => {
-    // Navigate to test-package step (will auto-skip if instructor doesn't offer it)
-    router.push(`/book/${instructor.id}/test-package`);
+    // Continue to book type selection before scheduling
+    router.push(`/book/${instructor.id}/book-type`);
   };
 
   return (
     <MultiStepBookingLayout currentStep={2}>
-      <div className="space-y-6">
+      <div className="space-y-6 text-white">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          <h2 className="text-2xl font-bold text-white/95 mb-2">
             Select Your Package
           </h2>
-          <p className="text-gray-600">
+          <p className="text-white/70">
             Choose the package that works best for you
           </p>
         </div>
@@ -46,18 +62,18 @@ export default function PackageSelectionPage() {
         <PackageSelector />
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/6">
           <button
             onClick={handleBack}
             type="button"
-            className="flex-1 bg-white text-gray-700 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors border-2 border-gray-300"
+            className="flex-1 bg-white/5 text-white/90 px-8 py-4 rounded-lg font-semibold hover:bg-white/6 transition-colors border border-white/8"
           >
             ← Back
           </button>
           <button
             onClick={handleContinue}
             type="button"
-            className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-lg font-semibold hover:from-purple-500 hover:to-pink-500 transition-colors"
           >
             Continue →
           </button>

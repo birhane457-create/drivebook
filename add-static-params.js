@@ -17,7 +17,6 @@ const dynamicRoutes = [
   'app/book/[instructorId]/package/page.tsx',
   'app/book/[instructorId]/payment/page.tsx',
   'app/book/[instructorId]/registration/page.tsx',
-  'app/book/[instructorId]/test-package/page.tsx',
   'app/booking/[id]/page.tsx',
   'app/booking/[id]/confirmation/page.tsx',
   'app/booking/[id]/payment/page.tsx',

@@ -3,7 +3,7 @@
 **Route:** `/dashboard`  
 **Auth required:** INSTRUCTOR role + active subscription  
 **File:** `app/dashboard/page.tsx`  
-**Last updated:** May 2026
+**Last updated:** June 2026 (Payout Schedule card added)
 
 ---
 
@@ -54,9 +54,79 @@ All fetched server-side on page load:
 | Upcoming Lessons | `instructor.bookings` (CONFIRMED, future, next 5) |
 | Total Clients | `prisma.client.count` for this instructor |
 | This Month (MTD) | `booking.aggregate` sum of COMPLETED bookings this month |
-| Hourly Rate | `instructor.hourlyRate` |
+| Next Payout (NEW) | `GET /api/instructor/payouts` — next payout date, pending amount, recent payouts |
 
-Revenue card also shows: daily average this month, daily average last month, % change.
+Revenue card shows: daily average this month, daily average last month, % change.
+
+Payout card shows: next payout date (e.g., "Fri, 13 Jun"), days until payout ("in 2 days"), pending transfer amount, recent 3 payouts with dates and status.
+
+---
+
+## Upcoming Lessons on Dashboard
+
+Shown on the main dashboard (`/dashboard`), displays the next upcoming bookings inline:
+
+**Layout:**
+- One lesson per line: `Client Name | Start Time - End Time · Duration (minutes)`
+- Clean, minimal spacing (no padding between items)
+- Alternating stripe colors for visual distinction:
+  - Even indices (0, 2, 4...): Lighter background
+  - Odd indices (1, 3, 5...): Darker background
+- No pickup location (kept compact)
+- Time range shown as start-end time (e.g., "9:00 am - 10:00 am")
+- Duration shown in blue (sky-300) in minutes (e.g., "60 min")
+- Shows only confirmed, future bookings
+- Click-through to full booking detail page (`/dashboard/bookings/[id]`)
+
+**Data:** Fetches from `instructor.bookings` (CONFIRMED, `startTime >= now`, max 5 results)
+
+**Example Display:**
+```
+Upcoming Lessons
+Next bookings on your calendar
+
+debeas              Thu, 11 June, 09:00 am - 10:00 am · 60 min
+sdfdsfdsd           Wed, 17 June, 09:00 am - 10:30 am · 90 min
+```
+
+---
+
+## Payout Schedule Card
+
+**Status:** New (June 2026)  
+**File:** `components/instructor/PayoutScheduleCard.tsx`  
+**API:** `GET /api/instructor/payouts`
+
+Displays next payout date, pending amount, and recent payout history on the main dashboard.
+
+**What it shows:**
+- Next payout date (e.g., "Fri, 13 Jun")
+- Days until next payout ("in 2 days")
+- Pending transfer amount (if any processing)
+- Count of payouts being processed
+- Recent 3 payouts with reference numbers, amounts, and status
+- Help text explaining weekly Stripe payouts
+- Link to payout settings (`/dashboard/settings/payout`)
+
+**Data fetched:**
+- 5 most recent completed payouts (PAID or SENT status)
+- All pending/processing payouts (PENDING, PROCESSING, ELIGIBLE, PENDING_TRANSFER)
+- Instructor's last payout date (for next payout estimate)
+- Payout method (stripe_connect, bank, manual)
+
+**Next payout estimate logic:**
+- If Stripe: Add 7 days to last payout, adjust to next Friday
+- If Bank/Manual: Add 7 days to last payout
+- If no history: Next Friday from today
+
+**Error handling:**
+- Shows friendly error card if API fails
+- Shows loading skeleton while fetching
+- Gracefully handles no payouts (empty state)
+
+**Link destinations:**
+- "View all payouts →" → `/dashboard/earnings` (full earnings history)
+- "Manage settings →" → `/dashboard/settings/payout` (payout method configuration)
 
 ---
 
@@ -321,6 +391,8 @@ After returning from Stripe Billing Portal (`?portal_return=true`), automaticall
 Shows: Pending Payout, This Week, This Month, All Time earnings.  
 Recent 10 payout transactions.  
 Links to full Earnings page.
+
+**Note:** Payout schedule is now visible on the main dashboard via the "Next Payout" card. The wallet page shows historical transaction details.
 
 ---
 

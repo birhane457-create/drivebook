@@ -62,6 +62,7 @@ export async function GET(
         pickupAddress: true,
         createdAt: true,
         paymentToken: true,
+        instructorId: true,
         instructor: {
           select: {
             name: true,
@@ -86,9 +87,27 @@ export async function GET(
     }
 
     // Calculate expiry server-side — never trust client countdown
-    const expiresAt = new Date(
+    // First check if there's an active SlotReservation for this booking
+    let expiresAt = new Date(
       booking.createdAt.getTime() + SLOT_HOLD_MINUTES * 60 * 1000
-    )
+    );
+
+    if (booking.startTime) {
+      // Look for the slot reservation that was created with this booking
+      const slotReservation = await prisma.slotReservation.findFirst({
+        where: {
+          instructorId: booking.instructorId,
+          startTime: booking.startTime,
+        },
+        orderBy: { expiresAt: 'desc' }, // Get most recent
+        take: 1,
+      });
+
+      if (slotReservation && slotReservation.expiresAt > new Date()) {
+        // Use the slot reservation expiry (more authoritative)
+        expiresAt = slotReservation.expiresAt;
+      }
+    }
 
     const serverExpired =
       booking.status === 'EXPIRED' ||

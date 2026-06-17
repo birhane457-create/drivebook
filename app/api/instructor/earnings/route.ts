@@ -35,13 +35,18 @@ export async function GET(req: NextRequest) {
 
     const [
       completedStats,
+      completedPlatformStats,
+      completedOfflineStats,
       pendingStats,
       thisMonthStats,
+      thisMonthPlatformStats,
+      thisMonthOfflineStats,
       lastMonthStats,
       scheduledBookings,
+      scheduledOfflineBookings,
       recentTransactions
     ] = await Promise.all([
-      // Completed earnings
+      // Completed earnings (all)
       (prisma as any).transaction.aggregate({
         where: {
           instructorId,
@@ -50,16 +55,41 @@ export async function GET(req: NextRequest) {
         _sum: { instructorPayout: true },
         _count: true
       }),
+      // Completed earnings (platform only)
+      (prisma as any).transaction.aggregate({
+        where: {
+          instructorId,
+          status: 'COMPLETED',
+          booking: {
+            source: { not: 'offline' }
+          }
+        },
+        _sum: { instructorPayout: true, amount: true, platformFee: true },
+        _count: true
+      }),
+      // Completed earnings (offline only)
+      prisma.booking.aggregate({
+        where: {
+          instructorId,
+          source: 'offline',
+          status: 'COMPLETED'
+        },
+        _sum: { offlineAmountPaid: true },
+        _count: true
+      }),
       // Pending payouts
       (prisma as any).transaction.aggregate({
         where: {
           instructorId,
-          status: 'PENDING'
+          status: 'PENDING',
+          booking: {
+            source: { not: 'offline' }
+          }
         },
         _sum: { instructorPayout: true },
         _count: true
       }),
-      // This month earnings
+      // This month earnings (all)
       (prisma as any).transaction.aggregate({
         where: {
           instructorId,
@@ -67,6 +97,30 @@ export async function GET(req: NextRequest) {
           createdAt: { gte: startOfThisMonth }
         },
         _sum: { instructorPayout: true },
+        _count: true
+      }),
+      // This month earnings (platform only)
+      (prisma as any).transaction.aggregate({
+        where: {
+          instructorId,
+          status: 'COMPLETED',
+          createdAt: { gte: startOfThisMonth },
+          booking: {
+            source: { not: 'offline' }
+          }
+        },
+        _sum: { instructorPayout: true, amount: true, platformFee: true },
+        _count: true
+      }),
+      // This month earnings (offline only)
+      prisma.booking.aggregate({
+        where: {
+          instructorId,
+          source: 'offline',
+          status: 'COMPLETED',
+          createdAt: { gte: startOfThisMonth }
+        },
+        _sum: { offlineAmountPaid: true },
         _count: true
       }),
       // Last month earnings
@@ -82,10 +136,11 @@ export async function GET(req: NextRequest) {
         _sum: { instructorPayout: true },
         _count: true
       }),
-      // Upcoming bookings (SCHEDULED - will earn when taught)
+      // Upcoming platform bookings (SCHEDULED - will earn when taught)
       prisma.booking.findMany({
         where: {
           instructorId,
+          source: { not: 'offline' },
           status: 'CONFIRMED',
           startTime: { gte: now }
         },
@@ -110,6 +165,28 @@ export async function GET(req: NextRequest) {
         },
         take: 20
       }),
+      // Upcoming offline bookings
+      prisma.booking.findMany({
+        where: {
+          instructorId,
+          source: 'offline',
+          status: 'CONFIRMED',
+          startTime: { gte: now }
+        },
+        select: {
+          id: true,
+          startTime: true,
+          endTime: true,
+          duration: true,
+          offlineAmountPaid: true,
+          clientName: true,
+          offlinePaymentMethod: true
+        } as any,
+        orderBy: {
+          startTime: 'asc'
+        },
+        take: 20
+      }),
       // Recent transactions (actual lessons only, not package purchases)
       (prisma as any).transaction.findMany({
         where: { 
@@ -124,6 +201,7 @@ export async function GET(req: NextRequest) {
               isPackageBooking: true,
               packageHours: true,
               parentBookingId: true,
+              source: true,
               client: {
                 select: {
                   name: true,
@@ -154,35 +232,63 @@ export async function GET(req: NextRequest) {
     });
     const hourlyRate = instructor?.hourlyRate || 0;
 
-    // Calculate scheduled bookings totals
-    const scheduledTotal = scheduledBookings.reduce((sum, b) => {
+    // Calculate platform scheduled bookings totals
+    const platformScheduledTotal = scheduledBookings.reduce((sum, b) => {
       let payout = b.instructorPayout;
       if (!payout || payout === 0) {
-        // Fallback 1: derive from price
         if (b.price > 0) {
           payout = b.price * 0.9;
         } else if (b.startTime && b.endTime) {
-          // Fallback 2: derive from duration × hourlyRate
           const hours = (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / 3600000;
           payout = hours * hourlyRate * 0.9;
         }
       }
       return sum + (payout || 0);
     }, 0);
-    const scheduledCount = scheduledBookings.length;
+    const platformScheduledCount = scheduledBookings.length;
+
+    // Calculate offline scheduled bookings totals
+    const offlineScheduledTotal = scheduledOfflineBookings.reduce((sum, b) => {
+      return sum + (b.offlineAmountPaid || 0);
+    }, 0);
+    const offlineScheduledCount = scheduledOfflineBookings.length;
 
     return NextResponse.json({
-      // EARNED - Money from lessons already taught (excluding package purchases)
-      totalEarnings: completedStats._sum.instructorPayout || 0,
-      pendingPayouts: pendingStats._sum.instructorPayout || 0,
-      completedPayouts: completedStats._sum.instructorPayout || 0,
-      thisMonthEarnings: thisMonthStats._sum.instructorPayout || 0,
+      // ── PLATFORM EARNINGS (DriveBook-processed payments) ──
+      platform: {
+        totalEarnings: completedPlatformStats._sum.instructorPayout || 0,
+        totalGross: completedPlatformStats._sum.amount || 0,
+        totalFees: completedPlatformStats._sum.platformFee || 0,
+        completedCount: completedPlatformStats._count || 0,
+        thisMonthEarnings: thisMonthPlatformStats._sum.instructorPayout || 0,
+        thisMonthGross: thisMonthPlatformStats._sum.amount || 0,
+        thisMonthFees: thisMonthPlatformStats._sum.platformFee || 0,
+        thisMonthCount: thisMonthPlatformStats._count || 0,
+        pendingPayouts: pendingStats._sum.instructorPayout || 0,
+        pendingCount: pendingStats._count || 0,
+        scheduledTotal: platformScheduledTotal,
+        scheduledCount: platformScheduledCount,
+      },
+      
+      // ── OFFLINE EARNINGS (Self-reported, instructor-handled) ──
+      offline: {
+        totalLogged: completedOfflineStats._sum.offlineAmountPaid || 0,
+        completedCount: completedOfflineStats._count || 0,
+        thisMonthLogged: thisMonthOfflineStats._sum.offlineAmountPaid || 0,
+        thisMonthCount: thisMonthOfflineStats._count || 0,
+        scheduledTotal: offlineScheduledTotal,
+        scheduledCount: offlineScheduledCount,
+      },
+
+      // ── COMBINED (for compatibility) ──
+      totalEarnings: (completedPlatformStats._sum.instructorPayout || 0) + (completedOfflineStats._sum.offlineAmountPaid || 0),
+      thisMonthEarnings: (thisMonthPlatformStats._sum.instructorPayout || 0) + (thisMonthOfflineStats._sum.offlineAmountPaid || 0),
       lastMonthEarnings: lastMonthStats._sum.instructorPayout || 0,
       
-      // Transactions with full details (filtered to exclude package purchases)
+      // Transactions with full details (filtered to exclude package purchases, platform only)
       transactions: lessonTransactions,
       
-      // SCHEDULED - Lessons confirmed to teach (will earn when taught)
+      // SCHEDULED - Platform lessons confirmed to teach (will earn when taught)
       scheduledBookings: scheduledBookings.map(booking => {
         let payout = booking.instructorPayout;
         if (!payout || payout === 0) {
@@ -204,8 +310,19 @@ export async function GET(req: NextRequest) {
           isFromPackage: booking.isPackageBooking && booking.parentBookingId !== null
         };
       }),
-      scheduledTotal,
-      scheduledCount
+      scheduledTotal: platformScheduledTotal,
+      scheduledCount: platformScheduledCount,
+
+      // SCHEDULED OFFLINE - Offline lessons logged for future
+      scheduledOffline: scheduledOfflineBookings.map(booking => ({
+        id: booking.id,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        duration: booking.duration,
+        clientName: booking.clientName || 'Unknown',
+        offlineAmountPaid: booking.offlineAmountPaid || 0,
+        offlinePaymentMethod: booking.offlinePaymentMethod || 'unknown'
+      }))
     });
   } catch (error) {
     console.error('Earnings fetch error:', error);

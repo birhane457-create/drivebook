@@ -1,287 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { addMinutes, format, parse, startOfDay, endOfDay } from 'date-fns'
+import { availabilityService } from '@/lib/services/availability'
+import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
 
-export const dynamic = 'force-dynamic';
-interface TimeSlot {
-  time: string
-  available: boolean
-  reason?: string
-}
+const querySchema = z.object({
+  instructorId: z.string().min(1, 'Instructor ID required'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  lessonDurationMinutes: z.coerce.number().min(30).max(480).default(60)
+})
 
+/**
+ * GET /api/availability/slots
+ * 
+ * Returns available time slots for lesson booking on a specific day.
+ * Respects instructor's:
+ * - Working hours
+ * - Booking buffer & travel time
+ * - Existing bookings (lessons + PDA tests)
+ * - Availability exceptions
+ * - Google Calendar sync (if enabled)
+ * 
+ * Query params:
+ * - instructorId: Instructor ID
+ * - date: YYYY-MM-DD format
+ * - lessonDurationMinutes: Duration of the lesson (default 60)
+ */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const instructorId = searchParams.get('instructorId')
-    const date = searchParams.get('date')
-    const duration = parseInt(searchParams.get('duration') || '60')
-    const excludeBookingId = searchParams.get('excludeBookingId') // For edit mode
+    const query = querySchema.parse({
+      instructorId: searchParams.get('instructorId'),
+      date: searchParams.get('date'),
+      lessonDurationMinutes: searchParams.get('lessonDurationMinutes')
+    })
 
-    if (!instructorId || !date) {
-      return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
-    }
-
-    const selectedDate = new Date(date)
-    const dayName = format(selectedDate, 'EEEE').toLowerCase()
-
-    // Determine the earliest bookable time:
-    // - If today: now + minimum advance notice (2 hours)
-    // - If future date: start of working hours
-    const now = new Date()
-    const isToday = selectedDate.toDateString() === now.toDateString()
-    const minimumAdvanceMinutes = 120 // 2 hours minimum notice
-    const earliestBookable = isToday
-      ? addMinutes(now, minimumAdvanceMinutes)
-      : null
-
-    // Get instructor's working hours, buffer settings, and slot configuration
+    // Verify instructor exists
     const instructor = await prisma.instructor.findUnique({
-      where: { id: instructorId },
-      select: {
-        workingHours: true,
-        allowedDurations: true,
-        bookingBufferMinutes: true,
-        enableTravelTime: true,
-        travelTimeMinutes: true
-      }
-    } as any) // Temporary type assertion until Prisma client is regenerated
+      where: { id: query.instructorId }
+    })
 
     if (!instructor) {
-      return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'Instructor not found' },
+        { status: 404 }
+      )
     }
 
-    // Use instructor's configuration or defaults
-    const allowedDurations = (instructor as any).allowedDurations || [60, 120]
-    const bookingBufferMinutes = (instructor as any).bookingBufferMinutes || 15
-    const enableTravelTime = (instructor as any).enableTravelTime || false
-    const travelTimeMinutes = (instructor as any).travelTimeMinutes || 10
-
-    // Validate that requested duration is allowed by instructor
-    // bypassDurationCheck is only for reschedule flows where the duration is already set
-    const bypassDurationCheck = searchParams.get('bypassDurationCheck') === 'true'
-    if (!bypassDurationCheck && allowedDurations.length > 0 && !allowedDurations.includes(duration)) {
-      return NextResponse.json({ 
-        slots: [], 
-        message: `This instructor does not offer ${duration}-minute lessons. Available: ${(allowedDurations as number[]).map(d => d + ' min').join(', ')}` 
-      })
+    // Parse date
+    const date = new Date(query.date + 'T00:00:00Z')
+    if (isNaN(date.getTime())) {
+      return NextResponse.json(
+        { error: 'Invalid date format' },
+        { status: 400 }
+      )
     }
 
-    const workingHours = (instructor.workingHours as any) || {}
+    // Get available slots using the availability service
+    const availableSlots = await availabilityService.getAvailableSlots(
+      query.instructorId,
+      date,
+      query.lessonDurationMinutes
+    )
 
-    // Normalize: DB may store { day: { start, end, enabled } } or { day: [{ start, end }] }
-    function normalizeDaySlots(val: any): { start: string; end: string }[] {
-      if (!val) return []
-      if (Array.isArray(val)) return val.filter((s: any) => s?.start && s?.end)
-      if (typeof val === 'object' && val.start && val.end && val.enabled !== false) return [{ start: val.start, end: val.end }]
-      return []
-    }
-
-    const daySlots = normalizeDaySlots(workingHours[dayName])
-
-    if (daySlots.length === 0) {
-      return NextResponse.json({ slots: [], message: 'Instructor not available on this day' })
-    }
-
-    // Get all bookings for this day (including PENDING) with location data
-    // Exclude the booking being edited if excludeBookingId is provided
-    const bookingWhere: any = {
-      instructorId,
-      startTime: {
-        gte: startOfDay(selectedDate),
-        lte: endOfDay(selectedDate)
-      },
-      status: {
-        in: ['PENDING', 'CONFIRMED']
-      }
-    }
-    
-    if (excludeBookingId) {
-      bookingWhere.id = { not: excludeBookingId }
-    }
-    
-    const bookings = await prisma.booking.findMany({
-      where: bookingWhere,
-      select: {
-        startTime: true,
-        endTime: true,
-        status: true,
-        pickupAddress: true
-      },
-      orderBy: {
-        startTime: 'asc'
-      }
+    return NextResponse.json({
+      instructorId: query.instructorId,
+      date: query.date,
+      lessonDurationMinutes: query.lessonDurationMinutes,
+      availableSlots: availableSlots.map(slot => ({
+        startTime: slot.toISOString(),
+        endTime: new Date(slot.getTime() + query.lessonDurationMinutes * 60 * 1000).toISOString()
+      }))
     })
-
-    // Get PDA tests for this day (if model exists)
-    let pdaTests: any[] = []
-    try {
-      if ((prisma as any).pDATest) {
-        pdaTests = await (prisma as any).pDATest.findMany({
-          where: {
-            instructorId,
-            testDate: {
-              gte: startOfDay(selectedDate),
-              lte: endOfDay(selectedDate)
-            }
-          },
-          select: {
-            testDate: true,
-            testTime: true
-          }
-        })
-      }
-    } catch (error) {
-      // PDATest model not available, skip
-    }
-
-    // Get availability exceptions (if model exists)
-    let exceptions: any[] = []
-    try {
-      if ((prisma as any).availabilityException) {
-        exceptions = await (prisma as any).availabilityException.findMany({
-          where: {
-            instructorId,
-            exceptionDate: {
-              gte: startOfDay(selectedDate),
-              lte: endOfDay(selectedDate)
-            }
-          },
-          select: {
-            startTime: true,
-            endTime: true,
-            reason: true
-          }
-        })
-      }
-    } catch (error) {
-      console.log('AvailabilityException model not available or error fetching:', error)
-    }
-
-    // Build list of blocked time ranges
-    const blockedRanges: Array<{ start: Date; end: Date; reason: string }> = []
-
-    // Add bookings to blocked ranges WITH buffer and optional travel time
-    bookings.forEach((booking) => {
-      if (!booking.startTime || !booking.endTime) return; // skip malformed bookings
-      // Block the actual booking time
-      blockedRanges.push({
-        start: booking.startTime,
-        end: booking.endTime,
-        reason: booking.status === 'PENDING' ? 'Pending booking' : 'Booked'
-      })
-
-      // Always block buffer time after booking (for rest/paperwork)
-      const bufferEnd = addMinutes(booking.endTime, bookingBufferMinutes)
-      blockedRanges.push({
-        start: booking.endTime,
-        end: bufferEnd,
-        reason: 'Transition time'
-      })
-
-      // Optionally block travel time (if instructor has it enabled)
-      if (enableTravelTime && travelTimeMinutes) {
-        blockedRanges.push({
-          start: bufferEnd,
-          end: addMinutes(bufferEnd, travelTimeMinutes),
-          reason: 'Travel time to next location'
-        })
-      }
-    })
-
-    // Add PDA tests with buffer
-    pdaTests.forEach(test => {
-      const testDateTime = parse(test.testTime, 'HH:mm', test.testDate)
-      blockedRanges.push({
-        start: addMinutes(testDateTime, -120), // 2 hours before
-        end: addMinutes(testDateTime, 60), // 1 hour after
-        reason: 'PDA test scheduled'
-      })
-    })
-
-    // Add exceptions
-    exceptions.forEach(exception => {
-      const exceptionStart = parse(exception.startTime, 'HH:mm', selectedDate)
-      const exceptionEnd = parse(exception.endTime, 'HH:mm', selectedDate)
-      blockedRanges.push({
-        start: exceptionStart,
-        end: exceptionEnd,
-        reason: exception.reason || 'Unavailable'
-      })
-    })
-
-    // Sort blocked ranges by start time
-    blockedRanges.sort((a, b) => a.start.getTime() - b.start.getTime())
-
-    // Determine slot interval (smallest allowed duration)
-    const slotInterval = Math.min(...allowedDurations)
-
-    // Calculate total buffer time (booking buffer + optional travel time)
-    const totalBufferMinutes = bookingBufferMinutes + (enableTravelTime ? travelTimeMinutes : 0)
-
-    // Generate time slots based on instructor's configuration
-    const slots: TimeSlot[] = []
-
-    for (const workSlot of daySlots) {
-      const workStart = parse(workSlot.start, 'HH:mm', selectedDate)
-      const workEnd = parse(workSlot.end, 'HH:mm', selectedDate)
-
-      // Generate slots at the configured interval
-      let currentTime = workStart
-      
-      while (currentTime < workEnd) {
-        // Calculate when this slot would end (lesson + buffer)
-        const slotEnd = addMinutes(currentTime, duration)
-        const bufferEnd = addMinutes(slotEnd, totalBufferMinutes)
-        
-        // Check if the lesson itself fits within working hours
-        // Buffer can extend slightly past end of day (instructor can rest after last lesson)
-        if (slotEnd > workEnd) {
-          break
-        }
-        
-        // Skip slots in the past (before now)
-        if (isToday && currentTime <= now) {
-          currentTime = addMinutes(currentTime, slotInterval)
-          continue
-        }
-
-        // Flag slots within minimum advance notice window — show but not bookable
-        const isShortNotice = earliestBookable !== null && currentTime < earliestBookable
-
-        // Check if slot conflicts with any blocked ranges
-        // Use slotEnd (not bufferEnd) as the lesson boundary for conflict detection
-        const hasConflict = blockedRanges.some(blocked => 
-          // Check if there's any overlap between [currentTime, slotEnd] and [blocked.start, blocked.end]
-          (currentTime >= blocked.start && currentTime < blocked.end) ||
-          (slotEnd > blocked.start && slotEnd <= blocked.end) ||
-          (currentTime <= blocked.start && slotEnd >= blocked.end)
-        )
-        
-        if (!hasConflict) {
-          slots.push({
-            time: format(currentTime, 'HH:mm'),
-            available: true,
-            reason: isShortNotice ? 'short_notice' : undefined
-          })
-        }
-        
-        // Move to next interval
-        currentTime = addMinutes(currentTime, slotInterval)
-      }
-    }
-
-    // Remove duplicates and sort
-    const uniqueSlots = Array.from(
-      new Map(slots.map(slot => [slot.time, slot])).values()
-    ).sort((a, b) => a.time.localeCompare(b.time))
-
-    // Compute nextAvailable — first slot that is available and not short-notice
-    const nextAvailable = uniqueSlots.find(s => s.available && !s.reason)?.time ?? null
-
-    return NextResponse.json({ slots: uniqueSlots, date, duration, nextAvailable })
   } catch (error) {
-    console.error('Get slots error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation error', details: error.errors },
+        { status: 400 }
+      )
+    }
+    console.error('Error fetching availability slots:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch availability slots' },
+      { status: 500 }
+    )
   }
 }

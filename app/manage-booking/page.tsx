@@ -73,14 +73,14 @@ function ManageBookingContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-10">
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 text-white/90">
           <h1 className="text-3xl font-bold mb-2">Manage Your Booking</h1>
-          <p className="text-gray-600">Enter your Booking ID to view or modify your lesson</p>
+          <p className="text-white/60">Enter your Booking ID to view or modify your lesson</p>
         </div>
 
-        <form onSubmit={handleSearch} className="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <form onSubmit={handleSearch} className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-6 mb-6 border border-white/10 backdrop-blur-sm">
           <label className="block text-sm font-medium mb-2">
             <Search className="inline h-4 w-4 mr-1" />
             Booking ID
@@ -92,52 +92,52 @@ function ManageBookingContent() {
               value={bookingId}
               onChange={(e) => setBookingId(e.target.value)}
               placeholder="Enter your booking ID (e.g., 65a1b2c3d4e5f6g7h8i9j0k1)"
-              className="flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-600 font-mono text-sm"
+              className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-lg focus:ring-2 focus:ring-purple-500 placeholder-white/50 font-mono text-sm text-white"
             />
             <button
               type="submit"
               disabled={loading || !bookingId}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-500 hover:to-pink-500 disabled:opacity-50"
             >
               {loading ? 'Searching...' : 'Search'}
             </button>
           </div>
           {error && (
-            <p className="text-red-600 text-sm mt-2">{error}</p>
+            <p className="text-red-400 text-sm mt-2">{error}</p>
           )}
         </form>
 
         {booking && (
-          <div className="bg-white rounded-lg shadow-lg p-6 space-y-6">
+          <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-6 space-y-6 border border-white/10 backdrop-blur-sm text-white">
             <div className="flex justify-between items-start">
               <div>
-                <h2 className="text-2xl font-bold mb-2">Booking Details</h2>
+                <h2 className="text-2xl font-bold mb-2 text-white/90">Booking Details</h2>
                 <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(booking.status)}`}>
                   {booking.status}
                 </span>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-500">Booking ID</p>
-                <p className="font-mono text-xs text-gray-700">{booking.id}</p>
+                <p className="text-sm text-white/60">Booking ID</p>
+                <p className="font-mono text-xs text-white/80">{booking.id}</p>
               </div>
             </div>
 
             <div className="border-t pt-6">
-              <h3 className="font-semibold mb-4">Lesson Information</h3>
+              <h3 className="font-semibold mb-4 text-white/90">Lesson Information</h3>
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <Calendar className="h-5 w-5 text-gray-400 mt-0.5" />
                   <div>
-                    <p className="text-sm text-gray-500">Date</p>
-                    <p className="font-medium">{formatDate(booking.startTime)}</p>
+                    <p className="text-sm text-white/60">Date</p>
+                    <p className="font-medium text-white">{formatDate(booking.startTime)}</p>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
                   <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
                   <div>
-                    <p className="text-sm text-gray-500">Time</p>
-                    <p className="font-medium">
+                    <p className="text-sm text-white/60">Time</p>
+                    <p className="font-medium text-white">
                       {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
                     </p>
                   </div>
@@ -147,8 +147,8 @@ function ManageBookingContent() {
                   <div className="flex items-start gap-3">
                     <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
                     <div>
-                      <p className="text-sm text-gray-500">Pickup Location</p>
-                      <p className="font-medium">{booking.pickupAddress}</p>
+                      <p className="text-sm text-white/60">Pickup Location</p>
+                      <p className="font-medium text-white">{booking.pickupAddress}</p>
                     </div>
                   </div>
                 )}

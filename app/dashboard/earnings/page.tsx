@@ -214,8 +214,8 @@ export default function EarningsPage() {
     return weeks.sort((a, b) => b.weekStart.getTime() - a.weekStart.getTime());
   };
 
-  if (loading) return <div className="min-h-screen bg-gray-50 p-4"><p>Loading earnings...</p></div>;
-  if (!earnings) return <div className="min-h-screen bg-gray-50 p-4"><p>Failed to load earnings data</p></div>;
+  if (loading) return <div className="min-h-screen bg-slate-950 text-slate-100 p-4"><p>Loading earnings...</p></div>;
+  if (!earnings) return <div className="min-h-screen bg-slate-950 text-slate-100 p-4"><p>Failed to load earnings data</p></div>;
 
   const weeklyEarnings = groupTransactionsByWeek(earnings.transactions);
   const visibleWeeks = weeklyEarnings.slice(0, showAllHistory ? weeksToShow : 2);
@@ -225,14 +225,14 @@ export default function EarningsPage() {
   const scheduledDays = groupScheduledByDay(earnings.scheduledBookings || []);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6">
+      <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-sm px-4 py-6">
 
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Earnings</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Money from lessons you've taught</p>
+            <h1 className="text-2xl font-bold text-slate-100">Earnings</h1>
+            <p className="text-sm text-slate-400 mt-0.5">Money from lessons you've taught</p>
           </div>
           <Link href="/dashboard/packages" className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors">
             📦 Packages
@@ -243,62 +243,62 @@ export default function EarningsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           {[
             { label: 'This Week', value: thisWeek?.totalNet || 0, sub: `${thisWeek?.totalBookings || 0} lessons`, icon: <DollarSign className="h-4 w-4 text-green-600" /> },
-            { label: 'Last Week', value: lastWeek?.totalNet || 0, sub: `${lastWeek?.totalBookings || 0} lessons`, icon: <Calendar className="h-4 w-4 text-blue-600" /> },
+            { label: 'Last Week', value: lastWeek?.totalNet || 0, sub: `${lastWeek?.totalBookings || 0} lessons`, icon: <Calendar className="h-4 w-4 text-sky-400" /> },
             { label: 'This Month', value: earnings.thisMonthEarnings, sub: 'Month to date', icon: <Calendar className="h-4 w-4 text-purple-600" /> },
-            { label: 'Scheduled', value: earnings.scheduledTotal, sub: `${earnings.scheduledCount} confirmed`, icon: <Clock className="h-4 w-4 text-blue-600" />, blue: true },
+            { label: 'Scheduled', value: earnings.scheduledTotal, sub: `${earnings.scheduledCount} confirmed`, icon: <Clock className="h-4 w-4 text-sky-400" />, blue: true },
           ].map(({ label, value, sub, icon, blue }) => (
-            <div key={label} className="bg-white rounded-lg shadow-sm p-4">
+            <div key={label} className="bg-slate-950 rounded-3xl shadow-sm p-4 border border-slate-800">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-gray-500">{label}</p>
+                <p className="text-xs text-slate-400">{label}</p>
                 {icon}
               </div>
-              <p className={`text-xl font-bold ${blue ? 'text-blue-600' : 'text-gray-900'}`}>${value.toFixed(2)}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+              <p className={`text-xl font-bold ${blue ? 'text-sky-400' : 'text-slate-100'}`}>${value.toFixed(2)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
             </div>
           ))}
         </div>
 
         {/* Scheduled Lessons — collapsible */}
         {earnings.scheduledBookings && earnings.scheduledBookings.length > 0 && (
-          <div className="mb-4 bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="mb-4 bg-slate-950 rounded-3xl shadow-sm border border-slate-800 overflow-hidden">
             <button
               onClick={() => setScheduledOpen(o => !o)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-900 hover:bg-slate-800 transition-colors"
             >
               <div className="flex items-center gap-2">
-                {scheduledOpen ? <ChevronDown className="h-4 w-4 text-blue-600" /> : <ChevronRight className="h-4 w-4 text-blue-600" />}
-                <Calendar className="h-4 w-4 text-blue-600" />
-                <span className="font-semibold text-gray-900 text-sm">Scheduled Lessons</span>
-                <span className="text-xs text-gray-500">(will earn when taught)</span>
+                {scheduledOpen ? <ChevronDown className="h-4 w-4 text-sky-400" /> : <ChevronRight className="h-4 w-4 text-sky-400" />}
+                <Calendar className="h-4 w-4 text-sky-400" />
+                <span className="font-semibold text-slate-100 text-sm">Scheduled Lessons</span>
+                <span className="text-xs text-slate-400">(will earn when taught)</span>
               </div>
               <div className="text-right">
-                <span className="font-bold text-blue-600 text-sm">${earnings.scheduledTotal.toFixed(2)}</span>
-                <span className="text-xs text-gray-400 ml-2">{earnings.scheduledCount} confirmed</span>
+                <span className="font-bold text-sky-400 text-sm">${earnings.scheduledTotal.toFixed(2)}</span>
+                <span className="text-xs text-slate-400 ml-2">{earnings.scheduledCount} confirmed</span>
               </div>
             </button>
 
             {scheduledOpen && (
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-slate-800">
                 {scheduledDays.map(day => (
                   <div key={day.dateKey}>
                     {/* Day sub-header */}
-                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50">
-                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{day.label}</span>
-                      <span className="text-xs text-gray-400">Total <span className="font-semibold text-blue-600">${day.totalPayout.toFixed(2)}</span></span>
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900">
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{day.label}</span>
+                      <span className="text-xs text-slate-400">Total <span className="font-semibold text-sky-400">${day.totalPayout.toFixed(2)}</span></span>
                     </div>
                     {day.bookings.map(b => (
-                      <div key={b.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50">
+                      <div key={b.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-900">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-slate-100">
                             {new Date(b.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                             {' · '}{b.clientName}
                           </p>
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-slate-400">
                             {b.duration}h
                             {b.isFromPackage && <span className="ml-1 text-purple-500">📦</span>}
                           </p>
                         </div>
-                        <p className="text-sm font-semibold text-blue-600">${b.instructorPayout.toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-sky-400">${b.instructorPayout.toFixed(2)}</p>
                       </div>
                     ))}
                   </div>
@@ -309,7 +309,7 @@ export default function EarningsPage() {
         )}
 
         {/* Earnings History note */}
-        <p className="text-xs text-gray-500 mb-3 px-1">📊 Earnings history — completed lessons only</p>
+        <p className="text-xs text-slate-400 mb-3 px-1">📊 Earnings history — completed lessons only</p>
 
         {/* Weekly groups */}
         <div className="space-y-3">
@@ -318,29 +318,29 @@ export default function EarningsPage() {
             const title = week.isCurrentWeek ? 'This Week' : week.isLastWeek ? 'Last Week' : week.weekLabel;
 
             return (
-              <div key={week.weekLabel} className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div key={week.weekLabel} className="bg-slate-950 rounded-lg shadow-sm overflow-hidden">
                 {/* Week header */}
                 <button
                   onClick={() => toggleWeek(week.weekLabel)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-green-50 hover:bg-green-100 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3 bg-slate-950 hover:bg-slate-900 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     {isExpanded ? <ChevronDown className="h-4 w-4 text-green-600" /> : <ChevronRight className="h-4 w-4 text-green-600" />}
                     <div className="text-left">
-                      <p className="font-semibold text-gray-900 text-sm">{title}</p>
-                      <p className="text-xs text-gray-400">{week.weekLabel} · {week.totalBookings} lessons · {week.totalWorkingHours.toFixed(1)}h</p>
+                      <p className="font-semibold text-slate-100 text-sm">{title}</p>
+                      <p className="text-xs text-slate-400">{week.weekLabel} · {week.totalBookings} lessons · {week.totalWorkingHours.toFixed(1)}h</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-green-600 text-base">${week.totalNet.toFixed(2)}</p>
-                    <p className="text-xs text-gray-400">net earned</p>
+                    <p className="text-xs text-slate-400">net earned</p>
                   </div>
                 </button>
 
                 {isExpanded && (
                   <div>
                     {/* Week summary strip */}
-                    <div className="grid grid-cols-4 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50">
+                    <div className="grid grid-cols-4 divide-x divide-slate-800 border-b border-slate-800 bg-slate-900">
                       {[
                         { label: 'Hours', val: `${week.totalWorkingHours.toFixed(1)}h` },
                         { label: 'Lessons', val: week.totalBookings },
@@ -348,14 +348,14 @@ export default function EarningsPage() {
                         { label: 'Commission', val: `-$${(week.totalGross - week.totalNet).toFixed(2)}`, red: true },
                       ].map(({ label, val, red }) => (
                         <div key={label} className="px-3 py-2 text-center">
-                          <p className="text-xs text-gray-400">{label}</p>
-                          <p className={`text-sm font-semibold ${red ? 'text-red-500' : 'text-gray-800'}`}>{val}</p>
+                          <p className="text-xs text-slate-400">{label}</p>
+                          <p className={`text-sm font-semibold ${red ? 'text-red-500' : 'text-slate-100'}`}>{val}</p>
                         </div>
                       ))}
                     </div>
 
                     {/* Days */}
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-slate-800">
                       {week.byDay.map(day => {
                         const dayKey = `${week.weekLabel}:${day.dateKey}`;
                         const dayExpanded = expandedDays.has(dayKey);
@@ -364,12 +364,12 @@ export default function EarningsPage() {
                             {/* Day row — clickable */}
                             <button
                               onClick={() => toggleDay(dayKey)}
-                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-900 transition-colors"
                             >
                               <div className="flex items-center gap-2">
-                                {dayExpanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
-                                <span className="text-sm font-medium text-gray-700">{day.label}</span>
-                                <span className="text-xs text-gray-400">{day.transactions.length} lesson{day.transactions.length !== 1 ? 's' : ''} · {day.totalHours.toFixed(1)}h</span>
+                                {dayExpanded ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+                                <span className="text-sm font-medium text-slate-100">{day.label}</span>
+                                <span className="text-xs text-slate-400">{day.transactions.length} lesson{day.transactions.length !== 1 ? 's' : ''} · {day.totalHours.toFixed(1)}h</span>
                               </div>
                               <span className="text-sm font-semibold text-green-600">${day.totalNet.toFixed(2)}</span>
                             </button>
@@ -378,28 +378,28 @@ export default function EarningsPage() {
                             {dayExpanded && day.transactions.map(t => {
                               const isFromPackage = t.booking?.isPackageBooking && t.booking?.parentBookingId;
                               return (
-                                <div key={t.id} className="flex items-start justify-between px-6 py-2 bg-gray-50 border-t border-gray-100">
+                                <div key={t.id} className="flex items-start justify-between px-6 py-2 bg-slate-950 border-t border-slate-800">
                                   <div>
                                     <div className="flex items-center gap-1.5">
                                       {t.booking?.id ? (
-                                        <Link href={`/dashboard/bookings?highlight=${t.booking.id}`} className="text-sm text-blue-600 hover:underline">
+                                        <Link href={`/dashboard/bookings?highlight=${t.booking.id}`} className="text-sm text-sky-400 hover:underline">
                                           {t.description}
                                         </Link>
                                       ) : (
-                                        <span className="text-sm text-gray-800">{t.description}</span>
+                                        <span className="text-sm text-slate-100">{t.description}</span>
                                       )}
                                       {isFromPackage && <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">📦</span>}
                                     </div>
                                     {t.booking && (
-                                      <p className="text-xs text-gray-400 mt-0.5">
+                                      <p className="text-xs text-slate-400 mt-0.5">
                                         {t.booking.client?.name ?? (t.booking as any).clientName ?? 'Guest'} · {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                                       </p>
                                     )}
-                                    <p className="text-xs text-gray-400">Gross ${t.amount.toFixed(2)} · Commission -${t.platformFee.toFixed(2)}</p>
+                                    <p className="text-xs text-slate-400">Gross ${t.amount.toFixed(2)} · Commission -${t.platformFee.toFixed(2)}</p>
                                   </div>
                                   <div className="text-right ml-4 shrink-0">
                                     <p className="text-sm font-semibold text-green-600">${t.instructorPayout.toFixed(2)}</p>
-                                    <p className="text-xs text-gray-400">net</p>
+                                    <p className="text-xs text-slate-400">net</p>
                                   </div>
                                 </div>
                               );
@@ -410,7 +410,7 @@ export default function EarningsPage() {
                     </div>
 
                     {/* Receipt */}
-                    <div className="px-4 py-3 border-t border-gray-100">
+                    <div className="px-4 py-3 border-t border-slate-800">
                       <button
                         onClick={async () => {
                           try {
@@ -426,7 +426,7 @@ export default function EarningsPage() {
                             } else { alert('Failed to generate receipt.'); }
                           } catch { alert('Failed to download receipt.'); }
                         }}
-                        className="w-full px-3 py-2 bg-blue-50 text-blue-700 text-sm rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 font-medium"
+                        className="w-full px-3 py-2 bg-slate-900 text-sky-400 text-sm rounded-lg hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 font-medium"
                       >
                         <FileText className="h-4 w-4" />
                         Download Weekly Receipt
@@ -442,7 +442,7 @@ export default function EarningsPage() {
             <div className="text-center">
               <button
                 onClick={() => { setShowAllHistory(true); setWeeksToShow(p => p + 4); }}
-                className="px-5 py-2 bg-white text-gray-600 text-sm rounded-lg shadow-sm hover:bg-gray-50 transition-colors font-medium"
+                className="px-5 py-2 bg-slate-950 text-slate-100 text-sm rounded-lg shadow-sm hover:bg-slate-900 transition-colors font-medium"
               >
                 Load more weeks
               </button>
@@ -450,16 +450,16 @@ export default function EarningsPage() {
           )}
 
           {weeklyEarnings.length === 0 && (
-            <div className="bg-white rounded-lg shadow-sm p-10 text-center">
-              <p className="text-gray-400 text-sm">No earnings yet. Complete lessons to see them here.</p>
+            <div className="bg-slate-950 rounded-lg shadow-sm p-10 text-center">
+              <p className="text-slate-400 text-sm">No earnings yet. Complete lessons to see them here.</p>
             </div>
           )}
         </div>
 
         {/* Footer info */}
-        <div className="mt-5 bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-xs font-semibold text-green-900 mb-1">💰 About Earnings</p>
-          <ul className="text-xs text-green-800 space-y-1">
+        <div className="mt-5 bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <p className="text-xs font-semibold text-green-300 mb-1">💰 About Earnings</p>
+          <ul className="text-xs text-green-300 space-y-1">
             <li>• Earnings recorded when lessons are completed</li>
             <li>• Payouts processed weekly on Fridays</li>
             <li>• Download weekly receipts for your records</li>

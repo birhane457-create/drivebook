@@ -62,15 +62,21 @@ export async function POST(req: NextRequest) {
       where: session.user.instructorId
         ? { id: session.user.instructorId }
         : { userId: session.user.id },
-      select: { id: true, subscriptionTier: true, customDomain: true },
+      select: { id: true, subscriptionTier: true, subscriptionStatus: true, trialEndsAt: true, customDomain: true },
     });
 
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
+    // Feature gate: custom domain requires STUDIO+ tier
     if (instructor.subscriptionTier !== 'STUDIO' && instructor.subscriptionTier !== 'BUSINESS') {
       return NextResponse.json({ error: 'Custom domain requires Studio or Business plan' }, { status: 403 });
+    }
+
+    // Feature gate: custom domain not available if trial expired
+    if (instructor.subscriptionStatus === 'TRIAL' && instructor.trialEndsAt && new Date(instructor.trialEndsAt) < new Date()) {
+      return NextResponse.json({ error: 'Your trial has expired. Upgrade to a paid plan to use custom domains.' }, { status: 403 });
     }
 
     const { domain } = await req.json();

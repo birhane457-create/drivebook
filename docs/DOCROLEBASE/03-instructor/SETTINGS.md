@@ -111,6 +111,60 @@ ABNs are rechecked weekly against the ABR. If your ABN is cancelled, `abnVerifie
 
 ---
 
+## PDA Test Configurations
+
+**Route:** `/dashboard/settings` (PDA Test Configurations section)  
+**API:** `GET/POST /api/instructor/pda-configs`  
+**Status:** ✅ Fixed June 13, 2026 — Persistence issue resolved
+
+Instructors can create multiple PDA (Practical Driving Assessment) test packages with different durations, prices, and test centres. Each config specifies what's included (pickup, dropoff, debriefing).
+
+### Configuration Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | String | Config name (e.g., "Standard PDA Test", "Advanced PDA") |
+| `durationMinutes` | Number | Test duration (min 60, typically 165–180) |
+| `price` | Number | Test price in AUD |
+| `discountPercent` | Number \| null | Optional discount percentage |
+| `testCentreIds` | String[] | Which test centres offer this config (min 1) |
+| `includes` | Object | `{pickup: bool, dropoff: bool, debriefing: bool}` |
+| `notes` | String \| null | Custom details (e.g., "includes mock test review") |
+| `isActive` | Boolean | Whether config is available to book |
+
+### Save Behavior
+
+**Load:** Settings page fetches from both endpoints:
+- `GET /api/instructor/settings` — general settings (hourly rate, service radius, working hours, etc.)
+- `GET /api/instructor/pda-configs` — PDA configs
+
+**Save:** Separated concerns:
+- General settings saved to `/api/instructor/settings` (PUT) — Always saves if duration selected
+- PDA configs saved to `/api/instructor/pda-configs` (POST) — Only complete configs (name + test centres)
+- Incomplete configs are skipped, not blocking general save
+
+**Example flow:**
+1. User adds PDA config with name but no test centres (incomplete)
+2. User clicks Save
+3. General settings save ✅
+4. PDA config skipped (incomplete), message shows "1 incomplete - fill in details to save"
+5. User selects test centres for PDA config
+6. User clicks Save again
+7. General settings save ✅
+8. PDA config saves ✅, message shows "1 configs saved"
+9. On page refresh, all configs load from `/api/instructor/pda-configs`
+
+### Booking Flow
+
+When clients book a PDA test, they:
+1. View available PDA configs (created here)
+2. Select one config
+3. Pick test centre (from config's `testCentreIds`)
+4. Choose test date/time
+5. Book via `/api/pda-bookings`
+
+---
+
 ## Google Calendar
 
 Instructors can connect Google Calendar to sync bookings automatically.

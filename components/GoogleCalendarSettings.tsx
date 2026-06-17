@@ -116,17 +116,17 @@ export default function GoogleCalendarSettings() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <Calendar className="h-5 w-5" />
+    <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6">
+      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-100">
+        <Calendar className="h-5 w-5 text-sky-400" />
         Google Calendar Integration
       </h2>
 
       {message && (
         <div className={`mb-4 p-3 rounded-lg flex items-start gap-2 ${
           message.includes('Error') || message.includes('Failed')
-            ? 'bg-red-50 text-red-800'
-            : 'bg-green-50 text-green-800'
+            ? 'bg-red-900/30 text-red-300 border border-red-700/50'
+            : 'bg-green-900/30 text-green-300 border border-green-700/50'
         }`}>
           {message.includes('Error') || message.includes('Failed') ? (
             <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
@@ -138,21 +138,21 @@ export default function GoogleCalendarSettings() {
       )}
 
       <div className="space-y-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800 mb-2">
+        <div className="bg-sky-900/20 border border-sky-700/40 rounded-lg p-4">
+          <p className="text-sm text-sky-300 mb-2">
             <strong>What this does:</strong>
           </p>
-          <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+          <ul className="text-sm text-sky-300/80 space-y-1 list-disc list-inside">
             <li>Syncs your Google Calendar events</li>
             <li>Automatically blocks booking times for your appointments</li>
             <li>Detects PDA tests and blocks 2 hours before + 1 hour after</li>
             <li>Prevents double bookings</li>
             <li>Syncs automatically every hour</li>
           </ul>
-          <div className="mt-3 pt-3 border-t border-blue-300">
-            <a 
-              href="/dashboard/help" 
-              className="text-sm font-medium text-blue-700 hover:text-blue-900 underline"
+          <div className="mt-3 pt-3 border-t border-sky-700/40">
+            <a
+              href="/dashboard/help"
+              className="text-sm font-medium text-sky-400 hover:text-sky-300 underline"
             >
               📖 View detailed guide on how to use keywords →
             </a>
@@ -161,20 +161,20 @@ export default function GoogleCalendarSettings() {
 
         {connected ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-green-600">
+            <div className="flex items-center gap-2 text-green-400">
               <CheckCircle2 className="h-5 w-5" />
               <span className="font-medium">Connected to Google Calendar</span>
             </div>
 
             {/* Buffer Mode Setting */}
-            <div className="bg-gray-50 border rounded-lg p-4">
-              <h3 className="font-medium text-gray-900 mb-3">PDA Test Buffer Mode</h3>
-              <p className="text-sm text-gray-600 mb-3">
+            <div className="bg-slate-950 border border-slate-700 rounded-lg p-4">
+              <h3 className="font-medium text-slate-100 mb-3">PDA Test Buffer Mode</h3>
+              <p className="text-sm text-slate-400 mb-3">
                 Choose how the system handles PDA test blocking times:
               </p>
-              
+
               <div className="space-y-2">
-                <label className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer hover:bg-white transition">
+                <label className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${bufferMode === 'auto' ? 'border-sky-500 bg-sky-900/20' : 'border-slate-700 hover:border-slate-600'}`}>
                   <input
                     type="radio"
                     name="bufferMode"
@@ -184,16 +184,16 @@ export default function GoogleCalendarSettings() {
                     className="mt-1"
                   />
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">Automatic Buffer</div>
-                    <div className="text-sm text-gray-600">
+                    <div className="font-medium text-slate-100">Automatic Buffer</div>
+                    <div className="text-sm text-slate-400">
                       System automatically blocks 2 hours before + 1 hour after PDA tests.
                       <br />
-                      <span className="text-xs italic">Example: Test at 10:00-11:00 → Blocks 8:00-12:00</span>
+                      <span className="text-xs italic text-slate-500">Example: Test at 10:00-11:00 → Blocks 8:00-12:00</span>
                     </div>
                   </div>
                 </label>
 
-                <label className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer hover:bg-white transition">
+                <label className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${bufferMode === 'manual' ? 'border-sky-500 bg-sky-900/20' : 'border-slate-700 hover:border-slate-600'}`}>
                   <input
                     type="radio"
                     name="bufferMode"
@@ -203,11 +203,11 @@ export default function GoogleCalendarSettings() {
                     className="mt-1"
                   />
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">Manual Buffer</div>
-                    <div className="text-sm text-gray-600">
+                    <div className="font-medium text-slate-100">Manual Buffer</div>
+                    <div className="text-sm text-slate-400">
                       You set the exact times in Google Calendar (include buffer yourself).
                       <br />
-                      <span className="text-xs italic">Example: Create event 8:00-12:00 → Blocks 8:00-12:00</span>
+                      <span className="text-xs italic text-slate-500">Example: Create event 8:00-12:00 → Blocks 8:00-12:00</span>
                     </div>
                   </div>
                 </label>
@@ -236,13 +236,13 @@ export default function GoogleCalendarSettings() {
               </button>
             </div>
 
-            <p className="text-xs text-gray-500">
-              Last sync: Automatic sync runs every hour. Click "Sync Now" to sync immediately.
+            <p className="text-xs text-slate-500">
+              Last sync: Automatic sync runs every hour. Click &quot;Sync Now&quot; to sync immediately.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-400">
               Connect your Google Calendar to automatically block times when you have other appointments.
             </p>
 
@@ -258,8 +258,8 @@ export default function GoogleCalendarSettings() {
           </div>
         )}
 
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-          <p className="text-xs text-yellow-800">
+        <div className="bg-amber-900/20 border border-amber-700/40 rounded-lg p-3">
+          <p className="text-xs text-amber-300">
             <strong>Privacy:</strong> We only read your calendar events to block booking times. We never modify or delete your calendar events.
           </p>
         </div>

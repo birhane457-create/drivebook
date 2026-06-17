@@ -51,11 +51,22 @@ export async function PUT(req: NextRequest) {
       where: session.user.instructorId
         ? { id: session.user.instructorId }
         : { userId: session.user.id },
-      select: { id: true, subscriptionTier: true },
+      select: { id: true, subscriptionTier: true, subscriptionStatus: true, trialEndsAt: true },
     });
 
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
+    }
+
+    // Feature gate: Check trial status for branded pages
+    const isTrialExpired = instructor.subscriptionStatus === 'TRIAL' && 
+                          instructor.trialEndsAt && 
+                          new Date(instructor.trialEndsAt) < new Date();
+    
+    if (isTrialExpired && instructor.subscriptionTier !== 'BASIC') {
+      return NextResponse.json({ 
+        error: 'Your trial has expired. Upgrade to a paid plan to use branding features.' 
+      }, { status: 403 });
     }
 
     const body = await req.json();

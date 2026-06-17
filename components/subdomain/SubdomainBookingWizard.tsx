@@ -8,7 +8,7 @@ import BookingDetailsForm from '@/components/BookingDetailsForm';
 import RegistrationForm from '@/components/RegistrationForm';
 import BookingSummary from '@/components/BookingSummary';
 
-type Step = 'package' | 'test-package' | 'book-type' | 'schedule' | 'register' | 'confirm';
+type Step = 'package' | 'book-type' | 'schedule' | 'register' | 'confirm';
 
 interface SubdomainBookingWizardProps {
   instructor: {
@@ -23,21 +23,12 @@ interface SubdomainBookingWizardProps {
     testPackageDuration: number | null;
     testPackageIncludes: string[];
     allowedDurations?: number[];
-    lessonPackages?: Array<{
-      id: string;
-      name: string;
-      durationMinutes: number;
-      price: number;
-      description: string;
-      isActive: boolean;
-    }>;
   };
   primary: string;
 }
 
 const STEP_LABELS: Record<Step, string> = {
   'package': 'Package',
-  'test-package': 'Test Package',
   'book-type': 'When to Book',
   'schedule': 'Schedule',
   'register': 'Your Details',
@@ -45,7 +36,7 @@ const STEP_LABELS: Record<Step, string> = {
 };
 
 export default function SubdomainBookingWizard({ instructor, primary }: SubdomainBookingWizardProps) {
-  const { setInstructor, bookingState, toggleTestPackage, updateBooking } = useBooking();
+  const { setInstructor, bookingState, updateBooking } = useBooking();
   const [step, setStep] = useState<Step>('package');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,14 +58,12 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
       testPackageDuration: instructor.testPackageDuration,
       testPackageIncludes: instructor.testPackageIncludes,
       allowedDurations: instructor.allowedDurations,
-      lessonPackages: instructor.lessonPackages,
     });
   }, [instructor.id]);
 
   // Build visible steps based on instructor and booking type
   const getSteps = (): Step[] => {
     const steps: Step[] = ['package'];
-    if (instructor.offersTestPackage) steps.push('test-package');
     steps.push('book-type');
     if (bookingState.bookingType === 'now') steps.push('schedule');
     steps.push('register');
@@ -151,7 +140,6 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
           packageType: bookingState.packageType,
           hours: bookingState.hours,
           includeTestPackage: bookingState.includeTestPackage,
-          customPackageId: bookingState.customPackageId ?? undefined,
           bookingType: bookingState.bookingType || 'later',
           registrationType: bookingState.registrationType,
           accountHolderName: bookingState.accountHolderName,
@@ -192,7 +180,7 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
         const fromParam = `?from=${encodeURIComponent(host)}`;
 
         const paymentUrl = data.transactionId
-          ? `${baseUrl}/payment/wallet/${data.transactionId}${fromParam}&hrs=${bookingState.hours}&rate=${bookingState.instructor?.hourlyRate ?? 0}&disc=${bookingState.pricing.discountPercentage}&total=${bookingState.pricing.total}&addon=${bookingState.customPackagePrice ?? 0}`
+          ? `${baseUrl}/payment/wallet/${data.transactionId}${fromParam}&hrs=${bookingState.hours}&rate=${bookingState.instructor?.hourlyRate ?? 0}&disc=${bookingState.pricing.discountPercentage}&total=${bookingState.pricing.total}`
           : `${baseUrl}/booking/${data.bookingId}/payment${fromParam}`;
 
         setPaymentOpened(true);
@@ -267,12 +255,6 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
               <span>-${p.discount.toFixed(2)}</span>
             </div>
           )}
-          {bookingState.customPackageId && bookingState.customPackagePrice && (
-            <div className="flex justify-between text-gray-600">
-              <span>Add-on package</span>
-              <span>${bookingState.customPackagePrice.toFixed(2)}</span>
-            </div>
-          )}
           <div className="flex justify-between text-gray-400">
             <span>Platform fee</span>
             <span>${p.platformFee.toFixed(2)}</span>
@@ -330,62 +312,6 @@ export default function SubdomainBookingWizard({ instructor, primary }: Subdomai
         </div>
       )}
 
-      {/* Test package step */}
-      {step === 'test-package' && instructor.offersTestPackage && instructor.testPackagePrice && (
-        <div className="space-y-4">
-          <div className="text-center">
-            <h3 className="text-lg font-bold text-gray-900">Add Test Package?</h3>
-            <p className="text-sm text-gray-500 mt-1">Prepare for your driving test with a specialised package</p>
-          </div>
-
-          <div className="border rounded-xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-bold text-gray-900">Test Package</p>
-                <p className="text-sm text-gray-500">
-                  {instructor.testPackageDuration
-                    ? `${instructor.testPackageDuration >= 60 ? `${instructor.testPackageDuration / 60}hr` : `${instructor.testPackageDuration}min`} package`
-                    : ''}
-                </p>
-              </div>
-              <p className="text-2xl font-bold text-blue-600">${instructor.testPackagePrice}</p>
-            </div>
-            {instructor.testPackageIncludes.length > 0 && (
-              <ul className="space-y-1">
-                {instructor.testPackageIncludes.map((item, i) => (
-                  <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
-                    <span className="text-green-600">✓</span> {item}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="text-xs text-blue-700 bg-blue-50 rounded p-2">
-              You can add the test package later from your dashboard if you change your mind
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <button type="button" onClick={handleBack} className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold">
-              ← Back
-            </button>
-            <button
-              type="button"
-              onClick={() => { if (bookingState.includeTestPackage) toggleTestPackage(); handleNext(); }}
-              className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold"
-            >
-              Skip
-            </button>
-            <button
-              type="button"
-              onClick={() => { if (!bookingState.includeTestPackage) toggleTestPackage(); handleNext(); }}
-              className="flex-1 py-3 rounded-xl text-white font-bold"
-              style={{ backgroundColor: primary }}
-            >
-              Add →
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Book type step */}
       {step === 'book-type' && (

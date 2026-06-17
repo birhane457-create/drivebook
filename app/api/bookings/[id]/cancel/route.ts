@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { emailService } from '@/lib/services/email'
 import { sendCancellationReceipt } from '@/lib/services/receipt-email'
 import { getNotifChannels } from '@/lib/config/platform-settings'
+import { createRefundTask } from '@/lib/services/taskManager'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,6 +126,22 @@ export async function POST(
       throw err
     }
 
+    // Create admin approval task for refunds > 24h (post-payout scenario)
+    if (refundPercentage > 0 && hoursUntilBooking > 24 && booking.client) {
+      try {
+        await createRefundTask({
+          bookingId: params.id,
+          clientId: booking.client.id,
+          amount: refundAmount,
+          reason: reason || 'Client-initiated cancellation',
+          contactName: booking.client.name,
+          contactEmail: booking.client.email,
+        });
+      } catch (e) {
+        console.error('Failed to create refund approval task:', e);
+      }
+    }
+
     // Audit log
     await prisma.auditLog.create({
       data: {
@@ -142,6 +159,7 @@ export async function POST(
           isPastBooking,
           isNonRefundable,
           reason: reason || null,
+          taskCreated: refundPercentage > 0 && hoursUntilBooking > 24,
         } as any,
       },
     })

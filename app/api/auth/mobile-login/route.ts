@@ -1,24 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { logger } from '@/lib/logger'
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
+import { normalizeEmail } from '@/lib/auth-email'
+import { authRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
 
+export const dynamic = 'force-dynamic'
 
-export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
-  try {
-    const { email, password } = await req.json();
+  if (!process.env.NEXTAUTH_SECRET) {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
 
-    if (!email || !password) {
+  try {
+    const ip = req.headers.get('x-forwarded-for')
+    const rateLimitId = getRateLimitIdentifier(undefined, ip, 'mobile-login')
+    const rateLimitResult = await checkRateLimitStrict(authRateLimit, rateLimitId)
+    if (!rateLimitResult.success) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
-        { status: 400 }
-      );
+        { error: rateLimitResult.error },
+        { status: 429, headers: rateLimitResult.headers }
+      )
     }
 
-    // Find user
+    const { email, password } = await req.json()
+
+    if (!email || !password) {
+      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+    }
+
+    const normalizedEmail = normalizeEmail(email)
+
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: {
         instructor: {
           select: {
@@ -29,45 +44,37 @@ export async function POST(req: NextRequest) {
           },
         },
       },
-    });
+    })
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    // Guard against OAuth-only accounts (no password set)
+    // Instructor-only email verification enforcement
+    if (user.role === 'INSTRUCTOR' && !user.emailVerified) {
+      return NextResponse.json({ error: 'Please verify your email before logging in.' }, { status: 403 })
+    }
+
     if (!user.password) {
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password)
     if (!isValidPassword) {
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    // Generate JWT token
     const token = jwt.sign(
       {
         userId: user.id,
         email: user.email,
         role: user.role,
-        instructorId: user.instructor?.id, // Add instructorId to token
+        instructorId: user.instructor?.id,
       },
-      process.env.NEXTAUTH_SECRET || 'your-secret-key',
+      process.env.NEXTAUTH_SECRET!,
       { expiresIn: '30d' }
-    );
+    )
 
-    // Return user data and token
     return NextResponse.json({
       success: true,
       token,
@@ -78,12 +85,11 @@ export async function POST(req: NextRequest) {
         name: user.instructor?.name || user.email,
         instructor: user.instructor,
       },
-    });
+    })
   } catch (error) {
-    console.error('Mobile login error:', error);
-    return NextResponse.json(
-      { error: 'Login failed' },
-      { status: 500 }
-    );
+    logger.error('Mobile login error:', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }
 }

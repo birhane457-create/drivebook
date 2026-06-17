@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { googleCalendarService } from '@/lib/services/googleCalendar';
@@ -5,7 +6,8 @@ import jwt from 'jsonwebtoken';
 
 
 export const dynamic = 'force-dynamic';
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.NEXTAUTH_SECRET
+if (!JWT_SECRET) throw new Error('NEXTAUTH_SECRET is not configured')
 
 interface JWTPayload {
   userId: string;
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
     
     let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+      decoded = jwt.verify(token, JWT_SECRET!) as unknown as JWTPayload;
     } catch (error) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -48,7 +50,9 @@ export async function GET(req: NextRequest) {
       bufferMode: instructor?.calendarBufferMode || 'auto',
     });
   } catch (error) {
-    console.error('Get calendar status error:', error);
+    logger.error('Get calendar status error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
     
     let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+      decoded = jwt.verify(token, JWT_SECRET!) as unknown as JWTPayload;
     } catch (error) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -77,7 +81,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ authUrl });
   } catch (error) {
-    console.error('Get auth URL error:', error);
+    logger.error('Get auth URL error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -95,7 +101,7 @@ export async function DELETE(req: NextRequest) {
     
     let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+      decoded = jwt.verify(token, JWT_SECRET!) as unknown as JWTPayload;
     } catch (error) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -106,7 +112,9 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Disconnect calendar error:', error);
+    logger.error('Disconnect calendar error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

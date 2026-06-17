@@ -234,11 +234,11 @@ export default function BookingsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'CONFIRMED': return 'bg-green-100 text-green-800'
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800'
-      case 'COMPLETED': return 'bg-blue-100 text-blue-800'
-      case 'CANCELLED': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'CONFIRMED': return 'bg-emerald-900 text-emerald-200'
+      case 'PENDING': return 'bg-amber-900 text-amber-200'
+      case 'COMPLETED': return 'bg-sky-900 text-sky-200'
+      case 'CANCELLED': return 'bg-red-900 text-red-200'
+      default: return 'bg-slate-800 text-slate-200'
     }
   }
 
@@ -247,18 +247,17 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold">Bookings ({bookings.length})</h1>
 
           {/* Urgent: pending short-notice approval requests */}
           {bookings.filter(b => b.status === 'PENDING' && new Date(b.startTime) < new Date(Date.now() + 2 * 60 * 60 * 1000)).length > 0 && (
-            <div className="w-full mt-4 p-4 bg-amber-50 border-2 border-amber-400 rounded-xl flex items-start gap-3">
+            <div className="w-full mt-4 p-4 bg-amber-950 border-2 border-amber-700 rounded-xl flex items-start gap-3">
               <span className="text-2xl shrink-0">⚡</span>
               <div className="flex-1">
-                <p className="font-bold text-amber-900">Last-minute booking requests need your approval</p>
-                <p className="text-sm text-amber-800 mt-0.5">
+                <p className="font-bold text-amber-200">Last-minute booking requests need your approval</p>
+                <p className="text-sm text-amber-300 mt-0.5">
                   {bookings.filter(b => b.status === 'PENDING' && new Date(b.startTime) < new Date(Date.now() + 2 * 60 * 60 * 1000)).length} request(s) within the next 2 hours. Approve or decline below.
                 </p>
               </div>
@@ -267,14 +266,14 @@ export default function BookingsPage() {
           <div className="flex gap-2">
             <Link 
               href="/dashboard/bookings/new"
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm font-medium"
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-blue-700 text-sm font-medium shadow-sm shadow-blue-600/30"
             >
               <Plus className="h-4 w-4" />
               Platform Booking
             </Link>
             <Link
               href="/dashboard/bookings/new?offline=true"
-              className="bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-800 text-sm font-medium"
+              className="bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-white/20 text-sm font-medium"
             >
               <Banknote className="h-4 w-4" />
               Offline / Cash
@@ -282,31 +281,31 @@ export default function BookingsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 h-5 w-5" />
                 <input
                   type="text"
                   placeholder="Search by client name..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-xl bg-white/5 text-slate-100 placeholder-white/30 focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 focus:outline-none"
                 />
               </div>
             </div>
             
             <div className="flex flex-wrap gap-2">
               {/* Time filter */}
-              <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-lg text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>All</button>
-              <button onClick={() => setFilter('upcoming')} className={`px-3 py-1.5 rounded-lg text-sm ${filter === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Upcoming</button>
-              <button onClick={() => setFilter('past')} className={`px-3 py-1.5 rounded-lg text-sm ${filter === 'past' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Past</button>
+              <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${filter === 'all' ? 'bg-sky-600 text-white shadow-sm' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}>All</button>
+              <button onClick={() => setFilter('upcoming')} className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${filter === 'upcoming' ? 'bg-sky-600 text-white shadow-sm' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}>Upcoming</button>
+              <button onClick={() => setFilter('past')} className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${filter === 'past' ? 'bg-sky-600 text-white shadow-sm' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}>Past</button>
               {/* Source filter */}
-              <div className="w-px bg-gray-200 mx-1" />
-              <button onClick={() => setSourceFilter('all')} className={`px-3 py-1.5 rounded-lg text-sm ${sourceFilter === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-100'}`}>All Types</button>
-              <button onClick={() => setSourceFilter('platform')} className={`px-3 py-1.5 rounded-lg text-sm ${sourceFilter === 'platform' ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-100'}`}>Platform</button>
-              <button onClick={() => setSourceFilter('offline')} className={`px-3 py-1.5 rounded-lg text-sm ${sourceFilter === 'offline' ? 'bg-gray-200 text-gray-800 border border-gray-400' : 'bg-gray-100'}`}>Offline</button>
+              <div className="w-px bg-white/10 mx-1" />
+              <button onClick={() => setSourceFilter('all')} className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${sourceFilter === 'all' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}>All Types</button>
+              <button onClick={() => setSourceFilter('platform')} className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${sourceFilter === 'platform' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}>Platform</button>
+              <button onClick={() => setSourceFilter('offline')} className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${sourceFilter === 'offline' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}>Offline</button>
             </div>
           </div>
         </div>
@@ -314,14 +313,14 @@ export default function BookingsPage() {
         {loading ? (
           <div className="text-center py-12">Loading...</div>
         ) : filteredBookings.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold mb-2">No bookings found</h3>
-            <p className="text-gray-600">Create your first booking to get started</p>
+          <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-12 text-center">
+            <Calendar className="h-16 w-16 text-white/20 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2 text-white">No bookings found</h3>
+            <p className="text-white/40">Create your first booking to get started</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="divide-y">
+          <div className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
+            <div className="divide-y divide-white/[0.06]">
               {filteredBookings.map((booking) => {
                 const isExpanded = expandedId === booking.id
                 const bookingDate = new Date(booking.startTime)
@@ -332,15 +331,15 @@ export default function BookingsPage() {
                 const canConfirm = booking.status === 'PENDING'
 
                 return (
-                  <div key={booking.id} className="hover:bg-gray-50 transition">
+                  <div key={booking.id} className="hover:bg-slate-900 transition">
                     {/* Compact Row */}
                     <div 
                       className="p-4 cursor-pointer flex items-center justify-between gap-4"
                       onClick={() => toggleExpand(booking.id)}
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <User className="h-5 w-5 text-blue-600" />
+                        <div className="h-10 w-10 bg-slate-800 rounded-full flex items-center justify-center flex-shrink-0">
+                          <User className="h-5 w-5 text-sky-400" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
@@ -352,16 +351,16 @@ export default function BookingsPage() {
                             </span>
                             {/* Source badge */}
                             {(booking.source ?? 'platform') === 'offline' ? (
-                              <span className="px-2 py-0.5 rounded-full text-xs bg-gray-200 text-gray-700 border border-gray-300 flex items-center gap-1">
-                                <Banknote className="h-3 w-3" /> Offline
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-slate-800 text-slate-200 border border-slate-700 flex items-center gap-1">
+                                <Banknote className="h-3 w-3 text-slate-200" /> Offline
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-slate-800 text-slate-200 border border-slate-700">
                                 Platform
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-4 text-sm text-slate-400">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
                               {bookingDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -370,7 +369,7 @@ export default function BookingsPage() {
                               <Clock className="h-3 w-3" />
                               {startTime} - {endTime}
                             </span>
-                            <span className="hidden sm:inline font-semibold text-blue-600">
+                            <span className="hidden sm:inline font-semibold text-slate-100">
                               ${booking.price}
                             </span>
                           </div>
@@ -378,12 +377,12 @@ export default function BookingsPage() {
                       </div>
                       
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="sm:hidden font-semibold text-blue-600">
+                        <span className="sm:hidden font-semibold text-slate-100">
                           ${booking.price}
                         </span>
                         {isExpanded ? 
-                          <ChevronUp className="h-5 w-5 text-gray-400" /> : 
-                          <ChevronDown className="h-5 w-5 text-gray-400" />
+                          <ChevronUp className="h-5 w-5 text-slate-500" /> : 
+                          <ChevronDown className="h-5 w-5 text-slate-500" />
                         }
                       </div>
                     </div>
@@ -429,11 +428,11 @@ export default function BookingsPage() {
 
                     {/* Expanded Details */}
                     {isExpanded && (
-                      <div className="px-4 pb-4 space-y-4 bg-gray-50">
+                      <div className="px-4 pb-4 space-y-4 bg-white/[0.02] border-t border-white/[0.06]">
                         <div className="grid sm:grid-cols-2 gap-4 text-sm">
                           <div>
-                            <h4 className="font-medium text-gray-700 mb-2">Client Details</h4>
-                            <div className="space-y-2 text-gray-600">
+                            <h4 className="font-medium text-slate-100 mb-2">Client Details</h4>
+                            <div className="space-y-2 text-slate-400">
                               <div className="flex items-center gap-2">
                                 <User className="h-4 w-4" />
                                 {booking.client?.name || (booking as any).clientName || 'Unknown Client'}
@@ -450,8 +449,8 @@ export default function BookingsPage() {
                           </div>
 
                           <div>
-                            <h4 className="font-medium text-gray-700 mb-2">Booking Details</h4>
-                            <div className="space-y-2 text-gray-600">
+                            <h4 className="font-medium text-slate-100 mb-2">Booking Details</h4>
+                            <div className="space-y-2 text-slate-400">
                               <div>
                                 <span className="font-medium">Date:</span> {bookingDate.toLocaleDateString('en-US', {
                                   weekday: 'long',
@@ -475,27 +474,27 @@ export default function BookingsPage() {
 
                         {(booking.pickupAddress || booking.dropoffAddress || editingId === booking.id) && (
                           <div>
-                            <h4 className="font-medium text-gray-700 mb-2">Locations</h4>
-                            <div className="space-y-2 text-sm text-gray-600">
+                            <h4 className="font-medium text-slate-100 mb-2">Locations</h4>
+                            <div className="space-y-2 text-sm text-slate-400">
                               {editingId === booking.id ? (
                                 <>
                                   <div>
-                                    <label className="block font-medium text-gray-700 mb-1">Pickup Address</label>
+                                    <label className="block font-medium text-slate-100 mb-1">Pickup Address</label>
                                     <input
                                       type="text"
                                       value={editForm.pickupAddress || ''}
                                       onChange={(e) => setEditForm({ ...editForm, pickupAddress: e.target.value })}
-                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                                       placeholder="Enter pickup address"
                                     />
                                   </div>
                                   <div>
-                                    <label className="block font-medium text-gray-700 mb-1">Dropoff Address</label>
+                                    <label className="block font-medium text-slate-100 mb-1">Dropoff Address</label>
                                     <input
                                       type="text"
                                       value={editForm.dropoffAddress || ''}
                                       onChange={(e) => setEditForm({ ...editForm, dropoffAddress: e.target.value })}
-                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                                       placeholder="Enter dropoff address"
                                     />
                                   </div>
@@ -504,18 +503,18 @@ export default function BookingsPage() {
                                 <>
                                   {booking.pickupAddress && (
                                     <div className="flex items-start gap-2">
-                                      <MapPin className="h-4 w-4 text-green-600 mt-0.5" />
+                                      <MapPin className="h-4 w-4 text-emerald-400 mt-0.5" />
                                       <div>
-                                        <div className="font-medium text-gray-700">Pickup</div>
+                                        <div className="font-medium text-slate-100">Pickup</div>
                                         {booking.pickupAddress}
                                       </div>
                                     </div>
                                   )}
                                   {booking.dropoffAddress && (
                                     <div className="flex items-start gap-2">
-                                      <MapPin className="h-4 w-4 text-red-600 mt-0.5" />
+                                      <MapPin className="h-4 w-4 text-rose-400 mt-0.5" />
                                       <div>
-                                        <div className="font-medium text-gray-700">Dropoff</div>
+                                        <div className="font-medium text-slate-100">Dropoff</div>
                                         {booking.dropoffAddress}
                                       </div>
                                     </div>
@@ -528,17 +527,17 @@ export default function BookingsPage() {
 
                         {(booking.notes || editingId === booking.id) && (
                           <div>
-                            <h4 className="font-medium text-gray-700 mb-2">Notes</h4>
+                            <h4 className="font-medium text-slate-100 mb-2">Notes</h4>
                             {editingId === booking.id ? (
                               <textarea
                                 value={editForm.notes || ''}
                                 onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                                 rows={3}
                                 placeholder="Add notes..."
                               />
                             ) : (
-                              <p className="text-sm text-gray-600 italic">{booking.notes}</p>
+                              <p className="text-sm text-slate-400 italic">{booking.notes}</p>
                             )}
                           </div>
                         )}
@@ -563,7 +562,7 @@ export default function BookingsPage() {
                                   cancelEdit()
                                 }}
                                 disabled={saving}
-                                className="flex-1 min-w-[120px] border border-gray-400 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="flex-1 min-w-[120px] border border-slate-700 text-slate-200 px-4 py-2 rounded-lg hover:bg-slate-900 disabled:opacity-50 flex items-center justify-center gap-2"
                               >
                                 Cancel (No Change)
                               </button>
@@ -654,7 +653,7 @@ export default function BookingsPage() {
                                     e.stopPropagation()
                                     handleDelete(booking.id)
                                   }}
-                                  className="flex-1 min-w-[120px] border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-100 flex items-center justify-center gap-2"
+                                  className="flex-1 min-w-[120px] border border-slate-700 text-slate-200 px-4 py-2 rounded-lg hover:bg-slate-900 flex items-center justify-center gap-2"
                                 >
                                   <X className="h-4 w-4" />
                                   Remove from List
@@ -671,16 +670,12 @@ export default function BookingsPage() {
             </div>
           </div>
         )}
-      </div>
+     
 
       {/* Toast notifications */}
       {toast && (
         <div className="fixed bottom-4 right-4 z-50">
-          <div
-            className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${
-              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-            }`}
-          >
+          <div className={`max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm text-white ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
             {toast.message}
           </div>
         </div>

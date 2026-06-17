@@ -138,20 +138,20 @@ const faqs = [
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-white/10 last:border-0">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-start justify-between gap-4 py-4 text-left"
       >
-        <span className="font-medium text-gray-900 text-sm">{q}</span>
+        <span className="font-medium text-slate-200 text-sm">{q}</span>
         {open ? (
-          <ChevronUp className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+          <ChevronUp className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+          <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
         )}
       </button>
       {open && (
-        <p className="text-sm text-gray-600 pb-4 leading-relaxed">{a}</p>
+        <p className="text-sm text-slate-400 pb-4 leading-relaxed">{a}</p>
       )}
     </div>
   );
@@ -175,136 +175,132 @@ export default function ClientHelpPage() {
     : filtered;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <HelpCircle className="w-12 h-12 text-blue-600 mx-auto mb-3" />
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Help Centre</h1>
-        <p className="text-gray-500">Find answers or get in touch with support</p>
-      </div>
-
-      {/* Search */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search help articles..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-        />
-      </div>
-
-      {/* Quick links */}
-      {!search && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <Link href="/client-dashboard/book-lesson" className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition text-center">
-            <BookOpen className="w-6 h-6 text-blue-600" />
-            <span className="text-xs font-medium text-gray-700">Book a Lesson</span>
-          </Link>
-          <Link href="/client-dashboard/wallet" className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition text-center">
-            <Wallet className="w-6 h-6 text-blue-600" />
-            <span className="text-xs font-medium text-gray-700">My Wallet</span>
-          </Link>
-          <Link href="/client-dashboard/bookings" className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition text-center">
-            <Calendar className="w-6 h-6 text-blue-600" />
-            <span className="text-xs font-medium text-gray-700">My Bookings</span>
-          </Link>
-          <Link href="/client-dashboard/progress" className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition text-center">
-            <TrendingUp className="w-6 h-6 text-blue-600" />
-            <span className="text-xs font-medium text-gray-700">My Progress</span>
-          </Link>
+    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <HelpCircle className="w-12 h-12 text-blue-400 mx-auto mb-3" />
+          <h1 className="text-3xl font-bold text-slate-100 mb-2">Help Centre</h1>
+          <p className="text-slate-400">Find answers or get in touch with support</p>
         </div>
-      )}
 
-      {/* Category filter pills */}
-      {!search && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          <button
-            onClick={() => setActiveCategory(null)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-              !activeCategory ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            All
-          </button>
-          {faqs.map(cat => (
+        {/* Search */}
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search help articles..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-slate-900 text-slate-100 placeholder-slate-500"
+          />
+        </div>
+
+        {/* Quick links */}
+        {!search && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+            <Link href="/client-dashboard/book-lesson" className="flex flex-col items-center gap-2 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 hover:bg-blue-900/20 transition text-center">
+              <BookOpen className="w-6 h-6 text-blue-400" />
+              <span className="text-xs font-medium text-slate-300">Book a Lesson</span>
+            </Link>
+            <Link href="/client-dashboard/wallet" className="flex flex-col items-center gap-2 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 hover:bg-blue-900/20 transition text-center">
+              <Wallet className="w-6 h-6 text-blue-400" />
+              <span className="text-xs font-medium text-slate-300">My Wallet</span>
+            </Link>
+            <Link href="/client-dashboard/bookings" className="flex flex-col items-center gap-2 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 hover:bg-blue-900/20 transition text-center">
+              <Calendar className="w-6 h-6 text-blue-400" />
+              <span className="text-xs font-medium text-slate-300">My Bookings</span>
+            </Link>
+            <Link href="/client-dashboard/progress" className="flex flex-col items-center gap-2 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 hover:bg-blue-900/20 transition text-center">
+              <TrendingUp className="w-6 h-6 text-blue-400" />
+              <span className="text-xs font-medium text-slate-300">My Progress</span>
+            </Link>
+          </div>
+        )}
+
+        {/* Category filter pills */}
+        {!search && (
+          <div className="flex flex-wrap gap-2 mb-6">
             <button
-              key={cat.category}
-              onClick={() => setActiveCategory(activeCategory === cat.category ? null : cat.category)}
+              onClick={() => setActiveCategory(null)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                activeCategory === cat.category ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                !activeCategory ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
-              {cat.category}
+              All
             </button>
-          ))}
-        </div>
-      )}
-
-      {/* FAQ sections */}
-      <div className="space-y-4 mb-10">
-        {displayed.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-            <p>No results for "{search}"</p>
-            <p className="text-sm mt-1">Try different keywords or contact support below.</p>
+            {faqs.map(cat => (
+              <button
+                key={cat.category}
+                onClick={() => setActiveCategory(activeCategory === cat.category ? null : cat.category)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                  activeCategory === cat.category ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {cat.category}
+              </button>
+            ))}
           </div>
-        ) : (
-          displayed.map(cat => {
-            const Icon = cat.icon;
-            return (
-              <div key={cat.category} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="flex items-center gap-2 px-5 py-3 bg-gray-50 border-b border-gray-100">
-                  <Icon className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-semibold text-gray-700">{cat.category}</span>
-                </div>
-                <div className="px-5">
-                  {cat.items.map((item, i) => (
-                    <FAQItem key={i} q={item.q} a={item.a} />
-                  ))}
-                </div>
-              </div>
-            );
-          })
         )}
-      </div>
 
-      {/* Contact support */}
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Still need help?</h2>
-        <p className="text-sm text-gray-600 mb-5">Our support team is available Mon–Fri, 9 AM – 6 PM.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <a
-            href="mailto:support@drivebook.com.au"
-            className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 transition"
-          >
-            <Mail className="w-5 h-5 text-blue-600 shrink-0" />
-            <div>
-              <p className="text-xs font-semibold text-gray-900">Email</p>
-              <p className="text-xs text-gray-500">support@drivebook.com.au</p>
+        {/* FAQ sections */}
+        <div className="space-y-4 mb-10">
+          {displayed.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+              <p>No results for &quot;{search}&quot;</p>
+              <p className="text-sm mt-1 text-slate-500">Try different keywords or contact support below.</p>
             </div>
-          </a>
-          <a
-            href="tel:1800DRIVEBOOK"
-            className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 transition"
-          >
-            <Phone className="w-5 h-5 text-blue-600 shrink-0" />
-            <div>
-              <p className="text-xs font-semibold text-gray-900">Phone</p>
-              <p className="text-xs text-gray-500">1800 DRIVEBOOK</p>
-            </div>
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 transition"
-          >
-            <MessageCircle className="w-5 h-5 text-blue-600 shrink-0" />
-            <div>
-              <p className="text-xs font-semibold text-gray-900">Live Chat</p>
-              <p className="text-xs text-gray-500">Available 9 AM – 6 PM</p>
-            </div>
-          </a>
+          ) : (
+            displayed.map(cat => {
+              const Icon = cat.icon;
+              return (
+                <div key={cat.category} className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+                  <div className="flex items-center gap-2 px-5 py-3 bg-slate-800/60 border-b border-white/10">
+                    <Icon className="w-4 h-4 text-blue-400" />
+                    <span className="text-sm font-semibold text-slate-200">{cat.category}</span>
+                  </div>
+                  <div className="px-5">
+                    {cat.items.map((item, i) => (
+                      <FAQItem key={i} q={item.q} a={item.a} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Contact support */}
+        <div className="bg-blue-900/20 border border-blue-700/40 rounded-xl p-6">
+          <h2 className="text-lg font-bold text-slate-100 mb-1">Still need help?</h2>
+          <p className="text-sm text-slate-400 mb-5">Our support team is available Mon–Fri, 9 AM – 6 PM.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <a href="mailto:support@drivebook.com.au"
+              className="flex items-center gap-3 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 transition">
+              <Mail className="w-5 h-5 text-blue-400 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-slate-200">Email</p>
+                <p className="text-xs text-slate-500">support@drivebook.com.au</p>
+              </div>
+            </a>
+            <a href="tel:1800DRIVEBOOK"
+              className="flex items-center gap-3 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 transition">
+              <Phone className="w-5 h-5 text-blue-400 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-slate-200">Phone</p>
+                <p className="text-xs text-slate-500">1800 DRIVEBOOK</p>
+              </div>
+            </a>
+            <a href="#"
+              className="flex items-center gap-3 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 transition">
+              <MessageCircle className="w-5 h-5 text-blue-400 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-slate-200">Live Chat</p>
+                <p className="text-xs text-slate-500">Available 9 AM – 6 PM</p>
+              </div>
+            </a>
+          </div>
         </div>
       </div>
     </div>

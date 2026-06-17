@@ -9,23 +9,24 @@ export async function middleware(req: NextRequest) {
 
   // ── MAINTENANCE MODE ──────────────────────────────────────────────────────
   const maintenanceMode = process.env.MAINTENANCE_MODE === 'true'
-  const bypassKey = process.env.MAINTENANCE_BYPASS_KEY || 'drivebook-admin-2026'
+  // No fallback — if key is not set, bypass is disabled entirely
+  const bypassKey = process.env.MAINTENANCE_BYPASS_KEY ?? null
 
   if (maintenanceMode) {
     const isMaintenancePage = url.pathname === '/maintenance'
     const isApi = url.pathname.startsWith('/api')
     const isStatic = url.pathname.startsWith('/_next') || url.pathname.startsWith('/static')
 
-    // Allow bypass via query param — sets a cookie and redirects clean
-    if (url.searchParams.get('bypass') === bypassKey) {
+    // Allow bypass via query param only if bypassKey is configured
+    if (bypassKey && url.searchParams.get('bypass') === bypassKey) {
       const res = NextResponse.redirect(new URL(url.pathname, req.url))
       res.cookies.set('maintenance_bypass', bypassKey, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 })
       return res
     }
 
-    // Allow if bypass cookie is set
+    // Allow if bypass cookie is set and matches configured key
     const bypassCookie = req.cookies.get('maintenance_bypass')?.value
-    const hasBypass = bypassCookie === bypassKey
+    const hasBypass = bypassKey !== null && bypassCookie === bypassKey
 
     if (!hasBypass && !isMaintenancePage && !isApi && !isStatic) {
       return NextResponse.redirect(new URL('/maintenance', req.url))
@@ -66,7 +67,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Skip middleware for public routes (non-subdomain)
-  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/api/auth', '/about', '/contact', '/blog', '/privacy', '/terms', '/teach-with-drivebook', '/book', '/maintenance']
+  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/set-password', '/api/auth', '/about', '/contact', '/blog', '/privacy', '/terms', '/teach-with-drivebook', '/book', '/maintenance']
   const isPublicPath = publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path))
 
   if (isPublicPath && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
@@ -80,8 +81,7 @@ export async function middleware(req: NextRequest) {
     url.pathname.startsWith('/api/admin/') ||
     url.pathname.startsWith('/api/instructor/') ||
     url.pathname.startsWith('/api/client/') ||
-    url.pathname.startsWith('/api/bookings/') ||
-    url.pathname.startsWith('/api/cron/');
+    url.pathname.startsWith('/api/bookings/')
 
   // For protected routes, check authentication only — layouts handle role-based access
   if (

@@ -24,14 +24,6 @@ interface Instructor {
   testPackageDuration: number | null;
   testPackageIncludes: string[];
   allowedDurations?: number[];
-  lessonPackages?: Array<{
-    id: string;
-    name: string;
-    durationMinutes: number;
-    price: number;
-    description: string;
-    isActive: boolean;
-  }>;
 }
 
 interface PricingBreakdown {
@@ -48,7 +40,6 @@ interface PlatformPricingSettings {
   package6Discount: number;
   package10Discount: number;
   package15Discount: number;
-  drivingTestPackagePrice: number;
 }
 
 interface ScheduledBooking {
@@ -59,6 +50,20 @@ interface ScheduledBooking {
   notes: string;
 }
 
+interface PdaTestBooking {
+  id: string;
+  configId: string;
+  configName: string;
+  testCentreId: string;
+  testCentreName: string;
+  testCentreAddress: string;
+  testDate: string;
+  testTime: string;
+  price: number;
+  durationMinutes: number;
+  status: string;
+}
+
 interface BookingState {
   // Step 1: Instructor
   instructor: Instructor | null;
@@ -67,8 +72,7 @@ interface BookingState {
   packageType: PackageType;
   hours: number;
   includeTestPackage: boolean;
-  customPackageId: string | null;   // instructor's fixed-price lesson package id
-  customPackagePrice: number | null; // fixed price — bypasses hourlyRate × hours calc
+  testPackingDate: string | null; // When user schedules PDA test (e.g., "2026-06-15")
   
   // Step 3: Book Now/Later
   bookingType: 'now' | 'later' | null;
@@ -76,6 +80,9 @@ interface BookingState {
   // Step 4: Booking Details (if Book Now)
   scheduledBookings: ScheduledBooking[];
   remainingHours: number;
+  
+  // PDA Test Booking
+  pdaTestBooking: PdaTestBooking | null;
   
   // Step 5: Registration
   registrationType: 'myself' | 'someone-else';
@@ -111,11 +118,11 @@ interface BookingContextType {
   updateBooking: (updates: Partial<BookingState>) => void;
   setInstructor: (instructor: Instructor) => void;
   setPackage: (packageType: PackageType, hours: number) => void;
-  setInstructorPackage: (id: string, price: number, durationMinutes: number) => void;
   toggleTestPackage: () => void;
   setClientDetails: (details: Partial<BookingState>) => void;
   addScheduledBooking: (booking: ScheduledBooking) => void;
   removeScheduledBooking: (index: number) => void;
+  setPdaTestBooking: (booking: PdaTestBooking | null) => void;
   resetBooking: () => void;
   
   // Slot management
@@ -145,7 +152,6 @@ const defaultPlatformSettings: PlatformPricingSettings = {
   package6Discount: 5,
   package10Discount: 10,
   package15Discount: 12,
-  drivingTestPackagePrice: 225,
 };
 
 const initialState: BookingState = {
@@ -153,11 +159,11 @@ const initialState: BookingState = {
   packageType: 'PACKAGE_10',
   hours: 10,
   includeTestPackage: false,
-  customPackageId: null,
-  customPackagePrice: null,
+  testPackingDate: null,
   bookingType: null,
   scheduledBookings: [],
   remainingHours: 0,
+  pdaTestBooking: null,
   registrationType: 'myself',
   accountHolderName: '',
   accountHolderEmail: '',
@@ -190,37 +196,35 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     }
 
     const s = state.platformSettings;
-    const discountMap: Record<string, number> = {
-      PACKAGE_6: s.package6Discount,
-      PACKAGE_10: s.package10Discount,
-      PACKAGE_15: s.package15Discount,
-      CUSTOM: 0,
-    };
-    const discountPercentage = discountMap[state.packageType] ?? 0;
+    
+    // Determine discount percentage
+    let discountPercentage = 0;
+    if (state.packageType === 'CUSTOM') {
+      // For custom hours, apply dynamic thresholds like the frontend does
+      if (state.hours >= 15) discountPercentage = s.package15Discount;
+      else if (state.hours >= 10) discountPercentage = s.package10Discount;
+      else if (state.hours >= 6) discountPercentage = s.package6Discount;
+      else discountPercentage = 0;
+    } else {
+      // For standard packages, use fixed discount
+      const discountMap: Record<string, number> = {
+        PACKAGE_6: s.package6Discount,
+        PACKAGE_10: s.package10Discount,
+        PACKAGE_15: s.package15Discount,
+      };
+      discountPercentage = discountMap[state.packageType] ?? 0;
+    }
 
     // Standard package: always price it if hours > 0 and packageType is set
     const standardSubtotal = state.hours > 0 ? state.instructor.hourlyRate * state.hours : 0;
     const standardDiscount = (standardSubtotal * discountPercentage) / 100;
 
-    // Instructor add-on: fixed price, no discount
-    const addonPrice = state.customPackagePrice ?? 0;
+    const testPackageAmount = state.includeTestPackage ? (state.instructor.testPackagePrice ?? 0) : 0;
 
-    const subtotal = standardSubtotal + addonPrice;
+    const subtotal = standardSubtotal + testPackageAmount;
     const discount = standardDiscount;
 
-    // Test package price
-    let testPackageAmount = 0;
-    if (state.includeTestPackage) {
-      if (state.instructor.offersTestPackage && state.instructor.testPackagePrice) {
-        testPackageAmount = state.instructor.testPackagePrice;
-      } else if (!state.instructor.offersTestPackage) {
-        testPackageAmount = 0;
-      } else {
-        testPackageAmount = s.drivingTestPackagePrice;
-      }
-    }
-
-    const afterDiscount = subtotal - discount + testPackageAmount;
+    const afterDiscount = subtotal - discount;
     const platformFee = (afterDiscount * s.platformFeePercentage) / 100;
     const total = afterDiscount + platformFee;
 
@@ -258,20 +262,6 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         packageType, 
         hours: actualHours,
         remainingHours: actualHours,
-        customPackageId: null,
-        customPackagePrice: null,
-      };
-      newState.pricing = calculatePricing(newState);
-      return newState;
-    });
-  }, [calculatePricing]);
-
-  const setInstructorPackage = useCallback((id: string, price: number, durationMinutes: number) => {
-    setBookingState(prev => {
-      const newState = {
-        ...prev,
-        customPackageId: id,
-        customPackagePrice: price,
       };
       newState.pricing = calculatePricing(newState);
       return newState;
@@ -323,6 +313,14 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       ...initialState,
       sessionId: prev.sessionId,
       slotReservations: [] // Clear reservations on reset
+    }));
+  }, []);
+
+  const setPdaTestBooking = useCallback((booking: PdaTestBooking | null) => {
+    setBookingState(prev => ({
+      ...prev,
+      pdaTestBooking: booking,
+      testPackingDate: booking ? booking.testDate : null
     }));
   }, []);
 
@@ -443,7 +441,41 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return false;
   }, []);
 
+  // Recover booking state from localStorage on first mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('bookingState');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          
+          // Only restore if this is recent (less than 24 hours old)
+          const ageInHours = (Date.now() - parsed.savedAt) / (1000 * 60 * 60);
+          if (ageInHours < 24 && parsed.instructor) {
+            // Clean up expired slot reservations
+            const cleanedReservations = parsed.slotReservations.filter(
+              (r: SlotReservation) => r.expiresAt > Date.now()
+            );
+            
+            setBookingState({
+              ...parsed,
+              slotReservations: cleanedReservations
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load booking from localStorage:', error);
+      }
+    }
+  }, []);
+
   // Fetch platform pricing settings from DB on mount
+  useEffect(() => {
+    // First, try to recover booking state from localStorage
+    loadFromLocalStorage();
+  }, [loadFromLocalStorage]);
+
+  // Then fetch platform pricing settings
   useEffect(() => {
     fetch('/api/public/pricing')
       .then(res => res.json())
@@ -457,7 +489,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         // Keep defaults on failure — booking flow continues
       });
-  }, []);
+  }, [calculatePricing]);
 
   // Auto-save to localStorage when booking state changes
   useEffect(() => {
@@ -471,11 +503,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     updateBooking,
     setInstructor,
     setPackage,
-    setInstructorPackage,
     toggleTestPackage,
     setClientDetails,
     addScheduledBooking,
     removeScheduledBooking,
+    setPdaTestBooking,
     resetBooking,
     reserveSlot,
     releaseSlot,
@@ -502,4 +534,4 @@ export function useBooking() {
   return context;
 }
 
-export type { ScheduledBooking, BookingState, PricingBreakdown, SlotReservation };
+export type { ScheduledBooking, BookingState, PricingBreakdown, SlotReservation, PdaTestBooking };

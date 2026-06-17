@@ -79,12 +79,12 @@ export default function RegistrationPage() {
 
   return (
     <MultiStepBookingLayout currentStep={bookingState.bookingType === 'now' ? 6 : 5}>
-      <div className="space-y-6">
+      <div className="space-y-6 text-white">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          <h2 className="text-2xl font-bold text-white/95 mb-2">
             Create Your Account
           </h2>
-          <p className="text-gray-600">
+          <p className="text-white/70">
             Register to manage your bookings and track your progress
           </p>
         </div>
@@ -93,18 +93,18 @@ export default function RegistrationPage() {
         <RegistrationForm />
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/6">
           <button
             onClick={() => router.back()}
             type="button"
-            className="flex-1 bg-white text-gray-700 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors border-2 border-gray-300"
+            className="flex-1 bg-white/5 text-white/90 px-8 py-4 rounded-lg font-semibold hover:bg-white/6 transition-colors border border-white/8"
           >
             ← Back
           </button>
           <button
             onClick={handleContinue}
             type="button"
-            className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-lg font-semibold hover:from-purple-500 hover:to-pink-500 transition-colors"
           >
             Continue to Payment →
           </button>

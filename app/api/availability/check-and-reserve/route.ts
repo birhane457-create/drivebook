@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
-
 export const dynamic = 'force-dynamic';
+
 const reserveSlotSchema = z.object({
   instructorId: z.string(),
   date: z.string(),
@@ -12,44 +12,10 @@ const reserveSlotSchema = z.object({
   sessionId: z.string() // Unique session ID for this booking flow
 });
 
-// Temporary slot reservations (in-memory, expires after 10 minutes)
-// In production, use Redis or database table
-const slotReservations = new Map<string, { expiresAt: Date; sessionId: string }>();
-
-// Clean up expired reservations
-function cleanupExpiredReservations() {
-  const now = new Date();
-  for (const [key, reservation] of slotReservations.entries()) {
-    if (reservation.expiresAt < now) {
-      slotReservations.delete(key);
-    }
-  }
-}
-
-// Generate slot key
-function getSlotKey(instructorId: string, date: string, time: string, duration: number): string {
-  return `${instructorId}:${date}:${time}:${duration}`;
-}
-
-// Check if slot overlaps with existing bookings or reservations
-async function isSlotAvailable(
-  instructorId: string,
-  date: string,
-  time: string,
-  duration: number,
-  sessionId: string
-): Promise<{ available: boolean; reason?: string }> {
-  cleanupExpiredReservations();
-
-  const slotKey = getSlotKey(instructorId, date, time, duration);
-  
-  // Check temporary reservations
-  const reservation = slotReservations.get(slotKey);
-  if (reservation && reservation.sessionId !== sessionId) {
-    return { available: false, reason: 'Slot is temporarily reserved by another user' };
-  }
-
-  // Parse date and time
+/**
+ * Parse date and time into startTime and endTime DateTime objects
+ */
+function parseSlotDateTime(date: string, time: string, duration: number) {
   const [hours, minutes] = time.split(':').map(Number);
   const startDateTime = new Date(date + 'T00:00:00');
   startDateTime.setHours(hours, minutes, 0, 0);
@@ -57,12 +23,57 @@ async function isSlotAvailable(
   const endDateTime = new Date(startDateTime);
   endDateTime.setMinutes(endDateTime.getMinutes() + duration);
 
-  // Check for overlapping confirmed bookings in database
+  return { startDateTime, endDateTime };
+}
+
+/**
+ * Check if slot is available:
+ * 1. No active database reservations by other sessions
+ * 2. No overlapping confirmed/pending bookings
+ */
+async function isSlotAvailable(
+  instructorId: string,
+  date: string,
+  time: string,
+  duration: number,
+  sessionId: string
+): Promise<{ available: boolean; reason?: string }> {
+  const { startDateTime, endDateTime } = parseSlotDateTime(date, time, duration);
+
+  // Clean up any expired reservations for this time slot
+  const now = new Date();
+  await prisma.slotReservation.deleteMany({
+    where: {
+      instructorId,
+      expiresAt: { lt: now }
+    }
+  });
+
+  // Check if another session has an active reservation overlapping this slot
+  // CRITICAL: Use range overlap logic — other.startTime < thisEnd AND other.endTime > thisStart
+  const existingReservation = await prisma.slotReservation.findFirst({
+    where: {
+      instructorId,
+      sessionId: { not: sessionId },
+      expiresAt: { gt: now },
+      // Range overlap: reservation.startTime < thisEndDateTime AND reservation.endTime > thisStartDateTime
+      AND: [
+        { startTime: { lt: endDateTime } },
+        { endTime: { gt: startDateTime } }
+      ]
+    }
+  });
+
+  if (existingReservation) {
+    return { available: false, reason: 'Slot is temporarily reserved by another user' };
+  }
+
+  // Check for overlapping confirmed/pending bookings
   const overlappingBookings = await prisma.booking.count({
     where: {
       instructorId,
       status: {
-        in: ['PENDING', 'CONFIRMED']
+        in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED']
       },
       OR: [
         {
@@ -97,7 +108,11 @@ async function isSlotAvailable(
   return { available: true };
 }
 
-// POST - Reserve a slot temporarily
+/**
+ * POST - Reserve a slot temporarily (10 minutes)
+ * Saves to database instead of in-memory Map
+ * Benefits: survives restarts, works in distributed systems, enables monitoring
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -120,21 +135,32 @@ export async function POST(req: NextRequest) {
       }, { status: 409 }); // 409 Conflict
     }
 
-    // Reserve the slot temporarily (10 minutes)
-    const slotKey = getSlotKey(data.instructorId, data.date, data.time, data.duration);
+    // Reserve the slot in database (10 minutes)
+    const { startDateTime, endDateTime } = parseSlotDateTime(
+      data.date,
+      data.time,
+      data.duration
+    );
+
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-    slotReservations.set(slotKey, {
-      expiresAt,
-      sessionId: data.sessionId
+    const reservation = await prisma.slotReservation.create({
+      data: {
+        instructorId: data.instructorId,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        sessionId: data.sessionId,
+        expiresAt
+      }
     });
 
     return NextResponse.json({
       success: true,
       available: true,
       expiresAt: expiresAt.toISOString(),
-      message: 'Slot reserved for 10 minutes'
+      message: 'Slot reserved for 10 minutes',
+      reservationId: reservation.id
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -145,7 +171,10 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE - Release a reserved slot
+/**
+ * DELETE - Release a reserved slot
+ * Only allows releasing if the session owns it (sessionId matches)
+ */
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -159,16 +188,30 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
-    const slotKey = getSlotKey(instructorId, date, time, parseInt(duration));
-    const reservation = slotReservations.get(slotKey);
+    const { startDateTime, endDateTime } = parseSlotDateTime(
+      date,
+      time,
+      parseInt(duration)
+    );
 
-    // Only allow releasing if it's the same session
-    if (reservation && reservation.sessionId === sessionId) {
-      slotReservations.delete(slotKey);
+    // Find and delete the reservation only if sessionId matches (ownership check)
+    const result = await prisma.slotReservation.deleteMany({
+      where: {
+        instructorId,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        sessionId // Only delete if same session owns it
+      }
+    });
+
+    if (result.count > 0) {
       return NextResponse.json({ success: true, message: 'Slot released' });
     }
 
-    return NextResponse.json({ success: false, message: 'Slot not found or not owned by session' });
+    return NextResponse.json(
+      { success: false, message: 'Slot not found or not owned by session' },
+      { status: 404 }
+    );
   } catch (error) {
     console.error('Release slot error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

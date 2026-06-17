@@ -176,7 +176,7 @@ export default function DocumentCompliancePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-slate-950 text-slate-100">
         <AdminNav />
         <div className="max-w-7xl mx-auto px-4 py-8">
           <p>Loading compliance data...</p>
@@ -186,79 +186,79 @@ export default function DocumentCompliancePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
       
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Document Compliance Dashboard</h1>
-          <p className="text-gray-600 mt-2">
+          <h1 className="text-3xl font-bold text-slate-100">Document Compliance Dashboard</h1>
+          <p className="text-slate-400 mt-2">
             Traffic light system for instructor document verification and expiry tracking
           </p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-slate-900 p-6 rounded-lg">
             <div className="text-2xl font-bold">{records.length}</div>
-            <div className="text-gray-600">Total Instructors</div>
+            <div className="text-slate-400">Total Instructors</div>
           </div>
-          <div className="bg-green-50 p-6 rounded-lg shadow border-2 border-green-200">
+          <div className="bg-green-900/20 p-6 rounded-lg shadow border-2 border-green-700/50">
             <div className="text-2xl font-bold text-green-700">🟢 {stats.valid}</div>
-            <div className="text-gray-600">Valid</div>
+            <div className="text-slate-400">Valid</div>
           </div>
-          <div className="bg-yellow-50 p-6 rounded-lg shadow border-2 border-yellow-200">
+          <div className="bg-yellow-900/20 p-6 rounded-lg shadow border-2 border-yellow-700/50">
             <div className="text-2xl font-bold text-yellow-700">🟡 {stats.expiring}</div>
-            <div className="text-gray-600">Expiring Soon</div>
+            <div className="text-slate-400">Expiring Soon</div>
           </div>
-          <div className="bg-red-50 p-6 rounded-lg shadow border-2 border-red-200">
+          <div className="bg-red-900/20 p-6 rounded-lg shadow border-2 border-red-700/50">
             <div className="text-2xl font-bold text-red-700">🔴 {stats.expired}</div>
-            <div className="text-gray-600">Expired/Invalid</div>
+            <div className="text-slate-400">Expired/Invalid</div>
           </div>
-          <div className="bg-gray-50 p-6 rounded-lg shadow border-2 border-gray-200">
-            <div className="text-2xl font-bold text-gray-700">⚪ {stats.review}</div>
-            <div className="text-gray-600">In Review</div>
+          <div className="bg-slate-950 p-6 rounded-lg shadow border-2 border-slate-700">
+            <div className="text-2xl font-bold text-slate-300">⚪ {stats.review}</div>
+            <div className="text-slate-400">In Review</div>
           </div>
         </div>
 
         {/* Actions and Search */}
-        <div className="bg-white p-4 rounded-lg shadow mb-6">
+        <div className="bg-slate-900 p-4 rounded-lg shadow mb-6">
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={handleAutoProcess}
                 disabled={processing}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-slate-600"
               >
                 {processing ? 'Processing...' : 'Auto-Process All'}
               </button>
               <button
                 onClick={() => setFilter('all')}
-                className={`px-4 py-2 rounded ${filter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-200'}`}
+                className={`px-4 py-2 rounded ${filter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
               >
                 All
               </button>
               <button
                 onClick={() => setFilter('valid')}
-                className={`px-4 py-2 rounded ${filter === 'valid' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+                className={`px-4 py-2 rounded ${filter === 'valid' ? 'bg-green-600 text-white' : 'bg-slate-700'}`}
               >
                 🟢 Valid
               </button>
               <button
                 onClick={() => setFilter('expiring')}
-                className={`px-4 py-2 rounded ${filter === 'expiring' ? 'bg-yellow-600 text-white' : 'bg-gray-200'}`}
+                className={`px-4 py-2 rounded ${filter === 'expiring' ? 'bg-yellow-600 text-white' : 'bg-slate-700'}`}
               >
                 🟡 Expiring
               </button>
               <button
                 onClick={() => setFilter('expired')}
-                className={`px-4 py-2 rounded ${filter === 'expired' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
+                className={`px-4 py-2 rounded ${filter === 'expired' ? 'bg-red-600 text-white' : 'bg-slate-700'}`}
               >
                 🔴 Expired
               </button>
               <button
                 onClick={() => setFilter('review')}
-                className={`px-4 py-2 rounded ${filter === 'review' ? 'bg-gray-600 text-white' : 'bg-gray-200'}`}
+                className={`px-4 py-2 rounded ${filter === 'review' ? 'bg-slate-800 text-white' : 'bg-slate-700'}`}
               >
                 ⚪ In Review
               </button>
@@ -271,39 +271,39 @@ export default function DocumentCompliancePage() {
                 placeholder="Search by name, email, or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full md:w-80 px-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
         </div>
 
         {/* Compact Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="bg-slate-900 rounded-lg border border-slate-800 overflow-hidden">
+          <table className="min-w-full divide-y divide-slate-700">
+            <thead className="bg-slate-950">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8"></th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instructor</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issues</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase w-8"></th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Instructor</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Issues</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-slate-900 divide-y divide-slate-700">
               {filteredRecords.map((record) => {
                 const isExpanded = expandedRows.has(record.instructorId);
                 return (
                   <>
                     <tr key={record.instructorId} className={
-                      record.status === 'expired' ? 'bg-red-50' :
-                      record.status === 'expiring' ? 'bg-yellow-50' :
-                      record.status === 'review' ? 'bg-gray-50' :
-                      'bg-white'
+                      record.status === 'expired' ? 'bg-red-900/20' :
+                      record.status === 'expiring' ? 'bg-yellow-900/20' :
+                      record.status === 'review' ? 'bg-slate-800' :
+                      'bg-slate-900'
                     }>
                       <td className="px-4 py-3">
                         <button
                           onClick={() => toggleRow(record.instructorId)}
-                          className="text-gray-600 hover:text-gray-900"
+                          className="text-slate-400 hover:text-slate-100"
                         >
                           {isExpanded ? '▼' : '▶'}
                         </button>
@@ -312,10 +312,10 @@ export default function DocumentCompliancePage() {
                         <span className="text-2xl">{getStatusIcon(record.status)}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-gray-900">{record.name}</div>
-                        <div className="text-xs text-gray-500">{record.email}</div>
+                        <div className="text-sm font-medium text-slate-100">{record.name}</div>
+                        <div className="text-xs text-slate-500">{record.email}</div>
                         {!record.isActive && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 mt-1">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900/40 text-red-300 mt-1">
                             Inactive
                           </span>
                         )}
@@ -331,14 +331,14 @@ export default function DocumentCompliancePage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => router.push(`/admin/documents/review/${record.instructorId}`)}
-                            className="text-sm text-blue-600 hover:text-blue-900 font-medium"
+                            className="text-sm text-blue-600 hover:text-blue-200 font-medium"
                           >
                             Review
                           </button>
                           {record.status === 'expiring' && (
                             <button
                               onClick={() => handleSendReminder(record.instructorId)}
-                              className="text-sm text-yellow-600 hover:text-yellow-900"
+                              className="text-sm text-yellow-600 hover:text-yellow-200"
                             >
                               Remind
                             </button>
@@ -346,7 +346,7 @@ export default function DocumentCompliancePage() {
                           {record.status === 'expired' && record.isActive && (
                             <button
                               onClick={() => handleDeactivate(record.instructorId)}
-                              className="text-sm text-red-600 hover:text-red-900"
+                              className="text-sm text-red-600 hover:text-red-200"
                             >
                               Deactivate
                             </button>
@@ -356,28 +356,28 @@ export default function DocumentCompliancePage() {
                     </tr>
                     {isExpanded && (
                       <tr className={
-                        record.status === 'expired' ? 'bg-red-50' :
-                        record.status === 'expiring' ? 'bg-yellow-50' :
-                        record.status === 'review' ? 'bg-gray-50' :
-                        'bg-gray-50'
+                        record.status === 'expired' ? 'bg-red-900/20' :
+                        record.status === 'expiring' ? 'bg-yellow-900/20' :
+                        record.status === 'review' ? 'bg-slate-800' :
+                        'bg-slate-800'
                       }>
                         <td colSpan={5} className="px-4 py-4">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             <div>
-                              <p className="font-semibold text-gray-700 mb-2">Contact</p>
-                              <p className="text-gray-600">Phone: {record.phone}</p>
-                              <p className="text-gray-600">Email: {record.email}</p>
+                              <p className="font-semibold text-slate-300 mb-2">Contact</p>
+                              <p className="text-slate-400">Phone: {record.phone}</p>
+                              <p className="text-slate-400">Email: {record.email}</p>
                             </div>
                             <div>
-                              <p className="font-semibold text-gray-700 mb-2">Expiry Dates</p>
-                              <p className="text-gray-600">License: {formatDate(record.licenseExpiry)}</p>
-                              <p className="text-gray-600">Insurance: {formatDate(record.insuranceExpiry)}</p>
-                              <p className="text-gray-600">Police Check: {formatDate(record.policeCheckExpiry)}</p>
-                              <p className="text-gray-600">WWC: {formatDate(record.wwcCheckExpiry)}</p>
+                              <p className="font-semibold text-slate-300 mb-2">Expiry Dates</p>
+                              <p className="text-slate-400">License: {formatDate(record.licenseExpiry)}</p>
+                              <p className="text-slate-400">Insurance: {formatDate(record.insuranceExpiry)}</p>
+                              <p className="text-slate-400">Police Check: {formatDate(record.policeCheckExpiry)}</p>
+                              <p className="text-slate-400">WWC: {formatDate(record.wwcCheckExpiry)}</p>
                             </div>
                             {record.issues.length > 0 && (
                               <div className="md:col-span-2">
-                                <p className="font-semibold text-gray-700 mb-2">Issues</p>
+                                <p className="font-semibold text-slate-300 mb-2">Issues</p>
                                 <ul className="list-disc list-inside text-red-600">
                                   {record.issues.map((issue, idx) => (
                                     <li key={idx}>{issue}</li>
@@ -397,7 +397,7 @@ export default function DocumentCompliancePage() {
         </div>
 
         {filteredRecords.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-slate-500">
             No instructors found for this filter
           </div>
         )}

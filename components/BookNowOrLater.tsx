@@ -14,79 +14,88 @@ export default function BookNowOrLater() {
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">When would you like to schedule?</h2>
-        <p className="text-gray-600 text-sm">Choose now for immediate slots or later to schedule from your dashboard.</p>
+        <h2 className="text-xl font-bold text-slate-50 mb-1">When would you like to schedule?</h2>
+        <p className="text-slate-300 text-sm">Choose now for immediate slots or later to schedule from your dashboard.</p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
-        <div className={`flex-1 p-4 rounded-lg border ${bookingState.bookingType === 'now' ? 'border-blue-600 bg-blue-50' : 'border-gray-200'}`}>
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">Book Now</h3>
-              <p className="text-sm text-gray-600 mt-1">See available time slots and confirm instantly.</p>
-            </div>
-            <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto pb-12">
+        {/* Book Now Option */}
+        <button
+          onClick={() => handleSelection('now')}
+          className={`flex-1 p-6 rounded-lg border transition-all ${
+            bookingState.bookingType === 'now' 
+              ? 'border-blue-500 bg-blue-950/40' 
+              : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-100 text-lg">Book Now</h3>
+            <div className="relative z-20">
               <button
                 onMouseEnter={() => setTooltip('now')}
                 onMouseLeave={() => setTooltip(null)}
-                onClick={() => setTooltip(tooltip === 'now' ? null : 'now')}
-                aria-label="info"
-                className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTooltip(tooltip === 'now' ? null : 'now');
+                }}
+                className="w-6 h-6 rounded-full bg-slate-700 text-slate-100 flex items-center justify-center text-xs hover:bg-slate-600 transition"
               >
-                i
+                ?
               </button>
+              {tooltip === 'now' && (
+                <div className="absolute right-0 top-8 w-40 p-2 text-sm bg-slate-900 border border-slate-600 rounded shadow-lg text-slate-100 z-50">
+                  See available time slots and confirm instantly.
+                </div>
+              )}
             </div>
           </div>
-
-          {tooltip === 'now' && (
-            <div className="mt-3 p-2 text-sm bg-white border rounded shadow-sm">Choose immediate slots from instructor availability.</div>
-          )}
-
-          <div className="mt-4 flex items-center justify-end">
-            <button
-              onClick={() => handleSelection('now')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm"
-            >
-              Book Now
-            </button>
+          <div className="h-12 flex items-center">
+            {bookingState.bookingType !== 'now' && (
+              <span className="text-blue-400 text-sm">→ Schedule immediately</span>
+            )}
           </div>
-        </div>
+        </button>
 
-        <div className={`flex-1 p-4 rounded-lg border ${bookingState.bookingType === 'later' ? 'border-blue-600 bg-blue-50' : 'border-gray-200'}`}>
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">Book Later</h3>
-              <p className="text-sm text-gray-600 mt-1">Pay now and schedule lessons later from your dashboard.</p>
-            </div>
-            <div className="flex items-center gap-2">
+        {/* Book Later Option */}
+        <button
+          onClick={() => handleSelection('later')}
+          className={`flex-1 p-6 rounded-lg border transition-all ${
+            bookingState.bookingType === 'later' 
+              ? 'border-blue-500 bg-blue-950/40' 
+              : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-100 text-lg">Book Later</h3>
+            <div className="relative z-20">
               <button
                 onMouseEnter={() => setTooltip('later')}
                 onMouseLeave={() => setTooltip(null)}
-                onClick={() => setTooltip(tooltip === 'later' ? null : 'later')}
-                aria-label="info"
-                className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTooltip(tooltip === 'later' ? null : 'later');
+                }}
+                className="w-6 h-6 rounded-full bg-slate-700 text-slate-100 flex items-center justify-center text-xs hover:bg-slate-600 transition"
               >
-                i
+                ?
               </button>
+              {tooltip === 'later' && (
+                <div className="absolute right-0 top-8 w-40 p-2 text-sm bg-slate-900 border border-slate-600 rounded shadow-lg text-slate-100 z-50">
+                  Pay now and schedule lessons later from your dashboard.
+                </div>
+              )}
             </div>
           </div>
-
-          {tooltip === 'later' && (
-            <div className="mt-3 p-2 text-sm bg-white border rounded shadow-sm">Purchase now and manage scheduling later in your account.</div>
-          )}
-
-          <div className="mt-4 flex items-center justify-end">
-            <button
-              onClick={() => handleSelection('later')}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm"
-            >
-              Book Later
-            </button>
+          <div className="h-12 flex items-center">
+            {bookingState.bookingType !== 'later' && (
+              <span className="text-blue-400 text-sm">→ Schedule anytime</span>
+            )}
           </div>
-        </div>
+        </button>
       </div>
 
-      <div className="bg-blue-50 rounded-lg p-3 max-w-3xl mx-auto mt-4 text-center text-sm text-blue-900">
+      {/* Info note at bottom with spacing */}
+      <div className="bg-blue-900 border border-blue-700 rounded-lg p-3 max-w-2xl mx-auto text-center text-sm text-blue-100">
         <span className="font-semibold">Note:</span> Your hours are valid for 12 months from purchase date
       </div>
     </div>

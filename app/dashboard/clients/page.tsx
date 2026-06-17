@@ -10,7 +10,6 @@ interface Client {
   phone: string
   email: string
   userId?: string
-  // aliased field from the backend for display and booking defaults
   addressText?: string
   addressLatitude?: number
   addressLongitude?: number
@@ -18,8 +17,23 @@ interface Client {
   createdAt: string
 }
 
+interface PaginationMeta {
+  page: number
+  limit: number
+  total: number
+  pages: number
+  hasMore: boolean
+}
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    page: 1,
+    limit: 25,
+    total: 0,
+    pages: 0,
+    hasMore: false,
+  })
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -35,16 +49,20 @@ export default function ClientsPage() {
   const [editData, setEditData] = useState<Client | null>(null)
 
   useEffect(() => {
-    fetchClients()
+    fetchClients(1)
   }, [])
 
-  const fetchClients = async () => {
+  const fetchClients = async (page: number = 1) => {
     try {
-      const res = await fetch('/api/clients')
+      const res = await fetch(`/api/clients?page=${page}&limit=25`)
       const data = await res.json()
       
-      // Check if data is an array
-      if (Array.isArray(data)) {
+      // Check if data has pagination structure
+      if (data.pagination) {
+        setClients(data.clients)
+        setPagination(data.pagination)
+      } else if (Array.isArray(data)) {
+        // Fallback for old format
         setClients(data)
       } else if (data.error) {
         console.error('API error:', data.error)
@@ -73,7 +91,7 @@ export default function ClientsPage() {
       if (res.ok) {
         setFormData({ name: '', phone: '', email: '', addressText: '', notes: '' })
         setShowForm(false)
-        fetchClients()
+        fetchClients(1)
         alert('Client added successfully!')
       } else {
         const error = await res.json()
@@ -110,7 +128,7 @@ export default function ClientsPage() {
       if (res.ok) {
         setEditingId(null)
         setEditData(null)
-        fetchClients()
+        fetchClients(pagination.page)
       }
     } catch (error) {
       console.error('Failed to update client:', error)
@@ -134,10 +152,9 @@ export default function ClientsPage() {
   ) : []
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
+    <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold">Clients ({clients.length})</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">Clients ({pagination.total})</h1>
           <button
             onClick={() => setShowForm(!showForm)}
             className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700"
@@ -148,60 +165,60 @@ export default function ClientsPage() {
         </div>
 
         {showForm && (
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">New Client</h2>
+          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-4 sm:p-6 mb-6">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-100 mb-4">New Client</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Full Name</label>
+                  <label className="block text-sm font-medium text-slate-100 mb-1">Full Name</label>
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                    className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Phone</label>
+                  <label className="block text-sm font-medium text-slate-100 mb-1">Phone</label>
                   <input
                     type="tel"
                     required
                     value={formData.phone}
                     onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                    className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
+                <label className="block text-sm font-medium text-slate-100 mb-1">Email</label>
                 <input
                   type="email"
                   required
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Address</label>
+                <label className="block text-sm font-medium text-slate-100 mb-1">Address</label>
                 <input
                   type="text"
                   value={formData.addressText}
                   onChange={(e) => setFormData(prev => ({ ...prev, addressText: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Notes</label>
+                <label className="block text-sm font-medium text-slate-100 mb-1">Notes</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                   rows={3}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                 />
               </div>
 
@@ -209,7 +226,7 @@ export default function ClientsPage() {
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 order-2 sm:order-1"
+                  className="flex-1 px-4 py-2 border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-900 order-2 sm:order-1"
                 >
                   Cancel
                 </button>
@@ -224,15 +241,15 @@ export default function ClientsPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-4 mb-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 h-5 w-5" />
             <input
               type="text"
               placeholder="Search clients..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+              className="w-full pl-10 pr-4 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
             />
           </div>
         </div>
@@ -240,47 +257,47 @@ export default function ClientsPage() {
         {loading ? (
           <div className="text-center py-12">Loading...</div>
         ) : filteredClients.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <User className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold mb-2">No clients found</h3>
-            <p className="text-gray-600">Add your first client to get started</p>
+          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-12 text-center">
+            <User className="h-16 w-16 text-slate-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2 text-slate-100">No clients found</h3>
+            <p className="text-slate-400">Add your first client to get started</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="divide-y">
+          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 overflow-hidden">
+            <div className="divide-y divide-slate-800">
               {filteredClients.map((client) => {
                 const isExpanded = expandedId === client.id
                 const isEditing = editingId === client.id
                 const displayClient = isEditing && editData ? editData : client
 
                 return (
-                  <div key={client.id} className="hover:bg-gray-50 transition">
+                  <div key={client.id} className="hover:bg-slate-900 transition">
                     {/* Compact Row */}
                     <div 
                       className="p-4 cursor-pointer flex items-center justify-between gap-4"
                       onClick={() => !isEditing && toggleExpand(client.id)}
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <User className="h-5 w-5 text-blue-600" />
+                        <div className="h-10 w-10 bg-slate-800 rounded-full flex items-center justify-center flex-shrink-0">
+                          <User className="h-5 w-5 text-sky-400" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold truncate">{client.name}</h3>
+                            <h3 className="font-semibold truncate text-slate-100">{client.name}</h3>
                             {!client.userId && (
-                              <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex-shrink-0">
-                                <AlertCircle className="h-3 w-3" />
+                              <span className="inline-flex items-center gap-1 text-xs bg-amber-950 text-amber-200 px-2 py-0.5 rounded-full flex-shrink-0">
+                                <AlertCircle className="h-3 w-3 text-amber-200" />
                                 No account
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-4 text-sm text-slate-400">
                             <span className="flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
+                              <Phone className="h-3 w-3 text-slate-400" />
                               {client.phone}
                             </span>
                             <span className="hidden sm:flex items-center gap-1 truncate">
-                              <Mail className="h-3 w-3" />
+                              <Mail className="h-3 w-3 text-slate-400" />
                               {client.email}
                             </span>
                           </div>
@@ -292,7 +309,7 @@ export default function ClientsPage() {
                           <Link
                             href={`/dashboard/clients/${client.id}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="p-2 hover:bg-gray-50 rounded-lg text-gray-500"
+                            className="p-2 hover:bg-slate-900 rounded-lg text-slate-400"
                             title="View Client"
                           >
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -305,7 +322,7 @@ export default function ClientsPage() {
                           <Link
                             href={`/dashboard/bookings/new?clientId=${client.id}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="p-2 hover:bg-green-50 rounded-lg text-green-600"
+                            className="p-2 hover:bg-slate-900 rounded-lg text-sky-400"
                             title="Book Now"
                           >
                             <CalendarPlus className="h-4 w-4" />
@@ -317,50 +334,50 @@ export default function ClientsPage() {
                               e.stopPropagation()
                               handleEdit(client)
                             }}
-                            className="p-2 hover:bg-blue-50 rounded-lg text-blue-600"
+                            className="p-2 hover:bg-slate-900 rounded-lg text-sky-400"
                           >
                             <Edit2 className="h-4 w-4" />
                           </button>
                         )}
                         {!isEditing && (
                           isExpanded ? 
-                            <ChevronUp className="h-5 w-5 text-gray-400" /> : 
-                            <ChevronDown className="h-5 w-5 text-gray-400" />
+                            <ChevronUp className="h-5 w-5 text-slate-500" /> : 
+                            <ChevronDown className="h-5 w-5 text-slate-500" />
                         )}
                       </div>
                     </div>
 
                     {/* Expanded Details */}
                     {isExpanded && (
-                      <div className="px-4 pb-4 space-y-4 bg-gray-50">
+                      <div className="px-4 pb-4 space-y-4 bg-slate-900 border-t border-slate-800">
                         {isEditing && editData ? (
                           // Edit Mode
                           <div className="space-y-4">
                             <div className="grid sm:grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-sm font-medium mb-1">Name</label>
+                                <label className="block text-sm font-medium text-slate-100 mb-1">Name</label>
                                 <input
                                   type="text"
                                   value={editData.name}
                                   onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                                  className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                                 />
                               </div>
                               <div>
-                                <label className="block text-sm font-medium mb-1">Phone</label>
+                                <label className="block text-sm font-medium text-slate-100 mb-1">Phone</label>
                                 <input
                                   type="tel"
                                   value={editData.phone}
                                   onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                                  className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                                 />
                               </div>
                             </div>
                             <div>
-                              <label className="block text-sm font-medium mb-1">
+                              <label className="block text-sm font-medium text-slate-100 mb-1">
                                 Email
                                 {client.userId && (
-                                  <span className="ml-2 text-xs text-blue-600 font-normal">
+                                  <span className="ml-2 text-xs text-sky-300 font-normal">
                                     (Has user account - cannot edit)
                                   </span>
                                 )}
@@ -370,13 +387,13 @@ export default function ClientsPage() {
                                 value={editData.email}
                                 onChange={(e) => setEditData({ ...editData, email: e.target.value })}
                                 disabled={!!client.userId}
-                                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 ${
-                                  client.userId ? 'bg-gray-100 cursor-not-allowed' : ''
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-sky-500 ${
+                                  client.userId ? 'bg-slate-800 text-slate-500 cursor-not-allowed border-slate-700' : 'bg-slate-950 text-slate-100 border-slate-700'
                                 }`}
                                 title={client.userId ? 'This client has a user account. They must change their email through account settings.' : ''}
                               />
                               {client.userId && (
-                                <p className="text-xs text-gray-600 mt-1">
+                                <p className="text-xs text-slate-500 mt-1">
                                   This client can login and must change their email through their account settings.
                                 </p>
                               )}
@@ -387,7 +404,7 @@ export default function ClientsPage() {
                                 type="text"
                                 value={editData.addressText || ''}
                                 onChange={(e) => setEditData({ ...editData, addressText: e.target.value })}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                                className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                               />
                             </div>
                             <div>
@@ -396,7 +413,7 @@ export default function ClientsPage() {
                                 value={editData.notes || ''}
                                 onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
                                 rows={3}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                                className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                               />
                             </div>
                             <div className="flex gap-2">
@@ -409,7 +426,7 @@ export default function ClientsPage() {
                               </button>
                               <button
                                 onClick={handleCancelEdit}
-                                className="flex-1 border px-4 py-2 rounded-lg hover:bg-gray-100 flex items-center justify-center gap-2"
+                                className="flex-1 border border-slate-700 px-4 py-2 rounded-lg hover:bg-slate-900 flex items-center justify-center gap-2 text-slate-200"
                               >
                                 <X className="h-4 w-4" />
                                 Cancel
@@ -419,26 +436,26 @@ export default function ClientsPage() {
                         ) : (
                           // View Mode
                           <div className="space-y-3 text-sm">
-                            <div className="flex items-center gap-2 text-gray-700">
-                              <Mail className="h-4 w-4 text-gray-400" />
+                            <div className="flex items-center gap-2 text-slate-300">
+                              <Mail className="h-4 w-4 text-slate-500" />
                               <span>{displayClient.email}</span>
                             </div>
                             {displayClient.addressText && (
-                              <div className="flex items-start gap-2 text-gray-700">
-                                <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
+                              <div className="flex items-start gap-2 text-slate-300">
+                                <MapPin className="h-4 w-4 text-slate-500 mt-0.5" />
                                 <span>{displayClient.addressText}</span>
                               </div>
                             )}
                             {displayClient.notes && (
-                              <div className="pt-2 border-t">
-                                <p className="text-gray-600 italic">{displayClient.notes}</p>
+                              <div className="pt-2 border-t border-slate-800">
+                                <p className="text-slate-400 italic">{displayClient.notes}</p>
                               </div>
                             )}
-                            <div className="pt-2 border-t text-xs text-gray-500">
+                            <div className="pt-2 border-t border-slate-800 text-xs text-slate-500">
                               Added {new Date(displayClient.createdAt).toLocaleDateString()}
                             </div>
                             {!client.userId && (
-                              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                              <div className="flex items-start gap-2 bg-amber-950 border border-amber-700 rounded-lg p-3 text-sm text-amber-200">
                                 <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                                 <span>This client hasn't registered yet. You can still book for them — they'll receive an email to claim their account and complete payment.</span>
                               </div>
@@ -462,7 +479,31 @@ export default function ClientsPage() {
             </div>
           </div>
         )}
+
+        {/* Pagination Controls */}
+        {pagination.pages > 1 && (
+          <div className="mt-6 flex items-center justify-between gap-4">
+            <div className="text-sm text-slate-400">
+              Page {pagination.page} of {pagination.pages} ({pagination.total} total)
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => fetchClients(pagination.page - 1)}
+                disabled={pagination.page === 1}
+                className="px-4 py-2 border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => fetchClients(pagination.page + 1)}
+                disabled={!pagination.hasMore}
+                className="px-4 py-2 border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
   )
 }

@@ -14,7 +14,8 @@ export interface InstructorResult {
   averageRating: number | null;
   totalReviews: number;
   bio: string | null;
-  lessonPackages: any[];
+  offersTestPackage?: boolean;
+  testPackagePrice?: number | null;
 }
 
 interface Options {

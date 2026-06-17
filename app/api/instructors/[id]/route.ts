@@ -1,51 +1,60 @@
-// @ts-nocheck
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
 
-export const dynamic = 'force-dynamic';
 export async function GET(
-  request: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const { id } = params
+
     const instructor = await prisma.instructor.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         name: true,
-        bio: true,
         phone: true,
+        bio: true,
         profileImage: true,
-        baseAddress: true,
+        carImage: true,
+        carMake: true,
+        carModel: true,
+        carYear: true,
         hourlyRate: true,
+        averageRating: true,
+        totalReviews: true,
+        baseAddress: true,
         serviceRadiusKm: true,
-        workingHours: true,
         allowedDurations: true,
-      },
-    });
+        offersTestPackage: true,
+        testPackagePrice: true,
+        testPackageDuration: true,
+        testPackageIncludes: true,
+      }
+    })
 
     if (!instructor) {
       return NextResponse.json(
         { error: 'Instructor not found' },
         { status: 404 }
-      );
+      )
     }
 
-    // Calculate rating from bookings (placeholder - return default values for now)
-    const averageRating = 4.5;
-    const totalReviews = 0;
+    const testPackageIncludes = Array.isArray((instructor.testPackageIncludes as any))
+      ? (instructor.testPackageIncludes as any)
+      : []
 
     return NextResponse.json({
       ...instructor,
-      averageRating,
-      totalReviews
-    });
+      testPackageIncludes,
+    })
   } catch (error) {
-    console.error('Instructor fetch error:', error);
+    console.error('Error fetching instructor:', error)
     return NextResponse.json(
       { error: 'Failed to fetch instructor' },
       { status: 500 }
-    );
+    )
   }
 }

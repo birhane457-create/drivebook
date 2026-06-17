@@ -110,7 +110,7 @@ model Instructor {
   bookingBufferMinutes Int?
   enableTravelTime     Boolean @default(false)
   travelTimeMinutes    Int?
-  lessonPackages       Json?
+  // legacy instructor-defined `lessonPackages` removed from schema
 
   // Google Calendar
   syncGoogleCalendar Boolean   @default(false)

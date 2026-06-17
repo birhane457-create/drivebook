@@ -21,12 +21,12 @@ interface IncomeSummary {
 }
 
 const CATEGORIES: Record<string, { label: string; color: string }> = {
-  FUEL_VEHICLE:  { label: 'Fuel & Vehicle',     color: 'bg-orange-100 text-orange-700' },
-  INSURANCE:     { label: 'Insurance',           color: 'bg-blue-100 text-blue-700' },
-  TRAINING:      { label: 'Training & Courses',  color: 'bg-purple-100 text-purple-700' },
-  EQUIPMENT:     { label: 'Equipment & Supplies',color: 'bg-teal-100 text-teal-700' },
-  SUBSCRIPTION:  { label: 'Subscriptions',       color: 'bg-indigo-100 text-indigo-700' },
-  OTHER:         { label: 'Other',               color: 'bg-gray-100 text-gray-700' },
+  FUEL_VEHICLE:  { label: 'Fuel & Vehicle',     color: 'bg-orange-950 text-orange-200' },
+  INSURANCE:     { label: 'Insurance',           color: 'bg-blue-950 text-blue-200' },
+  TRAINING:      { label: 'Training & Courses',  color: 'bg-purple-950 text-purple-200' },
+  EQUIPMENT:     { label: 'Equipment & Supplies',color: 'bg-teal-950 text-teal-200' },
+  SUBSCRIPTION:  { label: 'Subscriptions',       color: 'bg-indigo-950 text-indigo-200' },
+  OTHER:         { label: 'Other',               color: 'bg-slate-800 text-slate-200' },
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -203,18 +203,18 @@ export default function ExpensesPage() {
   })).filter(c => c.total > 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
 
         {/* Header */}
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Business Records</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Track your income and expenses for record-keeping</p>
+            <h1 className="text-2xl font-bold text-slate-100">Business Records</h1>
+            <p className="text-sm text-slate-400 mt-0.5">Track your income and expenses for record-keeping</p>
           </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={exportCSV}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 shadow-sm">
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-100 text-sm rounded-lg hover:bg-slate-800 shadow-sm">
               <Download className="h-4 w-4" /> Export CSV
             </button>
             <button onClick={() => setShowForm(v => !v)}
@@ -225,9 +225,9 @@ export default function ExpensesPage() {
         </div>
 
         {/* Legal disclaimer — always visible */}
-        <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-800">
+        <div className="mb-5 bg-amber-950 border border-amber-700 rounded-xl p-4 flex gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-300 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-200">
             <p className="font-semibold mb-1">Record-keeping tool only</p>
             <p>This page helps you keep records of your income and expenses. It does not provide tax advice, calculate tax liability, or determine what is deductible. Consult a registered tax agent or BAS agent for advice on your tax obligations.</p>
           </div>
@@ -236,14 +236,14 @@ export default function ExpensesPage() {
         {/* Period filter */}
         <div className="mb-5 flex gap-3 flex-wrap">
           <select value={year} onChange={e => setYear(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+            className="px-3 py-2 border border-slate-700 rounded-lg text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none">
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <select value={month} onChange={e => setMonth(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+            className="px-3 py-2 border border-slate-700 rounded-lg text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none">
             {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
-          {loading && <Loader2 className="h-5 w-5 animate-spin text-gray-400 self-center" />}
+          {loading && <Loader2 className="h-5 w-5 animate-spin text-slate-500 self-center" />}
         </div>
 
         {error && (
@@ -252,41 +252,41 @@ export default function ExpensesPage() {
 
         {/* Add expense form */}
         {showForm && (
-          <div className="mb-5 bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">Add Expense Record</h2>
+          <div className="mb-5 bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-5">
+            <h2 className="font-semibold text-slate-100 mb-4">Add Expense Record</h2>
             <form onSubmit={addExpense} className="space-y-3">
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Date</label>
                   <input type="date" required value={form.date}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Category</label>
                   <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                    className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none">
                     {Object.entries(CATEGORIES).map(([k, v]) => (
                       <option key={k} value={k}>{v.label}</option>
                     ))}
                   </select>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Description</label>
                   <input type="text" required maxLength={200} placeholder="e.g. Fuel for lessons — week of 12 May"
                     value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Amount (AUD)</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Amount (AUD)</label>
                   <input type="number" required min="0.01" step="0.01" max="100000" placeholder="0.00"
                     value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none" />
                 </div>
               </div>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowForm(false)}
-                  className="flex-1 py-2 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50">
+                  className="flex-1 py-2 border border-slate-700 text-slate-300 text-sm rounded-lg hover:bg-slate-900">
                   Cancel
                 </button>
                 <button type="submit" disabled={saving}
@@ -302,42 +302,42 @@ export default function ExpensesPage() {
         {/* Summary cards */}
         <div className="grid sm:grid-cols-3 gap-3 mb-5">
           {/* Income from DriveBook */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-xs text-gray-500 mb-1">Income (DriveBook)</p>
-            <p className="text-xl font-bold text-green-600">${(income?.netEarnings ?? 0).toFixed(2)}</p>
-            <p className="text-xs text-gray-400 mt-0.5">
+          <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-4">
+            <p className="text-xs text-slate-400 mb-1">Income (DriveBook)</p>
+            <p className="text-xl font-bold text-emerald-400">${(income?.netEarnings ?? 0).toFixed(2)}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
               Gross ${(income?.grossRevenue ?? 0).toFixed(2)} · Commission -${(income?.commission ?? 0).toFixed(2)}
             </p>
           </div>
 
           {/* Expenses */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-xs text-gray-500 mb-1">Expenses (self-entered)</p>
-            <p className="text-xl font-bold text-red-500">-${totalExpenses.toFixed(2)}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{expenses.length} record{expenses.length !== 1 ? 's' : ''}</p>
+          <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-4">
+            <p className="text-xs text-slate-400 mb-1">Expenses (self-entered)</p>
+            <p className="text-xl font-bold text-rose-400">-${totalExpenses.toFixed(2)}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{expenses.length} record{expenses.length !== 1 ? 's' : ''}</p>
           </div>
 
           {/* Difference — labelled carefully, no "profit" or "tax" language */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-xs text-gray-500 mb-1">Income minus expenses</p>
-            <p className={`text-xl font-bold ${(income?.netEarnings ?? 0) - totalExpenses >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
+          <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-4">
+            <p className="text-xs text-slate-400 mb-1">Income minus expenses</p>
+            <p className={`text-xl font-bold ${((income?.netEarnings ?? 0) - totalExpenses) >= 0 ? 'text-slate-100' : 'text-rose-400'}`}>
               ${((income?.netEarnings ?? 0) - totalExpenses).toFixed(2)}
             </p>
-            <p className="text-xs text-gray-400 mt-0.5">For your records only</p>
+            <p className="text-xs text-slate-500 mt-0.5">For your records only</p>
           </div>
         </div>
 
         {/* Expense breakdown by category */}
         {byCategory.length > 0 && (
-          <div className="mb-5 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-3">Expenses by category</h2>
+          <div className="mb-5 bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-4">
+            <h2 className="text-sm font-semibold text-slate-100 mb-3">Expenses by category</h2>
             <div className="space-y-2">
               {byCategory.map(c => (
                 <div key={c.key} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.color}`}>{c.label}</span>
                   </div>
-                  <span className="text-sm font-semibold text-gray-700">${c.total.toFixed(2)}</span>
+                  <span className="text-sm font-semibold text-slate-100">${c.total.toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -360,45 +360,45 @@ export default function ExpensesPage() {
         )}
 
         {/* Expense list */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">Expense records</h2>
-            <span className="text-xs text-gray-400">{expenses.length} record{expenses.length !== 1 ? 's' : ''}</span>
+        <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-100">Expense records</h2>
+            <span className="text-xs text-slate-400">{expenses.length} record{expenses.length !== 1 ? 's' : ''}</span>
           </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
             </div>
           ) : expenses.length === 0 ? (
-            <div className="py-12 text-center text-gray-400">
+            <div className="py-12 text-center text-slate-400">
               <p className="text-sm">No expense records for this period.</p>
               <button onClick={() => setShowForm(true)}
-                className="mt-3 text-sm text-blue-600 hover:underline">
+                className="mt-3 text-sm text-sky-400 hover:underline">
                 Add your first expense →
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-slate-800">
               {expenses.map(exp => (
-                <div key={exp.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                <div key={exp.id} className="flex items-center justify-between px-4 py-3 hover:bg-slate-900">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${CATEGORIES[exp.category]?.color || 'bg-gray-100 text-gray-700'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${CATEGORIES[exp.category]?.color || 'bg-slate-700 text-slate-100'}`}>
                           {CATEGORIES[exp.category]?.label || exp.category}
                         </span>
-                        <span className="text-xs text-gray-400 shrink-0">
+                        <span className="text-xs text-slate-400 shrink-0">
                           {new Date(exp.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-800 mt-0.5 truncate">{exp.description}</p>
+                      <p className="text-sm text-slate-100 mt-0.5 truncate">{exp.description}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-3">
-                    <span className="text-sm font-semibold text-red-500">-${exp.amount.toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-rose-400">-${exp.amount.toFixed(2)}</span>
                     <button onClick={() => deleteExpense(exp.id)}
-                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                      className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950 rounded-lg transition-colors">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -409,13 +409,13 @@ export default function ExpensesPage() {
         </div>
 
         {/* Footer disclaimer */}
-        <div className="mt-5 bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-500 space-y-1">
-          <p className="font-semibold text-gray-600">About this page</p>
+        <div className="mt-5 bg-slate-900 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-1">
+          <p className="font-semibold text-slate-100">About this page</p>
           <p>• Income figures are sourced directly from DriveBook platform records and cannot be edited here.</p>
           <p>• Expense records are self-entered by you. DriveBook does not verify them.</p>
           <p>• This tool is for your own record-keeping. It does not determine tax liability or deductibility.</p>
           <p>• Export your records and share them with your accountant or registered tax agent.</p>
-          <p>• For tax advice, contact a registered tax agent or the ATO: <a href="https://www.ato.gov.au" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">ato.gov.au</a></p>
+          <p>• For tax advice, contact a registered tax agent or the ATO: <a href="https://www.ato.gov.au" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">ato.gov.au</a></p>
         </div>
 
       </div>

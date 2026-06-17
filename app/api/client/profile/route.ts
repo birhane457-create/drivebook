@@ -16,6 +16,12 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Pagination params
+    const { searchParams } = new URL(req.url)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '10')))
+    const skip = (page - 1) * limit
+
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
@@ -38,6 +44,13 @@ export async function GET(req: NextRequest) {
     // Collect all client IDs linked to this user
     const clientIds = user.clients.map((c) => c.id);
 
+    // Get total count
+    const total = await prisma.booking.count({
+      where: clientIds.length > 0
+        ? { clientId: { in: clientIds } }
+        : { clientId: null },
+    })
+
     // Get user's bookings via clientId only
     const bookingsRaw = await prisma.booking.findMany({
       where: clientIds.length > 0
@@ -54,7 +67,9 @@ export async function GET(req: NextRequest) {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
     });
 
     // De-duplicate bookings in case a record matches both clientId and clientEmail
@@ -155,6 +170,13 @@ export async function GET(req: NextRequest) {
           }
         };
       }),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasMore: page < Math.ceil(total / limit),
+      },
       upcomingCount: activeBookings.filter(b => {
         if (!b.startTime) return false;
         return (b.status === 'CONFIRMED') && (!b.endTime || b.endTime > now);

@@ -81,6 +81,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = bookingSchema.parse(body)
 
+    // Reject legacy instructor add-on / special-service payloads
+    if (
+      Object.prototype.hasOwnProperty.call(body, 'specialServiceId') ||
+      Object.prototype.hasOwnProperty.call(body, 'specialServiceName') ||
+      Object.prototype.hasOwnProperty.call(body, 'specialServiceType') ||
+      Object.prototype.hasOwnProperty.call(body, 'customPackageId') ||
+      Object.prototype.hasOwnProperty.call(body, 'customPackagePrice')
+    ) {
+      return NextResponse.json({
+        error: 'Instructor special services are not supported. Use standard hourly lessons, platform bulk packages (6/10/15h), or PDA test packs configured in instructor settings.'
+      }, { status: 400 })
+    }
+
     const newStart = new Date(data.startTime)
     const newEnd = new Date(data.endTime)
     const now = new Date()
@@ -133,7 +146,9 @@ export async function POST(req: NextRequest) {
 
     // Calculate price — always server-side, never trust client input
     const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60)
+    
     const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
+    
     const platformFee = parseFloat((lessonPrice * PLATFORM_FEE_RATE).toFixed(2))
     const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC')
     const commissionRate = commissionRatePct / 100
@@ -160,41 +175,75 @@ export async function POST(req: NextRequest) {
       // Create booking as PENDING_PAYMENT — no wallet deduction yet.
       // Send the student an email: "your instructor booked a lesson, top up to confirm."
       // This is the natural first contact — they have a real reason to act.
-      const hasConflict = await availabilityService.checkDoubleBooking(
-        session.user.instructorId, newStart, newEnd
-      )
-      if (hasConflict) {
-        return NextResponse.json({ error: 'Time slot already booked' }, { status: 409 })
-      }
-
+      
+      // ── ATOMIC TRANSACTION FOR RACE CONDITION PREVENTION ─────────────────────────
+      // Use Prisma transaction to atomically:
+      // 1. Check for slot conflicts (within transaction lock)
+      // 2. Create booking
+      // This prevents race conditions where multiple requests could book same slot
       const pickupLocation = data.pickupAddress || client.defaultPickupAddress || null
-      const pendingBooking = await prisma.booking.create({
-        data: {
-          instructorId: session.user.instructorId,
-          clientId: data.clientId,
-          clientName: client.name,
-          clientPhone: client.phone,
-          bookingType: data.bookingType,
-          startTime: newStart,
-          endTime: newEnd,
-          duration: durationHours * 60,
-          price: lessonPrice,
-          platformFee,
-          instructorPayout,
-          commissionRate,
-          isFirstBooking,
-          isPaid: false,
-          pickupAddress: pickupLocation,
-          pickupLatitude: data.pickupLatitude ?? client.defaultPickupLat,
-          pickupLongitude: data.pickupLongitude ?? client.defaultPickupLng,
-          dropoffAddress: data.dropoffAddress,
-          notes: data.notes,
-          status: 'PENDING_PAYMENT',
-          createdBy: 'instructor',
-          originalStartTime: newStart,
-        } as any,
-        include: { client: true, instructor: { include: { user: true } } }
-      })
+      
+      let pendingBooking
+      try {
+        pendingBooking = await prisma.$transaction(async (tx) => {
+          // Within transaction: check for overlapping bookings
+          const overlappingBookings = await tx.booking.findFirst({
+            where: {
+              instructorId: session.user.instructorId,
+              status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+              OR: [
+                // Booking starts during this slot
+                { AND: [{ startTime: { gte: newStart } }, { startTime: { lt: newEnd } }] },
+                // Booking ends during this slot
+                { AND: [{ endTime: { gt: newStart } }, { endTime: { lte: newEnd } }] },
+                // Booking completely encompasses this slot
+                { AND: [{ startTime: { lte: newStart } }, { endTime: { gte: newEnd } }] }
+              ]
+            }
+          })
+
+          if (overlappingBookings) {
+            throw new Error('SLOT_CONFLICT')
+          }
+
+          // Create booking atomically within the transaction
+          return await tx.booking.create({
+            data: {
+              instructorId: session.user.instructorId,
+              clientId: data.clientId,
+              clientName: client.name,
+              clientPhone: client.phone,
+              bookingType: data.bookingType,
+              startTime: newStart,
+              endTime: newEnd,
+              duration: durationHours * 60,
+              price: lessonPrice,
+              platformFee,
+              instructorPayout,
+              commissionRate,
+              isFirstBooking,
+              isPaid: false,
+              pickupAddress: pickupLocation,
+              pickupLatitude: data.pickupLatitude ?? client.defaultPickupLat,
+              pickupLongitude: data.pickupLongitude ?? client.defaultPickupLng,
+              dropoffAddress: data.dropoffAddress,
+              notes: data.notes,
+              status: 'PENDING_PAYMENT',
+              createdBy: 'instructor',
+              originalStartTime: newStart,
+              // legacy add-on fields removed — platform no longer stores instructor add-on selections here
+            } as any,
+            include: { client: true, instructor: { include: { user: true } } }
+          })
+        })
+      } catch (txError) {
+        if ((txError as Error).message === 'SLOT_CONFLICT') {
+          return NextResponse.json({ 
+            error: 'Time slot already booked by another request. Please select a different time.' 
+          }, { status: 409 })
+        }
+        throw txError
+      }
 
       // Send "top up to confirm" email — includes set-password link if account is new
       try {
@@ -283,116 +332,136 @@ export async function POST(req: NextRequest) {
       }, { status: 201 })
     }
 
-    // ── AVAILABILITY CHECK ────────────────────────────────────────────────────
-    // NOTE: Pre-check outside transaction for fast rejection. The definitive
-    // check is INSIDE the transaction below to prevent TOCTOU race conditions.
-    const hasConflict = await availabilityService.checkDoubleBooking(
-      session.user.instructorId,
-      newStart,
-      newEnd
-    )
-    if (hasConflict) {
-      return NextResponse.json({ error: 'Time slot already booked' }, { status: 409 })
-    }
+    // ── AVAILABILITY CHECK & BOOKING CREATION (atomic transaction) ────────────
+    // NO pre-check outside transaction — eliminates TOCTOU race condition.
+    // All validation (slot conflict, wallet, etc) happens atomically within transaction.
+    // If check fails, entire transaction rolls back (no partial booking created).
 
     // ── CREATE BOOKING + DEDUCT WALLET (atomic) ───────────────────────────────
-    const booking = await prisma.$transaction(async (tx) => {
-      // Pickup location: use provided value or fall back to client's default
-      const pickupLocation = data.pickupAddress || client.defaultPickupAddress || null
-      const pickupLat = data.pickupLatitude ?? client.defaultPickupLat
-      const pickupLng = data.pickupLongitude ?? client.defaultPickupLng
+    let booking
+    try {
+      booking = await prisma.$transaction(async (tx) => {
+        // First: Check for overlapping bookings with current read lock
+        const overlappingBookings = await tx.booking.findFirst({
+          where: {
+            instructorId: session.user.instructorId,
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+            OR: [
+              { AND: [{ startTime: { gte: newStart } }, { startTime: { lt: newEnd } }] },
+              { AND: [{ endTime: { gt: newStart } }, { endTime: { lte: newEnd } }] },
+              { AND: [{ startTime: { lte: newStart } }, { endTime: { gte: newEnd } }] }
+            ]
+          }
+        })
 
-      // Re-check wallet balance inside transaction to prevent race conditions
-      const wallet = await tx.clientWallet.findUnique({ where: { userId: client.userId! } })
-      if (!wallet) throw new Error('Wallet not found')
-
-      const txns = await tx.walletTransaction.findMany({
-        where: { walletId: wallet.id, status: 'CONFIRMED' }
-      })
-      const txBalance = txns.reduce((sum, t) => t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
-      if (txBalance < lessonPrice) throw new Error('INSUFFICIENT_BALANCE')
-
-      // ── Definitive slot conflict check inside transaction (prevents TOCTOU race) ──
-      const slotConflict = await tx.booking.findFirst({
-        where: {
-          instructorId: session.user.instructorId,
-          status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
-          OR: [
-            { startTime: { lte: newStart }, endTime: { gt: newStart } },
-            { startTime: { lt: newEnd }, endTime: { gte: newEnd } },
-            { startTime: { gte: newStart }, endTime: { lte: newEnd } },
-          ],
-        },
-        select: { id: true },
-      })
-      if (slotConflict) throw new Error('SLOT_TAKEN')
-
-      // Deduct from wallet (update both stored balance and transaction log)
-      await tx.clientWallet.update({
-        where: { id: wallet.id },
-        data: { balance: { decrement: lessonPrice } },
-      })
-      await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'DEBIT',
-          amount: lessonPrice,
-          description: `Lesson booking — ${newStart.toLocaleDateString('en-AU')} ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`,
-          status: 'CONFIRMED',
+        if (overlappingBookings) {
+          throw new Error('SLOT_CONFLICT')
         }
-      })
 
-      // Create booking
-      const newBooking = await tx.booking.create({
-        data: {
-          instructorId: session.user.instructorId,
-          clientId: data.clientId,
-          clientName: client.name,
-          clientPhone: client.phone,
-          bookingType: data.bookingType,
-          startTime: newStart,
-          endTime: newEnd,
-          duration: durationHours * 60,
-          price: lessonPrice,
-          platformFee,
-          instructorPayout,
-          commissionRate,
-          isFirstBooking,
-          isPaid: true,
-          paidAt: now,
-          pickupAddress: pickupLocation,
-          pickupLatitude: pickupLat,
-          pickupLongitude: pickupLng,
-          dropoffAddress: data.dropoffAddress,
-          notes: data.notes,
-          status: 'CONFIRMED',
-          createdBy: 'instructor',
-          originalStartTime: newStart,
-        } as any,
-        include: {
-          client: true,
-          instructor: { include: { user: true } }
-        }
-      })
+        // Second: All checks passed, proceed with booking creation and wallet deduction
+        const pickupLocation = data.pickupAddress || client.defaultPickupAddress || null
+        const pickupLat = data.pickupLatitude ?? client.defaultPickupLat
+        const pickupLng = data.pickupLongitude ?? client.defaultPickupLng
 
-      // Create transaction record
-      await (tx as any).transaction.create({
-        data: {
-          bookingId: newBooking.id,
-          instructorId: session.user.instructorId,
-          type: 'BOOKING_PAYMENT',
-          amount: lessonPrice,
-          platformFee,
-          instructorPayout,
-          commissionRate,
-          status: 'COMPLETED',
-          description: `Booking payment — ${isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
-          metadata: { isFirstBooking },
-        }
-      })
+        // Re-check wallet balance inside transaction to prevent race conditions
+        const wallet = await tx.clientWallet.findUnique({ where: { userId: client.userId! } })
+        if (!wallet) throw new Error('Wallet not found')
 
-      return newBooking
-    }, { maxWait: 5000, timeout: 10000 })
+        const txns = await tx.walletTransaction.findMany({
+          where: { walletId: wallet.id, status: 'CONFIRMED' }
+        })
+        const txBalance = txns.reduce((sum, t) => t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
+        if (txBalance < lessonPrice) throw new Error('INSUFFICIENT_BALANCE')
+
+        // ── Definitive slot conflict check inside transaction (prevents TOCTOU race) ──
+        const slotConflict = await tx.booking.findFirst({
+          where: {
+            instructorId: session.user.instructorId,
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+            OR: [
+              { startTime: { lte: newStart }, endTime: { gt: newStart } },
+              { startTime: { lt: newEnd }, endTime: { gte: newEnd } },
+              { startTime: { gte: newStart }, endTime: { lte: newEnd } },
+            ],
+          },
+          select: { id: true },
+        })
+        if (slotConflict) throw new Error('SLOT_TAKEN')
+
+        // Deduct from wallet (update both stored balance and transaction log)
+        await tx.clientWallet.update({
+          where: { id: wallet.id },
+          data: { balance: { decrement: lessonPrice } },
+        })
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'DEBIT',
+            amount: lessonPrice,
+            description: `Lesson booking — ${newStart.toLocaleDateString('en-AU')} ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`,
+            status: 'CONFIRMED',
+          }
+        })
+
+        // Create booking
+        const newBooking = await tx.booking.create({
+          data: {
+            instructorId: session.user.instructorId,
+            clientId: data.clientId,
+            clientName: client.name,
+            clientPhone: client.phone,
+            bookingType: data.bookingType,
+            startTime: newStart,
+            endTime: newEnd,
+            duration: durationHours * 60,
+            price: lessonPrice,
+            platformFee,
+            instructorPayout,
+            commissionRate,
+            isFirstBooking,
+            isPaid: true,
+            paidAt: now,
+            pickupAddress: pickupLocation,
+            pickupLatitude: pickupLat,
+            pickupLongitude: pickupLng,
+            dropoffAddress: data.dropoffAddress,
+            notes: data.notes,
+            status: 'CONFIRMED',
+            createdBy: 'instructor',
+            originalStartTime: newStart,
+            // legacy add-on fields removed — platform no longer stores instructor add-on selections here
+          } as any,
+          include: {
+            client: true,
+            instructor: { include: { user: true } }
+          }
+        })
+
+        // Create transaction record
+        await (tx as any).transaction.create({
+          data: {
+            bookingId: newBooking.id,
+            instructorId: session.user.instructorId,
+            type: 'BOOKING_PAYMENT',
+            amount: lessonPrice,
+            platformFee,
+            instructorPayout,
+            commissionRate,
+            status: 'COMPLETED',
+            description: `Booking payment — ${isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
+            metadata: { isFirstBooking },
+          }
+        })
+
+        return newBooking
+      }, { maxWait: 5000, timeout: 10000 })
+    } catch (error) {
+      // Handle transaction errors from the second booking (with sufficient balance)
+      if (error instanceof Error && error.message === 'SLOT_TAKEN') {
+        throw new Error('SLOT_ALREADY_BOOKED')
+      }
+      throw error
+    }
 
     // Audit log — record instructor-created booking (non-critical)
     try {
@@ -483,12 +552,22 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, booking }, { status: 201 })
   } catch (error: any) {
-    if (error?.message === 'INSUFFICIENT_BALANCE') {
-      return NextResponse.json({ error: 'Insufficient wallet balance', insufficientBalance: true }, { status: 422 })
+    // Handle race condition: slot already booked
+    if (error?.message === 'SLOT_ALREADY_BOOKED' || error?.message === 'SLOT_TAKEN') {
+      return NextResponse.json({ 
+        error: 'Time slot was just taken. Please choose another time.',
+        slotConflict: true 
+      }, { status: 409 })
     }
-    if (error?.message === 'SLOT_TAKEN') {
-      return NextResponse.json({ error: 'Time slot was just taken. Please choose another time.' }, { status: 409 })
+    
+    // Handle wallet insufficient balance
+    if (error?.message === 'INSUFFICIENT_BALANCE' || error?.message === 'WALLET_INSUFFICIENT') {
+      return NextResponse.json({ 
+        error: 'Insufficient wallet balance', 
+        insufficientBalance: true 
+      }, { status: 422 })
     }
+    
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })
     }

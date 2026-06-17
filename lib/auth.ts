@@ -2,6 +2,7 @@ import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
+import { normalizeEmail } from './auth-email'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -16,16 +17,20 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials')
         }
 
+        const normalizedEmail = normalizeEmail(credentials.email)
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-          include: {
-            clients: true,
-            instructor: true
-          }
+          where: { email: normalizedEmail },
+          include: { clients: true, instructor: true }
         })
 
         if (!user || !user.password) {
           throw new Error('Invalid credentials')
+        }
+
+        // Instructor-only email verification enforcement
+        if (user.role === 'INSTRUCTOR' && !user.emailVerified) {
+          throw new Error('Please verify your email before logging in.')
         }
 
         const isCorrectPassword = await bcrypt.compare(

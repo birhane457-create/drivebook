@@ -32,12 +32,12 @@ interface Dispute {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  needs_response: 'bg-red-100 text-red-800',
-  warning_needs_response: 'bg-orange-100 text-orange-800',
-  under_review: 'bg-yellow-100 text-yellow-800',
-  charge_refunded: 'bg-blue-100 text-blue-800',
-  won: 'bg-green-100 text-green-800',
-  lost: 'bg-gray-100 text-gray-700',
+  needs_response: 'bg-red-900/40 text-red-300',
+  warning_needs_response: 'bg-orange-900/40 text-orange-300',
+  under_review: 'bg-yellow-900/40 text-yellow-300',
+  charge_refunded: 'bg-blue-900/40 text-blue-300',
+  won: 'bg-green-900/40 text-green-300',
+  lost: 'bg-slate-800 text-slate-300',
 };
 
 const OPEN_STATUSES = new Set([
@@ -100,11 +100,11 @@ export default function AdminDisputesPage() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Disputes</h1>
-          <p className="text-sm text-gray-500 mt-1">Stripe chargebacks and their resolution status</p>
+          <h1 className="text-2xl font-bold text-slate-100">Disputes</h1>
+          <p className="text-sm text-slate-500 mt-1">Stripe chargebacks and their resolution status</p>
         </div>
         {openCount > 0 && (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-900/40 text-red-300">
             {openCount} open
           </span>
         )}
@@ -119,7 +119,7 @@ export default function AdminDisputesPage() {
             className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
               filter === f
                 ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
+                : 'bg-slate-900 text-slate-400 border border-slate-700 hover:border-slate-600'
             }`}
           >
             {f}
@@ -128,15 +128,15 @@ export default function AdminDisputesPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4 mb-6 text-red-700 text-sm">
+        <div className="rounded-lg bg-red-900/20 border border-red-700/50 p-4 mb-6 text-red-700 text-sm">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="text-center py-16 text-gray-400">Loading disputes…</div>
+        <div className="text-center py-16 text-slate-500">Loading disputes…</div>
       ) : disputes.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-slate-500">
           {filter === 'open' ? 'No open disputes — great sign.' : 'No disputes found.'}
         </div>
       ) : (
@@ -144,27 +144,27 @@ export default function AdminDisputesPage() {
           {disputes.map((d) => (
             <div
               key={d.id}
-              className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
+              className="bg-slate-900 rounded-xl border border-slate-800 border border-slate-700 shadow-sm p-5"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   {/* Header row */}
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide ${STATUS_STYLES[d.status] ?? 'bg-gray-100 text-gray-600'}`}
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide ${STATUS_STYLES[d.status] ?? 'bg-slate-800 text-slate-400'}`}
                     >
                       {d.status.replace(/_/g, ' ')}
                     </span>
                     {d.payoutFrozen && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-900/40 text-orange-300">
                         Payout frozen
                       </span>
                     )}
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-slate-500">
                       Opened {formatDate(d.createdAt)}
                     </span>
                     {d.resolvedAt && (
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-slate-500">
                         · Resolved {formatDate(d.resolvedAt)}
                       </span>
                     )}
@@ -173,25 +173,25 @@ export default function AdminDisputesPage() {
                   {/* Amount + reason */}
                   <div className="flex flex-wrap gap-6 mb-3">
                     <div>
-                      <p className="text-xs text-gray-500">Amount at risk</p>
-                      <p className="text-lg font-bold text-gray-900">{formatAUD(d.amount)}</p>
+                      <p className="text-xs text-slate-500">Amount at risk</p>
+                      <p className="text-lg font-bold text-slate-100">{formatAUD(d.amount)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Reason</p>
-                      <p className="text-sm font-medium text-gray-800 capitalize">
+                      <p className="text-xs text-slate-500">Reason</p>
+                      <p className="text-sm font-medium text-slate-200 capitalize">
                         {d.reason.replace(/_/g, ' ')}
                       </p>
                     </div>
                     {d.instructor && (
                       <div>
-                        <p className="text-xs text-gray-500">Instructor</p>
-                        <p className="text-sm font-medium text-gray-800">{d.instructor.name}</p>
+                        <p className="text-xs text-slate-500">Instructor</p>
+                        <p className="text-sm font-medium text-slate-200">{d.instructor.name}</p>
                       </div>
                     )}
                     {d.booking && (
                       <div>
-                        <p className="text-xs text-gray-500">Booking</p>
-                        <p className="text-sm font-medium text-gray-800">
+                        <p className="text-xs text-slate-500">Booking</p>
+                        <p className="text-sm font-medium text-slate-200">
                           {d.booking.clientName ?? '—'}
                           {d.booking.startTime
                             ? ` · ${formatDate(d.booking.startTime)}`
@@ -202,7 +202,7 @@ export default function AdminDisputesPage() {
                   </div>
 
                   {/* Stripe IDs */}
-                  <div className="flex flex-wrap gap-4 text-xs text-gray-400 font-mono">
+                  <div className="flex flex-wrap gap-4 text-xs text-slate-500 font-mono">
                     <span>Dispute: {d.stripeDisputeId}</span>
                     <span>Charge: {d.stripeChargeId}</span>
                     {d.bookingId && <span>Booking: {d.bookingId}</span>}
@@ -215,7 +215,7 @@ export default function AdminDisputesPage() {
                     href={`https://dashboard.stripe.com/disputes/${d.stripeDisputeId}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:border-gray-400 transition-colors"
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 transition-colors"
                   >
                     View in Stripe ↗
                   </a>
@@ -223,7 +223,7 @@ export default function AdminDisputesPage() {
                   {d.bookingId && (
                     <a
                       href={`/admin/bookings?id=${d.bookingId}`}
-                      className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:border-gray-400 transition-colors"
+                      className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 transition-colors"
                     >
                       View booking
                     </a>
@@ -244,7 +244,7 @@ export default function AdminDisputesPage() {
 
               {/* Lost dispute — adjustment notice */}
               {d.status === 'lost' && (
-                <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">
+                <div className="mt-3 rounded-lg bg-slate-800 border border-slate-700 p-3 text-xs text-slate-400">
                   {d.adjustmentCreated
                     ? '✓ Recovery adjustment created — will be deducted from instructor\'s next payout.'
                     : '⚠ No recovery adjustment found — check if instructor was already paid out for this booking.'}

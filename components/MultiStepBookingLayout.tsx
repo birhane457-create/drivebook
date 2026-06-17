@@ -23,13 +23,7 @@ export default function MultiStepBookingLayout({ currentStep, children }: MultiS
 
     let stepNumber = 3;
 
-    // Add test package step if instructor offers it
-    if (bookingState.instructor?.offersTestPackage) {
-      steps.push({ number: stepNumber, label: 'Test' });
-      stepNumber++;
-    }
-
-    // Add book type step
+    // Add schedule step directly; test package is offered inline in summary
     steps.push({ number: stepNumber, label: 'Schedule' });
     stepNumber++;
 
@@ -52,9 +46,9 @@ export default function MultiStepBookingLayout({ currentStep, children }: MultiS
   const steps = generateSteps();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
       {/* Step Indicator */}
-      <div className="bg-white border-b">
+      <div className="bg-gradient-to-r from-white/5 to-white/2 border-b border-white/6 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto">
           <StepIndicator currentStep={currentStep} steps={steps} />
         </div>
@@ -62,17 +56,17 @@ export default function MultiStepBookingLayout({ currentStep, children }: MultiS
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Main Content */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              {children}
-            </div>
-          </div>
-
-          {/* Right Column - Booking Summary (Desktop Only) */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Left Column - Booking Summary Sidebar (Desktop Only) */}
           <div className="hidden lg:block">
             <BookingSummary />
+          </div>
+
+          {/* Right Column - Main Content (lg:col-span-3) */}
+          <div className="lg:col-span-3">
+            <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-6 border border-white/10 backdrop-blur-sm">
+              {children}
+            </div>
           </div>
         </div>
       </div>

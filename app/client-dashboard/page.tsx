@@ -69,6 +69,13 @@ interface ProfileData {
   wallet: WalletData;
 }
 
+interface Service {
+  name: string;
+  duration?: number;
+  price?: number;
+  includes?: string[];
+}
+
 interface InstructorData {
   id: string;
   name: string;
@@ -85,8 +92,8 @@ interface InstructorData {
   averageRating: number;
   totalReviews: number;
   offersTestPackage: boolean;
-  services: string[];
-  lessonPackages?: Array<{ id: string; name: string; durationMinutes: number; price: number; description: string; isActive: boolean }>;
+  services: Service[];
+  // legacy `lessonPackages` removed — packages are platform-managed (PDA) now
 }
 
 interface CurrentInstructorData {
@@ -108,6 +115,7 @@ export default function ClientDashboard() {
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [currentInstructor, setCurrentInstructor] = useState<CurrentInstructorData | null>(null);
+  const [averagePerformance, setAveragePerformance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('bookings');
   const [showAddCredits, setShowAddCredits] = useState(false);
@@ -167,10 +175,11 @@ export default function ClientDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [profileRes, walletRes, instructorRes] = await Promise.all([
+      const [profileRes, walletRes, instructorRes, performanceRes] = await Promise.all([
         fetch('/api/client/profile'),
         fetch('/api/client/wallet'),
-        fetch('/api/client/current-instructor')
+        fetch('/api/client/current-instructor'),
+        fetch('/api/client/my-performance')
       ]);
 
       if (profileRes.ok && walletRes.ok) {
@@ -187,6 +196,11 @@ export default function ClientDashboard() {
         const instructorData = await instructorRes.json();
         setCurrentInstructor(instructorData);
       }
+
+      if (performanceRes.ok) {
+        const performanceData = await performanceRes.json();
+        setAveragePerformance(performanceData.averagePerformance);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -196,10 +210,10 @@ export default function ClientDashboard() {
 
   if (status === 'loading' || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading your dashboard...</p>
+          <p className="text-slate-400">Loading your dashboard...</p>
         </div>
       </div>
     );
@@ -207,16 +221,17 @@ export default function ClientDashboard() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-600">Failed to load dashboard</p>
+          <p className="text-slate-400">Failed to load dashboard</p>
         </div>
       </div>
     );
   }
 
   const upcomingBookings = profile.bookings.filter(b => b.status === 'upcoming');
+  const awaitingPaymentBookings = profile.bookings.filter(b => b.status === 'awaiting_payment');
   const pastBookings = profile.bookings.filter(b => b.status === 'completed');
   const usagePercent = profile.wallet.totalPaid > 0 
     ? (profile.wallet.totalSpent / profile.wallet.totalPaid) * 100 
@@ -258,14 +273,14 @@ export default function ClientDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-20">
+    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
       {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8">
+      <header className="bg-slate-900/60 border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Welcome back, {profile.user.name}!</h1>
-              <p className="text-blue-100 mt-2">Manage your bookings and credits</p>
+              <p className="text-blue-200 mt-2">Track your learning progress</p>
             </div>
 
           </div>
@@ -275,29 +290,29 @@ export default function ClientDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8">
         {/* Success Banner */}
         {showSuccessBanner && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+          <div className="mb-6 p-4 bg-green-900/20 border border-green-700/50 rounded-xl flex items-start gap-3">
             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-green-900">Booking confirmed!</p>
-              <p className="text-sm text-green-700">Your lesson(s) have been booked successfully. Check your email for confirmation.</p>
+              <p className="font-semibold text-green-300">Booking confirmed!</p>
+              <p className="text-sm text-green-400/80">Your lesson(s) have been booked successfully. Check your email for confirmation.</p>
             </div>
           </div>
         )}
 
         {/* Pickup Location */}
         {profile?.user?.pickupLocation && (
-          <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-            <p className="text-sm font-semibold text-indigo-900 mb-1">📍 Your Pickup Location</p>
-            <p className="text-indigo-700">{profile.user.pickupLocation}</p>
+          <div className="mb-6 p-4 bg-indigo-900/20 border border-indigo-700/50 rounded-xl">
+            <p className="text-sm font-semibold text-indigo-300 mb-1">📍 Your Pickup Location</p>
+            <p className="text-indigo-400">{profile.user.pickupLocation}</p>
           </div>
         )}
 
         {/* Current Instructor Card */}
         {currentInstructor?.currentInstructor && (
-          <div className="mb-8 bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden">
+          <div className="mb-8 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
             {/* Card header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-5 py-3">
-              <p className="text-white text-sm font-semibold">👨‍🏫 Your Current Instructor</p>
+            <div className="bg-blue-600/20 border-b border-white/10 px-5 py-3">
+              <p className="text-blue-300 text-sm font-semibold">👨‍🏫 Your Current Instructor</p>
             </div>
 
             <div className="p-5">
@@ -308,11 +323,11 @@ export default function ClientDashboard() {
                     <img
                       src={currentInstructor.currentInstructor.profileImage}
                       alt={currentInstructor.currentInstructor.name}
-                      className="w-20 h-20 rounded-full object-cover border-2 border-blue-200"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-blue-700/50"
                     />
                   ) : (
-                    <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center border-2 border-blue-200">
-                      <span className="text-3xl font-bold text-blue-600">
+                    <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center border-2 border-blue-700/50">
+                      <span className="text-3xl font-bold text-blue-400">
                         {currentInstructor.currentInstructor.name.charAt(0)}
                       </span>
                     </div>
@@ -321,20 +336,20 @@ export default function ClientDashboard() {
 
                 {/* Name + rating + bio */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xl font-bold text-gray-900 leading-tight">
+                  <h3 className="text-xl font-bold text-slate-100 leading-tight">
                     {currentInstructor.currentInstructor.name}
                   </h3>
                   <div className="flex items-center gap-1 mt-1">
                     {[...Array(5)].map((_, i) => (
                       <Star key={i} className={`w-3.5 h-3.5 ${i < Math.round(currentInstructor.currentInstructor!.averageRating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
                     ))}
-                    <span className="text-xs text-gray-500 ml-1">
+                    <span className="text-xs text-slate-400 ml-1">
                       {currentInstructor.currentInstructor.averageRating.toFixed(1)}
                       {currentInstructor.currentInstructor.totalReviews > 0 && ` (${currentInstructor.currentInstructor.totalReviews})`}
                     </span>
                   </div>
                   {currentInstructor.currentInstructor.bio && (
-                    <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                    <p className="text-sm text-slate-400 mt-2 line-clamp-2">
                       {currentInstructor.currentInstructor.bio}
                     </p>
                   )}
@@ -346,10 +361,10 @@ export default function ClientDashboard() {
                     <img
                       src={currentInstructor.currentInstructor.carImage}
                       alt="Training vehicle"
-                      className="w-28 h-20 object-cover rounded-lg border border-gray-200"
+                      className="w-28 h-20 object-cover rounded-lg border border-slate-700"
                     />
                     {(currentInstructor.currentInstructor.carMake || currentInstructor.currentInstructor.carModel) && (
-                      <p className="text-xs text-gray-400 text-center mt-1">
+                      <p className="text-xs text-slate-500 text-center mt-1">
                         {[currentInstructor.currentInstructor.carMake, currentInstructor.currentInstructor.carModel, currentInstructor.currentInstructor.carYear].filter(Boolean).join(' ')}
                       </p>
                     )}
@@ -357,27 +372,43 @@ export default function ClientDashboard() {
                 )}
               </div>
 
-              {/* Pricing section */}
+              {/* Special Services section - Dynamic based on instructor setup */}
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {/* Standard lesson */}
-                <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700">Standard Lesson</p>
-                    <p className="text-xs text-gray-500">per hour</p>
-                  </div>
-                  <p className="text-base font-bold text-blue-700">${currentInstructor.currentInstructor.hourlyRate.toFixed(2)}</p>
-                </div>
-
-                {/* Lesson packages (PDA, mock test, etc.) */}
-                {currentInstructor.currentInstructor.lessonPackages?.map(pkg => (
-                  <div key={pkg.id} className="flex items-center justify-between bg-indigo-50 rounded-lg px-3 py-2">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-700">{pkg.name}</p>
-                      <p className="text-xs text-gray-500">{pkg.durationMinutes}min</p>
+                {currentInstructor.currentInstructor.services?.map((service, idx) => {
+                  // Standard lesson shows hourly rate
+                  if (service.name === 'Regular Lesson') {
+                    return (
+                      <div key={idx} className="flex items-center justify-between bg-blue-900/20 border border-blue-700/30 rounded-xl px-3 py-2">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-300">{service.name}</p>
+                          <p className="text-xs text-slate-400">per hour</p>
+                        </div>
+                        <p className="text-base font-bold text-blue-400">${currentInstructor.currentInstructor!.hourlyRate.toFixed(2)}</p>
+                      </div>
+                    );
+                  }
+                  
+                  // Other services show their configured pricing
+                  return (
+                    <div key={idx} className="flex items-center justify-between bg-indigo-900/20 border border-indigo-700/30 rounded-xl px-3 py-2">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-300">{service.name}</p>
+                        {service.duration && (
+                          <p className="text-xs text-slate-400">
+                            {service.duration >= 60 
+                              ? `${Math.floor(service.duration / 60)}h${service.duration % 60 > 0 ? ` ${service.duration % 60}m` : ''}` 
+                              : `${service.duration}m`}
+                          </p>
+                        )}
+                      </div>
+                      {service.price ? (
+                        <p className="text-base font-bold text-indigo-400">${service.price.toFixed(2)}</p>
+                      ) : (
+                        <p className="text-xs text-slate-400">Contact</p>
+                      )}
                     </div>
-                    <p className="text-base font-bold text-indigo-700">${pkg.price.toFixed(2)}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Car info on mobile (below pricing) */}
@@ -386,10 +417,10 @@ export default function ClientDashboard() {
                   <img
                     src={currentInstructor.currentInstructor.carImage}
                     alt="Training vehicle"
-                    className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                    className="w-full h-32 object-cover rounded-lg border border-slate-700"
                   />
                   {(currentInstructor.currentInstructor.carMake || currentInstructor.currentInstructor.carModel) && (
-                    <p className="text-xs text-gray-400 text-center mt-1">
+                    <p className="text-xs text-slate-500 text-center mt-1">
                       {[currentInstructor.currentInstructor.carMake, currentInstructor.currentInstructor.carModel, currentInstructor.currentInstructor.carYear].filter(Boolean).join(' ')}
                     </p>
                   )}
@@ -414,7 +445,7 @@ export default function ClientDashboard() {
                     }
                     router.push('/client-dashboard/book-lesson?newInstructor=true');
                   }}
-                  className="px-4 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition text-sm"
+                  className="px-4 py-2.5 bg-white/10 text-slate-200 font-semibold rounded-lg hover:bg-white/20 transition text-sm"
                 >
                   Switch
                 </button>
@@ -425,110 +456,101 @@ export default function ClientDashboard() {
 
         {/* Standalone package + wallet credits card */}
         {currentInstructor?.packageInfo && (
-          <div className="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-600 to-purple-800 px-5 py-3 flex items-center justify-between">
-              <p className="text-white text-sm font-semibold">📦 Your Package & Credits</p>
-              <span className="text-purple-200 text-xs">Wallet balance: <span className="text-white font-bold">${profile?.wallet.creditsRemaining?.toFixed(2) ?? '0.00'}</span></span>
+          <div className="mb-6 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
+            <div className="bg-violet-900/30 border-b border-white/10 px-5 py-3 flex items-center justify-between">
+              <p className="text-blue-300 text-sm font-semibold">📦 Your Package & Credits</p>
+              <span className="text-violet-400 text-xs">Wallet balance: <span className="text-white font-bold">${profile?.wallet.creditsRemaining?.toFixed(2) ?? '0.00'}</span></span>
             </div>
             <div className="p-5">
               <div className="grid grid-cols-3 gap-4 text-center mb-4">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Total</p>
-                  <p className="text-xl font-bold text-gray-900">{currentInstructor.packageInfo.totalHours}h</p>
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-400 mb-1">Total</p>
+                  <p className="text-xl font-bold text-slate-100">{currentInstructor.packageInfo.totalHours}h</p>
                 </div>
-                <div className="bg-orange-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Used</p>
-                  <p className="text-xl font-bold text-orange-600">{currentInstructor.packageInfo.usedHours}h</p>
+                <div className="bg-orange-900/20 rounded-lg p-3">
+                  <p className="text-xs text-slate-400 mb-1">Used</p>
+                  <p className="text-xl font-bold text-orange-400">{currentInstructor.packageInfo.usedHours}h</p>
                 </div>
-                <div className="bg-green-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Remaining</p>
-                  <p className="text-xl font-bold text-green-600">{currentInstructor.packageInfo.remainingHours}h</p>
+                <div className="bg-green-900/20 rounded-lg p-3">
+                  <p className="text-xs text-slate-400 mb-1">Remaining</p>
+                  <p className="text-xl font-bold text-green-400">{currentInstructor.packageInfo.remainingHours}h</p>
                 </div>
               </div>
               {/* Progress bar */}
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+              <div className="w-full bg-slate-700 rounded-full h-2 mb-3">
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all"
                   style={{ width: `${currentInstructor.packageInfo.totalHours > 0 ? (currentInstructor.packageInfo.usedHours / currentInstructor.packageInfo.totalHours) * 100 : 0}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-slate-400 text-center">
                 Credits are instructor-agnostic — your wallet balance can be used with any instructor.
                 {currentInstructor.packageInfo.expiryDate && ` Expires ${new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU')}.`}
               </p>
             </div>
           </div>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          {/* Total Credits Added */}
-          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border-t-4 border-blue-500">
+        {/* Learning Progress Stats - New Focus */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {/* Lessons Taken */}
+          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 p-4 md:p-6 border-t-4 border-blue-500 shadow-lg shadow-slate-950/20 hover:bg-slate-900/80 transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-semibold">Total Credits Added</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
-                  ${profile.wallet.totalPaid?.toFixed(2) || '0.00'}
+                <p className="text-slate-400 text-sm font-semibold">Lessons Taken</p>
+                <p className="text-2xl md:text-3xl font-bold text-slate-100 mt-2">
+                  {pastBookings.length}
                 </p>
+                {(upcomingBookings.length > 0 || awaitingPaymentBookings.length > 0) && (
+                  <p className="text-xs text-blue-300 mt-1">
+                    + {upcomingBookings.length + awaitingPaymentBookings.length} upcoming/pending
+                  </p>
+                )}
               </div>
-              <div className="text-4xl">💳</div>
+              <div className="text-4xl">📚</div>
             </div>
           </div>
 
-          {/* Net Booking Costs */}
-          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border-t-4 border-purple-500">
+          {/* Package Usage */}
+          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 p-4 md:p-6 border-t-4 border-green-500 shadow-lg shadow-slate-950/20 hover:bg-slate-900/80 transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-semibold">Net Booking Costs</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
-                  ${profile.wallet.totalSpent?.toFixed(2) || '0.00'}
+                <p className="text-slate-400 text-sm font-semibold">Package Hours</p>
+                <p className="text-2xl md:text-3xl font-bold text-slate-100 mt-2">
+                  {currentInstructor?.packageInfo?.remainingHours || 0}/{currentInstructor?.packageInfo?.totalHours || 0}h
                 </p>
+                {currentInstructor?.packageInfo?.expiryDate && (
+                  <p className="text-xs text-green-300 mt-1">Expires: {new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })}</p>
+                )}
               </div>
-              <div className="text-4xl">📊</div>
+              <div className="text-4xl">📦</div>
             </div>
           </div>
 
-          {/* Current Balance */}
-          <div className={`rounded-xl shadow-md p-4 md:p-6 border-t-4 ${
-            profile.wallet.creditsRemaining > 0 
-              ? 'bg-white border-green-500' 
-              : 'bg-red-50 border-red-500'
-          }`}>
+          {/* Performance Score */}
+          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 p-4 md:p-6 border-t-4 border-purple-500 shadow-lg shadow-slate-950/20 hover:bg-slate-900/80 transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-semibold">Current Balance</p>
-                <p className={`text-2xl md:text-3xl font-bold mt-2 ${
-                  profile.wallet.creditsRemaining > 0 
-                    ? 'text-gray-900' 
-                    : 'text-red-600'
-                }`}>
-                  ${profile.wallet.creditsRemaining?.toFixed(2) || '0.00'}
+                <p className="text-slate-400 text-sm font-semibold">Performance</p>
+                <p className="text-2xl md:text-3xl font-bold text-slate-100 mt-2">
+                  {averagePerformance ? `${averagePerformance}%` : '—'}
                 </p>
+                <Link href="/client-dashboard/progress" className="text-xs text-purple-300 mt-1 hover:text-purple-200 transition">
+                  View detailed progress →
+                </Link>
               </div>
-              <div className="text-4xl">✨</div>
-            </div>
-          </div>
-
-          {/* Total Hours Booked */}
-          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border-t-4 border-orange-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm font-semibold">Total Hours Booked</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">
-                  {profile.wallet.totalBookedHours || 0}h
-                </p>
-              </div>
-              <div className="text-4xl">⏱️</div>
+              <div className="text-4xl">⭐</div>
             </div>
           </div>
         </div>
 
         {/* Credit Exhaustion Warning — only show if no active bookings */}
-        {profile.wallet.creditsRemaining <= 0 && upcomingBookings.length === 0 && (
-          <div className="mb-8 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-lg">
+        {profile.wallet.creditsRemaining <= 0 && upcomingBookings.length === 0 && awaitingPaymentBookings.length === 0 && (
+          <div className="mb-8 bg-amber-900/20 border-l-4 border-amber-500 p-4 rounded-lg">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-semibold text-amber-900">Credits Exhausted</h3>
-                <p className="text-amber-800 text-sm mt-1">
+                <h3 className="font-semibold text-amber-300">Credits Exhausted</h3>
+                <p className="text-amber-400 text-sm mt-1">
                   You've used all your credits. Add more to continue booking lessons.
                 </p>
                 <button
@@ -543,8 +565,8 @@ export default function ClientDashboard() {
         )}
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-xl shadow-md mb-6 overflow-hidden">
-          <div className="flex border-b border-gray-200">
+        <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 mb-6 overflow-hidden shadow-lg shadow-slate-950/20">
+          <div className="flex border-b border-white/10">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -554,8 +576,8 @@ export default function ClientDashboard() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 px-6 py-4 font-semibold flex items-center justify-center gap-2 transition ${
                     isActive
-                      ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      ? 'border-b-2 border-blue-500 text-blue-400 bg-blue-900/20'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -572,18 +594,18 @@ export default function ClientDashboard() {
               <div className="space-y-6">
                 {/* Upcoming Bookings */}
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <span className="inline-block w-3 h-3 bg-green-500 rounded-full"></span>
+                  <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 bg-green-400 rounded-full"></span>
                     Upcoming Lessons
                   </h3>
                   {upcomingBookings.length > 0 ? (
                     <div className="space-y-3">
                       {upcomingBookings.map((booking) => (
-                        <div key={booking.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-gray-50 transition">
+                        <div key={booking.id} className="border border-slate-700 rounded-lg overflow-hidden">
+                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-800 transition">
                             <div className="flex-1">
-                              <h4 className="font-semibold text-gray-900">{booking.instructor.name}</h4>
-                              <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                              <h4 className="font-semibold text-slate-100">{booking.instructor.name}</h4>
+                              <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-4 h-4" />
                                   {new Date(booking.date).toLocaleDateString()}
@@ -596,14 +618,14 @@ export default function ClientDashboard() {
                                   <BookOpen className="w-4 h-4" />
                                   {booking.duration}h
                                 </span>
-                                <span className="font-semibold text-gray-900">${booking.price.toFixed(2)}</span>
+                                <span className="font-semibold text-slate-100">${booking.price.toFixed(2)}</span>
                               </div>
                             </div>
                             <div className="flex gap-2 ml-4 items-center">
                               {/* Expand contact */}
                               <button
                                 onClick={() => setExpandedBookingId(expandedBookingId === booking.id ? null : booking.id)}
-                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                                 title="Contact instructor"
                               >
                                 {expandedBookingId === booking.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -620,7 +642,7 @@ export default function ClientDashboard() {
                                   instructor: booking.instructor.name,
                                   hourlyRate: booking.instructor.hourlyRate
                                 })}
-                                className="px-2 py-1 md:px-3 md:py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition text-sm font-semibold flex items-center gap-1"
+                                className="px-2 py-1 md:px-3 md:py-2 text-blue-400 border border-blue-600/60 rounded-lg hover:bg-blue-900/20 transition text-sm font-semibold flex items-center gap-1"
                               >
                                 <Edit2 className="w-4 h-4" />
                                 Reschedule
@@ -633,7 +655,7 @@ export default function ClientDashboard() {
                                   instructor: booking.instructor.name,
                                   price: booking.price
                                 })}
-                                className="px-2 py-1 md:px-3 md:py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition text-sm font-semibold"
+                                className="px-2 py-1 md:px-3 md:py-2 text-red-400 border border-red-600/60 rounded-lg hover:bg-red-900/20 transition text-sm font-semibold"
                               >
                                 Cancel
                               </button>
@@ -641,12 +663,12 @@ export default function ClientDashboard() {
                           </div>
                           {/* Expandable contact panel */}
                           {expandedBookingId === booking.id && (
-                            <div className="border-t border-gray-100 bg-blue-50 px-4 py-3 flex flex-wrap gap-4 items-center">
-                              <p className="text-xs font-semibold text-blue-900 w-full">Contact {booking.instructor.name}</p>
+                            <div className="border-t border-slate-700 bg-blue-900/20 px-4 py-3 flex flex-wrap gap-4 items-center">
+                              <p className="text-xs font-semibold text-blue-300 w-full">Contact {booking.instructor.name}</p>
                               {booking.instructor.phone && (
                                 <a
                                   href={`tel:${booking.instructor.phone}`}
-                                  className="flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 bg-white px-3 py-1.5 rounded-lg border border-blue-200 hover:border-blue-400 transition"
+                                  className="flex items-center gap-2 text-sm text-blue-300 hover:text-blue-200 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-blue-400 transition"
                                 >
                                   <Phone className="w-4 h-4" />
                                   {booking.instructor.phone}
@@ -657,7 +679,7 @@ export default function ClientDashboard() {
                                   href={`https://wa.me/${booking.instructor.whatsapp.replace(/\D/g, '')}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center gap-2 text-sm text-green-700 hover:text-green-900 bg-white px-3 py-1.5 rounded-lg border border-green-200 hover:border-green-400 transition"
+                                  className="flex items-center gap-2 text-sm text-green-300 hover:text-green-200 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-green-400 transition"
                                 >
                                   <MessageCircle className="w-4 h-4" />
                                   WhatsApp
@@ -672,14 +694,92 @@ export default function ClientDashboard() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-500 text-center py-8">No upcoming lessons. Book one now!</p>
+                    <p className="text-slate-500 text-center py-8">No upcoming lessons. Book one now!</p>
                   )}
                 </div>
 
+                {/* Awaiting Payment Bookings */}
+                {awaitingPaymentBookings.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                      <span className="inline-block w-3 h-3 bg-amber-400 rounded-full"></span>
+                      Awaiting Payment
+                    </h3>
+                    <div className="space-y-3">
+                      {awaitingPaymentBookings.map((booking) => (
+                        <div key={booking.id} className="border-2 border-amber-600/50 bg-amber-900/20 rounded-lg overflow-hidden">
+                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-amber-900/30 transition">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-slate-100">{booking.instructor.name}</h4>
+                              <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-4 h-4" />
+                                  {new Date(booking.date).toLocaleDateString()}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-4 h-4" />
+                                  {booking.time}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <BookOpen className="w-4 h-4" />
+                                  {booking.duration}h
+                                </span>
+                                <span className="font-semibold text-slate-100">${booking.price.toFixed(2)}</span>
+                              </div>
+                              <p className="text-xs text-amber-400 mt-2 font-semibold">
+                                <Wallet className="w-3 h-3 inline mr-1" />
+                                Payment required to confirm this booking
+                              </p>
+                            </div>
+                            <div className="flex gap-2 ml-4 items-start flex-col">
+                              <button
+                                onClick={() => router.push(`/booking/${booking.id}/confirmation?tab=payment`)}
+                                className="px-3 py-2 text-white font-semibold rounded-lg hover:bg-blue-700 transition text-sm flex items-center gap-1 bg-blue-600 w-full whitespace-nowrap"
+                              >
+                                <CreditCard className="w-4 h-4" />
+                                Pay Now
+                              </button>
+                              <button
+                                onClick={() => setRescheduleModal({
+                                  isOpen: true,
+                                  bookingId: booking.id,
+                                  instructorId: booking.instructor.id,
+                                  date: booking.date,
+                                  time: booking.time,
+                                  duration: booking.duration * 60,
+                                  price: booking.price,
+                                  instructor: booking.instructor.name,
+                                  hourlyRate: booking.instructor.hourlyRate
+                                })}
+                                className="px-3 py-1.5 text-blue-400 border border-blue-600/60 rounded-lg hover:bg-blue-900/20 transition text-sm font-semibold flex items-center gap-1 w-full justify-center"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Reschedule
+                              </button>
+                              <button
+                                onClick={() => setCancelDialog({
+                                  isOpen: true,
+                                  bookingId: booking.id,
+                                  date: booking.date,
+                                  instructor: booking.instructor.name,
+                                  price: booking.price
+                                })}
+                                className="px-3 py-1.5 text-red-400 border border-red-600/60 rounded-lg hover:bg-red-900/20 transition text-sm font-semibold w-full justify-center flex items-center gap-1"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Past Bookings */}
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <span className="inline-block w-3 h-3 bg-gray-400 rounded-full"></span>
+                  <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 bg-slate-500 rounded-full"></span>
                     Completed Lessons
                   </h3>
                   {pastBookings.length > 0 ? (
@@ -687,18 +787,18 @@ export default function ClientDashboard() {
                       {pastBookings.map((booking) => (
                         <div
                           key={booking.id}
-                          className="flex items-center justify-between p-3 md:p-4 border border-gray-200 rounded-lg bg-gray-50"
+                          className="flex items-center justify-between p-3 md:p-4 border border-slate-700 bg-slate-800/50 rounded-lg hover:bg-slate-800 transition"
                         >
                           <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">
+                            <h4 className="font-semibold text-slate-100">
                               {booking.instructor.name}
                             </h4>
-                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                            <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
                                 {new Date(booking.date).toLocaleDateString()}
                               </span>
-                              <span className="font-semibold text-gray-900">
+                              <span className="font-semibold text-slate-100">
                                 ${booking.price.toFixed(2)}
                               </span>
                             </div>
@@ -709,7 +809,7 @@ export default function ClientDashboard() {
                               bookingId: booking.id,
                               instructorName: booking.instructor.name
                             })}
-                            className="px-3 py-1 md:px-4 md:py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition font-semibold flex items-center gap-1"
+                            className="px-3 py-1 md:px-4 md:py-2 text-blue-400 hover:bg-blue-900/20 rounded-lg transition font-semibold flex items-center gap-1"
                           >
                             <Star className="w-4 h-4" />
                             Leave Review
@@ -718,7 +818,7 @@ export default function ClientDashboard() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-500 text-center py-8">No completed lessons yet.</p>
+                    <p className="text-slate-500 text-center py-8">No completed lessons yet.</p>
                   )}
                 </div>
               </div>
@@ -728,13 +828,13 @@ export default function ClientDashboard() {
             {activeTab === 'wallet' && (
               <div className="space-y-6">
                 {/* Usage Overview */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 sm:p-6 border border-blue-200">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">Credit Usage</h3>
+                <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-4 sm:p-6">
+                  <h3 className="text-lg font-bold text-slate-100 mb-4">Credit Usage</h3>
                   
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Total Balance</span>
-                      <span className="text-2xl font-bold text-gray-900">
+                      <span className="text-slate-400">Total Balance</span>
+                      <span className="text-2xl font-bold text-slate-100">
                         ${profile.wallet.totalPaid?.toFixed(2) || '0.00'}
                       </span>
                     </div>
@@ -742,12 +842,12 @@ export default function ClientDashboard() {
                     {/* Progress Bar */}
                     <div className="mt-4">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-gray-600">Used</span>
-                        <span className="text-sm font-semibold text-gray-900">
+                        <span className="text-sm text-slate-400">Used</span>
+                        <span className="text-sm font-semibold text-slate-100">
                           ${profile.wallet.totalSpent?.toFixed(2) || '0.00'} ({usagePercent.toFixed(1)}%)
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div className="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
                         <div
                           className={`h-full transition-all ${
                             usagePercent > 80
@@ -761,13 +861,13 @@ export default function ClientDashboard() {
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-blue-200">
+                    <div className="pt-3 border-t border-white/10">
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Available Balance</span>
+                        <span className="text-slate-400">Available Balance</span>
                         <span className={`text-2xl font-bold ${
                           profile.wallet.creditsRemaining > 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
+                            ? 'text-green-400'
+                            : 'text-red-400'
                         }`}>
                           ${profile.wallet.creditsRemaining?.toFixed(2) || '0.00'}
                         </span>
@@ -779,17 +879,17 @@ export default function ClientDashboard() {
                 {/* Instructor Breakdown */}
                 {profile.wallet.packages && Object.keys(profile.wallet.packages).length > 0 && (
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-4">Spending by Instructor</h3>
+                    <h3 className="text-lg font-bold text-slate-100 mb-4">Spending by Instructor</h3>
                     <div className="space-y-2">
                       {Object.entries(profile.wallet.packages).map(([instructor, data]: any) => (
-                        <div key={instructor} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div key={instructor} className="flex items-center justify-between p-3 bg-slate-900/60 backdrop-blur border border-white/10 rounded-lg shadow-sm hover:bg-slate-900/80 transition">
                           <div>
-                            <p className="font-semibold text-gray-900">{instructor}</p>
-                            <p className="text-sm text-gray-500">{data.bookingCount} bookings</p>
+                            <p className="font-semibold text-slate-100">{instructor}</p>
+                            <p className="text-sm text-slate-400">{data.bookingCount} bookings</p>
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-gray-900">${data.totalSpent.toFixed(2)}</p>
-                            <p className="text-sm text-gray-500">{data.totalHours}h</p>
+                            <p className="font-bold text-slate-100">${data.totalSpent.toFixed(2)}</p>
+                            <p className="text-sm text-slate-400">{data.totalHours}h</p>
                           </div>
                         </div>
                       ))}
@@ -799,35 +899,35 @@ export default function ClientDashboard() {
 
                 {/* Transaction History - Collapsible */}
                 {profile.wallet.transactions && profile.wallet.transactions.length > 0 && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-4">
                     <button
                       onClick={() => setShowTransactionHistory(!showTransactionHistory)}
-                      className="w-full flex items-center justify-between text-lg font-bold text-gray-900 hover:text-gray-700 transition"
+                      className="w-full flex items-center justify-between text-lg font-bold text-slate-100 hover:text-slate-300 transition"
                     >
                       <span>📋 Transaction History ({profile.wallet.transactions.length})</span>
                       <ChevronDown className={`w-5 h-5 transition-transform ${showTransactionHistory ? 'rotate-180' : ''}`} />
                     </button>
                     
                     {showTransactionHistory && (
-                      <div className="mt-4 space-y-3 border-t border-gray-200 pt-4 max-h-96 overflow-y-auto">
+                      <div className="mt-4 space-y-3 border-t border-white/10 pt-4 max-h-96 overflow-y-auto">
                         {profile.wallet.transactions.map((tx, idx) => (
-                          <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <div key={idx} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm font-semibold text-gray-900">
+                                  <span className="text-sm font-semibold text-slate-100">
                                     {formatTransactionType(tx.type)}
                                   </span>
                                 </div>
-                                <p className="text-sm text-gray-600 mt-1">{tx.description || 'N/A'}</p>
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="text-sm text-slate-400 mt-1">{tx.description || 'N/A'}</p>
+                                <p className="text-xs text-slate-500 mt-1">
                                   {formatDate(tx.createdAt || tx.date)}
                                 </p>
                               </div>
                               <span className={`text-lg font-bold ${
                                 tx.type?.toUpperCase() === 'CHARGE' || tx.type?.toUpperCase() === 'DEBIT' 
-                                  ? 'text-red-600' 
-                                  : 'text-green-600'
+                                  ? 'text-red-400' 
+                                  : 'text-green-400'
                               }`}>
                                 {formatTransactionAmount(tx.amount, tx.type)}
                               </span>
@@ -842,7 +942,7 @@ export default function ClientDashboard() {
                 <div className="pt-3"></div>
                 <button
                   onClick={() => setShowAddCredits(true)}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20"
                 >
                   <CreditCard className="w-5 h-5" />
                   Add More Credits
@@ -853,17 +953,17 @@ export default function ClientDashboard() {
             {/* History Tab */}
             {activeTab === 'history' && (
               <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Transactions</h3>
+                <h3 className="text-lg font-bold text-slate-100 mb-4">Recent Transactions</h3>
                 {profile.wallet.transactions && profile.wallet.transactions.length > 0 ? (
                   <div className="space-y-2">
                     {profile.wallet.transactions.map((transaction) => (
                       <div
                         key={transaction.id}
-                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition"
+                        className="flex items-center justify-between p-4 border border-slate-700 rounded-lg hover:shadow-md transition"
                       >
                         <div className="flex-1">
-                          <p className="font-semibold text-gray-900">{transaction.description}</p>
-                          <p className="text-sm text-gray-500">
+                          <p className="font-semibold text-slate-100">{transaction.description}</p>
+                          <p className="text-sm text-slate-400">
                             {formatDate(transaction.createdAt || transaction.date)}
                           </p>
                         </div>
@@ -877,8 +977,8 @@ export default function ClientDashboard() {
                           </p>
                           <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
                             transaction.status === 'completed'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-blue-100 text-blue-700'
+                              ? 'bg-green-900/40 text-green-300'
+                              : 'bg-blue-900/40 text-blue-300'
                           }`}>
                             {transaction.status}
                           </span>
@@ -887,7 +987,7 @@ export default function ClientDashboard() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-center py-8">No transactions yet.</p>
+                  <p className="text-slate-500 text-center py-8">No transactions yet.</p>
                 )}
               </div>
             )}

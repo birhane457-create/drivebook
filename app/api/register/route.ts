@@ -3,8 +3,10 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { emailService } from '@/lib/services/email'
+import crypto from 'crypto'
 // P1-4 FIX: Rate limit registration — prevents email enumeration and DB flooding
 import { checkRateLimitStrict, getRateLimitIdentifier, authRateLimit } from '@/lib/ratelimit'
+import { normalizeEmail } from '@/lib/auth-email'
 
 
 export const dynamic = 'force-dynamic';
@@ -44,9 +46,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = registerSchema.parse(body)
 
+    const normalizedEmail = normalizeEmail(data.email)
+
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
-      where: { email: data.email }
+      where: { email: normalizedEmail }
     })
 
     if (existingUser) {
@@ -59,12 +63,19 @@ export async function POST(req: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10)
 
+    // Create verification token (instructor-only)
+    const verificationToken = crypto.randomBytes(32).toString('hex')
+    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
     // Create user and instructor
     const user = await prisma.user.create({
       data: {
-        email: data.email,
+        email: normalizedEmail,
         password: hashedPassword,
         role: 'INSTRUCTOR',
+        emailVerified: false,
+        verificationToken,
+        verificationTokenExpiry,
         ...(data.termsAccepted && {
           termsAcceptedAt: new Date(),
           termsVersion: data.termsVersion || '1.0',
@@ -103,9 +114,11 @@ export async function POST(req: NextRequest) {
     try {
       const instructorData = user.instructor;
       if (instructorData) {
+        const verifyUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${verificationToken}`
+
         await emailService.sendGenericEmail({
           to: user.email,
-          subject: `Welcome to ${process.env.PLATFORM_NAME || 'DriveBook'}!`,
+          subject: `Welcome to ${process.env.PLATFORM_NAME || 'DriveBook'}! Please verify your email`,
           html: `
           <!DOCTYPE html>
           <html>
@@ -128,6 +141,15 @@ export async function POST(req: NextRequest) {
               <div class="content">
                 <p>Hi ${instructorData.name},</p>
                 <p>Thank you for registering as a driving instructor on our platform!</p>
+
+                <div class="info-box">
+                  <h3 style="margin-top: 0;">✅ Verify Your Email</h3>
+                  <p style="margin: 10px 0;">Please verify your email to access the instructor dashboard.</p>
+                  <div style="text-align: center;">
+                    <a href="${verifyUrl}" class="button">Verify Email →</a>
+                  </div>
+                  <p style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280;">This link expires in 24 hours.</p>
+                </div>
                 
                 <div class="info-box">
                   <h3 style="margin-top: 0;">📋 What's Next?</h3>

@@ -7,7 +7,7 @@ import {
   AlertCircle, CheckCircle, Calendar,
 } from 'lucide-react';
 import {
-  HOUR_PACKAGES, DRIVING_TEST_PACKAGE, calculatePackagePrice, PackageType,
+  HOUR_PACKAGES, calculatePackagePrice, PackageType,
 } from '@/lib/config/packages';
 import SlotPicker from '@/components/SlotPicker';
 
@@ -18,10 +18,6 @@ interface BulkBookingFormProps {
   searchedLocation?: string | null;
   brandColorPrimary?: string;
   brandColorSecondary?: string;
-  lessonPackages?: Array<{
-    id: string; name: string; durationMinutes: number;
-    price: number; description: string; isActive: boolean;
-  }>;
   serviceAreas?: string | null;
   baseAddress?: string | null;
   serviceRadiusKm?: number | null;
@@ -44,7 +40,6 @@ export default function BulkBookingForm({
   hourlyRate,
   searchedLocation,
   brandColorPrimary = '#3B82F6',
-  lessonPackages = [],
   serviceAreas,
   baseAddress,
   serviceRadiusKm,
@@ -95,18 +90,20 @@ export default function BulkBookingForm({
   });  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hours = selectedPackage === 'CUSTOM' ? customHours : HOUR_PACKAGES[selectedPackage].hours;
-  // Use instructor's test package price if available, otherwise fall back to platform default
-  const effectiveTestPackagePrice = offersTestPackage && testPackagePrice ? testPackagePrice : DRIVING_TEST_PACKAGE.price;
-  const pricing = calculatePackagePrice(hourlyRate, hours, selectedPackage, includeTestPackage);
-  // Override test package amount with instructor's price
-  const adjustedPricing = includeTestPackage && offersTestPackage && testPackagePrice
-    ? {
-        ...pricing,
-        testPackage: testPackagePrice,
-        total: pricing.total - DRIVING_TEST_PACKAGE.price + testPackagePrice,
-        installments: (pricing.total - DRIVING_TEST_PACKAGE.price + testPackagePrice) / 4,
-      }
-    : pricing;
+  // Test packages are now managed via instructor PDA configs
+  const pricing = calculatePackagePrice(hourlyRate, hours, selectedPackage);
+  const testPackageAmount = includeTestPackage && offersTestPackage && testPackagePrice ? testPackagePrice : 0;
+  const subtotalWithTest = pricing.subtotal + testPackageAmount;
+  const totalAfterDiscount = subtotalWithTest - pricing.discount;
+  const platformFeeWithTest = (totalAfterDiscount * 3.6) / 100;
+  const summaryPricing = {
+    ...pricing,
+    testPackage: testPackageAmount,
+    subtotal: subtotalWithTest,
+    platformFee: platformFeeWithTest,
+    total: totalAfterDiscount + platformFeeWithTest,
+    installments: (totalAfterDiscount + platformFeeWithTest) / 4,
+  };
   const isPackage = hours > 1;
   const currentLabel = stepLabels[step];
 
@@ -210,14 +207,14 @@ export default function BulkBookingForm({
           instructorId,
           packageType: selectedPackage,
           hours,
-          includeTestPackage,
           bookingType,
+          includeTestPackage,
           registrationType: 'myself',
           accountHolderName: formData.name,
           accountHolderEmail: formData.email,
           accountHolderPhone: formData.phone,
           accountHolderPassword: emailStatus === 'exists' ? '' : formData.password,
-          pricing: adjustedPricing,
+          pricing: summaryPricing,
           scheduledBookings: bookingType === 'now' && selectedSlot?.time ? [{
             date: selectedSlot.date,
             time: selectedSlot.time,
@@ -312,6 +309,32 @@ export default function BulkBookingForm({
       )}
     </div>
   );
+
+  const PdaAddOnPanel = () => {
+    if (!offersTestPackage || !testPackagePrice) return null;
+    return (
+      <div className="rounded-lg border p-4 bg-white/90 border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="font-semibold text-gray-900">Add PDA test pack</p>
+            <p className="text-sm text-gray-600 mt-1">Optional assessment add-on with instructor pricing.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIncludeTestPackage((prev) => !prev)}
+            className={`px-4 py-2 rounded-lg font-semibold transition ${includeTestPackage ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-blue-600 text-white hover:bg-blue-500'}`}
+          >
+            {includeTestPackage ? 'Remove add-on' : 'Add PDA pack'}
+          </button>
+        </div>
+        <div className="mt-3 text-sm text-gray-700 flex flex-wrap gap-3">
+          <span className="font-semibold">Price:</span>
+          <span>${testPackagePrice.toFixed(2)}</span>
+          {testPackageDuration ? <span>• {Math.floor(testPackageDuration / 60)}h {testPackageDuration % 60}m</span> : null}
+        </div>
+      </div>
+    );
+  };
 
   // ── render ────────────────────────────────────────────────────────────────
 
@@ -420,38 +443,7 @@ export default function BulkBookingForm({
             })}
           </div>
 
-          {/* Test package add-on — only shown if instructor offers it */}
-          {offersTestPackage && testPackagePrice && (
-            <div className="border rounded-lg p-4 flex items-start gap-3 bg-purple-50 border-purple-200">
-              <input
-                type="checkbox" id="testPkg" checked={includeTestPackage}
-                onChange={(e) => setIncludeTestPackage(e.target.checked)}
-                className="mt-1 h-5 w-5 accent-purple-600"
-              />
-              <label htmlFor="testPkg" className="cursor-pointer flex-1">
-                <span className="font-semibold text-gray-900">Add Driving Test Package </span>
-                <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-0.5 rounded ml-1">
-                  +${testPackagePrice}
-                </span>
-                {testPackageDuration && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    {testPackageDuration >= 60
-                      ? `${(testPackageDuration / 60).toFixed(1).replace('.0', '')}hr Test Package`
-                      : `${testPackageDuration}min Test Package`}
-                  </p>
-                )}
-                {testPackageIncludes.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {testPackageIncludes.map((f, i) => (
-                      <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
-                        <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />{f}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </label>
-            </div>
-          )}
+          <PdaAddOnPanel />
 
           {/* Order summary */}
           <div className="rounded-lg border p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
@@ -459,29 +451,29 @@ export default function BulkBookingForm({
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">{hours} hrs credit</span>
-                <span>${adjustedPricing.subtotal.toFixed(2)}</span>
+                <span>${summaryPricing.subtotal.toFixed(2)}</span>
               </div>
-              {adjustedPricing.discount > 0 && (
+              {summaryPricing.discount > 0 && (
                 <div className="flex justify-between text-green-700">
-                  <span>Discount ({adjustedPricing.discountPercentage}% off)</span>
-                  <span>-${adjustedPricing.discount.toFixed(2)}</span>
+                  <span>Discount ({summaryPricing.discountPercentage}% off)</span>
+                  <span>-${summaryPricing.discount.toFixed(2)}</span>
                 </div>
               )}
-              {includeTestPackage && (
-                <div className="flex justify-between">
-                  <span>Test Package</span>
-                  <span>${adjustedPricing.testPackage.toFixed(2)}</span>
+              {includeTestPackage && testPackageAmount > 0 && (
+                <div className="flex justify-between text-gray-700">
+                  <span>PDA test pack</span>
+                  <span>${testPackageAmount.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-gray-500">
                 <span>Platform fee (3.6%)</span>
-                <span>${adjustedPricing.platformFee.toFixed(2)}</span>
+                <span>${summaryPricing.platformFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-base border-t pt-2 mt-1">
                 <span>Total</span>
-                <span style={{ color: primary }}>${adjustedPricing.total.toFixed(2)}</span>
+                <span style={{ color: primary }}>${summaryPricing.total.toFixed(2)}</span>
               </div>
-              <p className="text-center text-gray-500 text-xs">or 4 x ${adjustedPricing.installments.toFixed(2)}</p>
+              <p className="text-center text-gray-500 text-xs">or 4 x ${summaryPricing.installments.toFixed(2)}</p>
             </div>
           </div>
 
@@ -851,6 +843,8 @@ export default function BulkBookingForm({
             />
           </div>
 
+          <PdaAddOnPanel />
+
           <NavButtons />
         </div>
       )}
@@ -914,7 +908,7 @@ export default function BulkBookingForm({
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Package</span>
-                <span className="font-medium text-gray-900">{hours} hours{includeTestPackage ? ' + Test Package' : ''}</span>
+                <span className="font-medium text-gray-900">{hours} hours</span>
               </div>
               {formData.address && (
                 <div className="flex justify-between">
@@ -925,29 +919,44 @@ export default function BulkBookingForm({
             </div>
 
             <div className="border-t pt-3 space-y-1 text-sm">
+              <div className="flex items-center justify-between py-1">
+                <span className="text-gray-600">PDA add-on</span>
+                <button
+                  type="button"
+                  onClick={() => setIncludeTestPackage((prev) => !prev)}
+                  disabled={!offersTestPackage || !testPackagePrice}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+                    includeTestPackage
+                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {includeTestPackage ? 'Remove PDA pack' : 'Add PDA pack'}
+                </button>
+              </div>
               <div className="flex justify-between text-gray-500">
                 <span>{hours} hrs × ${hourlyRate}/hr</span>
-                <span>${adjustedPricing.subtotal.toFixed(2)}</span>
+                <span>${summaryPricing.subtotal.toFixed(2)}</span>
               </div>
-              {adjustedPricing.discount > 0 && (
+              {summaryPricing.discount > 0 && (
                 <div className="flex justify-between text-green-700">
-                  <span>Discount ({adjustedPricing.discountPercentage}%)</span>
-                  <span>-${adjustedPricing.discount.toFixed(2)}</span>
+                  <span>Discount ({summaryPricing.discountPercentage}%)</span>
+                  <span>-${summaryPricing.discount.toFixed(2)}</span>
                 </div>
               )}
-              {includeTestPackage && adjustedPricing.testPackage > 0 && (
+              {includeTestPackage && summaryPricing.testPackage > 0 && (
                 <div className="flex justify-between text-gray-500">
                   <span>Test Package</span>
-                  <span>+${adjustedPricing.testPackage.toFixed(2)}</span>
+                  <span>+${summaryPricing.testPackage.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-gray-500">
                 <span>Platform fee (3.6%)</span>
-                <span>+${adjustedPricing.platformFee.toFixed(2)}</span>
+                <span>+${summaryPricing.platformFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-base pt-2 border-t">
                 <span>Total</span>
-                <span style={{ color: primary }}>${adjustedPricing.total.toFixed(2)}</span>
+                <span style={{ color: primary }}>${summaryPricing.total.toFixed(2)}</span>
               </div>
             </div>
           </div>

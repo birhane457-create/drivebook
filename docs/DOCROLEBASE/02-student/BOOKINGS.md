@@ -49,18 +49,21 @@ The API is scoped — only returns bookings belonging to the logged-in student's
 
 ## Booking Statuses
 
-| DB Status | Display Label | Badge |
-|-----------|--------------|-------|
-| `CONFIRMED` (future) | Upcoming | Green |
-| `CONFIRMED` (past endTime) | Completed | Grey |
-| `COMPLETED` | Completed | Grey |
-| `PENDING` | Awaiting Confirmation | Amber |
-| `PENDING_PAYMENT` | Awaiting Payment | Yellow |
-| `NO_SHOW` | No Show | Red |
-| `CANCELLED` | Cancelled | Red |
-| `EXPIRED` | Expired | Grey |
+| DB Status | Display Label | Badge | Location | Actions |
+|-----------|--------------|-------|----------|---------|
+| `CONFIRMED` (future) | Upcoming | Green | Upcoming section | Reschedule, Cancel, Contact |
+| `CONFIRMED` (past endTime) | Completed | Grey | Completed section | Leave Review |
+| `COMPLETED` | Completed | Grey | Completed section | Leave Review |
+| `PENDING` | Awaiting Confirmation | Amber | (Not displayed to student) | — |
+| `PENDING_PAYMENT` | Awaiting Payment | Yellow/Amber | **Awaiting Payment section** ⭐ | **Pay Now, Reschedule, Cancel** |
+| `NO_SHOW` | No Show | Red | Completed section | Leave Review |
+| `CANCELLED` | Cancelled | Red | (Not displayed; in history if user clicks detail) | — |
+| `EXPIRED` | Expired | Grey | (Not displayed; in history if user clicks detail) | — |
 
-All statuses are now visible to the student. Previously, PENDING, PENDING_PAYMENT, CANCELLED, and EXPIRED were hidden — this has been corrected.
+**Key Change:** PENDING_PAYMENT bookings now visible in dedicated "Awaiting Payment" section on main dashboard with clear payment pathway.
+
+**Before:** PENDING_PAYMENT bookings were completely hidden from dashboard. Students only accessed via email/SMS link.  
+**After:** Students can see, pay, reschedule, or cancel from dashboard's "Awaiting Payment" section.
 
 ---
 

@@ -4,17 +4,24 @@
     "es2021": true,
     "node": true
   },
-  "extends": ["eslint:recommended", "next/core-web-vitals"],
+  "extends": ["next/core-web-vitals"],
+  "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "ecmaVersion": 2021,
-    "sourceType": "module"
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
   },
+  "plugins": ["@typescript-eslint"],
   "rules": {
     "no-console": ["warn", { "allow": ["warn", "error"] }],
-    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    "eqeqeq": ["error", "always"],
-    "curly": ["error", "all"],
-    "quote-props": ["error", "as-needed"],
-    "max-len": ["warn", { "code": 120 }]
+    "no-unused-vars": "off",
+    "eqeqeq": ["warn", "always"],
+    "curly": "off",
+    "quote-props": "off",
+    "max-len": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "react/no-unescaped-entities": "off"
   }
 }

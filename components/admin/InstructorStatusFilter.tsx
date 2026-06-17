@@ -23,7 +23,7 @@ export default function InstructorStatusFilter({ currentStatus, pendingCount = 0
       {/* Mobile select */}
       <div className="sm:hidden">
         <select
-          className="block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+          className="block w-full rounded-md border-slate-700 focus:border-blue-500 focus:ring-blue-500"
           value={currentStatus}
           onChange={(e) => router.push(`/admin/instructors?status=${e.target.value}`)}
         >
@@ -44,8 +44,8 @@ export default function InstructorStatusFilter({ currentStatus, pendingCount = 0
               href={`/admin/instructors?status=${t.value}`}
               className={`relative px-4 py-2 font-medium text-sm rounded-lg transition-colors ${
                 currentStatus === t.value
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-900/40 text-blue-300'
+                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-900'
               }`}
             >
               {t.label}

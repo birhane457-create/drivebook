@@ -8,6 +8,7 @@ import { webhookRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '
 import { notifyPaymentReceived } from '@/lib/services/notifications';
 import { getNotifChannels } from '@/lib/config/platform-settings';
 import { recordPaymentCollected } from '@/lib/services/payout-service';
+import { logger } from '@/lib/logger';
 import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
 import { sendAlert } from '@/lib/services/alert-service';
 import Stripe from 'stripe';
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
     const rateLimitResult = await checkRateLimitStrict(webhookRateLimit, rateLimitId);
     
     if (!rateLimitResult.success) {
-      console.error('🚨 Webhook rate limit exceeded:', rateLimitId);
+      logger.error('🚨 Webhook rate limit exceeded', { rateLimitId });
       return NextResponse.json(
         { error: 'Too many webhook requests' },
         { status: 429, headers: rateLimitResult.headers }
@@ -64,12 +65,14 @@ export async function POST(req: NextRequest) {
       });
       
       if (existingEvent) {
-        console.log('✅ Webhook already processed (idempotent):', idempotencyKey);
+        logger.info('✅ Webhook already processed (idempotent)', { idempotencyKey });
         return NextResponse.json({ received: true, duplicate: true });
       }
     } catch (idempotencyErr) {
       // WebhookEvent table may not exist yet — log and continue processing
-      console.warn('⚠️ Idempotency check failed (non-fatal):', idempotencyErr);
+      logger.warn('⚠️ Idempotency check failed (non-fatal)', {
+        error: idempotencyErr instanceof Error ? idempotencyErr.message : String(idempotencyErr),
+      });
     }
 
     // Process event based on type — errors here are caught below
@@ -78,14 +81,18 @@ export async function POST(req: NextRequest) {
     } catch (handlerErr) {
       // Log the error but return 200 so Stripe stops retrying for handler-level errors
       // (signature is valid, we received the event — processing errors should not cause retries)
-      console.error(`🚨 Webhook handler error for ${event.type}:`, handlerErr);
+      logger.error(`🚨 Webhook handler error for ${event.type}`, {
+        error: handlerErr instanceof Error ? handlerErr.message : String(handlerErr),
+      });
       // Return 200 to acknowledge receipt — admin must investigate via logs
       return NextResponse.json({ received: true, handlerError: true });
     }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
-    console.error('🚨 Webhook error:', error);
+    logger.error('🚨 Webhook error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     
     // Signature verification failure — return 400 (not 500) so Stripe knows it's a bad request
     if (error.message?.includes('signature') || error.message?.includes('Invalid webhook')) {
@@ -129,9 +136,10 @@ async function verifyStripeWebhook(req: NextRequest): Promise<Stripe.Event> {
   }
   
   if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.warn('⚠️ STRIPE_WEBHOOK_SECRET not set - webhook not verified!');
-    console.warn('   This is DANGEROUS in production!');
-    return JSON.parse(body);
+    // Never process unsigned events. Without this secret, any caller could forge
+    // payment success events and mutate bookings/wallets.
+    logger.error('STRIPE_WEBHOOK_SECRET not set - rejecting webhook (fail closed)')
+    throw new Error('Invalid webhook: STRIPE_WEBHOOK_SECRET not configured')
   }
   
   try {
@@ -141,7 +149,7 @@ async function verifyStripeWebhook(req: NextRequest): Promise<Stripe.Event> {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err: any) {
-    console.error('🚨 Webhook verification failed:', err.message);
+    logger.error('🚨 Webhook verification failed', { error: err?.message ?? String(err) });
     throw new Error(`Invalid webhook signature: ${err.message}`);
   }
 }
@@ -150,9 +158,10 @@ async function verifyStripeWebhook(req: NextRequest): Promise<Stripe.Event> {
  * Route events to appropriate handlers
  */
 async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): Promise<void> {
-  console.log(`📥 Processing webhook: ${event.type}`);
+  logger.info(`📥 Processing webhook: ${event.type}`);
   
-  switch (event.type) {
+  // Stripe's TS union may lag behind some event types; treat as string for routing.
+  switch (event.type as string) {
     // CHECKOUT EVENTS
     case 'checkout.session.completed':
       await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, idempotencyKey);
@@ -216,7 +225,7 @@ async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): P
       break;
 
     default:
-      console.log(`ℹ️ Unhandled event type: ${event.type}`);
+      logger.info(`ℹ️ Unhandled event type: ${event.type}`);
       // Still record it for idempotency
       await recordWebhookEvent(idempotencyKey, event.type, event.id, {});
   }
@@ -234,7 +243,7 @@ async function handleCheckoutCompleted(
   const { instructorId } = metadata || {};
 
   if (!instructorId || !customer) {
-    console.error('❌ Missing instructorId or customer in checkout session');
+    logger.error('❌ Missing instructorId or customer in checkout session');
     await recordWebhookEvent(idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
       error: 'Missing instructorId or customer'
     });
@@ -272,7 +281,7 @@ async function handleCheckoutCompleted(
     });
   });
 
-  console.log(`✅ Checkout completed: Synced customer ${customer} for instructor ${instructorId}`);
+  logger.info(`✅ Checkout completed: Synced customer ${customer} for instructor ${instructorId}`);
 }
 
 // ============================================================================
@@ -288,7 +297,7 @@ async function handleWalletPaymentSuccess(
   transactionId?: string,
   walletId?: string
 ): Promise<void> {
-  console.log(`💰 Processing wallet payment: transactionId=${transactionId}, walletId=${walletId}`);
+  logger.info(`💰 Processing wallet payment: transactionId=${transactionId}, walletId=${walletId}`);
 
   let confirmedTransactions: any[] = [];
 
@@ -324,7 +333,7 @@ async function handleWalletPaymentSuccess(
     }
 
     if (transactions.length === 0) {
-      console.error('❌ No wallet transactions found to confirm');
+      logger.error('❌ No wallet transactions found to confirm');
       throw new Error('No wallet transactions found');
     }
 
@@ -334,7 +343,7 @@ async function handleWalletPaymentSuccess(
     );
     const receivedCents = paymentIntent.amount_received;
     if (receivedCents !== expectedCents) {
-      console.error('❌ Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
+      logger.error('❌ Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
       throw new Error(`Wallet payment amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
     }
 
@@ -345,7 +354,7 @@ async function handleWalletPaymentSuccess(
         data: { status: 'CONFIRMED' }
       });
       
-      console.log(`✅ Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount})`);
+      logger.info(`✅ Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount})`);
     }
 
     // Get wallet details for logging
@@ -354,7 +363,7 @@ async function handleWalletPaymentSuccess(
       include: { user: true }
     });
 
-    console.log(`✅ Wallet payment processed: ${wallet?.user.email} - ${transactions.length} transaction(s) confirmed`);
+    logger.info(`✅ Wallet payment processed: ${wallet?.user.email} - ${transactions.length} transaction(s) confirmed`);
     confirmedTransactions = transactions;
   });
 
@@ -378,7 +387,9 @@ async function handleWalletPaymentSuccess(
       });
     }
   } catch (auditErr) {
-    console.error('AuditLog for wallet payment (non-critical):', auditErr);
+    logger.error('AuditLog for wallet payment (non-critical)', {
+      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    });
   }
 
   try {
@@ -413,7 +424,9 @@ async function handleWalletPaymentSuccess(
       }
     }
   } catch (receiptErr) {
-    console.error('Wallet top-up receipt email failed:', receiptErr);
+    logger.error('Wallet top-up receipt email failed', {
+      error: receiptErr instanceof Error ? receiptErr.message : String(receiptErr),
+    });
   }
 }
 
@@ -426,7 +439,7 @@ async function handleBookingPaymentSuccess(
 
   // Handle both booking payments AND wallet/package purchases
   if (!bookingId && !transactionId && !walletId) {
-    console.error('❌ No bookingId, transactionId, or walletId in payment intent metadata');
+    logger.error('❌ No bookingId, transactionId, or walletId in payment intent metadata');
     await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
       error: 'Missing bookingId, transactionId, or walletId'
     });
@@ -453,7 +466,7 @@ async function handleBookingPaymentSuccess(
     });
 
     if (!booking) {
-      console.error('❌ Booking not found:', bookingId);
+      logger.error('❌ Booking not found', { bookingId });
       throw new Error(`Booking not found: ${bookingId}`);
     }
 
@@ -462,7 +475,7 @@ async function handleBookingPaymentSuccess(
     // released and taken by another student. Reviving the booking risks a double-booking.
     // Safe policy: issue a full refund via Stripe and flag for admin review.
     if (booking.status === 'EXPIRED') {
-      console.error(`🚨 Delayed payment on expired booking ${bookingId} — issuing automatic refund`);
+      logger.error(`🚨 Delayed payment on expired booking ${bookingId} — issuing automatic refund`);
       
       // Issue automatic full refund via Stripe
       try {
@@ -475,10 +488,12 @@ async function handleBookingPaymentSuccess(
             reason: 'Booking expired before payment confirmed — automatic refund',
           },
         });
-        console.log(`✅ Auto-refund issued for expired booking ${bookingId}`);
+        logger.info(`✅ Auto-refund issued for expired booking ${bookingId}`);
       } catch (refundErr) {
         // Refund failed — must flag for manual admin action
-        console.error(`🚨 CRITICAL: Auto-refund FAILED for expired booking ${bookingId}. Manual action required.`, refundErr);
+        logger.error(`🚨 CRITICAL: Auto-refund FAILED for expired booking ${bookingId}. Manual action required.`, {
+          error: refundErr instanceof Error ? refundErr.message : String(refundErr),
+        });
       }
 
       // Mark booking as requiring admin review regardless of refund success
@@ -502,7 +517,7 @@ async function handleBookingPaymentSuccess(
 
     // ── Already confirmed (idempotent replay) ────────────────────────────────
     if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
-      console.log(`ℹ️ Booking ${bookingId} already ${booking.status} — skipping wallet ops`);
+      logger.info(`ℹ️ Booking ${bookingId} already ${booking.status} — skipping wallet ops`);
       await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
         bookingId, note: 'already_confirmed'
       });
@@ -511,7 +526,7 @@ async function handleBookingPaymentSuccess(
 
     // ── Strict state machine: only PENDING_PAYMENT → CONFIRMED ───────────────
     if (booking.status !== 'PENDING_PAYMENT') {
-      console.error(`🚨 Webhook rejected: booking ${bookingId} is in status '${booking.status}' — cannot confirm`);
+      logger.error(`🚨 Webhook rejected: booking ${bookingId} is in status '${booking.status}' — cannot confirm`);
       await recordWebhookEvent(idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
         bookingId, error: `Rejected: invalid source status '${booking.status}'`
       });
@@ -525,7 +540,7 @@ async function handleBookingPaymentSuccess(
     const receivedAmount = paymentIntent.amount_received;
     
     if (receivedAmount !== expectedAmount) {
-      console.error('❌ Payment amount mismatch:', {
+      logger.error('❌ Payment amount mismatch:', {
         expected: expectedAmount,
         received: receivedAmount,
         bookingId
@@ -552,7 +567,7 @@ async function handleBookingPaymentSuccess(
     }
 
     if (!userId) {
-      console.warn(`⚠️ Could not resolve userId for booking ${bookingId} — wallet ops skipped`);
+      logger.warn(`⚠️ Could not resolve userId for booking ${bookingId} — wallet ops skipped`);
     }
 
     // ✅ P0 FIX #5: Verify payment customer matches instructor
@@ -563,7 +578,7 @@ async function handleBookingPaymentSuccess(
       });
       
       if (instructor?.stripeCustomerId && instructor.stripeCustomerId !== paymentIntent.customer) {
-        console.error('❌ Payment customer mismatch:', {
+        logger.error('❌ Payment customer mismatch:', {
           instructorId: booking.instructorId,
           instructorStripeCustomerId: instructor.stripeCustomerId,
           paymentCustomerId: paymentIntent.customer
@@ -633,7 +648,7 @@ async function handleBookingPaymentSuccess(
         });
 
         const remaining = packageTotalPaid - booking.price;
-        console.log(`✅ Package wallet: +${packageTotalPaid} CREDIT / -${booking.price} DEBIT = ${remaining.toFixed(2)} remaining for userId=${userId}`);
+        logger.info(`✅ Package wallet: +${packageTotalPaid} CREDIT / -${booking.price} DEBIT = ${remaining.toFixed(2)} remaining for userId=${userId}`);
       } else {
         // Single lesson — confirm any pending wallet transactions
         await tx.walletTransaction.updateMany({
@@ -648,7 +663,7 @@ async function handleBookingPaymentSuccess(
     }
   });
 
-  console.log(`✅ Booking payment processed with validations: ${bookingId}`);
+  logger.info(`✅ Booking payment processed with validations: ${bookingId}`);
 
   // ── Audit log: Stripe payment event ──────────────────────────────────────
   // This closes the audit blind spot — Stripe payment events are now in AuditLog
@@ -671,7 +686,9 @@ async function handleBookingPaymentSuccess(
       },
     });
   } catch (auditErr) {
-    console.error('AuditLog for payment_succeeded failed (non-critical):', auditErr);
+    logger.error('AuditLog for payment_succeeded failed (non-critical)', {
+      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    });
   }
 
   // ── Ledger: record payment collected ─────────────────────────────────────
@@ -687,11 +704,11 @@ async function handleBookingPaymentSuccess(
       const instructorPayout = (ledgerBooking as any).instructorPayout
         ?? ledgerBooking.price * (1 - ((ledgerBooking as any).commissionRate ?? 15) / 100);
       await recordPaymentCollected(bookingId, ledgerBooking.price, instructorPayout);
-      console.log(`✅ Ledger updated: collected=${ledgerBooking.price} reserved=${instructorPayout}`);
+      logger.info(`✅ Ledger updated: collected=${ledgerBooking.price} reserved=${instructorPayout}`);
     }
   } catch (ledgerErr) {
     // Alert admin — ledger is out of sync. Reconciliation cron will detect this.
-    console.error('🚨 LEDGER UPDATE FAILED — booking confirmed but ledger not updated:', {
+    logger.error('🚨 LEDGER UPDATE FAILED — booking confirmed but ledger not updated:', {
       bookingId,
       error: ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr),
     });
@@ -754,7 +771,7 @@ async function handleBookingPaymentSuccess(
           stripeRef: paymentIntent.id,
           paymentMethod: 'Card',
           bookingId,
-        }).catch(e => console.error('Package receipt email failed:', e));
+        }).catch(e => logger.error('Package receipt email failed', { error: e instanceof Error ? e.message : String(e) }));
       } else {
         await sendSingleLessonReceipt({
           clientName: booking.client.name,
@@ -772,7 +789,7 @@ async function handleBookingPaymentSuccess(
           stripeRef: paymentIntent.id,
           paymentMethod: 'Card',
           bookingId,
-        }).catch(e => console.error('Single lesson receipt email failed:', e));
+        }).catch(e => logger.error('Single lesson receipt email failed', { error: e instanceof Error ? e.message : String(e) }));
       }
     }
 
@@ -790,10 +807,14 @@ async function handleBookingPaymentSuccess(
         });
       }
     } catch (smsErr) {
-      console.error('SMS confirmation failed (non-critical):', smsErr);
+      logger.error('SMS confirmation failed (non-critical)', {
+        error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+      });
     }
   } catch (notifError) {
-    console.error('Failed to create payment notification:', notifError);
+    logger.error('Failed to create payment notification', {
+      error: notifError instanceof Error ? notifError.message : String(notifError),
+    });
   }
 }
 
@@ -825,7 +846,7 @@ async function handleBookingPaymentFailed(
     });
   });
 
-  console.log(`❌ Booking payment failed: ${bookingId}`);
+  logger.info(`❌ Booking payment failed: ${bookingId}`);
 
   // Audit log: Stripe payment failure
   try {
@@ -844,7 +865,9 @@ async function handleBookingPaymentFailed(
       },
     });
   } catch (auditErr) {
-    console.error('AuditLog for payment_failed (non-critical):', auditErr);
+    logger.error('AuditLog for payment_failed (non-critical)', {
+      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    });
   }
 }
 
@@ -879,12 +902,12 @@ async function handleSubscriptionUpdate(
     };
     tier = priceToTier[priceId] || undefined;
     if (tier) {
-      console.log(`ℹ️ Derived tier '${tier}' from price ID ${priceId} (metadata was missing)`);
+      logger.info(`ℹ️ Derived tier '${tier}' from price ID ${priceId} (metadata was missing)`);
     }
   }
 
   if (!instructorId || !tier) {
-    console.error('❌ Missing metadata in subscription:', subscription.id);
+    logger.error('❌ Missing metadata in subscription', { subscriptionId: subscription.id });
     await recordWebhookEvent(idempotencyKey, 'subscription.updated', subscription.id, {
       error: 'Missing instructorId or tier'
     });
@@ -893,7 +916,7 @@ async function handleSubscriptionUpdate(
 
   const plan = SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS];
   if (!plan) {
-    console.error('❌ Invalid tier:', tier);
+    logger.error('❌ Invalid tier', { tier });
     return;
   }
 
@@ -903,8 +926,8 @@ async function handleSubscriptionUpdate(
     select: { id: true },
   });
   if (!instructorExists) {
-    console.error(`❌ Instructor not found in DB: "${instructorId}" — subscription ${subscription.id} NOT synced.`);
-    console.error('   Check Stripe subscription metadata for typos in instructorId.');
+    logger.error(`❌ Instructor not found in DB: "${instructorId}" — subscription ${subscription.id} NOT synced.`);
+    logger.error('   Check Stripe subscription metadata for typos in instructorId.');
     await recordWebhookEvent(idempotencyKey, 'subscription.updated', subscription.id, {
       error: `Instructor not found: ${instructorId}`,
       subscriptionId: subscription.id,
@@ -1011,7 +1034,7 @@ async function handleSubscriptionUpdate(
     }
   }
 
-  console.log(`✅ Subscription updated: ${subscription.id} (${tier}, ${status})`);
+  logger.info(`✅ Subscription updated: ${subscription.id} (${tier}, ${status})`);
 }
 
 async function handleSubscriptionCancelled(
@@ -1052,7 +1075,7 @@ async function handleSubscriptionCancelled(
     });
   });
 
-  console.log(`✅ Subscription cancelled: ${subscription.id}`);
+  logger.info(`✅ Subscription cancelled: ${subscription.id}`);
 }
 
 async function handleTrialEnding(
@@ -1096,7 +1119,7 @@ async function handleTrialEnding(
     });
   }
 
-  console.log(`✅ Trial ending notification sent: ${subscription.id}`);
+  logger.info(`✅ Trial ending notification sent: ${subscription.id}`);
 }
 
 async function handleInvoicePaymentSucceeded(
@@ -1137,11 +1160,11 @@ async function handleInvoicePaymentSucceeded(
           trialEndsAt: null, // Clear trial end date — they're now a paying customer
         }
       });
-      console.log(`✅ Instructor ${subscriptionRecord.instructorId} status → ACTIVE (invoice paid)`);
+      logger.info(`✅ Instructor ${subscriptionRecord.instructorId} status → ACTIVE (invoice paid)`);
     }
   });
 
-  console.log(`✅ Invoice payment succeeded: ${invoice.id}`);
+  logger.info(`✅ Invoice payment succeeded: ${invoice.id}`);
 }
 
 async function handleInvoicePaymentFailed(
@@ -1200,7 +1223,7 @@ async function handleInvoicePaymentFailed(
     });
   }
 
-  console.log(`❌ Invoice payment failed: ${invoice.id}`);
+  logger.info(`❌ Invoice payment failed: ${invoice.id}`);
 }
 
 // ============================================================================
@@ -1253,7 +1276,9 @@ async function handleDisputeOpened(
       }
     }
   } catch (lookupErr) {
-    console.error('[DISPUTE] charge lookup failed (non-critical):', lookupErr);
+    logger.error('[DISPUTE] charge lookup failed (non-critical)', {
+      error: lookupErr instanceof Error ? lookupErr.message : String(lookupErr),
+    });
   }
 
   await recordWebhookEvent(idempotencyKey, 'charge.dispute.created', dispute.id, {
@@ -1282,7 +1307,9 @@ async function handleDisputeOpened(
       },
     });
   } catch (dbErr) {
-    console.error('[DISPUTE] StripeDispute upsert failed (non-critical):', dbErr);
+    logger.error('[DISPUTE] StripeDispute upsert failed (non-critical)', {
+      error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+    });
   }
 
   // Append ledger entry — amount at risk
@@ -1311,7 +1338,9 @@ async function handleDisputeOpened(
       });
     } catch (holdErr) {
       // payoutHold field may not exist in older schema versions — log and continue
-      console.error('[DISPUTE] Could not set payoutHold (field may not exist):', holdErr);
+      logger.error('[DISPUTE] Could not set payoutHold (field may not exist)', {
+        error: holdErr instanceof Error ? holdErr.message : String(holdErr),
+      });
     }
   }
 
@@ -1329,7 +1358,9 @@ async function handleDisputeOpened(
       },
     });
   } catch (auditErr) {
-    console.error('[DISPUTE] Audit log failed (non-critical):', auditErr);
+    logger.error('[DISPUTE] Audit log failed (non-critical)', {
+      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    });
   }
 
   // Alert operations
@@ -1349,7 +1380,7 @@ async function handleDisputeOpened(
     },
   });
 
-  console.log(`🚨 Dispute opened: ${dispute.id} — $${amount.toFixed(2)} — ${reason}`);
+  logger.info(`🚨 Dispute opened: ${dispute.id} — $${amount.toFixed(2)} — ${reason}`);
 }
 
 /**
@@ -1388,7 +1419,9 @@ async function handleDisputeClosed(
       }
     }
   } catch (lookupErr) {
-    console.error('[DISPUTE CLOSED] charge lookup failed:', lookupErr);
+    logger.error('[DISPUTE CLOSED] charge lookup failed', {
+      error: lookupErr instanceof Error ? lookupErr.message : String(lookupErr),
+    });
   }
 
   await recordWebhookEvent(idempotencyKey, 'charge.dispute.closed', dispute.id, {
@@ -1425,7 +1458,7 @@ async function handleDisputeClosed(
       metadata: { stripeDisputeId: dispute.id, bookingId, instructorId, amount },
     });
 
-    console.log(`✅ Dispute WON: ${dispute.id} — $${amount.toFixed(2)} recovered`);
+    logger.info(`✅ Dispute WON: ${dispute.id} — $${amount.toFixed(2)} recovered`);
 
   } else if (status === 'lost') {
     // Chargeback confirmed — platform absorbs the loss
@@ -1464,7 +1497,9 @@ async function handleDisputeClosed(
           });
         }
       } catch (adjErr) {
-        console.error('[DISPUTE LOST] Could not create recovery adjustment:', adjErr);
+        logger.error('[DISPUTE LOST] Could not create recovery adjustment', {
+          error: adjErr instanceof Error ? adjErr.message : String(adjErr),
+        });
       }
     }
 
@@ -1476,7 +1511,7 @@ async function handleDisputeClosed(
       metadata: { stripeDisputeId: dispute.id, bookingId, instructorId, amount, stripeFee, totalLoss },
     });
 
-    console.log(`🚨 Dispute LOST: ${dispute.id} — $${totalLoss.toFixed(2)} total loss`);
+    logger.info(`🚨 Dispute LOST: ${dispute.id} — $${totalLoss.toFixed(2)} total loss`);
   }
 
   // Always audit log the close
@@ -1493,7 +1528,9 @@ async function handleDisputeClosed(
       },
     });
   } catch (auditErr) {
-    console.error('[DISPUTE CLOSED] Audit log failed:', auditErr);
+    logger.error('[DISPUTE CLOSED] Audit log failed', {
+      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    });
   }
 
   // Update the StripeDispute record with the outcome
@@ -1508,7 +1545,9 @@ async function handleDisputeClosed(
       },
     });
   } catch (dbErr) {
-    console.error('[DISPUTE CLOSED] StripeDispute update failed (non-critical):', dbErr);
+    logger.error('[DISPUTE CLOSED] StripeDispute update failed (non-critical)', {
+      error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+    });
   }
 }
 
@@ -1555,7 +1594,9 @@ async function handleChargeRefunded(
     const pi = await stripe.paymentIntents.retrieve(piId);
     bookingId = pi.metadata?.bookingId ?? null;
   } catch (lookupErr) {
-    console.error('[REFUND SYNC] PI lookup failed:', lookupErr);
+    logger.error('[REFUND SYNC] PI lookup failed', {
+      error: lookupErr instanceof Error ? lookupErr.message : String(lookupErr),
+    });
   }
 
   if (!bookingId) {
@@ -1595,7 +1636,7 @@ async function handleChargeRefunded(
     where: { type: 'REFUND_ISSUED', referenceId: bookingId },
   });
   if (existingLedger) {
-    console.log(`ℹ️ [REFUND SYNC] Booking ${bookingId} already has REFUND_ISSUED entry — skipping duplicate`);
+    logger.info(`ℹ️ [REFUND SYNC] Booking ${bookingId} already has REFUND_ISSUED entry — skipping duplicate`);
     return;
   }
 
@@ -1640,7 +1681,9 @@ async function handleChargeRefunded(
       },
     });
   } catch (auditErr) {
-    console.error('[REFUND SYNC] Audit log failed:', auditErr);
+    logger.error('[REFUND SYNC] Audit log failed', {
+      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    });
   }
 
   void sendAlert({
@@ -1651,7 +1694,7 @@ async function handleChargeRefunded(
     metadata: { stripeChargeId: chargeId, piId, refundedAmount, isFullRefund, bookingStatus: booking.status },
   });
 
-  console.log(`⚠️ [REFUND SYNC] Out-of-band refund on booking ${bookingId}: $${refundedAmount.toFixed(2)}`);
+  logger.info(`⚠️ [REFUND SYNC] Out-of-band refund on booking ${bookingId}: $${refundedAmount.toFixed(2)}`);
 }
 
 // ============================================================================
@@ -1720,7 +1763,7 @@ async function handleTransferFailed(
         totalReserved: amount,  // return to reserved — still owed to instructor
       });
 
-      console.log(`🔄 [TRANSFER FAILED] Payout ${payoutId} reverted to FAILED — $${amount.toFixed(2)} re-credited to platform`);
+      logger.info(`🔄 [TRANSFER FAILED] Payout ${payoutId} reverted to FAILED — $${amount.toFixed(2)} re-credited to platform`);
     }
   }
 
@@ -1745,7 +1788,9 @@ async function handleTransferFailed(
       },
     });
   } catch (auditErr) {
-    console.error('[TRANSFER FAILED] Audit log failed:', auditErr);
+    logger.error('[TRANSFER FAILED] Audit log failed', {
+      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+    });
   }
 
   // Alert operations — this needs immediate human action
@@ -1779,11 +1824,13 @@ async function handleTransferFailed(
         });
       }
     } catch (notifErr) {
-      console.error('[TRANSFER FAILED] Instructor notification failed:', notifErr);
+      logger.error('[TRANSFER FAILED] Instructor notification failed', {
+        error: notifErr instanceof Error ? notifErr.message : String(notifErr),
+      });
     }
   }
 
-  console.log(`🚨 [TRANSFER FAILED] Transfer ${transferId} — $${amount.toFixed(2)} — instructor: ${instructorId}`);
+  logger.info(`🚨 [TRANSFER FAILED] Transfer ${transferId} — $${amount.toFixed(2)} — instructor: ${instructorId}`);
 }
 
 // ============================================================================
@@ -1853,5 +1900,5 @@ async function handleConnectAccountUpdated(
     detailsSubmitted,
   });
 
-  console.log(`✅ Connect account updated: instructor=${instructorId} charges=${chargesEnabled} payouts=${payoutsEnabled}`);
+  logger.info(`✅ Connect account updated: instructor=${instructorId} charges=${chargesEnabled} payouts=${payoutsEnabled}`);
 }

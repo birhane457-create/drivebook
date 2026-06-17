@@ -307,11 +307,64 @@ Generated: ${new Date().toISOString()}
 }
 
 /**
- * Send emergency notification
+ * Send emergency notification via email to configured admin address
  */
 async function sendEmergencyNotification(params: { type: string; status: LiquidityStatus }) {
-  // TODO: Implement email/SMS notification
-  console.log('[LIQUIDITY] 🚨 EMERGENCY NOTIFICATION:', params.type);
-  console.log('[LIQUIDITY] Status:', params.status.status);
-  console.log('[LIQUIDITY] Reserve Ratio:', (params.status.reserveRatio * 100).toFixed(1) + '%');
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.ADMIN_REPORT_EMAIL
+  if (!adminEmail) {
+    console.error('[LIQUIDITY] 🚨 EMERGENCY: ADMIN_EMAIL not configured — cannot send notification')
+    return
+  }
+
+  try {
+    const { emailService } = await import('@/lib/services/email')
+    const statusColor = params.status.status === 'EMERGENCY' ? '#dc2626' : '#d97706'
+    const ratioPercent = (params.status.reserveRatio * 100).toFixed(1)
+
+    await emailService.sendGenericEmail({
+      to: adminEmail,
+      subject: `🚨 DriveBook ${params.status.status}: Liquidity Alert — Reserve at ${ratioPercent}%`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+          <div style="background:${statusColor};color:white;padding:16px;border-radius:8px;margin-bottom:24px">
+            <h2 style="margin:0">🚨 ${params.status.status} Liquidity Alert</h2>
+            <p style="margin:8px 0 0">Immediate action required</p>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+            <tr style="background:#f9fafb">
+              <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">Current Balance</td>
+              <td style="padding:10px;border:1px solid #e5e7eb">$${params.status.currentBalance.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">Required Reserve</td>
+              <td style="padding:10px;border:1px solid #e5e7eb">$${params.status.requiredReserve.toFixed(2)}</td>
+            </tr>
+            <tr style="background:#f9fafb">
+              <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">Reserve Ratio</td>
+              <td style="padding:10px;border:1px solid #e5e7eb;color:${statusColor};font-weight:700">${ratioPercent}%</td>
+            </tr>
+            <tr>
+              <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">Days of Coverage</td>
+              <td style="padding:10px;border:1px solid #e5e7eb">${params.status.daysOfCoverage.toFixed(1)} days</td>
+            </tr>
+          </table>
+
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:24px">
+            <p style="margin:0;font-weight:600;color:#991b1b">Actions Required:</p>
+            <ul style="margin:8px 0 0;padding-left:20px;color:#7f1d1d">
+              ${params.status.actions.map(a => `<li>${a}</li>`).join('')}
+            </ul>
+          </div>
+
+          <p style="color:#6b7280;font-size:12px">
+            Generated ${new Date().toLocaleString('en-AU')} · DriveBook Platform
+          </p>
+        </div>
+      `,
+    })
+    console.log(`[LIQUIDITY] Emergency notification sent to ${adminEmail}`)
+  } catch (err) {
+    console.error('[LIQUIDITY] Failed to send emergency notification email:', err)
+  }
 }

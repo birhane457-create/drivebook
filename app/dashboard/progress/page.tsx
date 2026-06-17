@@ -36,38 +36,38 @@ export default function InstructorProgressPage() {
   }, []);
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+      <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   // If API doesn't exist yet, show a useful placeholder
   if (!data) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Student Progress</h1>
-          <p className="text-gray-500 mb-8">Track how your students are progressing based on lesson feedback</p>
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <div className="max-w-4xl mx-auto px-4 py-8 bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20">
+          <h1 className="text-2xl font-bold text-slate-100 mb-2">Student Progress</h1>
+          <p className="text-slate-400 mb-8">Track how your students are progressing based on lesson feedback</p>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
-            <TrendingUp className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No feedback data yet</h3>
-            <p className="text-gray-500 text-sm mb-6">
+          <div className="bg-slate-950/40 rounded-3xl border border-white/10 shadow-sm p-12 text-center">
+            <TrendingUp className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-100 mb-2">No feedback data yet</h3>
+            <p className="text-slate-400 text-sm mb-6">
               After completing lessons, use the lesson feedback form to record student performance.
               Progress charts will appear here once you have feedback data.
             </p>
             <Link
               href="/dashboard/bookings"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 border border-slate-700 transition"
             >
               <BookOpen className="h-4 w-4" />
               Go to Bookings
             </Link>
           </div>
 
-          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-5">
-            <h3 className="font-semibold text-blue-900 mb-2">How lesson feedback works</h3>
-            <ul className="text-sm text-blue-800 space-y-1.5">
+          <div className="mt-6 bg-slate-900/60 backdrop-blur border border-white/10 rounded-3xl p-5 shadow-sm">
+            <h3 className="font-semibold text-slate-100 mb-2">How lesson feedback works</h3>
+            <ul className="text-sm text-slate-400 space-y-1.5">
               <li>• After each lesson, open the booking and tap "Give Feedback"</li>
               <li>• Select PDA assessment codes for areas needing improvement</li>
               <li>• Mark student strengths and give an overall performance score</li>
@@ -85,22 +85,22 @@ export default function InstructorProgressPage() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Student Progress</h1>
-        <p className="text-gray-500 mb-6">Lesson feedback you've recorded across all students</p>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-4xl mx-auto px-4 py-8 bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20">
+        <h1 className="text-2xl font-bold text-slate-100 mb-2">Student Progress</h1>
+        <p className="text-slate-400 mb-6">Lesson feedback you've recorded across all students</p>
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Lessons Reviewed', value: data.totalLessonsWithFeedback, icon: <BookOpen className="h-5 w-5 text-blue-600" /> },
-            { label: 'Feedback Rate', value: `${feedbackRate}%`, icon: <TrendingUp className="h-5 w-5 text-green-600" /> },
-            { label: 'Avg Score', value: data.averageScore ? `${data.averageScore}%` : '—', icon: <Star className="h-5 w-5 text-yellow-500" /> },
-            { label: 'Total Lessons', value: data.totalLessons, icon: <Users className="h-5 w-5 text-purple-600" /> },
+            { label: 'Lessons Reviewed', value: data.totalLessonsWithFeedback, icon: <BookOpen className="h-5 w-5 text-blue-400" /> },
+            { label: 'Feedback Rate', value: `${feedbackRate}%`, icon: <TrendingUp className="h-5 w-5 text-green-400" /> },
+            { label: 'Avg Score', value: data.averageScore ? `${data.averageScore}%` : '—', icon: <Star className="h-5 w-5 text-yellow-400" /> },
+            { label: 'Total Lessons', value: data.totalLessons, icon: <Users className="h-5 w-5 text-purple-400" /> },
           ].map(({ label, value, icon }) => (
-            <div key={label} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-              <div className="flex items-center gap-2 mb-1">{icon}<p className="text-xs text-gray-500">{label}</p></div>
-              <p className="text-2xl font-bold text-gray-900">{value}</p>
+            <div key={label} className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-4 hover:bg-slate-900/80 transition">
+              <div className="flex items-center gap-2 mb-1">{icon}<p className="text-xs text-slate-400">{label}</p></div>
+              <p className="text-2xl font-bold text-slate-100">{value}</p>
             </div>
           ))}
         </div>
@@ -108,19 +108,19 @@ export default function InstructorProgressPage() {
         {/* Common focus areas */}
         {data.topFocusAreas.length > 0 && (
           <div className="grid md:grid-cols-2 gap-4 mb-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              <h3 className="font-semibold text-orange-700 mb-3">Most Common Focus Areas</h3>
+            <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-5">
+              <h3 className="font-semibold text-orange-300 mb-3">Most Common Focus Areas</h3>
               <div className="flex flex-wrap gap-2">
                 {data.topFocusAreas.map((area, i) => (
-                  <span key={i} className="px-2.5 py-1 bg-orange-50 text-orange-700 text-xs rounded-full border border-orange-200">{area}</span>
+                  <span key={i} className="px-2.5 py-1 bg-orange-900/30 text-orange-300 text-xs rounded-full border border-orange-700/50">{area}</span>
                 ))}
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              <h3 className="font-semibold text-green-700 mb-3">Most Common Strengths</h3>
+            <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-5">
+              <h3 className="font-semibold text-emerald-300 mb-3">Most Common Strengths</h3>
               <div className="flex flex-wrap gap-2">
                 {data.topStrengths.map((s, i) => (
-                  <span key={i} className="px-2.5 py-1 bg-green-50 text-green-700 text-xs rounded-full border border-green-200">{s}</span>
+                  <span key={i} className="px-2.5 py-1 bg-green-900/30 text-green-300 text-xs rounded-full border border-green-700/50">{s}</span>
                 ))}
               </div>
             </div>
@@ -128,52 +128,52 @@ export default function InstructorProgressPage() {
         )}
 
         {/* Recent feedback */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Recent Lesson Feedback</h2>
+        <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/10">
+            <h2 className="font-semibold text-slate-100">Recent Lesson Feedback</h2>
           </div>
           {data.recentFeedback.length === 0 ? (
-            <div className="p-10 text-center text-gray-400">
+            <div className="p-10 text-center text-slate-400">
               <p>No feedback recorded yet</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-slate-700">
               {data.recentFeedback.map(fb => {
                 const isExpanded = expandedId === fb.id;
                 return (
                   <div key={fb.id}>
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : fb.id)}
-                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition text-left"
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/50 transition text-left"
                     >
                       <div>
-                        <p className="font-medium text-gray-900">{fb.clientName}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="font-medium text-slate-100">{fb.clientName}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
                           {new Date(fb.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
                         {fb.performanceScore !== null && (
                           <span className={`text-sm font-bold px-2.5 py-1 rounded-full ${
-                            fb.performanceScore >= 85 ? 'bg-green-100 text-green-700' :
-                            fb.performanceScore >= 70 ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
+                            fb.performanceScore >= 85 ? 'bg-green-900/30 text-green-300 border border-green-700/50' :
+                            fb.performanceScore >= 70 ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50' :
+                            'bg-red-900/30 text-red-300 border border-red-700/50'
                           }`}>{fb.performanceScore}%</span>
                         )}
-                        {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
                       </div>
                     </button>
                     {isExpanded && (
-                      <div className="px-5 pb-4 bg-gray-50 space-y-3 text-sm">
+                      <div className="px-5 pb-4 bg-slate-800/30 space-y-3 text-sm">
                         {fb.notes && (
-                          <p className="text-gray-700 bg-blue-50 border-l-4 border-blue-400 px-3 py-2 rounded">
+                          <p className="text-slate-300 bg-blue-900/20 border-l-4 border-blue-500 px-3 py-2 rounded">
                             💬 {fb.notes}
                           </p>
                         )}
                         <div className="flex gap-3">
                           <Link
                             href={`/dashboard/bookings/${fb.bookingId}`}
-                            className="text-xs text-blue-600 hover:underline"
+                            className="text-xs text-blue-400 hover:text-blue-300 transition"
                           >
                             View booking →
                           </Link>

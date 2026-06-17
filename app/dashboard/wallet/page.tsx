@@ -42,26 +42,26 @@ export default function InstructorWalletPage() {
   useEffect(() => { load(); }, []);
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+      <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center text-red-600">{error}</div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center text-red-400">{error}</div>
   );
 
   const recent = data?.transactions?.slice(0, 10) ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Payout Wallet</h1>
-            <p className="text-gray-500 mt-1">Your earnings balance and payout history</p>
+            <h1 className="text-3xl font-bold text-slate-100">Payout Wallet</h1>
+            <p className="text-slate-400 mt-1">Your earnings balance and payout history</p>
           </div>
           <div className="flex gap-3">
             <button onClick={load} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">
@@ -75,41 +75,41 @@ export default function InstructorWalletPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pending Payout</p>
-            <p className="text-2xl font-bold text-amber-600">${(data?.pendingPayouts ?? 0).toFixed(2)}</p>
-            <div className="flex items-center gap-1 mt-2 text-xs text-amber-500">
+          <div className="bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-800">
+            <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Pending Payout</p>
+            <p className="text-2xl font-bold text-amber-400">${(data?.pendingPayouts ?? 0).toFixed(2)}</p>
+            <div className="flex items-center gap-1 mt-2 text-xs text-amber-300">
               <Clock className="w-3 h-3" /> Awaiting processing
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">This Week</p>
-            <p className="text-2xl font-bold text-green-600">${(data?.thisWeekEarnings ?? 0).toFixed(2)}</p>
-            <div className="flex items-center gap-1 mt-2 text-xs text-green-500">
+          <div className="bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-800">
+            <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">This Week</p>
+            <p className="text-2xl font-bold text-green-400">${(data?.thisWeekEarnings ?? 0).toFixed(2)}</p>
+            <div className="flex items-center gap-1 mt-2 text-xs text-green-300">
               <TrendingUp className="w-3 h-3" /> Net earnings
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">This Month</p>
-            <p className="text-2xl font-bold text-blue-600">${(data?.thisMonthEarnings ?? 0).toFixed(2)}</p>
-            <div className="flex items-center gap-1 mt-2 text-xs text-blue-500">
+          <div className="bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-800">
+            <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">This Month</p>
+            <p className="text-2xl font-bold text-sky-400">${(data?.thisMonthEarnings ?? 0).toFixed(2)}</p>
+            <div className="flex items-center gap-1 mt-2 text-xs text-sky-300">
               <DollarSign className="w-3 h-3" /> Net earnings
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">All Time</p>
-            <p className="text-2xl font-bold text-gray-900">${(data?.totalEarnings ?? 0).toFixed(2)}</p>
-            <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
+          <div className="bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-800">
+            <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">All Time</p>
+            <p className="text-2xl font-bold text-slate-100">${(data?.totalEarnings ?? 0).toFixed(2)}</p>
+            <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
               <CheckCircle className="w-3 h-3" /> Total paid out
             </div>
           </div>
         </div>
 
         {/* Recent transactions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900">Recent Payouts</h2>
-            <Link href="/dashboard/earnings" className="text-sm text-blue-600 hover:underline">View all</Link>
+        <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+            <h2 className="font-semibold text-slate-100">Recent Payouts</h2>
+            <Link href="/dashboard/earnings" className="text-sm text-cyan-400 hover:text-cyan-300">View all</Link>
           </div>
 
           {recent.length === 0 ? (
@@ -121,12 +121,12 @@ export default function InstructorWalletPage() {
           ) : (
             <div className="divide-y divide-gray-50">
               {recent.map(tx => (
-                <div key={tx.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
+                <div key={tx.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-800 transition">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-slate-100">
                       {tx.booking?.client?.name ?? tx.description ?? 'Payout'}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-slate-400 mt-0.5">
                       {tx.booking?.startTime
                         ? new Date(tx.booking.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
                         : new Date(tx.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -147,9 +147,9 @@ export default function InstructorWalletPage() {
         </div>
 
         {/* Info note */}
-        <p className="text-xs text-gray-400 text-center mt-6">
+        <p className="text-xs text-slate-400 text-center mt-6">
           Payouts are processed by the platform admin. For detailed earnings breakdown, visit the{' '}
-          <Link href="/dashboard/earnings" className="text-blue-500 hover:underline">Earnings page</Link>.
+          <Link href="/dashboard/earnings" className="text-cyan-300 hover:text-cyan-200">Earnings page</Link>.
         </p>
       </div>
     </div>

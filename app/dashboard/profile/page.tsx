@@ -200,14 +200,14 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-6">Profile</h1>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-6 text-slate-100">Profile</h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Profile Photo */}
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Profile Photo</h2>
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-100">Profile Photo</h2>
             <div className="flex flex-col sm:flex-row items-center gap-6">
               <div className="relative">
                 {profileImage ? (
@@ -219,8 +219,8 @@ export default function ProfilePage() {
                     className="rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-32 h-32 bg-gray-200 rounded-full flex items-center justify-center">
-                    <Camera className="h-12 w-12 text-gray-400" />
+                  <div className="w-32 h-32 bg-slate-800 rounded-full flex items-center justify-center">
+                    <Camera className="h-12 w-12 text-slate-500" />
                   </div>
                 )}
               </div>
@@ -231,10 +231,10 @@ export default function ProfilePage() {
                     type="file"
                     accept="image/*"
                     onChange={(e) => handleImageUpload(e, 'profile')}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-800 file:text-slate-100 hover:file:bg-slate-700"
                   />
                 </label>
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-sm text-slate-400 mt-2">
                   JPG, PNG or GIF. Max 5MB.
                 </p>
               </div>
@@ -242,8 +242,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Basic Info */}
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Basic Information</h2>
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-100">Basic Information</h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Full Name</label>
@@ -251,7 +251,7 @@ export default function ProfilePage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                   required
                 />
               </div>
@@ -262,7 +262,7 @@ export default function ProfilePage() {
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                   required
                 />
               </div>
@@ -274,15 +274,15 @@ export default function ProfilePage() {
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                   rows={4}
                   placeholder="Tell clients about yourself, your experience, teaching style..."
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
               </div>
             </div>
           </div>
 
           {/* Car Information */}
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Car Information</h2>
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-100">Car Information</h2>
             
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2">Car Photo</label>
@@ -297,8 +297,8 @@ export default function ProfilePage() {
                       className="rounded-lg object-cover"
                     />
                   ) : (
-                    <div className="w-48 h-36 bg-gray-200 rounded-lg flex items-center justify-center">
-                      <Car className="h-12 w-12 text-gray-400" />
+                    <div className="w-48 h-36 bg-slate-800 rounded-lg flex items-center justify-center">
+                      <Car className="h-12 w-12 text-slate-500" />
                     </div>
                   )}
                 </div>
@@ -309,7 +309,7 @@ export default function ProfilePage() {
                       type="file"
                       accept="image/*"
                       onChange={(e) => handleImageUpload(e, 'car')}
-                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-800 file:text-slate-100 hover:file:bg-slate-700"
                     />
                   </label>
                 </div>
@@ -324,7 +324,7 @@ export default function ProfilePage() {
                   value={formData.carMake}
                   onChange={(e) => setFormData({ ...formData, carMake: e.target.value })}
                   placeholder="Toyota"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
               </div>
 
@@ -335,7 +335,7 @@ export default function ProfilePage() {
                   value={formData.carModel}
                   onChange={(e) => setFormData({ ...formData, carModel: e.target.value })}
                   placeholder="Corolla"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
               </div>
 
@@ -348,15 +348,15 @@ export default function ProfilePage() {
                   placeholder="2020"
                   min="1990"
                   max={new Date().getFullYear() + 1}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
               </div>
             </div>
           </div>
 
           {/* Business Information */}
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Business Information</h2>
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-100">Business Information</h2>
             <div className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
@@ -365,10 +365,10 @@ export default function ProfilePage() {
                     type="number"
                     value={formData.hourlyRate}
                     readOnly
-                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-600"
+                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-400 rounded-lg cursor-not-allowed"
                     title="Change this in Settings"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Change in Settings page</p>
+                  <p className="text-xs text-slate-400 mt-1">Change in Settings page</p>
                 </div>
 
                 <div>
@@ -377,10 +377,10 @@ export default function ProfilePage() {
                     type="number"
                     value={formData.serviceRadiusKm}
                     readOnly
-                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-600"
+                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-400 rounded-lg cursor-not-allowed"
                     title="Change this in Settings"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Change in Settings page</p>
+                  <p className="text-xs text-slate-400 mt-1">Change in Settings page</p>
                 </div>
               </div>
 
@@ -391,9 +391,9 @@ export default function ProfilePage() {
                   value={formData.baseAddress}
                   onChange={(e) => setFormData({ ...formData, baseAddress: e.target.value })}
                   placeholder="e.g. Maylands WA 6051"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">Your home base — only the suburb is shown publicly</p>
+                <p className="text-xs text-slate-400 mt-1">Your home base — only the suburb is shown publicly</p>
               </div>
 
               <div>
@@ -402,16 +402,16 @@ export default function ProfilePage() {
                   {formData.vehicleTypes.map((type) => (
                     <span
                       key={type}
-                      className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium"
+                      className="bg-slate-800 text-slate-100 px-3 py-1 rounded-full text-sm font-medium"
                     >
                       {type}
                     </span>
                   ))}
                   {formData.vehicleTypes.length === 0 && (
-                    <span className="text-gray-500 text-sm">No vehicle types set</span>
+                    <span className="text-slate-400 text-sm">No vehicle types set</span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Change in Settings page</p>
+                <p className="text-xs text-slate-400 mt-1">Change in Settings page</p>
               </div>
 
               <div>
@@ -420,13 +420,13 @@ export default function ProfilePage() {
                   {formData.languages.map((lang) => (
                     <span
                       key={lang}
-                      className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1"
+                      className="bg-slate-800 text-slate-100 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1"
                     >
                       {lang}
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, languages: formData.languages.filter(l => l !== lang) })}
-                        className="ml-1 text-green-600 hover:text-red-600"
+                        className="ml-1 text-slate-300 hover:text-red-400"
                       >
                         ×
                       </button>
@@ -449,7 +449,7 @@ export default function ProfilePage() {
                       }
                     }}
                     placeholder="e.g. English, Arabic, Tigrinya"
-                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 text-sm"
+                    className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm placeholder-slate-500"
                   />
                   <button
                     type="button"
@@ -465,14 +465,14 @@ export default function ProfilePage() {
                     Add
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Press Enter or click Add. Shown on your public profile.</p>
+                <p className="text-xs text-slate-400 mt-1">Press Enter or click Add. Shown on your public profile.</p>
               </div>
             </div>
           </div>
 
           {/* Professional Credentials */}
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Professional Credentials</h2>
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-100">Professional Credentials</h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Instructor License Number</label>
@@ -481,7 +481,7 @@ export default function ProfilePage() {
                   value={formData.licenseNumber}
                   onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
                   placeholder="e.g. DI12345"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
                 {!formData.licenseNumber && (
                   <p className="text-xs text-amber-600 mt-1">⚠️ Not provided — complete your profile</p>
@@ -495,7 +495,7 @@ export default function ProfilePage() {
                   value={formData.insuranceNumber}
                   onChange={(e) => setFormData({ ...formData, insuranceNumber: e.target.value })}
                   placeholder="e.g. POL-2024-XXXXX"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
                 {!formData.insuranceNumber && (
                   <p className="text-xs text-amber-600 mt-1">⚠️ Not provided — complete your profile</p>
@@ -503,8 +503,8 @@ export default function ProfilePage() {
               </div>
 
               {(!formData.licenseNumber || !formData.insuranceNumber) && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <p className="text-sm text-amber-800">
+                <div className="bg-amber-900/20 border border-amber-700/60 rounded-lg p-4">
+                  <p className="text-sm text-amber-300">
                     Complete your professional credentials to increase trust with students.
                   </p>
                 </div>
@@ -513,8 +513,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Service Areas */}
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4 flex items-center gap-2">
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 text-slate-100">
               <MapPin className="h-5 w-5" />
               Service Areas (Postcodes)
             </h2>
@@ -525,7 +525,7 @@ export default function ProfilePage() {
                 value={newPostcode}
                 onChange={(e) => setNewPostcode(e.target.value)}
                 placeholder="Enter postcode (e.g., 6051)"
-                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
               <button
                 type="button"
@@ -541,7 +541,7 @@ export default function ProfilePage() {
               {serviceAreas.map((area) => (
                 <div
                   key={area.id}
-                  className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg flex items-center gap-2"
+                  className="bg-slate-800 text-slate-100 px-3 py-2 rounded-lg flex items-center gap-2"
                 >
                   <span className="font-medium">{area.postcode}</span>
                   {area.suburb && <span className="text-sm">({area.suburb})</span>}
@@ -555,15 +555,15 @@ export default function ProfilePage() {
                 </div>
               ))}
               {serviceAreas.length === 0 && (
-                <p className="text-gray-500 text-sm">No service areas added yet</p>
+                <p className="text-slate-400 text-sm">No service areas added yet</p>
               )}
             </div>
           </div>
 
           {/* Social Links & Public Profile */}
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-1">Social Links</h2>
-            <p className="text-sm text-gray-500 mb-4">These appear on your public booking page</p>
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-1 text-slate-100">Social Links</h2>
+            <p className="text-sm text-slate-400 mb-4">These appear on your public booking page</p>
             <div className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
@@ -575,7 +575,7 @@ export default function ProfilePage() {
                     placeholder="e.g. 5"
                     min="0"
                     max="50"
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                   />
                 </div>
               </div>
@@ -586,9 +586,9 @@ export default function ProfilePage() {
                   value={formData.whatsapp}
                   onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
                   placeholder="e.g. 61412345678"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">Include country code, no spaces (e.g. 61412345678)</p>
+                <p className="text-xs text-slate-400 mt-1">Include country code, no spaces (e.g. 61412345678)</p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Instagram Handle</label>
@@ -597,7 +597,7 @@ export default function ProfilePage() {
                   value={formData.instagram}
                   onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
                   placeholder="e.g. yourhandle (without @)"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
               </div>
               <div>
@@ -607,7 +607,7 @@ export default function ProfilePage() {
                   value={formData.facebook}
                   onChange={(e) => setFormData({ ...formData, facebook: e.target.value })}
                   placeholder="e.g. yourpage or https://facebook.com/yourpage"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 />
               </div>
             </div>
@@ -626,3 +626,4 @@ export default function ProfilePage() {
     </div>
   )
 }
+

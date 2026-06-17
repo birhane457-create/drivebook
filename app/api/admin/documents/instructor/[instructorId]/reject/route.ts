@@ -60,6 +60,23 @@ export async function POST(
       });
     }
 
+    // Log audit entry
+    await prisma.auditLog.create({
+      data: {
+        action: 'DOCUMENT_REJECTED',
+        actorId: session.user.id,
+        actorRole: session.user.role,
+        targetType: 'Instructor',
+        targetId: params.instructorId,
+        metadata: {
+          instructorName: instructor?.name,
+          documentKey,
+          rejectionReason: reason,
+        },
+        success: true,
+      },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Reject document error:', error);

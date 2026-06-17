@@ -9,11 +9,32 @@
 
 ## What It Shows
 
+**Header:**
+- Platform overview banner with current status
+
 **Stats row (4 cards):**
 - Total instructors (approved · pending breakdown)
 - Total bookings (+ this month count)
 - Total students
 - Platform revenue MTD (sum of settled transaction platform fees)
+
+**Key Widgets:**
+
+**💳 Booking Payment Status** (Platform Revenue)
+- Shows verified payment revenue only (Stripe, Wallet, Platform payments)
+- Tracks platform bookings through payment stages
+- Real-time status: Pending, Completed, Refunded, Expired
+- Auto-refreshes every 60 seconds
+- Excludes offline bookings (not platform revenue)
+- Purpose: Visibility into what DriveBook actually owes instructors
+
+**📊 Instructor Retention Status** (Offline Bookings)
+- Shows offline bookings tracked by instructors
+- Retention strategy metrics (optional feature)
+- No financial impact (offline is not revenue)
+- Auto-refreshes every 60 seconds
+- Separate from platform revenue
+- Purpose: Understand instructor use of offline features
 
 **Action alerts (shown only when action is needed):**
 
@@ -35,6 +56,7 @@
 
 **Recent Bookings table:**
 - Last 10 bookings with client, instructor, date, status, price
+- Source badges: blue "Platform" or grey "Offline"
 
 **Crash resilience:** All DB queries are wrapped in `try/catch` with zero fallbacks. The dashboard renders with empty stats if the DB is unavailable — it never shows a 500 error.
 

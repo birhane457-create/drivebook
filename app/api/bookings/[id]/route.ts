@@ -302,6 +302,46 @@ export async function DELETE(
 
     const now = new Date()
 
+    // Block deletion of paid future bookings — must use /cancel instead
+    // which applies the correct refund policy. DELETE is only for unpaid or past bookings.
+    if (booking.isPaid && booking.startTime && booking.startTime > now) {
+      return NextResponse.json({
+        error: 'Cannot delete a paid upcoming booking. Use the cancel endpoint to apply the correct refund policy.',
+        useCancel: true,
+      }, { status: 409 })
+    }
+
+    // For paid past bookings or bookings that passed without completion,
+    // issue a full refund to the client wallet before soft-deleting
+    let refundIssued = false
+    if (booking.isPaid && booking.price > 0 && booking.client?.userId) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          const wallet = await tx.clientWallet.findUnique({
+            where: { userId: booking.client!.userId! },
+          })
+          if (wallet) {
+            await tx.walletTransaction.create({
+              data: {
+                walletId: wallet.id,
+                type: 'CREDIT',
+                amount: booking.price,
+                description: `Refund — booking deleted (${booking.id.slice(-8)})`,
+                status: 'CONFIRMED',
+              },
+            })
+            await tx.clientWallet.update({
+              where: { id: wallet.id },
+              data: { balance: { increment: booking.price } },
+            })
+          }
+        })
+        refundIssued = true
+      } catch (refundErr) {
+        console.error('Refund on delete failed — proceeding with soft delete:', refundErr)
+      }
+    }
+
     // Soft delete — data is NEVER hard deleted
     await prisma.booking.update({
       where: { id: params.id },
@@ -415,6 +455,7 @@ export async function DELETE(
     return NextResponse.json({
       success: true,
       message: 'Booking cancelled. Record retained for audit purposes.',
+      refundIssued,
       auditId: params.id
     })
   } catch (error) {

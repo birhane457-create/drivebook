@@ -30,8 +30,9 @@ export async function GET() {
         clientId: client.id,
         status: { in: ['CONFIRMED', 'COMPLETED'] },
         startTime: { lt: now },
-        isReviewed: false,
-      } as any,
+        clientRating: null,
+        reviewGivenAt: null,
+      },
       include: {
         instructor: { select: { name: true } },
       },

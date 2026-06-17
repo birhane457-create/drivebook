@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     const data = validateSlotsSchema.parse(body);
 
     const invalidSlots = [];
+    const now = new Date();
 
     for (const slot of data.slots) {
       // Parse date and time
@@ -30,12 +31,35 @@ export async function POST(req: NextRequest) {
       const endDateTime = new Date(startDateTime);
       endDateTime.setMinutes(endDateTime.getMinutes() + slot.duration);
 
+      // Clean up expired reservations for this instructor
+      await prisma.slotReservation.deleteMany({
+        where: {
+          instructorId: data.instructorId,
+          expiresAt: { lt: now },
+        },
+      });
+
+      // Check for active slot reservations owned by other sessions.
+      // Range overlap: reservation.startTime < thisEndDateTime AND reservation.endTime > thisStartDateTime
+      const conflictingReservation = await prisma.slotReservation.findFirst({
+        where: {
+          instructorId: data.instructorId,
+          sessionId: { not: data.sessionId },
+          expiresAt: { gt: now },
+          AND: [
+            { startTime: { lt: endDateTime } },
+            { endTime: { gt: startDateTime } }
+          ]
+        },
+        select: { id: true },
+      });
+
       // Check for overlapping confirmed bookings in database
       const overlappingBookings = await prisma.booking.count({
         where: {
           instructorId: data.instructorId,
           status: {
-            in: ['PENDING', 'CONFIRMED', 'COMPLETED']
+            in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED']
           },
           OR: [
             {
@@ -63,12 +87,14 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      if (overlappingBookings > 0) {
+      if (conflictingReservation || overlappingBookings > 0) {
         invalidSlots.push({
           date: slot.date,
           time: slot.time,
           duration: slot.duration,
-          reason: 'This slot was booked by another user'
+          reason: conflictingReservation
+            ? 'This slot is temporarily reserved by another user'
+            : 'This slot was booked by another user'
         });
       }
     }

@@ -12,19 +12,34 @@ export default function BookingDetailsPage() {
   const { bookingState } = useBooking();
 
   useEffect(() => {
-    if (!bookingState.instructor || bookingState.bookingType !== 'now') {
-      router.push('/book');
-    }
+    // Wait for instructor to load from localStorage before redirecting
+    const timer = setTimeout(() => {
+      if (!bookingState.instructor || bookingState.bookingType !== 'now') {
+        router.push('/book');
+      }
+    }, 500); // Wait 500ms for localStorage recovery
+    
+    return () => clearTimeout(timer);
   }, [bookingState.instructor, bookingState.bookingType, router]);
 
+  // While instructor is loading, show loading state
   if (!bookingState.instructor || bookingState.bookingType !== 'now') {
-    return null;
+    return (
+      <MultiStepBookingLayout currentStep={5}>
+        <div className="space-y-6 flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
+            <p className="text-white/70">Loading booking details...</p>
+          </div>
+        </div>
+      </MultiStepBookingLayout>
+    );
   }
 
   const handleContinue = () => {
-    // Validate that at least one booking is scheduled
-    if (bookingState.scheduledBookings.length === 0) {
-      alert('Please schedule at least one lesson to continue');
+    // Validate that at least one booking (lesson or PDA) is scheduled
+    if (bookingState.scheduledBookings.length === 0 && !bookingState.pdaTestBooking) {
+      alert('Please schedule at least one lesson or PDA test to continue');
       return;
     }
 
@@ -33,32 +48,32 @@ export default function BookingDetailsPage() {
 
   return (
     <MultiStepBookingLayout currentStep={5}>
-      <div className="space-y-6">
+      <div className="space-y-6 text-white">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Schedule Your Lessons
+          <h2 className="text-2xl font-bold text-white/95 mb-2">
+            Schedule Your Lessons & Tests
           </h2>
-          <p className="text-gray-600">
-            Book your lessons now or schedule some for later from your dashboard
+          <p className="text-white/70">
+            Add lessons, PDA tests, or both. You can schedule lessons now and book more later from your dashboard.
           </p>
         </div>
 
         <BookingDetailsForm />
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/6">
           <button
             onClick={() => router.back()}
             type="button"
-            className="flex-1 bg-white text-gray-700 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors border-2 border-gray-300"
+            className="flex-1 bg-white/5 text-white/90 px-8 py-4 rounded-lg font-semibold hover:bg-white/6 transition-colors border border-white/8"
           >
             ← Back
           </button>
           <button
             onClick={handleContinue}
             type="button"
-            disabled={bookingState.scheduledBookings.length === 0}
-            className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+            disabled={bookingState.scheduledBookings.length === 0 && !bookingState.pdaTestBooking}
+            className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-lg font-semibold hover:from-purple-500 hover:to-pink-500 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Continue to Registration →
           </button>

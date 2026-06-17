@@ -1,10 +1,12 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 
 
 export const dynamic = 'force-dynamic';
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.NEXTAUTH_SECRET
+if (!JWT_SECRET) throw new Error('NEXTAUTH_SECRET is not configured')
 
 interface JWTPayload {
   userId: string;
@@ -15,14 +17,16 @@ interface JWTPayload {
 // GET - Get instructor settings
 export async function GET(req: NextRequest) {
   try {
-    console.log('[Settings Mobile API] GET request received');
+    logger.info('[Settings Mobile API] GET request received');
     
     // Get token from Authorization header
     const authHeader = req.headers.get('authorization');
-    console.log('[Settings Mobile API] Authorization header:', authHeader ? 'Present' : 'Missing');
+    logger.info('[Settings Mobile API] Authorization header', {
+      present: !!authHeader,
+    });
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('[Settings Mobile API] No valid authorization header');
+      logger.info('[Settings Mobile API] No valid authorization header');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -31,10 +35,12 @@ export async function GET(req: NextRequest) {
     // Verify token
     let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
-      console.log('[Settings Mobile API] Token decoded:', decoded);
+      decoded = jwt.verify(token, JWT_SECRET!) as unknown as JWTPayload;
+      logger.info('[Settings Mobile API] Token decoded', decoded as unknown as Record<string, unknown>);
     } catch (error) {
-      console.log('[Settings Mobile API] Token verification failed:', error);
+      logger.info('[Settings Mobile API] Token verification failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
@@ -58,10 +64,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    console.log('[Settings Mobile API] Settings retrieved successfully');
+    logger.info('[Settings Mobile API] Settings retrieved successfully');
     return NextResponse.json(instructor);
   } catch (error) {
-    console.error('[Settings Mobile API] Error:', error);
+    logger.error('[Settings Mobile API] Error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: 'Failed to fetch settings' },
       { status: 500 }
@@ -72,13 +80,13 @@ export async function GET(req: NextRequest) {
 // PUT - Update instructor settings
 export async function PUT(req: NextRequest) {
   try {
-    console.log('[Settings Mobile API] PUT request received');
+    logger.info('[Settings Mobile API] PUT request received');
     
     // Get token from Authorization header
     const authHeader = req.headers.get('authorization');
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('[Settings Mobile API] No valid authorization header');
+      logger.info('[Settings Mobile API] No valid authorization header');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -87,10 +95,12 @@ export async function PUT(req: NextRequest) {
     // Verify token
     let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
-      console.log('[Settings Mobile API] Token decoded:', decoded);
+      decoded = jwt.verify(token, JWT_SECRET!) as unknown as JWTPayload;
+      logger.info('[Settings Mobile API] Token decoded', decoded as unknown as Record<string, unknown>);
     } catch (error) {
-      console.log('[Settings Mobile API] Token verification failed:', error);
+      logger.info('[Settings Mobile API] Token verification failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
@@ -135,10 +145,12 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    console.log('[Settings Mobile API] Settings updated successfully');
+    logger.info('[Settings Mobile API] Settings updated successfully');
     return NextResponse.json(updatedInstructor);
   } catch (error) {
-    console.error('[Settings Mobile API] Error:', error);
+    logger.error('[Settings Mobile API] Error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: 'Failed to update settings' },
       { status: 500 }

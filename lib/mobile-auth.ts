@@ -23,11 +23,17 @@ export async function validateMobileToken(req: NextRequest) {
 
     const token = authHeader.slice(7); // Remove 'Bearer ' prefix
 
-    // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.NEXTAUTH_SECRET || 'your-secret-key'
-    ) as TokenPayload;
+  // Verify token — fail hard if secret is not configured
+  const jwtSecret = process.env.NEXTAUTH_SECRET
+  if (!jwtSecret) {
+    return {
+      valid: false,
+      error: 'Server configuration error',
+      user: null,
+    }
+  }
+
+  const decoded = jwt.verify(token, jwtSecret) as TokenPayload
 
     // Get user from database to ensure they still exist
     const user = await prisma.user.findUnique({

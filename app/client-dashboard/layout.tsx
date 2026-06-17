@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import ClientNav from '@/components/ClientNav';
+import ClientDashboardNav from '@/components/ClientDashboardNav';
 import ClientMobileBottomNav from '@/components/client/MobileBottomNav';
 
 export const dynamic = 'force-dynamic';
@@ -32,8 +32,8 @@ export default async function ClientDashboardLayout({
 
   return (
     <>
-      <ClientNav />
-      <div className="pb-20 md:pb-0">
+      <ClientDashboardNav />
+      <div className="pb-20 lg:pb-0">
         {children}
       </div>
       <ClientMobileBottomNav />

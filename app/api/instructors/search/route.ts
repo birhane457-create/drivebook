@@ -66,7 +66,10 @@ export async function GET(req: NextRequest) {
         serviceAreas: true,
         baseAddress: true,
         serviceRadiusKm: true,
-        lessonPackages: true,
+        offersTestPackage: true,
+        testPackagePrice: true,
+        testPackageDuration: true,
+        testPackageIncludes: true,
         _count: { select: { bookings: true } },
       },
     });
@@ -176,7 +179,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** Shape instructors for the frontend */
 function format(
   instructors: {
     id: string; name: string; profileImage: string | null; carImage: string | null;
@@ -184,33 +186,40 @@ function format(
     hourlyRate: number; vehicleTypes: string | null; languages: string | null;
     averageRating: number | null; totalReviews: number; bio: string | null;
     serviceAreas: string | null; baseAddress: string | null; serviceRadiusKm: number | null;
-    lessonPackages: unknown; _count: { bookings: number };
+    offersTestPackage: boolean; testPackagePrice: number | null;
+    testPackageDuration: number | null; testPackageIncludes: unknown;
+    _count: { bookings: number };
   }[],
   _searchPoint: unknown
 ) {
-  return instructors.map(i => ({
-    id: i.id,
-    name: i.name,
-    profileImage: i.profileImage,
-    carImage: i.carImage,
-    carMake: i.carMake,
-    carModel: i.carModel,
-    carYear: i.carYear,
-    hourlyRate: i.hourlyRate,
-    serviceAreas: i.serviceAreas,
-    baseAddress: i.baseAddress,
-    serviceRadiusKm: i.serviceRadiusKm ?? DEFAULT_RADIUS_KM,
-    vehicleTypes: i.vehicleTypes ? i.vehicleTypes.split(',').map((v: string) => v.trim()) : ['Manual', 'Automatic'],
-    languages: i.languages ? i.languages.split(',').map((l: string) => l.trim()) : ['English'],
-    averageRating: i.averageRating ?? 4.8,
-    totalReviews: i.totalReviews ?? 0,
-    totalBookings: i._count.bookings,
-    bio: i.bio || 'Experienced driving instructor',
-    distance: null as number | null,
-    offersTestPackage: !!(i.lessonPackages as any[])?.some((p: any) => p.isActive !== false),
-    testPackagePrice: null,
-    testPackageDuration: null,
-    testPackageIncludes: [],
-    lessonPackages: ((i.lessonPackages as any[]) || []).filter((p: any) => p.isActive !== false),
-  }));
+  return instructors.map(i => {
+    const testIncludes = Array.isArray(i.testPackageIncludes)
+      ? (i.testPackageIncludes as string[])
+      : [];
+
+    return {
+      id: i.id,
+      name: i.name,
+      profileImage: i.profileImage,
+      carImage: i.carImage,
+      carMake: i.carMake,
+      carModel: i.carModel,
+      carYear: i.carYear,
+      hourlyRate: i.hourlyRate,
+      serviceAreas: i.serviceAreas,
+      baseAddress: i.baseAddress,
+      serviceRadiusKm: i.serviceRadiusKm ?? DEFAULT_RADIUS_KM,
+      vehicleTypes: i.vehicleTypes ? i.vehicleTypes.split(',').map((v: string) => v.trim()) : ['Manual', 'Automatic'],
+      languages: i.languages ? i.languages.split(',').map((l: string) => l.trim()) : ['English'],
+      averageRating: i.averageRating ?? 4.8,
+      totalReviews: i.totalReviews ?? 0,
+      totalBookings: i._count.bookings,
+      bio: i.bio || 'Experienced driving instructor',
+      distance: null as number | null,
+      offersTestPackage: i.offersTestPackage ?? false,
+      testPackagePrice: i.testPackagePrice,
+      testPackageDuration: i.testPackageDuration,
+      testPackageIncludes: testIncludes,
+    }
+  });
 }

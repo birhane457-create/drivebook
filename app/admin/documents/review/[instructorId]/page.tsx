@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminNav from '@/components/admin/AdminNav';
-import { CheckCircle, ExternalLink, ArrowLeft, Save, Calendar, Upload, X } from 'lucide-react';
+import { CheckCircle, ExternalLink, ArrowLeft, Save, Calendar, Upload, X, Trash2 } from 'lucide-react';
 
 interface InstructorDocuments {
   id: string;
@@ -56,7 +56,7 @@ function trafficLight(expiry: string | undefined, hasDoc: boolean): 'green' | 'y
 }
 
 function TrafficDot({ color }: { color: 'green' | 'yellow' | 'red' }) {
-  const cls = color === 'green' ? 'bg-green-500' : color === 'yellow' ? 'bg-yellow-400' : 'bg-red-500';
+  const cls = color === 'green' ? 'bg-green-900/200' : color === 'yellow' ? 'bg-yellow-400' : 'bg-red-900/200';
   return (
     <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold shrink-0 ${cls}`}>
       {color === 'green' ? '\u2713' : color === 'yellow' ? '!' : '\u2717'}
@@ -146,15 +146,34 @@ export default function DocumentReviewPage() {
     else showToast('Failed to remove');
   };
 
+  const [rejectingField, setRejectingField] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const rejectDoc = async (field: string, label: string) => {
+    if (!rejectReason.trim()) {
+      showToast('Please provide a reason for rejection');
+      return;
+    }
+    setRejectingField(null);
+    const res = await fetch(`/api/admin/documents/instructor/${instructorId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentKey: field, reason: rejectReason }),
+    });
+    setRejectReason('');
+    if (res.ok) { showToast(`${label} rejected and instructor notified`); fetchDocs(); }
+    else showToast('Failed to reject document');
+  };
+
   if (loading) return (
-    <div className="min-h-screen bg-gray-50"><AdminNav />
-      <div className="flex items-center justify-center h-64 text-gray-400">Loading...</div>
+    <div className="min-h-screen bg-slate-950 text-slate-100"><AdminNav />
+      <div className="flex items-center justify-center h-64 text-slate-500">Loading...</div>
     </div>
   );
 
   if (!instructor) return (
-    <div className="min-h-screen bg-gray-50"><AdminNav />
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center text-gray-500">Instructor not found</div>
+    <div className="min-h-screen bg-slate-950 text-slate-100"><AdminNav />
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center text-slate-400">Instructor not found</div>
     </div>
   );
 
@@ -164,24 +183,24 @@ export default function DocumentReviewPage() {
   const overall = lights.includes('red') ? 'red' : lights.includes('yellow') ? 'yellow' : 'green';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
 
       {toast && (
-        <div className="fixed top-4 right-4 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">{toast}</div>
+        <div className="fixed top-4 right-4 z-50 bg-slate-950 text-white text-sm px-4 py-2 rounded-xl shadow-lg">{toast}</div>
       )}
 
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mb-5">
+        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-300 mb-5">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
 
         {/* Header */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-sm p-5 mb-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{instructor.name}</h1>
-              <p className="text-sm text-gray-500">{instructor.email} &middot; {instructor.phone}</p>
+              <h1 className="text-xl font-bold text-slate-100">{instructor.name}</h1>
+              <p className="text-sm text-slate-400">{instructor.email} &middot; {instructor.phone}</p>
             </div>
             <div className="flex items-center gap-2">
               <TrafficDot color={overall} />
@@ -198,8 +217,8 @@ export default function DocumentReviewPage() {
         </div>
 
         {/* Document rows */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-5">
-          <div className="grid grid-cols-[1.5rem_1fr_9rem_auto_auto] gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide items-center">
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-sm overflow-hidden mb-5">
+          <div className="grid grid-cols-[1.5rem_1fr_9rem_auto_auto] gap-2 px-4 py-2 bg-slate-950 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide items-center">
             <div></div>
             <div>Document</div>
             <div className="flex items-center gap-1"><Calendar className="w-3 h-3" />Expiry</div>
@@ -207,7 +226,7 @@ export default function DocumentReviewPage() {
             <div>Upload</div>
           </div>
 
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-slate-800">
             {DOC_FIELDS.map(field => {
               const docUrl = instructor[field.key] as string | undefined;
               const hasDoc = !!docUrl;
@@ -221,11 +240,11 @@ export default function DocumentReviewPage() {
                   <TrafficDot color={light} />
 
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800">
+                    <p className="text-sm font-medium text-slate-200">
                       {field.label}
                       {field.required && <span className="text-red-400 ml-1 text-xs">*</span>}
                     </p>
-                    <p className="text-xs text-gray-400">{!hasDoc ? 'Not uploaded' : !field.expiryKey ? 'Uploaded' : ''}</p>
+                    <p className="text-xs text-slate-500">{!hasDoc ? 'Not uploaded' : !field.expiryKey ? 'Uploaded' : ''}</p>
                   </div>
 
                   {/* Expiry input */}
@@ -237,32 +256,38 @@ export default function DocumentReviewPage() {
                           value={expiry[field.expiryKey] || ''}
                           onChange={e => setExpiry(prev => ({ ...prev, [field.expiryKey!]: e.target.value }))}
                           className={`text-xs border rounded-lg px-2 py-1.5 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none
-                            ${light === 'red' ? 'border-red-300 bg-red-50' : light === 'yellow' ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}
+                            ${light === 'red' ? 'border-red-300 bg-red-900/20' : light === 'yellow' ? 'border-yellow-300 bg-yellow-900/20' : 'border-slate-700 bg-slate-900'}`}
                         />
                         <span className={`text-xs font-medium ${light === 'red' ? 'text-red-500' : light === 'yellow' ? 'text-yellow-600' : 'text-green-600'}`}>
                           {expiry[field.expiryKey] ? (light === 'red' ? 'Expired' : light === 'yellow' ? 'Expiring soon' : 'Valid') : 'No date set'}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-300">N/A</span>
+                      <span className="text-xs text-slate-500">N/A</span>
                     )}
                   </div>
 
-                  {/* View / Remove */}
+                  {/* View / Remove / Reject */}
                   <div className="flex items-center gap-1">
                     {hasDoc ? (
                       <>
                         <a href={docUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-300">
                           <ExternalLink className="w-3.5 h-3.5" />View
                         </a>
-                        <button onClick={() => removeDoc(field.key as string)}
-                          className="text-gray-300 hover:text-red-400 ml-1" title="Remove">
+                        <button 
+                          onClick={() => setRejectingField(field.key as string)}
+                          className="text-slate-500 hover:text-red-400 ml-1" 
+                          title="Reject and notify instructor">
                           <X className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => removeDoc(field.key as string)}
+                          className="text-slate-500 hover:text-slate-300 ml-1" title="Remove">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </>
                     ) : (
-                      <span className="text-xs text-gray-300">None</span>
+                      <span className="text-xs text-slate-500">None</span>
                     )}
                   </div>
 
@@ -282,7 +307,7 @@ export default function DocumentReviewPage() {
                     <button
                       onClick={() => fileInputRefs.current[field.key as string]?.click()}
                       disabled={isUploading}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-lg border border-gray-200 hover:border-blue-300 disabled:opacity-40 transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-slate-900 hover:bg-blue-900/20 text-slate-400 hover:text-blue-700 rounded-lg border border-slate-700 hover:border-blue-300 disabled:opacity-40 transition-colors"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       {isUploading ? 'Uploading...' : hasDoc ? 'Replace' : 'Upload'}
@@ -295,8 +320,8 @@ export default function DocumentReviewPage() {
         </div>
 
         {/* Expiry summary */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Expiry Summary</p>
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-sm p-4 mb-5">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Expiry Summary</p>
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: 'Driver License', key: 'licenseExpiry' },
@@ -308,8 +333,8 @@ export default function DocumentReviewPage() {
               const light = val ? trafficLight(val, true) : 'yellow';
               return (
                 <div key={key} className={`flex items-center justify-between rounded-lg px-3 py-2 border
-                  ${light === 'red' ? 'bg-red-50 border-red-200' : light === 'yellow' ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
-                  <span className="text-xs font-medium text-gray-700">{label}</span>
+                  ${light === 'red' ? 'bg-red-900/20 border-red-700/50' : light === 'yellow' ? 'bg-yellow-900/20 border-yellow-700/50' : 'bg-green-900/20 border-green-700/50'}`}>
+                  <span className="text-xs font-medium text-slate-300">{label}</span>
                   <span className={`text-xs font-semibold ${light === 'red' ? 'text-red-600' : light === 'yellow' ? 'text-yellow-600' : 'text-green-700'}`}>
                     {val ? new Date(val).toLocaleDateString('en-AU') : 'Not set'}
                   </span>
@@ -331,6 +356,44 @@ export default function DocumentReviewPage() {
           </button>
         </div>
       </div>
+
+      {/* Reject Modal */}
+      {rejectingField && (
+        <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-slate-100 mb-1">Reject Document</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              {DOC_FIELDS.find(f => f.key === rejectingField)?.label}
+            </p>
+            
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">Reason for rejection</label>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                placeholder="Explain why this document is being rejected..."
+                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+                rows={4}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setRejectingField(null); setRejectReason(''); }}
+                className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 text-sm rounded-lg hover:bg-slate-700 border border-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => rejectDoc(rejectingField, DOC_FIELDS.find(f => f.key === rejectingField)?.label || 'Document')}
+                className="flex-1 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700"
+              >
+                Reject & Notify
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

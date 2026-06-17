@@ -65,7 +65,7 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
         setError(result.error.message || 'Payment failed');
       } else if (result.paymentIntent?.status === 'succeeded') {
         // Step 3: Credit the wallet, passing the confirmed paymentIntentId
-        await fetch('/api/client/wallet-add', {
+        const walletAddRes = await fetch('/api/client/wallet-add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -74,6 +74,23 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
           }),
         });
 
+        // P0 FIX #5: Check wallet-add response for errors
+        if (!walletAddRes.ok) {
+          const walletError = await walletAddRes.json();
+          setError(walletError.error || 'Failed to add credits to wallet');
+          setLoading(false);
+          return;
+        }
+
+        const walletResult = await walletAddRes.json();
+        
+        if (!walletResult.success) {
+          setError(walletResult.error || 'Wallet credit failed');
+          setLoading(false);
+          return;
+        }
+
+        // Success - call onSuccess to refresh dashboard
         onSuccess();
         onClose();
       }

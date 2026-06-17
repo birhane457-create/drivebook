@@ -25,8 +25,8 @@ const FIELD_OPTIONS = [
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING:   'bg-amber-100 text-amber-700',
-  APPLIED:   'bg-green-100 text-green-700',
-  CANCELLED: 'bg-gray-100 text-gray-500',
+  APPLIED:   'bg-green-900/40 text-green-300',
+  CANCELLED: 'bg-slate-900 text-slate-400',
 };
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
@@ -115,11 +115,11 @@ export default function RateChangeScheduler() {
   const pastChanges = changes.filter(c => c.status !== 'PENDING');
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-blue-600" />
-          <h2 className="font-semibold text-gray-900">Scheduled Rate Changes</h2>
+          <h2 className="font-semibold text-slate-100">Scheduled Rate Changes</h2>
           {pendingChanges.length > 0 && (
             <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
               {pendingChanges.length} pending
@@ -135,54 +135,54 @@ export default function RateChangeScheduler() {
       </div>
 
       {/* How it works */}
-      <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 text-xs text-blue-800">
+      <div className="px-6 py-3 bg-blue-900/20 border-b border-blue-100 text-xs text-blue-300">
         <strong>How it works:</strong> Schedule a rate change with a future effective date. On that date, the cron job automatically applies the new rate and sends an email + in-app notification to all affected instructors. Existing confirmed bookings are never affected — only new bookings from the effective date.
       </div>
 
       {/* Schedule form */}
       {showForm && (
-        <div className="px-6 py-5 border-b border-gray-100 bg-gray-50">
-          <h3 className="font-semibold text-gray-900 mb-4">Schedule a new rate change</h3>
+        <div className="px-6 py-5 border-b border-slate-800 bg-slate-950">
+          <h3 className="font-semibold text-slate-100 mb-4">Schedule a new rate change</h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Which rate</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Which rate</label>
                 <select value={form.field} onChange={e => setForm(f => ({ ...f, field: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-slate-900">
                   {FIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">New rate (%)</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">New rate (%)</label>
                 <input type="number" min="0" max="50" step="0.5" required
                   placeholder="e.g. 14"
                   value={form.newRate} onChange={e => setForm(f => ({ ...f, newRate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Effective date</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Effective date</label>
                 <input type="date" required
                   min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
                   value={form.effectiveDate} onChange={e => setForm(f => ({ ...f, effectiveDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                <p className="text-xs text-gray-400 mt-1">Must be at least 1 day in the future</p>
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                <p className="text-xs text-slate-500 mt-1">Must be at least 1 day in the future</p>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Reason <span className="text-gray-400">(shown to instructors in the notification)</span>
+              <label className="block text-xs font-medium text-slate-400 mb-1">
+                Reason <span className="text-slate-500">(shown to instructors in the notification)</span>
               </label>
               <textarea required rows={3} minLength={10} maxLength={500}
                 placeholder="e.g. Annual rate review — aligning with updated platform operating costs and market rates."
                 value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
-              <p className="text-xs text-gray-400 mt-1">{form.reason.length}/500 — min 10 characters</p>
+                className="w-full px-3 py-2 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
+              <p className="text-xs text-slate-500 mt-1">{form.reason.length}/500 — min 10 characters</p>
             </div>
 
             {/* Warning box */}
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <div className="flex items-start gap-2 bg-amber-900/20 border border-amber-200 rounded-lg p-3">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-800">
+              <p className="text-xs text-amber-300">
                 Scheduling this will cancel any existing pending change for the same rate field. 
                 Instructors will receive an email and in-app notification on the effective date.
               </p>
@@ -193,7 +193,7 @@ export default function RateChangeScheduler() {
 
             <div className="flex gap-3">
               <button type="button" onClick={() => setShowForm(false)}
-                className="flex-1 py-2 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50">
+                className="flex-1 py-2 border border-slate-700 text-slate-400 text-sm rounded-lg hover:bg-slate-950">
                 Cancel
               </button>
               <button type="submit" disabled={saving}
@@ -207,16 +207,16 @@ export default function RateChangeScheduler() {
       )}
 
       {success && !showForm && (
-        <div className="px-6 py-3 bg-green-50 border-b border-green-100 text-sm text-green-700">{success}</div>
+        <div className="px-6 py-3 bg-green-900/20 border-b border-green-100 text-sm text-green-700">{success}</div>
       )}
 
       {/* Pending changes */}
       {loading ? (
         <div className="flex items-center justify-center py-10">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
         </div>
       ) : pendingChanges.length === 0 && pastChanges.length === 0 ? (
-        <div className="px-6 py-10 text-center text-gray-400 text-sm">
+        <div className="px-6 py-10 text-center text-slate-500 text-sm">
           No scheduled rate changes. Use the button above to schedule one.
         </div>
       ) : (
@@ -229,21 +229,21 @@ export default function RateChangeScheduler() {
                     {STATUS_ICON[change.status]}
                     {change.status}
                   </span>
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-slate-100">
                     {FIELD_OPTIONS.find(o => o.value === change.field)?.label || change.field}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="text-gray-500">{change.currentRate}%</span>
-                  <span className="text-gray-400">→</span>
+                  <span className="text-slate-400">{change.currentRate}%</span>
+                  <span className="text-slate-500">→</span>
                   <span className={`font-bold ${change.newRate > change.currentRate ? 'text-red-600' : 'text-green-600'}`}>
                     {change.newRate}%
                   </span>
-                  <span className="text-gray-400 text-xs">
+                  <span className="text-slate-500 text-xs">
                     effective {new Date(change.effectiveDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1 italic truncate">{change.reason}</p>
+                <p className="text-xs text-slate-400 mt-1 italic truncate">{change.reason}</p>
                 {change.appliedAt && (
                   <p className="text-xs text-green-600 mt-0.5">
                     Applied {new Date(change.appliedAt).toLocaleDateString('en-AU')}
@@ -253,7 +253,7 @@ export default function RateChangeScheduler() {
               </div>
               {change.status === 'PENDING' && (
                 <button onClick={() => cancelChange(change.id)}
-                  className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                  className="p-1.5 text-slate-500 hover:text-red-500 hover:bg-red-900/20 rounded-lg transition-colors shrink-0">
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}

@@ -9,7 +9,6 @@ export interface PricingSettings {
   package10Discount: number;
   package15Discount: number;
   discountPaidBy: string;
-  drivingTestPackagePrice: number;
   cancellationFee: number;
   lateCancellationWindowHours: number;
   noShowPenaltyAmount: number;
@@ -32,7 +31,6 @@ const DEFAULTS: PricingSettings = {
   package10Discount: 10,
   package15Discount: 12,
   discountPaidBy: 'shared',
-  drivingTestPackagePrice: 225,
   cancellationFee: 0,
   lateCancellationWindowHours: 24,
   noShowPenaltyAmount: 0,
@@ -64,7 +62,6 @@ export async function getPlatformPricing(): Promise<PricingSettings> {
       package10Discount: record.package10Discount,
       package15Discount: record.package15Discount,
       discountPaidBy: record.discountPaidBy,
-      drivingTestPackagePrice: record.drivingTestPackagePrice,
       cancellationFee: record.cancellationFee,
       lateCancellationWindowHours: record.lateCancellationWindowHours,
       noShowPenaltyAmount: record.noShowPenaltyAmount,

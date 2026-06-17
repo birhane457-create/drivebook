@@ -51,40 +51,40 @@ export default function StaffGovernancePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
             <Shield className="w-8 h-8 text-blue-600" />
             Staff Governance Dashboard
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-slate-400 mt-2">
             Monitor operational controls, financial authority, and audit compliance
           </p>
         </div>
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-600">Loading governance data...</p>
+            <p className="text-slate-400">Loading governance data...</p>
           </div>
         ) : stats ? (
           <>
             {/* Critical Alerts */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Tasks Requiring Approval */}
-              <div className={`bg-white rounded-lg shadow p-6 border-l-4 ${
+              <div className={`bg-slate-900 rounded-lg border border-slate-800 p-6 border-l-4 ${
                 stats.tasksRequiringApproval > 0 ? 'border-orange-500' : 'border-green-500'
               }`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 font-semibold">Awaiting Approval</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                    <p className="text-sm text-slate-400 font-semibold">Awaiting Approval</p>
+                    <p className="text-3xl font-bold text-slate-100 mt-2">
                       {stats.tasksRequiringApproval}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       Tasks requiring supervisor/owner approval
                     </p>
                   </div>
@@ -97,16 +97,16 @@ export default function StaffGovernancePage() {
               </div>
 
               {/* SLA Breaches */}
-              <div className={`bg-white rounded-lg shadow p-6 border-l-4 ${
+              <div className={`bg-slate-900 rounded-lg border border-slate-800 p-6 border-l-4 ${
                 stats.slaBreaches > 0 ? 'border-red-500' : 'border-green-500'
               }`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 font-semibold">SLA Breaches</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                    <p className="text-sm text-slate-400 font-semibold">SLA Breaches</p>
+                    <p className="text-3xl font-bold text-slate-100 mt-2">
                       {stats.slaBreaches}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       Tasks that missed response/resolution SLA
                     </p>
                   </div>
@@ -119,14 +119,14 @@ export default function StaffGovernancePage() {
               </div>
 
               {/* Escalations */}
-              <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+              <div className="bg-slate-900 rounded-lg border border-slate-800 p-6 border-l-4 border-purple-500">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 font-semibold">Escalations</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                    <p className="text-sm text-slate-400 font-semibold">Escalations</p>
+                    <p className="text-3xl font-bold text-slate-100 mt-2">
                       {stats.escalations}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       Tasks escalated to supervisor/owner
                     </p>
                   </div>
@@ -136,9 +136,9 @@ export default function StaffGovernancePage() {
             </div>
 
             {/* Financial Monitoring */}
-            <div className="bg-white rounded-lg shadow mb-8">
+            <div className="bg-slate-900 rounded-lg border border-slate-800 mb-8">
               <div className="p-6 border-b">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
                   <DollarSign className="w-6 h-6 text-green-600" />
                   Financial Monitoring
                 </h2>
@@ -146,19 +146,19 @@ export default function StaffGovernancePage() {
               <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <p className="text-sm text-gray-600">Total Refunds (All Time)</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">
+                    <p className="text-sm text-slate-400">Total Refunds (All Time)</p>
+                    <p className="text-2xl font-bold text-slate-100 mt-1">
                       ${stats.totalRefunds.toFixed(2)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Refunds This Week</p>
+                    <p className="text-sm text-slate-400">Refunds This Week</p>
                     <p className="text-2xl font-bold text-orange-600 mt-1">
                       ${stats.refundsThisWeek.toFixed(2)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">% of Revenue Refunded</p>
+                    <p className="text-sm text-slate-400">% of Revenue Refunded</p>
                     <p className={`text-2xl font-bold mt-1 ${
                       stats.refundPercentageOfRevenue > 10 ? 'text-red-600' : 'text-green-600'
                     }`}>
@@ -173,9 +173,9 @@ export default function StaffGovernancePage() {
             </div>
 
             {/* Performance Metrics */}
-            <div className="bg-white rounded-lg shadow mb-8">
+            <div className="bg-slate-900 rounded-lg border border-slate-800 mb-8">
               <div className="p-6 border-b">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
                   <Clock className="w-6 h-6 text-blue-600" />
                   Performance Metrics
                 </h2>
@@ -183,13 +183,13 @@ export default function StaffGovernancePage() {
               <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <p className="text-sm text-gray-600">Avg Resolution Time</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">
+                    <p className="text-sm text-slate-400">Avg Resolution Time</p>
+                    <p className="text-2xl font-bold text-slate-100 mt-1">
                       {stats.avgResolutionTime.toFixed(1)}h
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Tasks Reopened</p>
+                    <p className="text-sm text-slate-400">Tasks Reopened</p>
                     <p className={`text-2xl font-bold mt-1 ${
                       stats.tasksReopened > 5 ? 'text-red-600' : 'text-green-600'
                     }`}>
@@ -197,7 +197,7 @@ export default function StaffGovernancePage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Workload Balance</p>
+                    <p className="text-sm text-slate-400">Workload Balance</p>
                     <p className={`text-2xl font-bold mt-1 ${
                       stats.staffWorkloadImbalance ? 'text-orange-600' : 'text-green-600'
                     }`}>
@@ -209,76 +209,76 @@ export default function StaffGovernancePage() {
             </div>
 
             {/* Governance Controls Status */}
-            <div className="bg-white rounded-lg shadow">
+            <div className="bg-slate-900 rounded-lg border border-slate-800">
               <div className="p-6 border-b">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
                   <Shield className="w-6 h-6 text-purple-600" />
                   Governance Controls Status
                 </h2>
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-green-900/20 rounded-lg">
                     <div className="flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <p className="font-semibold text-gray-900">Financial Control Separation</p>
-                        <p className="text-sm text-gray-600">Approval thresholds enforced</p>
+                        <p className="font-semibold text-slate-100">Financial Control Separation</p>
+                        <p className="text-sm text-slate-400">Approval thresholds enforced</p>
                       </div>
                     </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                    <span className="px-3 py-1 bg-green-900/40 text-green-300 rounded-full text-sm font-semibold">
                       Active
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-green-900/20 rounded-lg">
                     <div className="flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <p className="font-semibold text-gray-900">Task Closure Control</p>
-                        <p className="text-sm text-gray-600">Resolution & audit requirements enforced</p>
+                        <p className="font-semibold text-slate-100">Task Closure Control</p>
+                        <p className="text-sm text-slate-400">Resolution & audit requirements enforced</p>
                       </div>
                     </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                    <span className="px-3 py-1 bg-green-900/40 text-green-300 rounded-full text-sm font-semibold">
                       Active
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-green-900/20 rounded-lg">
                     <div className="flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <p className="font-semibold text-gray-900">Automated Refund Calculation</p>
-                        <p className="text-sm text-gray-600">System-calculated, not manual</p>
+                        <p className="font-semibold text-slate-100">Automated Refund Calculation</p>
+                        <p className="text-sm text-slate-400">System-calculated, not manual</p>
                       </div>
                     </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                    <span className="px-3 py-1 bg-green-900/40 text-green-300 rounded-full text-sm font-semibold">
                       Active
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-green-900/20 rounded-lg">
                     <div className="flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <p className="font-semibold text-gray-900">Permission Matrix</p>
-                        <p className="text-sm text-gray-600">Role-based access control enforced</p>
+                        <p className="font-semibold text-slate-100">Permission Matrix</p>
+                        <p className="text-sm text-slate-400">Role-based access control enforced</p>
                       </div>
                     </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                    <span className="px-3 py-1 bg-green-900/40 text-green-300 rounded-full text-sm font-semibold">
                       Active
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-green-900/20 rounded-lg">
                     <div className="flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <p className="font-semibold text-gray-900">SLA Enforcement</p>
-                        <p className="text-sm text-gray-600">Automatic escalation enabled</p>
+                        <p className="font-semibold text-slate-100">SLA Enforcement</p>
+                        <p className="text-sm text-slate-400">Automatic escalation enabled</p>
                       </div>
                     </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                    <span className="px-3 py-1 bg-green-900/40 text-green-300 rounded-full text-sm font-semibold">
                       Active
                     </span>
                   </div>
@@ -296,7 +296,7 @@ export default function StaffGovernancePage() {
               </Link>
               <Link
                 href="/admin/payouts"
-                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+                className="px-6 py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-800 transition"
               >
                 Process Payouts
               </Link>
@@ -311,7 +311,7 @@ export default function StaffGovernancePage() {
         ) : (
           <div className="text-center py-12">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <p className="text-gray-600">Failed to load governance data</p>
+            <p className="text-slate-400">Failed to load governance data</p>
           </div>
         )}
       </div>

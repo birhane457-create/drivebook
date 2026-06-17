@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
+import { LogIn, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
@@ -14,9 +15,15 @@ export default function LoginPage() {
     setError('')
 
     const formData = new FormData(e.currentTarget)
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-    
+    const email = (formData.get('email') as string ?? '').trim().toLowerCase()
+    const password = (formData.get('password') as string ?? '')
+
+    if (!email || !password) {
+      setError('Please enter both email and password')
+      setLoading(false)
+      return
+    }
+
     try {
       const result = await signIn('credentials', {
         email,
@@ -25,19 +32,23 @@ export default function LoginPage() {
       })
 
       if (result?.error) {
-        setError('Invalid email or password')
+        const isCredentialError = result.error === 'CredentialsSignin' || result.status === 401
+        setError(isCredentialError ? 'Invalid email or password' : result.error || 'Login failed')
         setLoading(false)
       } else if (result?.ok) {
-        // Successful login - fetch session and redirect
         const sessionRes = await fetch('/api/auth/session')
+
+        if (!sessionRes.ok) {
+          setError('Unable to load session after login. Please try again.')
+          setLoading(false)
+          return
+        }
+
         const session = await sessionRes.json()
-        
+
         if (session?.user?.role) {
           const role = session.user.role
-
-          // If on a subdomain, redirect to the main domain so dashboards work correctly
           const hostname = window.location.hostname
-          // Known compound TLDs — need 4+ parts to be a subdomain (sub.domain.com.au)
           const compoundTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
           const tld2 = hostname.split('.').slice(-2).join('.')
           const minParts = compoundTLDs.includes(tld2) ? 4 : 3
@@ -67,54 +78,78 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-8 sm:py-12 px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 sm:p-8">
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8">Login</h2>
-        
-        {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded mb-4">
-            {error}
-          </div>
-        )}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center py-8 sm:py-12 px-4">
+      <div className="max-w-md w-full">
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
-            <input
-              type="email"
-              name="email"
-              required
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-            />
+        {/* Icon + title */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-purple-600/30 border border-purple-500/40 mb-4">
+            <LogIn className="w-7 h-7 text-purple-300" aria-hidden="true" />
           </div>
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-violet-300 via-pink-300 to-purple-300 bg-clip-text text-transparent">
+            Welcome back
+          </h1>
+          <p className="mt-2 text-sm text-white/60">Log in to your account</p>
+        </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium">Password</label>
-              <Link href="/forgot-password" className="text-xs text-blue-600 hover:text-blue-700">
-                Forgot password?
-              </Link>
+        {/* Card */}
+        <div className="bg-gradient-to-br from-white/10 to-white/5 rounded-2xl shadow-2xl shadow-purple-900/50 border border-white/20 p-6 sm:p-8 backdrop-blur-xl">
+          {error && (
+            <div className="bg-red-500/20 text-red-300 p-3 rounded-lg mb-4 border border-red-500/50 backdrop-blur-sm text-sm">
+              {error}
             </div>
-            <input
-              type="password"
-              name="password"
-              required
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
+          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-white/90">Email</label>
+              <input
+                type="email"
+                name="email"
+                required
+                autoComplete="email"
+                placeholder="you@example.com"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 focus:bg-white/15 transition-all backdrop-blur-sm"
+              />
+            </div>
 
-        <p className="text-center mt-4 text-sm sm:text-base text-gray-600">
-          Don't have an account?{' '}
-          <Link href="/register" className="text-blue-600 hover:underline">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-white/90">Password</label>
+                <Link href="/forgot-password" className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
+                  Forgot password?
+                </Link>
+              </div>
+              <input
+                type="password"
+                name="password"
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 focus:bg-white/15 transition-all backdrop-blur-sm"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold shadow-lg shadow-purple-900/50 hover:from-purple-500 hover:to-pink-500 hover:shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Logging in...
+                </>
+              ) : (
+                'Login'
+              )}
+            </button>
+          </form>
+        </div>
+
+        <p className="text-center mt-6 text-sm text-white/60">
+          Don&apos;t have an account?{' '}
+          <Link href="/register" className="text-purple-400 hover:text-purple-300 font-semibold transition-colors">
             Register
           </Link>
         </p>

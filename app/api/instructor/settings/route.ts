@@ -30,15 +30,8 @@ const settingsSchema = z.object({
   bookingBufferMinutes: z.number().min(10).max(20).optional(),
   enableTravelTime: z.boolean().optional(),
   travelTimeMinutes: z.number().min(5).max(60).optional(),
-  // Custom lesson packages
-  lessonPackages: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    durationMinutes: z.number().min(30),
-    price: z.number().min(0),
-    description: z.string(),
-    isActive: z.boolean()
-  })).optional(),
+  // PDA configs - handled separately, ignored here
+  pdaConfigs: z.array(z.any()).optional(),
   // FIX #14: Self-service booking pause toggle
   acceptingBookings: z.boolean().optional(),
 })
@@ -88,7 +81,7 @@ export async function PUT(req: NextRequest) {
     if (data.bookingBufferMinutes !== undefined) updateData.bookingBufferMinutes = data.bookingBufferMinutes
     if (data.enableTravelTime !== undefined) updateData.enableTravelTime = data.enableTravelTime
     if (data.travelTimeMinutes !== undefined) updateData.travelTimeMinutes = data.travelTimeMinutes
-    if (data.lessonPackages !== undefined) updateData.lessonPackages = data.lessonPackages
+    // Note: pdaConfigs are managed separately via /api/instructor/custom-packages
     // FIX #14: Allow instructors to pause/resume new bookings self-service
     if (data.acceptingBookings !== undefined) updateData.acceptingBookings = data.acceptingBookings
 
@@ -155,12 +148,17 @@ export async function GET(req: NextRequest) {
         bookingBufferMinutes: true,
         enableTravelTime: true,
         travelTimeMinutes: true,
-        lessonPackages: true,
         acceptingBookings: true,
       }
     })
 
-    return NextResponse.json(instructor)
+    // Return response
+    const response = {
+      ...instructor,
+      pdaConfigs: [],  // Will be fetched separately via /api/instructor/custom-packages
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('Fetch settings error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

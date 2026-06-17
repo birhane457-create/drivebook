@@ -109,8 +109,8 @@ export async function GET(req: NextRequest) {
           )
         : null;
 
-    // Recent feedback (last 5 lessons)
-    const recentFeedback = bookingsWithFeedback.slice(0, 5).map((booking) => ({
+    // Recent feedback (all lessons, not limited)
+    const recentFeedback = bookingsWithFeedback.map((booking) => ({
       id: booking.id,
       date: booking.startTime,
       instructor: booking.instructor.name,

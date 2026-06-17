@@ -98,7 +98,6 @@ export default async function SubdomainBookingPage({
       totalReviews: true,
       subscriptionTier: true,
       workingHours: true,
-      lessonPackages: true,
       bookingBufferMinutes: true,
       languages: true,
       vehicleTypes: true,
@@ -118,7 +117,6 @@ export default async function SubdomainBookingPage({
       testPackageIncludes: true,
       subscriptionStatus: true,
       trialEndsAt: true,
-      // Test package fields — accessed via (instructor as any) until schema is pushed to production
     },
   });
 
@@ -259,7 +257,6 @@ export default async function SubdomainBookingPage({
     return lines;
   })();
 
-  const activePackages = ((instructor.lessonPackages as any[]) || []).filter((p: any) => p.isActive !== false);
   const searchedLocation = searchParams.location || null;
   const languages = instructor.languages ? instructor.languages.split(',').map(l => l.trim()) : [];
   const vehicleTypes = instructor.vehicleTypes ? instructor.vehicleTypes.split(',').map(v => v.trim()) : [];
@@ -559,33 +556,35 @@ export default async function SubdomainBookingPage({
                   </div>
                 )}
 
-                {/* Packages */}
-                {activePackages.map((pkg: any) => {
-                  const pkgDuration = pkg.durationMinutes
-                    ? formatDuration(pkg.durationMinutes)
-                    : pkg.hours
-                    ? `${pkg.hours} hrs`
-                    : null;
-                  const hourlyEquiv = pkg.durationMinutes
-                    ? (instructor.hourlyRate * pkg.durationMinutes) / 60
-                    : pkg.hours
-                    ? instructor.hourlyRate * pkg.hours
-                    : null;
-                  const saving = hourlyEquiv ? hourlyEquiv - pkg.price : null;
-                  return (
-                    <div key={pkg.id} className="flex justify-between items-start py-2 border-b border-gray-50 last:border-0">
-                      <div>
-                        <p className="text-base font-medium text-gray-800">{pkg.name}</p>
-                        {pkgDuration && <p className="text-sm text-gray-400">{pkgDuration}</p>}
-                        {pkg.description && <p className="text-xs text-gray-400 mt-0.5">{pkg.description}</p>}
-                      </div>
-                      <div className="text-right shrink-0 ml-3">
-                        <p className="font-bold" style={{ color: secondary }}>${pkg.price.toFixed(2)}</p>
-                        {/* No "save vs hourly" — instructor packages include extras beyond lesson time */}
-                      </div>
+                {/* Bulk packages (6 / 10 / 15 hrs) + optional PDA test pack */}
+                <div className="py-2 border-b border-gray-50">
+                  <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide font-medium">Bulk lesson packages</p>
+                  <div className="space-y-2">
+                    {[6, 10, 15].map((hours) => {
+                      const base = instructor.hourlyRate * hours;
+                      const discountPct = hours >= 15 ? 12 : hours >= 10 ? 10 : 5;
+                      const price = base * (1 - discountPct / 100);
+                      return (
+                        <div key={hours} className="flex justify-between items-center">
+                          <div>
+                            <p className="text-base font-medium text-gray-800">{hours} hours</p>
+                            <p className="text-xs text-gray-400">{discountPct}% bulk discount</p>
+                          </div>
+                          <p className="font-bold" style={{ color: secondary }}>${price.toFixed(0)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                {instructor.offersTestPackage && instructor.testPackagePrice && (
+                  <div className="flex justify-between items-start py-2 border-b border-gray-50">
+                    <div>
+                      <p className="text-base font-medium text-gray-800">PDA test pack</p>
+                      <p className="text-sm text-gray-400">Configured by instructor</p>
                     </div>
-                  );
-                })}
+                    <p className="font-bold" style={{ color: secondary }}>${instructor.testPackagePrice.toFixed(2)}</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -724,7 +723,7 @@ export default async function SubdomainBookingPage({
               </div>
             )}
 
-            <div id="booking-form" className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div id="booking-form" className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl shadow-purple-900/30 border border-white/10 p-6 backdrop-blur-sm">
               {/* Social proof banner */}
               {(instructor.totalReviews > 0 || nextAvailableLabel) && (
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4 text-sm text-gray-600">
@@ -753,7 +752,6 @@ export default async function SubdomainBookingPage({
                     testPackageDuration: instructor.testPackageDuration ?? null,
                     testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
                     allowedDurations: allowedDurations,
-                    lessonPackages: activePackages,
                   }}
                   primary={primary}
                 />
@@ -770,8 +768,8 @@ export default async function SubdomainBookingPage({
             </div>
 
             {/* Reviews section */}
-            {recentReviews.length > 0 ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              {recentReviews.length > 0 ? (
+              <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl shadow-purple-900/30 border border-white/10 p-6 backdrop-blur-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-gray-900">Student Reviews</h2>
                   <div className="flex items-center gap-1">
@@ -844,7 +842,6 @@ export default async function SubdomainBookingPage({
                   testPackageDuration: instructor.testPackageDuration ?? null,
                   testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
                   allowedDurations: allowedDurations,
-                  lessonPackages: activePackages,
                 }}
                 primary={primary}
               />

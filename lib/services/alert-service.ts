@@ -29,6 +29,7 @@ export type AlertType =
   | 'DISPUTE_WON'             // Sprint A: chargeback won — liability cleared
   | 'DISPUTE_LOST'            // Sprint A: chargeback confirmed — cash loss
   | 'DISPUTE_EVIDENCE_NEEDED' // Sprint A: manual evidence submission required
+  | 'DISPUTE_EVIDENCE_STAGED' // Sprint A: evidence staged in Stripe — admin review needed
   | 'REFUND_SYNCED'           // Sprint B: out-of-band refund detected
   | 'TRANSFER_FAILED'         // Sprint C: Stripe Connect transfer failed
   | 'BOOKING_AUTO_NO_SHOW';   // cleanup cron auto-no-show alert

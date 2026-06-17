@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
           const { sendAlert } = await import('@/lib/services/alert-service');
           await sendAlert({
             type: 'BOOKING_AUTO_NO_SHOW',
-            severity: 'INFO',
+            severity: 'LOW',
             message: `Booking ${b.id} was automatically marked NO_SHOW (no check-in recorded)`,
             entityId: b.id,
             metadata: { bookingId: b.id, instructorUserId: b.instructor.userId },

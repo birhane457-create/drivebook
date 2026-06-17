@@ -4,12 +4,18 @@ import { authOptions } from '@/lib/auth';
 import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateWallet } from '@/lib/services/wallet-helpers';
+import { walletRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
+// P0 FIX #7: Add minimum $10 validation + maximum $10,000
 const schema = z.object({
-  amount: z.number().positive().max(10000),
+  amount: z.number()
+    .positive('Amount must be positive')
+    .min(10, 'Minimum top-up is $10')
+    .max(10000, 'Maximum amount is $10,000 per transaction')
+    .multipleOf(0.01, 'Amount must have at most 2 decimal places'),
 });
 
 export async function POST(req: NextRequest) {
@@ -20,6 +26,26 @@ export async function POST(req: NextRequest) {
     }
     if (session.user.role !== 'CLIENT') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // P0 FIX #6: Rate limiting - max 5 top-up intents per minute per user
+    // Prevents abuse: rapid creation of payment intents could spam Stripe API
+    const rateLimitId = getRateLimitIdentifier(
+      session.user.id,
+      req.headers.get('x-forwarded-for'),
+      'wallet-topup-intent'
+    );
+    
+    const rateLimitResult = await checkRateLimit(walletRateLimit, rateLimitId);
+    
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: rateLimitResult.error },
+        { 
+          status: 429,
+          headers: rateLimitResult.headers 
+        }
+      );
     }
 
     const { amount } = schema.parse(await req.json());

@@ -79,4 +79,6 @@ export const CRON_JOB_CONFIG: Record<string, { maxAgeMinutes: number; descriptio
   'reconcile-stripe':          { maxAgeMinutes: 1500,  description: 'Stripe payment reconciliation (daily at 3am AWST)' },
   'apply-rate-changes':        { maxAgeMinutes: 1500,  description: 'Applies scheduled commission rate changes (daily)' },
   'weekly-payouts':            { maxAgeMinutes: 10080, description: 'Automatic Stripe Connect payouts (Tuesday 2am AWST)' },
+  'check-trial-expiry':        { maxAgeMinutes: 1500,  description: 'Marks TRIAL subscriptions as EXPIRED when trial ends (daily)' },
+  'send-trial-expiry-alerts':  { maxAgeMinutes: 1500,  description: 'Sends trial expiry warnings and notifications (daily)' },
 };

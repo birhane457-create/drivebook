@@ -1,8 +1,10 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { googleCalendarService } from '@/lib/services/googleCalendar';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.NEXTAUTH_SECRET
+if (!JWT_SECRET) throw new Error('NEXTAUTH_SECRET is not configured')
 
 interface JWTPayload {
   userId: string;
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
     
     let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+      decoded = jwt.verify(token, JWT_SECRET!) as unknown as JWTPayload;
     } catch (error) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -33,7 +35,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Sync calendar error:', error);
+    logger.error('Sync calendar error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ 
       error: error.message || 'Internal server error' 
     }, { status: 500 });

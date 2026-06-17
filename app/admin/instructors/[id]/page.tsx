@@ -87,7 +87,7 @@ export default function AdminInstructorProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-slate-950 text-slate-100">
         <AdminNav />
         <div className="max-w-7xl mx-auto px-4 py-8">
           <p>Loading instructor profile...</p>
@@ -98,12 +98,12 @@ export default function AdminInstructorProfilePage() {
 
   if (!instructor) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-slate-950 text-slate-100">
         <AdminNav />
         <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Instructor Not Found</h1>
-            <Link href="/admin/instructors" className="text-blue-600 hover:text-blue-800">
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-6 text-center">
+            <h1 className="text-2xl font-bold text-slate-100 mb-4">Instructor Not Found</h1>
+            <Link href="/admin/instructors" className="text-blue-600 hover:text-blue-300">
               Back to Instructors
             </Link>
           </div>
@@ -118,20 +118,20 @@ export default function AdminInstructorProfilePage() {
   const wwcStatus = getDocStatus(instructor.wwcCheckExpiry, instructor.wwcCheckDoc);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Back Button */}
         <Link 
           href="/admin/instructors"
-          className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-4"
+          className="inline-flex items-center text-blue-600 hover:text-blue-300 mb-4"
         >
           ← Back to Instructors
         </Link>
 
         {/* Profile Header */}
-        <div className="bg-white rounded-lg shadow mb-6">
+        <div className="bg-slate-900 rounded-lg border border-slate-800 mb-6">
           <div className="p-6">
             <div className="flex items-start gap-6">
               {instructor.profileImage ? (
@@ -141,25 +141,25 @@ export default function AdminInstructorProfilePage() {
                   className="h-24 w-24 rounded-full object-cover"
                 />
               ) : (
-                <div className="h-24 w-24 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-gray-500 text-3xl font-medium">
+                <div className="h-24 w-24 rounded-full bg-slate-800 flex items-center justify-center">
+                  <span className="text-slate-400 text-3xl font-medium">
                     {instructor.name.charAt(0)}
                   </span>
                 </div>
               )}
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-2">
-                  <h1 className="text-3xl font-bold text-gray-900">{instructor.name}</h1>
+                  <h1 className="text-3xl font-bold text-slate-100">{instructor.name}</h1>
                   <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
-                    instructor.approvalStatus === 'APPROVED' ? 'bg-green-100 text-green-800' :
-                    instructor.approvalStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                    instructor.approvalStatus === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
+                    instructor.approvalStatus === 'APPROVED' ? 'bg-green-900/40 text-green-300' :
+                    instructor.approvalStatus === 'PENDING' ? 'bg-yellow-900/40 text-yellow-300' :
+                    instructor.approvalStatus === 'REJECTED' ? 'bg-red-900/40 text-red-300' :
+                    'bg-slate-900 text-slate-200'
                   }`}>
                     {instructor.approvalStatus}
                   </span>
                 </div>
-                <div className="space-y-1 text-gray-600">
+                <div className="space-y-1 text-slate-400">
                   <p>📧 {instructor.user?.email || instructor.email || 'No email'}</p>
                   <p>📞 {instructor.phone}</p>
                   <p>🆔 License: {instructor.licenseNumber || 'Not provided'}</p>
@@ -176,7 +176,7 @@ export default function AdminInstructorProfilePage() {
             </div>
             {instructor.bio && (
               <div className="mt-4 pt-4 border-t">
-                <p className="text-gray-700">{instructor.bio}</p>
+                <p className="text-slate-300">{instructor.bio}</p>
               </div>
             )}
           </div>
@@ -184,22 +184,22 @@ export default function AdminInstructorProfilePage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-600">Total Bookings</p>
-            <p className="text-2xl font-bold text-gray-900">{instructor._count.bookings}</p>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+            <p className="text-sm text-slate-400">Total Bookings</p>
+            <p className="text-2xl font-bold text-slate-100">{instructor._count.bookings}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-600">Reviews</p>
-            <p className="text-2xl font-bold text-gray-900">{instructor.totalReviews || 0}</p>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+            <p className="text-sm text-slate-400">Reviews</p>
+            <p className="text-2xl font-bold text-slate-100">{instructor.totalReviews || 0}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-600">Average Rating</p>
-            <p className="text-2xl font-bold text-gray-900">
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+            <p className="text-sm text-slate-400">Average Rating</p>
+            <p className="text-2xl font-bold text-slate-100">
               {instructor.averageRating ? instructor.averageRating.toFixed(1) : 'N/A'}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-600">Account Status</p>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+            <p className="text-sm text-slate-400">Account Status</p>
             <p className={`text-lg font-bold ${instructor.isActive ? 'text-green-600' : 'text-red-600'}`}>
               {instructor.isActive ? 'Active' : 'Inactive'}
             </p>
@@ -207,15 +207,15 @@ export default function AdminInstructorProfilePage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="border-b border-gray-200">
+        <div className="bg-slate-900 rounded-lg border border-slate-800 mb-6">
+          <div className="border-b border-slate-700">
             <nav className="flex -mb-px">
               <button
                 onClick={() => setActiveTab('overview')}
                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
                   activeTab === 'overview'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700'
                 }`}
               >
                 Overview
@@ -225,7 +225,7 @@ export default function AdminInstructorProfilePage() {
                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
                   activeTab === 'bookings'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700'
                 }`}
               >
                 Bookings ({instructor.bookings?.length || 0})
@@ -235,7 +235,7 @@ export default function AdminInstructorProfilePage() {
                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
                   activeTab === 'documents'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700'
                 }`}
               >
                 Documents
@@ -249,28 +249,28 @@ export default function AdminInstructorProfilePage() {
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Stats</h3>
+                  <h3 className="text-lg font-semibold text-slate-100 mb-3">Quick Stats</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="border rounded-lg p-3">
-                      <p className="text-xs text-gray-600">Completed</p>
+                      <p className="text-xs text-slate-400">Completed</p>
                       <p className="text-xl font-bold text-green-600">
                         {instructor.bookings.filter((b: any) => b.status === 'COMPLETED').length}
                       </p>
                     </div>
                     <div className="border rounded-lg p-3">
-                      <p className="text-xs text-gray-600">Upcoming</p>
+                      <p className="text-xs text-slate-400">Upcoming</p>
                       <p className="text-xl font-bold text-blue-600">
                         {instructor.bookings.filter((b: any) => b.status === 'CONFIRMED' && new Date(b.startTime) > new Date()).length}
                       </p>
                     </div>
                     <div className="border rounded-lg p-3">
-                      <p className="text-xs text-gray-600">Cancelled</p>
+                      <p className="text-xs text-slate-400">Cancelled</p>
                       <p className="text-xl font-bold text-red-600">
                         {instructor.bookings.filter((b: any) => b.status === 'CANCELLED').length}
                       </p>
                     </div>
                     <div className="border rounded-lg p-3">
-                      <p className="text-xs text-gray-600">Pending</p>
+                      <p className="text-xs text-slate-400">Pending</p>
                       <p className="text-xl font-bold text-yellow-600">
                         {instructor.bookings.filter((b: any) => b.status === 'PENDING').length}
                       </p>
@@ -279,48 +279,48 @@ export default function AdminInstructorProfilePage() {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Document Status</h3>
+                  <h3 className="text-lg font-semibold text-slate-100 mb-3">Document Status</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="border rounded-lg p-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">License</p>
+                      <p className="text-sm font-medium text-slate-300 mb-2">License</p>
                       <p className={`text-lg font-bold ${licenseStatus.color}`}>
                         {licenseStatus.icon} {licenseStatus.label}
                       </p>
                       {instructor.licenseExpiry && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-400 mt-1">
                           Expires: {new Date(instructor.licenseExpiry).toLocaleDateString()}
                         </p>
                       )}
                     </div>
                     <div className="border rounded-lg p-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Insurance</p>
+                      <p className="text-sm font-medium text-slate-300 mb-2">Insurance</p>
                       <p className={`text-lg font-bold ${insuranceStatus.color}`}>
                         {insuranceStatus.icon} {insuranceStatus.label}
                       </p>
                       {instructor.insuranceExpiry && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-400 mt-1">
                           Expires: {new Date(instructor.insuranceExpiry).toLocaleDateString()}
                         </p>
                       )}
                     </div>
                     <div className="border rounded-lg p-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Police Check</p>
+                      <p className="text-sm font-medium text-slate-300 mb-2">Police Check</p>
                       <p className={`text-lg font-bold ${policeStatus.color}`}>
                         {policeStatus.icon} {policeStatus.label}
                       </p>
                       {instructor.policeCheckExpiry && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-400 mt-1">
                           Expires: {new Date(instructor.policeCheckExpiry).toLocaleDateString()}
                         </p>
                       )}
                     </div>
                     <div className="border rounded-lg p-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">WWC Check</p>
+                      <p className="text-sm font-medium text-slate-300 mb-2">WWC Check</p>
                       <p className={`text-lg font-bold ${wwcStatus.color}`}>
                         {wwcStatus.icon} {wwcStatus.label}
                       </p>
                       {instructor.wwcCheckExpiry && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-400 mt-1">
                           Expires: {new Date(instructor.wwcCheckExpiry).toLocaleDateString()}
                         </p>
                       )}
@@ -328,44 +328,44 @@ export default function AdminInstructorProfilePage() {
                   </div>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-blue-900 mb-3">Subscription & Tax</h3>
+                <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-200 mb-3">Subscription & Tax</h3>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <p className="text-xs text-gray-500">Tier</p>
-                      <p className="font-semibold text-gray-900">{instructor.subscriptionTier || 'BASIC'}</p>
+                      <p className="text-xs text-slate-400">Tier</p>
+                      <p className="font-semibold text-slate-100">{instructor.subscriptionTier || 'BASIC'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Status</p>
+                      <p className="text-xs text-slate-400">Status</p>
                       <p className={`font-semibold ${instructor.subscriptionStatus === 'ACTIVE' ? 'text-green-600' : 'text-amber-600'}`}>
                         {instructor.subscriptionStatus || 'TRIAL'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Hourly Rate</p>
-                      <p className="font-semibold text-gray-900">${instructor.hourlyRate}/hr</p>
+                      <p className="text-xs text-slate-400">Hourly Rate</p>
+                      <p className="font-semibold text-slate-100">${instructor.hourlyRate}/hr</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Payout Method</p>
-                      <p className="font-semibold text-gray-900">{instructor.payoutMethod?.replace('_', ' ') || 'Not set'}</p>
+                      <p className="text-xs text-slate-400">Payout Method</p>
+                      <p className="font-semibold text-slate-100">{instructor.payoutMethod?.replace('_', ' ') || 'Not set'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Stripe Connect</p>
+                      <p className="text-xs text-slate-400">Stripe Connect</p>
                       {instructor.stripeConnectStatus === 'connected' ? (
                         <p className="font-semibold text-green-600">✓ Connected</p>
                       ) : (
                         <p className="font-semibold text-amber-600">⚠ Not connected</p>
                       )}
                       {instructor.stripeConnectStatus !== 'connected' && instructor.payoutMethod === 'bank_transfer' && (
-                        <p className="text-xs text-gray-400 mt-0.5">Using manual bank transfer</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Using manual bank transfer</p>
                       )}
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">ABN</p>
-                      <p className="font-semibold text-gray-900">{instructor.abn || 'Not provided'}</p>
+                      <p className="text-xs text-slate-400">ABN</p>
+                      <p className="font-semibold text-slate-100">{instructor.abn || 'Not provided'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">ABN Status</p>
+                      <p className="text-xs text-slate-400">ABN Status</p>
                       <p className={`font-semibold ${instructor.abnVerified ? 'text-green-600' : 'text-red-600'}`}>
                         {instructor.abnVerified ? '✓ Verified' : '✗ Unverified'} — {instructor.withholdingTaxRate}% withholding
                       </p>
@@ -386,50 +386,50 @@ export default function AdminInstructorProfilePage() {
               <div>
                 {instructor.bookings && instructor.bookings.length > 0 ? (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-slate-700">
+                      <thead className="bg-slate-950">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Time</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">ID</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Client</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Date/Time</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Type</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Price</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-slate-900 divide-y divide-slate-700">
                         {instructor.bookings.map((booking: any) => (
-                          <tr key={booking.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-gray-900">#{booking.id.slice(-6).toUpperCase()}</td>
+                          <tr key={booking.id} className="hover:bg-slate-800/50">
+                            <td className="px-4 py-3 text-sm text-slate-100">#{booking.id.slice(-6).toUpperCase()}</td>
                             <td className="px-4 py-3">
-                              <div className="text-sm font-medium text-gray-900">
+                              <div className="text-sm font-medium text-slate-100">
                                 {booking.client?.name || booking.clientName || 'N/A'}
                               </div>
-                              <div className="text-xs text-gray-500">
+                              <div className="text-xs text-slate-400">
                                 {booking.client?.email || booking.clientEmail || 'N/A'}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
+                            <td className="px-4 py-3 text-sm text-slate-400">
                               {new Date(booking.startTime).toLocaleDateString()}
                               <div className="text-xs">{new Date(booking.startTime).toLocaleTimeString()}</div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{booking.bookingType}</td>
+                            <td className="px-4 py-3 text-sm text-slate-100">{booking.bookingType}</td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                booking.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                                booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                booking.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
-                                'bg-blue-100 text-blue-800'
+                                booking.status === 'CONFIRMED' ? 'bg-green-900/40 text-green-300' :
+                                booking.status === 'PENDING' ? 'bg-yellow-900/40 text-yellow-300' :
+                                booking.status === 'CANCELLED' ? 'bg-red-900/40 text-red-300' :
+                                'bg-blue-900/40 text-blue-300'
                               }`}>
                                 {booking.status}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">${booking.price.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-slate-100">${booking.price.toFixed(2)}</td>
                             <td className="px-4 py-3">
                               <Link
                                 href={`/admin/bookings`}
-                                className="text-sm text-blue-600 hover:text-blue-900"
+                                className="text-sm text-blue-600 hover:text-blue-200"
                               >
                                 View
                               </Link>
@@ -440,7 +440,7 @@ export default function AdminInstructorProfilePage() {
                     </table>
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-center py-8">No bookings yet</p>
+                  <p className="text-slate-400 text-center py-8">No bookings yet</p>
                 )}
               </div>
             )}
@@ -458,13 +458,13 @@ export default function AdminInstructorProfilePage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-3">License</h4>
+                    <h4 className="font-semibold text-slate-100 mb-3">License</h4>
                     <p className={`font-bold mb-2 ${licenseStatus.color}`}>
                       {licenseStatus.icon} {licenseStatus.label}
                     </p>
-                    <p className="text-sm text-gray-600">Number: {instructor.licenseNumber || 'Not provided'}</p>
+                    <p className="text-sm text-slate-400">Number: {instructor.licenseNumber || 'Not provided'}</p>
                     {instructor.licenseExpiry && (
-                      <p className="text-sm text-gray-600">Expires: {new Date(instructor.licenseExpiry).toLocaleDateString()}</p>
+                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.licenseExpiry).toLocaleDateString()}</p>
                     )}
                     <div className="mt-2 space-y-1">
                       {instructor.licenseImageFront && (
@@ -481,13 +481,13 @@ export default function AdminInstructorProfilePage() {
                   </div>
 
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-3">Insurance</h4>
+                    <h4 className="font-semibold text-slate-100 mb-3">Insurance</h4>
                     <p className={`font-bold mb-2 ${insuranceStatus.color}`}>
                       {insuranceStatus.icon} {insuranceStatus.label}
                     </p>
-                    <p className="text-sm text-gray-600">Number: {instructor.insuranceNumber || 'Not provided'}</p>
+                    <p className="text-sm text-slate-400">Number: {instructor.insuranceNumber || 'Not provided'}</p>
                     {instructor.insuranceExpiry && (
-                      <p className="text-sm text-gray-600">Expires: {new Date(instructor.insuranceExpiry).toLocaleDateString()}</p>
+                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.insuranceExpiry).toLocaleDateString()}</p>
                     )}
                     {instructor.insurancePolicyDoc && (
                       <a href={instructor.insurancePolicyDoc} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block mt-2">
@@ -497,12 +497,12 @@ export default function AdminInstructorProfilePage() {
                   </div>
 
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-3">Police Check</h4>
+                    <h4 className="font-semibold text-slate-100 mb-3">Police Check</h4>
                     <p className={`font-bold mb-2 ${policeStatus.color}`}>
                       {policeStatus.icon} {policeStatus.label}
                     </p>
                     {instructor.policeCheckExpiry && (
-                      <p className="text-sm text-gray-600">Expires: {new Date(instructor.policeCheckExpiry).toLocaleDateString()}</p>
+                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.policeCheckExpiry).toLocaleDateString()}</p>
                     )}
                     {instructor.policeCheckDoc && (
                       <a href={instructor.policeCheckDoc} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block mt-2">
@@ -512,12 +512,12 @@ export default function AdminInstructorProfilePage() {
                   </div>
 
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-3">WWC Check</h4>
+                    <h4 className="font-semibold text-slate-100 mb-3">WWC Check</h4>
                     <p className={`font-bold mb-2 ${wwcStatus.color}`}>
                       {wwcStatus.icon} {wwcStatus.label}
                     </p>
                     {instructor.wwcCheckExpiry && (
-                      <p className="text-sm text-gray-600">Expires: {new Date(instructor.wwcCheckExpiry).toLocaleDateString()}</p>
+                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.wwcCheckExpiry).toLocaleDateString()}</p>
                     )}
                     {instructor.wwcCheckDoc && (
                       <a href={instructor.wwcCheckDoc} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block mt-2">

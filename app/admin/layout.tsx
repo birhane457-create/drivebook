@@ -31,11 +31,11 @@ export default async function AdminLayout({
 
   // Admin has access - render the page with mobile bottom nav
   return (
-    <>
-      <div className="pb-20 md:pb-0">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="pb-20 lg:pb-0">
         {children}
       </div>
       <AdminMobileBottomNav />
-    </>
+    </div>
   )
 }

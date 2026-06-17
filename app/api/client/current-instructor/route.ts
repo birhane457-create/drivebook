@@ -77,8 +77,11 @@ export async function GET(req: NextRequest) {
         averageRating: true,
         totalReviews: true,
         baseAddress: true,
-        lessonPackages: true,
         userId: true,
+        offersTestPackage: true,
+        testPackagePrice: true,
+        testPackageDuration: true,
+        testPackageIncludes: true,
       }
     })
 
@@ -131,16 +134,33 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Default services
-    const services = [
-      'Regular Driving Lessons',
-      'PDA Test Package',
-      'Mock Test'
-    ]
+    // Build dynamic services from instructor setup
+    interface ServiceItem {
+      name: string
+      duration?: number
+      price?: number
+      includes?: string[]
+    }
+    
+    const dynamicServices: ServiceItem[] = []
 
-    // Parse lesson packages for service pricing
-    const packages = (instructor.lessonPackages as any[]) || []
-    const activePackages = packages.filter((p: any) => p.isActive !== false)
+    // Regular lesson is always available
+    dynamicServices.push({
+      name: 'Regular Lesson',
+      duration: 60 // Default 1 hour
+    })
+
+    // PDA test packages — configured in instructor dashboard settings
+    if (instructor.offersTestPackage) {
+      dynamicServices.push({
+        name: 'PDA Test Package',
+        duration: instructor.testPackageDuration || undefined,
+        price: instructor.testPackagePrice || undefined,
+        includes: Array.isArray(instructor.testPackageIncludes) 
+          ? (instructor.testPackageIncludes as string[])
+          : undefined
+      })
+    }
 
     return NextResponse.json({
       currentInstructor: {
@@ -160,9 +180,8 @@ export async function GET(req: NextRequest) {
         bio: instructor.bio,
         averageRating: instructor.averageRating || 4.5,
         totalReviews: instructor.totalReviews || 0,
-        offersTestPackage: true,
-        services,
-        lessonPackages: activePackages,
+        offersTestPackage: instructor.offersTestPackage || false,
+        services: dynamicServices,
       },
       packageInfo,
       latestBookingId: latestPackageBooking?.id,

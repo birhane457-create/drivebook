@@ -17,14 +17,6 @@ interface SubdomainBookingEntryProps {
     testPackageDuration: number | null;
     testPackageIncludes: string[];
     allowedDurations?: number[];
-    lessonPackages?: Array<{
-      id: string;
-      name: string;
-      durationMinutes: number;
-      price: number;
-      description: string;
-      isActive: boolean;
-    }>;
   };
   primary: string;
 }
@@ -46,9 +38,9 @@ export default function SubdomainBookingEntry({ instructor, primary }: Subdomain
 
       {/* Full-screen booking overlay — hides the rest of the page */}
       {open && (
-        <div className="fixed inset-0 z-[100] bg-gray-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-y-auto">
           {/* Compact header */}
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
+          <div className="sticky top-0 z-10 bg-gradient-to-r from-white/5 to-white/2 border-b border-white/6 backdrop-blur-sm shadow-sm">
             <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div
@@ -57,13 +49,13 @@ export default function SubdomainBookingEntry({ instructor, primary }: Subdomain
                 >
                   {instructor.name.charAt(0)}
                 </div>
-                <span className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">
+                <span className="font-semibold text-white/90 text-sm truncate max-w-[200px]">
                   {instructor.name}
                 </span>
               </div>
               <button
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+                className="flex items-center gap-1.5 text-sm text-white/60 hover:text-white transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

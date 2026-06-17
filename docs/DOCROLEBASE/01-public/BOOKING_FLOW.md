@@ -30,7 +30,8 @@ The entry point for new students. No API calls on this page.
 **What it shows:**
 - Instructor name, photo, rating, years experience, car details, languages
 - Hourly rate and available lesson durations (from `instructor.allowedDurations`)
-- Package pricing (6h, 10h, 15h discounts) + instructor custom add-on packages
+- Package pricing (6h, 10h, 15h discounts)
+- Optional PDA test pack (only if instructor enabled it in Settings)
 - Available time slots via `SlotPicker` component
 - `BulkBookingForm` — the main booking form
 
@@ -38,26 +39,23 @@ The entry point for new students. No API calls on this page.
 
 A multi-step form (`components/BulkBookingForm.tsx`) that handles:
 
-1. **Package selection** — standard packages (6/10/15 hrs with platform discounts) + optional instructor add-on packages (fixed price, no platform discount)
+1. **Package selection** — standard packages (6/10/15 hrs with platform discounts) or custom hours
 2. **Book Now / Book Later** — student chooses whether to schedule now or load wallet and book from dashboard
 3. **Schedule** (Book Now only) — date picker + slot grid + duration selector. Slots are duration-aware — a 3hr slot at 9am is blocked if 10am is already booked. Local overlap check prevents scheduling two lessons that overlap.
 4. **Client details** — name, email, phone, pickup address
 5. **Password creation** — for new users only (min 6 chars)
 6. **Review & confirm** — price breakdown with order summary
 
-**Instructor add-on packages:**
-- Set by instructor in Settings → Custom Lesson Packages
-- Fixed price — no platform bulk discount applied
-- Shown as optional checkboxes below standard packages
-- Can be combined with a standard package or selected alone
-- `customPackageId` sent in booking payload; server looks up price from DB
+**PDA test pack (optional):**
+- Only shown if the instructor configured PDA test packages in their dashboard settings.
+- Booked via the `includeTestPackage` toggle (public/subdomain bulk booking) and scheduled using the PDA scheduling UI.
 
 **Pricing calculation (client-side preview):**
 ```
-standardLesson = instructor.hourlyRate × hours × (1 − discountPct/100)
-addonPackage   = pkg.price (fixed, no discount)
-platformFee    = (standardLesson + addonPackage) × platformFeePercentage/100
-total          = standardLesson + addonPackage + platformFee
+lessonSubtotal = instructor.hourlyRate × hours × (1 − discountPct/100)
+pdaTestPack    = (optional) instructor-configured PDA test price (may include discount)
+platformFee    = (lessonSubtotal + pdaTestPack) × platformFeePercentage/100
+total          = lessonSubtotal + pdaTestPack + platformFee
 ```
 Discount rates and platform fee fetched live from `GET /api/public/pricing` (sourced from `PlatformSettings` in DB). Configurable via `/admin/pricing`.
 
@@ -74,7 +72,7 @@ When `bookingType: now`, `lockedHourlyRate` and `lockedDiscountPct` are stored o
 When `bookingType: later`, the wallet is credited with the package amount but no rate is locked. When the student later books individual lessons from their dashboard (`POST /api/client/bookings/create-bulk`), the server fetches the instructor's current `hourlyRate` and recalculates the price — client-submitted prices are ignored entirely.
 
 **Slot blocking during scheduling (Book Now):**
-When the student selects a time slot in the schedule step, `BookingDetailsForm` calls `POST /api/availability/check-and-reserve` before adding the slot. This places a 10-minute in-memory reservation on the slot, preventing another concurrent session from claiming it. If the slot is already reserved, returns 409 and the form refreshes available slots. Reservations are released on slot removal and component unmount. The 10-minute window matches the `PENDING_PAYMENT` booking expiry.
+When the student selects a time slot in the schedule step, `BookingDetailsForm` calls `POST /api/availability/check-and-reserve` before adding the slot. This places a 10-minute database-backed reservation on the slot, preventing another concurrent session from claiming it. If the slot is already reserved, returns 409 and the form refreshes available slots. Reservations are released on slot removal and component unmount. The 10-minute window matches the `PENDING_PAYMENT` booking expiry.
 
 ---
 

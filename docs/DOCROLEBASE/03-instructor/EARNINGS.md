@@ -9,20 +9,41 @@
 
 ## What It Shows
 
-- Weekly earnings breakdown (bar chart by day)
+The earnings page focuses on **platform earnings** — what DriveBook processes and pays you. This is the main business metric.
+
+### 💳 Platform Earnings
+- Weekly breakdown by day (bar chart)
 - Daily lesson list with per-lesson payout
-- Scheduled upcoming lessons (confirmed, not yet completed)
+- Commission deducted per lesson
+- Scheduled upcoming platform lessons
 - Receipt download per lesson
+- Trend comparison (this week vs last week)
+
+**This is what matters:** Platform bookings = verified DriveBook revenue.
+
+---
+
+## Offline Lessons (Optional Feature)
+
+Offline lessons are an **optional retention service** for instructors who have existing students they want to keep. They are:
+- Not part of platform earnings metrics
+- Not included in payout calculations
+- Tracked separately for instructor records
+- Optional feature (not required)
+
+See [OFFLINE_BOOKINGS.md](./OFFLINE_BOOKINGS.md) for details on logging offline lessons.
 
 ---
 
 ## Earnings Calculation
 
-For each completed booking:
+**Platform earnings only.** For each completed platform booking:
 
 ```
 instructorPayout = booking.price × (1 - commissionRate / 100)
 ```
+
+**Offline bookings:** Not included in earnings calculations. They are tracked separately as a retention feature.
 
 Commission rate is determined at booking creation time from `PlatformSettings`:
 
@@ -39,12 +60,51 @@ Note: The `newStudentBonus` concept was removed in May 2026. Commission is now a
 
 ---
 
+## API Response Structure
+
+`GET /api/instructor/earnings` returns platform earnings data:
+
+```json
+{
+  "totalEarnings": 2700,
+  "totalGross": 3000,
+  "totalFees": 300,
+  "completedCount": 25,
+  "thisMonthEarnings": 2500,
+  "thisMonthGross": 2778,
+  "thisMonthFees": 278,
+  "thisMonthCount": 10,
+  "pendingPayouts": 350,
+  "pendingCount": 1,
+  "scheduledTotal": 450,
+  "scheduledCount": 3,
+  "transactions": [...],
+  "platform": {
+    "totalEarnings": 2700,
+    "totalGross": 3000,
+    "totalFees": 300,
+    "pendingPayouts": 350,
+    "scheduledTotal": 450
+  }
+}
+```
+
+**Platform object** contains verified DriveBook earnings only. Offline lessons are not included in earnings calculations.
+
+---
+
+## Payout Processing
+
+**Only platform earnings are processed for payout.** Offline lessons are a retention feature and do not generate payouts.
+
+---
+
 ## Withholding Tax
 
 At payout time, ATO withholding tax is deducted from the gross payout:
 
 ```
-grossAmount  = sum of instructorPayout across eligible transactions
+grossAmount  = sum of instructorPayout across eligible platform transactions
 taxWithheld  = grossAmount x (withholdingTaxRate / 100)
 netAmount    = grossAmount - taxWithheld
 ```
@@ -66,6 +126,8 @@ If `gstRegistered = true` on your instructor profile, the GST component (1/11 of
 ## Payout Eligibility
 
 A booking becomes eligible for payout 24 hours after `COMPLETED` status. The admin processes payouts via `/admin/payouts`.
+
+**Only platform bookings** generate payouts. Offline lessons do not.
 
 Payouts are withheld if:
 - The booking is under dispute
@@ -104,6 +166,7 @@ Each completed lesson has a downloadable receipt showing:
 
 ## Related
 
+- [OFFLINE_BOOKINGS.md](./OFFLINE_BOOKINGS.md) — How offline bookings work
 - [DASHBOARD.md](./DASHBOARD.md) — Earnings summary on home
 - [SETTINGS.md](./SETTINGS.md) — Tax and Payout settings
 - `docs/06-payments/COMMISSIONS.md` — Commission rate details

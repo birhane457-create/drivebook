@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
+import { verifyOAuthState } from '@/lib/oauth-state'
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const code = searchParams.get('code')
-    const state = searchParams.get('state') // instructor ID
+    const state = searchParams.get('state')
     const error = searchParams.get('error')
 
     if (error) {
@@ -22,13 +25,23 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const instructorId = state
+    const verified = verifyOAuthState(state)
+    if (!verified) {
+      return NextResponse.redirect(
+        new URL('/dashboard/settings?error=invalid_state', req.url)
+      )
+    }
 
-    // Exchange code for tokens
+    const session = await getServerSession(authOptions)
+    if (session?.user?.instructorId && session.user.instructorId !== verified.instructorId) {
+      return NextResponse.redirect(
+        new URL('/dashboard/settings?error=session_mismatch', req.url)
+      )
+    }
+
+    const instructorId = verified.instructorId
     const tokens = await googleCalendarService.getTokensFromCode(code)
     await googleCalendarService.saveTokens(instructorId, tokens)
-    
-    // Sync calendar events
     await googleCalendarService.syncCalendarEvents(instructorId)
 
     return NextResponse.redirect(

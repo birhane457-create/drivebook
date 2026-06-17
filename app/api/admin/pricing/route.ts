@@ -15,7 +15,6 @@ const pricingSchema = z.object({
   basicCommissionRate:        z.number().min(0).max(30),
   proCommissionRate:          z.number().min(0).max(30),
   businessCommissionRate:     z.number().min(0).max(30),
-  drivingTestPackagePrice:    z.number().min(0).max(500),
   discountPaidBy:             z.enum(['platform', 'shared', 'instructor']),
   cancellationFee:            z.number().min(0).max(500).optional().default(0),
   lateCancellationWindowHours:z.number().min(0).max(72).optional().default(24),

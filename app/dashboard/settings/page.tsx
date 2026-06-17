@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, Package, CheckCircle, AlertCircle } from 'lucide-react'
+import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Zap, Check } from 'lucide-react'
 import GoogleCalendarSettings from '@/components/GoogleCalendarSettings'
 
 interface TimeSlot {
@@ -19,13 +19,26 @@ interface WorkingHours {
   sunday: TimeSlot[]
 }
 
-interface LessonPackage {
+interface PDAConfig {
   id: string
   name: string
   durationMinutes: number
   price: number
-  description: string
+  discountPercent?: number | null
+  testCentreIds?: string[]
+  includes?: {
+    pickup: boolean
+    dropoff: boolean
+    debriefing: boolean
+  }
+  notes?: string
   isActive: boolean
+}
+
+interface TestCentre {
+  id: string
+  name: string
+  address: string
 }
 
 export default function SettingsPage() {
@@ -34,7 +47,11 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [workingHoursExpanded, setWorkingHoursExpanded] = useState(false)
   const [bookingPrefsExpanded, setBookingPrefsExpanded] = useState(false)
-  const [packagesExpanded, setPackagesExpanded] = useState(false)
+  const [pdaConfigsExpanded, setPdaConfigsExpanded] = useState(false)
+  const [expandedPDAConfig, setExpandedPDAConfig] = useState<string | null>(null)
+  const [testCentres, setTestCentres] = useState<TestCentre[]>([])
+  const [loadingCentres, setLoadingCentres] = useState(true)
+  const [originalPDAConfigIds, setOriginalPDAConfigIds] = useState<string[]>([])
   const [formData, setFormData] = useState<{
     hourlyRate: number
     serviceRadiusKm: number
@@ -44,7 +61,7 @@ export default function SettingsPage() {
     bookingBufferMinutes: number
     enableTravelTime: boolean
     travelTimeMinutes: number
-    lessonPackages: LessonPackage[]
+    pdaConfigs: PDAConfig[]
     acceptingBookings: boolean
   }>({
     hourlyRate: 60,
@@ -63,20 +80,69 @@ export default function SettingsPage() {
     bookingBufferMinutes: 15,
     enableTravelTime: false,
     travelTimeMinutes: 10,
-    lessonPackages: [],
+    pdaConfigs: [],
     acceptingBookings: true,
   })
+
+  // Load test centres on mount
+  useEffect(() => {
+    const fetchTestCentres = async () => {
+      try {
+        const res = await fetch('/api/test-centres')
+        if (res.ok) {
+          const data = await res.json()
+          const centres = data.testCentres || []
+          console.log('✅ Loaded test centres:', centres)
+          setTestCentres(centres)
+        } else {
+          console.error('Failed to fetch test centres:', res.status, res.statusText)
+        }
+      } catch (error) {
+        console.error('Failed to fetch test centres:', error)
+      } finally {
+        setLoadingCentres(false)
+      }
+    }
+    fetchTestCentres()
+  }, [])
 
   // Load settings on mount
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch('/api/instructor/settings')
-        if (res.ok) {
-          const data = await res.json()
+        const [settingsRes, pdaConfigsRes] = await Promise.all([
+          fetch('/api/instructor/settings'),
+          fetch('/api/instructor/pda-configs')
+        ])
 
-          // Normalize workingHours from DB: DB may store { day: { start, end, enabled } }
-          // but the UI needs { day: [{ start, end }] }
+        let pdaConfigs: PDAConfig[] = []
+        
+        if (pdaConfigsRes.ok) {
+          const pdaData = await pdaConfigsRes.json()
+          const rawConfigs = Array.isArray(pdaData.configs) ? pdaData.configs : []
+          
+          // Transform raw configs: convert testCentres array to testCentreIds
+          pdaConfigs = rawConfigs.map((config: any) => ({
+            id: config.id,
+            name: config.name,
+            durationMinutes: config.durationMinutes,
+            price: config.price,
+            discountPercent: config.discountPercent,
+            testCentreIds: config.testCentres?.map((tc: any) => tc.testCentre.id) || [],
+            includes: config.includes,
+            notes: config.notes,
+            isActive: config.isActive
+          }))
+          
+          // Track original config IDs from DB so we can detect deletions later
+          setOriginalPDAConfigIds(pdaConfigs.map(c => c.id))
+          console.log('✅ Loaded PDA configs:', pdaConfigs)
+        }
+
+        if (settingsRes.ok) {
+          const data = await settingsRes.json()
+
+          // Normalize workingHours from DB
           const normalizeWorkingHours = (wh: any): WorkingHours => {
             const days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] as const
             const defaults: WorkingHours = {
@@ -94,10 +160,8 @@ export default function SettingsPage() {
               const val = wh[day]
               if (!val) { result[day] = []; continue }
               if (Array.isArray(val)) {
-                // Already array format — filter valid slots
                 result[day] = val.filter((s: any) => s && s.start && s.end)
               } else if (typeof val === 'object' && val.start && val.end) {
-                // Object format { start, end, enabled }
                 result[day] = val.enabled === false ? [] : [{ start: val.start, end: val.end }]
               } else {
                 result[day] = []
@@ -115,8 +179,8 @@ export default function SettingsPage() {
             bookingBufferMinutes: data.bookingBufferMinutes || 15,
             enableTravelTime: data.enableTravelTime || false,
             travelTimeMinutes: data.travelTimeMinutes || 10,
-            lessonPackages: data.lessonPackages || [],
-            acceptingBookings: data.acceptingBookings !== false, // default true
+            pdaConfigs: pdaConfigs,
+            acceptingBookings: data.acceptingBookings !== false,
           })
         }
       } catch (error) {
@@ -128,35 +192,53 @@ export default function SettingsPage() {
     fetchSettings()
   }, [])
 
-  const addLessonPackage = () => {
-    const newPackage: LessonPackage = {
-      id: `pkg_${Date.now()}`,
+  const addPDAConfig = () => {
+    const newConfig: PDAConfig = {
+      id: `pda_${Date.now()}`,
       name: '',
-      durationMinutes: 165, // 2:45 hours default
-      price: 0,
-      description: '',
+      durationMinutes: 180,
+      price: 225,
+      discountPercent: null,
+      testCentreIds: [],
+      includes: {
+        pickup: true,
+        dropoff: true,
+        debriefing: true
+      },
+      notes: '',
       isActive: true
     }
-    setFormData(prev => ({
-      ...prev,
-      lessonPackages: [...prev.lessonPackages, newPackage]
-    }))
+    // Update form data with new config
+    const updatedFormData = {
+      ...formData,
+      pdaConfigs: [...formData.pdaConfigs, newConfig]
+    }
+    setFormData(updatedFormData)
+    
+    // Expand the new config so user can see the form (use setTimeout to ensure state is updated)
+    setTimeout(() => {
+      setExpandedPDAConfig(newConfig.id)
+    }, 0)
   }
 
-  const updateLessonPackage = (id: string, updates: Partial<LessonPackage>) => {
+  const updatePDAConfig = (id: string, updates: Partial<PDAConfig>) => {
     setFormData(prev => ({
       ...prev,
-      lessonPackages: prev.lessonPackages.map(pkg => 
-        pkg.id === id ? { ...pkg, ...updates } : pkg
+      pdaConfigs: prev.pdaConfigs.map(config => 
+        config.id === id ? { ...config, ...updates } : config
       )
     }))
   }
 
-  const removeLessonPackage = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      lessonPackages: prev.lessonPackages.filter(pkg => pkg.id !== id)
-    }))
+  const removePDAConfig = (id: string) => {
+    // Show confirmation dialog
+    if (window.confirm('Are you sure you want to delete this PDA configuration? This action cannot be undone.')) {
+      setFormData(prev => ({
+        ...prev,
+        pdaConfigs: prev.pdaConfigs.filter(config => config.id !== id)
+      }))
+      setExpandedPDAConfig(null)
+    }
   }
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -173,24 +255,162 @@ export default function SettingsPage() {
       return
     }
     
-    console.log('📤 Submitting settings:', JSON.stringify(formData, null, 2))
+    const settingsData = {
+      hourlyRate: formData.hourlyRate,
+      serviceRadiusKm: formData.serviceRadiusKm,
+      vehicleTypes: formData.vehicleTypes,
+      workingHours: formData.workingHours,
+      allowedDurations: formData.allowedDurations,
+      bookingBufferMinutes: formData.bookingBufferMinutes,
+      enableTravelTime: formData.enableTravelTime,
+      travelTimeMinutes: formData.travelTimeMinutes,
+      acceptingBookings: formData.acceptingBookings,
+    }
+    
+    console.log('📤 Submitting settings:', JSON.stringify(settingsData, null, 2))
     
     setSaving(true)
     
     try {
+      // Save general settings first
       const res = await fetch('/api/instructor/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(settingsData)
       })
 
-      if (res.ok) {
-        showToast('success', 'Settings saved successfully!')
-      } else {
+      if (!res.ok) {
         const error = await res.json()
         console.error('❌ Settings save error:', error)
         showToast('error', `Failed to save: ${error.details || error.error || 'Unknown error'}`)
+        setSaving(false)
+        return
       }
+
+      console.log('✅ General settings saved')
+      console.log(`📦 Processing ${formData.pdaConfigs.length} PDA configs...`)
+
+      // First, detect and DELETE removed configs
+      const currentConfigIds = formData.pdaConfigs.map(c => c.id)
+      const deletedConfigIds = originalPDAConfigIds.filter(id => !currentConfigIds.includes(id))
+      
+      console.log(`🗑️ Deleted config IDs: ${deletedConfigIds.join(', ') || 'none'}`)
+      
+      for (const deletedId of deletedConfigIds) {
+        try {
+          const deleteRes = await fetch(`/api/instructor/pda-configs/${deletedId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          })
+          
+          if (!deleteRes.ok) {
+            const deleteError = await deleteRes.json()
+            console.error(`❌ Failed to delete PDA config ${deletedId}:`, deleteError)
+            // Don't block - just log and continue
+          } else {
+            console.log(`✅ PDA config ${deletedId} deleted`)
+          }
+        } catch (error) {
+          console.error(`Error deleting PDA config ${deletedId}:`, error)
+          // Don't block - just log and continue
+        }
+      }
+
+      // Save only COMPLETED PDA configs (must have name AND test centres)
+      let savedCount = 0
+      const updatedPdaConfigs: PDAConfig[] = []
+      
+      for (const config of formData.pdaConfigs) {
+        // Skip if no name (empty template)
+        if (!config.name || config.name.trim() === '') {
+          console.log('⏭️ Skipping PDA config with no name (empty template)')
+          continue
+        }
+        
+        // Skip if no test centres selected
+        if (!config.testCentreIds || config.testCentreIds.length === 0) {
+          console.log(`⏭️ Skipping PDA config "${config.name}" (no test centres selected)`)
+          continue
+        }
+
+        const isExistingConfig = originalPDAConfigIds.includes(config.id)
+        const url = isExistingConfig
+          ? `/api/instructor/pda-configs/${config.id}`
+          : '/api/instructor/pda-configs'
+        const method = isExistingConfig ? 'PATCH' : 'POST'
+
+        try {
+          const pdaRes = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: config.name,
+              durationMinutes: config.durationMinutes,
+              price: config.price,
+              discountPercent: config.discountPercent,
+              testCentreIds: config.testCentreIds,
+              includes: config.includes,
+              notes: config.notes,
+              isActive: config.isActive
+            })
+          })
+          
+          if (!pdaRes.ok) {
+            const pdaError = await pdaRes.json()
+            console.error(`❌ Failed to ${isExistingConfig ? 'update' : 'save'} PDA config "${config.name}":`, pdaError)
+            // Don't block - just skip this one and continue
+            continue
+          }
+          
+          // Get the saved config from response (has real DB ID)
+          const savedConfig = await pdaRes.json()
+          
+          // Transform API response: convert testCentres array to testCentreIds array
+          const transformedConfig: PDAConfig = {
+            id: savedConfig.id,
+            name: savedConfig.name,
+            durationMinutes: savedConfig.durationMinutes,
+            price: savedConfig.price,
+            discountPercent: savedConfig.discountPercent,
+            testCentreIds: savedConfig.testCentres?.map((tc: any) => tc.testCentre.id) || [],
+            includes: savedConfig.includes,
+            notes: savedConfig.notes,
+            isActive: savedConfig.isActive
+          }
+          
+          updatedPdaConfigs.push(transformedConfig)
+          console.log(`✅ PDA config "${config.name}" ${isExistingConfig ? 'updated' : 'saved'} with ID:`, savedConfig.id)
+          savedCount++
+        } catch (error) {
+          console.error(`Error ${isExistingConfig ? 'updating' : 'saving'} PDA config "${config.name}":`, error)
+          // Don't block - just skip this one and continue
+          continue
+        }
+      }
+      
+      // Update form state with actual saved configs (with real DB IDs)
+      setFormData(prev => ({
+        ...prev,
+        pdaConfigs: updatedPdaConfigs
+      }))
+      
+      // Update the tracking list with the new saved configs
+      setOriginalPDAConfigIds(updatedPdaConfigs.map(c => c.id))
+
+      // Keep the first saved config expanded so user can see what was saved
+      if (updatedPdaConfigs.length > 0) {
+        setExpandedPDAConfig(updatedPdaConfigs[0].id)
+      }
+
+      // Show success message
+      let message = 'Settings saved successfully!'
+      if (formData.pdaConfigs.length > 0) {
+        const skipped = formData.pdaConfigs.length - savedCount
+        if (skipped > 0) {
+          message += ` (${savedCount} PDA configs saved${skipped > 0 ? `, ${skipped} incomplete - fill in details to save them` : ''})`
+        }
+      }
+      showToast('success', message)
     } catch (error) {
       console.error('Failed to save settings:', error)
       showToast('error', 'Failed to save settings')
@@ -202,9 +422,9 @@ export default function SettingsPage() {
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6">Settings</h1>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-slate-100">Settings</h1>
 
         {/* Toast */}
         {toast && (
@@ -216,499 +436,685 @@ export default function SettingsPage() {
         )}
 
         {loading ? (
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <p className="text-gray-600">Loading settings...</p>
+          <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6 text-center">
+            <p className="text-slate-400">Loading settings...</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Pricing
-            </h2>
-            
-            <div>
-              <label className="block text-sm font-medium mb-2">Hourly Rate ($)</label>
-              <input
-                type="number"
-                value={formData.hourlyRate}
-                onChange={(e) => setFormData(prev => ({ ...prev, hourlyRate: parseFloat(e.target.value) }))}
-                min="0"
-                step="0.01"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <MapPin className="h-5 w-5" />
-              Service Area
-            </h2>
-            
-            <div className="space-y-4">
+            {/* Pricing Section */}
+            <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-100">
+                <DollarSign className="h-5 w-5" />
+                Pricing
+              </h2>
+              
               <div>
-                <label className="block text-sm font-medium mb-2">Service Radius (km)</label>
+                <label className="block text-sm font-medium mb-2 text-slate-200">Hourly Rate ($)</label>
                 <input
                   type="number"
-                  value={formData.serviceRadiusKm}
-                  onChange={(e) => setFormData(prev => ({ ...prev, serviceRadiusKm: parseInt(e.target.value) }))}
-                  min="1"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                  value={formData.hourlyRate}
+                  onChange={(e) => setFormData(prev => ({ ...prev, hourlyRate: parseFloat(e.target.value) }))}
+                  min="0"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">Maximum distance you're willing to travel for pickups</p>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div
-              className="flex items-center justify-between cursor-pointer"
-              onClick={() => setBookingPrefsExpanded(!bookingPrefsExpanded)}
-            >
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Booking Preferences
+            {/* Service Area Section */}
+            <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-100">
+                <MapPin className="h-5 w-5" />
+                Service Area
               </h2>
-              {bookingPrefsExpanded ? (
-                <ChevronUp className="h-5 w-5 text-gray-500" />
-              ) : (
-                <ChevronDown className="h-5 w-5 text-gray-500" />
-              )}
-            </div>
-
-            {bookingPrefsExpanded && (
-            <div className="space-y-6 mt-4">
-              {/* Allowed Durations */}
-              <div>
-                <label className="block text-sm font-medium mb-3">Lesson Durations You Offer</label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {[
-                    { value: 30, label: '30 min' },
-                    { value: 60, label: '1 hour' },
-                    { value: 90, label: '1.5 hours' },
-                    { value: 120, label: '2 hours' },
-                    { value: 180, label: '3 hours' }
-                  ].map((duration) => (
-                    <label key={duration.value} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.allowedDurations.includes(duration.value)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData(prev => ({
-                              ...prev,
-                              allowedDurations: [...prev.allowedDurations, duration.value].sort((a, b) => a - b)
-                            }))
-                          } else {
-                            setFormData(prev => ({
-                              ...prev,
-                              allowedDurations: prev.allowedDurations.filter(d => d !== duration.value)
-                            }))
-                          }
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-600"
-                      />
-                      <span className="text-sm">{duration.label}</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Select at least one duration. Students can only book these lengths.</p>
-                {formData.allowedDurations.length === 0 && (
-                  <p className="text-xs text-red-600 mt-1">⚠️ Please select at least one duration</p>
-                )}
-              </div>
-
-              {/* Buffer Time */}
-              <div>
-                <label className="block text-sm font-medium mb-3">Buffer Between Bookings</label>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  {[10, 15, 20].map((minutes) => (
-                    <label key={minutes} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="bookingBuffer"
-                        value={minutes}
-                        checked={formData.bookingBufferMinutes === minutes}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
-                          bookingBufferMinutes: parseInt(e.target.value)
-                        }))}
-                        className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-600"
-                      />
-                      <span className="text-sm">{minutes} minutes</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Time for rest, paperwork, and preparation between students (always applied)
-                </p>
-              </div>
-
-              {/* Optional Travel Time */}
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer mb-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.enableTravelTime}
-                    onChange={(e) => setFormData(prev => ({
-                      ...prev,
-                      enableTravelTime: e.target.checked
-                    }))}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-600"
-                  />
-                  <span className="text-sm font-medium">Add travel time between bookings</span>
-                </label>
-                
-                {formData.enableTravelTime && (
-                  <div className="ml-6 space-y-2">
-                    <div className="flex items-center gap-3">
-                      <label className="text-sm">Travel time (minutes):</label>
-                      <input
-                        type="number"
-                        value={formData.travelTimeMinutes}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
-                          travelTimeMinutes: parseInt(e.target.value) || 10
-                        }))}
-                        min="5"
-                        max="60"
-                        className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                      />
-                      <span className="text-sm text-gray-600">minutes</span>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Additional time on top of buffer for traveling to next student's location
-                    </p>
-                  </div>
-                )}
-                
-                {!formData.enableTravelTime && (
-                  <p className="text-xs text-gray-500 ml-6">
-                    Only buffer time will be applied between bookings
-                  </p>
-                )}
-              </div>
-
-              {/* Example Preview */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-blue-900 mb-2">📅 Schedule Example:</h4>
-                <div className="text-xs text-blue-800 space-y-1">
-                  <p>
-                    <strong>Lesson:</strong> 1 hour (9:00-10:00)
-                  </p>
-                  <p>
-                    <strong>Buffer:</strong> {formData.bookingBufferMinutes} minutes (10:00-10:{formData.bookingBufferMinutes.toString().padStart(2, '0')})
-                  </p>
-                  {formData.enableTravelTime && (
-                    <p>
-                      <strong>Travel:</strong> {formData.travelTimeMinutes} minutes (10:{formData.bookingBufferMinutes.toString().padStart(2, '0')}-10:{(formData.bookingBufferMinutes + formData.travelTimeMinutes).toString().padStart(2, '0')})
-                    </p>
-                  )}
-                  <p className="pt-2 border-t border-blue-300 mt-2">
-                    <strong>Total blocked:</strong> {60 + formData.bookingBufferMinutes + (formData.enableTravelTime ? formData.travelTimeMinutes : 0)} minutes
-                  </p>
-                  <p>
-                    <strong>Next available:</strong> {formData.enableTravelTime 
-                      ? `10:${(formData.bookingBufferMinutes + formData.travelTimeMinutes).toString().padStart(2, '0')}`
-                      : `10:${formData.bookingBufferMinutes.toString().padStart(2, '0')}`
-                    }
-                  </p>
-                </div>
-              </div>
-            </div>
-            )}
-
-            {!bookingPrefsExpanded && (
-              <p className="text-sm text-gray-500 mt-2">Click to expand and edit booking preferences</p>
-            )}
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div 
-              className="flex items-center justify-between cursor-pointer"
-              onClick={() => setWorkingHoursExpanded(!workingHoursExpanded)}
-            >
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Working Hours
-              </h2>
-              {workingHoursExpanded ? (
-                <ChevronUp className="h-5 w-5 text-gray-500" />
-              ) : (
-                <ChevronDown className="h-5 w-5 text-gray-500" />
-              )}
-            </div>
-            
-            {workingHoursExpanded && (
-              <>
-                <p className="text-sm text-gray-600 mb-4 mt-4">
-                  Set your availability for each day. You can add multiple time slots per day (e.g., 8:00-12:00 and 14:00-18:00 for split shifts).
-                </p>
-                
-                <div className="space-y-4">
-                  {days.map((day) => (
-                    <div key={day} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="font-medium capitalize">{day}</div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newHours = { ...formData.workingHours }
-                            const dayKey = day as keyof typeof formData.workingHours
-                            newHours[dayKey] = [...(newHours[dayKey] || []), { start: '09:00', end: '17:00' }]
-                            setFormData(prev => ({ ...prev, workingHours: newHours }))
-                          }}
-                          className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                        >
-                          <Plus className="h-4 w-4" />
-                          Add Time Slot
-                        </button>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {(formData.workingHours[day as keyof typeof formData.workingHours] || []).length === 0 ? (
-                          <div className="text-sm text-gray-500 italic">Not working this day</div>
-                        ) : (
-                          formData.workingHours[day as keyof typeof formData.workingHours].map((slot, index) => (
-                            <div key={index} className="flex items-center gap-2">
-                              <input
-                                type="time"
-                                value={slot.start}
-                                onChange={(e) => {
-                                  const newHours = { ...formData.workingHours }
-                                  const dayKey = day as keyof typeof newHours
-                                  newHours[dayKey][index].start = e.target.value
-                                  setFormData(prev => ({ ...prev, workingHours: newHours }))
-                                }}
-                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                              />
-                              <span className="text-gray-500">to</span>
-                              <input
-                                type="time"
-                                value={slot.end}
-                                onChange={(e) => {
-                                  const newHours = { ...formData.workingHours }
-                                  const dayKey = day as keyof typeof newHours
-                                  newHours[dayKey][index].end = e.target.value
-                                  setFormData(prev => ({ ...prev, workingHours: newHours }))
-                                }}
-                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newHours = { ...formData.workingHours }
-                                  const dayKey = day as keyof typeof newHours
-                                  newHours[dayKey] = newHours[dayKey].filter((_, i) => i !== index)
-                                  setFormData(prev => ({ ...prev, workingHours: newHours }))
-                                }}
-                                className="text-red-600 hover:text-red-700 p-2"
-                                title="Remove time slot"
-                              >
-                                <X className="h-5 w-5" />
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-            
-            {!workingHoursExpanded && (
-              <p className="text-sm text-gray-500 mt-2">Click to expand and edit your working hours</p>
-            )}
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div
-              className="flex items-center justify-between cursor-pointer"
-              onClick={() => setPackagesExpanded(!packagesExpanded)}
-            >
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Custom Lesson Packages
-              </h2>
-              <div className="flex items-center gap-2">
-                {packagesExpanded && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); addLessonPackage() }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Package
-                  </button>
-                )}
-                {packagesExpanded ? (
-                  <ChevronUp className="h-5 w-5 text-gray-500" />
-                ) : (
-                  <ChevronDown className="h-5 w-5 text-gray-500" />
-                )}
-              </div>
-            </div>
-
-            {packagesExpanded && (
-            <>
-            <p className="text-sm text-gray-600 mb-4 mt-4">
-              Create custom packages for PDA tests, special lessons, or bundled services with custom durations and pricing.
-            </p>
-            
-            {formData.lessonPackages.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No custom packages yet</p>
-                <p className="text-sm">Add packages like "PDA Test Package" or "First Lesson Special"</p>
-              </div>
-            ) : (
+              
               <div className="space-y-4">
-                {formData.lessonPackages.map((pkg) => (
-                  <div key={pkg.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Package Name</label>
-                          <input
-                            type="text"
-                            value={pkg.name}
-                            onChange={(e) => updateLessonPackage(pkg.id, { name: e.target.value })}
-                            placeholder="e.g., PDA Test Package"
-                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                          />
-                        </div>
-                        
-                        <div className="grid sm:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium mb-1">Duration (minutes)</label>
-                            <input
-                              type="number"
-                              value={pkg.durationMinutes}
-                              onChange={(e) => updateLessonPackage(pkg.id, { durationMinutes: parseInt(e.target.value) || 0 })}
-                              min="30"
-                              step="15"
-                              placeholder="165"
-                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                              {Math.floor(pkg.durationMinutes / 60)}h {pkg.durationMinutes % 60}m
-                            </p>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-sm font-medium mb-1">Price ($)</label>
-                            <input
-                              type="number"
-                              value={pkg.price}
-                              onChange={(e) => updateLessonPackage(pkg.id, { price: parseFloat(e.target.value) || 0 })}
-                              min="0"
-                              step="0.01"
-                              placeholder="150.00"
-                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Description</label>
-                          <textarea
-                            value={pkg.description}
-                            onChange={(e) => updateLessonPackage(pkg.id, { description: e.target.value })}
-                            placeholder="e.g., Includes pickup, car warmup, 2-hour test prep, and drop-off at test center"
-                            rows={2}
-                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
-                          />
-                        </div>
-                        
-                        <label className="flex items-center gap-2 cursor-pointer">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">Service Radius (km)</label>
+                  <input
+                    type="number"
+                    value={formData.serviceRadiusKm}
+                    onChange={(e) => setFormData(prev => ({ ...prev, serviceRadiusKm: parseInt(e.target.value) }))}
+                    min="1"
+                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Maximum distance you're willing to travel for pickups</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Booking Preferences Section */}
+            <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
+              <div
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => setBookingPrefsExpanded(!bookingPrefsExpanded)}
+              >
+                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-100">
+                  <Clock className="h-5 w-5" />
+                  Booking Preferences
+                </h2>
+                {bookingPrefsExpanded ? (
+                  <ChevronUp className="h-5 w-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-slate-400" />
+                )}
+              </div>
+
+              {bookingPrefsExpanded && (
+                <div className="space-y-6 mt-4">
+                  {/* Allowed Durations */}
+                  <div>
+                    <label className="block text-sm font-medium mb-3">Lesson Durations You Offer</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                      {[
+                        { value: 30, label: '30 min' },
+                        { value: 60, label: '1 hour' },
+                        { value: 90, label: '1.5 hours' },
+                        { value: 120, label: '2 hours' },
+                        { value: 180, label: '3 hours' }
+                      ].map((duration) => (
+                        <label key={duration.value} className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={pkg.isActive}
-                            onChange={(e) => updateLessonPackage(pkg.id, { isActive: e.target.checked })}
+                            checked={formData.allowedDurations.includes(duration.value)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  allowedDurations: [...prev.allowedDurations, duration.value].sort((a, b) => a - b)
+                                }))
+                              } else {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  allowedDurations: prev.allowedDurations.filter(d => d !== duration.value)
+                                }))
+                              }
+                            }}
                             className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-600"
                           />
-                          <span className="text-sm">Active (visible to students)</span>
+                          <span className="text-sm">{duration.label}</span>
                         </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">Select at least one duration. Students can only book these lengths.</p>
+                    {formData.allowedDurations.length === 0 && (
+                      <p className="text-xs text-rose-400 mt-1">⚠️ Please select at least one duration</p>
+                    )}
+                  </div>
+
+                  {/* Buffer Time */}
+                  <div>
+                    <label className="block text-sm font-medium mb-3">Buffer Between Bookings</label>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      {[10, 15, 20].map((minutes) => (
+                        <label key={minutes} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="bookingBuffer"
+                            value={minutes}
+                            checked={formData.bookingBufferMinutes === minutes}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              bookingBufferMinutes: parseInt(e.target.value)
+                            }))}
+                            className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                          />
+                          <span className="text-sm">{minutes} minutes</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">
+                      Time for rest, paperwork, and preparation between students (always applied)
+                    </p>
+                  </div>
+
+                  {/* Travel Time */}
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer mb-3">
+                      <input
+                        type="checkbox"
+                        checked={formData.enableTravelTime}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          enableTravelTime: e.target.checked
+                        }))}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-600"
+                      />
+                      <span className="text-sm font-medium">Add travel time between bookings</span>
+                    </label>
+                    
+                    {formData.enableTravelTime && (
+                      <div className="ml-6 space-y-2">
+                        <div className="flex items-center gap-3">
+                          <label className="text-sm">Travel time (minutes):</label>
+                          <input
+                            type="number"
+                            value={formData.travelTimeMinutes}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              travelTimeMinutes: parseInt(e.target.value) || 10
+                            }))}
+                            min="5"
+                            max="60"
+                            className="w-20 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-slate-300">minutes</span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Additional time on top of buffer for traveling to next student's location
+                        </p>
                       </div>
-                      
-                      <button
-                        type="button"
-                        onClick={() => removeLessonPackage(pkg.id)}
-                        className="text-red-600 hover:text-red-700 p-2"
-                        title="Remove package"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
+                    )}
+                    
+                    {!formData.enableTravelTime && (
+                      <p className="text-xs text-slate-400 ml-6">
+                        Only buffer time will be applied between bookings
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Example Preview */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-slate-100 mb-2">📅 Schedule Example:</h4>
+                    <div className="text-xs text-slate-400 space-y-1">
+                      <p>
+                        <strong>Lesson:</strong> 1 hour (9:00-10:00)
+                      </p>
+                      <p>
+                        <strong>Buffer:</strong> {formData.bookingBufferMinutes} minutes (10:00-10:{formData.bookingBufferMinutes.toString().padStart(2, '0')})
+                      </p>
+                      {formData.enableTravelTime && (
+                        <p>
+                          <strong>Travel:</strong> {formData.travelTimeMinutes} minutes (10:{formData.bookingBufferMinutes.toString().padStart(2, '0')}-10:{(formData.bookingBufferMinutes + formData.travelTimeMinutes).toString().padStart(2, '0')})
+                        </p>
+                      )}
+                      <p className="pt-2 border-t border-slate-700 mt-2">
+                        <strong>Total blocked:</strong> {60 + formData.bookingBufferMinutes + (formData.enableTravelTime ? formData.travelTimeMinutes : 0)} minutes
+                      </p>
+                      <p>
+                        <strong>Next available:</strong> {formData.enableTravelTime 
+                          ? `10:${(formData.bookingBufferMinutes + formData.travelTimeMinutes).toString().padStart(2, '0')}`
+                          : `10:${formData.bookingBufferMinutes.toString().padStart(2, '0')}`
+                        }
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-            
-            <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <p className="text-sm text-amber-800">
-                <strong>Examples:</strong> "PDA Test - 2:45h ($165)" • "First Lesson Special - 1h ($45)" • "Highway Practice - 2h ($110)"
-              </p>
+                </div>
+              )}
+
+              {!bookingPrefsExpanded && (
+                <p className="text-sm text-slate-400 mt-2">Click to expand and edit booking preferences</p>
+              )}
             </div>
-            </>
-            )}
 
-            {!packagesExpanded && (
-              <p className="text-sm text-gray-500 mt-2">Click to expand and manage lesson packages</p>
-            )}
-          </div>
-
-          <GoogleCalendarSettings />
-
-          {/* FIX #14: Booking pause toggle — instructor self-service */}
-          <div className={`rounded-lg shadow p-6 border-2 ${!formData.acceptingBookings ? 'bg-amber-50 border-amber-300' : 'bg-white border-transparent'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  {formData.acceptingBookings ? (
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <AlertCircle className="h-5 w-5 text-amber-500" />
-                  )}
-                  Accepting New Bookings
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  {formData.acceptingBookings
-                    ? 'Students can currently book lessons with you.'
-                    : 'New bookings are paused. Existing confirmed bookings are unaffected.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormData(prev => ({ ...prev, acceptingBookings: !prev.acceptingBookings }))}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2
-                  ${formData.acceptingBookings ? 'bg-green-500' : 'bg-gray-300'}`}
-                aria-label={formData.acceptingBookings ? 'Pause bookings' : 'Resume bookings'}
+            {/* Working Hours Section */}
+            <div className="bg-slate-950 rounded-3xl shadow-sm border border-slate-800 p-6">
+              <div 
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => setWorkingHoursExpanded(!workingHoursExpanded)}
               >
-                <span
-                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform
-                    ${formData.acceptingBookings ? 'translate-x-6' : 'translate-x-1'}`}
-                />
-              </button>
+                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-100">
+                  <Clock className="h-5 w-5" />
+                  Working Hours
+                </h2>
+                {workingHoursExpanded ? (
+                  <ChevronUp className="h-5 w-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-slate-400" />
+                )}
+              </div>
+              
+              {workingHoursExpanded && (
+                <>
+                  <p className="text-sm text-slate-400 mb-4 mt-4">
+                    Set your availability for each day. You can add multiple time slots per day (e.g., 8:00-12:00 and 14:00-18:00 for split shifts).
+                  </p>
+                  
+                  <div className="space-y-4">
+                    {days.map((day) => (
+                      <div key={day} className="border border-slate-700 bg-slate-900 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="font-medium capitalize">{day}</div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newHours = { ...formData.workingHours }
+                              const dayKey = day as keyof typeof formData.workingHours
+                              newHours[dayKey] = [...(newHours[dayKey] || []), { start: '09:00', end: '17:00' }]
+                              setFormData(prev => ({ ...prev, workingHours: newHours }))
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add Time Slot
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {(formData.workingHours[day as keyof typeof formData.workingHours] || []).length === 0 ? (
+                            <div className="text-sm text-slate-400 italic">Not working this day</div>
+                          ) : (
+                            formData.workingHours[day as keyof typeof formData.workingHours].map((slot, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <input
+                                  type="time"
+                                  value={slot.start}
+                                  onChange={(e) => {
+                                    const newHours = { ...formData.workingHours }
+                                    const dayKey = day as keyof typeof newHours
+                                    newHours[dayKey][index].start = e.target.value
+                                    setFormData(prev => ({ ...prev, workingHours: newHours }))
+                                  }}
+                                  className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                />
+                                <span className="text-slate-400">to</span>
+                                <input
+                                  type="time"
+                                  value={slot.end}
+                                  onChange={(e) => {
+                                    const newHours = { ...formData.workingHours }
+                                    const dayKey = day as keyof typeof newHours
+                                    newHours[dayKey][index].end = e.target.value
+                                    setFormData(prev => ({ ...prev, workingHours: newHours }))
+                                  }}
+                                  className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newHours = { ...formData.workingHours }
+                                    const dayKey = day as keyof typeof newHours
+                                    newHours[dayKey] = newHours[dayKey].filter((_, i) => i !== index)
+                                    setFormData(prev => ({ ...prev, workingHours: newHours }))
+                                  }}
+                                  className="text-red-400 hover:text-red-500 p-2"
+                                  title="Remove time slot"
+                                >
+                                  <X className="h-5 w-5" />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              
+              {!workingHoursExpanded && (
+                <p className="text-sm text-slate-400 mt-2">Click to expand and edit your working hours</p>
+              )}
             </div>
-            {!formData.acceptingBookings && (
-              <p className="mt-3 text-sm text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
-                ⚠️ New bookings are paused. Save settings to apply this change.
-              </p>
-            )}
-          </div>
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            <Save className="h-5 w-5" />
-            {saving ? 'Saving...' : 'Save Settings'}
-          </button>
-        </form>
+            {/* PDA Test Configurations Section */}
+            <div className="bg-slate-950 rounded-3xl shadow-sm border border-slate-800 p-6">
+              <div className="flex items-center justify-between">
+                <h2 
+                  className="text-xl font-bold flex items-center gap-2 text-slate-100 flex-1 cursor-pointer"
+                  onClick={() => setPdaConfigsExpanded(!pdaConfigsExpanded)}
+                >
+                  <Zap className="h-5 w-5 text-amber-500" />
+                  PDA Test Configurations
+                </h2>
+                <div className="flex items-center gap-2">
+                  {pdaConfigsExpanded && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        addPDAConfig()
+                      }}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add PDA Config
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPdaConfigsExpanded(!pdaConfigsExpanded)}
+                    className="text-slate-400 hover:text-slate-300 p-1"
+                  >
+                    {pdaConfigsExpanded ? (
+                      <ChevronUp className="h-5 w-5" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {pdaConfigsExpanded && (
+                <>
+                  <p className="text-sm text-slate-400 mb-4 mt-4">
+                    Configure PDA (Practical Driving Assessment) test packages. Each config specifies duration, price, test centres, and what's included.
+                  </p>
+                  
+                  {formData.pdaConfigs.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <Zap className="h-12 w-12 mx-auto mb-2 opacity-50 text-amber-500" />
+                      <p>No PDA configurations yet</p>
+                      <p className="text-sm">Create PDA test packages to offer students</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {formData.pdaConfigs.map((config) => {
+                        const isExpanded = expandedPDAConfig === config.id
+                        const durationStr = `${Math.floor(config.durationMinutes / 60)}h ${config.durationMinutes % 60}m`
+                        const selectedCentresPreview = config.testCentreIds?.slice(0, 3).map(id => testCentres.find(c => c.id === id)?.name).filter(Boolean) || []
+                        const moreCount = (config.testCentreIds?.length || 0) - 3
+                        
+                        // Only show in collapsed view if it has a name (is complete)
+                        const isComplete = config.name && config.name.trim() !== ''
+                        
+                        return (
+                          <div key={config.id}>
+                            {/* COLLAPSED VIEW - show ALL configs (complete or incomplete) */}
+                            {!isExpanded && (
+                              <div className="border border-slate-700 bg-slate-900 rounded-lg p-3 flex items-center justify-between hover:bg-slate-800/50 transition">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-4 flex-wrap">
+                                    {isComplete ? (
+                                      <>
+                                        <span className="text-sm font-medium text-slate-100">{config.name}</span>
+                                        <span className="text-xs text-slate-400">·</span>
+                                        <span className="text-xs text-slate-400">{durationStr}</span>
+                                        <span className="text-xs text-slate-400">·</span>
+                                        <span className="text-xs text-slate-100 font-medium">${config.price.toFixed(2)}</span>
+                                        {selectedCentresPreview.length > 0 && (
+                                          <>
+                                            <span className="text-xs text-slate-400">·</span>
+                                            <div className="flex flex-wrap gap-1">
+                                              {selectedCentresPreview.map((name, idx) => (
+                                                <span key={idx} className="text-xs bg-blue-900/40 text-blue-200 px-1.5 py-0.5 rounded">
+                                                  ☑ {name}
+                                                </span>
+                                              ))}
+                                              {moreCount > 0 && (
+                                                <span className="text-xs text-slate-400">+{moreCount}</span>
+                                              )}
+                                            </div>
+                                          </>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-sm text-slate-400 italic">(Unnamed - click to edit)</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    setExpandedPDAConfig(config.id)
+                                  }}
+                                  className="ml-4 text-blue-400 hover:text-blue-300 flex items-center gap-1 whitespace-nowrap text-sm"
+                                >
+                                  View/Edit
+                                  <ChevronDown className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                            
+                            {/* EXPANDED VIEW */}
+                            {isExpanded && (
+                              <div className="border border-slate-700 bg-slate-900 rounded-lg p-4 space-y-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      setExpandedPDAConfig(null)
+                                    }}
+                                    className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-sm"
+                                  >
+                                    Hide
+                                    <ChevronUp className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      removePDAConfig(config.id)
+                                    }}
+                                    className="text-red-400 hover:text-red-500 p-1"
+                                    title="Delete this configuration"
+                                  >
+                                    <X className="h-5 w-5" />
+                                  </button>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-sm font-medium mb-1 text-slate-200">Configuration Name</label>
+                                    <input
+                                      type="text"
+                                      value={config.name}
+                                      onChange={(e) => updatePDAConfig(config.id, { name: e.target.value })}
+                                      placeholder="e.g., Standard PDA Test"
+                                      className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                  
+                                  <div className="grid sm:grid-cols-3 gap-3">
+                                    <div>
+                                      <label className="block text-sm font-medium mb-1 text-slate-200">Duration (min)</label>
+                                      <input
+                                        type="number"
+                                        value={config.durationMinutes}
+                                        onChange={(e) => updatePDAConfig(config.id, { durationMinutes: parseInt(e.target.value) || 180 })}
+                                        min="60"
+                                        step="15"
+                                        className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                      />
+                                      <p className="text-xs text-slate-400 mt-1">{durationStr}</p>
+                                    </div>
+                                    
+                                    <div>
+                                      <label className="block text-sm font-medium mb-1 text-slate-200">Price ($)</label>
+                                      <input
+                                        type="number"
+                                        value={config.price}
+                                        onChange={(e) => updatePDAConfig(config.id, { price: parseFloat(e.target.value) || 0 })}
+                                        min="0"
+                                        step="0.01"
+                                        className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                      />
+                                    </div>
+                                    
+                                    <div>
+                                      <label className="block text-sm font-medium mb-1 text-slate-200">Discount %</label>
+                                      <input
+                                        type="number"
+                                        value={config.discountPercent || ''}
+                                        onChange={(e) => updatePDAConfig(config.id, { discountPercent: e.target.value ? parseFloat(e.target.value) : null })}
+                                        min="0"
+                                        max="100"
+                                        step="0.1"
+                                        className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                      />
+                                      {config.discountPercent && <p className="text-xs text-green-400 mt-1">${(config.price * (1 - config.discountPercent / 100)).toFixed(2)}</p>}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2 text-slate-200">Test Centres</label>
+                                    {loadingCentres ? (
+                                      <p className="text-sm text-slate-400">Loading...</p>
+                                    ) : testCentres.length === 0 ? (
+                                      <p className="text-sm text-slate-400">No test centres available</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        <div className="space-y-2 max-h-48 overflow-y-auto bg-slate-950 rounded border border-slate-700 p-3">
+                                          {testCentres.map((centre) => (
+                                            <label key={centre.id} className="flex items-start gap-2 cursor-pointer hover:bg-slate-800/50 p-2 rounded transition">
+                                              <input
+                                                type="checkbox"
+                                                checked={config.testCentreIds?.includes(centre.id) || false}
+                                                onChange={(e) => {
+                                                  updatePDAConfig(config.id, {
+                                                    testCentreIds: e.target.checked 
+                                                      ? [...(config.testCentreIds || []), centre.id]
+                                                      : (config.testCentreIds || []).filter(id => id !== centre.id)
+                                                  })
+                                                }}
+                                                className="w-4 h-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
+                                              />
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium flex items-center gap-1 text-slate-200">
+                                                  {centre.name}
+                                                  {config.testCentreIds?.includes(centre.id) && (
+                                                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                                  )}
+                                                </p>
+                                                <p className="text-xs text-slate-400">{centre.address}</p>
+                                              </div>
+                                            </label>
+                                          ))}
+                                        </div>
+                                        {config.testCentreIds && config.testCentreIds.length > 0 && (
+                                          <div className="bg-slate-950 border border-blue-700/30 rounded p-2">
+                                            <p className="text-xs text-blue-300 font-medium mb-1">✓ Selected Centres:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                              {config.testCentreIds.map(centreId => {
+                                                const centre = testCentres.find(c => c.id === centreId)
+                                                return centre ? (
+                                                  <span key={centreId} className="text-xs bg-blue-900/40 text-blue-200 px-2 py-0.5 rounded">
+                                                    ☑ {centre.name}
+                                                  </span>
+                                                ) : null
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2 text-slate-200">What's Included</label>
+                                    <div className="space-y-2">
+                                      {[
+                                        { key: 'pickup' as const, label: 'Pickup from student location' },
+                                        { key: 'dropoff' as const, label: 'Drop-off after test' },
+                                        { key: 'debriefing' as const, label: 'Post-test debriefing' }
+                                      ].map(({ key, label }) => (
+                                        <label key={key} className="flex items-center gap-2 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={config.includes?.[key] ?? false}
+                                            onChange={(e) => updatePDAConfig(config.id, {
+                                              includes: { 
+                                                pickup: config.includes?.pickup ?? true,
+                                                dropoff: config.includes?.dropoff ?? true,
+                                                debriefing: config.includes?.debriefing ?? true,
+                                                [key]: e.target.checked 
+                                              }
+                                            })}
+                                            className="w-4 h-4 text-blue-600 rounded"
+                                          />
+                                          <span className="text-sm text-slate-200">{label}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium mb-1 text-slate-200">Notes</label>
+                                    <textarea
+                                      value={config.notes}
+                                      onChange={(e) => updatePDAConfig(config.id, { notes: e.target.value })}
+                                      placeholder="Any special details students should know"
+                                      rows={2}
+                                      className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      addPDAConfig()
+                    }}
+                    className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add PDA Config
+                  </button>
+                  
+                  <div className="mt-4 bg-slate-950 border border-blue-700 rounded-lg p-3">
+                    <p className="text-sm text-blue-300">
+                      <strong>💡 Tip:</strong> Create multiple configs with different durations and test centres. Students see all available options when booking.
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {!pdaConfigsExpanded && (
+                <p className="text-sm text-slate-400 mt-2">Click to expand and manage PDA configurations</p>
+              )}
+            </div>
+
+            {/* Google Calendar Settings */}
+            <GoogleCalendarSettings />
+
+            {/* Accepting Bookings Section */}
+            <div className={`rounded-3xl shadow-sm border p-6 ${!formData.acceptingBookings ? 'bg-slate-950 border-amber-700' : 'bg-slate-950 border-slate-800'}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    {formData.acceptingBookings ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-amber-500" />
+                    )}
+                    Accepting New Bookings
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {formData.acceptingBookings
+                      ? 'Students can currently book lessons with you.'
+                      : 'New bookings are paused. Existing confirmed bookings are unaffected.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, acceptingBookings: !prev.acceptingBookings }))}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2
+                    ${formData.acceptingBookings ? 'bg-green-500' : 'bg-slate-700'}`}
+                  aria-label={formData.acceptingBookings ? 'Pause bookings' : 'Resume bookings'}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-slate-100 shadow transform transition-transform
+                      ${formData.acceptingBookings ? 'translate-x-6' : 'translate-x-1'}`}
+                  />
+                </button>
+              </div>
+              {!formData.acceptingBookings && (
+                <p className="mt-3 text-sm text-amber-200 bg-amber-950/20 rounded-lg px-3 py-2">
+                  ⚠️ New bookings are paused. Save settings to apply this change.
+                </p>
+              )}
+            </div>
+
+            {/* Save Button */}
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Save className="h-5 w-5" />
+              {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </form>
         )}
       </div>
     </div>

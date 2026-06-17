@@ -82,13 +82,13 @@ export default function AdminTestCentresPage() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Test Centres</h1>
-            <p className="text-sm text-gray-500 mt-1">{centres.filter(c => c.isActive).length} active · {centres.length} total</p>
+            <h1 className="text-2xl font-bold text-slate-100">Test Centres</h1>
+            <p className="text-sm text-slate-500 mt-1">{centres.filter(c => c.isActive).length} active · {centres.length} total</p>
           </div>
           <button
             onClick={() => { setShowForm(!showForm); setEditingId(null); setForm(EMPTY_FORM); }}
@@ -101,45 +101,45 @@ export default function AdminTestCentresPage() {
 
         {/* Form */}
         {showForm && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-            <h2 className="font-semibold text-gray-900 mb-4">{editingId ? 'Edit Centre' : 'Add New Centre'}</h2>
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 mb-6">
+            <h2 className="font-semibold text-slate-100 mb-4">{editingId ? 'Edit Centre' : 'Add New Centre'}</h2>
             <form onSubmit={handleSave} className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Name</label>
                   <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Midland DVS" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    placeholder="e.g. Midland DVS" className="w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Region</label>
                   <input value={form.region} onChange={e => setForm(f => ({ ...f, region: e.target.value }))}
-                    placeholder="e.g. Perth Metro East" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    placeholder="e.g. Perth Metro East" className="w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Address</label>
                   <input required value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                    placeholder="e.g. 1 Great Eastern Highway" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    placeholder="e.g. 1 Great Eastern Highway" className="w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Suburb</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Suburb</label>
                   <input required value={form.suburb} onChange={e => setForm(f => ({ ...f, suburb: e.target.value }))}
-                    placeholder="e.g. Midland" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    placeholder="e.g. Midland" className="w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Latitude (optional)</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Latitude (optional)</label>
                   <input type="number" step="any" value={form.lat} onChange={e => setForm(f => ({ ...f, lat: e.target.value }))}
-                    placeholder="-31.8921" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    placeholder="-31.8921" className="w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Longitude (optional)</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Longitude (optional)</label>
                   <input type="number" step="any" value={form.lng} onChange={e => setForm(f => ({ ...f, lng: e.target.value }))}
-                    placeholder="116.0053" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    placeholder="116.0053" className="w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-3">
                 <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }}
-                  className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+                  className="flex-1 py-2.5 border border-slate-600 text-slate-300 rounded-lg text-sm hover:bg-slate-800">Cancel</button>
                 <button type="submit" disabled={saving}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -157,28 +157,28 @@ export default function AdminTestCentresPage() {
           <div className="space-y-6">
             {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([region, regionCentres]) => (
               <div key={region}>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{region}</h2>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="divide-y divide-gray-100">
+                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">{region}</h2>
+                <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                  <div className="divide-y divide-slate-800">
                     {regionCentres.map(c => (
                       <div key={c.id} className={`flex items-center justify-between px-5 py-3 ${!c.isActive ? 'opacity-50' : ''}`}>
                         <div className="flex items-start gap-3">
-                          <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                          <MapPin className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
                           <div>
-                            <p className="font-medium text-gray-900 text-sm">{c.name}</p>
-                            <p className="text-xs text-gray-500">{c.address}, {c.suburb} {c.state}</p>
+                            <p className="font-medium text-slate-100 text-sm">{c.name}</p>
+                            <p className="text-xs text-slate-500">{c.address}, {c.suburb} {c.state}</p>
                             {c.lat && c.lng && (
-                              <p className="text-xs text-gray-400">{c.lat.toFixed(4)}, {c.lng.toFixed(4)}</p>
+                              <p className="text-xs text-slate-500">{c.lat.toFixed(4)}, {c.lng.toFixed(4)}</p>
                             )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <button onClick={() => handleToggleActive(c)}
-                            className={`p-1.5 rounded-lg transition ${c.isActive ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                            className={`p-1.5 rounded-lg transition ${c.isActive ? 'text-green-600 hover:bg-green-900/20' : 'text-slate-500 hover:bg-slate-800'}`}
                             title={c.isActive ? 'Deactivate' : 'Activate'}>
                             {c.isActive ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                           </button>
-                          <button onClick={() => handleEdit(c)} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600">
+                          <button onClick={() => handleEdit(c)} className="p-1.5 hover:bg-blue-900/20 rounded-lg text-blue-600">
                             <Edit2 className="h-4 w-4" />
                           </button>
                         </div>

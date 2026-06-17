@@ -38,10 +38,10 @@ const PRESETS = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  COMPLETED: 'bg-green-100 text-green-700',
-  PENDING: 'bg-yellow-100 text-yellow-700',
-  REFUNDED: 'bg-red-100 text-red-700',
-  CANCELLED: 'bg-gray-100 text-gray-600',
+  COMPLETED: 'bg-green-900/40 text-green-300',
+  PENDING: 'bg-yellow-900/40 text-yellow-300',
+  REFUNDED: 'bg-red-900/40 text-red-300',
+  CANCELLED: 'bg-slate-800 text-slate-400',
 };
 
 function toDateInput(d: Date) {
@@ -123,9 +123,9 @@ export default function AdminRevenuePage() {
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
-      <div className="max-w-7xl mx-auto px-4 py-8 flex items-center gap-3 text-gray-500">
+      <div className="max-w-7xl mx-auto px-4 py-8 flex items-center gap-3 text-slate-500">
         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
         Loading revenue data...
       </div>
@@ -133,7 +133,7 @@ export default function AdminRevenuePage() {
   );
 
   if (!data) return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
       <div className="max-w-7xl mx-auto px-4 py-8"><p className="text-red-500">Failed to load revenue data.</p></div>
     </div>
@@ -146,45 +146,45 @@ export default function AdminRevenuePage() {
   const isFiltered = activePreset !== 'All time';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <AdminNav />
       <div className="max-w-7xl mx-auto px-4 py-8">
 
         {/* Header */}
         <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Revenue Management</h1>
-            <p className="text-gray-500 mt-1 text-sm">
-              Commission = platform fee on <span className="font-medium text-gray-700">completed lesson payments</span> (BOOKING_PAYMENT transactions).
+            <h1 className="text-3xl font-bold text-slate-100">Revenue Management</h1>
+            <p className="text-slate-500 mt-1 text-sm">
+              Commission = platform fee on <span className="font-medium text-slate-300">completed lesson payments</span> (BOOKING_PAYMENT transactions).
               Wallet top-ups and package purchases are excluded.
             </p>
           </div>
-          <button onClick={() => fetchRevenue(fromDate, toDate)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 shrink-0">
+          <button onClick={() => fetchRevenue(fromDate, toDate)} className="p-2 text-slate-500 hover:text-slate-400 rounded-lg hover:bg-slate-800 shrink-0">
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
 
         {/* Date filter */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="bg-slate-900 rounded-lg border border-slate-800 p-4 mb-6">
           <div className="flex items-center gap-2 flex-wrap">
-            <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
-            <span className="text-sm text-gray-500 shrink-0">Filter:</span>
+            <Calendar className="h-4 w-4 text-slate-500 shrink-0" />
+            <span className="text-sm text-slate-500 shrink-0">Filter:</span>
             {PRESETS.map(p => (
               <button key={p.label} onClick={() => applyPreset(p)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  activePreset === p.label ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  activePreset === p.label ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                 }`}>
                 {p.label}
               </button>
             ))}
             <div className="flex items-center gap-2 ml-auto">
               <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setActivePreset(''); }}
-                className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <span className="text-gray-400 text-xs">to</span>
+                className="border border-slate-700 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <span className="text-slate-500 text-xs">to</span>
               <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setActivePreset(''); }}
-                className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="border border-slate-700 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <button onClick={applyCustom}
-                className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800">
+                className="px-3 py-1.5 bg-slate-950 text-white text-xs rounded-lg hover:bg-slate-900">
                 Apply
               </button>
             </div>
@@ -193,32 +193,32 @@ export default function AdminRevenuePage() {
 
         {/* Stats — two rows: filtered range + all-time context */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
-          <div className="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
-            <p className="text-xs text-gray-500 mb-1">Commission Earned</p>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-5 border-l-4 border-blue-500">
+            <p className="text-xs text-slate-500 mb-1">Commission Earned</p>
             <p className="text-2xl font-bold text-blue-700">{fmt(data.rangeCommission)}</p>
-            <p className="text-xs text-gray-400 mt-1">Platform fee · {data.rangeLessons} completed lessons</p>
-            <p className="text-xs text-gray-300 mt-0.5">in selected period</p>
+            <p className="text-xs text-slate-500 mt-1">Platform fee · {data.rangeLessons} completed lessons</p>
+            <p className="text-xs text-slate-500 mt-0.5">in selected period</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-5 border-l-4 border-gray-300">
-            <p className="text-xs text-gray-500 mb-1">Gross Lesson Revenue</p>
-            <p className="text-2xl font-bold text-gray-900">{fmt(data.rangeGross)}</p>
-            <p className="text-xs text-gray-400 mt-1">Total paid by students for lessons</p>
-            <p className="text-xs text-gray-300 mt-0.5">in selected period</p>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-5 border-l-4 border-slate-600">
+            <p className="text-xs text-slate-500 mb-1">Gross Lesson Revenue</p>
+            <p className="text-2xl font-bold text-slate-100">{fmt(data.rangeGross)}</p>
+            <p className="text-xs text-slate-500 mt-1">Total paid by students for lessons</p>
+            <p className="text-xs text-slate-500 mt-0.5">in selected period</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-5 border-l-4 border-green-400">
-            <p className="text-xs text-gray-500 mb-1">Instructor Payouts</p>
-            <p className="text-2xl font-bold text-gray-900">{fmt(data.rangeInstructorPayout)}</p>
-            <p className="text-xs text-gray-400 mt-1">Paid to instructors</p>
-            <p className="text-xs text-gray-300 mt-0.5">in selected period</p>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-5 border-l-4 border-green-400">
+            <p className="text-xs text-slate-500 mb-1">Instructor Payouts</p>
+            <p className="text-2xl font-bold text-slate-100">{fmt(data.rangeInstructorPayout)}</p>
+            <p className="text-xs text-slate-500 mt-1">Paid to instructors</p>
+            <p className="text-xs text-slate-500 mt-0.5">in selected period</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-5 border-l-4 border-red-400">
-            <p className="text-xs text-gray-500 mb-1">Refunds Issued</p>
-            <p className="text-2xl font-bold text-gray-900">{fmt(data.rangeRefunds)}</p>
-            <p className="text-xs text-gray-400 mt-1">{data.rangeRefundCount} refunds</p>
-            <p className="text-xs text-gray-300 mt-0.5">in selected period</p>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 p-5 border-l-4 border-red-400">
+            <p className="text-xs text-slate-500 mb-1">Refunds Issued</p>
+            <p className="text-2xl font-bold text-slate-100">{fmt(data.rangeRefunds)}</p>
+            <p className="text-xs text-slate-500 mt-1">{data.rangeRefundCount} refunds</p>
+            <p className="text-xs text-slate-500 mt-0.5">in selected period</p>
           </div>
         </div>
 
@@ -230,19 +230,19 @@ export default function AdminRevenuePage() {
             { label: 'Pending Payouts', value: fmt(data.pendingPayouts), sub: 'awaiting processing', link: '/admin/payouts' },
             { label: 'Total Refunds (all time)', value: fmt(data.totalRefunds), sub: `${data.refundCount} refunds` },
           ].map(s => (
-            <div key={s.label} className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3">
-              <p className="text-xs text-gray-400">{s.label}</p>
-              <p className="text-lg font-bold text-gray-700 mt-0.5">{s.value}</p>
+            <div key={s.label} className="bg-slate-950 rounded-lg border border-slate-700 px-4 py-3">
+              <p className="text-xs text-slate-500">{s.label}</p>
+              <p className="text-lg font-bold text-slate-300 mt-0.5">{s.value}</p>
               {s.link
                 ? <Link href={s.link} className="text-xs text-blue-600 hover:underline">{s.sub}</Link>
-                : <p className={`text-xs mt-0.5 ${(s as any).subColor || 'text-gray-400'}`}>{s.sub}</p>}
+                : <p className={`text-xs mt-0.5 ${(s as any).subColor || 'text-slate-500'}`}>{s.sub}</p>}
             </div>
           ))}
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="border-b border-gray-100 flex overflow-x-auto">
+        <div className="bg-slate-900 rounded-lg border border-slate-800">
+          <div className="border-b border-slate-800 flex overflow-x-auto">
             {([
               { key: 'overview', label: 'Overview', icon: BarChart2 },
               { key: 'transactions', label: `Transactions (${data.recentTransactions.length})`, icon: DollarSign },
@@ -251,7 +251,7 @@ export default function AdminRevenuePage() {
             ] as { key: Tab; label: string; icon: any }[]).map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                  tab === t.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  tab === t.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-300'
                 }`}>
                 <t.icon className="h-4 w-4" />
                 {t.label}
@@ -266,69 +266,69 @@ export default function AdminRevenuePage() {
               <div className="space-y-8">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-semibold text-gray-900">Monthly Commission Trend (last 6 months)</h3>
-                    <div className="flex items-center gap-4 text-xs text-gray-400">
+                    <h3 className="text-base font-semibold text-slate-100">Monthly Commission Trend (last 6 months)</h3>
+                    <div className="flex items-center gap-4 text-xs text-slate-500">
                       <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-600 inline-block" /> Commission</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-100 inline-block" /> Gross</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-900/40 inline-block" /> Gross</span>
                     </div>
                   </div>
                   <div className="space-y-3">
                     {data.revenueByMonth.map(m => (
                       <div key={m.month} className="flex items-center gap-4">
-                        <div className="w-20 text-xs text-gray-500 text-right shrink-0">{m.month}</div>
+                        <div className="w-20 text-xs text-slate-500 text-right shrink-0">{m.month}</div>
                         <div className="flex-1 relative h-8">
-                          <div className="absolute inset-0 bg-gray-100 rounded-full" />
-                          <div className="absolute inset-y-0 left-0 bg-blue-100 rounded-full" style={{ width: `${(m.gross / maxMonthGross) * 100}%` }} />
+                          <div className="absolute inset-0 bg-slate-800 rounded-full" />
+                          <div className="absolute inset-y-0 left-0 bg-blue-900/40 rounded-full" style={{ width: `${(m.gross / maxMonthGross) * 100}%` }} />
                           <div className="absolute inset-y-0 left-0 bg-blue-600 rounded-full flex items-center justify-end pr-2" style={{ width: `${(m.commission / maxMonthGross) * 100}%` }}>
                             {m.commission > 0 && <span className="text-white text-xs font-medium">{fmt(m.commission)}</span>}
                           </div>
                         </div>
-                        <div className="w-28 text-xs text-gray-500 shrink-0">
-                          <span className="font-medium text-gray-700">{fmt(m.gross)}</span> gross
+                        <div className="w-28 text-xs text-slate-500 shrink-0">
+                          <span className="font-medium text-slate-300">{fmt(m.gross)}</span> gross
                         </div>
-                        <div className="w-16 text-xs text-gray-400 shrink-0">{m.transactions} lessons</div>
+                        <div className="w-16 text-xs text-slate-500 shrink-0">{m.transactions} lessons</div>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm">
+                <div className="grid grid-cols-3 gap-4 p-4 bg-blue-900/20 border border-blue-100 rounded-lg text-sm">
                   <div>
                     <p className="text-xs text-blue-500 mb-1">All-Time Gross (lessons)</p>
-                    <p className="font-bold text-gray-900 text-lg">{fmt(data.totalGross)}</p>
-                    <p className="text-xs text-gray-400">paid by students</p>
+                    <p className="font-bold text-slate-100 text-lg">{fmt(data.totalGross)}</p>
+                    <p className="text-xs text-slate-500">paid by students</p>
                   </div>
                   <div>
                     <p className="text-xs text-blue-500 mb-1">All-Time Instructor Payouts</p>
-                    <p className="font-bold text-gray-900 text-lg">{fmt(data.totalInstructorPayouts)}</p>
-                    <p className="text-xs text-gray-400">paid to instructors</p>
+                    <p className="font-bold text-slate-100 text-lg">{fmt(data.totalInstructorPayouts)}</p>
+                    <p className="text-xs text-slate-500">paid to instructors</p>
                   </div>
                   <div>
                     <p className="text-xs text-blue-500 mb-1">All-Time Platform Commission</p>
                     <p className="font-bold text-blue-700 text-lg">{fmt(data.totalCommission)}</p>
-                    <p className="text-xs text-gray-400">net platform revenue</p>
+                    <p className="text-xs text-slate-500">net platform revenue</p>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900 mb-4">Top Instructors by Payout <span className="text-xs font-normal text-gray-400 ml-1">(selected period)</span></h3>
+                  <h3 className="text-base font-semibold text-slate-100 mb-4">Top Instructors by Payout <span className="text-xs font-normal text-slate-500 ml-1">(selected period)</span></h3>
                   <div className="space-y-2">
                     {data.topInstructors.map((inst, i) => (
-                      <div key={inst.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                      <div key={inst.id} className="flex items-center gap-4 p-3 bg-slate-800 rounded-lg">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                          i === 0 ? 'bg-yellow-100 text-yellow-800' : i === 1 ? 'bg-gray-200 text-gray-700' : i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'
+                          i === 0 ? 'bg-yellow-900/40 text-yellow-300' : i === 1 ? 'bg-slate-700 text-slate-300' : i === 2 ? 'bg-orange-900/40 text-orange-300' : 'bg-blue-900/20 text-blue-700'
                         }`}>{i + 1}</div>
                         <div className="flex-1 min-w-0">
-                          <Link href={`/admin/instructors/${inst.id}`} className="font-medium text-gray-900 hover:text-blue-600 text-sm">{inst.name}</Link>
-                          <p className="text-xs text-gray-400">{inst.transactionCount} lessons · {fmt(inst.grossAmount)} gross</p>
+                          <Link href={`/admin/instructors/${inst.id}`} className="font-medium text-slate-100 hover:text-blue-600 text-sm">{inst.name}</Link>
+                          <p className="text-xs text-slate-500">{inst.transactionCount} lessons · {fmt(inst.grossAmount)} gross</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-gray-900 text-sm">{fmt(inst.totalEarnings)}</p>
+                          <p className="font-bold text-slate-100 text-sm">{fmt(inst.totalEarnings)}</p>
                           <p className="text-xs text-blue-600">fee: {fmt(inst.platformFee)}</p>
                         </div>
                       </div>
                     ))}
-                    {data.topInstructors.length === 0 && <p className="text-gray-400 text-sm">No completed lessons in this period.</p>}
+                    {data.topInstructors.length === 0 && <p className="text-slate-500 text-sm">No completed lessons in this period.</p>}
                   </div>
                 </div>
               </div>
@@ -339,12 +339,12 @@ export default function AdminRevenuePage() {
               <div>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-gray-900">Lesson Transactions</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Booking payments only — wallet top-ups excluded</p>
+                    <h3 className="text-base font-semibold text-slate-100">Lesson Transactions</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Booking payments only — wallet top-ups excluded</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => exportCSV(data.recentTransactions, 'transactions.csv')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-slate-700 rounded-lg hover:bg-slate-800 text-slate-400">
                       <Download className="h-3.5 w-3.5" /> CSV
                     </button>
                     <Link href="/admin/payouts" className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
@@ -354,7 +354,7 @@ export default function AdminRevenuePage() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                    <thead className="bg-slate-950 text-slate-500 text-xs uppercase">
                       <tr>
                         <th className="px-4 py-3 text-left">Date</th>
                         <th className="px-4 py-3 text-left">Instructor</th>
@@ -366,26 +366,26 @@ export default function AdminRevenuePage() {
                         <th className="px-4 py-3 text-left">Txn Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-800">
                       {data.recentTransactions.map(t => (
-                        <tr key={t.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                        <tr key={t.id} className="hover:bg-slate-800">
+                          <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
                           <td className="px-4 py-3">
                             {t.booking?.instructor
-                              ? <Link href={`/admin/instructors/${t.booking.instructor.id}`} className="text-gray-900 hover:text-blue-600">{t.booking.instructor.name}</Link>
-                              : <span className="text-gray-400">—</span>}
+                              ? <Link href={`/admin/instructors/${t.booking.instructor.id}`} className="text-slate-100 hover:text-blue-600">{t.booking.instructor.name}</Link>
+                              : <span className="text-slate-500">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-gray-600">{t.booking?.clientName || '—'}</td>
-                          <td className="px-4 py-3 text-right font-medium text-gray-900">{fmt(t.amount)}</td>
+                          <td className="px-4 py-3 text-slate-400">{t.booking?.clientName || '—'}</td>
+                          <td className="px-4 py-3 text-right font-medium text-slate-100">{fmt(t.amount)}</td>
                           <td className="px-4 py-3 text-right font-semibold text-blue-600">{fmt(t.platformFee)}</td>
-                          <td className="px-4 py-3 text-right text-gray-600">{fmt(t.instructorPayout)}</td>
+                          <td className="px-4 py-3 text-right text-slate-400">{fmt(t.instructorPayout)}</td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[t.booking?.status || ''] || 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[t.booking?.status || ''] || 'bg-slate-800 text-slate-400'}`}>
                               {t.booking?.status || '—'}
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[t.status] || 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[t.status] || 'bg-slate-800 text-slate-400'}`}>
                               {t.status}
                             </span>
                           </td>
@@ -393,7 +393,7 @@ export default function AdminRevenuePage() {
                       ))}
                     </tbody>
                   </table>
-                  {data.recentTransactions.length === 0 && <p className="text-center text-gray-400 py-8">No transactions in this period.</p>}
+                  {data.recentTransactions.length === 0 && <p className="text-center text-slate-500 py-8">No transactions in this period.</p>}
                 </div>
               </div>
             )}
@@ -403,15 +403,15 @@ export default function AdminRevenuePage() {
               <div>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-gray-900">Refunded Transactions</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Total: {fmt(data.rangeRefunds)} · {data.rangeRefundCount} refunds in period</p>
+                    <h3 className="text-base font-semibold text-slate-100">Refunded Transactions</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Total: {fmt(data.rangeRefunds)} · {data.rangeRefundCount} refunds in period</p>
                   </div>
                   <button onClick={() => exportCSV(data.refundedTransactions, 'refunds.csv')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-slate-700 rounded-lg hover:bg-slate-800 text-slate-400">
                     <Download className="h-3.5 w-3.5" /> CSV
                   </button>
                 </div>
-                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4 text-sm text-blue-800 flex gap-3">
+                <div className="bg-blue-900/20 border border-blue-100 rounded-lg p-4 mb-4 text-sm text-blue-300 flex gap-3">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                   <div>
                     Refunds are processed from the <Link href="/admin/payouts" className="font-medium underline">Payouts → Withheld tab</Link>.
@@ -419,14 +419,14 @@ export default function AdminRevenuePage() {
                   </div>
                 </div>
                 {data.refundedTransactions.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400">
+                  <div className="text-center py-12 text-slate-500">
                     <RefreshCw className="h-10 w-10 mx-auto mb-3 opacity-30" />
                     <p>No refunds in this period.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                      <thead className="bg-slate-950 text-slate-500 text-xs uppercase">
                         <tr>
                           <th className="px-4 py-3 text-left">Date</th>
                           <th className="px-4 py-3 text-left">Instructor</th>
@@ -435,18 +435,18 @@ export default function AdminRevenuePage() {
                           <th className="px-4 py-3 text-left">Note</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-slate-800">
                         {data.refundedTransactions.map(t => (
-                          <tr key={t.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                          <tr key={t.id} className="hover:bg-slate-800">
+                            <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
                             <td className="px-4 py-3">
                               {t.booking?.instructor
-                                ? <Link href={`/admin/instructors/${t.booking.instructor.id}`} className="text-gray-900 hover:text-blue-600">{t.booking.instructor.name}</Link>
-                                : <span className="text-gray-400">—</span>}
+                                ? <Link href={`/admin/instructors/${t.booking.instructor.id}`} className="text-slate-100 hover:text-blue-600">{t.booking.instructor.name}</Link>
+                                : <span className="text-slate-500">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-gray-600">{t.booking?.clientName || '—'}</td>
+                            <td className="px-4 py-3 text-slate-400">{t.booking?.clientName || '—'}</td>
                             <td className="px-4 py-3 text-right font-semibold text-red-600">{fmt(t.amount)}</td>
-                            <td className="px-4 py-3 text-gray-400 text-xs max-w-xs truncate">{t.description || '—'}</td>
+                            <td className="px-4 py-3 text-slate-500 text-xs max-w-xs truncate">{t.description || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -459,20 +459,20 @@ export default function AdminRevenuePage() {
             {/* EXPORT */}
             {tab === 'reports' && (
               <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Export Reports</h3>
-                <p className="text-xs text-gray-400 mb-4">All exports use the currently selected date range.</p>
+                <h3 className="text-base font-semibold text-slate-100 mb-1">Export Reports</h3>
+                <p className="text-xs text-slate-500 mb-4">All exports use the currently selected date range.</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button onClick={() => exportCSV(data.recentTransactions, 'transactions.csv')}
-                    className="p-5 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 text-left transition-colors">
+                    className="p-5 border-2 border-slate-700 rounded-lg hover:border-blue-500 hover:bg-blue-900/20 text-left transition-colors">
                     <FileText className="h-7 w-7 text-blue-600 mb-2" />
-                    <p className="font-semibold text-gray-900">Lesson Transactions (CSV)</p>
-                    <p className="text-xs text-gray-500 mt-1">Date, instructor, student, lesson fee, commission, payout, status</p>
+                    <p className="font-semibold text-slate-100">Lesson Transactions (CSV)</p>
+                    <p className="text-xs text-slate-500 mt-1">Date, instructor, student, lesson fee, commission, payout, status</p>
                   </button>
                   <button onClick={() => exportCSV(data.refundedTransactions, 'refunds.csv')}
-                    className="p-5 border-2 border-gray-200 rounded-lg hover:border-red-400 hover:bg-red-50 text-left transition-colors">
+                    className="p-5 border-2 border-slate-700 rounded-lg hover:border-red-400 hover:bg-red-900/20 text-left transition-colors">
                     <RefreshCw className="h-7 w-7 text-red-500 mb-2" />
-                    <p className="font-semibold text-gray-900">Refunds Report (CSV)</p>
-                    <p className="text-xs text-gray-500 mt-1">All refunded transactions with notes</p>
+                    <p className="font-semibold text-slate-100">Refunds Report (CSV)</p>
+                    <p className="text-xs text-slate-500 mt-1">All refunded transactions with notes</p>
                   </button>
                   <button onClick={() => {
                     const rows = data.revenueByMonth.map(m => ({
@@ -482,10 +482,10 @@ export default function AdminRevenuePage() {
                     } as TxnRow));
                     exportCSV(rows, 'revenue-by-month.csv');
                   }}
-                    className="p-5 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 text-left transition-colors">
+                    className="p-5 border-2 border-slate-700 rounded-lg hover:border-green-500 hover:bg-green-900/20 text-left transition-colors">
                     <BarChart2 className="h-7 w-7 text-green-600 mb-2" />
-                    <p className="font-semibold text-gray-900">Monthly Summary (CSV)</p>
-                    <p className="text-xs text-gray-500 mt-1">Gross, commission, instructor payout, lesson count per month</p>
+                    <p className="font-semibold text-slate-100">Monthly Summary (CSV)</p>
+                    <p className="text-xs text-slate-500 mt-1">Gross, commission, instructor payout, lesson count per month</p>
                   </button>
                   <button onClick={() => {
                     const rows = data.topInstructors.map(i => ({
@@ -495,10 +495,10 @@ export default function AdminRevenuePage() {
                     } as TxnRow));
                     exportCSV(rows, 'instructor-earnings.csv');
                   }}
-                    className="p-5 border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 text-left transition-colors">
+                    className="p-5 border-2 border-slate-700 rounded-lg hover:border-purple-500 hover:bg-violet-900/20 text-left transition-colors">
                     <Users className="h-7 w-7 text-purple-600 mb-2" />
-                    <p className="font-semibold text-gray-900">Instructor Earnings (CSV)</p>
-                    <p className="text-xs text-gray-500 mt-1">Gross, commission, payout per instructor</p>
+                    <p className="font-semibold text-slate-100">Instructor Earnings (CSV)</p>
+                    <p className="text-xs text-slate-500 mt-1">Gross, commission, payout per instructor</p>
                   </button>
                 </div>
               </div>

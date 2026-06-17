@@ -1,6 +1,6 @@
 # API Reference
 
-All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
+Public and authenticated API endpoints in DriveBook. Base URL: `https://drivebook.com.au/api`
 
 ---
 
@@ -8,13 +8,14 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/auth/[...nextauth]` | — | NextAuth handlers |
+| GET/POST | `/api/auth/[...nextauth]` | — | NextAuth handlers |
 | POST | `/api/auth/forgot-password` | — | Send reset email |
 | POST | `/api/auth/reset-password` | — | Reset with token |
 | POST | `/api/auth/verify-email` | — | Verify email token |
+| POST | `/api/auth/resend-verification` | — | Resend instructor verification email |
 | GET | `/api/auth/check-email` | — | Check if email exists |
 | POST | `/api/auth/mobile-login` | — | JWT login for mobile |
-| GET | `/api/auth/google/callback` | — | Google OAuth callback |
+| GET | `/api/calendar/callback` | Session | Google Calendar OAuth callback (signed state) |
 | POST | `/api/register` | — | Register new user |
 
 ---
@@ -24,9 +25,20 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | POST | `/api/public/bookings/bulk` | — | Create booking (subdomain flow) |
+| POST | `/api/public/bookings` | — | Create public booking |
 | GET | `/api/public/bookings/[id]` | — | Get booking for payment page |
+| GET | `/api/public/bookings/[id]/payment-summary` | — | Payment summary for public booking |
+| GET | `/api/public/bookings/[id]/payment-status` | — | Booking payment status |
+| GET | `/api/public/bookings/[id]/timeline` | — | Booking timeline and notes |
+| POST | `/api/public/bookings/[id]/cancel` | — | Public cancel booking |
+| POST | `/api/public/bookings/[id]/reschedule` | — | Public reschedule booking |
+| GET | `/api/public/bookings/[id]/cancellation-policy` | — | Get cancellation policy |
+| GET | `/api/public/pricing` | — | Public pricing settings |
+| GET | `/api/public/check-service-area` | — | Check if address is within service area |
 | GET | `/api/branding/[slug]` | — | Get instructor branding by slug |
 | GET | `/api/instructors/search` | — | Search instructors by location |
+| GET | `/api/instructors/[id]/availability` | — | Get available slots for a specific instructor |
+| GET | `/api/instructors/search` | — | Public instructor directory/search |
 | GET | `/api/availability/slots` | — | Get available slots |
 | GET | `/api/health` | — | Health check |
 
@@ -37,6 +49,7 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | POST | `/api/payments/create-intent` | CLIENT/INSTRUCTOR | Create Stripe PaymentIntent (auth required, ownership verified) |
+| POST | `/api/payments/verify` | CLIENT/INSTRUCTOR | Verify payment intent or transaction status |
 | POST | `/api/stripe/webhook` | Stripe sig | Handle Stripe events |
 | POST | `/api/subscriptions/checkout` | INSTRUCTOR | Create Stripe Checkout session |
 
@@ -46,7 +59,7 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| GET | `/api/client/bookings` | CLIENT | List client bookings |
+| GET | `/api/client/bookings/[id]` | CLIENT | Get client booking by ID |
 | POST | `/api/client/bookings/create-bulk` | CLIENT | Book lessons from wallet |
 | PUT | `/api/client/bookings/[id]/reschedule` | CLIENT | Reschedule booking |
 | GET | `/api/client/wallet/summary` | CLIENT | Wallet balance + history |
@@ -69,6 +82,7 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 | POST | `/api/bookings/[id]/cancel` | INSTRUCTOR/CLIENT/ADMIN | Cancel with refund |
 | PATCH | `/api/bookings/[id]/reschedule` | INSTRUCTOR | Reschedule |
 | POST | `/api/bookings/[id]/check-in` | INSTRUCTOR/mobile JWT | Check in |
+| POST | `/api/bookings/[id]/check-out` | INSTRUCTOR | Check out completed lesson |
 | POST | `/api/bookings/send-payment-link` | INSTRUCTOR | Email wallet top-up link |
 
 ---
@@ -81,10 +95,12 @@ All API routes in DriveBook. Base URL: `https://drivebook.com.au/api`
 | PATCH | `/api/instructor/profile` | INSTRUCTOR | Update profile |
 | GET | `/api/instructor/branding` | INSTRUCTOR | Get branding settings |
 | POST | `/api/instructor/branding` | INSTRUCTOR | Update branding |
-| GET | `/api/instructor/availability` | INSTRUCTOR | Get working hours |
-| POST | `/api/instructor/availability` | INSTRUCTOR | Update working hours |
-| GET | `/api/instructor/clients` | INSTRUCTOR | List clients |
-| POST | `/api/instructor/clients` | INSTRUCTOR | Add client |
+| GET | `/api/instructor/settings` | INSTRUCTOR | Get instructor settings |
+| PUT | `/api/instructor/settings` | INSTRUCTOR | Update settings, including working hours |
+| GET | `/api/instructor/availability/exceptions` | INSTRUCTOR | List availability exceptions |
+| POST | `/api/instructor/availability/exceptions` | INSTRUCTOR | Create availability exception |
+| DELETE | `/api/instructor/availability/exceptions` | INSTRUCTOR | Delete availability exception |
+| GET | `/api/instructor/clients/[id]` | INSTRUCTOR | Get instructor client detail |
 | GET | `/api/instructor/subscription` | INSTRUCTOR | Get subscription |
 | POST | `/api/instructor/subscription` | INSTRUCTOR | Create/update subscription |
 | DELETE | `/api/instructor/subscription` | INSTRUCTOR | Cancel subscription |

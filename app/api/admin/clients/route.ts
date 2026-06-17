@@ -1,22 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     
-    // Check admin role
-    const admin = await prisma.user.findUnique({
-      where: { email: session?.user?.email || '' },
-      select: { role: true }
-    });
-
-    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'SUPER_ADMIN')) {
+    // Check admin role — use session role directly (authOptions ensures correct decoding)
+    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
+
+    // Pagination params
+    const { searchParams } = new URL(req.url)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '25')))
+    const skip = (page - 1) * limit
+
+    // Get total count
+    const total = await prisma.client.count()
 
     // Get all clients with wallet data
     const clients = await prisma.client.findMany({
@@ -43,7 +48,9 @@ export async function GET(req: NextRequest) {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
     });
 
     // Format response with calculations
@@ -105,7 +112,16 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json(formattedUsers);
+    return NextResponse.json({
+      clients: formattedUsers,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasMore: page < Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     console.error('Admin clients fetch error:', error);
     return NextResponse.json(

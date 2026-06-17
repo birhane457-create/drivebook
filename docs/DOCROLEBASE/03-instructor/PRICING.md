@@ -18,7 +18,7 @@ This rate is used to calculate:
 
 ## Lesson Packages
 
-Instructors can offer pre-defined packages. Stored as `Instructor.lessonPackages` (JSON).
+Instructors can no longer offer legacy pre-defined `lessonPackages`. Instructor-configured packages have been removed; platform-managed PDA test packages remain supported via `offersTestPackage` and related fields.
 
 Default package discounts (configurable via `/admin/pricing`):
 | Package | Hours | Default Discount |
@@ -33,6 +33,25 @@ The `discountPaidBy` setting in `PlatformSettings` determines who absorbs the di
 - `shared` — split between platform and instructor
 
 ---
+
+## Legacy Add-on Cleanup
+
+**Status:** ✅ COMPLETE (June 16, 2026)
+
+Instructor **special services** and custom legacy add-ons are **removed** and no longer supported across booking flows. Use the platform PDA test package fields instead.
+
+### Supported pricing only
+
+| Type | Source | How students book |
+|------|--------|-------------------|
+| **Hourly lessons** | `Instructor.hourlyRate` | Client dashboard, instructor booking API |
+| **Bulk packages (6 / 10 / 15 hrs)** | Platform discounts via `PlatformSettings` + `calculatePackagePriceDynamic` | Public/subdomain wizard, `/api/public/bookings/bulk` |
+| **PDA test pack** | `PDATestConfig` + `offersTestPackage` / `testPackagePrice` in instructor dashboard settings | `includeTestPackage` toggle in bulk booking; PDA configs in settings |
+
+### Rejected payloads
+
+APIs return `400` if the request includes `specialServiceId`, `specialServiceName`, `specialServiceType`, `customPackageId`, or `customPackagePrice`.
+
 
 ## Allowed Durations
 

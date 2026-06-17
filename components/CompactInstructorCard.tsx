@@ -4,15 +4,6 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { Star, ChevronDown, ChevronUp } from 'lucide-react';
 
-interface LessonPackage {
-  id: string;
-  name: string;
-  durationMinutes: number;
-  price: number;
-  description: string;
-  isActive: boolean;
-}
-
 interface CompactInstructorCardProps {
   instructor: {
     id: string;
@@ -30,13 +21,11 @@ interface CompactInstructorCardProps {
     languages: string[];
     vehicleTypes: string[];
     totalBookings: number;
-    lessonPackages?: LessonPackage[];
   };
   onSelect: () => void;
 }
 
 export default function CompactInstructorCard({ instructor, onSelect }: CompactInstructorCardProps) {
-  const packages = instructor.lessonPackages?.filter(p => p.isActive !== false) || [];
   const [bioOpen, setBioOpen] = useState(false);
 
   return (
@@ -108,20 +97,12 @@ export default function CompactInstructorCard({ instructor, onSelect }: CompactI
           </div>
         )}
 
-        {/* Pricing tiles */}
-        <div className="grid grid-cols-2 gap-1.5 mb-3">
-          {/* Standard lesson */}
+        {/* Pricing */}
+        <div className="mb-3">
           <div className="bg-blue-50 rounded-lg px-2.5 py-2">
             <p className="text-xs text-gray-500">Standard</p>
             <p className="text-sm font-bold text-blue-700">${instructor.hourlyRate}/hr</p>
           </div>
-          {/* Lesson packages */}
-          {packages.map(pkg => (
-            <div key={pkg.id} className="bg-indigo-50 rounded-lg px-2.5 py-2">
-              <p className="text-xs text-gray-500 truncate">{pkg.name}</p>
-              <p className="text-sm font-bold text-indigo-700">${pkg.price.toFixed(0)}</p>
-            </div>
-          ))}
         </div>
 
         {/* Select button */}

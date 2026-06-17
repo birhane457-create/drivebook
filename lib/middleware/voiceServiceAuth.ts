@@ -7,7 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const VOICE_SERVICE_API_KEY = process.env.VOICE_SERVICE_API_KEY || 'dev-voice-key-change-in-production';
+// Fail hard if key not configured — no known fallback in production
+const VOICE_SERVICE_API_KEY = process.env.VOICE_SERVICE_API_KEY
+
+if (!VOICE_SERVICE_API_KEY) {
+  console.error('[voiceServiceAuth] VOICE_SERVICE_API_KEY is not set — all voice requests will be rejected')
+};
 
 export interface VoiceServiceRequest extends NextRequest {
   voiceService?: {
@@ -34,7 +39,8 @@ export function authenticateVoiceService(req: NextRequest): {
     };
   }
 
-  if (apiKey !== VOICE_SERVICE_API_KEY) {
+  // Reject if key not configured or doesn't match
+  if (!VOICE_SERVICE_API_KEY || apiKey !== VOICE_SERVICE_API_KEY) {
     return {
       authenticated: false,
       error: 'Invalid API key',

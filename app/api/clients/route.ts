@@ -113,10 +113,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Pagination params
+    const { searchParams } = new URL(req.url)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '25')))
+    const skip = (page - 1) * limit
+
+    // Get total count
+    const total = await prisma.client.count({
+      where: { instructorId: session.user.instructorId },
+    })
+
     const clients = await prisma.client.findMany({
       where: { instructorId: session.user.instructorId },
       select: safeClientSelect,
       orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
     })
 
     const sanitizedClients = clients.map(sanitizeClientForInstructor)
@@ -131,7 +144,16 @@ export async function GET(req: NextRequest) {
       req.headers.get('x-forwarded-for')
     )
 
-    return NextResponse.json(sanitizedClients)
+    return NextResponse.json({
+      clients: sanitizedClients,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasMore: page < Math.ceil(total / limit),
+      },
+    })
   } catch (error) {
     console.error('Fetch clients error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -98,7 +98,7 @@ export default function PlatformSettingsForm() {
   }
 
   if (loading || !s) {
-    return <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-400 text-sm">Loading settings...</div>;
+    return <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 text-center text-slate-500 text-sm">Loading settings...</div>;
   }
 
   return (
@@ -112,55 +112,55 @@ export default function PlatformSettingsForm() {
       )}
 
       {/* Booking Rules */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-5">
+      <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-6">
+        <h2 className="font-semibold text-slate-100 flex items-center gap-2 mb-5">
           <Calendar className="h-5 w-5 text-blue-600" />
           Booking Rules
         </h2>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-300 mb-1">
               Minimum advance booking (hours)
             </label>
             <input
               type="number" min={0} max={168} value={s.booking.minAdvanceHours}
               onChange={e => setBooking({ minAdvanceHours: parseInt(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-400 mt-1">Clients can't book less than this many hours ahead</p>
+            <p className="text-xs text-slate-500 mt-1">Clients can't book less than this many hours ahead</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-300 mb-1">
               Maximum advance booking (days)
             </label>
             <input
               type="number" min={1} max={365} value={s.booking.maxAdvanceDays}
               onChange={e => setBooking({ maxAdvanceDays: parseInt(e.target.value) || 1 })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-400 mt-1">How far ahead a single lesson can be booked</p>
+            <p className="text-xs text-slate-500 mt-1">How far ahead a single lesson can be booked</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-300 mb-1">
               Max lessons per instructor per day
             </label>
             <input
               type="number" min={1} max={20} value={s.booking.maxLessonsPerDayPerInstructor}
               onChange={e => setBooking({ maxLessonsPerDayPerInstructor: parseInt(e.target.value) || 1 })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col justify-center">
-            <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="flex items-start gap-3 p-4 bg-blue-900/20 border border-blue-700/50 rounded-xl">
               <button
                 type="button"
                 onClick={() => setBooking({ packageBypassMinAdvance: !s.booking.packageBypassMinAdvance })}
                 className={`relative inline-flex h-6 w-11 rounded-full transition-colors shrink-0 mt-0.5 ${s.booking.packageBypassMinAdvance ? 'bg-blue-600' : 'bg-gray-300'}`}
               >
-                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${s.booking.packageBypassMinAdvance ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                <span className={`inline-block h-5 w-5 rounded-full bg-slate-900 shadow transform transition-transform mt-0.5 ${s.booking.packageBypassMinAdvance ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
               <div>
-                <p className="text-sm font-medium text-blue-900">Packages bypass min advance window</p>
+                <p className="text-sm font-medium text-blue-200">Packages bypass min advance window</p>
                 <p className="text-xs text-blue-700 mt-0.5">
                   When on, clients buying a full package (6/10/15 lessons) can book the first lesson immediately — prevents second thoughts and bypasses the minimum window. Smart for conversion.
                 </p>
@@ -171,21 +171,21 @@ export default function PlatformSettingsForm() {
       </div>
 
       {/* Notification Matrix */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-2">
+      <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 p-6">
+        <h2 className="font-semibold text-slate-100 flex items-center gap-2 mb-2">
           <Bell className="h-5 w-5 text-purple-600" />
           Notification Channels
         </h2>
-        <p className="text-xs text-gray-400 mb-5 flex items-center gap-1">
+        <p className="text-xs text-slate-500 mb-5 flex items-center gap-1">
           <Info className="h-3.5 w-3.5" />
           Controls which channels fire for each event. In-app is the bell icon. SMS requires Twilio. Email requires SMTP.
         </p>
 
         {/* Header */}
         <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 items-center mb-2 px-1">
-          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Event</span>
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Event</span>
           {(['inApp', 'email', 'sms'] as const).map(ch => (
-            <div key={ch} className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide w-16 justify-center">
+            <div key={ch} className="flex items-center gap-1 text-xs font-medium text-slate-400 uppercase tracking-wide w-16 justify-center">
               {CHANNEL_ICONS[ch]}{CHANNEL_LABELS[ch]}
             </div>
           ))}
@@ -198,17 +198,17 @@ export default function PlatformSettingsForm() {
             return (
               <div key={event} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 items-center py-3 px-1">
                 <div>
-                  <p className="text-sm text-gray-800">{label}</p>
-                  <p className="text-xs text-gray-400">{who}{note ? ` · ${note}` : ''}</p>
+                  <p className="text-sm text-slate-200">{label}</p>
+                  <p className="text-xs text-slate-500">{who}{note ? ` · ${note}` : ''}</p>
                 </div>
                 {(['inApp', 'email', 'sms'] as const).map(ch => (
                   <div key={ch} className="w-16 flex justify-center">
                     <button
                       type="button"
                       onClick={() => toggleChannel(event, ch)}
-                      className={`w-9 h-5 rounded-full transition-colors relative ${channels[ch] ? 'bg-blue-600' : 'bg-gray-200'}`}
+                      className={`w-9 h-5 rounded-full transition-colors relative ${channels[ch] ? 'bg-blue-600' : 'bg-slate-800'}`}
                     >
-                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${channels[ch] ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-slate-900 shadow transition-transform ${channels[ch] ? 'translate-x-4' : 'translate-x-0.5'}`} />
                     </button>
                   </div>
                 ))}
@@ -226,7 +226,7 @@ export default function PlatformSettingsForm() {
           <Save className="h-4 w-4" />
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
-        <p className="text-xs text-gray-400">Booking rules apply to new bookings immediately.</p>
+        <p className="text-xs text-slate-500">Booking rules apply to new bookings immediately.</p>
       </div>
     </form>
   );

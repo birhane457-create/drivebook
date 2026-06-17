@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import { HOUR_PACKAGES } from '@/lib/config/packages';
-import { useRouter } from 'next/navigation';
 
 interface BookingSummaryProps {
   showButtons?: boolean;
@@ -13,7 +12,6 @@ interface BookingSummaryProps {
   continueText?: string;
   backText?: string;
   loading?: boolean;
-  currentStep?: number;
 }
 
 export default function BookingSummary({ 
@@ -22,22 +20,18 @@ export default function BookingSummary({
   onBack,
   continueText = 'Continue →',
   backText = '← Back',
-  loading = false,
-  currentStep = 1
+  loading = false
 }: BookingSummaryProps) {
-  const router = useRouter();
-  const { bookingState } = useBooking();
+  const { bookingState, toggleTestPackage } = useBooking();
   const [showPackageInfo, setShowPackageInfo] = useState(false);
-  const { instructor, packageType, hours, includeTestPackage, pricing } = bookingState;
-  const addonPackage = bookingState.customPackageId
-    ? (instructor as any)?.lessonPackages?.find((p: any) => p.id === bookingState.customPackageId)
-    : null;
+  const { instructor, packageType, hours, includeTestPackage, pricing, pdaTestBooking } = bookingState;
+  const testPackagePrice = instructor?.testPackagePrice ?? 0;
 
   if (!instructor) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 sticky top-4">
-        <h3 className="text-lg font-semibold mb-4">Booking Summary</h3>
-        <p className="text-gray-500 text-sm">Select an instructor to begin</p>
+      <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl p-4 sm:p-6 sticky top-4 border border-white/10 backdrop-blur-sm text-white">
+        <h3 className="text-lg font-semibold mb-4 text-white/90">Booking Summary</h3>
+        <p className="text-white/70 text-sm">Select an instructor to begin</p>
       </div>
     );
   }
@@ -48,12 +42,12 @@ export default function BookingSummary({
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 sticky top-4">
-        <h3 className="text-lg font-semibold mb-4">Booking Summary</h3>
+      <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-4 sm:p-6 sticky top-4 border border-white/10 backdrop-blur-sm text-white">
+        <h3 className="text-lg font-semibold mb-4 text-white/90">Booking Summary</h3>
 
         {/* Instructor Info */}
-        <div className="flex items-center gap-3 mb-6 pb-6 border-b">
-          <div className="relative w-16 h-16 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+        <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/6">
+          <div className="relative w-16 h-16 rounded-full overflow-hidden bg-white/6 flex-shrink-0">
             {instructor.profileImage ? (
               <Image
                 src={instructor.profileImage}
@@ -62,35 +56,33 @@ export default function BookingSummary({
                 className="object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400 text-2xl font-bold">
+              <div className="w-full h-full flex items-center justify-center text-white/70 text-2xl font-bold">
                 {instructor.name.charAt(0)}
               </div>
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-gray-900 truncate">{instructor.name}</h4>
+            <h4 className="font-semibold text-white truncate">{instructor.name}</h4>
             <div className="flex items-center gap-1 text-sm">
-              <span className="text-yellow-500">★</span>
-              <span className="text-gray-600">
+              <span className="text-yellow-400">★</span>
+              <span className="text-white/80">
                 {instructor.averageRating?.toFixed(1) || 'New'}
               </span>
-              <span className="text-gray-400">
-                ({instructor.totalReviews})
-              </span>
+              <span className="text-white/60">({instructor.totalReviews})</span>
             </div>
           </div>
         </div>
 
         {/* COMPACT Package Details - 2 LINES */}
-        <div className="bg-blue-50 rounded-lg p-3 mb-6 pb-6 border-b">
+        <div className="bg-white/5 rounded-lg p-3 mb-6 pb-6 border-b border-white/6">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
-              <p className="text-xs font-semibold text-blue-900 mb-1">{packageInfo.name}</p>
-              <p className="text-sm text-blue-800">{hours}h • ${instructor.hourlyRate}/h</p>
+              <p className="text-xs font-semibold text-white mb-1">{packageInfo.name}</p>
+              <p className="text-sm text-white/80">{hours}h • ${instructor.hourlyRate}/h</p>
             </div>
             <button
               onClick={() => setShowPackageInfo(true)}
-              className="text-blue-600 hover:text-blue-800 p-1 flex-shrink-0"
+              className="text-white/80 hover:text-white p-1 flex-shrink-0"
               title="Click for details"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -100,77 +92,111 @@ export default function BookingSummary({
           </div>
         </div>
 
+        {/* Optional PDA Add-on */}
+        {instructor.offersTestPackage && !pdaTestBooking && (
+          <div className="bg-white/5 rounded-lg p-4 mb-6 border border-white/10">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Add PDA test pack</p>
+                <p className="text-xs text-white/70 mt-1">Optional driving test preparation add-on before scheduling and payment.</p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleTestPackage}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${includeTestPackage ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-blue-600 text-white hover:bg-blue-500'}`}
+              >
+                {includeTestPackage ? 'Remove add-on' : 'Add PDA pack'}
+              </button>
+            </div>
+            <div className="mt-3 text-xs text-white/70 flex flex-wrap gap-3">
+              <span className="font-semibold">Price:</span>
+              <span>${testPackagePrice.toFixed(2)}</span>
+              {instructor.testPackageDuration ? <span>• {Math.floor(instructor.testPackageDuration / 60)}h {instructor.testPackageDuration % 60}m</span> : null}
+            </div>
+          </div>
+        )}
+
         {/* Price Breakdown */}
-        <div className="space-y-2 mb-6 pb-6 border-b">
+        <div className="space-y-2 mb-6 pb-6 border-b border-white/6">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Subtotal</span>
-            <span className="text-gray-900">${pricing.subtotal.toFixed(2)}</span>
+            <span className="text-white/70">Subtotal</span>
+            <span className="text-white">${pricing.subtotal.toFixed(2)}</span>
           </div>
           
           {pricing.discount > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-green-600">
-                Discount ({pricing.discountPercentage}%)
-              </span>
-              <span className="text-green-600">-${pricing.discount.toFixed(2)}</span>
+              <span className="text-green-300">Discount ({pricing.discountPercentage}%)</span>
+              <span className="text-green-300">-${pricing.discount.toFixed(2)}</span>
             </div>
           )}
 
           {includeTestPackage && pricing.testPackage > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Test Package</span>
-              <span className="text-gray-900">${pricing.testPackage.toFixed(2)}</span>
+              <span className="text-white/70">Test Package</span>
+              <span className="text-white">${pricing.testPackage.toFixed(2)}</span>
             </div>
           )}
 
-          {addonPackage && bookingState.customPackagePrice && (
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{addonPackage.name} <span className="text-xs text-gray-400">(add-on)</span></span>
-              <span className="text-gray-900">${bookingState.customPackagePrice.toFixed(2)}</span>
-            </div>
-          )}
 
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Platform Fee</span>
-            <span className="text-gray-900">${pricing.platformFee.toFixed(2)}</span>
+            <span className="text-white/70">Platform Fee</span>
+            <span className="text-white">${pricing.platformFee.toFixed(2)}</span>
           </div>
         </div>
 
         {/* Total */}
         <div className="space-y-3">
           <div className="flex justify-between items-center">
-            <span className="text-lg font-semibold text-gray-900">Total</span>
-            <span className="text-2xl font-bold text-blue-600">
-              ${pricing.total.toFixed(2)}
-            </span>
+            <span className="text-lg font-semibold text-white">Total</span>
+            <span className="text-2xl font-bold text-white">${pricing.total.toFixed(2)}</span>
           </div>
 
           {/* Scheduled Bookings (if any) */}
-          {bookingState.scheduledBookings.length > 0 && (
-            <div className="bg-green-50 rounded-lg p-3">
-              <p className="text-xs text-green-800 font-semibold mb-1">
-                Scheduled: {bookingState.scheduledBookings.length}
-              </p>
-              <p className="text-xs text-green-700">
-                Remaining: {bookingState.remainingHours.toFixed(1)}h
-              </p>
+          {(bookingState.scheduledBookings.length > 0 || bookingState.includeTestPackage) && (
+            <div className="space-y-2 mb-6">
+              {bookingState.scheduledBookings.length > 0 && (
+                <div className="bg-green-800/20 rounded-lg p-3 border border-green-700/30">
+                  <p className="text-xs text-green-200 font-semibold mb-1">✓ Lessons Scheduled: {bookingState.scheduledBookings.length}</p>
+                  {bookingState.remainingHours > 0 && (
+                    <p className="text-xs text-green-200">Extra hours to schedule: {bookingState.remainingHours.toFixed(1)}h</p>
+                  )}
+                </div>
+              )}
+              
+              {pdaTestBooking && (
+                <div className="bg-blue-800/20 rounded-lg p-3 border border-blue-700/30">
+                  <p className="text-xs text-blue-200 font-semibold mb-1">✓ PDA Test Booked</p>
+                  <p className="text-xs text-blue-200 mb-1">{pdaTestBooking.configName}</p>
+                  <p className="text-xs text-blue-200 font-mono mb-1">📅 {new Date(pdaTestBooking.testDate).toLocaleDateString('en-AU', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                  <p className="text-xs text-blue-200 font-mono mb-1">🕐 {pdaTestBooking.testTime}</p>
+                  <p className="text-xs text-blue-200 font-mono">📍 {pdaTestBooking.testCentreName}</p>
+                </div>
+              )}
+              
+              {bookingState.includeTestPackage && !pdaTestBooking && (
+                <div className="bg-blue-800/20 rounded-lg p-3 border border-blue-700/30">
+                  <p className="text-xs text-blue-200 font-semibold mb-1">📝 PDA Test Pending</p>
+                  <p className="text-xs text-blue-200">{bookingState.instructor?.testPackageDuration ? `${Math.floor((bookingState.instructor.testPackageDuration || 165) / 60)}h ${((bookingState.instructor.testPackageDuration || 165) % 60)}m` : '2h 45m'} test preparation</p>
+                  <p className="text-xs text-blue-300 mt-1">Use the "Schedule PDA Test" tab to book your test</p>
+                </div>
+              )}
             </div>
           )}
 
           {/* Buttons at Bottom - Left Aligned */}
           {showButtons && (
-            <div className="mt-6 pt-6 border-t border-gray-200 flex flex-col sm:flex-row gap-3">
+            <div className="mt-6 pt-6 border-t border-white/6 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={onBack}
                 disabled={loading}
-                className="flex-1 sm:flex-initial px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-initial px-4 py-2 bg-white/5 border border-white/8 text-white/90 rounded-lg font-semibold hover:bg-white/6 transition-colors disabled:bg-gray-700 disabled:cursor-not-allowed"
               >
                 {backText}
               </button>
               <button
                 onClick={onContinue}
                 disabled={loading}
-                className="flex-1 sm:flex-initial px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 sm:flex-initial px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-500 hover:to-pink-500 transition-colors disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -238,12 +264,6 @@ export default function BookingSummary({
                     <div className="flex justify-between">
                       <span className="text-gray-600">Test Package Add-on</span>
                       <span className="text-gray-900">${pricing.testPackage.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {addonPackage && bookingState.customPackagePrice && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">{addonPackage.name}</span>
-                      <span className="text-gray-900">${bookingState.customPackagePrice.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
