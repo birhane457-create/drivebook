@@ -69,10 +69,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ received: true, duplicate: true });
       }
     } catch (idempotencyErr) {
-      // WebhookEvent table may not exist yet — log and continue processing
-      logger.warn('⚠️ Idempotency check failed (non-fatal)', {
+      // DB error during duplicate check — MUST reject rather than continue.
+      // If we process anyway and Stripe retries, we risk double-crediting a wallet.
+      // Returning 500 tells Stripe to retry later when the DB is healthy.
+      // The original "non-fatal" comment was written before the WebhookEvent table
+      // existed; the table is now fully migrated and this path should never be hit
+      // in normal operation.
+      logger.error('🚨 Idempotency check failed — rejecting webhook to prevent duplicate processing', {
+        idempotencyKey,
         error: idempotencyErr instanceof Error ? idempotencyErr.message : String(idempotencyErr),
       });
+      return NextResponse.json(
+        { error: 'Idempotency check failed — will retry' },
+        { status: 500 }
+      );
     }
 
     // Process event based on type — errors here are caught below

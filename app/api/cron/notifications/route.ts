@@ -1,38 +1,44 @@
-// Cron endpoint for generating notifications
-// Can be called by Vercel Cron, external scheduler, or manually for testing
-// IMPORTANT: Protect with authorization in production
+/**
+ * Cron Job: Notifications Dispatcher
+ *
+ * Endpoint: /api/cron/notifications
+ * Schedule: Every 15 minutes (vercel.json)
+ * Auth:     Vercel Crons authenticate via x-vercel-cron header automatically.
+ *           Bearer auth check removed — Vercel does not send Authorization headers on crons.
+ *
+ * Runs two jobs each tick:
+ *   1. generateBookingReminders  — in-app reminders for lessons tomorrow and in 1 hour
+ *   2. generatePackageExpiryAlerts — in-app alerts at 7d / 1d / today / yesterday (marks expired)
+ *
+ * Each job is independently try/caught — one failure does not abort the other.
+ * CronHealth is pinged on success, failed on unhandled error.
+ */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateBookingReminders } from '@/lib/jobs/bookingReminders';
 import { generatePackageExpiryAlerts } from '@/lib/jobs/packageExpiryAlerts';
+import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const startTime = Date.now();
+
+  const results: {
+    bookingReminders: { success: boolean } | null;
+    packageExpiryAlerts: { success: boolean } | null;
+    errors: { job: string; error: string }[];
+    completedAt: string;
+    duration: string;
+  } = {
+    bookingReminders: null,
+    packageExpiryAlerts: null,
+    errors: [],
+    completedAt: new Date().toISOString(),
+    duration: '',
+  };
+
   try {
-    // Security: Check authorization header (optional - add if using external scheduler)
-    const authHeader = req.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-
-    // In production, verify the secret
-    if (process.env.NODE_ENV === 'production' && cronSecret) {
-      if (!authHeader || !authHeader.includes(cronSecret)) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
-        );
-      }
-    }
-
-    console.log('🔔 Running notification generation cron jobs...');
-
-    const results: any = {
-      bookingReminders: null,
-      packageExpiryAlerts: null,
-      errors: [],
-      completedAt: new Date().toISOString(),
-    };
-
     // Run booking reminders job
     try {
       results.bookingReminders = await generateBookingReminders();
@@ -41,6 +47,7 @@ export async function GET(req: NextRequest) {
         job: 'bookingReminders',
         error: error instanceof Error ? error.message : String(error),
       });
+      console.error('[NotificationsCron] bookingReminders failed:', error);
     }
 
     // Run package expiry alerts job
@@ -51,24 +58,31 @@ export async function GET(req: NextRequest) {
         job: 'packageExpiryAlerts',
         error: error instanceof Error ? error.message : String(error),
       });
+      console.error('[NotificationsCron] packageExpiryAlerts failed:', error);
     }
 
-    console.log('✅ Cron jobs completed');
+    results.completedAt = new Date().toISOString();
+    results.duration = `${Date.now() - startTime}ms`;
 
-    // Return 200 even if there are errors (so the cron doesn't retry indefinitely)
-    return NextResponse.json(results);
+    await pingCronHealth('notifications');
+
+    return NextResponse.json({ success: true, ...results });
   } catch (error) {
-    console.error('❌ Error in notifications cron:', error);
+    console.error('[NotificationsCron] Unhandled error:', error);
+    await failCronHealth('notifications', error);
 
-    return NextResponse.json({
-      error: 'Cron job failed',
-      message: error instanceof Error ? error.message : String(error),
-      completedAt: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        duration: `${Date.now() - startTime}ms`,
+      },
+      { status: 500 }
+    );
   }
 }
 
+// Allow POST for manual triggers / testing
 export async function POST(req: NextRequest) {
-  // Allow POST for testing/manual triggers
   return GET(req);
 }

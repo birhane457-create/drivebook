@@ -36,101 +36,68 @@ const request = require('supertest');
 // ── Mock all outbound HTTP so tests run offline ────────────────────────────────
 jest.mock('../services/drivebook-api-client', () => ({}));
 
-// Mock the generated JS SDK classes used by main-app-proxy
-jest.mock('../generated-client-js/dist/index.js', () => {
-  const makeApi = (methods) => {
-    return jest.fn().mockImplementation(() => methods);
-  };
+// Mock axios so all proxy calls return controlled responses without hitting the network
+jest.mock('axios', () => {
+  const mockAxios = jest.fn().mockImplementation(({ url, method }) => {
+    const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
 
-  return {
-    ApiClient: {
-      instance: {
-        basePath: '',
-        authentications: { BearerAuth: { apiKey: '', apiKeyPrefix: '' } },
-      },
-    },
-    AvailabilityApi: makeApi({
-      getAvailableSlots: jest.fn((_iid, _date, _opts, cb) =>
-        cb(null, { slots: [{ time: '09:00', available: true }] }, { status: 200 })
-      ),
-      checkAvailability: jest.fn((_iid, _date, _dur, _opts, cb) =>
-        cb(null, { available: true, slots: [] }, { status: 200 })
-      ),
-    }),
-    InstructorsApi: makeApi({
-      getInstructorRecommendations: jest.fn((_loc, _opts, cb) =>
-        cb(
-          null,
-          { recommendations: [{ id: 'inst_1', name: 'Debesay', hourlyRate: 79 }] },
-          { status: 200 }
-        )
-      ),
-      searchInstructorsByLocation: jest.fn((_loc, cb) =>
-        cb(
-          null,
-          { instructors: [{ id: 'inst_1', name: 'Debesay', hourlyRate: 79 }] },
-          { status: 200 }
-        )
-      ),
-    }),
-    PackagesApi: makeApi({
-      getPackages: jest.fn((_iid, cb) =>
-        cb(null, { packages: [{ type: 'PACKAGE_10', hours: 10, price: 790 }] }, { status: 200 })
-      ),
-    }),
-    BookingsApi: makeApi({
-      createBooking: jest.fn((_body, _ikey, cb) =>
-        cb(
-          null,
-          {
-            success: true,
-            bookingId: 'bkg_test_001',
-            status: 'PENDING_PAYMENT',
-            checkoutUrl: 'https://drivebook.com.au/booking/bkg_test_001/payment',
-            total: 790,
-          },
-          { status: 200 }
-        )
-      ),
-      lookupBookings: jest.fn((_phone, cb) =>
-        cb(
-          null,
-          {
-            bookings: [
-              {
-                bookingId: 'bkg_test_001',
-                startTime: '2050-01-01T09:00:00Z',
-                instructor: { name: 'Debesay' },
-                status: 'CONFIRMED',
-              },
-            ],
-          },
-          { status: 200 }
-        )
-      ),
-      cancelBooking: jest.fn((_id, _token, _ikey, _body, cb) =>
-        cb(null, { success: true, refund: { percentage: 100, amount: 790 } }, { status: 200 })
-      ),
-      rescheduleBooking: jest.fn((_id, _body, _token, cb) =>
-        cb(
-          null,
-          { success: true, oldStartTime: '2050-01-01T09:00:00Z', newStartTime: '2050-01-03T10:00:00Z' },
-          { status: 200 }
-        )
-      ),
-    }),
-    VerificationsApi: makeApi({
-      sendOtp: jest.fn((_body, cb) =>
-        cb(null, { verificationId: 'vrf_001', expiresAt: '2050-01-01T09:10:00Z' }, { status: 200 })
-      ),
-      confirmOtp: jest.fn((_body, cb) =>
-        cb(null, { verified: true, verificationToken: 'tok_abc123' }, { status: 200 })
-      ),
-    }),
-    SystemApi: makeApi({
-      healthCheck: jest.fn((cb) => cb(null, { status: 'ok' }, { status: 200 })),
-    }),
-  };
+    // Health
+    if (path === '/api/health') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { status: 'ok', uptime: 42 } });
+    }
+    // Availability slots
+    if (path === '/api/availability/slots') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { slots: [{ time: '09:00', available: true }] } });
+    }
+    // Availability check
+    if (path === '/api/availability') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { available: true, slots: [] } });
+    }
+    // Instructor recommendations
+    if (path === '/api/instructors/recommendations') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { recommendations: [{ id: 'inst_1', name: 'Debesay', hourlyRate: 79 }] } });
+    }
+    // Instructor search
+    if (path === '/api/instructors/search') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { instructors: [{ id: 'inst_1', name: 'Debesay', hourlyRate: 79 }] } });
+    }
+    // Packages
+    if (path === '/api/packages') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { packages: [{ type: 'PACKAGE_10', hours: 10, price: 790 }] } });
+    }
+    // Booking creation
+    if (path === '/api/public/bookings/bulk' && method === 'POST') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: {
+        success: true, bookingId: 'bkg_test_001', status: 'PENDING_PAYMENT',
+        checkoutUrl: 'https://drivebook.com.au/booking/bkg_test_001/payment', total: 790,
+      }});
+    }
+    // Booking lookup
+    if (path === '/api/bookings/lookup') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: {
+        bookings: [{ bookingId: 'bkg_test_001', startTime: '2050-01-01T09:00:00Z', instructor: { name: 'Debesay' }, status: 'CONFIRMED' }],
+      }});
+    }
+    // OTP send
+    if (path === '/api/verifications/otp' && method === 'POST') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { verificationId: 'vrf_001', expiresAt: '2050-01-01T09:10:00Z' } });
+    }
+    // OTP confirm
+    if (path === '/api/verifications/otp/confirm' && method === 'POST') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { verified: true, verificationToken: 'tok_abc123' } });
+    }
+    // Cancel
+    if (path.match(/\/api\/public\/bookings\/[^/]+\/cancel/)) {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { success: true, refund: { percentage: 100, amount: 790 } } });
+    }
+    // Reschedule
+    if (path.match(/\/api\/public\/bookings\/[^/]+\/reschedule/)) {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { success: true, oldStartTime: '2050-01-01T09:00:00Z', newStartTime: '2050-01-03T10:00:00Z' } });
+    }
+    // Fallback
+    return Promise.resolve({ status: 404, headers: {}, data: { error: 'Not found' } });
+  });
+  return mockAxios;
 });
 
 // Mock database + instructor service (avoid real DB hits)
@@ -377,72 +344,57 @@ describe('Contract Tests — API Response Shapes', () => {
 describe('VoiceSessionService', () => {
   const voiceSession = require('../services/voice-session-service');
 
-  afterEach(() => {
-    // Clean up any sessions created during tests
-    voiceSession.clearSession('0400111111');
-    voiceSession.clearSession('+61400111111');
+  afterEach(async () => {
+    await voiceSession.clearSession('0400111111');
+    await voiceSession.clearSession('+61400111111');
   });
 
-  test('saves and retrieves a session', () => {
-    voiceSession.saveSession('0400111111', {
+  test('saves and retrieves a session', async () => {
+    await voiceSession.saveSession('0400111111', {
       lastAction: 'BOOKING_CREATED',
       bookingId: 'bkg_001',
       checkoutUrl: 'https://drivebook.com.au/booking/bkg_001/payment',
       instructorName: 'Debesay',
     });
 
-    const session = voiceSession.getSession('0400111111');
+    const session = await voiceSession.getSession('0400111111');
     expect(session).not.toBeNull();
     expect(session.bookingId).toBe('bkg_001');
     expect(session.lastAction).toBe('BOOKING_CREATED');
   });
 
-  test('normalises 04xx and +614xx to the same key', () => {
-    voiceSession.saveSession('0400111111', { lastAction: 'BOOKING_CREATED', bookingId: 'bkg_001' });
-    const session = voiceSession.getSession('+61400111111');
+  test('normalises 04xx and +614xx to the same key', async () => {
+    await voiceSession.saveSession('0400111111', { lastAction: 'BOOKING_CREATED', bookingId: 'bkg_001' });
+    const session = await voiceSession.getSession('+61400111111');
     expect(session).not.toBeNull();
     expect(session.bookingId).toBe('bkg_001');
   });
 
-  test('returns null after session is cleared', () => {
-    voiceSession.saveSession('0400111111', { lastAction: 'BOOKING_CREATED', bookingId: 'bkg_001' });
-    voiceSession.clearSession('0400111111');
-    expect(voiceSession.getSession('0400111111')).toBeNull();
+  test('returns null after session is cleared', async () => {
+    await voiceSession.saveSession('0400111111', { lastAction: 'BOOKING_CREATED', bookingId: 'bkg_001' });
+    await voiceSession.clearSession('0400111111');
+    expect(await voiceSession.getSession('0400111111')).toBeNull();
   });
 
-  test('buildRecoveryPrompt mentions instructor name for BOOKING_CREATED', () => {
-    voiceSession.saveSession('0400111111', {
+  test('buildRecoveryPrompt mentions instructor name for BOOKING_CREATED', async () => {
+    await voiceSession.saveSession('0400111111', {
       lastAction: 'BOOKING_CREATED',
       instructorName: 'Debesay',
     });
-    const session = voiceSession.getSession('0400111111');
+    const session = await voiceSession.getSession('0400111111');
     const prompt = voiceSession.buildRecoveryPrompt(session);
     expect(prompt).toContain('Debesay');
     expect(prompt).toContain('payment link');
   });
 
-  test('buildRecoveryPrompt mentions verification code for AWAITING_OTP', () => {
-    voiceSession.saveSession('0400111111', { lastAction: 'AWAITING_OTP' });
-    const session = voiceSession.getSession('0400111111');
+  test('buildRecoveryPrompt mentions verification code for AWAITING_OTP', async () => {
+    await voiceSession.saveSession('0400111111', { lastAction: 'AWAITING_OTP' });
+    const session = await voiceSession.getSession('0400111111');
     const prompt = voiceSession.buildRecoveryPrompt(session);
     expect(prompt).toContain('verification code');
   });
 
-  test('expired sessions return null', () => {
-    // Manually inject an already-expired session
-    const key = voiceSession.normalisePhone('0400111111');
-    const sessions = voiceSession._getMapSizeForTest; // just to confirm access
-    voiceSession.saveSession('0400111111', { lastAction: 'BOOKING_CREATED' });
-
-    const session = voiceSession.getSession('0400111111');
-    // Force-expire it
-    session.expiresAt = Date.now() - 1;
-
-    // Now re-retrieve — should be null because the expiry check runs on get
-    // We need to put the expired session back in the map for this test
-    voiceSession.saveSession('0400111111', session); // re-save with past expiresAt
-    // But saveSession always resets expiresAt — test the code path via a mock
-    // This validates the guard logic exists in the service
-    expect(typeof voiceSession.getSession).toBe('function');
+  test('getStorageMode returns map in test environment', () => {
+    expect(voiceSession.getStorageMode()).toBe('map');
   });
 });

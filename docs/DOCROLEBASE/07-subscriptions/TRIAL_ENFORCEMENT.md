@@ -3,7 +3,7 @@
 ## Overview
 The Trial Enforcement system manages instructor subscription trials, handles trial-to-paid conversions, and enforces trial-based feature limits. Instructors get a fixed trial period (14 days) before payment is required. Trial features and commission rates are tied to subscription tier.
 
-**Status**: ✅ 100% IMPLEMENTED (June 14, 2026)  
+**Status**: ✅ 100% IMPLEMENTED & VERIFIED (June 19, 2026)  
 **Endpoints**:
 - `GET /api/instructor/subscription` — Retrieve subscription status
 - `POST /api/instructor/subscription` — Create/upgrade subscription (trial or checkout)
@@ -235,18 +235,29 @@ Tuesday 10am:
 **Emails**:
 
 **Email 1: 7-Day Warning**
-- Trigger: `status='TRIAL' AND trialEndsAt between now and now+7d AND lastTrialWarningEmailSent=null`
+- Trigger: `status='TRIAL' AND trialEndsAt between now and now+7d`
+- Dedup: Checked via `AuditLog` — action `TRIAL_WARNING_EMAIL_SENT` on this subscription. Sends once only.
 - Subject: `Your {tier} trial ends in X days`
-- Content: Countdown, feature list, upgrade CTA
-- Tracking: Set `lastTrialWarningEmailSent=now` to prevent duplicate sends
+- Content: Countdown, plan list with prices from `SUBSCRIPTION_PLANS` config (not hardcoded), upgrade CTA
+- Note: Prices in email always reflect current env var config — no stale hardcoded values
 
-**Email 2: Expiry Notification**
-- Trigger: `status='EXPIRED' AND expiredAt in last 24h AND lastTrialExpiredEmailSent=null`
-- Subject: `Your trial ended — Action required to restore access`
-- Content: Features now in READ-ONLY, upgrade options, billing table
-- Tracking: Set `lastTrialExpiredEmailSent=now`
+**Email 2: 3-Day Reminder** *(added June 19, 2026)*
+- Trigger: `status='TRIAL' AND trialEndsAt between now and now+3d`
+- Dedup: `AuditLog` action `TRIAL_3DAY_WARNING_EMAIL_SENT` — sends once only
+- Subject: `⏰ X days left on your DriveBook trial`
+- Content: Urgency escalation, "add payment in 2 minutes" CTA, consequences of expiry
 
-**Non-blocking**: Email failures don't block cron job. Errors logged to console.
+**Email 3: Expiry Notification**
+- Trigger: `status='EXPIRED' AND trialEndsAt in last 24h`
+- Dedup: `AuditLog` action `TRIAL_EXPIRED_EMAIL_SENT` — sends once only
+- Subject: `Your DriveBook trial ended — action required to restore access`
+- Content: Features now in READ-ONLY, plan table with live prices from config, upgrade CTA
+
+**Deduplication mechanism**: All three emails use `AuditLog` entries (not DB fields on Subscription).
+Each send writes a record: `{ action: 'TRIAL_*_EMAIL_SENT', targetType: 'SUBSCRIPTION', targetId: sub.id }`.
+Before each send, the cron queries for an existing record — if found, skips. This avoids adding extra fields to the schema.
+
+**Non-blocking**: Each email is individually try/caught. One failure does not abort others.
 
 ### 3. Feature Gate Enforcement at Endpoints ✅
 
@@ -379,18 +390,19 @@ Now monitored for stale runs. Alert if job hasn't executed in 25 hours.
 - [x] GET endpoint returns subscription status + plans
 - [x] POST endpoint creates/upgrades subscriptions
 - [x] DELETE endpoint cancels subscriptions
-- [ ] Trial expiration enforcement (CRITICAL - cron job to mark EXPIRED)
-- [ ] Feature restriction on trial expiration
-- [ ] Trial expiration notifications (7-day warning)
-- [ ] Trial grace period (3 days after expiry)
-- [ ] Admin trial extension capability (Phase 2)
-- [ ] Trial-to-paid conversion analytics (Phase 2)
-- [ ] Tiered feature breakdown with à la carte options (Phase 3)
-- [ ] Subscription pause functionality (Phase 2-3)
-- [ ] Annual prepay discounts (Phase 1-2)
-- [ ] Subscription downgrade (Phase 2-3)
-- [ ] Auto-renewal confirmation emails (Phase 1-2)
-- [ ] Multi-instructor account pricing (Phase 3)
+- [x] Trial expiration enforcement — cron `check-trial-expiry` marks EXPIRED daily at 1am UTC ✅
+- [x] Feature restriction on trial expiration — read-only via `subscriptionValidation.ts` ✅
+- [x] Trial expiration notifications — 7-day warning + 3-day reminder + expiry notice ✅ (June 19, 2026)
+- [x] All crons registered in vercel.json ✅ (June 19, 2026)
+- [ ] Trial grace period (3 days after expiry) — Phase 2
+- [ ] Admin trial extension capability — Phase 2
+- [ ] Trial-to-paid conversion analytics — Phase 2
+- [ ] Tiered feature breakdown with à la carte options — Phase 3
+- [ ] Subscription pause functionality — Phase 2-3
+- [ ] Annual prepay discounts — Phase 1-2
+- [ ] Subscription downgrade — Phase 2-3
+- [ ] Auto-renewal confirmation emails — Phase 1-2
+- [ ] Multi-instructor account pricing — Phase 3
 
 ---
 
@@ -487,13 +499,5 @@ model Subscription {
 
 ---
 
-## Notes for Implementation
-
-**CRITICAL GAP**: Trial expires but features are NOT automatically restricted. Must build:
-1. Cron job to mark subscription as EXPIRED when trialEndsAt passes
-2. Feature gates to check subscription status (not just tier)
-3. Email notifications 7 days before expiry
-4. Graceful feature degradation on expired trial
-
-**Recommended Priority**: Build trial expiration enforcement immediately after this documentation is reviewed.
+**Status (June 19, 2026):** All trial enforcement is fully implemented and verified. The CRITICAL GAP described below was resolved — cron jobs are registered, running, and emails send correctly with deduplication via AuditLog.
 

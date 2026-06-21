@@ -44,7 +44,8 @@ export async function GET() {
       id: b.id,
       bookingId: b.id,
       instructorName: b.instructor.name,
-      bookingDate: b.startTime?.toISOString() ?? '',
+      // Guard null startTime — page renders new Date(bookingDate) so empty string → Invalid Date
+      bookingDate: b.startTime ? b.startTime.toISOString() : null,
     }));
 
     return NextResponse.json(pending);

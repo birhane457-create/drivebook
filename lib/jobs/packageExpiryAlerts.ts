@@ -1,6 +1,5 @@
-// @ts-nocheck
 // Job to generate package expiry notifications
-// Runs daily: sends alerts 7 days before, 1 day before, and day of expiry
+// Runs every 15 min via notifications cron: alerts at 7d / 1d / today / yesterday (marks expired)
 
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/services/notificationService';

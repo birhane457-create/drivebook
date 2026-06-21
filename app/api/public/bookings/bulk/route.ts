@@ -530,7 +530,14 @@ export async function POST(req: NextRequest) {
     const firstLessonPrice = parseFloat((instructor.hourlyRate * firstLessonDurationHours).toFixed(2));
     const PLATFORM_FEE_RATE = 0.036;
     const firstLessonPlatformFee = parseFloat((firstLessonPrice * PLATFORM_FEE_RATE).toFixed(2));
-    const firstLessonPayout = parseFloat((firstLessonPrice - firstLessonPlatformFee).toFixed(2));
+
+    // Lock commission rate at booking creation time — never re-fetch at payout time.
+    // If the platform rate changes after this booking is created, the instructor
+    // receives the rate that was in effect when the student paid. Immutable from here.
+    const { getCommissionRate } = await import('@/lib/services/platform-pricing');
+    const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC');
+    const commissionRateDecimal = commissionRatePct / 100;
+    const firstLessonPayout = parseFloat((firstLessonPrice * (1 - commissionRateDecimal)).toFixed(2));
 
     // ── Book Later: wallet-only, no booking created ───────────────────────────
     // P1-1 FIX: Do NOT create a WalletTransaction here — payment hasn't happened yet.
@@ -633,6 +640,9 @@ export async function POST(req: NextRequest) {
             price: firstLessonPrice,
             platformFee: firstLessonPlatformFee,
             instructorPayout: firstLessonPayout,
+            // Lock commission rate at booking time — immutable even if platform rates change later.
+            // Payout service uses this stored value, never re-fetches the live rate.
+            commissionRate: commissionRateDecimal,
             pickupAddress: data.scheduledBookings?.[0]?.pickupLocation || null,
             notes: data.scheduledBookings?.[0]?.notes || null,
             isPackageBooking: data.hours > 1,

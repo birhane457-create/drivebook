@@ -108,13 +108,13 @@ Verification prompt:
 - "I will send a verification code now. Tell me the code when you get it."
 
 Alternative phrasing:
-- "A 4-digit code will be sent to your contact. Please say it back to me."
+- "A 6-digit code will be sent to your contact. Please say it back to me."
 - "Please read the confirmation code when it arrives."
 
 TwiML OTP request example:
 ```xml
 <Response>
-  <Say voice="alice">I'm sending a verification code now. Listen for it and tell me the digits.</Say>
+  <Say voice="alice">I'm sending a 6-digit verification code now. Listen for it and tell me the digits.</Say>
   <Pause length="1"/>
 </Response>
 ```
@@ -122,8 +122,8 @@ TwiML OTP request example:
 TwiML OTP collect example:
 ```xml
 <Response>
-  <Gather input="dtmf" numDigits="4" timeout="10" action="/voice/otp-confirm" method="POST">
-    <Say voice="alice">Enter the 4-digit code you received.</Say>
+  <Gather input="dtmf" numDigits="6" timeout="10" action="/voice/otp-confirm" method="POST">
+    <Say voice="alice">Enter the 6-digit code you received.</Say>
   </Gather>
   <Say voice="alice">I didn't hear the code. Please type it using your phone keypad.</Say>
 </Response>
@@ -145,11 +145,11 @@ Alternative phrasing:
 ### Step 1: Ask for identifying info
 
 Primary prompt:
-- "Please tell me the phone number, email, or booking reference for the lesson you want to change."
+- "What phone number was used when the booking was made?"
 
 Alternative phrasing:
-- "Give me the phone, email or reference on the booking you want to reschedule."
-- "What contact or booking ID is on the reservation?"
+- "Tell me the mobile number on the booking you want to reschedule."
+- "What phone number is the booking under?"
 
 ### Step 2: Present matching bookings
 
@@ -205,11 +205,11 @@ Alternative phrasing:
 ### Step 1: Ask for booking info
 
 Prompt:
-- "To cancel, please tell me the phone number, email, or booking reference on the reservation."
+- "What phone number was used when the booking was made?"
 
 Alternative phrasing:
-- "Give me the booking contact or reference so I can find your lesson."
-- "I need the booking phone, email, or reference number."
+- "Tell me the mobile number on the reservation so I can find it."
+- "What number is the booking under?"
 
 ### Step 2: Verify and confirm cancellation
 
@@ -254,7 +254,7 @@ Alternative phrasing:
 ## 6. TwiML timing recommendations
 - Use `<Pause length="1"/>` after long messages or before asking for user input again.
 - Use `<Gather timeout="5" input="speech dtmf"/>` when asking for a short phrase or choice.
-- Use `<Gather numDigits="4" timeout="10" input="dtmf"/>` for PIN collection.
+- Use `<Gather numDigits="6" timeout="10" input="dtmf"/>` for OTP/PIN collection.
 - After a failed gather, repeat the prompt once and then optionally route to human support.
 
 Example fallback TwiML:

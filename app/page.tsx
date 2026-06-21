@@ -283,24 +283,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Testimonials */}
-        <section className="py-12 md:py-20">
-          <h2 className="text-4xl md:text-5xl font-bold text-center text-white mb-12">What Our Community Says</h2>
-          <div className="max-w-3xl mx-auto space-y-6">
-            <blockquote className="border-l-4 border-pink-500 p-6 bg-white/5 backdrop-blur-sm rounded-lg italic text-white/80">
-              <span className="text-5xl text-pink-400 leading-none">&ldquo;</span>
-              I passed my test on the first try! DriveBook matched me with an instructor who understood exactly what I needed. The booking system made everything so easy. <strong className="text-white">— Sarah M., Perth</strong>
-            </blockquote>
-            <blockquote className="border-l-4 border-cyan-500 p-6 bg-white/5 backdrop-blur-sm rounded-lg italic text-white/80">
-              <span className="text-5xl text-cyan-400 leading-none">&ldquo;</span>
-              As a parent I was nervous about putting my daughter in a car with a stranger. DriveBook made it easy — I could see the instructor&apos;s credentials, read real reviews, and track her progress after every lesson. I felt completely at ease. <strong className="text-white">— Linda R., Parent, Perth</strong>
-            </blockquote>
-            <blockquote className="border-l-4 border-violet-500 p-6 bg-white/5 backdrop-blur-sm rounded-lg italic text-white/80">
-              <span className="text-5xl text-violet-400 leading-none">&ldquo;</span>
-              The bulk package saved me money and the SMS reminders kept me on track. Highly recommend! <strong className="text-white">— Michael K., New Driver</strong>
-            </blockquote>
-          </div>
-        </section>
+
 
         {/* FAQ - Learner Focused */}
         <section className="py-12 md:py-20">

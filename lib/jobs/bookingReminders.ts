@@ -1,6 +1,5 @@
-// @ts-nocheck
 // Job to generate booking reminder notifications
-// Runs daily: sends reminders 24h before and 1h before lessons
+// Runs every 15 min via notifications cron: sends reminders 24h before and 1h before lessons
 
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/services/notificationService';

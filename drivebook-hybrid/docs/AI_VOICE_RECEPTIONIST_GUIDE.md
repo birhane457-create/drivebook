@@ -502,7 +502,7 @@ Body:
   "accountHolderName": "string",
   "accountHolderEmail": "string",
   "accountHolderPhone": "string",
-  "accountHolderPassword": "string",
+  // accountHolderPassword intentionally omitted — backend generates it automatically
   "learnerName": "string", // if someone-else
   "learnerPhone": "string", // optional
   "learnerRelationship": "string", // if someone-else

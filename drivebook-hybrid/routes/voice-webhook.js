@@ -63,7 +63,7 @@ router.post('/incoming', validateTwilioRequest, async (req, res) => {
     // If the caller has an active session (e.g. their previous call dropped
     // mid-booking), greet them with context and resend their payment link so
     // they don't need to start from scratch.
-    const existingSession = voiceSession.getSession(From);
+    const existingSession = await voiceSession.getSession(From);
     const twiml = new twilio.twiml.VoiceResponse();
 
     if (existingSession) {
@@ -87,7 +87,7 @@ router.post('/incoming', validateTwilioRequest, async (req, res) => {
           );
 
         // Mark as resent so we don't flood on subsequent call-backs
-        voiceSession.saveSession(From, { lastAction: 'PAYMENT_LINK_SENT' });
+        await voiceSession.saveSession(From, { lastAction: 'PAYMENT_LINK_SENT' });
       }
 
       twiml.say(voiceSession.buildRecoveryPrompt(existingSession));

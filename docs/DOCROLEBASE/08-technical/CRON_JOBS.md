@@ -2,7 +2,7 @@
 
 **Purpose:** Automated background jobs for cleanup, payouts, notifications, and health monitoring.
 
-**Status:** ✅ AS IS (10 jobs implemented) | ⏳ AS IT SHOULD BE (Recommendations)
+**Status:** ✅ AS IS (12 jobs implemented, all registered in vercel.json) | ⏳ AS IT SHOULD BE (Recommendations)
 
 ---
 
@@ -12,13 +12,15 @@
 
 **Architecture:** HTTP-triggered cron endpoints (not traditional background workers)
 
-**Trigger Method:** External cron service calls HTTP endpoint with `Authorization: Bearer CRON_SECRET` header
+**Trigger Method:** Vercel Crons call HTTP endpoints automatically. Vercel authenticates via its own internal mechanism (`x-vercel-cron` header). No `Authorization: Bearer` header is sent by Vercel — routes that require Bearer tokens will fail when called by Vercel Crons.
 
-**Location:** `app/api/cron/*/route.ts` (10 endpoints)
+**Auth pattern (correct):** Most crons use `pingCronHealth` / `failCronHealth` from `lib/services/cron-health.ts` with no manual auth check. `slot-cleanup` and `notifications` were fixed June 19, 2026 to remove broken Bearer checks.
+
+**Location:** `app/api/cron/*/route.ts` (12 endpoints)
 
 **Health Tracking:** `CronHealth` model — each job pings table on completion
 
-### Cron Jobs (10 total)
+### Cron Jobs (12 total — all registered in vercel.json)
 
 #### 1. **Weekly Payouts** 
 - **Endpoint:** `GET /api/cron/weekly-payouts`
@@ -35,12 +37,12 @@
 
 #### 2. **Slot Reservation Cleanup**
 - **Endpoint:** `GET /api/cron/slot-cleanup`
-- **Schedule:** Every 5-10 minutes (external service configurable)
-- **Trigger:** Manual or external cron service
+- **Schedule:** Every 10 minutes — `*/10 * * * *`
 - **Purpose:** Delete expired slot reservations to prevent table bloat
 - **Expiry:** 10 minutes after creation (`SlotReservation.expiresAt`)
 - **Query:** Deletes all where `expiresAt < NOW()`
-- **Health Ping:** Updates `CronHealth` on success/failure
+- **Health Ping:** `pingCronHealth('slot-cleanup')` on success, `failCronHealth` on error
+- **Note:** Fixed June 19, 2026 — removed broken Bearer auth check that caused 401 on every Vercel call
 
 #### 3. **Apply Rate Changes**
 - **Endpoint:** `GET /api/cron/apply-rate-changes`
@@ -101,15 +103,36 @@
   - Alert if discrepancies found
 
 #### 9. **Notifications / Cleanup**
-- **Endpoint:** `GET /api/cron/notifications` (GET for check, POST to send)
-- **Schedule:** As-needed (manual trigger)
-- **Purpose:** Send queued notifications, clean up old notifications
-- **Action:** Batch send via email/SMS service, delete read > 90 days old
+- **Endpoint:** `GET /api/cron/notifications`
+- **Schedule:** Every 15 minutes — `*/15 * * * *`
+- **Purpose:** Generate in-app booking reminders and package expiry alerts
+- **Jobs run:**
+  - `generateBookingReminders` — in-app notifications for lessons tomorrow and in 1 hour
+  - `generatePackageExpiryAlerts` — in-app alerts at 7d / 1d / today / yesterday (marks expired)
+- **Dedup:** Each job checks for existing notifications before creating (time-window based)
+- **Health Ping:** `pingCronHealth('notifications')` on success
+- **Note:** Fixed June 19, 2026 — removed broken Bearer auth check; added CronHealth ping; removed `@ts-nocheck` from both job files
 
-#### 10. **Slot Cleanup (Alternative)**
-- **Endpoint:** `GET /api/cron/cleanup-expired-bookings` ⚠️ May be duplicate
-- **Purpose:** May be redundant with slot-cleanup job
-- **Status:** Verify if both needed or consolidate
+#### 10. **Slot Cleanup (Expired Bookings)**
+- **Endpoint:** `GET /api/cron/cleanup-expired-bookings`
+- **Schedule:** Every 5 minutes — `*/5 * * * *`
+- **Purpose:** Expire PENDING_PAYMENT bookings after 10 min, auto-complete/no-show bookings, purge idempotency keys
+- **Note:** Separate from `slot-cleanup` — this operates on the `Booking` table, not `SlotReservation`
+
+#### 11. **Check Trial Expiry**
+- **Endpoint:** `GET /api/cron/check-trial-expiry`
+- **Schedule:** Daily at 1am UTC — `0 1 * * *`
+- **Purpose:** Mark `TRIAL` subscriptions as `EXPIRED` when `trialEndsAt < now`. Reverts instructor tier to `BASIC`.
+- **Health Ping:** `pingCronHealth('check-trial-expiry')` on success
+- **Added:** June 19, 2026 (was missing from vercel.json)
+
+#### 12. **Send Trial Expiry Alerts**
+- **Endpoint:** `GET /api/cron/send-trial-expiry-alerts`
+- **Schedule:** Daily at 2am UTC — `0 2 * * *` (runs after check-trial-expiry at 1am)
+- **Purpose:** Three email sequences — 7-day warning, 3-day reminder, expiry notification
+- **Dedup:** AuditLog entries (`TRIAL_WARNING_EMAIL_SENT`, `TRIAL_3DAY_WARNING_EMAIL_SENT`, `TRIAL_EXPIRED_EMAIL_SENT`)
+- **Pricing:** All plan prices pulled from `SUBSCRIPTION_PLANS` config — no hardcoded values
+- **Added:** June 19, 2026 (was missing from vercel.json)
 
 ---
 
@@ -439,15 +462,14 @@ ORDER BY lastRunAt DESC;
 
 ## Implementation Checklist
 
-- [ ] Verify all 10 cron jobs documented above exist in codebase
-- [ ] Create `/admin/cron-jobs` dashboard for visibility
-- [ ] Consolidate `vercel.json` with all job schedules
-- [ ] Implement retry logic for failed jobs
-- [ ] Add job timeout handling (60 second limit)
-- [ ] Test weekly-payouts doesn't timeout on large dataset
-- [ ] Set up Slack alerts for failed jobs
-- [ ] Document CRON_SECRET rotation policy
-- [ ] Add batch processing for reconcile-stripe
-- [ ] Test health-check detection of stale jobs
-- [ ] Add manual trigger button to each job
+- [x] All 12 cron jobs documented and registered in `vercel.json` ✅ (June 19, 2026)
+- [x] Each cron pings `CronHealth` on success/failure ✅
+- [x] `slot-cleanup` and `notifications` auth bugs fixed ✅ (June 19, 2026)
+- [x] `@ts-nocheck` removed from `bookingReminders.ts` and `packageExpiryAlerts.ts` ✅
+- [ ] Create `/admin/cron-jobs` dashboard for visibility (Phase 2)
+- [ ] Implement retry logic for failed jobs (Phase 2)
+- [ ] Add job timeout handling (Phase 2)
+- [ ] Set up Slack/email alerts for failed jobs (Phase 2)
+- [ ] Add batch processing for large datasets e.g. weekly-payouts (Phase 2)
+- [ ] Add manual trigger button to admin UI (Phase 2)
 

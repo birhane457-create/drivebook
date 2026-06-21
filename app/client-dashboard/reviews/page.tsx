@@ -110,7 +110,9 @@ export default function ClientReviewsPage() {
                         <h3 className="font-semibold text-slate-100">{pending.instructorName}</h3>
                         <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
                           <Calendar className="w-4 h-4" />
-                          Lesson on {new Date(pending.bookingDate).toLocaleDateString()}
+                          {pending.bookingDate
+                            ? `Lesson on ${new Date(pending.bookingDate).toLocaleDateString()}`
+                            : 'Date not recorded'}
                         </p>
                       </div>
                       <button 
@@ -154,13 +156,15 @@ export default function ClientReviewsPage() {
                         </div>
                       </div>
                       <span className="text-sm text-slate-400">
-                        {new Date(review.date).toLocaleDateString()}
+                        {review.date ? new Date(review.date).toLocaleDateString() : ''}
                       </span>
                     </div>
                     <p className="text-slate-300">{review.comment}</p>
                     <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
-                      Lesson on {new Date(review.bookingDate).toLocaleDateString()}
+                      {review.bookingDate
+                        ? `Lesson on ${new Date(review.bookingDate).toLocaleDateString()}`
+                        : 'Date not recorded'}
                     </p>
                   </div>
                 ))}

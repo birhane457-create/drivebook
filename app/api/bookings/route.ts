@@ -221,6 +221,8 @@ export async function POST(req: NextRequest) {
               platformFee,
               instructorPayout,
               commissionRate,
+              // Lock hourly rate at booking time — immutable even if instructor changes rate later.
+              lockedHourlyRate: instructor.hourlyRate,
               isFirstBooking,
               isPaid: false,
               pickupAddress: pickupLocation,
@@ -231,7 +233,6 @@ export async function POST(req: NextRequest) {
               status: 'PENDING_PAYMENT',
               createdBy: 'instructor',
               originalStartTime: newStart,
-              // legacy add-on fields removed — platform no longer stores instructor add-on selections here
             } as any,
             include: { client: true, instructor: { include: { user: true } } }
           })
@@ -418,6 +419,8 @@ export async function POST(req: NextRequest) {
             platformFee,
             instructorPayout,
             commissionRate,
+            // Lock hourly rate at booking time — immutable even if instructor changes rate later.
+            lockedHourlyRate: instructor.hourlyRate,
             isFirstBooking,
             isPaid: true,
             paidAt: now,
@@ -429,7 +432,6 @@ export async function POST(req: NextRequest) {
             status: 'CONFIRMED',
             createdBy: 'instructor',
             originalStartTime: newStart,
-            // legacy add-on fields removed — platform no longer stores instructor add-on selections here
           } as any,
           include: {
             client: true,
@@ -502,7 +504,8 @@ export async function POST(req: NextRequest) {
       console.error('Calendar sync failed:', e)
     }
 
-    // Email confirmation + receipt (non-critical)
+    // Email confirmation + receipt — with SMS + in-app fallback if email fails
+    let emailConfirmationSent = false;
     try {
       await emailService.sendBookingConfirmation({
         clientName: booking.client!.name,
@@ -513,8 +516,40 @@ export async function POST(req: NextRequest) {
         endTime: booking.endTime!,
         pickupAddress: booking.pickupAddress || undefined,
       })
+      emailConfirmationSent = true;
     } catch (e) {
-      console.error('Email confirmation failed:', e)
+      console.error('Email confirmation failed — attempting SMS + in-app fallback:', e)
+
+      // Fallback 1: SMS to client if they have a phone number
+      if (client.phone) {
+        try {
+          const { smsService } = await import('@/lib/services/sms');
+          await smsService.sendBookingConfirmation({
+            clientPhone: client.phone,
+            clientName: client.name,
+            instructorName: booking.instructor.name,
+            startTime: booking.startTime!,
+            price: booking.price,
+          });
+        } catch (smsErr) {
+          console.error('SMS fallback also failed:', smsErr);
+        }
+      }
+
+      // Fallback 2: In-app notification so the client sees confirmation in their dashboard
+      if (client.userId) {
+        try {
+          const { notifyClientBookingConfirmed } = await import('@/lib/services/notifications');
+          await notifyClientBookingConfirmed(
+            client.userId,
+            booking.instructor.name,
+            booking.id,
+            booking.startTime!
+          );
+        } catch (notifErr) {
+          console.error('In-app notification fallback also failed:', notifErr);
+        }
+      }
     }
 
     try {

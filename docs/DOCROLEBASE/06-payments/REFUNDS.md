@@ -3,6 +3,9 @@
 **Governing Law:** Western Australia  
 **File:** `app/api/bookings/[id]/cancel/route.ts`
 
+> **Scope:** This doc covers the refund policy rules, legal requirements, and ledger impact.  
+> For the full cancellation implementation (atomic transactions, post-payout adjustments, audit logging), see [`REFUND_ADJUSTMENTS.md`](./REFUND_ADJUSTMENTS.md).
+
 ---
 
 ## Refund Tiers

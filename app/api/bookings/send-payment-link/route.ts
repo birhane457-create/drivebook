@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Build the top-up URL — pre-fills the amount on the wallet page
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://deivebook.vercel.app'
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://drivebook.com.au'
     const topUpUrl = `${baseUrl}/client-dashboard/wallet?topup=${topUpAmount.toFixed(2)}`
 
     const feeRate = platformFeeRate ?? 0.036

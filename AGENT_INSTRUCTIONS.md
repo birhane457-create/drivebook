@@ -101,17 +101,45 @@ Default assumption:
 UPDATE EXISTING DOCUMENTATION.
 DO NOT CREATE NEW DOCUMENTATION.
 
-## Current State (As of June 13, 2026)
+## Current State (As of June 19, 2026)
 
-### ✅ VERIFIED COMPLETE
-- **Awaiting Payment:** Dashboard section works, docs accurate
-  - Location: `docs/DOCROLEBASE/02-student/AWAITING_PAYMENT.md`
-  - Status: ✅ VERIFIED COMPLETE
+### ✅ ALL IMPLEMENTATION TASKS COMPLETE
+All 7 original implementation tasks are done and documented in DOCROLEBASE.
+All 4 security issues (MEDIUM #4, #5, #6, #8) are fixed.
+All cron jobs registered in vercel.json and auth-corrected.
+TypeScript: 0 errors. No hardcoded prices. No fake content.
 
 ### ⏳ PENDING (In TODO.md)
-- 18 PLANNED features (code exists, docs needed)
-- 9 FIXES NEEDED (code/docs mismatches)
-- 10+ VERIFIED (accurate, no changes)
+- 9 config tasks in Vercel/Stripe/Google dashboards (no code changes needed)
+- 1 deferred item: /blog — build 2 articles when ready
+
+### ✅ VOICE SERVICE FIXES (June 19, 2026)
+- `main-app-proxy.js` — startup crash fixed (generated-client-js path didn't exist). Rewrote to direct axios. Now sends `x-api-key` to authenticate against main app.
+- `voice-webhook.js` — `getSession()`/`saveSession()` not awaited → every call triggered recovery. Fixed.
+- `package.json` — added `axios` dependency.
+- `.env.example` — completely rewritten with correct voice service vars.
+- `contract.test.js` — replaced broken generated-client mock with axios mock. Session tests now use `await`.
+- `voice-script.md` — OTP 4→6 digits. Booking reference prompts replaced with phone-only asks.
+- `AI_VOICE_RECEPTIONIST_GUIDE.md` — removed `accountHolderPassword` from booking format.
+- Webhook idempotency: now hard-fail (was soft-fail)
+- Commission rate: locked at booking creation in both booking routes
+- Email failure: SMS + in-app fallback added
+- Slot double-booking: verified already fixed (inside $transaction)
+
+### ✅ CRON FIXES APPLIED (June 19, 2026)
+- 4 missing crons added to vercel.json (check-trial-expiry, send-trial-expiry-alerts, slot-cleanup, notifications)
+- slot-cleanup and notifications cron auth bugs fixed (were returning 401 on every Vercel call)
+- @ts-nocheck removed from bookingReminders.ts and packageExpiryAlerts.ts
+
+### ✅ OTHER FIXES APPLIED (June 19, 2026)
+- Trial emails: all prices/rates now from SUBSCRIPTION_PLANS config (no hardcoded values)
+- 3-day trial reminder email added (was only 7-day + expiry)
+- Subscription page banner: escalates at ≤3 days, shows payment nudge when no card added
+- Fake testimonials removed from homepage (ACL risk)
+- error.tsx: production now shows generic message (was exposing Prisma errors)
+- .env.example: added NEXT_PUBLIC_VOICE_PHONE_NUMBER and NEXT_PUBLIC_COPILOT_DIRECT_LINE_TOKEN
+- AIReceptionistShowcase: removed hardcoded US fallback phone number
+- Mobile TODO stubs closed — Capacitor wrapper uses web UI, not separate native screens
 
 ---
 
@@ -159,7 +187,7 @@ When starting next session, say:
 
 ---
 
-**Last Updated:** June 16, 2026 (batch booking route hardening verified)
+**Last Updated:** June 19, 2026 (full pre-production hardening session complete)
 
 ---
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Phone, MessageSquare, Calendar, CheckCircle, Clock } from 'lucide-react'
 
-const VOICE_NUMBER = process.env.NEXT_PUBLIC_VOICE_PHONE_NUMBER || '+1 (708) 933-5601'
+const VOICE_NUMBER = process.env.NEXT_PUBLIC_VOICE_PHONE_NUMBER || null
 
 const slides = [
   {
@@ -112,12 +112,16 @@ function CallStep() {
           <div className="w-24 h-24 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <Phone className="w-12 h-12 text-white" />
           </div>
-          <a
-            href={`tel:${VOICE_NUMBER}`}
-            className="inline-block bg-purple-600 text-white px-8 py-4 rounded-xl no-underline font-bold text-2xl hover:bg-purple-700 transition-all shadow-lg mb-4"
-          >
-            {VOICE_NUMBER}
-          </a>
+          {VOICE_NUMBER ? (
+            <a
+              href={`tel:${VOICE_NUMBER}`}
+              className="inline-block bg-purple-600 text-white px-8 py-4 rounded-xl no-underline font-bold text-2xl hover:bg-purple-700 transition-all shadow-lg mb-4"
+            >
+              {VOICE_NUMBER}
+            </a>
+          ) : (
+            <p className="text-purple-600 font-bold text-xl mb-4">Phone number coming soon</p>
+          )}
           <div className="flex items-center justify-center gap-2 text-sm text-gray-600 mb-4">
             <Clock className="w-4 h-4" />
             <span>Available 24/7</span>

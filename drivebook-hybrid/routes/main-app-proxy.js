@@ -1,23 +1,22 @@
+/**
+ * Main App Proxy
+ *
+ * Forwards AI/voice service API calls to the main DriveBook application.
+ *
+ * FIX (June 19, 2026): The original file required '../generated-client-js/dist/index.js'
+ * which does not exist (directory is 'generated-client', TypeScript source only, no dist).
+ * This caused the voice service to crash on startup — no calls could be handled.
+ *
+ * All routes now use direct axios proxy calls (consistent with proxyRequest() already
+ * in this file). The generated client is not needed at runtime.
+ */
+
 const express = require('express');
 const axios = require('axios');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
-
-// Generated JS client (built): use dist index for runtime integration
-const DriveBookClient = require('../generated-client-js/dist/index.js');
-const ApiClient = DriveBookClient.ApiClient;
-const AvailabilityApi = DriveBookClient.AvailabilityApi;
-const InstructorsApi = DriveBookClient.InstructorsApi;
-const PackagesApi = DriveBookClient.PackagesApi;
-const BookingsApi = DriveBookClient.BookingsApi;
-const VerificationsApi = DriveBookClient.VerificationsApi;
-const SystemApi = DriveBookClient.SystemApi;
-
-// Configure client to point at the configured DriveBook base URL and set service auth
-ApiClient.instance.basePath = `${config.DRIVEBOOK_BASE_URL.replace(/\/$/, '')}/api`;
-// Use bearer-style header with the internal service API key
-ApiClient.instance.authentications.BearerAuth.apiKey = config.DRIVEBOOK_API_KEY;
-ApiClient.instance.authentications.BearerAuth.apiKeyPrefix = 'Bearer';
+const voiceSession = require('../services/voice-session-service');
+const smsService = require('../services/sms-service');
 
 const router = express.Router();
 
@@ -33,9 +32,8 @@ function buildTargetUrl(req, targetPath) {
   return url.toString();
 }
 
-// P1-8 FIX: Use an explicit allowlist of headers to forward rather than a denylist.
-// Forwarding all headers blindly lets a caller inject x-forwarded-for, authorization,
-// x-internal-user-id, or any header the main app trusts from "internal" sources.
+// P1-8 FIX: Explicit allowlist — never forward authorization, x-forwarded-for, or
+// internal trust headers the main app might act on.
 const ALLOWED_FORWARD_HEADERS = new Set([
   'content-type',
   'idempotency-key',
@@ -55,12 +53,11 @@ function buildForwardHeaders(req) {
       headers[lowerKey] = value;
     }
   });
-
-  // Always set x-forwarded-for from the actual socket IP, never from a header the caller supplied
+  // Always set x-forwarded-for from the actual socket IP, never from caller-supplied header
   headers['x-forwarded-for'] = req.socket?.remoteAddress || req.ip || 'unknown';
-  if (req.requestId) {
-    headers['x-request-id'] = req.requestId;
-  }
+  if (req.requestId) headers['x-request-id'] = req.requestId;
+  // Authenticate to the main app as the voice service
+  if (config.DRIVEBOOK_API_KEY) headers['x-api-key'] = config.DRIVEBOOK_API_KEY;
   return headers;
 }
 
@@ -68,17 +65,12 @@ async function proxyRequest(req, res, targetPath) {
   try {
     const targetUrl = buildTargetUrl(req, targetPath);
     const headers = buildForwardHeaders(req);
-    const options = {
-      method: req.method,
-      headers,
-    };
 
+    let data;
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
       if (req.body && Object.keys(req.body).length > 0) {
-        options.body = JSON.stringify(req.body);
-        if (!headers['content-type']) {
-          options.headers['Content-Type'] = 'application/json';
-        }
+        data = req.body;
+        if (!headers['content-type']) headers['content-type'] = 'application/json';
       }
     }
 
@@ -88,215 +80,135 @@ async function proxyRequest(req, res, targetPath) {
       targetUrl,
     });
 
-    const axiosOptions = {
+    const response = await axios({
       method: req.method,
       url: targetUrl,
-      headers: options.headers,
-      data: options.body ? JSON.parse(options.body) : undefined,
+      headers,
+      data,
       validateStatus: () => true,
-      responseType: 'text',
-      // FIX #9: Explicit timeout so slow upstream calls don't hang Twilio sessions.
-      // Twilio's own TwiML timeout is 10s — give the backend 8s to respond.
+      // FIX #9: Explicit timeout — Twilio's TwiML timeout is 10s, give backend 8s.
       timeout: 8000,
-    };
+    });
 
-    const response = await axios(axiosOptions);
-    const contentType = (response.headers && (response.headers['content-type'] || response.headers['Content-Type'])) || '';
-    const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-
+    const contentType = response.headers?.['content-type'] || '';
     res.status(response.status);
     if (contentType.includes('application/json')) {
-      try {
-        return res.json(JSON.parse(responseText));
-      } catch (err) {
-        return res.send(responseText);
-      }
+      return res.json(response.data);
     }
-
-    return res.send(responseText);
+    return res.send(
+      typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+    );
   } catch (error) {
     logger.logError(error, { requestId: req.requestId, path: targetPath });
     return res.status(502).json({ error: 'Failed to proxy request to main app' });
   }
 }
 
-// Public AI routes forwarded to main app
-router.get('/health', (req, res) => {
-  const api = new SystemApi();
-  api.healthCheck((err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+// ── Routes ────────────────────────────────────────────────────────────────────
 
-router.post('/locations/validate', (req, res) => proxyRequest(req, res, '/api/locations/validate'));
+router.get('/health', (req, res) => proxyRequest(req, res, '/api/health'));
 
-router.get('/instructors/recommendations', (req, res) => {
-  const { location, vehicleType, language, budget, experienceLevel, limit } = req.query;
-  const api = new InstructorsApi();
-  api.getInstructorRecommendations(location, { vehicleType, language, budget, experienceLevel, limit }, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.post('/locations/validate', (req, res) =>
+  proxyRequest(req, res, '/api/locations/validate')
+);
 
-router.get('/instructors/search', (req, res) => {
-  const { location } = req.query;
-  const api = new InstructorsApi();
-  api.searchInstructorsByLocation(location, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.get('/instructors/recommendations', (req, res) =>
+  proxyRequest(req, res, '/api/instructors/recommendations')
+);
 
-router.get('/packages', (req, res) => {
-  const { instructorId } = req.query;
-  const api = new PackagesApi();
-  api.getPackages(instructorId, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.get('/instructors/search', (req, res) =>
+  proxyRequest(req, res, '/api/instructors/search')
+);
 
-router.get('/availability/slots', (req, res) => {
-  const { instructorId, date, duration } = req.query;
-  const api = new AvailabilityApi();
-  api.getAvailableSlots(instructorId, date, { duration }, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.get('/packages', (req, res) =>
+  proxyRequest(req, res, '/api/packages')
+);
 
-router.post('/availability', (req, res) => {
-  const { instructorId, date, duration } = req.query;
-  const api = new AvailabilityApi();
-  api.checkAvailability(instructorId, date, duration, { body: req.body }, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.get('/availability/slots', (req, res) =>
+  proxyRequest(req, res, '/api/availability/slots')
+);
 
-router.post('/public/bookings/bulk', (req, res) => {
-  const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'];
-  const api = new BookingsApi();
-  api.createBooking(req.body, idempotencyKey, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
+router.post('/availability', (req, res) =>
+  proxyRequest(req, res, '/api/availability')
+);
 
-    // FIX #4: Send payment link SMS immediately at booking creation time.
-    // This is independent of whether the voice call stays connected.
-    // Without this, a call disconnect after booking creation means the caller
-    // never receives their payment URL and the booking expires silently.
-    const phone = req.body && req.body.accountHolderPhone;
+/**
+ * POST /public/bookings/bulk
+ *
+ * Creates a booking and immediately sends a payment SMS so the customer
+ * gets the payment link even if the call drops.
+ * Also persists a voice session for 10-min call-back recovery.
+ */
+router.post('/public/bookings/bulk', async (req, res) => {
+  try {
+    const targetUrl = buildTargetUrl(req, '/api/public/bookings/bulk');
+    const headers = buildForwardHeaders(req);
+    if (!headers['content-type']) headers['content-type'] = 'application/json';
+
+    const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'];
+    if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
+
+    logger.logInfo('Proxying booking creation', { requestId: req.requestId, targetUrl });
+
+    const response = await axios({
+      method: 'POST',
+      url: targetUrl,
+      headers,
+      data: req.body,
+      validateStatus: () => true,
+      timeout: 8000,
+    });
+
+    // FIX #4: Send payment SMS immediately — independent of whether the voice call stays connected.
+    const phone = req.body?.accountHolderPhone;
+    const data = response.data;
     if (data && data.checkoutUrl && phone) {
-      const smsService = require('../services/sms-service');
       const msg = `Your DriveBook lesson is reserved for 10 minutes. Complete payment here: ${data.checkoutUrl}`;
-      smsService.sendSms(phone, msg).catch((smsErr) => {
-        logger.logError(smsErr, { requestId: req.requestId, context: 'booking-creation-sms' });
-      });
+      smsService.sendSms(phone, msg).catch((smsErr) =>
+        logger.logError(smsErr, { requestId: req.requestId, context: 'booking-creation-sms' })
+      );
 
-      // SPRINT 3: Persist voice session so a call-back within 10 minutes triggers
-      // recovery instead of starting a fresh booking flow.
+      // SPRINT 3: Persist voice session so a call-back within 10 min triggers recovery
       if (data.bookingId) {
-        const voiceSession = require('../services/voice-session-service');
-        const instructorId =
-          (req.body && req.body.instructorId) || null;
-        // instructorName may be resolved earlier by the AI; pass it if available
-        const instructorName =
-          (req.body && req.body._resolvedInstructorName) || null;
         voiceSession.saveSession(phone, {
           lastAction: 'BOOKING_CREATED',
           bookingId: data.bookingId,
           checkoutUrl: data.checkoutUrl,
-          instructorId,
-          instructorName,
+          instructorId: req.body?.instructorId || null,
+          instructorName: req.body?._resolvedInstructorName || null,
         });
       }
     }
 
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
+    return res.status(response.status).json(data);
+  } catch (error) {
+    logger.logError(error, { requestId: req.requestId, path: '/public/bookings/bulk' });
+    return res.status(502).json({ error: 'Failed to proxy request to main app' });
+  }
 });
 
-router.get('/bookings/lookup', (req, res) => {
-  const { phone } = req.query;
-  const api = new BookingsApi();
-  api.lookupBookings(phone, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.get('/bookings/lookup', (req, res) =>
+  proxyRequest(req, res, '/api/bookings/lookup')
+);
 
-router.post('/verifications/otp', (req, res) => {
-  const api = new VerificationsApi();
-  api.sendOtp(req.body, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.post('/verifications/otp', (req, res) =>
+  proxyRequest(req, res, '/api/verifications/otp')
+);
 
-router.post('/verifications/otp/confirm', (req, res) => {
-  const api = new VerificationsApi();
-  api.confirmOtp(req.body, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.post('/verifications/otp/confirm', (req, res) =>
+  proxyRequest(req, res, '/api/verifications/otp/confirm')
+);
 
-router.get('/public/bookings/:id', (req, res) => proxyRequest(req, res, `/api/public/bookings/${req.params.id}`));
+router.get('/public/bookings/:id', (req, res) =>
+  proxyRequest(req, res, `/api/public/bookings/${req.params.id}`)
+);
 
-router.post('/public/bookings/:id/cancel', (req, res) => {
-  const verificationToken = req.headers['x-verification-token'];
-  const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'];
-  const api = new BookingsApi();
-  api.cancelBooking(req.params.id, verificationToken, idempotencyKey, req.body, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.post('/public/bookings/:id/cancel', (req, res) =>
+  proxyRequest(req, res, `/api/public/bookings/${req.params.id}/cancel`)
+);
 
-router.post('/public/bookings/:id/reschedule', (req, res) => {
-  const verificationToken = req.headers['x-verification-token'];
-  const api = new BookingsApi();
-  api.rescheduleBooking(req.params.id, req.body, verificationToken, (err, data, response) => {
-    if (err) {
-      logger.logError(err, { requestId: req.requestId });
-      return res.status(response && response.status ? response.status : 502).json({ error: err.message || err });
-    }
-    return res.status(response && response.status ? response.status : 200).json(data);
-  });
-});
+router.post('/public/bookings/:id/reschedule', (req, res) =>
+  proxyRequest(req, res, `/api/public/bookings/${req.params.id}/reschedule`)
+);
 
 module.exports = router;
