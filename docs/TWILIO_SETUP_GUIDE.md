@@ -8,7 +8,7 @@
 
 ---
 
-## Step 1: Get Twilio Credentials
+## Step 1: Get Twilio Credentials.
 
 1. Go to https://console.twilio.com
 2. Find your **Account SID** and **Auth Token**
