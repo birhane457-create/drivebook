@@ -33,6 +33,7 @@ interface BookingDetail {
   lessonFeedback: string[];
   studentStrengths: string[];
   focusAreas: string[];
+  whiteboardSketchUrl: string | null;
   instructor: {
     id: string;
     name: string;
@@ -361,6 +362,22 @@ export default function ClientBookingDetailPage() {
             {booking.instructorNotes && (
               <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">
                 <span className="font-semibold">Note: </span>{booking.instructorNotes}
+              </div>
+            )}
+
+            {/* Lesson sketch — drawn by instructor during/after the lesson */}
+            {booking.whiteboardSketchUrl && (
+              <div>
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Lesson Sketch</p>
+                <div className="rounded-xl overflow-hidden border border-slate-200">
+                  <img
+                    src={booking.whiteboardSketchUrl}
+                    alt="Lesson sketch from instructor"
+                    className="w-full object-contain bg-white"
+                    style={{ maxHeight: 320 }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Diagram drawn by your instructor during this lesson</p>
               </div>
             )}
           </div>

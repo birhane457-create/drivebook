@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { PenLine, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   PDA_FEEDBACK_CODES,
   PDACategory,
@@ -14,6 +15,7 @@ import {
   calculateCategoryScores,
   calculateOverallScore
 } from '@/lib/services/lesson-feedback-service'
+import WhiteboardCanvas from '@/components/instructor/WhiteboardCanvas'
 
 interface LessonFeedbackFormProps {
   bookingId: string
@@ -34,6 +36,8 @@ export default function LessonFeedbackForm({
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [expandedCategory, setExpandedCategory] = useState<PDACategory | null>(null)
+  const [whiteboardSketchUrl, setWhiteboardSketchUrl] = useState<string | null>(null)
+  const [showWhiteboard, setShowWhiteboard] = useState(false)
 
   const toggleCode = (code: number) => {
     setSelectedCodes(prev =>
@@ -61,7 +65,8 @@ export default function LessonFeedbackForm({
           feedbackCodes: selectedCodes,
           strengths,
           areasToImprove,
-          instructorNotes: notes
+          instructorNotes: notes,
+          whiteboardSketchUrl,
         })
       })
 
@@ -294,6 +299,39 @@ export default function LessonFeedbackForm({
             placeholder="Any other observations or comments..."
           />
         </div>
+      </div>
+
+      {/* Whiteboard Sketch */}
+      <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden mb-6">
+        <button
+          type="button"
+          onClick={() => setShowWhiteboard(v => !v)}
+          className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <PenLine className="h-5 w-5 text-blue-600" />
+            <div className="text-left">
+              <p className="font-semibold text-gray-900">Lesson Sketch</p>
+              <p className="text-sm text-gray-500">
+                {whiteboardSketchUrl
+                  ? '✅ Sketch saved — student will see it on their progress page'
+                  : 'Draw a diagram to explain the lesson concept (optional)'}
+              </p>
+            </div>
+          </div>
+          {showWhiteboard
+            ? <ChevronUp className="h-5 w-5 text-gray-400" />
+            : <ChevronDown className="h-5 w-5 text-gray-400" />}
+        </button>
+
+        {showWhiteboard && (
+          <div className="p-4 border-t border-gray-200">
+            <WhiteboardCanvas
+              bookingId={bookingId}
+              onSave={(url) => setWhiteboardSketchUrl(url)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Submit Button */}

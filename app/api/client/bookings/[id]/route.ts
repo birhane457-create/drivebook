@@ -105,6 +105,7 @@ export async function GET(
       lessonFeedback: raw.lessonFeedback || [],
       studentStrengths: raw.studentStrengths || [],
       focusAreas: raw.focusAreas || [],
+      whiteboardSketchUrl: (raw as any).whiteboardSketchUrl || null,
       instructor: {
         id: raw.instructor.id,
         name: raw.instructor.name,

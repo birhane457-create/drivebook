@@ -3,6 +3,12 @@ info:
   title: DriveBook Voice Service API
   version: '2.0.0'
   description: |
+    Internal proxy spec for the drivebook-hybrid voice service.
+    Used by contract.test.js to validate API response shapes.
+    
+    Related: ../openapi.yaml is the full authoritative documentation spec.
+    Keep both in sync when adding endpoints.
+    
     API for AI voice agent to interact with DriveBook platform for booking driving lessons.
     The hybrid voice service exposes these `/api/*` endpoints and proxies them to the main DriveBook application.
     

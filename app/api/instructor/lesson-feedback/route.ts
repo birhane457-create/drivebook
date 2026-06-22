@@ -19,6 +19,7 @@ const feedbackSchema = z.object({
   strengths: z.string().optional().default(''),
   areasToImprove: z.string().optional().default(''),
   instructorNotes: z.string().optional().default(''),
+  whiteboardSketchUrl: z.string().url().optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -53,6 +54,9 @@ export async function POST(req: NextRequest) {
           .join('\n\n') || null,
         performanceScore: overallScore,
         feedbackGivenAt: new Date(),
+        ...(data.whiteboardSketchUrl !== undefined && {
+          whiteboardSketchUrl: data.whiteboardSketchUrl,
+        }),
       } as any,
     });
 

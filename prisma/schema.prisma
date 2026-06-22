@@ -284,6 +284,7 @@ model Booking {
   studentStrengths      Int[]      @default([])
   focusAreas            Int[]      @default([])
   performanceScore      Int?
+  whiteboardSketchUrl   String?    // Cloudinary URL of the lesson sketch drawn by instructor
   clientRating          Int?
   clientReview          String?
   reviewGivenAt         DateTime?

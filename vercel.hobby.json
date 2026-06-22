@@ -1,4 +1,5 @@
 {
+  "_note": "Hobby-plan compatible version. Copy contents to vercel.json if on Hobby plan. Upgrade to Pro for full cron frequency.",
   "framework": "nextjs",
   "crons": [
     {

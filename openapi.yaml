@@ -1,7 +1,14 @@
 swagger: '2.0'
 info:
   title: DriveBook Voice Service API
+  version: '3.0.0'
   description: |
+    Full API contract for the DriveBook voice service and AI agent.
+    This is the authoritative documentation spec — shared externally, used for Swagger UI.
+    
+    Related: drivebook-hybrid/openapi.yaml is the internal voice service proxy spec
+    (used by contract tests). Keep both in sync when adding endpoints.
+    
     API for AI voice agent to interact with DriveBook platform for booking driving lessons.
     
     🔒 SECURITY PRINCIPLES - CRITICAL:
@@ -1263,7 +1270,8 @@ paths:
                   reviews:
                     type: integer
               expiresAt:
-                $ref: '#/definitions/ISO8601DateTime'
+                type: string
+                format: date-time
                 description: |
                   When the slot reservation expires (10 minutes after booking creation).
                   SMS link is valid until this time — returning users can complete payment.
@@ -1991,7 +1999,8 @@ paths:
                 type: string
                 enum: [cancel, reschedule, login]
                 default: cancel
-            required: []
+            required:
+              - purpose
       responses:
         '200':
           description: OTP sent successfully
@@ -2334,6 +2343,11 @@ definitions:
       details:
         type: object
         description: Optional structured details with additional diagnostic information
+
+  ISO8601DateTime:
+    type: string
+    format: date-time
+    description: ISO 8601 date-time string (e.g. "2026-03-25T09:00:00.000Z")
 
 tags:
   - name: System
