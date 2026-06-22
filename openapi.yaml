@@ -166,6 +166,8 @@ x-ai-rules:
   - Use GET /public/bookings/{id}/payment-status?token= to check if payment succeeded
   - Use GET /public/bookings/{id}/timeline?token= to answer "What happened to my booking?"
   - Never infer canPay from status alone — use the canPay field in payment-status response
+
+x-short-notice:
   thresholdMinutes: 120
   description: |
     A booking is short-notice when any scheduled lesson starts within
