@@ -36,7 +36,10 @@ export async function middleware(req: NextRequest) {
 
   // ── CUSTOM DOMAIN (Studio tier) ──────────────────────────────────────────
   // If the host is not our own domain, treat it as a custom domain booking page
-  const isOwnDomain = hostname.includes('drivebook.com.au') || hostname.includes('localhost') || hostname.includes('vercel.app')
+  const isOwnDomain = 
+    hostname.includes('drivebook.com.au') || 
+    hostname.includes('localhost') || 
+    hostname.endsWith('vercel.app')  // all *.vercel.app preview/production URLs
   if (!isOwnDomain) {
     const skipPaths = ['/api', '/_next', '/static', '/booking', '/login', '/register', '/dashboard', '/admin', '/client-dashboard']
     const shouldRewrite = !skipPaths.some(p => url.pathname.startsWith(p))
@@ -52,7 +55,10 @@ export async function middleware(req: NextRequest) {
   // ─────────────────────────────────────────────────────────────────────────
 
   // Extract subdomain FIRST — before any public path short-circuits
-  const subdomain = extractSubdomain(hostname)
+  // Do NOT extract subdomains from vercel.app preview URLs — the full hostname
+  // is not a customer subdomain (e.g. drivebook2-abc123-drivebook.vercel.app)
+  const isVercelPreview = hostname.endsWith('vercel.app')
+  const subdomain = isVercelPreview ? null : extractSubdomain(hostname)
 
   // If subdomain exists, rewrite to /subdomain/[slug] (skip API/_next/static)
   if (subdomain && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
