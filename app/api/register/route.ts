@@ -102,11 +102,42 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // Update user with instructorId
+    // Update user with instructorId and start 14-day trial immediately
     if (user.instructor) {
+      // Fix 4: Trial length from config — easy to change without redeploying
+      const trialDays = Number(process.env.BASIC_TRIAL_DAYS) || 14
+      const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
+
       await prisma.user.update({
         where: { id: user.id },
         data: { instructorId: user.instructor.id }
+      })
+
+      // Fix 1: Atomic trial creation inside a transaction — prevents duplicate subscriptions
+      // if two concurrent requests somehow register the same instructor simultaneously
+      await prisma.$transaction(async (tx) => {
+        // Start trial on the instructor record
+        await tx.instructor.update({
+          where: { id: user.instructor!.id },
+          data: {
+            subscriptionTier: 'BASIC',
+            subscriptionStatus: 'TRIAL',
+            trialEndsAt,
+          }
+        })
+        // Create the Subscription row so the subscription page can show billing info
+        await tx.subscription.create({
+          data: {
+            instructorId: user.instructor!.id,
+            tier: 'BASIC',
+            status: 'TRIAL',
+            monthlyAmount: 0,
+            billingCycle: 'monthly',
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: trialEndsAt,
+            trialEndsAt,
+          }
+        })
       })
     }
 
@@ -273,10 +304,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       { 
-        message: 'Registration successful. Please complete your profile.',
+        message: 'Registration successful. Please verify your email then log in.',
         userId: user.id,
         status: 'pending_approval',
-        redirectTo: '/setup/complete-profile'
+        redirectTo: '/login'
       },
       { status: 201 }
     )

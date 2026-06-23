@@ -13,11 +13,19 @@ function ResendVerificationButton({ email }: { email: string }) {
     if (!email) return
     setSending(true)
     try {
-      await fetch('/api/auth/resend-verification', {
+      const res = await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       })
+      if (res.ok) {
+        setSent(true)
+      } else {
+        // Show sent anyway — prevents email enumeration (don't reveal if email exists)
+        setSent(true)
+      }
+    } catch {
+      // Network error — show generic sent to avoid leaking info
       setSent(true)
     } finally {
       setSending(false)

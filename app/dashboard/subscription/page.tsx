@@ -17,7 +17,7 @@ export default async function SubscriptionPage() {
     where: { userId: session.user.id },
     include: {
       subscriptions: {
-        where: { status: { in: ['TRIAL', 'ACTIVE'] } },
+        where: { status: { in: ['TRIAL', 'ACTIVE', 'EXPIRED'] } },
         orderBy: { createdAt: 'desc' },
         take: 1,
       },
@@ -75,6 +75,29 @@ export default async function SubscriptionPage() {
             Choose the plan that works best for your driving instruction business
           </p>
         </div>
+
+        {/* EXPIRED — trial ended without payment, or subscription lapsed */}
+        {instructor.subscriptionStatus === 'EXPIRED' && (
+          <div className="mb-8 bg-red-50 border-2 border-red-300 rounded-lg p-6">
+            <div className="flex items-start gap-3">
+              <svg className="h-6 w-6 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <h3 className="text-sm font-semibold text-red-800">Your account is in read-only mode</h3>
+                <p className="mt-1 text-sm text-red-700">
+                  {currentSubscription?.tier && currentSubscription.tier !== 'BASIC'
+                    ? `You previously selected the ${SUBSCRIPTION_PLANS[currentSubscription.tier as SubscriptionTier]?.name ?? currentSubscription.tier} plan but payment was not completed.`
+                    : 'Your trial has ended and no payment method was added.'}
+                  {' '}Select a plan below and complete checkout to restore full access.
+                </p>
+                <p className="mt-2 text-xs text-red-600">
+                  Once you subscribe, billing renews automatically each month or year — you only need to do this once.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Current Plan Status */}
         {instructor.subscriptionStatus === 'TRIAL' && (
