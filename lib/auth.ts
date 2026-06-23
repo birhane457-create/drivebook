@@ -30,7 +30,7 @@ export const authOptions: NextAuthOptions = {
 
         // Instructor-only email verification enforcement
         if (user.role === 'INSTRUCTOR' && !user.emailVerified) {
-          throw new Error('Please verify your email before logging in.')
+          throw new Error('EMAIL_NOT_VERIFIED')
         }
 
         const isCorrectPassword = await bcrypt.compare(

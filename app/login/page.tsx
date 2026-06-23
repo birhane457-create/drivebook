@@ -3,11 +3,48 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { LogIn, Loader2 } from 'lucide-react'
+import { LogIn, Loader2, Mail } from 'lucide-react'
+
+function ResendVerificationButton({ email }: { email: string }) {
+  const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  const resend = async () => {
+    if (!email) return
+    setSending(true)
+    try {
+      await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      setSent(true)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (sent) return (
+    <p className="text-green-300 text-xs flex items-center gap-1">
+      <Mail className="w-3 h-3" /> Verification email sent — check your inbox
+    </p>
+  )
+
+  return (
+    <button
+      onClick={resend}
+      disabled={sending || !email}
+      className="text-xs text-purple-300 underline hover:text-purple-200 disabled:opacity-50"
+    >
+      {sending ? 'Sending…' : 'Resend verification email'}
+    </button>
+  )
+}
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [pendingEmail, setPendingEmail] = useState('')
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -32,8 +69,15 @@ export default function LoginPage() {
       })
 
       if (result?.error) {
-        const isCredentialError = result.error === 'CredentialsSignin' || result.status === 401
-        setError(isCredentialError ? 'Invalid email or password' : result.error || 'Login failed')
+        // NextAuth wraps all credential errors as 'CredentialsSignin'
+        // We use error codes in the thrown message to distinguish cases
+        const rawError = result.error
+        if (rawError.includes('EMAIL_NOT_VERIFIED')) {
+          setPendingEmail(email)
+          setError('EMAIL_NOT_VERIFIED')
+        } else {
+          setError('Invalid email or password')
+        }
         setLoading(false)
       } else if (result?.ok) {
         const sessionRes = await fetch('/api/auth/session')
@@ -49,10 +93,14 @@ export default function LoginPage() {
         if (session?.user?.role) {
           const role = session.user.role
           const hostname = window.location.hostname
+
+          // Never treat *.vercel.app as a subdomain — the instructor slug
+          // subdomains only apply to the real production domain (drivebook.com.au)
+          const isVercelDomain = hostname.endsWith('vercel.app') || hostname === 'localhost' || hostname.startsWith('127.')
           const compoundTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
           const tld2 = hostname.split('.').slice(-2).join('.')
           const minParts = compoundTLDs.includes(tld2) ? 4 : 3
-          const isSubdomain = hostname.split('.').length >= minParts && !hostname.startsWith('www.')
+          const isSubdomain = !isVercelDomain && hostname.split('.').length >= minParts && !hostname.startsWith('www.')
           const mainDomain = isSubdomain
             ? window.location.origin.replace(/^https?:\/\/[^.]+\./, 'https://')
             : ''
@@ -96,7 +144,18 @@ export default function LoginPage() {
         <div className="bg-gradient-to-br from-white/10 to-white/5 rounded-2xl shadow-2xl shadow-purple-900/50 border border-white/20 p-6 sm:p-8 backdrop-blur-xl">
           {error && (
             <div className="bg-red-500/20 text-red-300 p-3 rounded-lg mb-4 border border-red-500/50 backdrop-blur-sm text-sm">
-              {error}
+              {error === 'EMAIL_NOT_VERIFIED' ? (
+                <div>
+                  <p className="font-semibold mb-1">Email not verified</p>
+                  <p className="text-red-200/80 text-xs mb-2">
+                    Please verify your email address before logging in.
+                    Check your inbox for a verification link.
+                  </p>
+                  <ResendVerificationButton email={pendingEmail} />
+                </div>
+              ) : (
+                error
+              )}
             </div>
           )}
 

@@ -84,7 +84,9 @@ export default function NewBookingPage() {
   const fetchClients = async () => {
     try {
       const res = await fetch('/api/clients')
-      setClients(await res.json())
+      const data = await res.json()
+      // API returns { clients: [...], pagination: {...} }
+      setClients(Array.isArray(data) ? data : (data.clients ?? []))
     } catch { console.error('Failed to fetch clients') }
   }
 

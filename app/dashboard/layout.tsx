@@ -6,6 +6,7 @@ import DashboardNav from '@/components/DashboardNav'
 import MobileBottomNav from '@/components/instructor/MobileBottomNav'
 import ReadOnlyBanner from '@/components/instructor/ReadOnlyBanner'
 import PendingApprovalBanner from '@/components/instructor/PendingApprovalBanner'
+import SubscriptionSyncTrigger from '@/components/instructor/SubscriptionSyncTrigger'
 import { checkSubscriptionAccess } from '@/lib/middleware/subscriptionValidation'
 
 export const dynamic = 'force-dynamic'
@@ -47,6 +48,8 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <DashboardNav />
+      {/* Silently syncs Stripe subscription after portal return or payment */}
+      <SubscriptionSyncTrigger />
       <div className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),transparent_20%),radial-gradient(circle_at_top_right,_rgba(124,58,237,0.16),transparent_16%)]" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-10">

@@ -1,97 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import crypto from 'crypto'
-import { normalizeEmail } from '@/lib/auth-email'
-import { authRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { emailService } from '@/lib/services/email'
+import { normalizeEmail } from '@/lib/auth-email'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/auth/resend-verification
  *
- * Instructor-only email verification resend.
- * Always returns success to prevent enumeration.
+ * Resends the email verification link to an unverified instructor account.
+ * Always returns 200 to prevent email enumeration — the caller cannot tell
+ * whether the email exists in the system.
  */
 export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')
-    const rateLimitId = getRateLimitIdentifier(undefined, ip, 'resend-verification')
-    const rateLimitResult = await checkRateLimitStrict(authRateLimit, rateLimitId)
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: rateLimitResult.error },
-        { status: 429, headers: rateLimitResult.headers }
-      )
+    const body = await req.json()
+    const rawEmail = body.email?.trim()
+    if (!rawEmail) {
+      return NextResponse.json({ success: true }) // silent — no enumeration
     }
 
-    const body = await req.json().catch(() => ({}))
-    const emailRaw = typeof body?.email === 'string' ? body.email : ''
-    if (!emailRaw) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
-    }
-
-    const email = normalizeEmail(emailRaw)
+    const email = normalizeEmail(rawEmail)
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        emailVerified: true,
-      },
+      select: { id: true, email: true, role: true, emailVerified: true, name: true },
     })
 
-    // Always succeed (anti-enumeration)
+    // Only resend for unverified instructors — silently succeed for anything else
     if (!user || user.role !== 'INSTRUCTOR' || user.emailVerified) {
-      return NextResponse.json({
-        success: true,
-        message: 'If your account requires verification, a verification email has been sent.',
-      })
+      return NextResponse.json({ success: true })
     }
 
-    const verificationToken = crypto.randomBytes(32).toString('hex')
-    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    // Generate a new verification token (24h expiry)
+    const token = crypto.randomUUID()
+    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        verificationToken,
-        verificationTokenExpiry,
-      } as any,
+        verificationToken: token,
+        verificationTokenExpiry: expiry,
+      },
     })
 
-    const verifyUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${verificationToken}`
+    const verifyUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`
 
-    // If SMTP is not configured, we still return success (avoid blocking onboarding).
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      try {
-        await emailService.sendGenericEmail({
-          to: user.email,
-          subject: 'Verify your DriveBook instructor email',
-          html: `
-            <h2>Verify your email</h2>
-            <p>Please verify your email to access the instructor dashboard.</p>
-            <p><a href="${verifyUrl}" style="background:#2563eb;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Verify Email →</a></p>
-            <p style="color:#6b7280;font-size:13px;">This link expires in 24 hours.</p>
-          `,
-        })
-      } catch {
-        // non-blocking
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'If your account requires verification, a verification email has been sent.',
+    await emailService.sendGenericEmail({
+      to: email,
+      subject: 'Verify your DriveBook account',
+      html: `
+        <h2>Verify your email address</h2>
+        <p>Hi ${user.name || 'there'},</p>
+        <p>Click the button below to verify your email and activate your DriveBook instructor account.</p>
+        <p style="margin:24px 0;">
+          <a href="${verifyUrl}"
+             style="background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;">
+            Verify Email Address
+          </a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">
+          This link expires in 24 hours. If you didn't create a DriveBook account, ignore this email.
+        </p>
+        <p style="color:#9ca3af;font-size:12px;">
+          Or copy this link: ${verifyUrl}
+        </p>
+      `,
     })
+
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Resend verification error:', error)
-    return NextResponse.json(
-      { error: 'Failed to process request' },
-      { status: 500 }
-    )
+    // Still return 200 — never reveal internal errors on this endpoint
+    return NextResponse.json({ success: true })
   }
 }
-
