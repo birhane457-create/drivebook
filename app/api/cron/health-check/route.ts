@@ -12,6 +12,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 import { sendAlert } from '@/lib/services/alert-service';
 import { CRON_JOB_CONFIG } from '@/lib/services/cron-health';
 
@@ -71,22 +72,12 @@ export async function GET(req: NextRequest) {
       metadata: { issues, healthy, checkedAt: new Date().toISOString() },
     });
 
-    console.warn(`[CRON HEALTH] ${issues.length} issue(s):\n${summary}`);
+    logger.warn('[CRON HEALTH] issues detected', { count: issues.length, issues });
   } else {
-    console.log(`[CRON HEALTH] All ${healthy.length} jobs healthy`);
+    logger.info('[CRON HEALTH] All jobs healthy', { count: healthy.length });
   }
 
-  // Ping this job's own health (so we can detect if health-check itself stops running)
-  try {
-    await (prisma as any).cronHealth.upsert({
-      where: { jobName: 'health-check' },
-      update: { lastRunAt: new Date(), lastStatus: 'OK', lastError: null, runCount: { increment: 1 } },
-      create: { jobName: 'health-check', lastRunAt: new Date(), lastStatus: 'OK', runCount: 1 },
-    });
-  } catch { /* non-fatal */ }
-
   return NextResponse.json({
-    success: true,
     checkedAt: new Date().toISOString(),
     healthy: healthy.length,
     issues: issues.length,
