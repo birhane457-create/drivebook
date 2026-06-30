@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth/requireRole';
-import { enqueueNotification } from '@/lib/services/notificationRetry';
+import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry';
 
 export const dynamic = 'force-dynamic';
 
@@ -122,6 +122,7 @@ export async function POST(
           body: `<p>Dear ${instructor.name}, your instructor account has been suspended. Reason: ${reason}. Please contact support at ${process.env.ADMIN_EMAIL || 'support@drivebook.com'}.</p>`,
           idempotencyKey: `instructor-suspend-email-${params.id}`,
         })
+        drainRetryQueueAsync()
       }
       // Don't fail the suspension if email fails
     }

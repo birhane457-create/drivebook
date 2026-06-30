@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth/requireRole';
-import { enqueueNotification } from '@/lib/services/notificationRetry';
+import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry';
 
 export const dynamic = 'force-dynamic';
 // FIXED: Add input validation
@@ -141,6 +141,7 @@ export async function POST(
           body: `<p>Dear ${instructor.name}, your instructor application has not been approved at this time. Reason: ${reason}. Please contact support for more information.</p>`,
           idempotencyKey: `instructor-reject-email-${params.id}`,
         })
+        drainRetryQueueAsync()
       }
       // Don't fail the rejection if email fails
     }

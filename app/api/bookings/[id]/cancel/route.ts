@@ -7,7 +7,7 @@ import { sendCancellationReceipt } from '@/lib/services/receipt-email'
 import { getNotifChannels } from '@/lib/config/platform-settings'
 import { createRefundTask } from '@/lib/services/taskManager'
 import { recordFullRefund, recordPartialRefund } from '@/lib/services/ledger-operations'
-import { enqueueNotification } from '@/lib/services/notificationRetry'
+import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry'
 
 export const dynamic = 'force-dynamic'
 
@@ -227,6 +227,7 @@ export async function POST(
           bookingId: params.id,
           userId: booking.client!.userId ?? undefined,
         })
+        drainRetryQueueAsync()
       })
 
       // Send structured cancellation receipt to student
@@ -262,6 +263,7 @@ export async function POST(
           bookingId: params.id,
           userId: booking.client.userId ?? undefined,
         })
+        drainRetryQueueAsync()
       }
     }
 
@@ -280,6 +282,7 @@ export async function POST(
           idempotencyKey: `cancel-instructor-email-${params.id}`,
           bookingId: params.id,
         })
+        drainRetryQueueAsync()
       })
     }
 

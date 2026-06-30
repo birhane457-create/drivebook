@@ -113,7 +113,28 @@ export async function enqueueNotification(params: EnqueueParams): Promise<void> 
   }
 }
 
-// ── processRetryQueue ─────────────────────────────────────────────────────────
+// ── drainRetryQueueAsync ──────────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget helper: attempts to process due retry rows immediately,
+ * without blocking the calling request.
+ *
+ * Because Vercel Hobby only allows daily cron jobs, the cron for notification-retry
+ * runs once per day. Call this in any booking mutation catch block AFTER enqueuing,
+ * so the notification is retried on the very next user-triggered API call rather
+ * than waiting up to 24 hours.
+ *
+ * Usage (non-blocking — does NOT await):
+ *   drainRetryQueueAsync()
+ *
+ * This is safe to call unconditionally — it's idempotent and bounded (max 50 rows).
+ */
+export function drainRetryQueueAsync(): void {
+  // Don't await — let it run in the background after the response is sent
+  processRetryQueue().catch((err) =>
+    console.error('[NotificationRetry] Background drain failed:', err)
+  )
+}
 
 interface ProcessResult {
   processed: number

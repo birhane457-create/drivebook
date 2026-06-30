@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { requireAdmin } from '@/lib/auth/requireRole';
-import { enqueueNotification } from '@/lib/services/notificationRetry';
+import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,6 +135,7 @@ export async function POST(
           body: `<p>Dear ${approvedInstructor.name}, congratulations! Your application has been approved. Log in to your dashboard to get started: ${process.env.NEXTAUTH_URL}/dashboard</p>`,
           idempotencyKey: `instructor-approve-email-${params.id}`,
         })
+        drainRetryQueueAsync()
       }
       // Don't fail the approval if email fails
     }
