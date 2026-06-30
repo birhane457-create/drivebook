@@ -152,7 +152,7 @@ export default function ClientsPage() {
   ) : []
 
   return (
-    <div className="max-w-7xl mx-auto py-4 sm:py-8">
+    <div className="max-w-7xl mx-auto py-1 sm:py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">Clients ({pagination.total})</h1>
           <button
@@ -165,10 +165,10 @@ export default function ClientsPage() {
         </div>
 
         {showForm && (
-          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-4 sm:p-6 mb-6">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-100 mb-4">New Client</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
+          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-2 sm:p-6 mb-6">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-100 mb-1">New Client</h2>
+            <form onSubmit={handleSubmit} className="space-y-1">
+              <div className="grid sm:grid-cols-2 gap-1">
                 <div>
                   <label className="block text-sm font-medium text-slate-100 mb-1">Full Name</label>
                   <input
@@ -274,15 +274,15 @@ export default function ClientsPage() {
                   <div key={client.id} className="hover:bg-slate-800 transition">
                     {/* Compact Row */}
                     <div 
-                      className="p-4 cursor-pointer flex items-center justify-between gap-4"
+                      className="p-1 cursor-pointer flex items-center justify-between gap-1"
                       onClick={() => !isEditing && toggleExpand(client.id)}
                     >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex items-center gap-1 flex-1 min-w-0">
                         <div className="h-10 w-10 bg-slate-800 rounded-full flex items-center justify-center flex-shrink-0">
                           <User className="h-5 w-5 text-sky-400" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-0 flex-wrap">
                             <h3 className="font-semibold truncate text-slate-100">{client.name}</h3>
                             {!client.userId && (
                               <span className="inline-flex items-center gap-1 text-xs bg-amber-950 text-amber-200 px-2 py-0.5 rounded-full flex-shrink-0">
@@ -293,7 +293,7 @@ export default function ClientsPage() {
                           </div>
                           <div className="flex items-center gap-4 text-sm text-slate-400">
                             <span className="flex items-center gap-1">
-                              <Phone className="h-3 w-3 text-slate-400" />
+                              <Phone className="h-3 w-3 text-slate-200" />
                               {client.phone}
                             </span>
                             <span className="hidden sm:flex items-center gap-1 truncate">
@@ -304,12 +304,12 @@ export default function ClientsPage() {
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex items-top gap-0 flex-shrink-0">
                         {!isEditing && (
                           <Link
                             href={`/dashboard/clients/${client.id}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="p-2 hover:bg-slate-900 rounded-lg text-slate-400"
+                            className="p-2 hover:bg-slate-900 rounded-lg text-slate-200"
                             title="View Client"
                           >
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -342,7 +342,7 @@ export default function ClientsPage() {
                         {!isEditing && (
                           isExpanded ? 
                             <ChevronUp className="h-5 w-5 text-slate-500" /> : 
-                            <ChevronDown className="h-5 w-5 text-slate-500" />
+                            <ChevronDown className="h-5 w-3 text-slate-100" />
                         )}
                       </div>
                     </div>
