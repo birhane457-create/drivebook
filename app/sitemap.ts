@@ -72,7 +72,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       select: {
         id: true,
         customSlug: true,
-        updatedAt: true,
       },
     })
 
@@ -80,7 +79,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const slug = i.customSlug || i.id
       return {
         url: `${BASE_URL}/subdomain/${slug}`,
-        lastModified: i.updatedAt,
+        lastModified: now,
         changeFrequency: 'weekly' as const,
         priority: 0.8,
       }
