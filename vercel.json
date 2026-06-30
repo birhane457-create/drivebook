@@ -31,7 +31,7 @@
     },
     {
       "path": "/api/cron/check-trial-expiry",
-      "schedule": "0 1 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/send-trial-expiry-alerts",
