@@ -135,7 +135,6 @@ export async function POST(
           body: `<p>Dear ${approvedInstructor.name}, congratulations! Your application has been approved. Log in to your dashboard to get started: ${process.env.NEXTAUTH_URL}/dashboard</p>`,
           idempotencyKey: `instructor-approve-email-${params.id}`,
         })
-        drainRetryQueueAsync()
       }
       // Don't fail the approval if email fails
     }

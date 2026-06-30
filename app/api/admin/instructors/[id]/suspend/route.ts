@@ -122,7 +122,6 @@ export async function POST(
           body: `<p>Dear ${instructor.name}, your instructor account has been suspended. Reason: ${reason}. Please contact support at ${process.env.ADMIN_EMAIL || 'support@drivebook.com'}.</p>`,
           idempotencyKey: `instructor-suspend-email-${params.id}`,
         })
-        drainRetryQueueAsync()
       }
       // Don't fail the suspension if email fails
     }

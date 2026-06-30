@@ -325,7 +325,6 @@ export async function POST(req: NextRequest) {
           bookingId: pendingBooking.id,
           userId: client.userId ?? undefined,
         })
-        drainRetryQueueAsync()
       }
 
       try {
@@ -569,8 +568,7 @@ export async function POST(req: NextRequest) {
           await enqueueNotification({
             channel: 'SMS',
             recipient: client.phone,
-            body: `Booking confirmed with ${booking.instructor.name} on ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })
-        drainRetryQueueAsync()}. Cost: $${booking.price.toFixed(2)}`,
+            body: `Booking confirmed with ${booking.instructor.name} on ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}. Cost: $${booking.price.toFixed(2)}`,
             idempotencyKey: `booking-confirm-sms-${booking.id}`,
             bookingId: booking.id,
             userId: client.userId ?? undefined,
@@ -582,8 +580,7 @@ export async function POST(req: NextRequest) {
       await enqueueNotification({
         channel: 'EMAIL',
         recipient: booking.client!.email,
-        subject: `Booking Confirmed — ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })
-        drainRetryQueueAsync()}`,
+        subject: `Booking Confirmed — ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
         body: `<p>Hi ${booking.client!.name}, your lesson with ${booking.instructor.name} is confirmed. Log in to view details.</p>`,
         idempotencyKey: `booking-confirm-email-${booking.id}`,
         bookingId: booking.id,
@@ -630,8 +627,7 @@ export async function POST(req: NextRequest) {
       await enqueueNotification({
         channel: 'EMAIL',
         recipient: booking.client!.email,
-        subject: `Receipt — Lesson on ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })
-        drainRetryQueueAsync()}`,
+        subject: `Receipt — Lesson on ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
         body: `<p>Hi ${booking.client!.name}, your wallet was charged $${lessonPrice.toFixed(2)} for your lesson with ${booking.instructor.name}. Log in to view your receipt.</p>`,
         idempotencyKey: `booking-receipt-email-${booking.id}`,
         bookingId: booking.id,

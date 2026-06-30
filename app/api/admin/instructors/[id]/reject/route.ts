@@ -141,7 +141,6 @@ export async function POST(
           body: `<p>Dear ${instructor.name}, your instructor application has not been approved at this time. Reason: ${reason}. Please contact support for more information.</p>`,
           idempotencyKey: `instructor-reject-email-${params.id}`,
         })
-        drainRetryQueueAsync()
       }
       // Don't fail the rejection if email fails
     }

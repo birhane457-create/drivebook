@@ -227,7 +227,6 @@ export async function POST(
           bookingId: params.id,
           userId: booking.client!.userId ?? undefined,
         })
-        drainRetryQueueAsync()
       })
 
       // Send structured cancellation receipt to student
@@ -263,7 +262,6 @@ export async function POST(
           bookingId: params.id,
           userId: booking.client.userId ?? undefined,
         })
-        drainRetryQueueAsync()
       }
     }
 
@@ -282,7 +280,6 @@ export async function POST(
           idempotencyKey: `cancel-instructor-email-${params.id}`,
           bookingId: params.id,
         })
-        drainRetryQueueAsync()
       })
     }
 
