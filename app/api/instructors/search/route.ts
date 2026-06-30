@@ -211,7 +211,7 @@ function format(
       serviceRadiusKm: i.serviceRadiusKm ?? DEFAULT_RADIUS_KM,
       vehicleTypes: i.vehicleTypes ? i.vehicleTypes.split(',').map((v: string) => v.trim()) : ['Manual', 'Automatic'],
       languages: i.languages ? i.languages.split(',').map((l: string) => l.trim()) : ['English'],
-      averageRating: i.averageRating ?? 4.8,
+      averageRating: i.averageRating ?? null,
       totalReviews: i.totalReviews ?? 0,
       totalBookings: i._count.bookings,
       bio: i.bio || 'Experienced driving instructor',

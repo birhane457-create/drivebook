@@ -81,6 +81,18 @@ export default function CompactInstructorCard({ instructor, onSelect }: CompactI
         {/* Distance */}
         <p className="text-xs text-gray-400 mb-2">{instructor.distance.toFixed(1)} km away</p>
 
+        {/* Vehicle types + languages as small pills */}
+        {(instructor.vehicleTypes?.length > 0 || instructor.languages?.length > 0) && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {instructor.vehicleTypes?.map((v: string) => (
+              <span key={v} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{v}</span>
+            ))}
+            {instructor.languages?.filter((l: string) => l !== 'English').map((l: string) => (
+              <span key={l} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">{l}</span>
+            ))}
+          </div>
+        )}
+
         {/* Bio — toggle */}
         {instructor.bio && (
           <div className="mb-3">

@@ -36,7 +36,7 @@ export function useInstructorSearch(options: Options = {}) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const search = useCallback(
-    async (query: string, mode: 'location' | 'name' = 'location') => {
+    async (query: string, mode: 'location' | 'name' = 'location', vehicleType?: string, language?: string) => {
       if (!query.trim()) { setResults([]); return; }
 
       const run = async () => {
@@ -46,8 +46,10 @@ export function useInstructorSearch(options: Options = {}) {
         try {
           const param = mode === 'location' ? 'location' : 'name';
           const adminParam = admin ? '&admin=true' : '';
+          const vehicleParam = vehicleType ? `&vehicleType=${encodeURIComponent(vehicleType)}` : '';
+          const langParam = language ? `&language=${encodeURIComponent(language)}` : '';
           const res = await fetch(
-            `/api/instructors/search?${param}=${encodeURIComponent(query)}${adminParam}`
+            `/api/instructors/search?${param}=${encodeURIComponent(query)}${adminParam}${vehicleParam}${langParam}`
           );
           const data = await res.json();
           if (!res.ok) { setError(data.error || 'Search failed'); return; }
