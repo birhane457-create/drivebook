@@ -6,6 +6,8 @@ import { emailService } from '@/lib/services/email'
 import { sendCancellationReceipt } from '@/lib/services/receipt-email'
 import { getNotifChannels } from '@/lib/config/platform-settings'
 import { createRefundTask } from '@/lib/services/taskManager'
+import { recordFullRefund, recordPartialRefund } from '@/lib/services/ledger-operations'
+import { enqueueNotification } from '@/lib/services/notificationRetry'
 
 export const dynamic = 'force-dynamic'
 
@@ -164,10 +166,43 @@ export async function POST(
       },
     })
 
+    // FinancialLedger — record refund with deterministic idempotency keys (non-critical)
+    // Uses params.id (bookingId) as the stable anchor for idempotency keys.
+    // Safe to retry — duplicate idempotencyKey is silently ignored.
+    if (refundAmount > 0 && booking.client?.userId) {
+      try {
+        const refundId = `cancel-${params.id}` // stable, derived from bookingId
+        const args = {
+          refundId,
+          bookingId: params.id,
+          userId: booking.client.userId,
+          instructorId: booking.instructorId,
+          totalAmount: refundAmount,
+          platformFee: booking.platformFee ?? 0,
+          instructorPayout: booking.instructorPayout ?? 0,
+          reason: reason || `${refundPercentage}% cancellation refund`,
+          createdBy: user.id,
+        }
+        if (refundPercentage === 100) {
+          await recordFullRefund(args)
+        } else {
+          await recordPartialRefund({
+            ...args,
+            refundAmount,
+            refundPercentage,
+            originalPlatformFee: booking.platformFee ?? 0,
+            originalInstructorPayout: booking.instructorPayout ?? 0,
+          })
+        }
+      } catch (ledgerErr) {
+        console.error('[Ledger] Failed to record cancellation refund (non-critical):', ledgerErr)
+      }
+    }
+
     // Email notifications (non-critical)
     const cancelChannels = getNotifChannels('BOOKING_CANCELLED')
     const bookingDateStr = booking.startTime
-      ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })
       : 'N/A'
 
     if (cancelChannels.email && booking.client?.email) {
@@ -181,7 +216,18 @@ export async function POST(
         to: booking.client.email,
         subject: `Booking Cancelled — ${bookingDateStr}`,
         html: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client.name},</p><p>Your booking with <strong>${booking.instructor.name}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
-      }).catch(e => console.error('Cancel email to client failed:', e))
+      }).catch(async (e) => {
+        console.error('Cancel email to client failed:', e)
+        await enqueueNotification({
+          channel: 'EMAIL',
+          recipient: booking.client!.email,
+          subject: `Booking Cancelled — ${bookingDateStr}`,
+          body: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client!.name},</p><p>Your booking with <strong>${booking.instructor.name}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
+          idempotencyKey: `cancel-client-email-${params.id}`,
+          bookingId: params.id,
+          userId: booking.client!.userId ?? undefined,
+        })
+      })
 
       // Send structured cancellation receipt to student
       try {
@@ -207,6 +253,15 @@ export async function POST(
         })
       } catch (e) {
         console.error('Cancellation receipt email failed:', e)
+        await enqueueNotification({
+          channel: 'EMAIL',
+          recipient: booking.client.email,
+          subject: `Cancellation Receipt — ${bookingDateStr}`,
+          body: `<p>Hi ${booking.client.name}, your booking on ${bookingDateStr} was cancelled. Refund: $${refundAmount.toFixed(2)}. Log in to view details.</p>`,
+          idempotencyKey: `cancel-receipt-email-${params.id}`,
+          bookingId: params.id,
+          userId: booking.client.userId ?? undefined,
+        })
       }
     }
 
@@ -215,7 +270,17 @@ export async function POST(
         to: booking.instructor.user.email,
         subject: `Booking Cancelled — ${booking.client?.name || booking.clientName || 'Client'}`,
         html: `<h2>Booking Cancelled</h2><p>Hi ${booking.instructor.name},</p><p>A booking with <strong>${booking.client?.name || booking.clientName || 'Client'}</strong> on ${bookingDateStr} has been cancelled.</p>`,
-      }).catch(e => console.error('Cancel email to instructor failed:', e))
+      }).catch(async (e) => {
+        console.error('Cancel email to instructor failed:', e)
+        await enqueueNotification({
+          channel: 'EMAIL',
+          recipient: booking.instructor.user!.email,
+          subject: `Booking Cancelled — ${booking.client?.name || booking.clientName || 'Client'}`,
+          body: `<h2>Booking Cancelled</h2><p>Hi ${booking.instructor.name},</p><p>A booking with <strong>${booking.client?.name || booking.clientName || 'Client'}</strong> on ${bookingDateStr} has been cancelled.</p>`,
+          idempotencyKey: `cancel-instructor-email-${params.id}`,
+          bookingId: params.id,
+        })
+      })
     }
 
     return NextResponse.json({

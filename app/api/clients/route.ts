@@ -39,6 +39,19 @@ export async function POST(req: NextRequest) {
     const data = clientSchema.parse(body)
 
     const pickupAddress = data.addressText ?? data.defaultPickupAddress
+    const normalizedEmail = data.email.trim().toLowerCase()
+
+    // Prevent duplicate client records for the same instructor/email pair.
+    const existingClient = await prisma.client.findFirst({
+      where: {
+        instructorId: session.user.instructorId,
+        email: normalizedEmail,
+      },
+    })
+
+    if (existingClient) {
+      return NextResponse.json(existingClient, { status: 200 })
+    }
 
     // ── Silently create or link a User account ────────────────────────────────
     // Every client gets a userId from day one so the instructor can book for

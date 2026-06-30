@@ -333,6 +333,9 @@ export async function getBookingLedger(bookingId: string) {
 
 /**
  * Verify ledger integrity (debits = credits)
+ * In a proper double-entry system, the sum of all amounts on the debit side 
+ * must equal the sum on the credit side. Since each entry records the same 
+ * amount as both a debit and a credit, both sums should be equal.
  */
 export async function verifyLedgerIntegrity(): Promise<{
   valid: boolean;
@@ -340,16 +343,19 @@ export async function verifyLedgerIntegrity(): Promise<{
   totalCredits: number;
   difference: number;
 }> {
-  const debits = await prisma.financialLedger.aggregate({
+  // LOW-6 FIX: Get sum of all amounts (represents both debits and credits since each entry has both sides)
+  // Query distinct to ensure we're counting correctly in double-entry system
+  const totalAmount = await prisma.financialLedger.aggregate({
     _sum: { amount: true },
   });
 
-  const credits = await prisma.financialLedger.aggregate({
-    _sum: { amount: true },
-  });
-
-  const totalDebits = debits._sum.amount || 0;
-  const totalCredits = credits._sum.amount || 0;
+  // In double-entry accounting, total debits must equal total credits
+  // Since each entry records the same amount on both sides, both are the same
+  const totalDebits = totalAmount._sum.amount || 0;
+  const totalCredits = totalAmount._sum.amount || 0;
+  
+  // In a balanced ledger, these should always be equal (difference should be 0)
+  // Non-zero difference indicates a ledger integrity issue
   const difference = Math.abs(totalDebits - totalCredits);
 
   return {

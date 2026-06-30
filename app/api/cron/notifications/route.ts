@@ -24,6 +24,15 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
 
+  // Auth: accept either CRON_SECRET Bearer token (external schedulers)
+  // or the Vercel-injected x-vercel-cron header (Vercel Crons)
+  const authHeader = req.headers.get('authorization');
+  const isVercelCron = req.headers.get('x-vercel-cron') === '1';
+  const hasCronSecret = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  if (!isVercelCron && !hasCronSecret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const results: {
     bookingReminders: { success: boolean } | null;
     packageExpiryAlerts: { success: boolean } | null;

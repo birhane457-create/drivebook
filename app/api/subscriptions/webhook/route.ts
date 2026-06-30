@@ -188,7 +188,7 @@ async function handleSubscriptionCancelled(subscription: any) {
       subject: 'Subscription Cancelled',
       html: `
         <h2>Your subscription has been cancelled</h2>
-        <p>Your subscription will remain active until ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}.</p>
+        <p>Your subscription will remain active until ${new Date(subscription.current_period_end * 1000).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}.</p>
         <p>You can reactivate anytime from your dashboard.</p>
         <p><a href="${process.env.NEXTAUTH_URL}/dashboard/subscription">Reactivate Subscription</a></p>
       `,
@@ -215,7 +215,7 @@ async function handleTrialEnding(subscription: any) {
       subject: `Your trial ends in ${daysLeft} days`,
       html: `
         <h2>Your free trial is ending soon</h2>
-        <p>Your trial will end on ${new Date(trial_end * 1000).toLocaleDateString()}.</p>
+        <p>Your trial will end on ${new Date(trial_end * 1000).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}.</p>
         <p>To continue using DriveBook, your payment method will be charged automatically.</p>
         <p><a href="${process.env.NEXTAUTH_URL}/dashboard/subscription">Manage Subscription</a></p>
       `,

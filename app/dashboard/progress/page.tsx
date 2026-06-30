@@ -36,7 +36,7 @@ export default function InstructorProgressPage() {
   }, []);
 
   if (loading) return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+    <div className="flex items-center justify-center py-12">
       <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
@@ -44,8 +44,7 @@ export default function InstructorProgressPage() {
   // If API doesn't exist yet, show a useful placeholder
   if (!data) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100">
-        <div className="max-w-4xl mx-auto px-4 py-8 bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20">
+              <div className="max-w-4xl mx-auto px-4 py-8 bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20">
           <h1 className="text-2xl font-bold text-slate-100 mb-2">Student Progress</h1>
           <p className="text-slate-400 mb-8">Track how your students are progressing based on lesson feedback</p>
 
@@ -76,7 +75,7 @@ export default function InstructorProgressPage() {
             </ul>
           </div>
         </div>
-      </div>
+      
     );
   }
 
@@ -85,8 +84,7 @@ export default function InstructorProgressPage() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-4xl mx-auto px-4 py-8 bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20">
+          <div className="max-w-4xl mx-auto px-4 py-8 bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20">
         <h1 className="text-2xl font-bold text-slate-100 mb-2">Student Progress</h1>
         <p className="text-slate-400 mb-6">Lesson feedback you've recorded across all students</p>
 
@@ -187,6 +185,5 @@ export default function InstructorProgressPage() {
           )}
         </div>
       </div>
-    </div>
   );
 }

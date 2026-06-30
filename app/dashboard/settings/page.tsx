@@ -422,8 +422,7 @@ export default function SettingsPage() {
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
+          <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
         <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-slate-100">Settings</h1>
 
         {/* Toast */}
@@ -1117,6 +1116,5 @@ export default function SettingsPage() {
           </form>
         )}
       </div>
-    </div>
   )
 }

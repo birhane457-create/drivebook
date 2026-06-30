@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { DollarSign, Calendar, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
@@ -214,8 +214,8 @@ export default function EarningsPage() {
     return weeks.sort((a, b) => b.weekStart.getTime() - a.weekStart.getTime());
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-950 text-slate-100 p-4"><p>Loading earnings...</p></div>;
-  if (!earnings) return <div className="min-h-screen bg-slate-950 text-slate-100 p-4"><p>Failed to load earnings data</p></div>;
+  if (loading) return <div className="flex items-center justify-center py-12 text-slate-400">Loading earnings...</div>;
+  if (!earnings) return <div className="flex items-center justify-center py-12 text-red-400">Failed to load earnings data</div>;
 
   const weeklyEarnings = groupTransactionsByWeek(earnings.transactions);
   const visibleWeeks = weeklyEarnings.slice(0, showAllHistory ? weeksToShow : 2);
@@ -225,8 +225,8 @@ export default function EarningsPage() {
   const scheduledDays = groupScheduledByDay(earnings.scheduledBookings || []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6">
-      <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-sm px-4 py-6">
+    <div>
+      <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-sm px-1 py-1">
 
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
@@ -235,7 +235,7 @@ export default function EarningsPage() {
             <p className="text-sm text-slate-400 mt-0.5">Money from lessons you've taught</p>
           </div>
           <Link href="/dashboard/packages" className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors">
-            📦 Packages
+            ?? Packages
           </Link>
         </div>
 
@@ -295,7 +295,7 @@ export default function EarningsPage() {
                           </p>
                           <p className="text-xs text-slate-400">
                             {b.duration}h
-                            {b.isFromPackage && <span className="ml-1 text-purple-500">📦</span>}
+                            {b.isFromPackage && <span className="ml-1 text-purple-500">??</span>}
                           </p>
                         </div>
                         <p className="text-sm font-semibold text-sky-400">${b.instructorPayout.toFixed(2)}</p>
@@ -309,7 +309,7 @@ export default function EarningsPage() {
         )}
 
         {/* Earnings History note */}
-        <p className="text-xs text-slate-400 mb-3 px-1">📊 Earnings history — completed lessons only</p>
+        <p className="text-xs text-slate-400 mb-3 px-1">?? Earnings history — completed lessons only</p>
 
         {/* Weekly groups */}
         <div className="space-y-3">
@@ -388,7 +388,7 @@ export default function EarningsPage() {
                                       ) : (
                                         <span className="text-sm text-slate-100">{t.description}</span>
                                       )}
-                                      {isFromPackage && <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">📦</span>}
+                                      {isFromPackage && <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">??</span>}
                                     </div>
                                     {t.booking && (
                                       <p className="text-xs text-slate-400 mt-0.5">
@@ -458,7 +458,7 @@ export default function EarningsPage() {
 
         {/* Footer info */}
         <div className="mt-5 bg-slate-950 border border-slate-800 rounded-lg p-4">
-          <p className="text-xs font-semibold text-green-300 mb-1">💰 About Earnings</p>
+          <p className="text-xs font-semibold text-green-300 mb-1">?? About Earnings</p>
           <ul className="text-xs text-green-300 space-y-1">
             <li>• Earnings recorded when lessons are completed</li>
             <li>• Payouts processed weekly on Fridays</li>

@@ -194,7 +194,7 @@ export async function POST(
 
     smsService.sendSMS({
       to: otherPartyPhone,
-      message: `${checkedInName} has checked in for your lesson. Lesson started at ${checkInTime.toLocaleTimeString()}.`,
+      message: `${checkedInName} has checked in for your lesson. Lesson started at ${checkInTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}.`,
     }).catch(error => {
       console.error('Failed to send check-in SMS:', error);
       // Don't fail the check-in if SMS fails

@@ -194,11 +194,7 @@ export async function POST(req: NextRequest) {
             testCenterLatitude: 0,
             testCenterLongitude: 0,
             testDate: start,
-            testTime: start.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            }),
+            testTime: start.toISOString().slice(11, 16),
             result: 'PENDING',
             notes,
           },

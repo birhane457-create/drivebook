@@ -122,7 +122,7 @@ export async function notifyBookingConfirmed(bookingId: string) {
       return;
     }
 
-    const bookingDate = booking.startTime?.toLocaleDateString('en-AU') || 'N/A';
+    const bookingDate = booking.startTime?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) || 'N/A';
 
     return createNotification({
       userId: booking.client.userId,
@@ -158,7 +158,7 @@ export async function notifyBookingCancelled(bookingId: string, cancellationReas
       return;
     }
 
-    const bookingDate = booking.startTime?.toLocaleDateString('en-AU') || 'N/A';
+    const bookingDate = booking.startTime?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) || 'N/A';
 
     return createNotification({
       userId: booking.client.userId,
@@ -194,8 +194,8 @@ export async function notifyBookingRescheduled(bookingId: string, newDate: Date)
       return;
     }
 
-    const newDateStr = newDate.toLocaleDateString('en-AU');
-    const newTimeStr = newDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+    const newDateStr = newDate.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' });
+    const newTimeStr = newDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' });
 
     return createNotification({
       userId: booking.client.userId,
@@ -230,7 +230,7 @@ export async function notifyPackagePurchased(packageBookingId: string) {
       return;
     }
 
-    const expiryDate = pkg.packageExpiryDate?.toLocaleDateString('en-AU') || 'N/A';
+    const expiryDate = pkg.packageExpiryDate?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) || 'N/A';
     const hours = pkg.packageHours || 0;
     const price = pkg.packageTotalPaid || 0;
 

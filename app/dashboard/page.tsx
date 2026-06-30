@@ -333,9 +333,9 @@ export default async function DashboardPage() {
   const subStatus = instructor.subscriptionStatus
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-4 sm:py-6">
       <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 shadow-2xl shadow-slate-950/30 mb-8">
-        <div className="relative overflow-hidden px-6 py-8 sm:px-8 sm:py-10">
+        <div className="relative overflow-hidden px-4 py-6 sm:px-6 sm:py-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(124,58,237,0.16),transparent_35%)] opacity-80" />
           <div className="relative">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300/80 mb-3">Instructor Portal</p>

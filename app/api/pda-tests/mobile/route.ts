@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       id: b.id,
       testDate: b.startTime,
       testTime: b.startTime
-        ? new Date(b.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false })
+        ? new Date(b.startTime).toISOString().slice(11, 16)
         : '',
       testCenterName: b.pickupAddress || 'Test Centre',
       testCenterAddress: b.pickupAddress || '',

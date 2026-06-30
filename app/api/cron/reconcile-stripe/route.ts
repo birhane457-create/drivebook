@@ -232,6 +232,73 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ── Check 4: FinancialLedger gaps — confirmed bookings missing ledger entries ──
+    // Finds bookings that were confirmed in the window but have no FinancialLedger
+    // entry for `booking-{id}-payment`. Backfills them automatically.
+    // This catches transient failures from the webhook or booking routes.
+    let ledgerGapsFound = 0;
+    let ledgerGapsBackfilled = 0;
+
+    try {
+      const confirmedBookings = await prisma.booking.findMany({
+        where: {
+          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          isPaid: true,
+          paidAt: { gte: windowStart, lte: windowEnd },
+          bookingType: { not: 'PDA_TEST' as any }, // PDA_TEST handled separately
+        },
+        select: {
+          id: true,
+          price: true,
+          platformFee: true,
+          instructorPayout: true,
+          instructorId: true,
+          client: { select: { userId: true } },
+        },
+        take: 200, // limit per run — larger sets caught on next run
+      });
+
+      const { recordBookingPayment } = await import('@/lib/services/ledger-operations');
+
+      for (const bk of confirmedBookings) {
+        // Check if FinancialLedger already has this entry (idempotency key)
+        const existing = await (prisma as any).financialLedger.findUnique({
+          where: { idempotencyKey: `booking-${bk.id}-payment` },
+          select: { id: true },
+        });
+
+        if (!existing) {
+          ledgerGapsFound++;
+          const clientUserId = bk.client?.userId;
+          if (!clientUserId) continue;
+
+          const instrPayout = bk.instructorPayout ?? bk.price * 0.85;
+          const platFee    = bk.platformFee    ?? bk.price - instrPayout;
+
+          try {
+            await recordBookingPayment({
+              bookingId:        bk.id,
+              userId:           clientUserId,
+              instructorId:     bk.instructorId,
+              totalAmount:      bk.price,
+              platformFee:      platFee,
+              instructorPayout: instrPayout,
+              createdBy:        'RECONCILIATION_CRON',
+            });
+            ledgerGapsBackfilled++;
+            console.log(`[RECONCILIATION] Backfilled FinancialLedger for booking ${bk.id}`);
+          } catch (backfillErr: any) {
+            // Duplicate idempotency key means it was written between our check and insert — OK
+            if (!backfillErr?.message?.includes('idempotency')) {
+              console.error(`[RECONCILIATION] Failed to backfill ledger for booking ${bk.id}:`, backfillErr?.message);
+            }
+          }
+        }
+      }
+    } catch (ledgerCheckErr) {
+      console.error('[RECONCILIATION] FinancialLedger gap check failed (non-critical):', ledgerCheckErr);
+    }
+
     // ── Determine status ──────────────────────────────────────────────────
     const hasIssues =
       flaggedMissingPayments.length > 0 ||
@@ -256,6 +323,8 @@ export async function GET(req: NextRequest) {
           flaggedMissingTransfers,
           flaggedStuckPayouts,
           autoConfirmed,
+          financialLedgerGapsFound:       ledgerGapsFound,
+          financialLedgerGapsBackfilled:  ledgerGapsBackfilled,
         },
       },
     });
@@ -267,20 +336,23 @@ export async function GET(req: NextRequest) {
         `missingPayments=${flaggedMissingPayments.length}, ` +
         `missingTransfers=${flaggedMissingTransfers.length}, ` +
         `stuckPayouts=${flaggedStuckPayouts.length}` +
-        (autoConfirmed > 0 ? `, autoConfirmed=${autoConfirmed}` : ''),
+        (autoConfirmed > 0 ? `, autoConfirmed=${autoConfirmed}` : '') +
+        (ledgerGapsBackfilled > 0 ? `, ledgerBackfilled=${ledgerGapsBackfilled}` : ''),
       );
 
       // Alert — non-blocking
       void sendAlert({
         type: 'RECONCILIATION_ISSUES',
         severity: 'WARNING',
-        message: `Reconciliation issues detected — ${flaggedMissingPayments.length} missing payments, ${flaggedMissingTransfers.length} missing transfers, ${flaggedStuckPayouts.length} stuck payouts`,
+        message: `Reconciliation issues detected — ${flaggedMissingPayments.length} missing payments, ${flaggedMissingTransfers.length} missing transfers, ${flaggedStuckPayouts.length} stuck payouts${ledgerGapsFound > 0 ? `, ${ledgerGapsFound} FinancialLedger gaps (${ledgerGapsBackfilled} backfilled)` : ''}`,
         entityId: report.id,
         metadata: {
           reportId: report.id,
           missingPayments: flaggedMissingPayments.length,
           missingTransfers: flaggedMissingTransfers.length,
           stuckPayouts: flaggedStuckPayouts.length,
+          financialLedgerGapsFound:      ledgerGapsFound,
+          financialLedgerGapsBackfilled: ledgerGapsBackfilled,
           windowStart: windowStart.toISOString(),
           windowEnd: windowEnd.toISOString(),
         },
@@ -290,6 +362,7 @@ export async function GET(req: NextRequest) {
         `[RECONCILIATION OK] Run ${report.id}: ` +
         `${paymentsChecked} payments checked, ${transfersChecked} transfers checked` +
         (autoConfirmed > 0 ? `, ${autoConfirmed} auto-confirmed` : '') +
+        (ledgerGapsBackfilled > 0 ? `, ${ledgerGapsBackfilled} ledger gaps backfilled` : '') +
         ' — no issues',
       );
     }
@@ -305,6 +378,8 @@ export async function GET(req: NextRequest) {
       missingTransfers: flaggedMissingTransfers.length,
       stuckPayouts: flaggedStuckPayouts.length,
       autoConfirmed,
+      financialLedgerGapsFound:      ledgerGapsFound,
+      financialLedgerGapsBackfilled: ledgerGapsBackfilled,
     });
   } catch (error) {
     // Mark report FAILED so the lock is released

@@ -77,8 +77,8 @@ export default function PackagesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-sm p-6">
+    <div>
+      <div className="max-w-7xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-sm p-2">
 
         {/* Header */}
         <div className="mb-6">

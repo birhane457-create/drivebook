@@ -128,6 +128,7 @@ export async function GET(
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
+            timeZone: 'Australia/Perth',
           })
         : null,
       startTime: booking.startTime?.toISOString() ?? null,

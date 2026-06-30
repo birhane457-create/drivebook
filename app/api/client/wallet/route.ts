@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -14,6 +13,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    // Issue 6 fix: ensure only CLIENT role can access their own wallet
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -57,15 +64,20 @@ export async function GET(req: NextRequest) {
     // Calculate from wallet transactions (only CONFIRMED)
     const transactions = wallet.transactions || [];
     
+    // MEDIUM-4 FIX: Replace unsafe type comparisons with explicit type checks
+    // Type-safe transaction filtering without @ts-nocheck
+    const CREDIT_TYPE = 'CREDIT';
+    const DEBIT_TYPE = 'DEBIT';
+    
     // Total Credits Added = all CONFIRMED credits (money paid by user)
     const totalPaid = transactions
-      .filter(t => t.type.toUpperCase() === 'CREDIT' && t.status === 'CONFIRMED')
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter(t => String(t.type).toUpperCase() === CREDIT_TYPE && t.status === 'CONFIRMED')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
     
     // Total Spent = all CONFIRMED debits (booking charges)
     const totalSpent = transactions
-      .filter(t => t.type.toUpperCase() === 'DEBIT' && t.status === 'CONFIRMED')
-      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      .filter(t => String(t.type).toUpperCase() === DEBIT_TYPE && t.status === 'CONFIRMED')
+      .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
     
     // Calculate actual remaining balance
     const creditsRemaining = totalPaid - totalSpent;
@@ -87,7 +99,7 @@ export async function GET(req: NextRequest) {
 
     // Calculate total booked hours
     const totalBookedHours = bookings.reduce((sum, b) => {
-      const hours = b.duration || (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / (1000 * 60 * 60);
+      const hours = b.duration || (new Date(b.endTime ?? 0).getTime() - new Date(b.startTime ?? 0).getTime()) / (1000 * 60 * 60);
       return sum + hours;
     }, 0);
 

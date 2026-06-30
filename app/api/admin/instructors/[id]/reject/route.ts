@@ -4,7 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { z } from 'zod';
-
+import { requireAdmin } from '@/lib/auth/requireRole';
+import { enqueueNotification } from '@/lib/services/notificationRetry';
 
 export const dynamic = 'force-dynamic';
 // FIXED: Add input validation
@@ -22,9 +23,9 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // FIX #3: Re-verify admin role from DB
+    const auth = await requireAdmin(session);
+    if (auth.error) return auth.error;
 
     // FIXED: Validate input
     const body = await req.json();
@@ -132,6 +133,15 @@ export async function POST(
       }
     } catch (emailError) {
       console.error('Failed to send rejection email:', emailError);
+      if (instructor.user?.email) {
+        await enqueueNotification({
+          channel: 'EMAIL',
+          recipient: instructor.user.email,
+          subject: 'Application Status Update',
+          body: `<p>Dear ${instructor.name}, your instructor application has not been approved at this time. Reason: ${reason}. Please contact support for more information.</p>`,
+          idempotencyKey: `instructor-reject-email-${params.id}`,
+        })
+      }
       // Don't fail the rejection if email fails
     }
 

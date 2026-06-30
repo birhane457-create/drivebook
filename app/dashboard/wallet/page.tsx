@@ -54,8 +54,7 @@ export default function InstructorWalletPage() {
   const recent = data?.transactions?.slice(0, 10) ?? [];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
+          <div className="max-w-5xl mx-auto px-2 sm:px-4 lg:px-6 py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -152,6 +151,5 @@ export default function InstructorWalletPage() {
           <Link href="/dashboard/earnings" className="text-cyan-300 hover:text-cyan-200">Earnings page</Link>.
         </p>
       </div>
-    </div>
   );
 }

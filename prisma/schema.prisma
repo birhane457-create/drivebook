@@ -839,3 +839,45 @@ model FinancialLedger {
   @@index([userId])
   @@index([createdAt])
 }
+
+// NotificationRetry — lightweight queue for failed email/SMS sends.
+// Enqueued when a send fails; processed by /api/cron/notification-retry every 5 min.
+// Exponential backoff: attempt 1 = 5 min, 2 = 15 min, 3 = 45 min, then FAILED.
+model NotificationRetry {
+  id             String    @id @default(cuid())
+  channel        String    // EMAIL | SMS
+  recipient      String    // email address or E.164 phone number
+  subject        String?   // Email subject (null for SMS)
+  body           String    // HTML for email, plain text for SMS
+  idempotencyKey String    @unique  // prevents duplicate enqueue for same event
+  status         String    @default("PENDING") // PENDING | PROCESSING | SENT | FAILED
+  attemptCount   Int       @default(0)
+  maxAttempts    Int       @default(3)
+  nextAttemptAt  DateTime  @default(now())
+  lastAttemptAt  DateTime?
+  lastError      String?
+  bookingId      String?
+  userId         String?
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([bookingId])
+}
+
+// Device tokens for mobile push notifications (Capacitor / FCM / APNs).
+// One user can have multiple devices (e.g. phone + tablet).
+// Tokens are upserted on each app launch so stale tokens naturally get replaced.
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique  // FCM registration token or APNs device token
+  platform  String            // "android" | "ios" | "web"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, active])
+}

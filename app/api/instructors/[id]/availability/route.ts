@@ -42,11 +42,9 @@ export async function GET(
     }
 
     // Get bookings for this date to exclude booked times
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Use explicit UTC boundaries to avoid server TZ shifting the day window
+    const startOfDay = new Date(`${date}T00:00:00.000Z`)
+    const endOfDay   = new Date(`${date}T23:59:59.999Z`)
 
     const existingBookings = await prisma.booking.findMany({
       where: {
@@ -64,8 +62,8 @@ export async function GET(
       },
     });
 
-    // Get working hours for this day
-    const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    // Get working hours for this day — use UTC date string to get correct day name
+    const dayName = new Date(`${date}T12:00:00.000Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase();
     const workingHours = (instructor.workingHours as any) || {};
 
     // Normalize: DB may store { day: { start, end, enabled } } or { day: [{ start, end }] }
@@ -97,11 +95,9 @@ export async function GET(
       }
     }
 
-    // Filter out booked slots - extract time from startTime
+    // Filter out booked slots - extract UTC time from startTime ISO string
     const bookedTimes = existingBookings.map(b => {
-      const hours = String(b.startTime.getHours()).padStart(2, '0');
-      const minutes = String(b.startTime.getMinutes()).padStart(2, '0');
-      return `${hours}:${minutes}`;
+      return new Date(b.startTime).toISOString().slice(11, 16)
     });
     const availableSlots = allSlots.filter(slot => !bookedTimes.includes(slot));
 

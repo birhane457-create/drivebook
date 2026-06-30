@@ -176,8 +176,7 @@ export default function DocumentsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-        <div className="text-center">
+      <div >        <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto"></div>
           <p className="mt-4 text-slate-400">Loading documents...</p>
         </div>
@@ -186,8 +185,7 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-6xl mx-auto px-4 py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
+    <div >      <div className="max-w-6xl mx-auto px-1 py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-slate-100">Verification Documents</h1>

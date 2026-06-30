@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { getWalletBalance } from '@/lib/services/wallet-helpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,10 +76,12 @@ export async function POST(req: NextRequest) {
 
     const testCentre = config.testCentres[0].testCentre
 
-    // Parse test date and time
-    const [year, month, day] = data.testDate.split('-').map(Number)
-    const [hour, minute] = data.testTime.split(':').map(Number)
-    const testDateTime = new Date(year, month - 1, day, hour, minute)
+    // Parse test date and time — build UTC datetime directly to avoid server TZ shift
+    const startTime = new Date(`${data.testDate}T${data.testTime.padStart(5,'0')}:00.000Z`);
+    if (isNaN(startTime.getTime())) {
+      return NextResponse.json({ error: 'Invalid date or time' }, { status: 400 });
+    }
+    const testDateTime = startTime; // alias for readability below
 
     // Verify test date is in the future
     if (testDateTime < new Date()) {
@@ -87,70 +90,79 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Check for conflicts with other PDA bookings at same centre and time
-    const testStart = testDateTime
-    const testEnd = new Date(testStart.getTime() + config.durationMinutes * 60 * 1000)
-
-    const conflict = await prisma.pDATestBooking.findFirst({
-      where: {
-        instructorId: config.instructorId,
-        testCentreId: data.testCentreId,
-        testDate: {
-          gte: new Date(testStart.toDateString()),
-          lt: new Date(new Date(testStart).setDate(testStart.getDate() + 1))
-        },
-        status: { in: ['PENDING', 'CONFIRMED'] }
-      },
-      include: {
-        config: { select: { durationMinutes: true } }
-      }
-    })
-
-    if (conflict && conflict.testTime) {
-      const conflictStart = new Date(
-        testStart.toDateString() + ' ' + conflict.testTime
-      )
-      const conflictEnd = new Date(
-        conflictStart.getTime() + (conflict.config?.durationMinutes || 180) * 60 * 1000
-      )
-
-      // Check for time overlap
-      if (
-        (testStart >= conflictStart && testStart < conflictEnd) ||
-        (testEnd > conflictStart && testEnd <= conflictEnd) ||
-        (testStart <= conflictStart && testEnd >= conflictEnd)
-      ) {
-        return NextResponse.json({
-          error: 'This time slot is not available at this test centre'
-        }, { status: 409 })
-      }
-    }
-
     // Calculate price with discount
     let finalPrice = config.price
     if (config.discountPercent) {
       finalPrice = config.price * (1 - config.discountPercent / 100)
     }
 
-    // Create booking
-    const booking = await prisma.pDATestBooking.create({
-      data: {
-        instructorId: config.instructorId,
-        clientId: data.clientId,
-        configId: data.configId,
-        testCentreId: data.testCentreId,
-        testDate: testDateTime,
-        testTime: data.testTime,
-        price: finalPrice,
-        discountPercent: config.discountPercent,
-        status: 'PENDING',
-        parentBookingId: data.parentBookingId
-      },
-      include: {
-        testCentre: true,
-        instructor: { select: { id: true, name: true } }
+    // HIGH-4 FIX: Check wallet balance before booking
+    // Ensure client has sufficient funds to cover the PDA test booking
+    const walletBalance = await getWalletBalance(user.id)
+    if (walletBalance.balance < finalPrice) {
+      return NextResponse.json({
+        error: `Insufficient wallet balance. Required: $${finalPrice.toFixed(2)}, Available: $${walletBalance.balance.toFixed(2)}`,
+        code: 'INSUFFICIENT_WALLET_BALANCE',
+        required: finalPrice,
+        available: walletBalance.balance
+      }, { status: 400 })
+    }
+
+    // Check for conflicts and create booking atomically (prevents TOCTOU race)
+    const testStart = testDateTime
+    const testEnd = new Date(testStart.getTime() + config.durationMinutes * 60 * 1000)
+
+    let booking;
+    try {
+      booking = await prisma.$transaction(async (tx) => {
+        // Check for conflicting PDA bookings at same centre (within transaction)
+        const conflict = await tx.pDATestBooking.findFirst({
+          where: {
+            instructorId: config.instructorId,
+            testCentreId: data.testCentreId,
+            testDate: { gte: new Date(`${data.testDate}T00:00:00.000Z`), lt: new Date(`${data.testDate}T23:59:59.999Z`) },
+            status: { in: ['PENDING', 'CONFIRMED'] }
+          },
+          include: { config: { select: { durationMinutes: true } } }
+        });
+
+        if (conflict && conflict.testTime) {
+          const conflictStart = new Date(`${data.testDate}T${conflict.testTime.padStart(5,'0')}:00.000Z`);
+          const conflictEnd = new Date(conflictStart.getTime() + (conflict.config?.durationMinutes || 180) * 60 * 1000);
+          if (
+            (testStart >= conflictStart && testStart < conflictEnd) ||
+            (testEnd > conflictStart && testEnd <= conflictEnd) ||
+            (testStart <= conflictStart && testEnd >= conflictEnd)
+          ) {
+            throw new Error('SLOT_CONFLICT');
+          }
+        }
+
+        return tx.pDATestBooking.create({
+          data: {
+            instructorId: config.instructorId,
+            clientId: data.clientId,
+            configId: data.configId,
+            testCentreId: data.testCentreId,
+            testDate: testDateTime,
+            testTime: data.testTime,
+            price: finalPrice,
+            discountPercent: config.discountPercent,
+            status: 'PENDING',
+            parentBookingId: data.parentBookingId
+          },
+          include: {
+            testCentre: true,
+            instructor: { select: { id: true, name: true } }
+          }
+        });
+      });
+    } catch (txErr) {
+      if ((txErr as Error).message === 'SLOT_CONFLICT') {
+        return NextResponse.json({ error: 'This time slot is not available at this test centre' }, { status: 409 });
       }
-    })
+      throw txErr;
+    }
 
     return NextResponse.json({
       success: true,

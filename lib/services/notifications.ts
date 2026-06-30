@@ -38,12 +38,14 @@ export async function createNotification(params: CreateNotificationParams) {
 }
 
 // Convenience helpers for common events
+const AU_TZ = 'Australia/Perth';
+
 export async function notifyBookingRequest(instructorUserId: string, clientName: string, bookingId: string, startTime: Date) {
   return createNotification({
     userId: instructorUserId,
     type: 'BOOKING_REQUEST',
     title: 'New Booking Request',
-    message: `${clientName} requested a lesson on ${startTime.toLocaleDateString()} at ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    message: `${clientName} requested a lesson on ${startTime.toLocaleDateString('en-AU', { timeZone: AU_TZ })} at ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })}`,
     link: `/dashboard/bookings/${bookingId}`,
     metadata: { bookingId, clientName },
   });
@@ -54,7 +56,7 @@ export async function notifyBookingConfirmed(instructorUserId: string, clientNam
     userId: instructorUserId,
     type: 'BOOKING_CONFIRMED',
     title: 'Booking Confirmed',
-    message: `Booking with ${clientName} on ${startTime.toLocaleDateString()} is confirmed`,
+    message: `Booking with ${clientName} on ${startTime.toLocaleDateString('en-AU', { timeZone: AU_TZ })} is confirmed`,
     link: `/dashboard/bookings/${bookingId}`,
     metadata: { bookingId, clientName },
   });
@@ -111,7 +113,7 @@ export async function notifyBookingRescheduled(instructorUserId: string, clientN
     userId: instructorUserId,
     type: 'BOOKING_CONFIRMED', // reuse closest type
     title: 'Booking Rescheduled',
-    message: `Booking with ${clientName} rescheduled to ${newStart.toLocaleDateString()} at ${newStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    message: `Booking with ${clientName} rescheduled to ${newStart.toLocaleDateString('en-AU', { timeZone: AU_TZ })} at ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })}`,
     link: `/dashboard/bookings/${bookingId}`,
     metadata: { bookingId, clientName },
   });
@@ -122,7 +124,7 @@ export async function notifyClientBookingRescheduled(clientUserId: string, instr
     userId: clientUserId,
     type: 'BOOKING_CONFIRMED',
     title: 'Booking Rescheduled',
-    message: `Your lesson with ${instructorName} has been rescheduled to ${newStart.toLocaleDateString()} at ${newStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    message: `Your lesson with ${instructorName} has been rescheduled to ${newStart.toLocaleDateString('en-AU', { timeZone: AU_TZ })} at ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })}`,
     link: `/client-dashboard/bookings`,
     metadata: { bookingId, instructorName },
   });
@@ -134,7 +136,7 @@ export async function notifyClientBookingConfirmed(clientUserId: string, instruc
     userId: clientUserId,
     type: 'BOOKING_CONFIRMED',
     title: 'Booking Confirmed',
-    message: `Your lesson with ${instructorName} on ${startTime.toLocaleDateString()} is confirmed`,
+    message: `Your lesson with ${instructorName} on ${startTime.toLocaleDateString('en-AU', { timeZone: AU_TZ })} is confirmed`,
     link: `/client-dashboard/bookings`,
     metadata: { bookingId, instructorName },
   });
@@ -158,7 +160,7 @@ export async function notifyShortNoticeBookingRequest(
   bookingId: string,
   startTime: Date
 ) {
-  const timeStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ });
   const minutesUntil = Math.round((startTime.getTime() - Date.now()) / 60000);
   return createNotification({
     userId: instructorUserId,
@@ -181,7 +183,7 @@ export async function notifyClientBookingPendingApproval(
     userId: clientUserId,
     type: 'BOOKING_REQUEST',
     title: 'Booking Awaiting Approval',
-    message: `Your last-minute lesson request with ${instructorName} at ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} is awaiting approval.`,
+    message: `Your last-minute lesson request with ${instructorName} at ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })} is awaiting approval.`,
     link: `/client-dashboard/bookings`,
     metadata: { bookingId, instructorName, isShortNotice: true },
   });
@@ -194,8 +196,8 @@ export async function notifyLessonReminderInstructor(
   bookingId: string,
   startTime: Date
 ) {
-  const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-  const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: AU_TZ });
+  const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ });
   return createNotification({
     userId: instructorUserId,
     type: 'LESSON_REMINDER',
@@ -212,8 +214,8 @@ export async function notifyLessonReminderStudent(
   bookingId: string,
   startTime: Date
 ) {
-  const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-  const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: AU_TZ });
+  const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ });
   return createNotification({
     userId: studentUserId,
     type: 'LESSON_REMINDER',

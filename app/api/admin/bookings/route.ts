@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
           walletId: wallet.id,
           type: 'DEBIT',
           amount: lessonPrice,
-          description: `Lesson booking (admin) — ${newStart.toLocaleDateString('en-AU')}`,
+          description: `Lesson booking (admin) — ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
           status: 'CONFIRMED',
         },
       });

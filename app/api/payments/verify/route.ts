@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
                 walletId: wallet.id,
                 type: 'DEBIT',
                 amount: booking.price,
-                description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU')} · booking #${bookingId}`,
+                description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
                 status: 'CONFIRMED',
               },
             });
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
                 walletId: wallet.id,
                 type: 'DEBIT',
                 amount: booking.price,
-                description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU')} · booking #${bookingId}`,
+                description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
                 status: 'CONFIRMED',
               },
             });
@@ -216,7 +216,7 @@ export async function GET(req: NextRequest) {
         walletId: wallet.id,
         type: 'DEBIT',
         amount: booking.price,
-        description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU')} · booking #${bookingId}`,
+        description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
         status: 'CONFIRMED',
       },
     });
@@ -236,7 +236,7 @@ export async function GET(req: NextRequest) {
         walletId: wallet.id,
         type: 'DEBIT',
         amount: booking.price,
-        description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU')} · booking #${bookingId}`,
+        description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
         status: 'CONFIRMED',
       },
     });

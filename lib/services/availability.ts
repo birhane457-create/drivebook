@@ -1,5 +1,5 @@
 import { prisma } from '../prisma'
-import { addMinutes, format, parse, isWithinInterval, isSameDay } from 'date-fns'
+import { addMinutes, format } from 'date-fns'
 
 interface TimeSlot {
   start: string
@@ -8,6 +8,13 @@ interface TimeSlot {
 
 interface WorkingHours {
   [key: string]: TimeSlot[]
+}
+
+// Parse HH:mm string into a UTC Date on the given date's YYYY-MM-DD.
+// Avoids date-fns parse() shifting by the server's local TZ offset.
+function parseTimeUTC(hhMm: string, dateStr: string): Date {
+  const [h, m] = hhMm.split(':').map(Number)
+  return new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00.000Z`)
 }
 
 export class AvailabilityService {
@@ -41,10 +48,10 @@ export class AvailabilityService {
     if (daySlots.length === 0) return []
 
     // 2. Get existing bookings for this day (excluding PDA tests — handled separately)
-    const startOfDay = new Date(date)
-    startOfDay.setHours(0, 0, 0, 0)
-    const endOfDay = new Date(date)
-    endOfDay.setHours(23, 59, 59, 999)
+    // Use UTC day boundaries derived from the date's ISO string to avoid server TZ shifting
+    const dateStr = date.toISOString().slice(0, 10)
+    const startOfDay = new Date(`${dateStr}T00:00:00.000Z`)
+    const endOfDay   = new Date(`${dateStr}T23:59:59.999Z`)
 
     const bookings = await prisma.booking.findMany({
       where: {
@@ -88,8 +95,8 @@ export class AvailabilityService {
     const availableSlots: Date[] = []
 
     for (const slot of daySlots) {
-      const slotStart = parse(slot.start, 'HH:mm', date)
-      const slotEnd = parse(slot.end, 'HH:mm', date)
+      const slotStart = parseTimeUTC(slot.start, dateStr)
+      const slotEnd   = parseTimeUTC(slot.end,   dateStr)
 
       let currentTime = slotStart
 
@@ -101,20 +108,14 @@ export class AvailabilityService {
         // Check if this slot conflicts with any regular booking (+ buffer after each booking)
         const hasBookingConflict = bookings.some(booking => {
           if (!booking.startTime || !booking.endTime) return false;
-          // Extend the booking's end time by the buffer — no new slot can start within that window
           const bufferedEnd = addMinutes(booking.endTime, effectiveGapMinutes);
           return this.hasTimeConflict(currentTime, slotEndTime, booking.startTime, bufferedEnd);
         });
 
         // Check if this slot conflicts with a PDA test block.
-        // Block = (testStart - bufferMinutes) through testEnd.
-        // The buffer before the test ensures the instructor can finish their last lesson,
-        // travel to the centre, and arrive on time.
-        // The buffer after the test is handled automatically by the regular booking buffer
-        // when the next lesson is booked.
         const hasPDAConflict = pdaTestBookings.some(test => {
           if (!test.startTime) return false;
-          const testDurationMins = (test as any).duration ?? 165; // default 2h45
+          const testDurationMins = (test as any).duration ?? 165;
           const testEnd = test.endTime ?? addMinutes(test.startTime, testDurationMins);
           const blockStart = addMinutes(test.startTime, -effectiveGapMinutes);
           return this.hasTimeConflict(currentTime, slotEndTime, blockStart, testEnd);
@@ -122,8 +123,8 @@ export class AvailabilityService {
 
         // Check if this slot conflicts with exceptions
         const hasExceptionConflict = exceptions.some(exception => {
-          const exceptionStart = parse(exception.startTime, 'HH:mm', date)
-          const exceptionEnd = parse(exception.endTime, 'HH:mm', date)
+          const exceptionStart = parseTimeUTC(exception.startTime, dateStr)
+          const exceptionEnd   = parseTimeUTC(exception.endTime,   dateStr)
           return this.hasTimeConflict(currentTime, slotEndTime, exceptionStart, exceptionEnd)
         })
 
@@ -131,7 +132,7 @@ export class AvailabilityService {
           availableSlots.push(new Date(currentTime))
         }
 
-        currentTime = addMinutes(currentTime, 30) // Check every 30 minutes
+        currentTime = addMinutes(currentTime, 30)
       }
     }
 

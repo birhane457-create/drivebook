@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
       .reverse()
       .map((booking, index) => ({
         lesson: index + 1,
-        date: booking.startTime.toLocaleDateString(),
+        date: booking.startTime.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }),
         score: booking.performanceScore,
       }));
 

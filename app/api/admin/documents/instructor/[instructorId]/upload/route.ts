@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { cloudinaryService } from '@/lib/services/cloudinary';
+import { validateUpload, DOCUMENT_ALLOWED_TYPES, MAX_DOCUMENT_BYTES } from '@/lib/uploads/validateUpload';
+import { requireAdmin } from '@/lib/auth/requireRole';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +20,10 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+
+    // FIX #3: Re-verify admin role from DB — don't trust JWT alone
+    const auth = await requireAdmin(session);
+    if (auth.error) return auth.error;
 
     const contentType = req.headers.get('content-type') || '';
 
@@ -51,6 +54,12 @@ export async function POST(
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+
+    // Validate MIME type and magic bytes before sending to Cloudinary
+    const uploadValidation = validateUpload(buffer, file.type, DOCUMENT_ALLOWED_TYPES, MAX_DOCUMENT_BYTES);
+    if (!uploadValidation.valid) {
+      return NextResponse.json({ error: uploadValidation.error }, { status: uploadValidation.status });
+    }
 
     const url = await cloudinaryService.uploadInstructorDocument(
       params.instructorId,

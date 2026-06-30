@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { stripeService } from '@/lib/services/stripe';
 import { smsService } from '@/lib/services/sms';
+import { recordFullRefund } from '@/lib/services/ledger-operations';
 
 
 export const dynamic = 'force-dynamic';
@@ -67,6 +68,14 @@ export async function POST(
     // Determine refund amount (full or partial)
     const refundAmount = amount || transaction.amount;
 
+    // CRITICAL FIX #1: Validate refund amount does not exceed original transaction
+    if (refundAmount > transaction.amount) {
+      return NextResponse.json(
+        { error: `Refund amount ($${refundAmount}) cannot exceed transaction amount ($${transaction.amount})` },
+        { status: 400 }
+      );
+    }
+
     // Process refund through Stripe
     const refund = await stripeService.createRefund(
       transaction.stripePaymentIntentId,
@@ -74,7 +83,7 @@ export async function POST(
     );
 
     // Create refund transaction record
-    await (prisma as any).transaction.create({
+    const refundTransaction = await (prisma as any).transaction.create({
       data: {
         bookingId: transaction.bookingId,
         instructorId: transaction.instructorId,
@@ -97,6 +106,34 @@ export async function POST(
       where: { id: transactionId },
       data: { status: 'REFUNDED' }
     });
+
+    // CRITICAL FIX #1 CONTINUED: Record refund in ledger with wallet credit
+    // This ensures the client's wallet is credited and all ledger accounts are updated
+    try {
+      // Calculate refund allocation (proportional to original transaction split)
+      const refundPlatformFee = transaction.platformFee > 0 
+        ? Math.round((refundAmount * transaction.platformFee / transaction.amount) * 100) / 100 
+        : 0;
+      const refundInstructorPayout = transaction.instructorPayout > 0
+        ? Math.round((refundAmount * transaction.instructorPayout / transaction.amount) * 100) / 100
+        : 0;
+
+      await recordFullRefund({
+        refundId: refundTransaction.id,
+        bookingId: transaction.bookingId,
+        userId: transaction.booking?.client?.userId || 'UNKNOWN',
+        instructorId: transaction.instructorId,
+        totalAmount: refundAmount,
+        platformFee: refundPlatformFee,
+        instructorPayout: refundInstructorPayout,
+        reason: reason || 'Admin refund',
+        createdBy: session.user.id
+      });
+    } catch (ledgerErr) {
+      console.error('Warning: Ledger entry failed for refund:', ledgerErr);
+      // Log but don't fail the refund if ledger update fails (Stripe already processed it)
+      // This should be investigated and retried
+    }
 
     // If deducting from instructor, create a deduction record
     if (deductFromInstructor) {

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { CreditCard } from 'lucide-react';
@@ -89,8 +89,8 @@ export default function AddFundsPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+      <div className="flex items-center justify-center py-12">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -107,8 +107,8 @@ export default function AddFundsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
+      <div className="max-w-2xl mx-auto px-2 sm:px-4 lg:px-6 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link href="/dashboard/wallet" className="text-blue-600 hover:underline flex items-center gap-2 mb-4">
@@ -133,7 +133,7 @@ export default function AddFundsPage() {
                     className={`w-full p-4 border-2 rounded-lg transition text-left ${
                       selectedAmount === pkg.amount && customAmount === ''
                         ? 'border-blue-600 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                        : 'border-slate-700 hover:border-slate-700'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -158,7 +158,7 @@ export default function AddFundsPage() {
                 ))}
               </div>
 
-              <div className="border-t border-gray-200 pt-6">
+              <div className="border-t border-slate-700 pt-6">
                 <label className="block text-sm font-semibold text-gray-900 mb-3">
                   Or enter a custom amount
                 </label>
@@ -171,7 +171,7 @@ export default function AddFundsPage() {
                     value={customAmount}
                     onChange={(e) => { setCustomAmount(e.target.value); setSelectedAmount(null); }}
                     placeholder="Enter amount"
-                    className="w-full pl-8 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                    className="w-full pl-8 pr-4 py-3 border-2 border-slate-700 rounded-lg focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <p className="text-xs text-gray-600 mt-2">Minimum: $10</p>
@@ -182,7 +182,7 @@ export default function AddFundsPage() {
             <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
               <h3 className="font-semibold text-gray-900 mb-3">Order Summary</h3>
               <div className="flex justify-between mb-2">
-                <span className="text-gray-600">Amount</span>
+                <span className="text-slate-400">Amount</span>
                 <span className="font-semibold text-gray-900">${amountToCharge?.toFixed(2) || '0.00'}</span>
               </div>
               <div className="border-t border-blue-200 pt-2 flex justify-between">
@@ -201,7 +201,7 @@ export default function AddFundsPage() {
               </h2>
 
               <form onSubmit={handlePayment} className="space-y-4">
-                <div className="border-2 border-gray-300 rounded-lg p-4">
+                <div className="border-2 border-slate-700 rounded-lg p-4">
                   <CardElement
                     options={{
                       style: {
@@ -240,7 +240,7 @@ export default function AddFundsPage() {
                 </p>
               </form>
 
-              <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="mt-6 pt-6 border-t border-slate-700">
                 <h3 className="font-semibold text-gray-900 text-sm mb-3">Good to know</h3>
                 <ul className="space-y-1 text-xs text-gray-600">
                   <li>Credits never expire</li>

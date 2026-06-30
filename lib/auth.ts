@@ -42,6 +42,17 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials')
         }
 
+        // FIX #1: Block unapproved instructors at the auth gate.
+        // Previously, PENDING instructors could log in and receive a valid JWT.
+        // They were blocked at individual booking routes, but any route that
+        // didn't check approvalStatus was accessible. Gate it here instead —
+        // one place, always enforced, no route can accidentally forget.
+        if (user.role === 'INSTRUCTOR') {
+          if (!user.instructor || user.instructor.approvalStatus !== 'APPROVED') {
+            throw new Error('INSTRUCTOR_NOT_APPROVED')
+          }
+        }
+
         // P2-3 FIX: Soft gate — block login for unverified emails.
         // The User schema has emailVerified; we only enforce this for non-admin/instructor
         // accounts since admin accounts are created programmatically (already verified).
@@ -85,7 +96,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 7 * 24 * 60 * 60, // FIX #2: 7 days (was 30 days — stolen sessions now expire sooner)
   },
   // Explicitly set cookie name so middleware and server components agree
   cookies: {

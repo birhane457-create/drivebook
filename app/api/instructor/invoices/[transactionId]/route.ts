@@ -78,9 +78,9 @@ export async function GET(
 }
 
 function generateTextInvoice(transaction: any): string {
-  const date = new Date(transaction.createdAt).toLocaleDateString();
+  const date = new Date(transaction.createdAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' });
   const processedDate = transaction.processedAt 
-    ? new Date(transaction.processedAt).toLocaleDateString()
+    ? new Date(transaction.processedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })
     : 'Pending';
 
   let invoice = `
@@ -115,8 +115,8 @@ Description:       ${transaction.description || 'Booking payment'}
 Booking ID:        ${transaction.booking.id}
 Client:            ${transaction.booking.client.name}
 Booking Type:      ${transaction.booking.bookingType}
-Date:              ${new Date(transaction.booking.startTime).toLocaleDateString()}
-Time:              ${new Date(transaction.booking.startTime).toLocaleTimeString()} - ${new Date(transaction.booking.endTime).toLocaleTimeString()}
+Date:              ${new Date(transaction.booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}
+Time:              ${new Date(transaction.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })} - ${new Date(transaction.booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}
 
 `;
   }
@@ -154,7 +154,7 @@ ${transaction.stripeTransferId ? `Stripe Transfer ID: ${transaction.stripeTransf
                     Thank you for using DriveBook!
 ================================================================================
 
-Generated: ${new Date().toLocaleString()}
+Generated: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Perth' })}
 `;
 
   return invoice;

@@ -21,12 +21,10 @@ export async function getInstructorPosition(
   instructorId: string,
   bookingDateTime: Date
 ): Promise<InstructorPosition> {
-  // Get start and end of the booking day
-  const dayStart = new Date(bookingDateTime);
-  dayStart.setHours(0, 0, 0, 0);
-  
-  const dayEnd = new Date(bookingDateTime);
-  dayEnd.setHours(23, 59, 59, 999);
+  // Get start and end of the booking day — use UTC boundaries from ISO string
+  const dayStartStr = bookingDateTime.toISOString().slice(0, 10)
+  const dayStart = new Date(`${dayStartStr}T00:00:00.000Z`)
+  const dayEnd   = new Date(`${dayStartStr}T23:59:59.999Z`)
 
   // Find last completed/confirmed booking before this time on same day
   const lastBookingToday = await prisma.booking.findFirst({
@@ -119,11 +117,9 @@ export async function getDailyRoute(
   instructorId: string,
   date: Date
 ) {
-  const dayStart = new Date(date);
-  dayStart.setHours(0, 0, 0, 0);
-  
-  const dayEnd = new Date(date);
-  dayEnd.setHours(23, 59, 59, 999);
+  const dayStartStr = date.toISOString().slice(0, 10)
+  const dayStart = new Date(`${dayStartStr}T00:00:00.000Z`)
+  const dayEnd   = new Date(`${dayStartStr}T23:59:59.999Z`)
 
   const bookings = await prisma.booking.findMany({
     where: {

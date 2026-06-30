@@ -18,10 +18,8 @@ export async function GET(req: NextRequest) {
     const toParam = searchParams.get('to');
 
     const now = new Date();
-    const from = fromParam ? new Date(fromParam) : new Date(now.getFullYear(), now.getMonth() - 5, 1);
-    const to = toParam ? new Date(toParam) : now;
-    // Ensure 'to' covers the full day
-    to.setHours(23, 59, 59, 999);
+    const from = fromParam ? new Date(`${fromParam}T00:00:00.000Z`) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
+    const to   = toParam   ? new Date(`${toParam}T23:59:59.999Z`)   : now;
 
     const dateFilter = { gte: from, lte: to };
 
@@ -126,7 +124,7 @@ export async function GET(req: NextRequest) {
         _count: { id: true },
       });
       revenueByMonth.push({
-        month: mStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' }),
+        month: mStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric', timeZone: 'Australia/Perth' }),
         commission: agg._sum.platformFee || 0,
         gross: agg._sum.amount || 0,
         instructorPayout: agg._sum.instructorPayout || 0,

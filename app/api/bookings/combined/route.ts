@@ -102,43 +102,73 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Verify instructor exists
+    // Verify instructor exists and is approved with active subscription
     const instructor = await prisma.instructor.findUnique({
-      where: { id: data.instructorId }
+      where: { id: data.instructorId },
+      select: {
+        hourlyRate: true,
+        approvalStatus: true,
+        subscriptionStatus: true,
+        isActive: true,
+        acceptingBookings: true,
+        trialEndsAt: true,
+      }
     })
 
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
 
+    if (!instructor.isActive) {
+      return NextResponse.json({ error: 'Instructor account is not active' }, { status: 403 })
+    }
+
+    if (instructor.approvalStatus !== 'APPROVED') {
+      return NextResponse.json({ error: 'Instructor is not yet approved' }, { status: 403 })
+    }
+
+    const trialExpires = instructor.trialEndsAt ? new Date(instructor.trialEndsAt) : null
+    const trialActive = trialExpires ? trialExpires > new Date() : false
+    const subscriptionActive = instructor.subscriptionStatus === 'ACTIVE' || (instructor.subscriptionStatus === 'TRIAL' && trialActive)
+
+    if (!subscriptionActive) {
+      return NextResponse.json({ error: 'Instructor subscription is not active' }, { status: 403 })
+    }
+
+    if (instructor.acceptingBookings === false) {
+      return NextResponse.json({ error: 'Instructor is not currently accepting bookings' }, { status: 403 })
+    }
+
     const bookings: any = {}
     let subtotal = 0
     let totalDiscount = 0
+
+    // ── All booking creation is atomic — prevents TOCTOU races ───────────────
+    await prisma.$transaction(async (tx) => {
 
     // Create lesson booking if provided
     if (data.lesson) {
       const startTime = new Date(data.lesson.startTime)
       const endTime = new Date(startTime.getTime() + data.lesson.duration * 60 * 1000)
 
-      // Check for conflicts using availability service
-      const { availabilityService } = await import('@/lib/services/availability')
-      const hasConflict = await availabilityService.checkDoubleBooking(
-        data.instructorId,
-        startTime,
-        endTime
-      )
+      // Slot conflict check inside transaction (atomic)
+      const lessonConflict = await tx.booking.findFirst({
+        where: {
+          instructorId: data.instructorId,
+          status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+          OR: [
+            { AND: [{ startTime: { gte: startTime } }, { startTime: { lt: endTime } }] },
+            { AND: [{ endTime:   { gt: startTime } }, { endTime:   { lte: endTime } }] },
+            { AND: [{ startTime: { lte: startTime } }, { endTime:  { gte: endTime } }] },
+          ],
+        },
+        select: { id: true }
+      })
+      if (lessonConflict) throw new Error('LESSON_SLOT_CONFLICT')
 
-      if (hasConflict) {
-        return NextResponse.json(
-          { error: 'Time slot not available - conflict with existing booking' },
-          { status: 409 }
-        )
-      }
-
-      // Calculate lesson price
       const lessonPrice = (instructor.hourlyRate || 0) * (data.lesson.duration / 60)
 
-      const lessonBooking = await prisma.booking.create({
+      const lessonBooking = await tx.booking.create({
         data: {
           instructorId: data.instructorId,
           clientId: data.clientId,
@@ -155,7 +185,10 @@ export async function POST(req: NextRequest) {
           notes: data.lesson.notes,
           status: 'PENDING',
           bookingType: 'LESSON',
-          source: 'platform'
+          source: 'platform',
+          platformFee: 0,
+          instructorPayout: lessonPrice,
+          commissionRate: 0,
         }
       })
 
@@ -172,94 +205,57 @@ export async function POST(req: NextRequest) {
 
     // Create PDA test booking if provided
     if (data.pdaTest) {
-      // Verify PDA config exists and belongs to instructor
-      const config = await prisma.pDATestConfig.findUnique({
+      const config = await tx.pDATestConfig.findUnique({
         where: { id: data.pdaTest.configId },
         include: {
-          testCentres: {
-            where: {
-              testCentreId: data.pdaTest.testCentreId
-            }
-          }
+          testCentres: { where: { testCentreId: data.pdaTest.testCentreId } }
         }
       })
 
-      if (!config) {
-        return NextResponse.json({ error: 'PDA config not found' }, { status: 404 })
-      }
+      if (!config) throw new Error('PDA_CONFIG_NOT_FOUND')
+      if (config.instructorId !== data.instructorId) throw new Error('PDA_CONFIG_NOT_YOURS')
+      if (config.testCentres.length === 0) throw new Error('TEST_CENTRE_NOT_AVAILABLE')
 
-      if (config.instructorId !== data.instructorId) {
-        return NextResponse.json(
-          { error: 'PDA config does not belong to this instructor' },
-          { status: 403 }
-        )
-      }
+      // Parse as UTC — avoids local TZ shifting the datetime
+      const testDateTime = new Date(`${data.pdaTest.testDate}T${data.pdaTest.testTime}:00.000Z`)
+      if (isNaN(testDateTime.getTime())) throw new Error('INVALID_TEST_DATETIME')
+      if (testDateTime < new Date()) throw new Error('TEST_DATE_IN_PAST')
 
-      if (config.testCentres.length === 0) {
-        return NextResponse.json(
-          { error: 'Test centre not available for this config' },
-          { status: 404 }
-        )
-      }
+      const testEnd = new Date(testDateTime.getTime() + config.durationMinutes * 60 * 1000)
 
-      // Parse test date and time
-      const [year, month, day] = data.pdaTest.testDate.split('-').map(Number)
-      const [hour, minute] = data.pdaTest.testTime.split(':').map(Number)
-      const testDateTime = new Date(year, month - 1, day, hour, minute)
-
-      // Verify test date is in the future
-      if (testDateTime < new Date()) {
-        return NextResponse.json(
-          { error: 'Test date must be in the future' },
-          { status: 400 }
-        )
-      }
-
-      // Check for conflicts with other PDA bookings
-      const testStart = testDateTime
-      const testEnd = new Date(testStart.getTime() + config.durationMinutes * 60 * 1000)
-
-      const conflict = await prisma.pDATestBooking.findFirst({
+      // Conflict check inside transaction (atomic)
+      const pdaConflict = await tx.pDATestBooking.findFirst({
         where: {
           instructorId: data.instructorId,
           testCentreId: data.pdaTest.testCentreId,
           testDate: {
-            gte: new Date(testStart.toDateString()),
-            lt: new Date(new Date(testStart).setDate(testStart.getDate() + 1))
+            gte: new Date(`${data.pdaTest.testDate}T00:00:00.000Z`),
+            lt:  new Date(`${data.pdaTest.testDate}T23:59:59.999Z`),
           },
           status: { in: ['PENDING', 'CONFIRMED'] }
         },
-        include: {
-          config: { select: { durationMinutes: true } }
-        }
+        include: { config: { select: { durationMinutes: true } } }
       })
 
-      if (conflict && conflict.testTime) {
-        const conflictStart = new Date(testStart.toDateString() + ' ' + conflict.testTime)
-        const conflictEnd = new Date(
-          conflictStart.getTime() + (conflict.config?.durationMinutes || 180) * 60 * 1000
-        )
-
+      if (pdaConflict?.testTime) {
+        const conflictStart = new Date(`${data.pdaTest.testDate}T${pdaConflict.testTime.padStart(5,'0')}:00.000Z`)
+        const conflictEnd   = new Date(conflictStart.getTime() + (pdaConflict.config?.durationMinutes || 180) * 60 * 1000)
         if (
-          (testStart >= conflictStart && testStart < conflictEnd) ||
+          (testDateTime >= conflictStart && testDateTime < conflictEnd) ||
           (testEnd > conflictStart && testEnd <= conflictEnd) ||
-          (testStart <= conflictStart && testEnd >= conflictEnd)
+          (testDateTime <= conflictStart && testEnd >= conflictEnd)
         ) {
-          return NextResponse.json(
-            { error: 'This PDA test time slot is not available' },
-            { status: 409 }
-          )
+          throw new Error('PDA_SLOT_CONFLICT')
         }
       }
 
-      // Calculate PDA price with discount
       let pdaPrice = config.price
       if (config.discountPercent) {
         pdaPrice = config.price * (1 - config.discountPercent / 100)
         totalDiscount += config.price - pdaPrice
       }
 
-      const pdaBooking = await prisma.pDATestBooking.create({
+      const pdaBooking = await tx.pDATestBooking.create({
         data: {
           instructorId: data.instructorId,
           clientId: data.clientId,
@@ -269,11 +265,9 @@ export async function POST(req: NextRequest) {
           testTime: data.pdaTest.testTime,
           price: pdaPrice,
           discountPercent: config.discountPercent,
-          status: 'PENDING'
+          status: 'PENDING_PAYMENT'
         },
-        include: {
-          testCentre: true
-        }
+        include: { testCentre: true }
       })
 
       bookings.pdaTest = {
@@ -291,6 +285,8 @@ export async function POST(req: NextRequest) {
       subtotal += pdaPrice
     }
 
+    }) // end $transaction
+
     const total = subtotal - totalDiscount
 
     return NextResponse.json(
@@ -307,15 +303,17 @@ export async function POST(req: NextRequest) {
     )
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Validation error', details: error.errors }, { status: 400 })
     }
+    const msg = (error as Error).message
+    if (msg === 'LESSON_SLOT_CONFLICT') return NextResponse.json({ error: 'Lesson time slot conflicts with an existing booking' }, { status: 409 })
+    if (msg === 'PDA_SLOT_CONFLICT')    return NextResponse.json({ error: 'PDA test time slot is not available' }, { status: 409 })
+    if (msg === 'PDA_CONFIG_NOT_FOUND') return NextResponse.json({ error: 'PDA config not found' }, { status: 404 })
+    if (msg === 'PDA_CONFIG_NOT_YOURS') return NextResponse.json({ error: 'PDA config does not belong to this instructor' }, { status: 403 })
+    if (msg === 'TEST_CENTRE_NOT_AVAILABLE') return NextResponse.json({ error: 'Test centre not available for this config' }, { status: 404 })
+    if (msg === 'TEST_DATE_IN_PAST')    return NextResponse.json({ error: 'Test date must be in the future' }, { status: 400 })
+    if (msg === 'INVALID_TEST_DATETIME') return NextResponse.json({ error: 'Invalid test date or time' }, { status: 400 })
     console.error('Create combined booking error:', error)
-    return NextResponse.json(
-      { error: 'Failed to create booking' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 })
   }
 }

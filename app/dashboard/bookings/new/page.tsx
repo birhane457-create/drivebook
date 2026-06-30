@@ -162,8 +162,7 @@ export default function NewBookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
+          <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
         <div className="mb-6">
           <button onClick={() => router.back()} className="text-sky-300 hover:text-sky-200 mb-4 text-sm font-medium">← Back to Bookings</button>
           <div className="flex items-center gap-3">
@@ -329,6 +328,5 @@ export default function NewBookingPage() {
           </>
         )}
       </div>
-    </div>
   )
 }

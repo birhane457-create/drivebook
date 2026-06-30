@@ -414,15 +414,30 @@ async function handleWalletPaymentSuccess(
         const amountAdded = confirmedTransactions
           .filter((t: any) => t.type === 'CREDIT')
           .reduce((sum: number, t: any) => sum + t.amount, 0);
-        // Use computed balance (transaction-based) — stored balance field is not updated
         const balanceResult = await getWalletBalance(walletRecord.userId);
         const balanceAfter = balanceResult.balance;
         const balanceBefore = balanceAfter - amountAdded;
+
+        // FinancialLedger — record wallet credit (double-entry)
+        // Idempotency key: `wallet-credit-${paymentIntentId}` — deterministic
+        try {
+          const { recordWalletCredit } = await import('@/lib/services/ledger-operations');
+          await recordWalletCredit({
+            walletTransactionId: confirmedTx.id,
+            userId: walletRecord.userId,
+            amount: amountAdded,
+            stripePaymentIntentId: paymentIntent.id,
+            createdBy: 'STRIPE_WEBHOOK',
+          });
+        } catch (ledgerErr: any) {
+          if (!ledgerErr?.message?.includes('idempotency')) {
+            logger.error('[FinancialLedger] recordWalletCredit failed (non-critical):', { error: ledgerErr?.message });
+          }
+        }
+
         await sendWalletTopUpReceipt({
           clientName: walletRecord.user.name || walletRecord.user.email,
           clientEmail: walletRecord.user.email,
-          // Use WalletTransaction.id as receipt ID — DB-backed, unique, traceable
-          // Stripe PI ID is shown separately as stripeRef
           receiptId: confirmedTx.id,
           paidAt: new Date(),
           amountAdded,
@@ -652,7 +667,7 @@ async function handleBookingPaymentSuccess(
             walletId: wallet.id,
             type: 'DEBIT',
             amount: booking.price,
-            description: `First lesson — ${new Date(booking.startTime!).toLocaleDateString('en-AU')} (booking #${bookingId})`,
+            description: `First lesson — ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} (booking #${bookingId})`,
             status: 'CONFIRMED',
           }
         });
@@ -702,28 +717,70 @@ async function handleBookingPaymentSuccess(
   }
 
   // ── Ledger: record payment collected ─────────────────────────────────────
-  // Moved inside the main flow (after transaction) but with retry on failure.
   // This populates totalCollected + totalReserved so payout balance checks work.
-  // Non-critical: if it fails, booking is still confirmed. Alert is sent.
+  // Also writes to FinancialLedger (double-entry) for reconciliation/reporting.
+  // Non-critical: if either fails, booking is still confirmed. Alert is sent.
   try {
     const ledgerBooking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { price: true, instructorPayout: true, commissionRate: true },
+      select: {
+        price: true,
+        platformFee: true,
+        instructorPayout: true,
+        commissionRate: true,
+        instructorId: true,
+        client: { select: { userId: true } },
+      },
     });
     if (ledgerBooking) {
-      const instructorPayout = (ledgerBooking as any).instructorPayout
+      const instrPayout = (ledgerBooking as any).instructorPayout
         ?? ledgerBooking.price * (1 - ((ledgerBooking as any).commissionRate ?? 15) / 100);
-      await recordPaymentCollected(bookingId, ledgerBooking.price, instructorPayout);
-      logger.info(`✅ Ledger updated: collected=${ledgerBooking.price} reserved=${instructorPayout}`);
+      const platFee = (ledgerBooking as any).platformFee
+        ?? ledgerBooking.price - instrPayout;
+
+      // Existing payout-service ledger (totalCollected/totalReserved)
+      await recordPaymentCollected(bookingId, ledgerBooking.price, instrPayout);
+      logger.info(`✅ Ledger updated: collected=${ledgerBooking.price} reserved=${instrPayout}`);
+
+      // FinancialLedger — double-entry via ledger-operations
+      // Idempotency key: `booking-${bookingId}-payment` — deterministic, safe to retry
+      const { recordBookingPayment: recordLedgerPayment } = await import('@/lib/services/ledger-operations');
+      const clientUserId = ledgerBooking.client?.userId;
+      if (clientUserId) {
+        await recordLedgerPayment({
+          bookingId,
+          userId: clientUserId,
+          instructorId: ledgerBooking.instructorId,
+          totalAmount: ledgerBooking.price,
+          platformFee: platFee,
+          instructorPayout: instrPayout,
+          createdBy: 'STRIPE_WEBHOOK',
+        }).catch((err: Error) => {
+          // Duplicate idempotencyKey = already recorded — not an error
+          if (!err.message?.includes('idempotency')) {
+            logger.error('[FinancialLedger] recordBookingPayment failed (non-critical):', { bookingId, error: err.message });
+          }
+        });
+      }
     }
   } catch (ledgerErr) {
-    // Alert admin — ledger is out of sync. Reconciliation cron will detect this.
     logger.error('🚨 LEDGER UPDATE FAILED — booking confirmed but ledger not updated:', {
       bookingId,
       error: ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr),
     });
-    // Non-fatal: booking is confirmed, client has their lesson.
-    // The daily reconciliation cron will flag this as a missing LedgerEntry.
+    // Send structured alert so this is visible in monitoring — never silent
+    void sendAlert({
+      type: 'RECONCILIATION_ISSUES',
+      severity: 'WARNING',
+      message: `FinancialLedger write failed for confirmed booking ${bookingId} — reconciliation cron will backfill`,
+      entityId: bookingId,
+      metadata: {
+        bookingId,
+        stripePaymentIntentId: paymentIntentId,
+        error: ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr),
+        idempotencyKey: `booking-${bookingId}-payment`,
+      },
+    });
   }
 
   // Notify instructor of payment received (outside transaction - non-critical)
@@ -1116,7 +1173,7 @@ async function handleTrialEnding(
       subject: `Your trial ends in ${daysLeft} days`,
       html: `
         <h2>Your free trial is ending soon</h2>
-        <p>Your trial will end on ${new Date(trial_end * 1000).toLocaleDateString()}.</p>
+        <p>Your trial will end on ${new Date(trial_end * 1000).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}.</p>
         <p>To continue using DriveBook, your payment method will be charged automatically.</p>
       `
     });

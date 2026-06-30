@@ -280,7 +280,7 @@ export default function PayoutSettingsPage() {
   const inputBase = 'w-full border border-slate-700 bg-slate-950 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 placeholder-slate-500';
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
+    <div className="max-w-2xl mx-auto py-8 px-1">
       <h1 className="text-2xl font-bold text-slate-100 mb-1">Payout &amp; Tax Settings</h1>
       <p className="text-sm text-slate-400 mb-6">How you receive payments and your Australian tax details.</p>
 
@@ -294,7 +294,7 @@ export default function PayoutSettingsPage() {
       <form onSubmit={handleSave} className="space-y-6">
 
         {/* Payout Method */}
-        <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 space-y-4">
+        <div className="bg-slate-900 rounded-3xl border border-slate-800 p-1 space-y-4">
           <h2 className="font-semibold text-slate-100 flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-blue-400" />
             Payout Method

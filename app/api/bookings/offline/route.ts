@@ -82,63 +82,70 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Parse date + time into start/end
-    const [year, month, day] = data.date.split('-').map(Number);
-    const [hour, minute] = data.time.split(':').map(Number);
-    const startTime = new Date(year, month - 1, day, hour, minute, 0, 0);
-    const endTime = new Date(startTime.getTime() + data.durationMinutes * 60 * 1000);
-
-    if (startTime < new Date()) {
-      // Allow past offline bookings — instructors may log historical lessons
+    // Build datetimes as UTC — avoids local TZ shifting on the Vercel UTC server
+    const startTime = new Date(`${data.date}T${data.time}:00.000Z`)
+    if (isNaN(startTime.getTime())) {
+      return NextResponse.json({ error: 'Invalid date or time format' }, { status: 400 })
     }
+    const endTime = new Date(startTime.getTime() + data.durationMinutes * 60 * 1000)
 
-    // Conflict check — offline bookings still block the slot
-    const conflict = await prisma.booking.findFirst({
-      where: {
-        instructorId: session.user.instructorId,
-        status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
-        OR: [
-          { startTime: { lte: startTime }, endTime: { gt: startTime } },
-          { startTime: { lt: endTime }, endTime: { gte: endTime } },
-          { startTime: { gte: startTime }, endTime: { lte: endTime } },
-        ],
-      },
-      select: { id: true, source: true } as any,
-    });
+    // Atomic: conflict check + booking creation inside a single transaction (prevents TOCTOU race)
+    let booking: any
+    try {
+      booking = await prisma.$transaction(async (tx) => {
+        const conflict = await tx.booking.findFirst({
+          where: {
+            instructorId: session.user.instructorId,
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+            OR: [
+              { startTime: { lte: startTime }, endTime: { gt: startTime } },
+              { startTime: { lt: endTime }, endTime: { gte: endTime } },
+              { startTime: { gte: startTime }, endTime: { lte: endTime } },
+            ],
+          },
+          select: { id: true, source: true } as any,
+        });
 
-    if (conflict) {
-      return NextResponse.json({
-        error: 'This time slot conflicts with an existing booking',
-        conflictingBookingId: conflict.id,
-      }, { status: 409 });
+        if (conflict) throw new Error(`SLOT_CONFLICT:${conflict.id}`)
+
+        return tx.booking.create({
+          data: {
+            instructorId: session.user.instructorId,
+            clientName: data.clientName,
+            clientPhone: data.clientPhone || null,
+            bookingType: 'LESSON',
+            status: 'CONFIRMED',
+            startTime,
+            endTime,
+            duration: data.durationMinutes,
+            price: data.offlineAmountPaid ?? 0,
+            platformFee: 0,
+            instructorPayout: data.offlineAmountPaid ?? 0,
+            commissionRate: 0,
+            isPaid: true,
+            paidAt: new Date(),
+            pickupAddress: data.pickupAddress || null,
+            notes: data.notes || null,
+            createdBy: 'instructor',
+            originalStartTime: startTime,
+            source: 'offline',
+            offlinePaymentMethod: data.offlinePaymentMethod ?? null,
+            offlineAmountPaid: data.offlineAmountPaid ?? null,
+            clientEmail: data.clientEmail ?? null,
+          } as any,
+        });
+      });
+    } catch (txErr) {
+      const msg = (txErr as Error).message
+      if (msg?.startsWith('SLOT_CONFLICT:')) {
+        const id = msg.split(':')[1]
+        return NextResponse.json({
+          error: 'This time slot conflicts with an existing booking',
+          conflictingBookingId: id,
+        }, { status: 409 });
+      }
+      throw txErr
     }
-
-    const booking = await prisma.booking.create({
-      data: {
-        instructorId: session.user.instructorId,
-        clientName: data.clientName,
-        clientPhone: data.clientPhone || null,
-        bookingType: 'LESSON',
-        status: 'CONFIRMED',
-        startTime,
-        endTime,
-        duration: data.durationMinutes,
-        price: data.offlineAmountPaid ?? 0,
-        platformFee: 0,
-        instructorPayout: data.offlineAmountPaid ?? 0,
-        commissionRate: 0,
-        isPaid: true,
-        paidAt: new Date(),
-        pickupAddress: data.pickupAddress || null,
-        notes: data.notes || null,
-        createdBy: 'instructor',
-        originalStartTime: startTime,
-        source: 'offline',
-        offlinePaymentMethod: data.offlinePaymentMethod ?? null,
-        offlineAmountPaid: data.offlineAmountPaid ?? null,
-        clientEmail: data.clientEmail ?? null,
-      } as any,
-    });
 
     // Audit log — offline bookings must be traceable for dispute resolution
     try {

@@ -109,16 +109,17 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // P0 FIX #4: Idempotency check - don't credit twice for same paymentIntentId
-    // If this endpoint is called twice with same paymentIntentId, only credit once
+    // HIGH-2 FIX: Improved idempotency check using metadata instead of description
+    // Store paymentIntentId in metadata for reliable duplicate detection
     const existingTransaction = await prisma.walletTransaction.findFirst({
       where: {
         walletId: wallet.id,
-        description: {
-          contains: paymentIntentId
-        },
         status: 'CONFIRMED',
-        type: 'CREDIT'
+        type: 'CREDIT',
+        metadata: {
+          path: ['stripePaymentIntentId'],
+          equals: paymentIntentId
+        }
       }
     });
 
@@ -159,7 +160,12 @@ export async function POST(req: NextRequest) {
           type: 'CREDIT',
           amount: amount,
           status: 'CONFIRMED',
-          description: `Added ${amount.toFixed(2)} credits via ${paymentIntentId ? 'Stripe' : 'manual'}`
+          description: `Added ${amount.toFixed(2)} credits via ${paymentIntentId ? 'Stripe' : 'manual'}`,
+          metadata: {
+            stripePaymentIntentId: paymentIntentId,
+            type: 'wallet_topup',
+            verifiedAmount: true
+          }
         }
       });
 

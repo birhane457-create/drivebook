@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { z } from 'zod';
+import { requireAdmin } from '@/lib/auth/requireRole';
+import { enqueueNotification } from '@/lib/services/notificationRetry';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,9 +22,9 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // FIX #3: Re-verify admin role from DB
+    const auth = await requireAdmin(session);
+    if (auth.error) return auth.error;
 
     const body = await req.json();
     const { reason } = suspendSchema.parse(body);
@@ -112,6 +114,15 @@ export async function POST(
       }
     } catch (emailError) {
       console.error('Failed to send suspension email:', emailError);
+      if (instructor.user?.email) {
+        await enqueueNotification({
+          channel: 'EMAIL',
+          recipient: instructor.user.email,
+          subject: 'Account Suspension Notice',
+          body: `<p>Dear ${instructor.name}, your instructor account has been suspended. Reason: ${reason}. Please contact support at ${process.env.ADMIN_EMAIL || 'support@drivebook.com'}.</p>`,
+          idempotencyKey: `instructor-suspend-email-${params.id}`,
+        })
+      }
       // Don't fail the suspension if email fails
     }
 

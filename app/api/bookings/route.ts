@@ -13,12 +13,12 @@ import { notifyBookingRequest } from '@/lib/services/notifications'
 import { getNotifChannels, getBookingSettings } from '@/lib/config/platform-settings'
 import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation'
 import { bookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
-import { getCommissionRate } from '@/lib/services/platform-pricing'
+import { getCommissionRate, getPlatformFeeRate } from '@/lib/services/platform-pricing'
+import { recordBookingPayment } from '@/lib/services/ledger-operations'
+import { enqueueNotification } from '@/lib/services/notificationRetry'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
-
-const PLATFORM_FEE_RATE = 0.036 // 3.6% — stored on booking for reporting
 
 const bookingSchema = z.object({
   clientId: z.string(),
@@ -149,7 +149,9 @@ export async function POST(req: NextRequest) {
     
     const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
     
-    const platformFee = parseFloat((lessonPrice * PLATFORM_FEE_RATE).toFixed(2))
+    // MEDIUM-10 FIX: Get platform fee rate from DB instead of hardcoding
+    const platformFeeRate = await getPlatformFeeRate()
+    const platformFee = parseFloat((lessonPrice * (platformFeeRate / 100)).toFixed(2))
     const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC')
     const commissionRate = commissionRatePct / 100
     const instructorPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2))
@@ -253,9 +255,9 @@ export async function POST(req: NextRequest) {
           select: { resetToken: true, resetTokenExpiry: true }
         })
         const shortfall = parseFloat((lessonPrice - balance).toFixed(2))
-        const topUpAmount = parseFloat((shortfall / (1 - PLATFORM_FEE_RATE)).toFixed(2))
-        const dateStr = newStart.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
-        const timeStr = newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+        const topUpAmount = parseFloat((shortfall / (1 - platformFeeRate / 100)).toFixed(2))
+        const dateStr = newStart.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' })
+        const timeStr = newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
 
         // If account is new (has a resetToken), link to set-password page
         // Otherwise link to login page
@@ -313,6 +315,16 @@ export async function POST(req: NextRequest) {
         })
       } catch (e) {
         console.error('Top-up email failed:', e)
+        // Queue for retry — client won't see their booking confirmation if this stays lost
+        await enqueueNotification({
+          channel: 'EMAIL',
+          recipient: client.email,
+          subject: `📅 ${instructor.name} booked a lesson for you — top up to confirm`,
+          body: `<p>Hi ${client.name}, your lesson was booked but the confirmation email failed to send. Please log in to view your booking.</p>`,
+          idempotencyKey: `topup-email-${pendingBooking.id}`,
+          bookingId: pendingBooking.id,
+          userId: client.userId ?? undefined,
+        })
       }
 
       try {
@@ -399,7 +411,7 @@ export async function POST(req: NextRequest) {
             walletId: wallet.id,
             type: 'DEBIT',
             amount: lessonPrice,
-            description: `Lesson booking — ${newStart.toLocaleDateString('en-AU')} ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`,
+            description: `Lesson booking — ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}`,
             status: 'CONFIRMED',
           }
         })
@@ -478,6 +490,25 @@ export async function POST(req: NextRequest) {
       console.error('Audit log failed for booking creation:', auditErr)
     }
 
+    // FinancialLedger — record booking payment with deterministic idempotency keys
+    // Written after the $transaction commits so the DB connection is clean.
+    // Idempotent: safe to retry — duplicate idempotencyKey is silently ignored.
+    try {
+      if (booking.isPaid && client.userId) {
+        await recordBookingPayment({
+          bookingId: booking.id,
+          userId: client.userId,
+          instructorId: session.user.instructorId,
+          totalAmount: booking.price,
+          platformFee: booking.platformFee ?? 0,
+          instructorPayout: booking.instructorPayout ?? 0,
+          createdBy: session.user.instructorId,
+        })
+      }
+    } catch (ledgerErr) {
+      console.error('[Ledger] Failed to record booking payment (non-critical):', ledgerErr)
+    }
+
     // Google Calendar sync (non-critical)
     try {
       if (instructor.syncGoogleCalendar) {
@@ -532,9 +563,29 @@ export async function POST(req: NextRequest) {
             price: booking.price,
           });
         } catch (smsErr) {
-          console.error('SMS fallback also failed:', smsErr);
+          console.error('SMS fallback also failed:', smsErr)
+          // Queue SMS retry as well
+          await enqueueNotification({
+            channel: 'SMS',
+            recipient: client.phone,
+            body: `Booking confirmed with ${booking.instructor.name} on ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}. Cost: $${booking.price.toFixed(2)}`,
+            idempotencyKey: `booking-confirm-sms-${booking.id}`,
+            bookingId: booking.id,
+            userId: client.userId ?? undefined,
+          })
         }
       }
+
+      // Queue email retry — client must get their confirmation
+      await enqueueNotification({
+        channel: 'EMAIL',
+        recipient: booking.client!.email,
+        subject: `Booking Confirmed — ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
+        body: `<p>Hi ${booking.client!.name}, your lesson with ${booking.instructor.name} is confirmed. Log in to view details.</p>`,
+        idempotencyKey: `booking-confirm-email-${booking.id}`,
+        bookingId: booking.id,
+        userId: client.userId ?? undefined,
+      })
 
       // Fallback 2: In-app notification so the client sees confirmation in their dashboard
       if (client.userId) {
@@ -573,6 +624,15 @@ export async function POST(req: NextRequest) {
       })
     } catch (e) {
       console.error('Receipt email failed:', e)
+      await enqueueNotification({
+        channel: 'EMAIL',
+        recipient: booking.client!.email,
+        subject: `Receipt — Lesson on ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
+        body: `<p>Hi ${booking.client!.name}, your wallet was charged $${lessonPrice.toFixed(2)} for your lesson with ${booking.instructor.name}. Log in to view your receipt.</p>`,
+        idempotencyKey: `booking-receipt-email-${booking.id}`,
+        bookingId: booking.id,
+        userId: client.userId ?? undefined,
+      })
     }
 
     // In-app notification (non-critical)

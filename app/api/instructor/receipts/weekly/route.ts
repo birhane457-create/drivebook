@@ -22,11 +22,10 @@ export async function GET(req: NextRequest) {
     }
 
     const instructorId = session.user.instructorId;
-    const weekStartDate = new Date(weekStart);
-    weekStartDate.setHours(0, 0, 0, 0);
-    const weekEndDate = new Date(weekStartDate);
-    weekEndDate.setDate(weekEndDate.getDate() + 6);
-    weekEndDate.setHours(23, 59, 59, 999);
+    const weekStartDate = new Date(`${weekStart}T00:00:00.000Z`)
+    const weekEndDate   = new Date(`${weekStart}T00:00:00.000Z`)
+    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6)
+    const weekEndDateFinal = new Date(`${weekEndDate.toISOString().slice(0,10)}T23:59:59.999Z`)
 
     // Get instructor details
     const instructor = await prisma.instructor.findUnique({
@@ -52,7 +51,7 @@ export async function GET(req: NextRequest) {
         status: 'COMPLETED',
         createdAt: {
           gte: weekStartDate,
-          lte: weekEndDate
+          lte: weekEndDateFinal
         },
         booking: {
           // Exclude package purchases
@@ -108,7 +107,7 @@ export async function GET(req: NextRequest) {
     const dailyBreakdown: any = {};
     transactions.forEach((t: any) => {
       const date = new Date(t.createdAt);
-      const dayKey = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const dayKey = date.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Australia/Perth' });
       
       if (!dailyBreakdown[dayKey]) {
         dailyBreakdown[dayKey] = {
@@ -127,7 +126,7 @@ export async function GET(req: NextRequest) {
       dailyBreakdown[dayKey].transactions.push({
         description: t.description,
         clientName: t.booking?.client.name || 'N/A',
-        time: t.booking ? new Date(t.booking.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '',
+        time: t.booking ? new Date(t.booking.startTime).toISOString().slice(11, 16) : '',
         gross: t.amount,
         platformFee: t.platformFee,
         net: t.instructorPayout,
@@ -143,8 +142,8 @@ export async function GET(req: NextRequest) {
 
 Instructor: ${instructor.name}
 Email: ${instructor.user.email}
-Period: ${weekStartDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-     to ${weekEndDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+Period: ${weekStartDate.toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Australia/Perth' })}
+     to ${weekEndDateFinal.toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Australia/Perth' })}
 
 ───────────────────────────────────────────────────────────
 DAILY BREAKDOWN

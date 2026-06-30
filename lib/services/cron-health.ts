@@ -81,4 +81,5 @@ export const CRON_JOB_CONFIG: Record<string, { maxAgeMinutes: number; descriptio
   'weekly-payouts':            { maxAgeMinutes: 10080, description: 'Automatic Stripe Connect payouts (Tuesday 2am AWST)' },
   'check-trial-expiry':        { maxAgeMinutes: 1500,  description: 'Marks TRIAL subscriptions as EXPIRED when trial ends (daily)' },
   'send-trial-expiry-alerts':  { maxAgeMinutes: 1500,  description: 'Sends trial expiry warnings and notifications (daily)' },
+  'notification-retry':        { maxAgeMinutes: 10,    description: 'Retries failed email/SMS sends with exponential backoff (every 5 min)' },
 };

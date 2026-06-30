@@ -24,20 +24,19 @@ export async function GET(req: NextRequest) {
 
     const instructorId = session.user.instructorId
 
-    // Calculate current week boundaries (Mon-Sun)
+    // Calculate current week boundaries (Mon–Sun) in UTC
     const now = new Date()
-    const dayOfWeek = now.getDay() // 0 = Sunday, 1 = Monday
-    
-    // Calculate Monday of this week
+    const dayOfWeek = now.getUTCDay() // 0 = Sunday
     const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
     const mondayDate = new Date(now)
-    mondayDate.setDate(mondayDate.getDate() - daysFromMonday)
-    mondayDate.setHours(0, 0, 0, 0)
-    
-    // Calculate Sunday of this week (end of week)
-    const sundayDate = new Date(mondayDate)
-    sundayDate.setDate(sundayDate.getDate() + 6)
-    sundayDate.setHours(23, 59, 59, 999)
+    mondayDate.setUTCDate(mondayDate.getUTCDate() - daysFromMonday)
+    const mondayStr = mondayDate.toISOString().slice(0, 10)
+    const mondayStart = new Date(`${mondayStr}T00:00:00.000Z`)
+
+    const sundayDate = new Date(mondayStart)
+    sundayDate.setUTCDate(sundayDate.getUTCDate() + 6)
+    const sundayStr = sundayDate.toISOString().slice(0, 10)
+    const sundayEnd = new Date(`${sundayStr}T23:59:59.999Z`)
 
     // Get instructor's hourly rate
     const instructor = await prisma.instructor.findUnique({
@@ -55,8 +54,8 @@ export async function GET(req: NextRequest) {
         instructorId,
         status: 'COMPLETED',
         startTime: {
-          gte: mondayDate,
-          lte: sundayDate
+          gte: mondayStart,
+          lte: sundayEnd
         },
         // Platform bookings only (not offline)
         source: { not: 'offline' }
@@ -75,16 +74,16 @@ export async function GET(req: NextRequest) {
     const totalEarned = weeklyBookings.reduce((sum, booking) => sum + booking.price, 0)
 
     return NextResponse.json({
-      weekStart: mondayDate.toISOString(),
-      weekEnd: sundayDate.toISOString(),
-      weekStartDisplay: mondayDate.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' }),
-      weekEndDisplay: sundayDate.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' }),
+      weekStart: mondayStart.toISOString(),
+      weekEnd: sundayEnd.toISOString(),
+      weekStartDisplay: mondayStr.slice(5).replace('-', '/'),  // MM/DD → use ISO slice, locale-free
+      weekEndDisplay: sundayStr.slice(5).replace('-', '/'),
       completedCount,
       totalEarned: parseFloat(totalEarned.toFixed(2)),
       hourlyRate: instructor.hourlyRate,
       bookings: weeklyBookings.map(b => ({
         id: b.id,
-        date: b.startTime ? new Date(b.startTime).toLocaleDateString('en-AU') : null,
+        date: b.startTime ? new Date(b.startTime).toISOString().slice(0, 10) : null,
         price: b.price
       }))
     })

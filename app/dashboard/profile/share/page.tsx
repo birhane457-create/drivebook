@@ -14,11 +14,11 @@ export default async function ShareProfilePage() {
   const bookingUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/book/${session.user.instructorId}`
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 py-8">
+    <div>
+      <div className="max-w-3xl mx-auto py-6">
         <h1 className="text-3xl font-bold mb-6">Share Your Booking Page</h1>
 
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Share2 className="h-5 w-5" />
             Your Public Booking Link

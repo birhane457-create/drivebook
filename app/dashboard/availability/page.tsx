@@ -194,7 +194,7 @@ export default function AvailabilityPage() {
   const activeDays = DAYS.filter(d => workingHours[d].length > 0)
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 px-4 py-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 px-1 py-8">
       <div className="max-w-3xl mx-auto space-y-8">
 
       {/* Toast */}
@@ -230,7 +230,7 @@ export default function AvailabilityPage() {
         </div>
 
         {/* Day summary strip */}
-        <div className="flex gap-1.5 px-6 py-3 border-b border-slate-800 bg-slate-950">
+        <div className="flex gap-1.5 px-1 py-1 border-b border-slate-800 bg-slate-950">
           {DAYS.map(day => (
             <button
               key={day}

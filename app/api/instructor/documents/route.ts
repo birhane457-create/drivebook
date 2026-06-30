@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { cloudinaryService } from '@/lib/services/cloudinary';
+import { validateUpload, DOCUMENT_ALLOWED_TYPES, MAX_DOCUMENT_BYTES } from '@/lib/uploads/validateUpload';
 
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,12 @@ export async function POST(req: NextRequest) {
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+
+    // Validate MIME type and magic bytes before sending to Cloudinary
+    const uploadValidation = validateUpload(buffer, file.type, DOCUMENT_ALLOWED_TYPES, MAX_DOCUMENT_BYTES);
+    if (!uploadValidation.valid) {
+      return NextResponse.json({ error: uploadValidation.error }, { status: uploadValidation.status });
+    }
 
     // Upload to Cloudinary
     const url = await cloudinaryService.uploadInstructorDocument(

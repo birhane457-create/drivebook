@@ -120,8 +120,8 @@ export async function GET(req: NextRequest) {
           // clientEmail is stored on the booking for offline bookings
           const offlineEmail = (booking as any).clientEmail;
           if (offlineEmail) {
-            const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
-            const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' });
+            const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' });
             await emailService.sendGenericEmail({
               to: offlineEmail,
               subject: `Reminder: Driving lesson tomorrow with ${instructorName}`,

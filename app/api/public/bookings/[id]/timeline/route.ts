@@ -87,7 +87,7 @@ export async function GET(
       events.push({
         type: 'AWAITING_PAYMENT',
         time: booking.createdAt.toISOString(),
-        description: `Awaiting payment. Slot reserved until ${expiresAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}.`,
+        description: `Awaiting payment. Slot reserved until ${expiresAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}.`,
       })
     }
 

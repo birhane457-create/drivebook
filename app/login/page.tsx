@@ -83,6 +83,8 @@ export default function LoginPage() {
         if (rawError.includes('EMAIL_NOT_VERIFIED')) {
           setPendingEmail(email)
           setError('EMAIL_NOT_VERIFIED')
+        } else if (rawError.includes('INSTRUCTOR_NOT_APPROVED')) {
+          setError('INSTRUCTOR_NOT_APPROVED')
         } else {
           setError('Invalid email or password')
         }
@@ -160,6 +162,14 @@ export default function LoginPage() {
                     Check your inbox for a verification link.
                   </p>
                   <ResendVerificationButton email={pendingEmail} />
+                </div>
+              ) : error === 'INSTRUCTOR_NOT_APPROVED' ? (
+                <div>
+                  <p className="font-semibold mb-1">Account pending approval</p>
+                  <p className="text-red-200/80 text-xs">
+                    Your instructor application is still under review. You'll receive an email
+                    once your account has been approved.
+                  </p>
                 </div>
               ) : (
                 error

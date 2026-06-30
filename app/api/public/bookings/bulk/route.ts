@@ -528,13 +528,15 @@ export async function POST(req: NextRequest) {
     const firstLessonDurationMinutes = data.scheduledBookings?.[0]?.duration ?? 60;
     const firstLessonDurationHours = firstLessonDurationMinutes / 60;
     const firstLessonPrice = parseFloat((instructor.hourlyRate * firstLessonDurationHours).toFixed(2));
-    const PLATFORM_FEE_RATE = 0.036;
-    const firstLessonPlatformFee = parseFloat((firstLessonPrice * PLATFORM_FEE_RATE).toFixed(2));
+    
+    // MEDIUM-10 FIX: Get platform fee rate from DB instead of hardcoding
+    const { getCommissionRate, getPlatformFeeRate } = await import('@/lib/services/platform-pricing');
+    const platformFeeRate = await getPlatformFeeRate();
+    const firstLessonPlatformFee = parseFloat((firstLessonPrice * (platformFeeRate / 100)).toFixed(2));
 
     // Lock commission rate at booking creation time — never re-fetch at payout time.
     // If the platform rate changes after this booking is created, the instructor
     // receives the rate that was in effect when the student paid. Immutable from here.
-    const { getCommissionRate } = await import('@/lib/services/platform-pricing');
     const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC');
     const commissionRateDecimal = commissionRatePct / 100;
     const firstLessonPayout = parseFloat((firstLessonPrice * (1 - commissionRateDecimal)).toFixed(2));
@@ -742,7 +744,7 @@ export async function POST(req: NextRequest) {
                 testTime: 'TBD', // Client selects time later
                 price: pdaConfig.price,
                 discountPercent: pdaConfig.discountPercent,
-                status: 'PENDING',
+                status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
                 parentBookingId: booking.id // Link to main booking
               }
             });
@@ -766,15 +768,17 @@ export async function POST(req: NextRequest) {
         const { emailService } = await import('@/lib/services/email');
 
         // Format lesson details for email
-        const dateStr = startTime.toLocaleDateString('en-US', {
+        const dateStr = startTime.toLocaleDateString('en-AU', {
           weekday: 'long',
           month: 'long',
-          day: 'numeric'
+          day: 'numeric',
+          timeZone: 'Australia/Perth',
         });
         
-        const timeStr = startTime.toLocaleTimeString('en-US', {
+        const timeStr = startTime.toLocaleTimeString('en-AU', {
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          timeZone: 'Australia/Perth',
         });
         
         const durationHours = firstLessonDurationHours;

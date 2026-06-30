@@ -200,8 +200,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
+          <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm">
         <h1 className="text-2xl sm:text-3xl font-bold mb-6 text-slate-100">Profile</h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -623,7 +622,6 @@ export default function ProfilePage() {
           </button>
         </form>
       </div>
-    </div>
   )
 }
 

@@ -143,6 +143,40 @@ export async function POST(
         where: { id: user.id },
         data: { resetToken: null, resetTokenExpiry: null },
       })
+    } else {
+      // HIGH-1 fix: require ownership verification when no OTP token is provided.
+      if (!data.phone && !data.email) {
+        return NextResponse.json(
+          {
+            error: 'For security, please provide phone or email to verify ownership before cancelling.',
+            code: 'OWNERSHIP_VERIFICATION_REQUIRED'
+          },
+          { status: 400 }
+        )
+      }
+
+      const clientPhone = data.phone?.replace(/\s/g, '')
+      const clientEmail = data.email?.toLowerCase().trim()
+      const bookingClientPhone = booking.client?.phone?.replace(/\s/g, '')
+      const bookingClientEmail = booking.client?.userId
+        ? (await prisma.user.findUnique({
+            where: { id: booking.client.userId },
+            select: { email: true },
+          }))?.email?.toLowerCase().trim()
+        : null
+
+      const phoneMatches = clientPhone && bookingClientPhone && clientPhone === bookingClientPhone
+      const emailMatches = clientEmail && bookingClientEmail && clientEmail === bookingClientEmail
+
+      if (!phoneMatches && !emailMatches) {
+        return NextResponse.json(
+          {
+            error: 'Phone or email does not match the booking owner',
+            code: 'OWNERSHIP_VERIFICATION_FAILED'
+          },
+          { status: 403 }
+        )
+      }
     }
 
     // ── 3. Calculate refund ──────────────────────────────────────────────────

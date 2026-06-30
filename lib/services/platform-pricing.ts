@@ -89,3 +89,12 @@ export async function getCommissionRate(tier: string): Promise<number> {
     default: return pricing.basicCommissionRate; // BASIC + fallback
   }
 }
+
+/**
+ * MEDIUM-10 FIX: Get platform fee rate from DB instead of hardcoding
+ * Returns the platform fee percentage (e.g., 3.6 means 3.6%)
+ */
+export async function getPlatformFeeRate(): Promise<number> {
+  const pricing = await getPlatformPricing();
+  return pricing.platformFeePercentage;
+}

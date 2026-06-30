@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Car, Calendar, MapPin, Plus, CheckCircle, XCircle, Clock,
   ChevronDown, ChevronUp, Edit2, Save, X, Loader2, User, Phone, Mail, DollarSign,
-  Check
 } from 'lucide-react'
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface PDATest {
   id: string
@@ -20,8 +21,25 @@ interface PDATest {
 }
 
 interface Client { id: string; name: string; phone: string; email: string }
-interface TestCentre { id: string; name: string; address: string; suburb: string; region: string | null }
-// PDAConfig removed from this page — managed in dashboard/settings
+
+interface PDAConfig {
+  id: string
+  name: string
+  durationMinutes: number
+  price: number
+  discountPercent: number | null
+  isActive: boolean
+  testCentres: {
+    testCentre: { id: string; name: string; address: string }
+  }[]
+}
+
+interface AvailableSlot {
+  time: string
+  available: boolean
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 const resultColor = (r: string) =>
   r === 'PASS' ? 'bg-green-900/40 text-green-300' :
@@ -33,72 +51,71 @@ const resultIcon = (r: string) =>
   r === 'FAIL' ? <XCircle className="h-5 w-5 text-red-600" /> :
   <Clock className="h-5 w-5 text-yellow-600" />
 
-export default function PDATestsPage() {
-  const [tests, setTests] = useState<PDATest[]>([])
-  // PDA configs are managed in dashboard/settings
-  const [clients, setClients] = useState<Client[]>([])
-  const [centres, setCentres] = useState<TestCentre[]>([])
-  const [showForm, setShowForm] = useState(false)
-  
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editResult, setEditResult] = useState('')
-  const [defaultPrice, setDefaultPrice] = useState<number>(0)
-  const [showCentreDropdown, setShowCentreDropdown] = useState(false)
-  const centreDropdownRef = useRef<HTMLDivElement>(null)
+const today = new Date().toISOString().split('T')[0]
 
+// ── Page ───────────────────────────────────────────────────────────────────────
+
+export default function PDATestsPage() {
+  // List data
+  const [tests, setTests]     = useState<PDATest[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [configs, setConfigs] = useState<PDAConfig[]>([])
+  const [instructorId, setInstructorId] = useState<string>('')
+
+  // UI state
+  const [loading, setLoading]       = useState(true)
+  const [showForm, setShowForm]     = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [editResult, setEditResult] = useState('')
+
+  // Form — step-by-step
   const [form, setForm] = useState({
-    clientId: '',
-    testDate: '',
-    testTime: '',
+    clientId:    '',
+    configId:    '',
     testCentreId: '',
-    price: '',
-    notes: '',
+    testDate:    '',
+    selectedSlot: '', // HH:mm
+    price:       '',  // override
   })
 
-  
+  // Derived from selected config
+  const [availableCentres, setAvailableCentres] = useState<{ id: string; name: string; address: string }[]>([])
+  const [slots, setSlots]           = useState<AvailableSlot[]>([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [slotsError, setSlotsError]     = useState('')
 
-  useEffect(() => {
-    fetchAll()
-  }, [])
+  // ── Load on mount ────────────────────────────────────────────────────────────
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (centreDropdownRef.current && !centreDropdownRef.current.contains(e.target as Node)) {
-        setShowCentreDropdown(false)
-      }
-    }
-    if (showCentreDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showCentreDropdown])
+  useEffect(() => { fetchAll() }, [])
 
   const fetchAll = async () => {
     try {
-      const [testsRes, clientsRes, centresRes, settingsRes] = await Promise.all([
+      const [testsRes, clientsRes, configsRes, profileRes] = await Promise.all([
         fetch('/api/pda-tests'),
         fetch('/api/clients'),
-        fetch('/api/test-centres'),
-        fetch('/api/instructor/test-package'),
+        fetch('/api/instructor/pda-configs'),
+        fetch('/api/instructor/profile'),
       ])
-      if (testsRes.ok) setTests(await testsRes.json())
+
+      if (testsRes.ok)   setTests(await testsRes.json())
+
       if (clientsRes.ok) {
         const d = await clientsRes.json()
-        setClients(Array.isArray(d) ? d : [])
+        setClients(Array.isArray(d) ? d : (Array.isArray(d.clients) ? d.clients : []))
       }
-      if (centresRes.ok) setCentres(await centresRes.json())
-      if (settingsRes.ok) {
-        const s = await settingsRes.json()
-        if (s.testPackagePrice) {
-          setDefaultPrice(s.testPackagePrice)
-          setForm(f => ({ ...f, price: String(s.testPackagePrice) }))
-        }
+
+      if (configsRes.ok) {
+        const d = await configsRes.json()
+        const list: PDAConfig[] = Array.isArray(d) ? d : (Array.isArray(d.configs) ? d.configs : [])
+        setConfigs(list.filter(c => c.isActive))
       }
-      // PDA configs intentionally not loaded here — managed in dashboard/settings
+
+      if (profileRes.ok) {
+        const p = await profileRes.json()
+        if (p?.id) setInstructorId(p.id)
+      }
     } catch (e) {
       console.error('Failed to load PDA test data:', e)
     } finally {
@@ -106,29 +123,80 @@ export default function PDATestsPage() {
     }
   }
 
-  const handleSchedule = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.testCentreId) {
-      alert('Please select a test centre.')
+  // ── When config changes → update available test centres ──────────────────────
+
+  useEffect(() => {
+    if (!form.configId) {
+      setAvailableCentres([])
+      setForm(f => ({ ...f, testCentreId: '', testDate: '', selectedSlot: '' }))
       return
     }
+    const config = configs.find(c => c.id === form.configId)
+    if (!config) return
+    const centres = config.testCentres.map(tc => tc.testCentre)
+    setAvailableCentres(centres)
+    // Auto-select if only one centre
+    const autoId = centres.length === 1 ? centres[0].id : ''
+    setForm(f => ({ ...f, testCentreId: autoId, testDate: '', selectedSlot: '', price: String(config.price) }))
+    setSlots([])
+  }, [form.configId, configs])
+
+  // ── When date + centre + config all set → fetch available slots ──────────────
+
+  useEffect(() => {
+    if (!form.configId || !form.testCentreId || !form.testDate || !instructorId) {
+      setSlots([])
+      return
+    }
+
+    const fetchSlots = async () => {
+      setSlotsLoading(true)
+      setSlotsError('')
+      setForm(f => ({ ...f, selectedSlot: '' }))
+      try {
+        const res = await fetch(
+          `/api/availability/pda-tests?instructorId=${instructorId}&configId=${form.configId}&testCentreId=${form.testCentreId}&date=${form.testDate}`
+        )
+        if (!res.ok) {
+          const d = await res.json()
+          throw new Error(d.error || 'Failed to fetch slots')
+        }
+        const d = await res.json()
+        setSlots(Array.isArray(d.slots) ? d.slots : [])
+      } catch (err: any) {
+        setSlotsError(err.message || 'Could not load available slots')
+        setSlots([])
+      } finally {
+        setSlotsLoading(false)
+      }
+    }
+
+    fetchSlots()
+  }, [form.configId, form.testCentreId, form.testDate, instructorId])
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
+
+  const handleSchedule = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.selectedSlot) { alert('Please select a time slot.'); return }
     setSaving(true)
     try {
+      const config = configs.find(c => c.id === form.configId)
       const res = await fetch('/api/pda-tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId: form.clientId,
-          testDate: form.testDate,
-          testTime: form.testTime,
+          clientId:     form.clientId,
+          testDate:     form.testDate,
+          testTime:     form.selectedSlot,
           testCentreId: form.testCentreId,
           price: form.price ? parseFloat(form.price) : undefined,
-          notes: undefined, // notes field is used internally for centre data
         }),
       })
       if (res.ok) {
-        setForm({ clientId: '', testDate: '', testTime: '', testCentreId: '', price: String(defaultPrice), notes: '' })
+        setForm({ clientId: '', configId: '', testCentreId: '', testDate: '', selectedSlot: '', price: '' })
         setShowForm(false)
+        setSlots([])
         fetchAll()
       } else {
         const d = await res.json()
@@ -148,42 +216,32 @@ export default function PDATestsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ result: editResult }),
       })
-      if (res.ok) {
-        setEditingId(null)
-        setEditResult('')
-        fetchAll()
-      } else {
-        alert('Failed to update result.')
-      }
-    } catch {
-      alert('Failed to update result.')
-    }
+      if (res.ok) { setEditingId(null); setEditResult(''); fetchAll() }
+      else alert('Failed to update result.')
+    } catch { alert('Failed to update result.') }
   }
-
-  // PDA config creation removed from this page
-
-  
-
-  // Group centres by region for the dropdown
-  const centresByRegion = centres.reduce<Record<string, TestCentre[]>>((acc, c) => {
-    const region = c.region || 'Other'
-    if (!acc[region]) acc[region] = []
-    acc[region].push(c)
-    return acc
-  }, {})
 
   const toggleExpand = (id: string) => {
     if (editingId === id) return
     setExpandedId(expandedId === id ? null : id)
   }
 
+  // ── Derived ──────────────────────────────────────────────────────────────────
+
+  const selectedConfig = configs.find(c => c.id === form.configId)
+  const formComplete = form.clientId && form.configId && form.testCentreId && form.testDate
+
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
+          <div className="max-w-4xl mx-auto px-1 py-2 sm:py-8">
+
+        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">PDA Tests ({tests.length})</h1>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => { setShowForm(!showForm); setForm({ clientId: '', configId: '', testCentreId: '', testDate: '', selectedSlot: '', price: '' }); setSlots([]) }}
             className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700"
           >
             {showForm ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
@@ -191,106 +249,192 @@ export default function PDATestsPage() {
           </button>
         </div>
 
-        
+        {/* No configs warning */}
+        {showForm && configs.length === 0 && (
+          <div className="bg-amber-900/30 border border-amber-700 rounded-xl p-4 mb-6 text-amber-300 text-sm">
+            You have no active PDA test configurations. Go to <strong>Settings → PDA Test Packages</strong> to create one first.
+          </div>
+        )}
 
         {/* Schedule Form */}
-        {showForm && (
+        {showForm && configs.length > 0 && (
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 mb-6">
-            <h2 className="text-lg font-bold text-slate-100 mb-4">Schedule PDA Test</h2>
-            <form onSubmit={handleSchedule} className="space-y-4">
+            <h2 className="text-lg font-bold text-slate-100 mb-5">Schedule PDA Test</h2>
+            <form onSubmit={handleSchedule} className="space-y-5">
+
+              {/* Row 1: Student + PDA Package */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-1">Student</label>
+                  <label className="block text-sm font-medium text-slate-200 mb-1">Student <span className="text-red-400">*</span></label>
                   <select
                     required
                     value={form.clientId}
                     onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   >
-                    <option value="" className="bg-slate-900">Select student...</option>
+                    <option value="">Select student...</option>
                     {clients.map(c => (
-                      <option key={c.id} value={c.id} className="bg-slate-900">{c.name}</option>
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  {clients.length === 0 && (
+                    <p className="text-xs text-slate-500 mt-1">No students found. Add students from the Clients page.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-200 mb-1">PDA Package <span className="text-red-400">*</span></label>
+                  <select
+                    required
+                    value={form.configId}
+                    onChange={e => setForm(f => ({ ...f, configId: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Select package...</option>
+                    {configs.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} — {c.durationMinutes}min — ${c.discountPercent ? (c.price * (1 - c.discountPercent / 100)).toFixed(0) : c.price}
+                        {c.discountPercent ? ` (${c.discountPercent}% off)` : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Config details pill */}
+              {selectedConfig && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="bg-blue-900/40 text-blue-300 px-2.5 py-1 rounded-full">{selectedConfig.durationMinutes} min</span>
+                  <span className="bg-emerald-900/40 text-emerald-300 px-2.5 py-1 rounded-full">${selectedConfig.price}</span>
+                  {selectedConfig.discountPercent && (
+                    <span className="bg-purple-900/40 text-purple-300 px-2.5 py-1 rounded-full">{selectedConfig.discountPercent}% discount applied</span>
+                  )}
+                  <span className="bg-slate-700/60 text-slate-300 px-2.5 py-1 rounded-full">{selectedConfig.testCentres.length} centre{selectedConfig.testCentres.length !== 1 ? 's' : ''} available</span>
+                </div>
+              )}
+
+              {/* Row 2: Test Centre (only when config selected) */}
+              {form.configId && availableCentres.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-1">Test Centre</label>
+                  <label className="block text-sm font-medium text-slate-200 mb-1">Test Centre <span className="text-red-400">*</span></label>
                   <select
                     required
                     value={form.testCentreId}
-                    onChange={e => setForm(f => ({ ...f, testCentreId: e.target.value }))}
+                    onChange={e => setForm(f => ({ ...f, testCentreId: e.target.value, testDate: '', selectedSlot: '' }))}
                     className="w-full px-3 py-2.5 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   >
-                    <option value="" className="bg-slate-900">Select test centre...</option>
-                    {Object.entries(centresByRegion).map(([region, regionCentres]) => (
-                      <optgroup key={region} label={region}>
-                        {regionCentres.map(c => (
-                          <option key={c.id} value={c.id} className="bg-slate-900">{c.name} — {c.suburb}</option>
-                        ))}
-                      </optgroup>
+                    {availableCentres.length > 1 && <option value="">Select test centre...</option>}
+                    {availableCentres.map(tc => (
+                      <option key={tc.id} value={tc.id}>{tc.name} — {tc.address}</option>
                     ))}
                   </select>
                 </div>
+              )}
+
+              {/* Row 3: Date (only when centre selected) */}
+              {form.testCentreId && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-1">Test Date</label>
+                  <label className="block text-sm font-medium text-slate-200 mb-1">Test Date <span className="text-red-400">*</span></label>
                   <input
                     type="date"
                     required
+                    min={today}
                     value={form.testDate}
-                    onChange={e => setForm(f => ({ ...f, testDate: e.target.value }))}
-                    className="w-full px-3 py-2.5 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    onChange={e => setForm(f => ({ ...f, testDate: e.target.value, selectedSlot: '' }))}
+                    className="w-full sm:w-64 px-3 py-2.5 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
+              )}
+
+              {/* Row 4: Available slots (only when date selected) */}
+              {formComplete && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-1">Test Time</label>
-                  <input
-                    type="time"
-                    required
-                    value={form.testTime}
-                    onChange={e => setForm(f => ({ ...f, testTime: e.target.value }))}
-                    className="w-full px-3 py-2.5 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
+                  <label className="block text-sm font-medium text-slate-200 mb-2">
+                    Available Slots
+                    {slotsLoading && <span className="ml-2 text-slate-400 text-xs">Loading...</span>}
+                  </label>
+
+                  {slotsLoading && (
+                    <div className="flex items-center gap-2 text-slate-400 text-sm py-3">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Checking availability...
+                    </div>
+                  )}
+
+                  {!slotsLoading && slotsError && (
+                    <div className="text-red-400 text-sm py-2">{slotsError}</div>
+                  )}
+
+                  {!slotsLoading && !slotsError && slots.length === 0 && (
+                    <div className="bg-slate-800 rounded-lg px-4 py-3 text-slate-400 text-sm">
+                      No available slots on this date. Try a different date.
+                    </div>
+                  )}
+
+                  {!slotsLoading && slots.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {slots.filter(s => s.available).map(slot => (
+                        <button
+                          key={slot.time}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, selectedSlot: slot.time }))}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition ${
+                            form.selectedSlot === slot.time
+                              ? 'border-blue-500 bg-blue-900/40 text-blue-200'
+                              : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-blue-600 hover:text-white'
+                          }`}
+                        >
+                          {slot.time}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div>
+              )}
+
+              {/* Price override */}
+              {form.selectedSlot && (
+                <div className="sm:w-64">
                   <label className="block text-sm font-medium text-slate-200 mb-1">
                     Price ($)
-                    {defaultPrice > 0 && (
-                      <span className="ml-1 text-xs text-slate-400 font-normal">default: ${defaultPrice}</span>
-                    )}
+                    <span className="ml-1 text-xs text-slate-400 font-normal">optional override</span>
                   </label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder={defaultPrice > 0 ? String(defaultPrice) : '0.00'}
+                    placeholder={selectedConfig ? String(selectedConfig.price) : '0.00'}
                     value={form.price}
                     onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   />
-                  <p className="text-xs text-slate-400 mt-1">Leave blank to use your default test package price.</p>
+                  <p className="text-xs text-slate-500 mt-1">Leave blank to use the package price.</p>
                 </div>
-              </div>
+              )}
 
-              <div className="bg-amber-900/25 border border-amber-700/50 rounded-lg px-4 py-3 text-sm text-amber-300">
-                Scheduling a PDA test blocks your availability from {form.testTime ? (() => {
-                  const [h, m] = form.testTime.split(':').map(Number)
-                  const d = new Date(0, 0, 0, h, m - 15)
-                  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-                })() : 'before the test'} through 12:45 (2h45 test duration). Your booking buffer applies before and after.
-              </div>
+              {/* Booking summary */}
+              {form.selectedSlot && selectedConfig && (
+                <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg px-4 py-3 text-sm text-blue-200 space-y-1">
+                  <div className="font-semibold text-blue-100">Booking summary</div>
+                  <div>Package: {selectedConfig.name}</div>
+                  <div>Duration: {selectedConfig.durationMinutes} min — blocks until {(() => {
+                    const [h, m] = form.selectedSlot.split(':').map(Number)
+                    const end = new Date(0, 0, 0, h, m + selectedConfig.durationMinutes)
+                    return `${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`
+                  })()}</div>
+                  <div>Time: {form.testDate} at {form.selectedSlot}</div>
+                </div>
+              )}
 
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-800 transition"
-                >
+              {/* Actions */}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => { setShowForm(false); setSlots([]) }}
+                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-800 transition">
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-60"
+                  disabled={saving || !form.selectedSlot}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Car className="h-4 w-4" />}
                   Schedule Test
@@ -316,50 +460,32 @@ export default function PDATestsPage() {
             <div className="divide-y divide-slate-700">
               {tests.map(test => {
                 const isExpanded = expandedId === test.id
-                const isEditing = editingId === test.id
-                const testDate = new Date(test.testDate)
+                const isEditing  = editingId  === test.id
+                const testDate   = new Date(test.testDate)
 
                 return (
                   <div key={test.id} className="hover:bg-slate-800 transition">
-                    <div
-                      className="p-4 cursor-pointer flex items-center justify-between gap-4"
-                      onClick={() => !isEditing && toggleExpand(test.id)}
-                    >
+                    <div className="p-4 cursor-pointer flex items-center justify-between gap-4"
+                      onClick={() => !isEditing && toggleExpand(test.id)}>
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="shrink-0">{resultIcon(test.result)}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
                             <h3 className="font-semibold truncate text-slate-100">{test.client.name}</h3>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${resultColor(test.result)}`}>
-                              {test.result}
-                            </span>
-                            {test.price > 0 && (
-                              <span className="text-xs text-slate-400">${test.price.toFixed(0)}</span>
-                            )}
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${resultColor(test.result)}`}>{test.result}</span>
+                            {test.price > 0 && <span className="text-xs text-slate-400">${test.price.toFixed(0)}</span>}
                           </div>
                           <div className="flex items-center gap-3 text-sm text-slate-400">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {testDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {test.testTime}
-                            </span>
-                            <span className="hidden sm:flex items-center gap-1 truncate">
-                              <MapPin className="h-3 w-3 shrink-0" />
-                              {test.testCenterName}
-                            </span>
+                            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{testDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{test.testTime}</span>
+                            <span className="hidden sm:flex items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{test.testCenterName}</span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {!isEditing && test.result === 'PENDING' && (
-                          <button
-                            onClick={e => { e.stopPropagation(); setEditingId(test.id); setEditResult(test.result); setExpandedId(test.id) }}
-                            className="p-2 hover:bg-slate-700 rounded-lg text-sky-400"
-                            title="Update result"
-                          >
+                          <button onClick={e => { e.stopPropagation(); setEditingId(test.id); setEditResult(test.result); setExpandedId(test.id) }}
+                            className="p-2 hover:bg-slate-700 rounded-lg text-sky-400" title="Update result">
                             <Edit2 className="h-4 w-4" />
                           </button>
                         )}
@@ -376,35 +502,22 @@ export default function PDATestsPage() {
                           <div className="space-y-4 pt-4">
                             <p className="text-sm font-medium text-slate-200">Update Test Result</p>
                             <div className="flex gap-3">
-                              <button
-                                onClick={() => setEditResult('PASS')}
-                                className={`flex-1 px-4 py-3 rounded-xl border-2 flex items-center justify-center gap-2 font-medium transition ${
-                                  editResult === 'PASS' ? 'border-green-500 bg-green-900/40 text-green-300' : 'border-slate-700 hover:border-green-600 text-slate-300'
-                                }`}
-                              >
+                              <button onClick={() => setEditResult('PASS')}
+                                className={`flex-1 px-4 py-3 rounded-xl border-2 flex items-center justify-center gap-2 font-medium transition ${editResult === 'PASS' ? 'border-green-500 bg-green-900/40 text-green-300' : 'border-slate-700 hover:border-green-600 text-slate-300'}`}>
                                 <CheckCircle className="h-5 w-5" /> Pass
                               </button>
-                              <button
-                                onClick={() => setEditResult('FAIL')}
-                                className={`flex-1 px-4 py-3 rounded-xl border-2 flex items-center justify-center gap-2 font-medium transition ${
-                                  editResult === 'FAIL' ? 'border-red-500 bg-red-900/40 text-red-300' : 'border-slate-700 hover:border-red-600 text-slate-300'
-                                }`}
-                              >
+                              <button onClick={() => setEditResult('FAIL')}
+                                className={`flex-1 px-4 py-3 rounded-xl border-2 flex items-center justify-center gap-2 font-medium transition ${editResult === 'FAIL' ? 'border-red-500 bg-red-900/40 text-red-300' : 'border-slate-700 hover:border-red-600 text-slate-300'}`}>
                                 <XCircle className="h-5 w-5" /> Fail
                               </button>
                             </div>
                             <div className="flex gap-3">
-                              <button
-                                onClick={() => handleUpdateResult(test.id)}
-                                disabled={!editResult || editResult === test.result}
-                                className="flex-1 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm font-semibold"
-                              >
+                              <button onClick={() => handleUpdateResult(test.id)} disabled={!editResult || editResult === test.result}
+                                className="flex-1 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm font-semibold">
                                 <Save className="h-4 w-4" /> Save Result
                               </button>
-                              <button
-                                onClick={() => { setEditingId(null); setEditResult('') }}
-                                className="flex-1 border border-slate-700 text-slate-300 px-4 py-2.5 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-2 text-sm"
-                              >
+                              <button onClick={() => { setEditingId(null); setEditResult('') }}
+                                className="flex-1 border border-slate-700 text-slate-300 px-4 py-2.5 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-2 text-sm">
                                 <X className="h-4 w-4" /> Cancel
                               </button>
                             </div>
@@ -423,24 +536,16 @@ export default function PDATestsPage() {
                               <p className="font-medium text-slate-200 mb-2">Test Centre</p>
                               <div className="space-y-1.5 text-slate-400">
                                 <div className="font-medium text-slate-200">{test.testCenterName}</div>
-                                <div className="flex items-start gap-2">
-                                  <MapPin className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
-                                  {test.testCenterAddress}
-                                </div>
+                                <div className="flex items-start gap-2"><MapPin className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />{test.testCenterAddress}</div>
                                 {test.price > 0 && (
-                                  <div className="flex items-center gap-2">
-                                    <DollarSign className="h-4 w-4 text-slate-500" />
-                                    ${test.price.toFixed(2)}
-                                  </div>
+                                  <div className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-slate-500" />${test.price.toFixed(2)}</div>
                                 )}
                               </div>
                             </div>
                             {test.result === 'PENDING' && (
                               <div className="sm:col-span-2 pt-2 border-t border-slate-800">
-                                <button
-                                  onClick={() => { setEditingId(test.id); setEditResult(test.result); }}
-                                  className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 text-sm font-semibold"
-                                >
+                                <button onClick={() => { setEditingId(test.id); setEditResult(test.result) }}
+                                  className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 text-sm font-semibold">
                                   <Edit2 className="h-4 w-4" /> Update Result
                                 </button>
                               </div>
@@ -455,7 +560,8 @@ export default function PDATestsPage() {
             </div>
           </div>
         )}
+
       </div>
-    </div>
+
   )
 }

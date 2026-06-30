@@ -1,56 +1,24 @@
-// @ts-nocheck
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import Stripe from 'stripe';
+/**
+ * DEPRECATED — use /api/payments/wallet or /api/payments/create-intent instead.
+ *
+ * Wallet top-up:   POST /api/client/wallet-topup-intent  (min/max enforced, rate-limited)
+ * Booking payment: POST /api/payments/create-intent      (server-side price, advisory lock)
+ *
+ * This file is kept as a tombstone so any stale client code gets a clear error
+ * instead of silently failing.
+ */
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-01-28.clover',
-});
+import { NextResponse } from 'next/server';
 
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+export const dynamic = 'force-dynamic';
 
-    const body = await req.json();
-    const { amount, description, type } = body;
-
-    if (!amount || amount <= 0) {
-      return NextResponse.json(
-        { error: 'Invalid amount' },
-        { status: 400 }
-      );
-    }
-
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount), // Amount in cents
-      currency: 'aud',
-      receipt_email: session.user.email,
-      description: description || 'Wallet credit',
-      metadata: {
-        type: type || 'wallet-credit',
-        userEmail: session.user.email
-      }
-    });
-
-    return NextResponse.json({
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
-    });
-
-  } catch (error) {
-    console.error('Create payment intent error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create payment intent' },
-      { status: 500 }
-    );
-  }
+export async function POST() {
+  return NextResponse.json(
+    {
+      error: 'This endpoint is deprecated.',
+      walletTopUp: 'POST /api/client/wallet-topup-intent',
+      bookingPayment: 'POST /api/payments/create-intent',
+    },
+    { status: 410 } // 410 Gone — not a temporary redirect
+  );
 }

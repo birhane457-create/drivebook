@@ -152,7 +152,7 @@ export default function ClientsPage() {
   ) : []
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
+    <div className="max-w-7xl mx-auto py-4 sm:py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">Clients ({pagination.total})</h1>
           <button
@@ -263,15 +263,15 @@ export default function ClientsPage() {
             <p className="text-slate-400">Add your first client to get started</p>
           </div>
         ) : (
-          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 overflow-hidden">
-            <div className="divide-y divide-slate-800">
+          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-500 overflow-hidden">
+            <div className="divide-y divide-slate-500">
               {filteredClients.map((client) => {
                 const isExpanded = expandedId === client.id
                 const isEditing = editingId === client.id
                 const displayClient = isEditing && editData ? editData : client
 
                 return (
-                  <div key={client.id} className="hover:bg-slate-900 transition">
+                  <div key={client.id} className="hover:bg-slate-800 transition">
                     {/* Compact Row */}
                     <div 
                       className="p-4 cursor-pointer flex items-center justify-between gap-4"

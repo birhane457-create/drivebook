@@ -77,10 +77,10 @@ class EmailService {
               
               <div class="info-box">
                 <div class="info-row">
-                  <span class="label">📅 Date:</span> ${startTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  <span class="label">📅 Date:</span> ${startTime.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Australia/Perth' })}
                 </div>
                 <div class="info-row">
-                  <span class="label">🕐 Time:</span> ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  <span class="label">🕐 Time:</span> ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })} - ${endTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}
                 </div>
                 ${pickupAddress ? `
                 <div class="info-row">
@@ -168,10 +168,10 @@ class EmailService {
               
               <div class="info-box">
                 <div class="info-row">
-                  <span class="label">📅 Date:</span> ${startTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  <span class="label">📅 Date:</span> ${startTime.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Australia/Perth' })}
                 </div>
                 <div class="info-row">
-                  <span class="label">🕐 Time:</span> ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  <span class="label">🕐 Time:</span> ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })} - ${endTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}
                 </div>
                 ${pickupAddress ? `
                 <div class="info-row">
@@ -231,7 +231,7 @@ class EmailService {
               
               <div class="info-box">
                 <div class="info-row">
-                  <span class="label">📅 Date:</span> ${testDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  <span class="label">📅 Date:</span> ${testDate.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Australia/Perth' })}
                 </div>
                 <div class="info-row">
                   <span class="label">🕐 Time:</span> ${testTime}
@@ -492,8 +492,8 @@ The DriveBook Team
     claimUrl: string
   }) {
     const { clientName, clientEmail, instructorName, lessonDate, claimUrl } = data
-    const dateStr = lessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    const timeStr = lessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+    const dateStr = lessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })
+    const timeStr = lessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
 
     await this.transporter.sendMail({
       from: `"DriveBook" <${process.env.EMAIL_FROM}>`,

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
@@ -12,15 +12,15 @@ export const dynamic = 'force-dynamic';
  * Purpose: Send trial expiry notifications to instructors
  * Schedule: Daily at 2am UTC (after check-trial-expiry at 1am UTC)
  *
- * Emails sent (all pricing pulled from SUBSCRIPTION_PLANS config — never hardcoded):
- *   - 7 days before trial ends  → one-time warning (TRIAL_WARNING_EMAIL_SENT)
- *   - 3 days before trial ends  → one-time reminder (TRIAL_3DAY_WARNING_EMAIL_SENT)
- *   - Within 24h after expiry   → one-time expiry notice (TRIAL_EXPIRED_EMAIL_SENT)
+ * Emails sent (all pricing pulled from SUBSCRIPTION_PLANS config â€” never hardcoded):
+ *   - 7 days before trial ends  â†’ one-time warning (TRIAL_WARNING_EMAIL_SENT)
+ *   - 3 days before trial ends  â†’ one-time reminder (TRIAL_3DAY_WARNING_EMAIL_SENT)
+ *   - Within 24h after expiry   â†’ one-time expiry notice (TRIAL_EXPIRED_EMAIL_SENT)
  *
  * Deduplication: AuditLog entries prevent duplicate sends per subscription.
  */
 
-/** Build the plan comparison table rows from config — no hardcoded prices */
+/** Build the plan comparison table rows from config â€” no hardcoded prices */
 function buildPlanTableRows(): string {
   const tiers: SubscriptionTier[] = ['BASIC', 'PRO', 'STUDIO', 'BUSINESS'];
   return tiers
@@ -47,7 +47,7 @@ function buildPlanList(): string {
   return tiers
     .map((tier) => {
       const plan = SUBSCRIPTION_PLANS[tier];
-      return `<li><strong>${plan.name} ($${plan.monthlyPrice}/month)</strong> — ${plan.commissionRate}% commission</li>`;
+      return `<li><strong>${plan.name} ($${plan.monthlyPrice}/month)</strong> â€” ${plan.commissionRate}% commission</li>`;
     })
     .join('');
 }
@@ -59,6 +59,14 @@ const HELP_URL = `${BASE_URL}/help`;
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
 
+  // â”€â”€ Auth: CRON_SECRET Bearer token (external) or Vercel Cron header â”€â”€â”€â”€â”€â”€
+  const authHeader = req.headers.get('authorization');
+  const isVercelCron = req.headers.get('x-vercel-cron') === '1';
+  const hasCronSecret = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  if (!isVercelCron && !hasCronSecret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const now = new Date();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -68,7 +76,7 @@ export async function GET(req: NextRequest) {
     let remindersSent = 0;
     let expiryNotifications = 0;
 
-    // ── 1. 7-DAY WARNING ──────────────────────────────────────────────────────
+    // â”€â”€ 1. 7-DAY WARNING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const upcomingExpiries = await prisma.subscription.findMany({
       where: {
         status: 'TRIAL',
@@ -97,7 +105,7 @@ export async function GET(req: NextRequest) {
         ? SUBSCRIPTION_PLANS[sub.tier as SubscriptionTier].name
         : sub.tier || 'your plan';
       const expiryDateStr = new Date(sub.trialEndsAt).toLocaleDateString('en-AU', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
       });
 
       try {
@@ -116,7 +124,7 @@ export async function GET(req: NextRequest) {
                 View Plans &amp; Upgrade
               </a>
             </p>
-            <p>You can add your payment method now — you won't be charged until your trial ends.</p>
+            <p>You can add your payment method now â€” you won't be charged until your trial ends.</p>
             <p>Questions? Visit our <a href="${HELP_URL}">help center</a> or reply to this email.</p>
           `,
         });
@@ -139,7 +147,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── 2. 3-DAY REMINDER ─────────────────────────────────────────────────────
+    // â”€â”€ 2. 3-DAY REMINDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const threeDayExpiries = await prisma.subscription.findMany({
       where: {
         status: 'TRIAL',
@@ -168,18 +176,18 @@ export async function GET(req: NextRequest) {
         ? SUBSCRIPTION_PLANS[sub.tier as SubscriptionTier].name
         : sub.tier || 'your plan';
       const expiryDateStr = new Date(sub.trialEndsAt).toLocaleDateString('en-AU', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
       });
 
       try {
         await emailService.sendGenericEmail({
           to: sub.instructor.user.email,
-          subject: `⏰ ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left on your DriveBook trial`,
+          subject: `â° ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left on your DriveBook trial`,
           html: `
-            <h2>Last chance — trial ending ${daysLeft === 1 ? 'tomorrow' : `in ${daysLeft} days`}</h2>
+            <h2>Last chance â€” trial ending ${daysLeft === 1 ? 'tomorrow' : `in ${daysLeft} days`}</h2>
             <p>Hi ${sub.instructor.name},</p>
             <p>Your <strong>${tierName}</strong> trial ends on <strong>${expiryDateStr}</strong>.</p>
-            <p>After that, your account will switch to <strong>read-only mode</strong> — you won't be able to create new bookings or add students until you subscribe.</p>
+            <p>After that, your account will switch to <strong>read-only mode</strong> â€” you won't be able to create new bookings or add students until you subscribe.</p>
             <p>It takes less than 2 minutes to add a payment method. You won't be charged until your trial ends.</p>
             <p>
               <a href="${SUBSCRIPTION_URL}" style="background-color:#dc2626;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">
@@ -208,7 +216,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── 3. EXPIRY NOTIFICATION (within 24h after expiry) ─────────────────────
+    // â”€â”€ 3. EXPIRY NOTIFICATION (within 24h after expiry) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const recentlyExpired = await prisma.subscription.findMany({
       where: {
         status: 'EXPIRED',
@@ -234,22 +242,22 @@ export async function GET(req: NextRequest) {
       if (existing) continue;
 
       const expiryDateStr = new Date(sub.trialEndsAt).toLocaleDateString('en-AU', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
       });
 
       try {
         await emailService.sendGenericEmail({
           to: sub.instructor.user.email,
-          subject: `Your DriveBook trial ended — action required to restore access`,
+          subject: `Your DriveBook trial ended â€” action required to restore access`,
           html: `
             <h2>Your trial has ended</h2>
             <p>Hi ${sub.instructor.name},</p>
             <p>Your free trial ended on <strong>${expiryDateStr}</strong>.</p>
             <p>Your account is now in <strong>read-only mode</strong>. You can still view all your historical data, but:</p>
             <ul>
-              <li>❌ Cannot create new bookings</li>
-              <li>❌ Cannot add students</li>
-              <li>❌ Cannot change settings</li>
+              <li>âŒ Cannot create new bookings</li>
+              <li>âŒ Cannot add students</li>
+              <li>âŒ Cannot change settings</li>
             </ul>
             <p><strong>Choose a plan to restore full access:</strong></p>
             <table style="width:100%;border-collapse:collapse;">

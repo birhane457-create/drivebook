@@ -258,7 +258,7 @@ export async function processChargebackDefense(disputeId: string): Promise<void>
 
     if (booking) {
       const serviceDate = booking.startTime
-        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })
         : 'Date not recorded'
 
       evidenceText += `\nService Details:\n`

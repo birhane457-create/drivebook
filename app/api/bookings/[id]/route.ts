@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -70,9 +70,33 @@ export async function PATCH(
       )
     }
 
+    // Issue 9 fix: reject soft-deleted bookings
+    if ((booking as any).deletedAt) {
+      return NextResponse.json(
+        { error: 'Booking not found or access denied' },
+        { status: 404 }
+      )
+    }
+
     if (booking.status === 'CANCELLED' && data.status !== 'CONFIRMED') {
       return NextResponse.json(
         { error: 'Cannot edit cancelled bookings except to reconfirm' },
+        { status: 403 }
+      )
+    }
+
+    // Issue 7 fix: block invalid state transitions
+    // PENDING_PAYMENT → COMPLETED skips payment — must go through CONFIRMED first
+    if (booking.status === 'PENDING_PAYMENT' && data.status === 'COMPLETED') {
+      return NextResponse.json(
+        { error: 'Cannot mark a PENDING_PAYMENT booking as COMPLETED. Payment must be confirmed first.' },
+        { status: 422 }
+      )
+    }
+    // CANCELLED → CONFIRMED requires admin — instructors cannot reactivate cancelled bookings
+    if (booking.status === 'CANCELLED' && data.status === 'CONFIRMED' && !isAdmin) {
+      return NextResponse.json(
+        { error: 'Only admins can reinstate a cancelled booking.' },
         { status: 403 }
       )
     }
@@ -85,14 +109,54 @@ export async function PATCH(
     if (data.endTime) changes.endTime = { from: booking.endTime, to: new Date(data.endTime) };
 
     // FIXED: Use transaction wrapper for atomic updates
+    const newStart = data.startTime ? new Date(data.startTime) : null
+    const newEnd   = data.endTime   ? new Date(data.endTime)   : null
+
+    if (data.startTime && isNaN(new Date(data.startTime).getTime())) {
+      return NextResponse.json({ error: 'Invalid startTime' }, { status: 400 })
+    }
+    if (data.endTime && isNaN(new Date(data.endTime).getTime())) {
+      return NextResponse.json({ error: 'Invalid endTime' }, { status: 400 })
+    }
+
+    const effectiveStart = newStart ?? (booking.startTime as Date)
+    const effectiveEnd = newEnd ?? (booking.endTime as Date)
+    if (effectiveEnd <= effectiveStart) {
+      return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 })
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
+      // ── Slot conflict check when time is being changed ──────────────────────
+      if (newStart || newEnd) {
+        const checkStart = effectiveStart
+        const checkEnd = effectiveEnd
+
+        const slotConflict = await tx.booking.findFirst({
+          where: {
+            instructorId: booking.instructorId,
+            id: { not: params.id },                               // exclude this booking
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
+            OR: [
+              { AND: [{ startTime: { gte: checkStart } }, { startTime: { lt: checkEnd } }] },
+              { AND: [{ endTime:   { gt: checkStart } }, { endTime:   { lte: checkEnd } }] },
+              { AND: [{ startTime: { lte: checkStart } }, { endTime:  { gte: checkEnd } }] },
+            ],
+          },
+          select: { id: true },
+        })
+
+        if (slotConflict) {
+          throw new Error('SLOT_CONFLICT')
+        }
+      }
+
       // Update booking
       const updatedBooking = await tx.booking.update({
         where: { id: params.id },
         data: {
           ...data,
-          startTime: data.startTime ? new Date(data.startTime) : undefined,
-          endTime: data.endTime ? new Date(data.endTime) : undefined,
+          startTime: newStart ?? undefined,
+          endTime:   newEnd   ?? undefined,
         },
         include: {
           client: true,
@@ -104,36 +168,40 @@ export async function PATCH(
       if (data.price && data.price !== booking.price) {
         const priceDifference = data.price - booking.price;
         
-        // If price increased, need to charge the client
         if (priceDifference > 0 && booking.client?.userId) {
-          // Check if client has wallet
           const wallet = await tx.clientWallet.findUnique({
             where: { userId: booking.client.userId }
           });
 
           if (wallet) {
-            // ✅ P0 FIX #2: Calculate balance from transactions
-            const { balance } = await getWalletBalance(booking.client.userId);
-            
-            // Check if client has enough balance
-            if (balance < priceDifference) {
-              throw new Error(`Insufficient wallet balance. Need $${priceDifference.toFixed(2)} more for the duration increase.`);
+            // ── Balance from ledger inside the transaction (authoritative) ──
+            const txns = await tx.walletTransaction.findMany({
+              where: { walletId: wallet.id, status: 'CONFIRMED' }
+            })
+            const txBalance = txns.reduce((sum: number, t: any) =>
+              t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
+
+            if (txBalance < priceDifference) {
+              throw new Error(`INSUFFICIENT_BALANCE:${priceDifference.toFixed(2)}`)
             }
 
-            // Create wallet transaction (debit)
+            // Deduct from both ledger and stored balance field
             await tx.walletTransaction.create({
               data: {
                 walletId: wallet.id,
                 type: 'DEBIT',
                 amount: priceDifference,
-                description: `Duration increase for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString() : 'N/A'}`,
+                description: `Duration increase for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) : 'N/A'}`,
                 status: 'CONFIRMED'
               }
             });
+            await tx.clientWallet.update({
+              where: { id: wallet.id },
+              data: { balance: { decrement: priceDifference } },
+            })
           }
         }
         
-        // If price decreased, refund the client
         if (priceDifference < 0 && booking.client?.userId) {
           const refundAmount = Math.abs(priceDifference);
           
@@ -142,16 +210,34 @@ export async function PATCH(
           });
 
           if (wallet) {
-            // Create wallet transaction (credit)
+            // Refund to both ledger and stored balance field
             await tx.walletTransaction.create({
               data: {
                 walletId: wallet.id,
                 type: 'CREDIT',
                 amount: refundAmount,
-                description: `Duration reduction for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString() : 'N/A'}`,
+                description: `Duration reduction for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) : 'N/A'}`,
                 status: 'CONFIRMED'
               }
             });
+            await tx.clientWallet.update({
+              where: { id: wallet.id },
+              data: { balance: { increment: refundAmount } },
+            })
+          } else {
+            // Wallet missing — log but don't fail the update
+            console.warn(`[PATCH booking] Could not refund $${refundAmount}: no wallet for userId=${booking.client.userId}`)
+            await (tx as any).auditLog.create({
+              data: {
+                action: 'WALLET_REFUND_SKIPPED',
+                actorId: session.user.id!,
+                actorRole: 'INSTRUCTOR',
+                targetType: 'BOOKING',
+                targetId: params.id,
+                success: false,
+                metadata: { reason: 'Wallet not found', refundAmount, clientUserId: booking.client.userId },
+              },
+            }).catch(() => {})
           }
         }
 
@@ -160,17 +246,12 @@ export async function PATCH(
         })
 
         if (existingTransaction) {
-          // Recalculate commission
           const platformFee = data.price * (booking.commissionRate || 0.15)
           const instructorPayout = data.price - platformFee
 
           await (tx as any).transaction.update({
             where: { id: existingTransaction.id },
-            data: {
-              amount: data.price,
-              platformFee,
-              instructorPayout
-            }
+            data: { amount: data.price, platformFee, instructorPayout }
           })
         }
       }
@@ -213,6 +294,13 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })
+    }
+    if ((error as Error).message === 'SLOT_CONFLICT') {
+      return NextResponse.json({ error: 'The new time slot conflicts with an existing booking.' }, { status: 409 })
+    }
+    if ((error as Error).message?.startsWith('INSUFFICIENT_BALANCE:')) {
+      const needed = (error as Error).message.split(':')[1]
+      return NextResponse.json({ error: `Insufficient wallet balance. Need $${needed} more for the price increase.` }, { status: 422 })
     }
     console.error('Update booking error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -392,10 +480,10 @@ export async function DELETE(
     if (booking.client?.email) {
       const isPastBooking = booking.startTime && booking.startTime < now
       const bookingDateStr = booking.startTime
-        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })
         : 'N/A'
       const bookingTimeStr = booking.startTime
-        ? new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+        ? new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
         : 'N/A'
       const cancelNote = isPastBooking
         ? 'No refund applies — this lesson had already passed at the time of cancellation.'

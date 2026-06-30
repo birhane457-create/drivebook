@@ -22,9 +22,9 @@ const FIELD_LABELS: Record<string, { label: string; tier: string }> = {
 };
 
 export async function GET(req: NextRequest) {
-  // Verify cron secret
+  // Verify cron secret — explicitly reject if env var is not configured
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -139,7 +139,7 @@ async function notifyInstructors(
   });
 
   const effectiveDateStr = new Date(change.effectiveDate).toLocaleDateString('en-AU', {
-    day: 'numeric', month: 'long', year: 'numeric',
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
   });
 
   const direction = change.newRate > change.currentRate ? 'increased' : 'decreased';

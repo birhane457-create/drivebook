@@ -8,14 +8,18 @@ import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
 import { getWalletBalance } from '@/lib/services/wallet-helpers'
 import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
-import { getCommissionRate } from '@/lib/services/platform-pricing'
+import { getCommissionRate, getPlatformFeeRate } from '@/lib/services/platform-pricing'
+import { checkSubscriptionAccess } from '@/lib/middleware/subscriptionValidation'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
-const PLATFORM_FEE_RATE = 0.036
 const MAX_DURATION_MINUTES = 480
-const BATCH_CONCURRENCY = 4
+// Process batch bookings sequentially to avoid intra-batch slot conflicts.
+// Parallel batch processing can allow overlapping bookings within the same
+// request if each transaction only checks the DB and not the other pending
+// bookings in the batch.
+const BATCH_CONCURRENCY = 1
 
 const latitudeSchema = z
   .number()
@@ -195,6 +199,7 @@ export async function POST(req: NextRequest) {
         id: true,
         name: true,
         approvalStatus: true,
+        isActive: true,
         subscriptionStatus: true,
         subscriptionTier: true,
         syncGoogleCalendar: true,
@@ -203,7 +208,8 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    if (!instructor || instructor.approvalStatus !== 'APPROVED') {
+    // Issue 3 fix: check both approvalStatus and isActive
+    if (!instructor || instructor.approvalStatus !== 'APPROVED' || instructor.isActive === false) {
       return NextResponse.json(
         {
           error: 'Your account is pending approval',
@@ -213,10 +219,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (instructor.subscriptionStatus !== 'ACTIVE') {
+    // Issue 2 fix: use checkSubscriptionAccess() to enforce trial expiry + read-only
+    // parity with the single booking route (which calls requireActiveSubscription)
+    const subAccess = await checkSubscriptionAccess(session.user.id)
+    if (!subAccess.valid || (subAccess as any).readOnly) {
       return NextResponse.json(
         {
-          error: 'Active subscription required',
+          error: 'Active subscription required to create bookings',
           requiresSubscription: true,
         },
         { status: 403 }
@@ -246,6 +255,9 @@ export async function POST(req: NextRequest) {
     const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC')
     const commissionRate = commissionRatePct / 100
 
+    // MEDIUM-10 FIX: Get platform fee rate from DB instead of hardcoding
+    const platformFeeRate = await getPlatformFeeRate()
+
     const outcomes = await mapWithConcurrency(
       data.bookings,
       BATCH_CONCURRENCY,
@@ -257,6 +269,7 @@ export async function POST(req: NextRequest) {
           instructorId,
           clientMap,
           commissionRate,
+          platformFeeRate,
           now,
         })
     )
@@ -309,6 +322,7 @@ type ProcessBookingArgs = {
   instructorId: string
   clientMap: Map<string, ClientWithUser>
   commissionRate: number
+  platformFeeRate: number
   now: Date
 }
 
@@ -317,7 +331,7 @@ type ProcessOutcome =
   | { ok: false; error: BatchFailure }
 
 async function processBooking(args: ProcessBookingArgs): Promise<ProcessOutcome> {
-  const { bookingData, index, instructor, instructorId, clientMap, commissionRate, now } = args
+  const { bookingData, index, instructor, instructorId, clientMap, commissionRate, platformFeeRate, now } = args
 
   try {
     const startTime = new Date(bookingData.startTime)
@@ -338,7 +352,7 @@ async function processBooking(args: ProcessBookingArgs): Promise<ProcessOutcome>
 
     const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)
     const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
-    const platformFee = parseFloat((lessonPrice * PLATFORM_FEE_RATE).toFixed(2))
+    const platformFee = parseFloat((lessonPrice * (platformFeeRate / 100)).toFixed(2))
     const instructorPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2))
     const pickupLocation = bookingData.pickupAddress || client.defaultPickupAddress || null
 
@@ -480,13 +494,17 @@ async function createPendingBooking(ctx: {
 
   try {
     const shortfall = parseFloat((lessonPrice - balance).toFixed(2))
-    const topUpAmount = parseFloat((shortfall / (1 - PLATFORM_FEE_RATE)).toFixed(2))
+    // topUpAmount = shortfall + the proportional platform fee on the shortfall
+    // feeRate = platformFee / lessonPrice (already computed server-side)
+    const feeRate = lessonPrice > 0 ? platformFee / lessonPrice : 0
+    const topUpAmount = parseFloat((shortfall / (1 - feeRate)).toFixed(2))
     const dateStr = startTime.toLocaleDateString('en-AU', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
+      timeZone: 'Australia/Perth',
     })
-    const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+    const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
 
     const isNewAccount = !!(
       client.user?.resetToken &&
@@ -613,7 +631,7 @@ async function createConfirmedBooking(ctx: {
           walletId: wallet.id,
           type: 'DEBIT',
           amount: lessonPrice,
-          description: `Lesson booking — ${startTime.toLocaleDateString('en-AU')} ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`,
+          description: `Lesson booking — ${startTime.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}`,
           status: 'CONFIRMED',
         },
       })
@@ -685,6 +703,26 @@ async function createConfirmedBooking(ctx: {
     console.error('Audit log failed:', auditErr)
   }
 
+  // FinancialLedger — deterministic idempotency key per booking
+  try {
+    const { recordBookingPayment } = await import('@/lib/services/ledger-operations')
+    if (booking.isPaid && client?.userId) {
+      await recordBookingPayment({
+        bookingId: booking.id,
+        userId: client.userId,
+        instructorId,
+        totalAmount: booking.price,
+        platformFee: booking.platformFee ?? 0,
+        instructorPayout: booking.instructorPayout ?? 0,
+        createdBy: instructorId,
+      })
+    }
+  } catch (ledgerErr: any) {
+    if (!ledgerErr?.message?.includes('idempotency')) {
+      console.error('[Ledger] batch booking payment failed (non-critical):', ledgerErr?.message)
+    }
+  }
+
   try {
     if (instructor.syncGoogleCalendar) {
       const result = await googleCalendarService.createCalendarEvent(instructorId, {
@@ -710,14 +748,14 @@ async function createConfirmedBooking(ctx: {
   try {
     await emailService.sendGenericEmail({
       to: client.email,
-      subject: `✅ Lesson Confirmed — ${startTime.toLocaleDateString('en-AU', { month: 'long', day: 'numeric' })}`,
+      subject: `✅ Lesson Confirmed — ${startTime.toLocaleDateString('en-AU', { month: 'long', day: 'numeric', timeZone: 'Australia/Perth' })}`,
       html: `
         <h2>Lesson Confirmed</h2>
         <p>Hi ${client.name},</p>
         <p>Your lesson with <strong>${instructor.name}</strong> has been confirmed and paid.</p>
         <div style="background:#f3f4f6;padding:20px;margin:20px 0;border-radius:8px;">
-          <p><strong>Date:</strong> ${startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-          <p><strong>Time:</strong> ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+          <p><strong>Date:</strong> ${startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' })}</p>
+          <p><strong>Time:</strong> ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}</p>
           <p><strong>Cost:</strong> $${lessonPrice.toFixed(2)}</p>
         </div>
       `,

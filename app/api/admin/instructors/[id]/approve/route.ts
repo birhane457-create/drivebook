@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
+import { requireAdmin } from '@/lib/auth/requireRole';
+import { enqueueNotification } from '@/lib/services/notificationRetry';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +15,46 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // FIX #3: Re-verify admin role from DB — don't trust JWT alone
+    const auth = await requireAdmin(session);
+    if (auth.error) return auth.error;
+
+    // MEDIUM-7 FIX: Verify required documents exist before approval
+    const instructor = await prisma.instructor.findUnique({
+      where: { id: params.id }
+    });
+
+    if (!instructor) {
+      return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    const instructor = await prisma.instructor.update({
+    // Check for required documents
+    const requiredDocuments = [
+      'licenseImageFront',
+      'licenseImageBack',
+      'insurancePolicyDoc',
+      'policeCheckDoc',
+      'profileImage'
+    ];
+
+    const missingDocuments: string[] = [];
+    for (const doc of requiredDocuments) {
+      const docValue = (instructor as any)[doc];
+      if (!docValue || docValue.trim() === '') {
+        missingDocuments.push(doc);
+      }
+    }
+
+    if (missingDocuments.length > 0) {
+      return NextResponse.json({
+        error: `Cannot approve instructor. Missing required documents: ${missingDocuments.join(', ')}`,
+        code: 'MISSING_REQUIRED_DOCUMENTS',
+        missingDocuments
+      }, { status: 400 });
+    }
+
+    // All required documents present - proceed with approval
+    const approvedInstructor = await prisma.instructor.update({
       where: { id: params.id },
       data: {
         approvalStatus: 'APPROVED',
@@ -32,9 +69,9 @@ export async function POST(
 
     // Send approval email
     try {
-      if (instructor.user?.email) {
+      if (approvedInstructor.user?.email) {
         await emailService.sendGenericEmail({
-          to: instructor.user.email,
+          to: approvedInstructor.user.email,
           subject: 'Congratulations! Your Instructor Application is Approved',
           html: `
             <!DOCTYPE html>
@@ -55,7 +92,7 @@ export async function POST(
                   <h1 style="margin: 0;">🎉 Application Approved!</h1>
                 </div>
                 <div class="content">
-                  <p>Dear ${instructor.name},</p>
+                  <p>Dear ${approvedInstructor.name},</p>
                   
                   <p>Congratulations! We're excited to inform you that your application to join ${process.env.PLATFORM_NAME || 'DriveBook'} as a driving instructor has been approved!</p>
                   
@@ -90,10 +127,19 @@ export async function POST(
       }
     } catch (emailError) {
       console.error('Failed to send approval email:', emailError);
+      if (approvedInstructor.user?.email) {
+        await enqueueNotification({
+          channel: 'EMAIL',
+          recipient: approvedInstructor.user.email,
+          subject: 'Your Instructor Application is Approved',
+          body: `<p>Dear ${approvedInstructor.name}, congratulations! Your application has been approved. Log in to your dashboard to get started: ${process.env.NEXTAUTH_URL}/dashboard</p>`,
+          idempotencyKey: `instructor-approve-email-${params.id}`,
+        })
+      }
       // Don't fail the approval if email fails
     }
 
-    return NextResponse.json({ success: true, instructor });
+    return NextResponse.json({ success: true, instructor: approvedInstructor });
   } catch (error) {
     console.error('Error approving instructor:', error);
     return NextResponse.json(

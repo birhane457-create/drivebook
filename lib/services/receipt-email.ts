@@ -12,6 +12,16 @@ import { emailService } from './email';
 const BASE_URL = process.env.NEXTAUTH_URL || 'https://drivebook.com.au';
 const SUPPORT_EMAIL = process.env.ADMIN_EMAIL || 'support@drivebook.com.au';
 
+// All user-visible dates/times are displayed in Australian Western Standard Time
+const AU_TZ = 'Australia/Perth';
+
+function fmtDate(d: Date, opts: Intl.DateTimeFormatOptions = {}): string {
+  return d.toLocaleDateString('en-AU', { timeZone: AU_TZ, ...opts });
+}
+function fmtTime(d: Date, opts: Intl.DateTimeFormatOptions = {}): string {
+  return d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ, ...opts });
+}
+
 function receiptNumber(id: string): string {
   const year = new Date().getFullYear();
   const short = id.slice(-6).toUpperCase();
@@ -127,7 +137,7 @@ export async function sendPackagePurchaseReceipt(data: {
       <div class="meta">
         <table>
           <tr><td>Receipt #</td><td>${rn}</td></tr>
-          <tr><td>Date</td><td>${data.paidAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} at ${data.paidAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</td></tr>
+          <tr><td>Date</td><td>${fmtDate(data.paidAt, { day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.paidAt)}</td></tr>
           <tr><td>Paid by</td><td>${data.clientName}</td></tr>
           <tr><td>Email</td><td>${data.clientEmail}</td></tr>
         </table>
@@ -137,7 +147,7 @@ export async function sendPackagePurchaseReceipt(data: {
         <h3>What You Purchased</h3>
         <p style="margin:0;font-size:15px;font-weight:600;">${data.packageHours}-Hour Driving Lesson Package</p>
         <p style="margin:4px 0 0;font-size:14px;color:#6b7280;">with ${data.instructorName}${data.instructorLocation ? ` &middot; ${data.instructorLocation}` : ''}</p>
-        <p style="margin:12px 0 4px;font-size:14px;"><strong>First lesson:</strong> ${data.firstLessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${data.firstLessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+        <p style="margin:12px 0 4px;font-size:14px;"><strong>First lesson:</strong> ${fmtDate(data.firstLessonDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.firstLessonDate)}</p>
         ${data.pickupAddress ? `<p style="margin:0;font-size:14px;color:#6b7280;">&#x1F4CD; ${data.pickupAddress}</p>` : ''}
         <p style="margin:4px 0 0;font-size:14px;color:#6b7280;">Duration: ${data.firstLessonDurationHours} hour${data.firstLessonDurationHours !== 1 ? 's' : ''}</p>
       </div>
@@ -201,7 +211,7 @@ export async function sendWalletLessonReceipt(data: {
       <div class="meta">
         <table>
           <tr><td>Receipt #</td><td>${rn}</td></tr>
-          <tr><td>Date</td><td>${data.bookedAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+          <tr><td>Date</td><td>${fmtDate(data.bookedAt, { day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
           <tr><td>Paid by</td><td>${data.clientName}</td></tr>
           ${data.bookedBy === 'instructor' ? `<tr><td>Booked by</td><td>Your instructor (${data.instructorName})</td></tr>` : ''}
         </table>
@@ -209,7 +219,7 @@ export async function sendWalletLessonReceipt(data: {
 
       <div class="section">
         <h3>Lesson Booked</h3>
-        <p style="margin:0;font-size:15px;font-weight:600;">${data.lessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${data.lessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+        <p style="margin:0;font-size:15px;font-weight:600;">${fmtDate(data.lessonDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.lessonDate)}</p>
         <p style="margin:4px 0 0;font-size:14px;color:#6b7280;">Duration: ${data.durationHours} hour${data.durationHours !== 1 ? 's' : ''} &middot; Instructor: ${data.instructorName}</p>
       </div>
 
@@ -237,7 +247,7 @@ export async function sendWalletLessonReceipt(data: {
 
   await emailService.sendGenericEmail({
     to: data.clientEmail,
-    subject: `Receipt ${rn} &mdash; Lesson Booked &middot; ${data.lessonDate.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}`,
+    subject: `Receipt ${rn} &mdash; Lesson Booked &middot; ${fmtDate(data.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}`,
     html,
   });
 }
@@ -272,7 +282,7 @@ export async function sendSingleLessonReceipt(data: {
       <div class="meta">
         <table>
           <tr><td>Receipt #</td><td>${rn}</td></tr>
-          <tr><td>Date</td><td>${data.paidAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} at ${data.paidAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</td></tr>
+          <tr><td>Date</td><td>${fmtDate(data.paidAt, { day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.paidAt)}</td></tr>
           <tr><td>Paid by</td><td>${data.clientName}</td></tr>
           <tr><td>Email</td><td>${data.clientEmail}</td></tr>
         </table>
@@ -280,7 +290,7 @@ export async function sendSingleLessonReceipt(data: {
 
       <div class="section">
         <h3>Lesson Details</h3>
-        <p style="margin:0;font-size:15px;font-weight:600;">${data.lessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${data.lessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+        <p style="margin:0;font-size:15px;font-weight:600;">${fmtDate(data.lessonDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.lessonDate)}</p>
         <p style="margin:4px 0 0;font-size:14px;color:#6b7280;">Duration: ${data.durationHours} hour${data.durationHours !== 1 ? 's' : ''} &middot; Instructor: ${data.instructorName}</p>
         ${data.pickupAddress ? `<p style="margin:4px 0 0;font-size:14px;color:#6b7280;">&#x1F4CD; ${data.pickupAddress}</p>` : ''}
       </div>
@@ -336,7 +346,7 @@ export async function sendWalletTopUpReceipt(data: {
       <div class="meta">
         <table>
           <tr><td>Receipt #</td><td>${rn}</td></tr>
-          <tr><td>Date</td><td>${data.paidAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} at ${data.paidAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</td></tr>
+          <tr><td>Date</td><td>${fmtDate(data.paidAt, { day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.paidAt)}</td></tr>
           <tr><td>Account</td><td>${data.clientName}</td></tr>
           <tr><td>Email</td><td>${data.clientEmail}</td></tr>
         </table>
@@ -401,14 +411,14 @@ export async function sendCancellationReceipt(data: {
       <div class="meta">
         <table>
           <tr><td>Receipt #</td><td>${rn}</td></tr>
-          <tr><td>Cancelled</td><td>${data.cancelledAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} at ${data.cancelledAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</td></tr>
+          <tr><td>Cancelled</td><td>${fmtDate(data.cancelledAt, { day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.cancelledAt)}</td></tr>
           <tr><td>Cancelled by</td><td>${data.cancelledBy === 'instructor' ? 'Your instructor' : data.cancelledBy === 'admin' ? 'DriveBook support' : 'You'}</td></tr>
         </table>
       </div>
 
       <div class="section">
         <h3>Cancelled Lesson</h3>
-        <p style="margin:0;font-size:15px;font-weight:600;">${data.lessonDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${data.lessonDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+        <p style="margin:0;font-size:15px;font-weight:600;">${fmtDate(data.lessonDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.lessonDate)}</p>
         <p style="margin:4px 0 0;font-size:14px;color:#6b7280;">Instructor: ${data.instructorName}</p>
       </div>
 
@@ -438,7 +448,7 @@ export async function sendCancellationReceipt(data: {
 
   await emailService.sendGenericEmail({
     to: data.clientEmail,
-    subject: `Booking Cancelled &mdash; ${data.lessonDate.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}${hasRefund ? ` &middot; ${fmt(data.refundAmount)} refunded` : ''}`,
+    subject: `Booking Cancelled &mdash; ${fmtDate(data.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}${hasRefund ? ` &middot; ${fmt(data.refundAmount)} refunded` : ''}`,
     html,
   });
 }
@@ -465,7 +475,7 @@ export async function sendAdminCreditReceipt(data: {
       <div class="meta">
         <table>
           <tr><td>Receipt #</td><td>${rn}</td></tr>
-          <tr><td>Date</td><td>${data.creditedAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+          <tr><td>Date</td><td>${fmtDate(data.creditedAt, { day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
           <tr><td>Account</td><td>${data.clientName}</td></tr>
           <tr><td>Issued by</td><td>DriveBook Support</td></tr>
         </table>
@@ -521,7 +531,7 @@ export async function sendAdminDeductionReceipt(data: {
         <table>
           <tr><td>Receipt #</td><td>${rn}</td></tr>
           <tr><td>Transaction ID</td><td style="font-family:monospace;font-size:12px;">${data.transactionId}</td></tr>
-          <tr><td>Date</td><td>${data.deductedAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} at ${data.deductedAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</td></tr>
+          <tr><td>Date</td><td>${fmtDate(data.deductedAt, { day: 'numeric', month: 'long', year: 'numeric' })} at ${fmtTime(data.deductedAt)}</td></tr>
           <tr><td>Account</td><td>${data.clientName}</td></tr>
           <tr><td>Issued by</td><td>DriveBook Support</td></tr>
         </table>

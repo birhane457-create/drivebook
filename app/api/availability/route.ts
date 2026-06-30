@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
     const slots = await availabilityService.getAvailableSlots(
       instructorId,
-      new Date(date),
+      new Date(`${date}T00:00:00.000Z`),
       lessonDuration
     )
 

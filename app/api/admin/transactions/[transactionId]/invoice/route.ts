@@ -42,7 +42,7 @@ export async function GET(
 ================================================================================
 
 Invoice ID: ${transaction.id}
-Date: ${new Date(transaction.createdAt).toLocaleDateString('en-AU')}
+Date: ${new Date(transaction.createdAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}
 Status: ${transaction.status}
 
 --------------------------------------------------------------------------------
@@ -81,8 +81,8 @@ BOOKING DETAILS
 --------------------------------------------------------------------------------
 
 ${transaction.booking ? `
-Date: ${new Date(transaction.booking.startTime).toLocaleDateString('en-AU')}
-Time: ${new Date(transaction.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })} - ${new Date(transaction.booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+Date: ${new Date(transaction.booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}
+Time: ${new Date(transaction.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })} - ${new Date(transaction.booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}
 Pickup: ${transaction.booking.pickupAddress || 'N/A'}
 ` : 'No booking details available'}
 
@@ -92,8 +92,8 @@ PAYMENT INFORMATION
 
 Payment Method: Credit/Debit Card
 Payment Status: ${transaction.status}
-Processed: ${new Date(transaction.createdAt).toLocaleString('en-AU')}
-${transaction.processedAt ? `Completed: ${new Date(transaction.processedAt).toLocaleString('en-AU')}` : ''}
+Processed: ${new Date(transaction.createdAt).toLocaleString('en-AU', { timeZone: 'Australia/Perth' })}
+${transaction.processedAt ? `Completed: ${new Date(transaction.processedAt).toLocaleString('en-AU', { timeZone: 'Australia/Perth' })}` : ''}
 
 ================================================================================
                         Thank you for using DriveBook

@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
   const src = summary ?? {}
   const userPrompt = `Here is yesterday's DriveBook platform summary:
 
-Yesterday (${new Date((src.period as any)?.from ?? Date.now()).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}):
+Yesterday (${new Date((src.period as any)?.from ?? Date.now()).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' })}):
 - Bookings completed: ${(src.yesterday as any)?.bookingsCompleted ?? 0}
 - Bookings cancelled: ${(src.yesterday as any)?.bookingsCancelled ?? 0}
 - New bookings created: ${(src.yesterday as any)?.bookingsNew ?? 0}

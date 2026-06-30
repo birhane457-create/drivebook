@@ -5,15 +5,14 @@ import Link from 'next/link'
 
 export default function HelpCenterPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto px-1 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-100 mb-2">Help Center</h1>
           <p className="text-slate-400">Learn how to use DriveBook effectively</p>
         </div>
 
         {/* Google Calendar Sync */}
-        <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 mb-6">
+        <div className="bg-slate-900 rounded-3xl border border-slate-800 p-0 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <Calendar className="h-6 w-6 text-sky-400" />
             <h2 className="text-2xl font-bold text-slate-100">Google Calendar Integration</h2>
@@ -298,6 +297,6 @@ export default function HelpCenterPage() {
           </Link>
         </div>
       </div>
-    </div>
+  
   )
 }

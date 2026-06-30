@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { v2 as cloudinary } from 'cloudinary'
+import { validateBase64DataUrl } from '@/lib/uploads/validateUpload'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -34,9 +35,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid image data' }, { status: 400 })
     }
 
-    // Rough size check — base64 encodes ~1.37x, so 2MB base64 ≈ 1.5MB actual
-    if (dataUrl.length > 3 * 1024 * 1024) {
-      return NextResponse.json({ error: 'Image too large (max ~2MB)' }, { status: 413 })
+    // Validate data URL — checks format, size, and magic bytes
+    const validation = validateBase64DataUrl(dataUrl)
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     const result = await cloudinary.uploader.upload(dataUrl, {

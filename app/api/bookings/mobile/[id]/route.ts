@@ -52,16 +52,8 @@ export async function GET(
     const formattedBooking = {
       id: booking.id,
       date: booking.startTime.toISOString().split('T')[0],
-      startTime: booking.startTime.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false 
-      }),
-      endTime: booking.endTime.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false 
-      }),
+      startTime: booking.startTime.toISOString().slice(11, 16),
+      endTime: booking.endTime.toISOString().slice(11, 16),
       duration: (booking.endTime - booking.startTime) / (1000 * 60 * 60), // hours
       status: booking.status,
       client: {

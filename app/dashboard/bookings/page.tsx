@@ -247,7 +247,7 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
+    <div className="max-w-7xl mx-auto py-4 sm:py-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold">Bookings ({bookings.length})</h1>
 

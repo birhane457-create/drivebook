@@ -225,7 +225,7 @@ export async function createDocumentExpiryTask(params: {
     category: 'SUPPORT',
     priority: daysUntilExpiry <= 7 ? 'URGENT' : daysUntilExpiry <= 30 ? 'HIGH' : 'NORMAL',
     title: `Document Expiring - ${params.instructorName}`,
-    description: `${params.documentType} expires in ${daysUntilExpiry} days (${params.expiryDate.toLocaleDateString()})`,
+    description: `${params.documentType} expires in ${daysUntilExpiry} days (${params.expiryDate.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })})`,
     instructorId: params.instructorId,
     contactName: params.instructorName,
     contactEmail: params.instructorEmail,

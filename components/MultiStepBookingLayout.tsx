@@ -55,7 +55,7 @@ export default function MultiStepBookingLayout({ currentStep, children }: MultiS
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-2 sm:mx-4 px-2 sm:px-4 py-4 sm:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Left Column - Booking Summary Sidebar (Desktop Only) */}
           <div className="hidden lg:block">
@@ -64,7 +64,7 @@ export default function MultiStepBookingLayout({ currentStep, children }: MultiS
 
           {/* Right Column - Main Content (lg:col-span-3) */}
           <div className="lg:col-span-3">
-            <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-6 border border-white/10 backdrop-blur-sm">
+            <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-3 sm:p-6 border border-white/10 backdrop-blur-sm">
               {children}
             </div>
           </div>

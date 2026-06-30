@@ -125,17 +125,20 @@ export async function GET(req: NextRequest) {
       return {
         id: booking.id,
         clientName: booking.client.name,
-        date: startDate.toLocaleDateString('en-US', {
+        date: startDate.toLocaleDateString('en-AU', {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
+          timeZone: 'Australia/Perth',
         }),
-        time: startDate.toLocaleTimeString('en-US', {
+        time: startDate.toLocaleTimeString('en-AU', {
           hour: '2-digit',
           minute: '2-digit',
-        }) + ' - ' + endDate.toLocaleTimeString('en-US', {
+          timeZone: 'Australia/Perth',
+        }) + ' - ' + endDate.toLocaleTimeString('en-AU', {
           hour: '2-digit',
           minute: '2-digit',
+          timeZone: 'Australia/Perth',
         }),
         location: booking.pickupAddress || '',
       };

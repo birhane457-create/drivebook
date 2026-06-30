@@ -211,7 +211,7 @@ export default function BrandingPage() {
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-950 text-slate-100 p-6"><p>Loading...</p></div>;
+  if (loading) return <div><p>Loading...</p></div>;
 
   const tier = instructor?.subscriptionTier;
   const isBasic = tier === 'BASIC';
@@ -219,7 +219,7 @@ export default function BrandingPage() {
 
   if (isBasic) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
+      <div>
         <div className="max-w-4xl mx-auto">
           <div className="bg-slate-900 rounded-3xl border border-slate-800 p-8 text-center">
             <Sparkles className="h-16 w-16 text-purple-600 mx-auto mb-4" />
@@ -236,7 +236,7 @@ export default function BrandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-1">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">

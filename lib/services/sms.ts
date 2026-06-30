@@ -65,7 +65,10 @@ class SMSService {
     startTime: Date;
     price: number;
   }) {
-    const clientMessage = `Booking confirmed! Your lesson with ${data.instructorName} is on ${data.startTime.toLocaleDateString('en-AU')} at ${data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}. Price: $${data.price}`;
+    const tz = 'Australia/Perth'
+    const dateStr = data.startTime.toLocaleDateString('en-AU', { timeZone: tz })
+    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz })
+    const clientMessage = `Booking confirmed! Your lesson with ${data.instructorName} is on ${dateStr} at ${timeStr}. Price: $${data.price}`;
     return this.sendSMS({ to: data.clientPhone, message: clientMessage });
   }
 
@@ -77,8 +80,9 @@ class SMSService {
     startTime: Date;
     pickupAddress?: string;
   }) {
-    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
-    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+    const tz = 'Australia/Perth'
+    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz });
     const pickup = data.pickupAddress ? ` Pickup: ${data.pickupAddress}.` : '';
     const message = `Hi ${data.clientName}! Reminder: your driving lesson with ${data.instructorName} is tomorrow ${dateStr} at ${timeStr}.${pickup}`;
     return this.sendSMS({ to: data.clientPhone, message });
@@ -92,8 +96,9 @@ class SMSService {
     startTime: Date;
     pickupAddress?: string;
   }) {
-    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
-    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+    const tz = 'Australia/Perth'
+    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz });
     const pickup = data.pickupAddress ? ` Pickup: ${data.pickupAddress}.` : '';
     const message = `Hi ${data.instructorName}! Reminder: lesson with ${data.clientName} tomorrow ${dateStr} at ${timeStr}.${pickup}`;
     return this.sendSMS({ to: data.instructorPhone, message });

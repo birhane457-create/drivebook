@@ -167,6 +167,42 @@ export async function POST(
         where: { id: user.id },
         data: { resetToken: null, resetTokenExpiry: null },
       })
+    } else {
+      // HIGH-1 FIX: When verificationToken is omitted, still verify ownership
+      // Require phone or email to prove this is the client's booking
+      if (!data.phone && !data.email) {
+        return NextResponse.json(
+          { 
+            error: 'For security, please provide phone or email (or use verificationToken for OTP-verified reschedules)',
+            code: 'OWNERSHIP_VERIFICATION_REQUIRED'
+          },
+          { status: 400 }
+        )
+      }
+
+      // Verify the provided phone/email matches the booking's client
+      const clientPhone = data.phone?.replace(/\s/g, '')
+      const clientEmail = data.email?.toLowerCase().trim()
+      const bookingClientPhone = booking.client?.phone?.replace(/\s/g, '')
+      const bookingClientEmail = booking.client?.userId 
+        ? (await prisma.user.findUnique({ 
+            where: { id: booking.client.userId },
+            select: { email: true }
+          }))?.email?.toLowerCase().trim()
+        : null
+
+      const phoneMatches = clientPhone && bookingClientPhone && clientPhone === bookingClientPhone
+      const emailMatches = clientEmail && bookingClientEmail && clientEmail === bookingClientEmail
+
+      if (!phoneMatches && !emailMatches) {
+        return NextResponse.json(
+          { 
+            error: 'Phone or email does not match the booking owner',
+            code: 'OWNERSHIP_VERIFICATION_FAILED'
+          },
+          { status: 403 }
+        )
+      }
     }
 
     // ── 3. Build new start/end times ─────────────────────────────────────────
