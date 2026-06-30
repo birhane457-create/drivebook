@@ -1,4 +1,19 @@
 import Link from 'next/link'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Grow Your Driving School with DriveBook',
+  description:
+    'DriveBook helps driving instructors automate bookings, payments, and admin. AI receptionist answers calls 24/7. Join Australia\'s smart instructor platform.',
+  openGraph: {
+    title: 'Grow Your Driving School with DriveBook',
+    description:
+      'Automate bookings, payments, and admin. AI receptionist included. Join hundreds of instructors across Australia.',
+  },
+  alternates: {
+    canonical: 'https://drivebook.com.au/teach-with-drivebook',
+  },
+}
 
 const VOICE_NUMBER = process.env.NEXT_PUBLIC_VOICE_PHONE_NUMBER
 
