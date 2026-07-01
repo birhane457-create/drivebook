@@ -5,7 +5,6 @@ import {
   Star, Zap, BookOpen, Shield, Bell, ChevronRight,
 } from 'lucide-react'
 import Logo from '@/components/Logo'
-} from 'lucide-react'
 
 const BASE_URL = process.env.NEXTAUTH_URL || 'https://drivebook.com.au'
 
