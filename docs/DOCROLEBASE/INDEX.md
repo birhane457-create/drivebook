@@ -12,7 +12,8 @@
 - **How payments work:** `06-payments/WALLET.md`
 - **Cancellations & refunds:** `06-payments/REFUNDS.md`
 - **Dashboard features:** `02-student/DASHBOARD.md`
-- **Awaiting Payment bookings:** `02-student/AWAITING_PAYMENT.md` ⭐ NEW
+- **Awaiting Payment bookings:** `02-student/AWAITING_PAYMENT.md`
+- **Learn to drive (public hub):** `/learn-to-drive` page + `01-public/BLOG.md`
 
 ### 👨‍🏫 For Instructors
 - **Dashboard overview:** `03-instructor/DASHBOARD.md`
@@ -22,6 +23,7 @@
 - **Approval process:** `03-instructor/ONBOARDING_APPROVAL.md`
 - **Subscription tiers:** `07-subscriptions/TIERS.md`
 - **Stripe Connect setup:** `07-subscriptions/STRIPE_CONNECT_SETUP.md`
+- **Branding & logo:** `01-public/BRANDING.md` ⭐ NEW
 
 ### 👔 For Admin/Support
 - **Admin dashboard:** `05-admin/DASHBOARD.md`
@@ -38,27 +40,26 @@
 - **Stripe integration:** `06-payments/STRIPE.md`
 - **Security considerations:** `08-technical/SECURITY_ASSESSMENT.md`
 - **UI design system:** `08-technical/STYLING.md`
-- **SEO & sitemap:** `08-technical/SEO.md` ⭐ NEW
+- **SEO & sitemap:** `08-technical/SEO.md`
 - **Cron jobs:** `08-technical/CRON_JOBS.md`
-- **Blog system:** `01-public/BLOG.md` ⭐ NEW
+- **Blog system:** `01-public/BLOG.md`
+- **Logo & branding system:** `01-public/BRANDING.md` ⭐ NEW
 
 ---
 
 ## What Changed Recently (July 2026)
 
-✅ **Security fixes, blog platform, SEO infrastructure complete:**
-1. Auth gate for unapproved instructors; session 30d→7d
-2. requireRole() DB-verified admin checks; MIME upload validation
-3. Email/SMS retry queue with exponential backoff
-4. Mobile push notifications (FCM, DeviceToken)
-5. Blog: 23 posts, featured hero, tags, prev/next, related articles
-6. Tag archive pages, RSS feed
-7. Sitemap, robots.txt, Organization/WebSite JSON-LD
-8. Instructor search language + vehicle type filters in UI
-9. Batch booking security hardening
-10. Dashboard JSX/encoding fixes
+✅ **Blog scaled, pillar pages built, logo system implemented:**
+1. Blog scaled from 23 → 100 posts
+2. 4 SEO pillar hub pages: `/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`
+3. Sitemap updated with all pillar pages at priority 0.9
+4. DriveBook D-mark logo (SVG + React component) rolled out to all 14 public pages
+5. Homepage footer — Resources column with pillar page links
+6. DOCROLEBASE updated: BLOG.md, SEO.md, LANDING_PAGE.md, new BRANDING.md
 
-**See:** `00-overview/CHANGES.md` for detailed summary
+**See:** `00-overview/CHANGES.md` for full detail
+
+✅ **Previous: Security fixes, blog platform, SEO infrastructure complete (June–July 2026)**
 
 ---
 

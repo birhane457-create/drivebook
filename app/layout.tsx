@@ -17,6 +17,13 @@ export const metadata: Metadata = {
     default: "DriveBook – Book Driving Lessons in Australia",
     template: "%s | DriveBook",
   },
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+    apple: '/favicon.svg',
+  },
   description:
     "Find approved local driving instructors near you. Book online or by phone 24/7. Flexible lesson packages, transparent pricing, instant SMS confirmation. Manual & Automatic available.",
   keywords: [

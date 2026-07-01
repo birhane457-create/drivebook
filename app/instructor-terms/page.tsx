@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Logo from '@/components/Logo'
 
 export const metadata = {
   title: 'Instructor Terms and Conditions | DriveBook',
@@ -10,7 +11,7 @@ export default function InstructorTermsPage() {
     <div className="min-h-screen bg-white">
       <nav className="bg-white shadow-sm py-4 px-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold text-purple-600">DriveBook</Link>
+          <Link href="/" className="no-underline"><Logo size={32} /></Link>
           <div className="flex items-center gap-4">
             <Link href="/login" className="text-gray-700 hover:text-purple-600 font-medium">Login</Link>
             <Link href="/register" className="bg-purple-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-purple-700">Sign Up</Link>

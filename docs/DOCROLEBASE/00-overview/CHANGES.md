@@ -3,7 +3,91 @@
 
 ---
 
-## 🎯 July 2026 — Security Fixes, Blog Platform, SEO Infrastructure
+## 🎯 July 2026 — Feature Landing Pages (Phase 2 SEO)
+
+### Summary
+✅ 3 HIGH-priority feature landing pages built and added to sitemap  
+✅ Each includes BreadcrumbList + FAQPage JSON-LD, comparison table, related articles, CTA  
+✅ Sitemap updated with all 3 feature pages  
+✅ TODO.md updated — HIGH items marked done
+
+### Pages Built
+
+| Route | Target Query | Schema |
+|-------|-------------|--------|
+| `/features/ai-receptionist` | "AI answering service driving school Australia" | BreadcrumbList + FAQPage |
+| `/features/online-booking` | "driving lesson booking software Australia" | BreadcrumbList + FAQPage |
+| `/features/custom-domain` | "driving instructor website Australia" | BreadcrumbList + FAQPage |
+
+### Sitemap
+All 3 added at priority 0.8–0.85.
+
+---
+
+### Summary
+✅ Blog scaled from 23 posts to 100 posts (33 new posts in this session)  
+✅ 4 SEO pillar hub pages built (`/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`)  
+✅ DriveBook D-mark logo designed and implemented as SVG + React component  
+✅ Logo component rolled out across all 14 public-facing pages  
+✅ Homepage footer updated with Resources column linking all pillar pages  
+✅ Sitemap updated with all 4 pillar pages at priority 0.9  
+✅ DOCROLEBASE updated: BLOG.md, SEO.md, LANDING_PAGE.md, new BRANDING.md
+
+### Pillar Pages Built
+
+| Route | JSON-LD | Target queries |
+|-------|---------|---------------|
+| `/learn-to-drive` | BreadcrumbList + FAQPage | "learn to drive WA", "learner driver guide western australia" |
+| `/pda-guide` | BreadcrumbList + FAQPage | "PDA western australia", "practical driving assessment WA" |
+| `/for-instructors` | BreadcrumbList | "driving instructor resources australia", "grow driving school" |
+| `/platform` | BreadcrumbList + SoftwareApplication | "driving school software australia" |
+
+### Blog Posts Added (July 2026 — this session)
+
+**Students (16 posts):**
+- Freeway driving WA, Three-point turn guide, What is the PDA in WA
+- Driving anxiety tips, Reversing and parking manoeuvres, Speed limits WA
+- Give way rules WA complete guide, How to use DriveBook as a student
+- Wet weather driving WA, What to expect at PDA test centre
+- Manual transmission for learners, Parking rules WA, Country road driving WA
+- Logbook tips WA, Understanding provisional licence WA (P1/P2), How to pass the HPT
+
+**Instructors (17 posts):**
+- Handling student complaints, Reducing admin time, Tax deductions Australia
+- Getting first students, Writing a bio that wins bookings, Setting a cancellation policy
+- Tracking driving school revenue, Dealing with difficult students
+- Onboarding new instructor, Scaling driving school systems, Managing burnout
+- Own car vs student's car, How DriveBook handles refunds
+- DriveBook subscription plans explained, Google Business Profile guide
+- Social media marketing guide, How to reduce admin time
+
+### Logo System
+
+**Files created:**
+- `public/logo.svg` — full wordmark with D-mark, road, steering wheel
+- `public/logo-icon.svg` — 160×160 icon only
+- `public/favicon.svg` — 32×32 compact favicon
+- `components/Logo.tsx` — React component, 3 variants (full/icon/wordmark), dark prop
+
+**Pages updated** (old gradient text span → `<Logo>` component):
+- `app/page.tsx` (nav + footer)
+- `app/blog/page.tsx`, `app/blog/[slug]/page.tsx`, `app/blog/tag/[tag]/page.tsx`
+- `app/about/page.tsx`, `app/contact/page.tsx`
+- `app/terms/page.tsx`, `app/privacy/page.tsx`, `app/instructor-terms/page.tsx`
+- `app/learn-to-drive/page.tsx`, `app/pda-guide/page.tsx`
+- `app/for-instructors/page.tsx`, `app/platform/page.tsx`
+- `app/teach-with-drivebook/page.tsx`, `app/instructors/page.tsx`
+
+### New / Updated Permanent Documentation
+
+| File | Action | What it covers |
+|------|--------|---------------|
+| `docs/DOCROLEBASE/01-public/BLOG.md` | UPDATED | Post count 23→100, pillar pages section, new backlog |
+| `docs/DOCROLEBASE/08-technical/SEO.md` | UPDATED | Pillar pages, updated sitemap priorities, FAQ schema, internal linking, middleware note |
+| `docs/DOCROLEBASE/01-public/LANDING_PAGE.md` | UPDATED | Logo component, Resources footer column |
+| `docs/DOCROLEBASE/01-public/BRANDING.md` | NEW | Logo design, SVG files, React component API, usage table, colour palette, DO NOTs |
+
+---
 
 ### Summary
 ✅ Critical security fixes applied (auth gate, session lifetime, role verification, MIME validation)  

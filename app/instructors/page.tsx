@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Car } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
 import InstructorCard from '@/components/InstructorCard'
+import Logo from '@/components/Logo'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -24,10 +25,7 @@ export default async function InstructorsPage() {
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <Link href="/" className="flex items-center gap-2 no-underline">
-              <Car className="h-6 w-6 text-blue-400" />
-              <span className="text-lg font-bold bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent">DriveBook</span>
-            </Link>
+            <Link href="/" className="no-underline"><Logo size={32} dark /></Link>
             <div className="flex gap-3">
               <Link href="/login" className="text-white/70 hover:text-white text-sm font-medium no-underline px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
                 Login

@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { Clock } from 'lucide-react'
 import { getAllPosts, BlogPost } from '@/lib/blog'
 
+import Logo from '@/components/Logo'
+
 const BASE_URL = process.env.NEXTAUTH_URL || 'https://drivebook.com.au'
 
 export const metadata: Metadata = {
@@ -195,8 +197,8 @@ export default function BlogPage() {
       {/* Header */}
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent no-underline">
-            DriveBook
+          <Link href="/" className="no-underline">
+            <Logo size={32} dark />
           </Link>
           <nav className="hidden md:flex items-center gap-1 text-sm">
             <Link href="/book" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Book a Lesson</Link>

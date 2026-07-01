@@ -1,0 +1,57 @@
+---
+title: "How to Connect Your Custom Domain to DriveBook"
+description: "A custom domain makes your booking page look like your own website. Here's how to connect it to DriveBook on Studio or Business plan."
+date: "2026-05-18"
+author: "DriveBook Team"
+category: "instructors"
+readTime: "4 min read"
+tags: ['custom domain', 'branding', 'DriveBook setup', 'platform guide']
+---
+
+Every DriveBook instructor gets a booking page at `yourname.drivebook.com.au`. That's functional from day one. But if you want your booking page to live at your own domain — like `joshsdrivinglessons.com.au` — you can connect a custom domain on Studio or Business plan.
+
+Here's how it works.
+
+## What You Need
+
+1. A custom domain you own (purchased through a registrar like GoDaddy, Namecheap, Crazy Domains, or similar)
+2. DriveBook Studio or Business plan
+
+If you don't have a domain yet, `.com.au` domains are the most trusted for Australian businesses. You'll need to provide an ABN or ACN to register one. A `.com` domain is an alternative if you don't have an ABN yet.
+
+## Step 1: Add Your Domain in DriveBook
+
+In your DriveBook dashboard, go to Settings → Branding → Custom Domain. Enter the domain you want to connect (e.g., `joshsdrivinglessons.com.au`).
+
+DriveBook will provide you with a DNS record to add at your domain registrar. This is typically a CNAME record that points your domain to DriveBook's servers.
+
+## Step 2: Add the DNS Record at Your Registrar
+
+Log into your domain registrar (where you bought the domain). Find the DNS settings — usually under "Manage DNS" or "DNS Records."
+
+Add the CNAME record that DriveBook provided:
+- **Type:** CNAME
+- **Name / Host:** `@` or `www` (DriveBook will specify which)
+- **Value / Points to:** the DriveBook address provided
+
+Save the record. DNS changes typically propagate within a few minutes to a few hours, though it can occasionally take up to 24 hours.
+
+## Step 3: Verify in DriveBook
+
+Return to your DriveBook dashboard and click Verify. Once DriveBook detects the DNS record, your custom domain is connected and your booking page is live at the new address.
+
+DriveBook automatically provisions an SSL certificate for your domain (the padlock in the browser bar). You don't need to do anything for this — it's handled automatically.
+
+## What Changes After Connection
+
+Your booking page is now accessible at both your custom domain and your original DriveBook subdomain. Share the custom domain as your primary booking URL on business cards, social media, and anywhere you promote your lessons.
+
+Your logo (if uploaded under Branding) appears on the page. Your brand colours apply. The page looks like your own website, powered by DriveBook's booking system underneath.
+
+## If You Have a Separate Website
+
+If you already have a website built elsewhere (WordPress, Squarespace, etc.) and only want your DriveBook booking page at a subdomain — like `book.yourschool.com.au` — that's supported too. You'd add the CNAME record for the `book` subdomain only, leaving your main website unchanged.
+
+---
+
+**[Upgrade to Studio or Business to connect your custom domain →](/teach-with-drivebook)**

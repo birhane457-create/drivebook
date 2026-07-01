@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Menu, X, Zap } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
+import Logo from '@/components/Logo'
 import BookingFlowShowcase from '@/components/landing/BookingFlowShowcase'
 import AIReceptionistShowcase from '@/components/landing/AIReceptionistShowcase'
 import ProgressTrackingShowcase from '@/components/landing/ProgressTrackingShowcase'
@@ -18,12 +19,7 @@ export default function HomePage() {
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-7xl mx-auto flex justify-between items-center px-4 py-4">
           <Link href="/" className="flex items-center gap-2 no-underline group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent">
-              DriveBook
-            </span>
+            <Logo size={36} />
           </Link>
           
           {/* Desktop Menu */}
@@ -97,19 +93,19 @@ export default function HomePage() {
       </nav>
 
       {/* Hero Section - Learner Focused */}
-      <header className="relative overflow-hidden bg-gradient-to-br from-violet-900 via-purple-800 to-indigo-900 text-white py-20 md:py-32 px-4 text-center">
+      <header className="relative overflow-hidden bg-gradient-to-br from-violet-900 via-purple-800 to-indigo-900 text-white py-5 md:py-32 px-4 text-center">
         {/* Decorative blobs */}
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl -translate-y-1/2" />
         <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl translate-y-1/2" />
         <div className="absolute top-1/2 left-0 w-64 h-64 bg-violet-500/20 rounded-full blur-2xl -translate-x-1/2" />
 
         <div className="relative max-w-4xl mx-auto">
-          <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+          <h1 className="text-4xl md:text-6xl font-bold mb-2 leading-tight">
             Pass Your Driving Test<br className="hidden sm:block" />
             <span className="bg-gradient-to-r from-yellow-300 via-pink-300 to-cyan-300 bg-clip-text text-transparent">with Confidence</span>
           </h1>
-          <p className="text-lg md:text-xl mb-8 text-purple-100 max-w-2xl mx-auto">Book local instructors in seconds. Flexible lessons, transparent pricing, approved instructors.</p>
-          <ul className="list-none p-0 my-8 text-left inline-block max-w-2xl text-base md:text-lg space-y-2 text-purple-100">
+          <p className="text-lg md:text-xl mb-4 text-purple-100 max-w-2xl mx-auto">Book local instructors in seconds. Flexible lessons, transparent pricing, approved instructors.</p>
+          <ul className="list-none p-0 my-3 text-left inline-block max-w-2xl text-base md:text-lg space-y-2 text-purple-100">
             <li>🎯 Smart booking with real-time availability—no waiting, no phone tag</li>
             <li>📍 Location-based matching to find instructors who service your area</li>
             <li>💰 Save up to 12% with bulk hour packages and test preparation bundles</li>
@@ -346,7 +342,7 @@ export default function HomePage() {
       <footer className="bg-slate-900/50 backdrop-blur border-t border-white/10 text-white py-12 px-4 md:px-8 mt-16">
         <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-8 mb-8 text-left">
           <div>
-            <h3 className="font-bold text-lg mb-3 bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent">DriveBook</h3>
+            <Logo size={28} dark />
             <p className="text-white/50 text-sm">Connecting learners with professional driving instructors across Australia.</p>
           </div>
           <div>
@@ -355,6 +351,16 @@ export default function HomePage() {
               <li><Link href="/about" className="hover:text-white transition-colors no-underline">About Us</Link></li>
               <li><Link href="/contact" className="hover:text-white transition-colors no-underline">Contact</Link></li>
               <li><Link href="/teach-with-drivebook" className="hover:text-white transition-colors no-underline">For Instructors</Link></li>
+              <li><Link href="/platform" className="hover:text-white transition-colors no-underline">Platform Guide</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3 text-white">Resources</h3>
+            <ul className="space-y-2 text-sm text-white/50">
+              <li><Link href="/learn-to-drive" className="hover:text-white transition-colors no-underline">Learn to Drive</Link></li>
+              <li><Link href="/pda-guide" className="hover:text-white transition-colors no-underline">WA PDA Guide</Link></li>
+              <li><Link href="/for-instructors" className="hover:text-white transition-colors no-underline">Instructor Hub</Link></li>
+              <li><Link href="/blog" className="hover:text-white transition-colors no-underline">Blog</Link></li>
             </ul>
           </div>
           <div>

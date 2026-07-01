@@ -2,7 +2,7 @@
 
 **Route:** `/` (app/page.tsx)  
 **Audience:** Learner drivers + parents (primary), instructors (secondary — footer only)  
-**Last Updated:** March 2026  
+**Last Updated:** July 2026  
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Section | Content | Notes |
 |---------|---------|-------|
-| Nav | Logo, About, Contact, Blog, For Instructors, Login, Sign Up | Mobile hamburger menu |
+| Nav | Logo (D-mark + wordmark), About, Contact, Blog, For Instructors, Login, Sign Up | Mobile hamburger menu. Logo uses `<Logo size={36} />` component |
 | Hero | "Pass Your Driving Test with Confidence" + 5 bullets + CTA | Learner-focused only |
 | Trust Badge | Single green badge — background-checked, licensed & approved | One instance only — no repetition |
 | AI Phone Booking | "Book by Phone — AI Answers 24/7" + AIReceptionistShowcase | Primary differentiator, above Why Choose |
@@ -19,10 +19,9 @@
 | How It Works | BookingFlowShowcase — 4 steps | Search → Book → Confirm → Track |
 | Quick Summary | 4-step amber box | Mirrors the 4-step flow |
 | What You Get | 4 feature tiles | Payment, Test Prep, Progress, Confirmation |
-| Testimonials | Sarah M. (student), Linda R. (parent), Michael K. (student) | No instructor testimonials on this page |
 | FAQ | 6 questions | Trust, cancellation, payment, packages, choice, contact |
 | CTA | "Book Your First Lesson" + optional phone CTA | Instructor link in footer only |
-| Footer | 4-column: DriveBook, Company, Legal, Get Started | Instructor link tucked here |
+| Footer | 4-column: DriveBook (logo), Company, Resources, Legal, Get Started | Resources column added July 2026 |
 
 ---
 
@@ -59,6 +58,23 @@ James T. (Driving Instructor) quote was removed. It belongs on `/teach-with-driv
 ### CTA button text
 Hero: "Book Your First Lesson →"  
 Bottom CTA section: "Find Your Instructor →"
+
+---
+
+## Footer (July 2026 update)
+
+The footer now has a Resources column alongside the Company column, linking to all four pillar pages:
+
+```
+Company              Resources
+──────               ─────────
+About Us             Learn to Drive
+Contact              WA PDA Guide
+For Instructors      Instructor Hub
+Platform Guide       Blog
+```
+
+The DriveBook brand name in the footer is rendered using `<Logo size={28} dark />`.
 
 ---
 

@@ -11,6 +11,7 @@ DriveBook's SEO strategy targets two audiences via distinct URL patterns:
 
 1. **Platform search** (`/book`) — learner drivers searching for local instructors
 2. **Instructor microsites** (`subdomain.drivebook.com.au` or `/subdomain/[slug]`) — direct instructor profiles with local SEO
+3. **Content SEO** — 100+ blog posts + 4 pillar hub pages targeting informational queries
 
 ---
 
@@ -26,6 +27,8 @@ OpenGraph locale: `en_AU`
 
 Keywords include: driving lessons, driving instructor, driving instructor near me, manual/automatic, PDA test, Australia driving school
 
+Favicon: `favicon.svg` (SVG format, supported by all modern browsers). Falls back to `favicon.ico`.
+
 ### JSON-LD in root layout
 
 Two scripts injected for every page:
@@ -36,6 +39,7 @@ Two scripts injected for every page:
   "@type": "Organization",
   "name": "DriveBook",
   "url": "https://drivebook.com.au",
+  "logo": "https://drivebook.com.au/logo.png",
   "areaServed": { "@type": "Country", "name": "Australia" }
 }
 ```
@@ -59,6 +63,10 @@ Two scripts injected for every page:
 |-------|-------|-------|
 | `/` | DriveBook – Book Driving Lessons in Australia | Root default via layout |
 | `/book` | Find a Driving Instructor Near You – Book Online | Via `app/book/layout.tsx` |
+| `/learn-to-drive` | Learn to Drive in Western Australia — Complete Learner Driver Guide | Pillar page — priority 0.9 |
+| `/pda-guide` | Complete WA PDA Guide — Practical Driving Assessment Western Australia | Pillar page — priority 0.9 |
+| `/for-instructors` | Driving Instructor Hub — Grow Your Driving School \| DriveBook | Pillar page — priority 0.9 |
+| `/platform` | DriveBook Platform — How It Works for Driving Instructors | Pillar page — priority 0.85 |
 | `/teach-with-drivebook` | Grow Your Driving School with DriveBook | Via page export |
 | `/about` | About Us \| DriveBook | Via page export |
 | `/blog` | Driving Tips, Instructor Guides & WA Learner Resources \| DriveBook | Via page export |
@@ -74,6 +82,7 @@ Dynamic sitemap at `/sitemap.xml`. Regenerates hourly (`revalidate = 3600`).
 
 Includes:
 - All static public pages with priority scores
+- All four pillar pages (`/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`)
 - All active/approved instructor subdomain pages (`/subdomain/[slug]`)
 - All blog posts (`/blog/[slug]`) — dated from frontmatter
 - All blog tag archive pages (`/blog/tag/[tag]`) — derived from post tags
@@ -85,7 +94,11 @@ Priority mapping:
 |-------------|----------|
 | `/` | 1.0 |
 | `/book` | 0.9 |
+| `/learn-to-drive` | 0.9 |
+| `/pda-guide` | 0.9 |
+| `/for-instructors` | 0.9 |
 | `/teach-with-drivebook` | 0.8 |
+| `/platform` | 0.85 |
 | Instructor subdomain pages | 0.8 |
 | Blog posts | 0.75 |
 | `/about`, `/contact` | 0.6 |
@@ -150,6 +163,36 @@ Each blog post generates:
 
 ---
 
+## Pillar Page SEO (July 2026)
+
+Four hub pages were built as topical authority anchors. Each includes:
+
+### `/learn-to-drive`
+- JSON-LD: `BreadcrumbList` + `FAQPage` (5 questions about WA learner driving)
+- Targets: "learn to drive WA", "learner driver guide western australia"
+- Links to ~40 student blog posts
+- CTA → `/book`
+
+### `/pda-guide`
+- JSON-LD: `BreadcrumbList` + `FAQPage` (5 PDA-specific questions)
+- Targets: "PDA western australia", "practical driving assessment WA", "how to pass PDA"
+- Links to all PDA-related blog posts
+- CTA → `/book`
+
+### `/for-instructors`
+- JSON-LD: `BreadcrumbList`
+- Targets: "driving instructor resources australia", "how to grow driving school"
+- Links to ~60 instructor blog posts organised by topic
+- CTA → `/teach-with-drivebook`
+
+### `/platform`
+- JSON-LD: `BreadcrumbList` + `SoftwareApplication`
+- Targets: "driving school software australia", "driving lesson booking platform"
+- Documents all platform features with internal links to relevant blog posts
+- CTA → `/teach-with-drivebook`
+
+---
+
 ## Instructor Microsite SEO (`/subdomain/[slug]`)
 
 Each instructor's booking page generates:
@@ -173,6 +216,17 @@ OpenGraph image: Instructor profile photo (if set)
 
 ---
 
+## Internal Linking Structure
+
+All pillar pages are linked from:
+- Homepage footer navigation (Company column + Resources column)
+- Each pillar page's nav links to the other pillar pages
+- Blog posts include relevant in-content links to pillar pages
+
+This distributes page authority from the homepage through the pillar pages and outward to cluster blog posts.
+
+---
+
 ## Middleware — SEO-Safe Routes
 
 The following routes are excluded from auth middleware to ensure Google can always crawl them:
@@ -182,8 +236,11 @@ The following routes are excluded from auth middleware to ensure Google can alwa
 - `/rss.xml`
 - `/blog` and all `/blog/*` paths
 - `/subdomain/*` subdomain rewrite paths
+- `/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`
 
 See `middleware.ts` — `skipPaths` and `publicPaths` arrays.
+
+**Note:** Pillar pages (`/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`) must be verified as public in middleware before deploy.
 
 ---
 
@@ -193,17 +250,32 @@ After each deploy, submit to Google Search Console:
 1. Go to https://search.google.com/search-console
 2. Select `drivebook.com.au` property
 3. Sitemaps → Submit `https://drivebook.com.au/sitemap.xml`
-4. URL Inspection → Request indexing for `/`, `/book`, `/blog`
+4. URL Inspection → Request indexing for `/`, `/book`, `/blog`, `/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`
 
 ---
 
-## Future SEO Improvements (Backlog)
+## Current SEO Architecture Status (July 2026)
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| OG image generation (1200×630) per post | High | Improves social sharing CTR |
-| Search UI on `/blog` | Medium | Add at 40+ posts |
-| FAQ schema on learner posts | Medium | Boosts rich result chances |
-| Pagination on `/blog` | Low | Add at 60+ posts |
-| Author pages | Low | Add when multiple authors |
-| Reading progress bar | Low | Client-side component needed |
+| Layer | Status | Count |
+|-------|--------|-------|
+| Blog posts | ✅ Complete | 100 |
+| Tag archive pages | ✅ Auto-generated | ~120 unique tags |
+| RSS feed | ✅ Live | All 100 posts |
+| Sitemap | ✅ Dynamic, hourly | All posts + tags + instructors + pillar pages |
+| Pillar pages | ✅ Complete | 4 |
+| Instructor microsite pages | ✅ Live | Dynamic from DB |
+| JSON-LD structured data | ✅ All pages | BlogPosting, FAQPage, LocalBusiness, Organization, WebSite, SoftwareApplication |
+
+---
+
+## Pending SEO Work (see TODO.md for full roadmap)
+
+| Phase | What | Priority |
+|-------|------|----------|
+| 2 | Feature landing pages (`/features/*`) | High |
+| 3 | Comparison pages (`/compare/*`) | High |
+| 4 | Location pages (`/perth`, `/joondalup` etc.) | Medium |
+| 5 | Documentation centre (`/docs`) | Medium |
+| 6 | Interactive tools (calculators, quizzes) | Low |
+| — | OG images per post (1200×630) | When design assets ready |
+| — | Add pillar pages to middleware public paths | Before deploy |

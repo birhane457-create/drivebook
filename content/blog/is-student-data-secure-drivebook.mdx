@@ -1,0 +1,60 @@
+---
+title: "Is Student Data Secure on DriveBook?"
+description: "Questions about data security are legitimate. Here's a straightforward explanation of how DriveBook handles student and instructor data."
+date: "2026-07-06"
+author: "DriveBook Team"
+category: "instructors"
+readTime: "4 min read"
+tags: ['data security', 'privacy', 'trust', 'DriveBook']
+---
+
+When you use any digital platform for your business, you're entrusting it with your students' data — names, contact details, booking history, payment records. That's a reasonable thing to scrutinise.
+
+Here's a straightforward account of how DriveBook handles data security.
+
+## What Data DriveBook Holds
+
+For students:
+- Name, email address, phone number
+- Booking history and lesson records
+- Payment records (card data is never stored by DriveBook — it's handled directly by Stripe)
+- Progress notes and lesson feedback
+- Wallet balance
+
+For instructors:
+- Name, email, phone number
+- Profile information (bio, photo, service areas)
+- Earnings records and payout history
+- Bank account details for payouts (held by Stripe, not directly by DriveBook)
+
+## Payment Data
+
+DriveBook uses Stripe for all payment processing. Card numbers, CVVs, and sensitive payment data are never transmitted to or stored on DriveBook's servers. They go directly to Stripe, which is PCI DSS Level 1 certified — the highest standard for payment security.
+
+When you see a payment succeed in DriveBook, what the platform stores is a transaction record (amount, date, booking reference) — not your card details.
+
+## Authentication and Access
+
+Student accounts are protected by email and password authentication. Instructors and admins have role-based access — instructors see their own students and bookings; admin accounts have broader visibility.
+
+Passwords are hashed (never stored in plain text). Sessions have a limited lifetime and require re-authentication.
+
+## Data Isolation
+
+Students can only access their own records. Instructors can only access records for their own students. The admin account has access to all records under the school. There is no pathway for a student to view another student's data, or for one instructor to view another's student records.
+
+## Where Data Is Stored
+
+DriveBook infrastructure runs on cloud providers with enterprise-grade physical and network security. Data is not stored locally on any device — it lives on secured servers with access controls.
+
+## What Happens If You Leave
+
+If you close your DriveBook account, your data is retained for a period as required for legal and financial record-keeping purposes, then deleted. You can request an export of your own data before closing your account.
+
+## A Note on Privacy Policy
+
+DriveBook's full privacy policy is published at `drivebook.com.au/privacy`. It describes in detail what data is collected, how it's used, who it's shared with (and who it isn't), and your rights under Australian privacy law.
+
+---
+
+**[Create your DriveBook account →](/teach-with-drivebook)**

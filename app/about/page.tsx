@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Car, Shield, Users, Star, Target, Heart } from 'lucide-react'
+import Logo from '@/components/Logo'
 
 export const metadata = {
   title: 'About Us | DriveBook',
@@ -12,7 +13,7 @@ export default function AboutPage() {
       {/* Nav */}
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 py-4 px-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent no-underline">DriveBook</Link>
+          <Link href="/" className="no-underline"><Logo size={34} dark /></Link>
           <div className="flex items-center gap-3">
             <Link href="/book" className="text-white/70 hover:text-white font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors hidden md:block no-underline">Find Instructor</Link>
             <Link href="/login" className="text-white/70 hover:text-white font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Login</Link>
@@ -148,7 +149,7 @@ export default function AboutPage() {
       <footer className="bg-slate-900/50 backdrop-blur border-t border-white/10 text-white py-10 px-4 mt-8">
         <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-8 mb-8">
           <div>
-            <h3 className="font-bold text-lg mb-3 bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent">DriveBook</h3>
+            <Logo size={28} dark />
             <p className="text-white/50 text-sm">Connecting learners with professional driving instructors across Australia.</p>
           </div>
           <div>

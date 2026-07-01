@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <defs>
+    <linearGradient id="dg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#4338ca"/>
+      <stop offset="55%"  stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <radialGradient id="wg" cx="50%" cy="35%" r="65%">
+      <stop offset="0%"   stop-color="#fde68a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <clipPath id="dc">
+      <path d="
+        M10 6 L10 154 L58 154
+        C108 154 150 138 150 80
+        C150 22  108  6  58  6 Z
+        M38 30 L58 30
+        C88 30 120 44 120 80
+        C120 116 88 130 58 130
+        L38 130 Z
+      " fill-rule="evenodd"/>
+    </clipPath>
+  </defs>
+
+  <!-- D letterform -->
+  <path d="
+    M10 6 L10 154 L58 154
+    C108 154 150 138 150 80
+    C150 22  108  6  58  6 Z
+    M38 30 L58 30
+    C88 30 120 44 120 80
+    C120 116 88 130 58 130
+    L38 130 Z
+  " fill="url(#dg)" fill-rule="evenodd"/>
+
+  <!-- Road inside D -->
+  <g clip-path="url(#dc)">
+    <path d="M18 158 C26 132 36 118 50 106 C64 94 80 86 96 76 C112 66 122 58 128 42"
+          stroke="#1e1b4b" stroke-width="26" stroke-linecap="round" fill="none"/>
+    <path d="M18 158 C26 132 36 118 50 106 C64 94 80 86 96 76 C112 66 122 58 128 42"
+          stroke="white" stroke-width="3" stroke-linecap="round"
+          stroke-dasharray="9 8" fill="none" opacity="0.85"/>
+  </g>
+
+  <!-- Steering wheel @ (66, 96) r=21 -->
+  <circle cx="66" cy="96" r="21" fill="url(#wg)"/>
+  <circle cx="66" cy="96" r="13" fill="#fbbf24"/>
+  <circle cx="66" cy="96" r="5"  fill="#d97706"/>
+  <line x1="66" y1="75"  x2="66" y2="83"  stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="66" y1="109" x2="66" y2="117" stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="45" y1="96"  x2="53" y2="96"  stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="79" y1="96"  x2="87" y2="96"  stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="51" y1="81" x2="57" y2="87"   stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+  <line x1="81" y1="81" x2="75" y2="87"   stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+  <line x1="51" y1="111" x2="57" y2="105" stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+  <line x1="81" y1="111" x2="75" y2="105" stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+</svg>

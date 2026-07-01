@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import Logo from '@/components/Logo'
 
 export const metadata: Metadata = {
   title: 'Grow Your Driving School with DriveBook',
@@ -23,9 +24,7 @@ export default function TeachWithDriveBookPage() {
       {/* Navigation */}
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 py-4 px-5">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent no-underline">
-            DriveBook
-          </Link>
+          <Link href="/" className="no-underline"><Logo size={34} dark /></Link>
           <div className="flex items-center space-x-4">
             <Link href="/" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
               For Learners
