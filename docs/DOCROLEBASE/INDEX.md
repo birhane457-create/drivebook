@@ -1,6 +1,6 @@
 # DriveBook Documentation Index
 
-**Last Updated:** June 13, 2026  
+**Last Updated:** July 2026  
 **Purpose:** Quick reference to find documentation by topic
 
 ---
@@ -38,18 +38,25 @@
 - **Stripe integration:** `06-payments/STRIPE.md`
 - **Security considerations:** `08-technical/SECURITY_ASSESSMENT.md`
 - **UI design system:** `08-technical/STYLING.md`
+- **SEO & sitemap:** `08-technical/SEO.md` ⭐ NEW
+- **Cron jobs:** `08-technical/CRON_JOBS.md`
+- **Blog system:** `01-public/BLOG.md` ⭐ NEW
 
 ---
 
-## What Changed Recently (June 13, 2026)
+## What Changed Recently (July 2026)
 
-✅ **All 6 Fixes Complete:**
-1. ⭐ **Awaiting Payment Bookings** — Students can now see & manage pending payments from dashboard
-2. Slot Persistence — Database storage with auto-cleanup
-3. Race Conditions — Atomic transactions prevent double-booking
-4. Account Deduplication — Unique constraint handling
-5. PDA Test Linking — Consolidated billing
-6. Bulk Bookings Email — All booking methods send notifications
+✅ **Security fixes, blog platform, SEO infrastructure complete:**
+1. Auth gate for unapproved instructors; session 30d→7d
+2. requireRole() DB-verified admin checks; MIME upload validation
+3. Email/SMS retry queue with exponential backoff
+4. Mobile push notifications (FCM, DeviceToken)
+5. Blog: 23 posts, featured hero, tags, prev/next, related articles
+6. Tag archive pages, RSS feed
+7. Sitemap, robots.txt, Organization/WebSite JSON-LD
+8. Instructor search language + vehicle type filters in UI
+9. Batch booking security hardening
+10. Dashboard JSX/encoding fixes
 
 **See:** `00-overview/CHANGES.md` for detailed summary
 
@@ -62,6 +69,8 @@
 - `01-public/BOOKING_FLOW.md` — High-level overview
 - `01-public/SLOT_PERSISTENCE_FIX.md` — How slots persist in database
 - `01-public/RACE_CONDITION_FIX.md` — Double-booking prevention
+- `01-public/BLOG.md` — Blog platform architecture & content ⭐ NEW
+- `01-public/SUBDOMAIN_PAGE.md` — Instructor microsite booking
 - `03-instructor/BOOKINGS.md` — Instructor perspective
 
 ### Payments & Wallet
@@ -215,8 +224,10 @@ docs/DOCROLEBASE/
 
 ## Status
 
-✅ All documentation up-to-date with code (June 13, 2026)  
-✅ All 6 fixes complete & documented  
+✅ All documentation up-to-date with code (July 2026)  
+✅ Blog platform complete (23 posts, tags, RSS)  
+✅ SEO infrastructure complete  
+✅ Security fixes applied  
 ✅ TypeScript verification: 0 errors  
 ✅ Production-ready
 

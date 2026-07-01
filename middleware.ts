@@ -41,7 +41,7 @@ export async function middleware(req: NextRequest) {
     hostname.includes('localhost') || 
     hostname.endsWith('vercel.app')  // all *.vercel.app preview/production URLs
   if (!isOwnDomain) {
-    const skipPaths = ['/api', '/_next', '/static', '/booking', '/login', '/register', '/dashboard', '/admin', '/client-dashboard']
+    const skipPaths = ['/api', '/_next', '/static', '/booking', '/login', '/register', '/dashboard', '/admin', '/client-dashboard', '/sitemap.xml', '/robots.txt', '/rss.xml']
     const shouldRewrite = !skipPaths.some(p => url.pathname.startsWith(p))
     if (shouldRewrite) {
       const rest = url.pathname === '/' ? '' : url.pathname
@@ -62,7 +62,7 @@ export async function middleware(req: NextRequest) {
 
   // If subdomain exists, rewrite to /subdomain/[slug] (skip API/_next/static)
   if (subdomain && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
-    if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/_next') && !url.pathname.startsWith('/static') && !url.pathname.startsWith('/booking') && !url.pathname.startsWith('/login') && !url.pathname.startsWith('/register') && !url.pathname.startsWith('/book/') && url.pathname !== '/book') {
+    if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/_next') && !url.pathname.startsWith('/static') && !url.pathname.startsWith('/booking') && !url.pathname.startsWith('/login') && !url.pathname.startsWith('/register') && !url.pathname.startsWith('/book/') && url.pathname !== '/book' && url.pathname !== '/sitemap.xml' && url.pathname !== '/robots.txt' && url.pathname !== '/rss.xml') {
       const rest = url.pathname === '/' ? '' : url.pathname
       url.pathname = `/subdomain/${subdomain}${rest}`
       const response = NextResponse.rewrite(url)
@@ -73,7 +73,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Skip middleware for public routes (non-subdomain)
-  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/set-password', '/api/auth', '/about', '/contact', '/blog', '/privacy', '/terms', '/teach-with-drivebook', '/book', '/maintenance']
+  const publicPaths = ['/', '/login', '/register', '/instructors', '/auth/forgot-password', '/reset-password', '/set-password', '/api/auth', '/about', '/contact', '/blog', '/privacy', '/terms', '/teach-with-drivebook', '/book', '/maintenance', '/sitemap.xml', '/robots.txt', '/rss.xml']
   const isPublicPath = publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path))
 
   if (isPublicPath && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {

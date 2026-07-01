@@ -25,5 +25,7 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: `${BASE_URL}/sitemap.xml`,
+    // RSS feed — Google and feed readers pick this up
+    // Note: Not a standard robots.txt field but Next.js MetadataRoute supports it
   }
 }

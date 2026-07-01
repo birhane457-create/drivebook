@@ -134,6 +134,15 @@
 - **Pricing:** All plan prices pulled from `SUBSCRIPTION_PLANS` config — no hardcoded values
 - **Added:** June 19, 2026 (was missing from vercel.json)
 
+#### 13. **Notification Retry**
+- **Endpoint:** `GET /api/cron/notification-retry`
+- **Schedule:** Daily at 6am UTC — `0 6 * * *`
+- **Purpose:** Process failed email/SMS sends from the `NotificationRetry` queue. Retries up to 3 times with exponential backoff (5 min → 15 min → 45 min). Marks as FAILED after exhausting attempts.
+- **Service:** `lib/services/notificationRetry.ts` — `processRetryQueue()`
+- **DB Model:** `NotificationRetry` in schema
+- **Note:** Vercel Hobby plan only allows daily crons. Sub-daily retries are handled by `drainRetryQueueAsync()` called fire-and-forget from booking mutation routes.
+- **Added:** July 2026
+
 ---
 
 ## Cron Job Configuration
@@ -462,7 +471,7 @@ ORDER BY lastRunAt DESC;
 
 ## Implementation Checklist
 
-- [x] All 12 cron jobs documented and registered in `vercel.json` ✅ (June 19, 2026)
+- [x] All 13 cron jobs documented and registered in `vercel.json` ✅ (notification-retry added July 2026)
 - [x] Each cron pings `CronHealth` on success/failure ✅
 - [x] `slot-cleanup` and `notifications` auth bugs fixed ✅ (June 19, 2026)
 - [x] `@ts-nocheck` removed from `bookingReminders.ts` and `packageExpiryAlerts.ts` ✅

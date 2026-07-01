@@ -2,7 +2,7 @@
 
 **Stack:** Next.js 14 (App Router) · PostgreSQL (Supabase) · Prisma · Stripe · NextAuth · Azure Copilot Studio  
 **Hosted:** Vercel · drivebook.com.au  
-**Last Updated:** March 2026  
+**Last Updated:** July 2026  
 
 Everything is grouped by feature domain. Each entry shows: page → API route → service/lib → DB model.
 
@@ -242,7 +242,7 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 
 ## NOTIFICATIONS & ALERTS
 
-**What it does:** In-app notifications, SMS via Twilio, platform alerts for critical events.
+**What it does:** In-app notifications, SMS via Twilio, platform alerts for critical events, email/SMS retry queue.
 
 | Layer | File |
 |-------|------|
@@ -251,7 +251,12 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 | Notifications service | `lib/services/notifications.ts` |
 | Alert service | `lib/services/alert-service.ts` |
 | Email service | `lib/services/email.ts` |
-| DB model | `Notification` in schema |
+| SMS service | `lib/services/sms.ts` |
+| Notification retry service | `lib/services/notificationRetry.ts` |
+| Notification retry cron | `app/api/cron/notification-retry/route.ts` |
+| Mobile push service | `lib/services/pushNotification.ts` |
+| Device token registration | `app/api/mobile/push/register-device/route.ts` |
+| DB model | `Notification`, `NotificationRetry`, `DeviceToken` in schema |
 
 ---
 
@@ -318,9 +323,46 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 | Contact | `app/contact/page.tsx` |
 | Privacy | `app/privacy/page.tsx` |
 | Terms | `app/terms/page.tsx` |
-| Blog | `app/blog/page.tsx` |
+| Blog listing | `app/blog/page.tsx` |
+| Blog post | `app/blog/[slug]/page.tsx` |
+| Blog tag archive | `app/blog/tag/[tag]/page.tsx` |
 | Landing components | `components/landing/` |
 | Doc | `docs/DOCROLEBASE/01-public/LANDING_PAGE.md` |
+| Doc | `docs/DOCROLEBASE/01-public/BLOG.md` |
+
+---
+
+## BLOG
+
+**What it does:** Static MDX-based blog at `/blog`. Serves both learner drivers and driving instructors. Powers SEO organic traffic. Every post has a category-appropriate CTA.
+
+| Layer | File |
+|-------|------|
+| Blog utility lib | `lib/blog.ts` |
+| Listing page | `app/blog/page.tsx` |
+| Individual post | `app/blog/[slug]/page.tsx` |
+| Tag archive | `app/blog/tag/[tag]/page.tsx` |
+| RSS feed | `app/rss.xml/route.ts` |
+| Post content | `content/blog/*.mdx` (23 posts, July 2026) |
+| Doc | `docs/DOCROLEBASE/01-public/BLOG.md` |
+
+---
+
+## SEO & DISCOVERY
+
+**What it does:** Sitemap, robots.txt, RSS feed, OpenGraph, JSON-LD structured data, page metadata.
+
+| Layer | File |
+|-------|------|
+| Root metadata + JSON-LD | `app/layout.tsx` |
+| Dynamic sitemap | `app/sitemap.ts` |
+| Robots.txt | `app/robots.ts` |
+| RSS feed | `app/rss.xml/route.ts` |
+| Book page metadata | `app/book/layout.tsx` |
+| Instructor microsite metadata | `app/subdomain/[slug]/page.tsx` (`generateMetadata`) |
+| Blog post metadata | `app/blog/[slug]/page.tsx` (`generateMetadata`) |
+| Instructor search API | `app/api/instructors/search/route.ts` |
+| Doc | `docs/DOCROLEBASE/08-technical/SEO.md` |
 
 ---
 

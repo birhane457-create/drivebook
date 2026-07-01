@@ -1,5 +1,63 @@
-**Last Updated:** June 13, 2026  
+**Last Updated:** July 2026  
 **Tracking Method:** This file consolidates all DOCROLEBASE updates (vs creating multiple session files)
+
+---
+
+## 🎯 July 2026 — Security Fixes, Blog Platform, SEO Infrastructure
+
+### Summary
+✅ Critical security fixes applied (auth gate, session lifetime, role verification, MIME validation)  
+✅ Email/SMS retry queue with DB persistence and exponential backoff  
+✅ Mobile push notification endpoint (FCM, DeviceToken model)  
+✅ Full blog platform — 23 posts, featured hero, tags, related articles, prev/next, JSON-LD  
+✅ Tag archive pages (`/blog/tag/[tag]`) and RSS feed (`/rss.xml`)  
+✅ SEO infrastructure — sitemap, robots, OG metadata, Organization/WebSite JSON-LD  
+✅ Instructor search filters (vehicle type, language) exposed in UI  
+✅ Batch booking route security hardened (isActive check, subscription parity)  
+✅ State machine guards on booking transitions  
+✅ Dashboard layout margin fix (mobile)  
+✅ Multiple JSX parse errors and UTF-8 encoding issues fixed across dashboard pages
+
+### New Permanent Documentation
+
+| File | What it covers |
+|------|---------------|
+| `docs/DOCROLEBASE/01-public/BLOG.md` | NEW — blog architecture, post format, content catalogue, adding posts |
+| `docs/DOCROLEBASE/08-technical/SEO.md` | NEW — sitemap, robots, JSON-LD, metadata, RSS, future improvements |
+| `docs/DOCROLEBASE/08-technical/CRON_JOBS.md` | UPDATED — added notification-retry cron (#13) |
+| `docs/DOCROLEBASE/08-technical/CODEBASE_MAP.md` | UPDATED — added BLOG, SEO, NOTIFICATIONS sections; updated Last Updated |
+
+### Key Files Added/Changed
+
+**Security:**
+- `lib/auth.ts` — unapproved instructors blocked at auth gate; session reduced 30d→7d
+- `lib/auth/requireRole.ts` — DB-verified role check helper for admin routes
+- `lib/uploads/validateUpload.ts` — MIME type + magic byte validation
+- `app/api/admin/instructors/[id]/approve|reject|suspend/route.ts` — requireAdmin() applied
+- `app/api/bookings/batch/route.ts` — isActive check, checkSubscriptionAccess() parity
+- `app/api/client/wallet/route.ts` — role === CLIENT guard added
+- `app/api/bookings/[id]/route.ts` — PENDING_PAYMENT→COMPLETED blocked; soft-delete guard
+
+**Notifications:**
+- `lib/services/notificationRetry.ts` — enqueueNotification(), processRetryQueue(), drainRetryQueueAsync()
+- `app/api/cron/notification-retry/route.ts` — daily cron (Hobby plan limit)
+- `lib/services/pushNotification.ts` — FCM HTTP v1, sendPushToUser(), token cache
+- `app/api/mobile/push/register-device/route.ts` — POST (upsert) + DELETE (deregister)
+- `prisma/schema.prisma` — DeviceToken model, NotificationRetry model
+
+**Blog:**
+- `lib/blog.ts` — getAllPosts(), getPostBySlug(), getAdjacentPosts(), getRelatedPosts()
+- `app/blog/page.tsx` — featured hero, category sections, mid-page CTAs
+- `app/blog/[slug]/page.tsx` — MDX render, breadcrumb, tags, related, prev/next, BlogPosting JSON-LD
+- `app/blog/tag/[tag]/page.tsx` — tag archives with sidebar tag cloud
+- `app/rss.xml/route.ts` — RSS 2.0 feed
+- `content/blog/*.mdx` — 23 posts, all tagged (5 tags each)
+
+**SEO:**
+- `app/layout.tsx` — full metadata, Organization + WebSite JSON-LD, RSS autodiscovery
+- `app/sitemap.ts` — posts, tag archives, instructor microsites, RSS
+- `app/robots.ts` — disallow private paths
+- `middleware.ts` — sitemap.xml, robots.txt, rss.xml excluded from auth
 
 ---
 

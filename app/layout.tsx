@@ -92,6 +92,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* RSS feed auto-discovery */}
+        <link rel="alternate" type="application/rss+xml" title="DriveBook Blog" href={`${BASE_URL}/rss.xml`} />
         {/* Organization structured data — enables Google Knowledge Panel */}
         <script
           type="application/ld+json"

@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next'
 import { prisma } from '@/lib/prisma'
+import { getAllPosts } from '@/lib/blog'
 
 const BASE_URL = process.env.NEXTAUTH_URL || 'https://drivebook.com.au'
 
@@ -53,6 +54,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly',
       priority: 0.4,
     },
+    {
+      url: `${BASE_URL}/blog`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    },
+    {
+      url: `${BASE_URL}/rss.xml`,
+      lastModified: now,
+      changeFrequency: 'daily',
+      priority: 0.3,
+    },
   ]
 
   // ── Instructor subdomain pages — the highest-value SEO pages ────────────────
@@ -88,5 +101,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // DB unavailable at build time — return static pages only
   }
 
-  return [...staticPages, ...instructorPages]
+  // ── Blog posts ──────────────────────────────────────────────────────────────
+  let blogPages: MetadataRoute.Sitemap = []
+  let tagPages: MetadataRoute.Sitemap = []
+  try {
+    const posts = getAllPosts()
+    blogPages = posts.map(post => ({
+      url: `${BASE_URL}/blog/${post.slug}`,
+      lastModified: new Date(post.date),
+      changeFrequency: 'monthly' as const,
+      priority: 0.75,
+    }))
+
+    // Unique tag archive pages
+    const allTags = new Set<string>()
+    posts.forEach(p => p.tags?.forEach(t => allTags.add(
+      encodeURIComponent(t.toLowerCase().replace(/\s+/g, '-'))
+    )))
+    tagPages = Array.from(allTags).map(tagSlug => ({
+      url: `${BASE_URL}/blog/tag/${tagSlug}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    }))
+  } catch {
+    // content dir unavailable at build time — skip blog entries
+  }
+
+  return [...staticPages, ...blogPages, ...tagPages, ...instructorPages]
 }
