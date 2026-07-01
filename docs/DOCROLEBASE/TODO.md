@@ -32,15 +32,28 @@
 | 100+ blog posts | Students + instructors, all with frontmatter, tags, JSON-LD |
 | Tag archive pages (`/blog/tag/[tag]`) | Auto-generated from post tags |
 | RSS feed (`/rss.xml`) | Auto-generated from all posts |
-| Sitemap with blog + tag + instructor pages | Dynamic, regenerated hourly |
+| Sitemap with all pages | Dynamic, regenerated hourly — includes pillar, feature, compare pages |
 | JSON-LD on all blog posts | BreadcrumbList + BlogPosting |
 | Related posts + prev/next navigation | On all blog post pages |
 | Pillar page: `/learn-to-drive` | Learner hub — 40+ article links, FAQ schema |
 | Pillar page: `/pda-guide` | WA PDA master guide — scoring, failures, prep |
 | Pillar page: `/for-instructors` | Instructor resource hub — 60+ article links by topic |
 | Pillar page: `/platform` | Platform documentation — all features explained with links |
-| Sitemap updated with all 4 pillar pages | Priority 0.9 |
-| Homepage footer updated with pillar page links | Internal linking from root |
+| Feature page: `/features/ai-receptionist` | BreadcrumbList + FAQPage + comparison table |
+| Feature page: `/features/online-booking` | BreadcrumbList + FAQPage + comparison table |
+| Feature page: `/features/custom-domain` | BreadcrumbList + FAQPage + comparison table |
+| Feature page: `/features/student-progress` | BreadcrumbList + FAQPage + skill tracking demo |
+| Feature page: `/features/multi-instructor` | BreadcrumbList + FAQPage + plan comparison table |
+| Feature page: `/features/payments` | BreadcrumbList + FAQPage + payment flow steps |
+| Comparison page: `/compare/google-calendar` | 14-row comparison table + narrative |
+| Comparison page: `/compare/paper-diary` | Risk callout + comparison table + hidden cost narrative |
+| Comparison page: `/compare/calendly` | 17-row comparison table + narrative |
+| Logo system | `public/logo.svg`, `public/logo-icon.svg`, `public/favicon.svg`, `components/Logo.tsx` |
+| Logo rolled out to all 15 public pages | `dark` prop for dark backgrounds, default for light |
+| Homepage footer — 4 columns | Resources column (pillar pages) + Features column (feature pages) |
+| `middleware.ts` updated | `/features/*` and `/compare/*` added to `publicPaths` |
+| `/for-instructors` capability strip | Icons are clickable links to feature pages |
+| `/teach-with-drivebook` | "Explore Every Feature" section + compare links added |
 
 ---
 

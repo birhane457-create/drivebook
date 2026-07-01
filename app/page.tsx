@@ -364,6 +364,17 @@ export default function HomePage() {
             </ul>
           </div>
           <div>
+            <h3 className="font-semibold mb-3 text-white">Features</h3>
+            <ul className="space-y-2 text-sm text-white/50">
+              <li><Link href="/features/ai-receptionist" className="hover:text-white transition-colors no-underline">AI Receptionist</Link></li>
+              <li><Link href="/features/online-booking" className="hover:text-white transition-colors no-underline">Online Booking</Link></li>
+              <li><Link href="/features/custom-domain" className="hover:text-white transition-colors no-underline">Custom Domain</Link></li>
+              <li><Link href="/features/payments" className="hover:text-white transition-colors no-underline">Payments</Link></li>
+              <li><Link href="/features/student-progress" className="hover:text-white transition-colors no-underline">Student Progress</Link></li>
+              <li><Link href="/features/multi-instructor" className="hover:text-white transition-colors no-underline">Multi-Instructor</Link></li>
+            </ul>
+          </div>
+          <div>
             <h3 className="font-semibold mb-3 text-white">Legal</h3>
             <ul className="space-y-2 text-sm text-white/50">
               <li><Link href="/terms" className="hover:text-white transition-colors no-underline">Learner Terms</Link></li>

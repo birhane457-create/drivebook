@@ -3,33 +3,65 @@
 
 ---
 
-## 🎯 July 2026 — Feature Landing Pages (Phase 2 SEO)
+## 🎯 July 2026 — Navigation Wiring for Features & Compare Pages
 
 ### Summary
-✅ 3 HIGH-priority feature landing pages built and added to sitemap  
-✅ Each includes BreadcrumbList + FAQPage JSON-LD, comparison table, related articles, CTA  
-✅ Sitemap updated with all 3 feature pages  
-✅ TODO.md updated — HIGH items marked done
+✅ Feature and compare pages now linked from 4 entry points  
+✅ Zero new files — pure navigation additions to existing pages
 
-### Pages Built
+### Navigation Added
+
+| Page | What was added |
+|------|---------------|
+| `app/teach-with-drivebook/page.tsx` | "Explore Every Feature" section — 6 feature cards + 3 compare links |
+| `app/page.tsx` (homepage footer) | New "Features" column — all 6 feature pages |
+| `app/for-instructors/page.tsx` (capability strip) | Each icon is now a clickable link to its feature page |
+| `app/for-instructors/page.tsx` (CTA area) | "Comparing options?" row with 3 compare page links |
+
+---
+
+## 🎯 July 2026 — Feature Landing Pages (Phase 2 + Phase 3 SEO)
+
+### Summary
+✅ 6 feature landing pages built (3 HIGH + 3 MED priority)  
+✅ 3 comparison pages built  
+✅ All 9 pages added to sitemap  
+✅ TODO.md updated  
+
+### Feature Pages Built
 
 | Route | Target Query | Schema |
 |-------|-------------|--------|
 | `/features/ai-receptionist` | "AI answering service driving school Australia" | BreadcrumbList + FAQPage |
 | `/features/online-booking` | "driving lesson booking software Australia" | BreadcrumbList + FAQPage |
 | `/features/custom-domain` | "driving instructor website Australia" | BreadcrumbList + FAQPage |
+| `/features/student-progress` | "driving lesson progress tracker" | BreadcrumbList + FAQPage |
+| `/features/multi-instructor` | "driving school management software" | BreadcrumbList + FAQPage |
+| `/features/payments` | "driving lesson payment system" | BreadcrumbList + FAQPage |
+
+### Comparison Pages Built
+
+| Route | Title | Schema |
+|-------|-------|--------|
+| `/compare/google-calendar` | DriveBook vs Google Calendar | BreadcrumbList |
+| `/compare/paper-diary` | DriveBook vs Paper Diary | BreadcrumbList |
+| `/compare/calendly` | DriveBook vs Calendly | BreadcrumbList |
+
+### Middleware Fix
+`middleware.ts` — added `/features` and `/compare` to `publicPaths` so these pages are accessible without authentication.
 
 ### Sitemap
-All 3 added at priority 0.8–0.85.
+All 9 pages added: feature pages at 0.8–0.85, compare pages at 0.75.
 
 ---
 
+## 🎯 July 2026 — Blog Scale, Pillar Pages, Logo System
+
 ### Summary
-✅ Blog scaled from 23 posts to 100 posts (33 new posts in this session)  
+✅ Blog scaled from 23 posts to 100 posts  
 ✅ 4 SEO pillar hub pages built (`/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`)  
-✅ DriveBook D-mark logo designed and implemented as SVG + React component  
-✅ Logo component rolled out across all 14 public-facing pages  
-✅ Homepage footer updated with Resources column linking all pillar pages  
+✅ DriveBook D-mark logo (SVG + React component) rolled out to all 14 public-facing pages  
+✅ Homepage footer updated with Resources column + pillar page links  
 ✅ Sitemap updated with all 4 pillar pages at priority 0.9  
 ✅ DOCROLEBASE updated: BLOG.md, SEO.md, LANDING_PAGE.md, new BRANDING.md
 
@@ -42,41 +74,39 @@ All 3 added at priority 0.8–0.85.
 | `/for-instructors` | BreadcrumbList | "driving instructor resources australia", "grow driving school" |
 | `/platform` | BreadcrumbList + SoftwareApplication | "driving school software australia" |
 
-### Blog Posts Added (July 2026 — this session)
+### Blog Posts Added (100 total)
 
-**Students (16 posts):**
-- Freeway driving WA, Three-point turn guide, What is the PDA in WA
-- Driving anxiety tips, Reversing and parking manoeuvres, Speed limits WA
-- Give way rules WA complete guide, How to use DriveBook as a student
-- Wet weather driving WA, What to expect at PDA test centre
-- Manual transmission for learners, Parking rules WA, Country road driving WA
-- Logbook tips WA, Understanding provisional licence WA (P1/P2), How to pass the HPT
+33 new posts added in this session covering:
 
-**Instructors (17 posts):**
-- Handling student complaints, Reducing admin time, Tax deductions Australia
-- Getting first students, Writing a bio that wins bookings, Setting a cancellation policy
-- Tracking driving school revenue, Dealing with difficult students
-- Onboarding new instructor, Scaling driving school systems, Managing burnout
-- Own car vs student's car, How DriveBook handles refunds
-- DriveBook subscription plans explained, Google Business Profile guide
-- Social media marketing guide, How to reduce admin time
+**Students:** Freeway driving WA, three-point turn, PDA overview, driving anxiety, reversing, speed limits WA, give way rules WA, how to use DriveBook as a student, wet weather driving, PDA test centre guide, manual transmission, parking rules WA, country road driving, logbook tips, provisional licence WA (P1/P2), HPT guide
+
+**Instructors:** Handling complaints, reducing admin time, tax deductions, getting first students, writing a bio, cancellation policy, tracking revenue, difficult students, onboarding instructors, scaling systems, burnout management, own car vs student's car, refunds guide, subscription plans, Google Business Profile, social media marketing
 
 ### Logo System
 
 **Files created:**
-- `public/logo.svg` — full wordmark with D-mark, road, steering wheel
+- `public/logo.svg` — full wordmark (D-mark + "DriveBook" + tagline)
 - `public/logo-icon.svg` — 160×160 icon only
 - `public/favicon.svg` — 32×32 compact favicon
-- `components/Logo.tsx` — React component, 3 variants (full/icon/wordmark), dark prop
+- `components/Logo.tsx` — React component, variants: `full`/`icon`/`wordmark`, `dark` prop
 
-**Pages updated** (old gradient text span → `<Logo>` component):
-- `app/page.tsx` (nav + footer)
-- `app/blog/page.tsx`, `app/blog/[slug]/page.tsx`, `app/blog/tag/[tag]/page.tsx`
-- `app/about/page.tsx`, `app/contact/page.tsx`
+**Pages updated** (old gradient text → `<Logo>` component):
+- `app/page.tsx`, `app/blog/page.tsx`, `app/blog/[slug]/page.tsx`, `app/blog/tag/[tag]/page.tsx`
+- `app/about/page.tsx`, `app/contact/page.tsx`, `app/teach-with-drivebook/page.tsx`
 - `app/terms/page.tsx`, `app/privacy/page.tsx`, `app/instructor-terms/page.tsx`
-- `app/learn-to-drive/page.tsx`, `app/pda-guide/page.tsx`
-- `app/for-instructors/page.tsx`, `app/platform/page.tsx`
-- `app/teach-with-drivebook/page.tsx`, `app/instructors/page.tsx`
+- `app/learn-to-drive/page.tsx`, `app/pda-guide/page.tsx`, `app/for-instructors/page.tsx`, `app/platform/page.tsx`
+- `app/instructors/page.tsx`
+
+### DOCROLEBASE Updated
+
+| File | Action |
+|------|--------|
+| `01-public/BLOG.md` | Updated — post count 23→100, pillar pages section |
+| `08-technical/SEO.md` | Updated — pillar pages, sitemap priorities, FAQ schema, middleware note |
+| `01-public/LANDING_PAGE.md` | Updated — logo component, Resources + Features footer columns |
+| `01-public/BRANDING.md` | NEW — logo design, SVG files, React component API, usage table, colour palette |
+
+---
 
 ### New / Updated Permanent Documentation
 

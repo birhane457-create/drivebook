@@ -118,21 +118,21 @@ export default function ForInstructorsPage() {
         <section className="bg-white/[0.03] border-y border-white/10 py-8 px-4 overflow-x-auto">
           <div className="max-w-5xl mx-auto flex items-center justify-around gap-6 min-w-max md:min-w-0">
             {[
-              { icon: Calendar, label: 'Online Booking' },
-              { icon: Phone, label: 'AI Receptionist' },
-              { icon: CreditCard, label: 'Payments' },
-              { icon: Users, label: 'Student CRM' },
-              { icon: Star, label: 'Reviews' },
-              { icon: Globe, label: 'Custom Domain' },
-              { icon: BarChart3, label: 'Revenue Reports' },
-              { icon: Zap, label: 'Automation' },
-            ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex flex-col items-center gap-2 text-center">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+              { icon: Calendar, label: 'Online Booking', href: '/features/online-booking' },
+              { icon: Phone, label: 'AI Receptionist', href: '/features/ai-receptionist' },
+              { icon: CreditCard, label: 'Payments', href: '/features/payments' },
+              { icon: Users, label: 'Student CRM', href: '/features/student-progress' },
+              { icon: Star, label: 'Reviews', href: '/platform#reviews' },
+              { icon: Globe, label: 'Custom Domain', href: '/features/custom-domain' },
+              { icon: BarChart3, label: 'Revenue Reports', href: '/platform#reporting' },
+              { icon: Zap, label: 'Multi-Instructor', href: '/features/multi-instructor' },
+            ].map(({ icon: Icon, label, href }) => (
+              <Link key={label} href={href} className="flex flex-col items-center gap-2 text-center no-underline group">
+                <div className="w-10 h-10 rounded-xl bg-white/10 group-hover:bg-pink-500/20 group-hover:border-pink-500/30 border border-transparent flex items-center justify-center transition-all">
                   <Icon className="h-4 w-4 text-pink-400" />
                 </div>
-                <span className="text-white/60 text-xs whitespace-nowrap">{label}</span>
-              </div>
+                <span className="text-white/60 group-hover:text-white text-xs whitespace-nowrap transition-colors">{label}</span>
+              </Link>
             ))}
           </div>
         </section>
@@ -290,6 +290,21 @@ export default function ForInstructorsPage() {
                   </div>
                   {f}
                 </div>
+              ))}
+            </div>
+          </div>
+          {/* Comparison links */}
+          <div className="mt-6 pt-6 border-t border-white/10">
+            <p className="text-white/40 text-xs mb-3">Comparing options?</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { href: '/compare/google-calendar', label: 'vs Google Calendar' },
+                { href: '/compare/paper-diary', label: 'vs Paper Diary' },
+                { href: '/compare/calendly', label: 'vs Calendly' },
+              ].map(({ href, label }) => (
+                <Link key={href} href={href} className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.03] text-white/50 hover:text-white hover:bg-white/10 no-underline transition-all">
+                  DriveBook {label} →
+                </Link>
               ))}
             </div>
           </div>

@@ -166,6 +166,43 @@ export default function TeachWithDriveBookPage() {
           </div>
         </section>
 
+        {/* Platform Features — deep dive links */}
+        <section className="my-16">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold text-white mb-3">Explore Every Feature</h2>
+            <p className="text-white/50 text-sm">Deep-dive guides on what each part of DriveBook actually does.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { href: '/features/ai-receptionist', emoji: '📞', title: 'AI Phone Receptionist', desc: 'Answers every call 24/7 and books lessons while you teach.' },
+              { href: '/features/online-booking', emoji: '📅', title: 'Online Booking', desc: 'Students book and pay directly from your booking page.' },
+              { href: '/features/custom-domain', emoji: '🌐', title: 'Custom Domain', desc: 'Your own website address — no building required.' },
+              { href: '/features/payments', emoji: '💳', title: 'Payments & Payouts', desc: 'Student wallets, lesson packages, weekly payouts.' },
+              { href: '/features/student-progress', emoji: '📊', title: 'Student Progress', desc: 'Track lesson notes and skill development over time.' },
+              { href: '/features/multi-instructor', emoji: '👥', title: 'Multi-Instructor Schools', desc: 'Manage your whole school from one admin dashboard.' },
+            ].map(({ href, emoji, title, desc }) => (
+              <Link key={href} href={href} className="flex gap-4 p-5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-emerald-500/40 transition-all no-underline group">
+                <span className="text-2xl shrink-0">{emoji}</span>
+                <div>
+                  <p className="font-semibold text-white group-hover:text-emerald-300 transition-colors text-sm mb-1">{title}</p>
+                  <p className="text-white/50 text-xs leading-relaxed">{desc}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+          <div className="mt-6 grid sm:grid-cols-3 gap-3">
+            {[
+              { href: '/compare/google-calendar', label: 'DriveBook vs Google Calendar →' },
+              { href: '/compare/paper-diary', label: 'DriveBook vs Paper Diary →' },
+              { href: '/compare/calendly', label: 'DriveBook vs Calendly →' },
+            ].map(({ href, label }) => (
+              <Link key={href} href={href} className="text-center p-3 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.07] text-white/50 hover:text-white text-xs font-medium no-underline transition-all">
+                {label}
+              </Link>
+            ))}
+          </div>
+        </section>
+
         {/* Why Instructors Choose Us */}
         <section className="my-16">
           <h2 className="text-4xl text-center mb-10 text-white">Why Instructors Choose DriveBook</h2>
