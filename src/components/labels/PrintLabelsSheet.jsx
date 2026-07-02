@@ -11,6 +11,12 @@ export default function PrintLabelsSheet({ items }) {
         <div key={`${label.id}-${idx}`} className="border border-black flex flex-col items-center justify-center p-3 break-inside-avoid">
           <p className="text-xs font-semibold text-center mb-1">{label.display_text}</p>
           <BarcodeSVG value={label.barcode_value} height={50} barUnit={1.5} />
+          {label.label_type === 'product' && (
+            <div className="flex items-center justify-between w-full mt-1 text-[10px]">
+              <span>{label.label_date || ''}</span>
+              {label.price != null && <span className="font-bold">${Number(label.price).toFixed(2)}</span>}
+            </div>
+          )}
         </div>
       ))}
     </div>

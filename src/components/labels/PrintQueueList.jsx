@@ -24,7 +24,11 @@ export default function PrintQueueList({ items }) {
           <BarcodeSVG value={item.barcode_value} height={36} barUnit={1.2} showText={false} />
           <div className="flex-1 min-w-0">
             <p className="font-medium text-sm truncate">{item.display_text}</p>
-            <p className="text-xs text-muted-foreground">{item.barcode_value}</p>
+            <p className="text-xs text-muted-foreground">
+              {item.barcode_value}
+              {item.label_type === 'product' && item.price != null && ` · $${Number(item.price).toFixed(2)}`}
+              {item.label_type === 'product' && item.label_date && ` · ${item.label_date}`}
+            </p>
           </div>
           <Badge variant="secondary" className="capitalize">{item.label_type}</Badge>
           <Badge variant="outline">x{item.quantity}</Badge>

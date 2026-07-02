@@ -55,6 +55,8 @@ export default function AddProductLabelForm() {
       barcode_value: selected.barcode || selected.sku,
       display_text: selected.name,
       quantity: parseInt(quantity) || 1,
+      price: selected.selling_price || 0,
+      label_date: new Date().toISOString().slice(0, 10),
     });
   };
 

@@ -28,6 +28,15 @@
       "default": 1,
       "description": "Number of copies to print"
     },
+    "price": {
+      "type": "number",
+      "description": "Selling price to display on the label (product labels only)"
+    },
+    "label_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date to display on the label"
+    },
     "status": {
       "type": "string",
       "enum": [
