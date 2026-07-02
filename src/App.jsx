@@ -13,6 +13,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import AppLayout from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import Products from '@/pages/Products';
+import BarcodeLabels from '@/pages/BarcodeLabels';
 import Inventory from '@/pages/Inventory';
 import POS from '@/pages/POS';
 import Purchases from '@/pages/Purchases';
@@ -119,6 +120,7 @@ const AuthenticatedApp = () => {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
+          <Route path="/barcode-labels" element={<BarcodeLabels />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/purchases" element={<Purchases />} />
           <Route path="/transfers" element={<Transfers />} />

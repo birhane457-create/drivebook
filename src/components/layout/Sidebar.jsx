@@ -10,7 +10,7 @@ import {
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
   CreditCard, Palette, Lightbulb, Rocket, Heart, FlaskConical, PlayCircle,
-  Target, TestTube, Briefcase, ChevronDown
+  Target, TestTube, Briefcase, ChevronDown, QrCode
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -42,6 +42,7 @@ const ROLE_MENUS = {
         { path: '/purchases', icon: Truck, label: 'Purchases' },
         { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
         { path: '/approvals', icon: CheckSquare, label: 'Approvals' },
+        { path: '/barcode-labels', icon: QrCode, label: 'Barcode Labels' },
       ]
     },
     {
@@ -167,6 +168,7 @@ const ROLE_MENUS = {
         { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting' },
         { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
         { path: '/optimization', icon: TrendingUp, label: 'Optimization' },
+        { path: '/barcode-labels', icon: QrCode, label: 'Barcode Labels' },
       ]
     },
     {
@@ -222,6 +224,7 @@ const ROLE_MENUS = {
         { path: '/inventory', icon: Warehouse, label: 'Inventory' },
         { path: '/products', icon: Package, label: 'Products' },
         { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
+        { path: '/barcode-labels', icon: QrCode, label: 'Barcode Labels' },
       ]
     },
     {
@@ -264,6 +267,7 @@ const ROLE_MENUS = {
         { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting' },
         { path: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
         { path: '/alerts', icon: Bell, label: 'Alerts' },
+        { path: '/barcode-labels', icon: QrCode, label: 'Barcode Labels' },
       ]
     },
   ],

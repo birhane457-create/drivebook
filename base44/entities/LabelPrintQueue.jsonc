@@ -1,0 +1,44 @@
+{
+  "name": "LabelPrintQueue",
+  "type": "object",
+  "properties": {
+    "label_type": {
+      "type": "string",
+      "enum": [
+        "product",
+        "shelf"
+      ],
+      "default": "product",
+      "description": "Whether this label is for a product or a shelf/aisle location"
+    },
+    "product_id": {
+      "type": "string",
+      "description": "Reference to Product (product labels only)"
+    },
+    "barcode_value": {
+      "type": "string",
+      "description": "The value encoded in the barcode"
+    },
+    "display_text": {
+      "type": "string",
+      "description": "Human readable text printed under the barcode"
+    },
+    "quantity": {
+      "type": "number",
+      "default": 1,
+      "description": "Number of copies to print"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "printed"
+      ],
+      "default": "pending"
+    }
+  },
+  "required": [
+    "barcode_value",
+    "display_text"
+  ]
+}
