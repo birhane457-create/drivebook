@@ -32,50 +32,16 @@ export default function Transfers() {
 
   const statusMutation = useMutation({
     mutationFn: async ({ transfer, newStatus }) => {
-      await base44.entities.StockTransfer.update(transfer.id, { status: newStatus });
-      
-      if (newStatus === 'received') {
-        // Process transfer: deduct from source, add to destination
-        for (const item of transfer.items || []) {
-          // Deduct from source
-          const sourceStock = await base44.entities.StockLevel.filter({ product_id: item.product_id, location_id: transfer.from_location_id });
-          if (sourceStock.length > 0) {
-            const sl = sourceStock[0];
-            await base44.entities.StockLevel.update(sl.id, { quantity: Math.max(0, sl.quantity - item.quantity) });
-            await base44.entities.InventoryLog.create({
-              product_id: item.product_id, product_name: item.product_name,
-              location_id: transfer.from_location_id, type: 'transfer_out',
-              quantity_change: -item.quantity, quantity_before: sl.quantity, quantity_after: sl.quantity - item.quantity,
-              reference_id: transfer.id, reference_type: 'transfer',
-            });
-          }
-          // Add to destination
-          const destStock = await base44.entities.StockLevel.filter({ product_id: item.product_id, location_id: transfer.to_location_id });
-          if (destStock.length > 0) {
-            const sl = destStock[0];
-            await base44.entities.StockLevel.update(sl.id, { quantity: sl.quantity + item.quantity });
-            await base44.entities.InventoryLog.create({
-              product_id: item.product_id, product_name: item.product_name,
-              location_id: transfer.to_location_id, type: 'transfer_in',
-              quantity_change: item.quantity, quantity_before: sl.quantity, quantity_after: sl.quantity + item.quantity,
-              reference_id: transfer.id, reference_type: 'transfer',
-            });
-          } else {
-            await base44.entities.StockLevel.create({ product_id: item.product_id, location_id: transfer.to_location_id, quantity: item.quantity });
-            await base44.entities.InventoryLog.create({
-              product_id: item.product_id, product_name: item.product_name,
-              location_id: transfer.to_location_id, type: 'transfer_in',
-              quantity_change: item.quantity, quantity_before: 0, quantity_after: item.quantity,
-              reference_id: transfer.id, reference_type: 'transfer',
-            });
-          }
-        }
-      }
+      const res = await base44.functions.invoke('processTransfer', { transfer_id: transfer.id, new_status: newStatus });
+      return res.data;
     },
     onSuccess: () => {
       toast.success('Transfer updated');
       queryClient.invalidateQueries({ queryKey: ['transfers'] });
       queryClient.invalidateQueries({ queryKey: ['stock-levels'] });
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.error || 'Failed to update transfer');
     },
   });
 
