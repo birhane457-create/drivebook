@@ -26,6 +26,15 @@
       "type": "number",
       "description": "Cost price per unit"
     },
+    "average_cost": {
+      "type": "number",
+      "description": "Weighted average cost per unit across receipts"
+    },
+    "total_on_hand": {
+      "type": "number",
+      "default": 0,
+      "description": "Total on-hand quantity across all locations"
+    },
     "selling_price": {
       "type": "number",
       "description": "Selling price per unit"

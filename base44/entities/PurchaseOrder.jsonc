@@ -20,6 +20,7 @@
         "submitted",
         "partial",
         "received",
+        "closed",
         "cancelled"
       ],
       "default": "draft"
@@ -44,6 +45,15 @@
           },
           "unit_cost": {
             "type": "number"
+          },
+          "line_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "partial",
+              "complete"
+            ],
+            "default": "pending"
           }
         }
       }
@@ -58,6 +68,38 @@
     "expected_date": {
       "type": "string",
       "format": "date"
+    },
+    "last_received_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "total_received_value": {
+      "type": "number",
+      "default": 0
+    },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "receipt_number": {
+            "type": "string"
+          },
+          "received_by": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "total_value": {
+            "type": "number"
+          },
+          "line_count": {
+            "type": "number"
+          }
+        }
+      }
     }
   },
   "required": [
