@@ -35,7 +35,7 @@ const ROLE_MENUS = {
     {
       label: 'Operations',
       items: [
-        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/pos', icon: ShoppingCart, label: 'Point of Sale' },
         { path: '/products', icon: Package, label: 'Products' },
         { path: '/inventory', icon: Warehouse, label: 'Inventory' },
@@ -154,7 +154,7 @@ const ROLE_MENUS = {
     {
       label: 'Overview',
       items: [
-        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/alerts', icon: Bell, label: 'Alerts' },
       ]
     },
@@ -202,7 +202,7 @@ const ROLE_MENUS = {
     {
       label: 'Overview',
       items: [
-        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/alerts', icon: Bell, label: 'Alerts' },
       ]
     },
@@ -246,7 +246,7 @@ const ROLE_MENUS = {
     {
       label: 'Info',
       items: [
-        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/alerts', icon: Bell, label: 'Alerts' },
       ]
     },
@@ -257,7 +257,7 @@ const ROLE_MENUS = {
     {
       label: 'Warehouse',
       items: [
-        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/inventory', icon: Warehouse, label: 'Inventory' },
         { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution' },
         { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH' },

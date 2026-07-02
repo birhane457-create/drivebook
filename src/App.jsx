@@ -109,14 +109,14 @@ const AuthenticatedApp = () => {
 
   return (
     <Routes>
-      <Route path="/home" element={<Home />} />
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/purchases" element={<Purchases />} />
