@@ -55,6 +55,9 @@ export default function SettingsPage() {
   const [formData, setFormData] = useState<{
     hourlyRate: number
     serviceRadiusKm: number
+    baseAddress: string
+    licenseNumber: string
+    insuranceNumber: string
     vehicleTypes: string[]
     workingHours: WorkingHours
     allowedDurations: number[]
@@ -66,6 +69,9 @@ export default function SettingsPage() {
   }>({
     hourlyRate: 60,
     serviceRadiusKm: 20,
+    baseAddress: '',
+    licenseNumber: '',
+    insuranceNumber: '',
     vehicleTypes: ['AUTO'],
     workingHours: {
       monday: [{ start: '09:00', end: '17:00' }],
@@ -173,6 +179,9 @@ export default function SettingsPage() {
           setFormData({
             hourlyRate: data.hourlyRate || 60,
             serviceRadiusKm: data.serviceRadiusKm || 20,
+            baseAddress: data.baseAddress || '',
+            licenseNumber: data.licenseNumber || '',
+            insuranceNumber: data.insuranceNumber || '',
             vehicleTypes: data.vehicleTypes || ['AUTO'],
             workingHours: normalizeWorkingHours(data.workingHours),
             allowedDurations: data.allowedDurations || [60, 120],
@@ -258,6 +267,9 @@ export default function SettingsPage() {
     const settingsData = {
       hourlyRate: formData.hourlyRate,
       serviceRadiusKm: formData.serviceRadiusKm,
+      baseAddress: formData.baseAddress || null,
+      licenseNumber: formData.licenseNumber || null,
+      insuranceNumber: formData.insuranceNumber || null,
       vehicleTypes: formData.vehicleTypes,
       workingHours: formData.workingHours,
       allowedDurations: formData.allowedDurations,
@@ -479,6 +491,59 @@ export default function SettingsPage() {
                   />
                   <p className="text-xs text-slate-400 mt-1">Maximum distance you're willing to travel for pickups</p>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">Base Address</label>
+                  <input
+                    type="text"
+                    value={formData.baseAddress}
+                    onChange={(e) => setFormData(prev => ({ ...prev, baseAddress: e.target.value }))}
+                    placeholder="e.g. Maylands WA 6051"
+                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Your home base — only suburb name shown publicly</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Professional Credentials */}
+            <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
+              <h2 className="text-xl font-bold mb-1 flex items-center gap-2 text-slate-100">
+                <Zap className="h-5 w-5" />
+                Professional Credentials
+              </h2>
+              <p className="text-sm text-slate-400 mb-4">
+                Stored securely, not shown publicly.{' '}
+                <a href="/dashboard/documents" className="text-violet-400 hover:underline">
+                  Upload documents (licence, insurance) →
+                </a>
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">Instructor Licence Number</label>
+                  <input
+                    type="text"
+                    value={formData.licenseNumber}
+                    onChange={(e) => setFormData(prev => ({ ...prev, licenseNumber: e.target.value }))}
+                    placeholder="e.g. DI12345"
+                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">Insurance Policy Number</label>
+                  <input
+                    type="text"
+                    value={formData.insuranceNumber}
+                    onChange={(e) => setFormData(prev => ({ ...prev, insuranceNumber: e.target.value }))}
+                    placeholder="e.g. POL-2024-XXXXX"
+                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                {(!formData.licenseNumber || !formData.insuranceNumber) && (
+                  <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-3 text-sm text-amber-300">
+                    ⚠️ Complete your credentials — required for approval and student trust.
+                  </div>
+                )}
               </div>
             </div>
 

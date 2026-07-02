@@ -5,6 +5,12 @@ import Logo from '@/components/Logo'
 export const metadata = {
   title: 'About Us | DriveBook',
   description: 'DriveBook connects learners with verified driving instructors across Australia. Learn about our mission, values, and how we work.',
+  openGraph: {
+    title: 'About DriveBook — Our Mission & Story',
+    description: 'Learn how DriveBook was built to connect Australian learner drivers with verified, qualified driving instructors.',
+    url: 'https://drivebook.com.au/about',
+  },
+  alternates: { canonical: 'https://drivebook.com.au/about' },
 }
 
 export default function AboutPage() {
@@ -136,6 +142,11 @@ export default function AboutPage() {
           <Link href="/book" className="inline-block bg-white text-violet-900 px-10 py-4 rounded-xl font-bold text-lg hover:shadow-xl hover:scale-105 transition-all no-underline">
             Find Your Instructor →
           </Link>
+          <div className="flex flex-wrap justify-center gap-3 mt-5">
+            <Link href="/learn-to-drive" className="text-purple-200 hover:text-white text-sm no-underline underline underline-offset-2">Learner Driver Hub →</Link>
+            <span className="text-purple-400">·</span>
+            <Link href="/pda-guide" className="text-purple-200 hover:text-white text-sm no-underline underline underline-offset-2">WA PDA Guide →</Link>
+          </div>
           <p className="mt-6 text-purple-200 text-sm">
             Are you a driving instructor?{' '}
             <Link href="/teach-with-drivebook" className="text-white underline hover:text-purple-200">

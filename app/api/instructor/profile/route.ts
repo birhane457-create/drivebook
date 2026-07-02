@@ -15,7 +15,9 @@ const profileSchema = z.object({
   carImage: z.string().optional(),
   carMake: z.string().optional(),
   carModel: z.string().optional(),
-  carYear: z.number().optional().nullable(),
+  carYear: z.union([z.number(), z.string()]).optional().nullable().transform(v =>
+    v === null || v === undefined ? null : String(v)
+  ),
   whatsapp: z.string().optional().nullable(),
   instagram: z.string().optional().nullable(),
   facebook: z.string().optional().nullable(),
@@ -23,7 +25,14 @@ const profileSchema = z.object({
   baseAddress: z.string().optional().nullable(),
   licenseNumber: z.string().optional().nullable(),
   insuranceNumber: z.string().optional().nullable(),
-  languages: z.array(z.string()).optional(),
+  languages: z.union([
+    z.array(z.string()),
+    z.string(),
+  ]).optional().nullable().transform(v => {
+    if (!v) return null
+    if (Array.isArray(v)) return v.filter(Boolean).join(',')
+    return v
+  }),
 })
 
 // Helper: find instructor by session (handles null instructorId via userId fallback)

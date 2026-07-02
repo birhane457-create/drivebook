@@ -219,11 +219,20 @@ OpenGraph image: Instructor profile photo (if set)
 ## Internal Linking Structure
 
 All pillar pages are linked from:
-- Homepage footer navigation (Company column + Resources column)
+- Homepage footer navigation (Company column + Resources column + Features column)
 - Each pillar page's nav links to the other pillar pages
 - Blog posts include relevant in-content links to pillar pages
 
-This distributes page authority from the homepage through the pillar pages and outward to cluster blog posts.
+Feature pages are linked from:
+- Homepage footer — Features column
+- `/teach-with-drivebook` — "Explore Every Feature" section with 6 feature cards
+- `/for-instructors` — capability strip icons (each links to its feature page)
+- `/platform` page — each platform section links to the relevant feature page
+
+Comparison pages are linked from:
+- `/teach-with-drivebook` — 3 compare links below the feature cards
+- `/for-instructors` CTA area — "Comparing options?" row
+- Relevant blog posts (e.g. `drivebook-vs-google-calendar` → `/compare/google-calendar`)
 
 ---
 
@@ -261,10 +270,14 @@ After each deploy, submit to Google Search Console:
 | Blog posts | ✅ Complete | 100 |
 | Tag archive pages | ✅ Auto-generated | ~120 unique tags |
 | RSS feed | ✅ Live | All 100 posts |
-| Sitemap | ✅ Dynamic, hourly | All posts + tags + instructors + pillar pages |
+| Sitemap | ✅ Dynamic, hourly | All posts + tags + instructors + pillar + feature + compare pages |
 | Pillar pages | ✅ Complete | 4 |
+| Feature landing pages | ✅ 6 of 10 done | 4 LOW pending |
+| Comparison pages | ✅ 3 of 5 done | 2 pending |
 | Instructor microsite pages | ✅ Live | Dynamic from DB |
 | JSON-LD structured data | ✅ All pages | BlogPosting, FAQPage, LocalBusiness, Organization, WebSite, SoftwareApplication |
+| Internal linking | ✅ Complete | Feature/compare pages linked from footer, teach-with-drivebook, for-instructors |
+| Middleware public paths | ✅ Updated | `/features/*` and `/compare/*` added |
 
 ---
 

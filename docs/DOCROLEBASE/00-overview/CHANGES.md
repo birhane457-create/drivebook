@@ -3,7 +3,118 @@
 
 ---
 
-## 🎯 July 2026 — Navigation Wiring for Features & Compare Pages
+## 🎯 July 2026 — Profile Page: Email Display + Collapsible Sections
+
+### Changes
+
+**`app/dashboard/profile/page.tsx`:**
+- Added `useSession` — email read from session client-side (no extra API call)
+- Added **Email Address** field in Basic Info section — read-only, shows login email, links to support to change (email is on `User` model, not `Instructor` — changing it is an auth operation)
+- Made three secondary sections collapsible with chevron toggle:
+  - **Teaching Vehicle** (`vehicleOpen` state, default open)
+  - **Location** (`locationOpen` state, default open)
+  - **Languages** (`langOpen` state, default open)
+- Header rows are `type="button"` — safe inside the form, won't trigger submit
+- Added `ChevronDown` to imports; sections use `overflow-hidden` + conditional content render
+
+---
+
+## 🎯 July 2026 — Profile Page Rebuild + Settings Consolidation + Bug Fixes
+
+### Summary
+✅ Profile page rebuilt — cleaner, no duplicate fields, vehicle types now editable  
+✅ Settings page extended — base address, professional credentials added  
+✅ 3 DB type mismatch bugs fixed (carYear, languages, recommendations filter)  
+✅ next.config.js images.domains deprecation warning fixed  
+
+### Files Changed
+
+**`app/dashboard/profile/page.tsx`:**
+- Removed: Social Links (WhatsApp/Instagram/Facebook) → lives on Branding page
+- Removed: Professional Credentials (licence/insurance) → moved to Settings
+- Removed: Read-only rate/radius/vehicleTypes displays
+- Added: `vehicleTypes` checkboxes (Manual/Automatic) — **first time editable post-registration**
+- Added: `vehicleTypes` loaded from API (splits comma-string), saved via `/api/instructor/settings`
+- Added: Years Experience field in Basic Info section
+- Added: Quick-link cards (Branding, Settings, Documents) placed **below** Save button
+- `carYear` sent as string (fixes PrismaClientValidationError)
+- `languages` array joined to comma-string before sending (fixes PrismaClientValidationError)
+- Inline "✓ Saved" confirmation instead of alert()
+- Layout: 5 clean sections replacing 8 bloated ones
+
+**`app/dashboard/settings/page.tsx`:**
+- Added `baseAddress` field in Service Area section (alongside radius)
+- Added Professional Credentials section: licenseNumber + insuranceNumber fields + Documents link
+- `formData` type, initial state, fetch loader all updated
+- Submit payload includes all three new fields
+
+**`app/api/instructor/settings/route.ts`:**
+- Added `baseAddress` to Zod schema, update logic, and GET select
+
+**`app/api/instructor/profile/route.ts`:**
+- `carYear` Zod: `z.number()` → `.transform(v => String(v))` — `Expected String, provided Int`
+- `languages` Zod: `z.array(z.string())` → `.transform(v => Array.isArray(v) ? v.join(',') : v)` — `Expected String, provided (String)`
+
+**`app/api/instructors/recommendations/route.ts`:**
+- `vehicleTypes: { has: vehicleType }` → `{ contains: vehicleType.toUpperCase() }` — Prisma array operator on String field
+- `languages: { has: language }` → `{ contains: language }` — same pre-existing bug
+
+**`next.config.js`:**
+- `images.domains` (deprecated) → `images.remotePatterns`
+
+---
+
+**`next.config.js`** — Warning fix:
+- `images.domains` (deprecated) replaced with `images.remotePatterns`
+
+---
+
+### Issues Found & Fixed
+
+| Page | Issues | Fixes Applied |
+|------|--------|--------------|
+| `app/about/page.tsx` | Missing OG/canonical; no pillar links in CTA | Added openGraph + canonical; added `/learn-to-drive` + `/pda-guide` links below CTA button |
+| `app/contact/page.tsx` | Missing OG/canonical | Added openGraph + canonical |
+| `app/help/page.tsx` | `'use client'` with no hooks (blocked metadata); no metadata; no nav; no logo; no footer; no pillar links | Removed `'use client'`; added full metadata with OG/canonical; added nav with Logo; added pillar links to student/instructor sections; added footer |
+| `app/book/page.tsx` | Used `<Car>` icon + raw text instead of Logo; "Become Instructor" linked to `/register` (wrong); no pillar links | Replaced with `<Logo>`; fixed CTA to `/teach-with-drivebook`; added `/learn-to-drive` + `/pda-guide` links in hero |
+| `app/not-found.tsx` | No metadata (should be noindex); no logo; single recovery link only | Added `metadata` with `robots: noindex`; added Logo; added 5 pillar/section recovery links; added footer |
+
+### No Issues Found
+- `app/about/page.tsx` — Logo, content all good
+- `app/contact/page.tsx` — Logo, content all good  
+- `app/book/layout.tsx` — metadata already complete (title, description, OG, canonical)
+
+---
+
+### Issues Found in `app/instructors/page.tsx`
+
+| # | Issue | Severity |
+|---|-------|---------|
+| 1 | Unused `Car` import from lucide-react | Minor (lint warning) |
+| 2 | No SEO metadata exported | Medium — page not getting title/description in Google |
+| 3 | No breadcrumb or JSON-LD | Medium — missed SEO signal |
+| 4 | No internal links to `/learn-to-drive` or `/book` | Medium — lost linking opportunity |
+| 5 | Empty state had no fallback link | Minor UX |
+| 6 | No instructor count shown | Minor UX |
+
+### Fixes Applied
+
+- Removed unused `Car` import
+- Added `export const metadata` with title, description, OpenGraph, canonical
+- Added BreadcrumbList JSON-LD
+- Added breadcrumb nav element
+- Added "Learn to Drive" link in nav and footer
+- Added "Search by Location →" CTA linking to `/book` (location-based search)
+- Added "Learner Driver Guide →" CTA linking to `/learn-to-drive`
+- Added instructor count line above the grid
+- Added bottom CTA section directing to `/book` for location search
+- Added proper footer with privacy/terms/learn-to-drive links
+
+### What Was NOT Changed
+
+- `InstructorCard` component — still uses light (`bg-white`) styling. This is a known visual inconsistency (white cards on dark page). The card is also used in light-background contexts (`/book` page). Fix would require a `dark` variant prop — deferred.
+
+---
 
 ### Summary
 ✅ Feature and compare pages now linked from 4 entry points  

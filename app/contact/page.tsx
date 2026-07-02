@@ -5,6 +5,12 @@ import Logo from '@/components/Logo'
 export const metadata = {
   title: 'Contact Us | DriveBook',
   description: 'Get in touch with the DriveBook team. We\'re here to help learners and instructors.',
+  openGraph: {
+    title: 'Contact DriveBook Support',
+    description: 'Email support, instructor enquiries, and common questions answered.',
+    url: 'https://drivebook.com.au/contact',
+  },
+  alternates: { canonical: 'https://drivebook.com.au/contact' },
 }
 
 export default function ContactPage() {

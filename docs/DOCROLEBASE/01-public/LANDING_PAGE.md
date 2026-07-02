@@ -63,18 +63,33 @@ Bottom CTA section: "Find Your Instructor →"
 
 ## Footer (July 2026 update)
 
-The footer now has a Resources column alongside the Company column, linking to all four pillar pages:
+The footer now has 5 columns (DriveBook brand, Company, Resources, Features, Legal/Get Started):
 
 ```
-Company              Resources
-──────               ─────────
-About Us             Learn to Drive
-Contact              WA PDA Guide
-For Instructors      Instructor Hub
-Platform Guide       Blog
+Company              Resources            Features
+──────               ─────────            ────────
+About Us             Learn to Drive       AI Receptionist
+Contact              WA PDA Guide         Online Booking
+For Instructors      Instructor Hub       Custom Domain
+Platform Guide       Blog                 Payments
+                                          Student Progress
+                                          Multi-Instructor
 ```
 
 The DriveBook brand name in the footer is rendered using `<Logo size={28} dark />`.
+
+---
+
+## Navigation Entry Points (July 2026)
+
+Feature and comparison pages are surfaced from:
+
+| Page | What's linked |
+|------|--------------|
+| Homepage footer | Features column — all 6 feature pages |
+| `/teach-with-drivebook` | "Explore Every Feature" section + 3 compare links |
+| `/for-instructors` capability strip | Each icon links to its feature page |
+| `/for-instructors` CTA area | "Comparing options?" row — 3 compare links |
 
 ---
 

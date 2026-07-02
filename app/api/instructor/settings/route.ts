@@ -9,7 +9,8 @@ import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidati
 export const dynamic = 'force-dynamic';
 const settingsSchema = z.object({
   hourlyRate: z.number().positive().optional(),
-  serviceRadiusKm: z.number().min(1).max(100).optional(), // Changed from min(5) to min(1)
+  serviceRadiusKm: z.number().min(1).max(100).optional(),
+  baseAddress: z.string().optional().nullable(),
   vehicleTypes: z.union([
     z.array(z.enum(['AUTO', 'MANUAL'])),
     z.enum(['AUTO', 'MANUAL']).transform(v => [v]),
@@ -73,6 +74,7 @@ export async function PUT(req: NextRequest) {
     const updateData: any = {}
     if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate
     if (data.serviceRadiusKm !== undefined) updateData.serviceRadiusKm = data.serviceRadiusKm
+    if (data.baseAddress !== undefined) updateData.baseAddress = data.baseAddress || null
     if (data.vehicleTypes !== undefined) updateData.vehicleTypes = Array.isArray(data.vehicleTypes) ? data.vehicleTypes.join(',') : data.vehicleTypes
     if (data.workingHours !== undefined) updateData.workingHours = data.workingHours
     if (data.licenseNumber !== undefined) updateData.licenseNumber = data.licenseNumber
@@ -140,6 +142,7 @@ export async function GET(req: NextRequest) {
       select: {
         hourlyRate: true,
         serviceRadiusKm: true,
+        baseAddress: true,
         vehicleTypes: true,
         workingHours: true,
         licenseNumber: true,

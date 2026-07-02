@@ -6,7 +6,11 @@ const nextConfig = {
     ignoreDuringBuilds: false,
   },
   images: {
-    domains: ['localhost', 'res.cloudinary.com'],
+    remotePatterns: [
+      { protocol: 'http',  hostname: 'localhost' },
+      { protocol: 'https', hostname: 'localhost' },
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+    ],
   },
   experimental: {
     missingSuspenseWithCSRBailout: false,

@@ -50,12 +50,12 @@ export async function GET(req: NextRequest) {
 
     // Filter by vehicle type if specified
     if (vehicleType) {
-      whereConditions.vehicleTypes = { has: vehicleType };
+      whereConditions.vehicleTypes = { contains: vehicleType.toUpperCase() };
     }
 
     // Filter by language if specified
     if (language) {
-      whereConditions.languages = { has: language };
+      whereConditions.languages = { contains: language };
     }
 
     // Filter by budget if specified
