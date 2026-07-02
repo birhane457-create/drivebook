@@ -10,10 +10,11 @@ import {
   GitBranch, Clock, Activity, Lock, ShieldCheck,
   Bot, BookOpen, Eye, Code2, Key, UserCheck, Puzzle,
   CreditCard, Palette, Lightbulb, Rocket, Heart, FlaskConical, PlayCircle,
-  Target, TestTube, Briefcase, ChevronDown, QrCode
+  Target, TestTube, Briefcase, ChevronDown, QrCode, Search
 } from 'lucide-react';
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { canAccess } from '@/lib/route-access';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -273,7 +274,7 @@ const ROLE_MENUS = {
   ],
 };
 
-export default function Sidebar({ user, alertCount = 0 }) {
+export default function Sidebar({ user, alertCount = 0, onOpenSearch }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
@@ -306,9 +307,31 @@ export default function Sidebar({ user, alertCount = 0 }) {
         )}
       </div>
 
+      {/* Search trigger */}
+      {!collapsed && (
+        <button
+          onClick={() => onOpenSearch?.()}
+          className="mx-3 mb-2 flex items-center gap-2 w-[calc(100%-1.5rem)] px-3 py-2 rounded-lg text-sm text-sidebar-foreground/40 bg-sidebar-accent hover:bg-sidebar-accent/70 hover:text-sidebar-foreground/60 transition-colors"
+        >
+          <Search className="w-4 h-4" />
+          <span>Search pages...</span>
+          <kbd className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-sidebar-foreground/10">⌘K</kbd>
+        </button>
+      )}
+      {collapsed && (
+        <button
+          onClick={() => onOpenSearch?.()}
+          className="mx-auto mb-2 flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/40 bg-sidebar-accent hover:bg-sidebar-accent/70 hover:text-sidebar-foreground/60 transition-colors"
+        >
+          <Search className="w-4 h-4" />
+        </button>
+      )}
+
       {/* Nav */}
       <nav className="flex-1 py-3 px-2 overflow-y-auto">
         {menuGroups.map((group) => {
+          const accessibleItems = group.items.filter(item => canAccess(item.path, userRole));
+          if (accessibleItems.length === 0) return null;
           const isGroupCollapsed = collapsedGroups[group.label];
           return (
             <div key={group.label} className="mb-1">
@@ -321,7 +344,7 @@ export default function Sidebar({ user, alertCount = 0 }) {
                   <ChevronDown className={cn("w-3 h-3 transition-transform", isGroupCollapsed && "-rotate-90")} />
                 </button>
               )}
-              {!isGroupCollapsed && group.items.map((item) => {
+              {!isGroupCollapsed && accessibleItems.map((item) => {
                 const isActive = location.pathname === item.path;
                 return (
                   <Link
