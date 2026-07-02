@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Search, Plus, Minus, X, CreditCard, ShoppingCart, User, Percent } from 'lucide-react';
+import { Search, Plus, Minus, X, CreditCard, ShoppingCart, User, Percent, ArrowLeft, ScanBarcode } from 'lucide-react';
 import OfflineStatusBar, { useOfflinePOS } from '@/components/pos/OfflinePOSManager';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -116,6 +117,21 @@ export default function POS() {
     searchRef.current?.focus();
   };
 
+  const handleSearchKeyDown = (e) => {
+    if (e.key !== 'Enter') return;
+    const q = search.trim().toLowerCase();
+    if (!q) return;
+    // Exact barcode/SKU match (typical of a barcode scanner) auto-adds to cart
+    const exact = products.find(p => p.barcode?.toLowerCase() === q || p.sku?.toLowerCase() === q);
+    if (exact) {
+      addToCart(exact);
+      return;
+    }
+    if (filtered.length === 1) {
+      addToCart(filtered[0]);
+    }
+  };
+
   const updateCartQty = (productId, delta) => {
     setCart(prev => prev.map(c => {
       if (c.product_id !== productId) return c;
@@ -164,6 +180,11 @@ export default function POS() {
       <div className="flex flex-col h-screen overflow-hidden border-r">
         <div className="p-4 border-b bg-card">
           <div className="flex items-center gap-3 mb-3">
+            <Link to="/dashboard">
+              <Button variant="outline" size="icon" title="Back to Dashboard">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
             <Select value={locationId} onValueChange={setLocationId}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Select Store" />
@@ -177,43 +198,53 @@ export default function POS() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               ref={searchRef}
-              placeholder="Search by name, SKU, or barcode..."
+              placeholder="Search by name, SKU, or scan barcode..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className="pl-9 h-11"
               autoFocus
             />
           </div>
         </div>
         <ScrollArea className="flex-1 p-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {filtered.map(product => {
-              const stock = getStock(product.id);
-              return (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  disabled={stock <= 0}
-                  className="text-left p-3 rounded-xl border bg-card hover:border-primary/50 hover:shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
-                      {product.name?.[0]}
-                    </div>
-                    <Badge variant="secondary" className="text-xs">{stock} left</Badge>
-                  </div>
-                  <p className="font-medium text-sm truncate">{product.name}</p>
-                  <p className="text-xs text-muted-foreground">{product.sku}</p>
-                  <p className="font-bold text-primary mt-1">${product.selling_price?.toFixed(2)}</p>
-                </button>
-              );
-            })}
-          </div>
-          {filtered.length === 0 && (
+          {search.trim() === '' ? (
             <div className="text-center py-20 text-muted-foreground">
-              <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>No products found</p>
+              <ScanBarcode className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>Search a product or scan a barcode to begin</p>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {filtered.map(product => {
+                  const stock = getStock(product.id);
+                  return (
+                    <button
+                      key={product.id}
+                      onClick={() => addToCart(product)}
+                      disabled={stock <= 0}
+                      className="text-left p-3 rounded-xl border bg-card hover:border-primary/50 hover:shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+                          {product.name?.[0]}
+                        </div>
+                        <Badge variant="secondary" className="text-xs">{stock} left</Badge>
+                      </div>
+                      <p className="font-medium text-sm truncate">{product.name}</p>
+                      <p className="text-xs text-muted-foreground">{product.sku}</p>
+                      <p className="font-bold text-primary mt-1">${product.selling_price?.toFixed(2)}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              {filtered.length === 0 && (
+                <div className="text-center py-20 text-muted-foreground">
+                  <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p>No products found</p>
+                </div>
+              )}
+            </>
           )}
         </ScrollArea>
       </div>
