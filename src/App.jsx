@@ -83,6 +83,7 @@ import WhiteLabel from '@/pages/WhiteLabel';
 import DeveloperPortal from '@/pages/DeveloperPortal';
 import Home from '@/pages/Home';
 import DataSeeder from '@/pages/DataSeeder';
+import AppDocumentation from '@/pages/AppDocumentation';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -185,6 +186,7 @@ const AuthenticatedApp = () => {
           <Route path="/documentation" element={<DocumentationPortal />} />
           <Route path="/implementation-toolkit" element={<ImplementationToolkit />} />
           <Route path="/data-seeder" element={<DataSeeder />} />
+          <Route path="/app-documentation" element={<AppDocumentation />} />
         </Route>
         <Route path="/pos" element={<POS />} />
       </Route>
