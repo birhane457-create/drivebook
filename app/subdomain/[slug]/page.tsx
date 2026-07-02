@@ -132,8 +132,8 @@ export default async function SubdomainBookingPage({
     subStatus === 'ACTIVE' ||
     (subStatus === 'TRIAL' && !trialExpired);
 
-  // Branding — colors apply for all tiers; logo/name white-labelling is PRO/BUSINESS only
-  const isPro = instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'BUSINESS';
+  // Branding — colors apply for all tiers; logo/name white-labelling is PRO/STUDIO/BUSINESS only
+  const isPro = instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'STUDIO' || instructor.subscriptionTier === 'BUSINESS';
   const hasBranding = isPro && instructor.showBrandingOnBookingPage;
   const brandLogo = hasBranding ? instructor.brandLogo : null;
   // Colors apply regardless of tier — fall back to defaults if not set

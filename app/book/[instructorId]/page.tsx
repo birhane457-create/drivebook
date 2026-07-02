@@ -28,10 +28,10 @@ export default async function PublicBookingPage({
     subStatus === 'ACTIVE' ||
     (subStatus === 'TRIAL' && !trialExpired);
 
-  // Check if branding is enabled for PRO/BUSINESS tier
+  // Check if branding is enabled for PRO/STUDIO/BUSINESS tier
   const hasBranding = 
     (instructor as any).showBrandingOnBookingPage &&
-    (instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'BUSINESS');
+    (instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'STUDIO' || instructor.subscriptionTier === 'BUSINESS');
 
   const brandLogo = hasBranding ? (instructor as any).brandLogo : null;
   const primaryColor = hasBranding && (instructor as any).brandColorPrimary ? (instructor as any).brandColorPrimary : '#3B82F6';

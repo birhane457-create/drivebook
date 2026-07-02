@@ -87,11 +87,11 @@ See [BOOKING_FLOW.md](./BOOKING_FLOW.md) for full payment flow.
 | Social links | ✅ | ✅ | ✅ | ✅ |
 
 ```typescript
-const isPro = instructor.subscriptionTier === 'PRO' 
-           || instructor.subscriptionTier === 'STUDIO' 
+const isPro = instructor.subscriptionTier === 'PRO'
+           || instructor.subscriptionTier === 'STUDIO'
            || instructor.subscriptionTier === 'BUSINESS';
 const hasBranding = isPro && instructor.showBrandingOnBookingPage;
-// Nav shows instructor name only if hasBranding, otherwise shows "DriveBook"
+// Nav shows instructor logo only if hasBranding, otherwise shows Car icon + "DriveBook"
 // Colors apply to all tiers — fall back to #3B82F6 / #10B981 if not set
 ```
 

@@ -3,7 +3,34 @@
 
 ---
 
-## 🎯 July 2026 — Profile Page: Email Display + Collapsible Sections
+## 🎯 July 2026 — Branding Logo Bug: STUDIO Tier Missing from isPro Check
+
+### Bug
+Brand logo was not showing on the public booking page for instructors on the **STUDIO** subscription tier. Instead, the Car icon + "DriveBook" text appeared in the nav — even when a logo was uploaded and `showBrandingOnBookingPage` was enabled.
+
+### Root Cause
+Two pages had an incomplete `isPro` tier check that excluded `STUDIO`:
+
+```typescript
+// BUG — was:
+const isPro = tier === 'PRO' || tier === 'BUSINESS';
+
+// FIX — should be:
+const isPro = tier === 'PRO' || tier === 'STUDIO' || tier === 'BUSINESS';
+```
+
+`hasBranding = isPro && showBrandingOnBookingPage`. With `isPro = false` for STUDIO, `hasBranding` was always false, so `brandLogo` was set to `null`, and the Car icon fallback showed.
+
+The DB data was correct — `brandLogo`, `carImage`, and `profileImage` were all stored in the right fields.
+
+### Files Fixed
+- `app/subdomain/[slug]/page.tsx` — `isPro` check updated
+- `app/book/[instructorId]/page.tsx` — `hasBranding` check updated
+
+### Docs Updated
+- `docs/DOCROLEBASE/01-public/SUBDOMAIN_PAGE.md` — Branding Tiers table + code comment corrected
+
+---
 
 ### Changes
 
