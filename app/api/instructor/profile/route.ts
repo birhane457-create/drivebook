@@ -33,6 +33,15 @@ const profileSchema = z.object({
     if (Array.isArray(v)) return v.filter(Boolean).join(',')
     return v
   }),
+  videoUrl: z.string().url().optional().nullable().or(z.literal('')).transform(v => v || null),
+  specialties: z.union([
+    z.array(z.string()),
+    z.string(),
+  ]).optional().nullable().transform(v => {
+    if (!v) return null
+    if (Array.isArray(v)) return v.filter(Boolean).join(',')
+    return v
+  }),
 })
 
 // Helper: find instructor by session (handles null instructorId via userId fallback)
@@ -60,6 +69,7 @@ export async function GET(req: NextRequest) {
         licenseNumber: true, insuranceNumber: true, languages: true,
         isActive: true, isVerified: true,
         whatsapp: true, instagram: true, facebook: true, yearsExperience: true,
+        videoUrl: true, specialties: true,
       } as any
     })
 
@@ -104,6 +114,8 @@ export async function PUT(req: NextRequest) {
         ...(data.licenseNumber !== undefined && { licenseNumber: data.licenseNumber }),
         ...(data.insuranceNumber !== undefined && { insuranceNumber: data.insuranceNumber }),
         ...(data.languages !== undefined && { languages: data.languages }),
+        ...(data.videoUrl !== undefined && { videoUrl: data.videoUrl }),
+        ...(data.specialties !== undefined && { specialties: data.specialties }),
       } as any
     })
 

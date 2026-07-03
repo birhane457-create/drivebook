@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Zap, Check } from 'lucide-react'
@@ -98,7 +98,7 @@ export default function SettingsPage() {
         if (res.ok) {
           const data = await res.json()
           const centres = data.testCentres || []
-          console.log('✅ Loaded test centres:', centres)
+          console.log('âœ… Loaded test centres:', centres)
           setTestCentres(centres)
         } else {
           console.error('Failed to fetch test centres:', res.status, res.statusText)
@@ -142,7 +142,7 @@ export default function SettingsPage() {
           
           // Track original config IDs from DB so we can detect deletions later
           setOriginalPDAConfigIds(pdaConfigs.map(c => c.id))
-          console.log('✅ Loaded PDA configs:', pdaConfigs)
+          console.log('âœ… Loaded PDA configs:', pdaConfigs)
         }
 
         if (settingsRes.ok) {
@@ -279,7 +279,7 @@ export default function SettingsPage() {
       acceptingBookings: formData.acceptingBookings,
     }
     
-    console.log('📤 Submitting settings:', JSON.stringify(settingsData, null, 2))
+    console.log('ðŸ“¤ Submitting settings:', JSON.stringify(settingsData, null, 2))
     
     setSaving(true)
     
@@ -293,20 +293,20 @@ export default function SettingsPage() {
 
       if (!res.ok) {
         const error = await res.json()
-        console.error('❌ Settings save error:', error)
+        console.error('âŒ Settings save error:', error)
         showToast('error', `Failed to save: ${error.details || error.error || 'Unknown error'}`)
         setSaving(false)
         return
       }
 
-      console.log('✅ General settings saved')
-      console.log(`📦 Processing ${formData.pdaConfigs.length} PDA configs...`)
+      console.log('âœ… General settings saved')
+      console.log(`ðŸ“¦ Processing ${formData.pdaConfigs.length} PDA configs...`)
 
       // First, detect and DELETE removed configs
       const currentConfigIds = formData.pdaConfigs.map(c => c.id)
       const deletedConfigIds = originalPDAConfigIds.filter(id => !currentConfigIds.includes(id))
       
-      console.log(`🗑️ Deleted config IDs: ${deletedConfigIds.join(', ') || 'none'}`)
+      console.log(`ðŸ—‘ï¸ Deleted config IDs: ${deletedConfigIds.join(', ') || 'none'}`)
       
       for (const deletedId of deletedConfigIds) {
         try {
@@ -317,10 +317,10 @@ export default function SettingsPage() {
           
           if (!deleteRes.ok) {
             const deleteError = await deleteRes.json()
-            console.error(`❌ Failed to delete PDA config ${deletedId}:`, deleteError)
+            console.error(`âŒ Failed to delete PDA config ${deletedId}:`, deleteError)
             // Don't block - just log and continue
           } else {
-            console.log(`✅ PDA config ${deletedId} deleted`)
+            console.log(`âœ… PDA config ${deletedId} deleted`)
           }
         } catch (error) {
           console.error(`Error deleting PDA config ${deletedId}:`, error)
@@ -335,13 +335,13 @@ export default function SettingsPage() {
       for (const config of formData.pdaConfigs) {
         // Skip if no name (empty template)
         if (!config.name || config.name.trim() === '') {
-          console.log('⏭️ Skipping PDA config with no name (empty template)')
+          console.log('â­ï¸ Skipping PDA config with no name (empty template)')
           continue
         }
         
         // Skip if no test centres selected
         if (!config.testCentreIds || config.testCentreIds.length === 0) {
-          console.log(`⏭️ Skipping PDA config "${config.name}" (no test centres selected)`)
+          console.log(`â­ï¸ Skipping PDA config "${config.name}" (no test centres selected)`)
           continue
         }
 
@@ -369,7 +369,7 @@ export default function SettingsPage() {
           
           if (!pdaRes.ok) {
             const pdaError = await pdaRes.json()
-            console.error(`❌ Failed to ${isExistingConfig ? 'update' : 'save'} PDA config "${config.name}":`, pdaError)
+            console.error(`âŒ Failed to ${isExistingConfig ? 'update' : 'save'} PDA config "${config.name}":`, pdaError)
             // Don't block - just skip this one and continue
             continue
           }
@@ -391,7 +391,7 @@ export default function SettingsPage() {
           }
           
           updatedPdaConfigs.push(transformedConfig)
-          console.log(`✅ PDA config "${config.name}" ${isExistingConfig ? 'updated' : 'saved'} with ID:`, savedConfig.id)
+          console.log(`âœ… PDA config "${config.name}" ${isExistingConfig ? 'updated' : 'saved'} with ID:`, savedConfig.id)
           savedCount++
         } catch (error) {
           console.error(`Error ${isExistingConfig ? 'updating' : 'saving'} PDA config "${config.name}":`, error)
@@ -501,7 +501,7 @@ export default function SettingsPage() {
                     placeholder="e.g. Maylands WA 6051"
                     className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-slate-400 mt-1">Your home base — only suburb name shown publicly</p>
+                  <p className="text-xs text-slate-400 mt-1">Your home base â€” only suburb name shown publicly</p>
                 </div>
               </div>
             </div>
@@ -515,7 +515,7 @@ export default function SettingsPage() {
               <p className="text-sm text-slate-400 mb-4">
                 Stored securely, not shown publicly.{' '}
                 <a href="/dashboard/documents" className="text-violet-400 hover:underline">
-                  Upload documents (licence, insurance) →
+                  Upload documents (licence, insurance) â†’
                 </a>
               </p>
               <div className="space-y-4">
@@ -541,7 +541,7 @@ export default function SettingsPage() {
                 </div>
                 {(!formData.licenseNumber || !formData.insuranceNumber) && (
                   <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-3 text-sm text-amber-300">
-                    ⚠️ Complete your credentials — required for approval and student trust.
+                    âš ï¸ Complete your credentials â€” required for approval and student trust.
                   </div>
                 )}
               </div>
@@ -602,7 +602,7 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-xs text-slate-400 mt-2">Select at least one duration. Students can only book these lengths.</p>
                     {formData.allowedDurations.length === 0 && (
-                      <p className="text-xs text-rose-400 mt-1">⚠️ Please select at least one duration</p>
+                      <p className="text-xs text-rose-400 mt-1">âš ï¸ Please select at least one duration</p>
                     )}
                   </div>
 
@@ -679,7 +679,7 @@ export default function SettingsPage() {
 
                   {/* Example Preview */}
                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-slate-100 mb-2">📅 Schedule Example:</h4>
+                    <h4 className="text-sm font-semibold text-slate-100 mb-2">ðŸ“… Schedule Example:</h4>
                     <div className="text-xs text-slate-400 space-y-1">
                       <p>
                         <strong>Lesson:</strong> 1 hour (9:00-10:00)
@@ -882,17 +882,17 @@ export default function SettingsPage() {
                                     {isComplete ? (
                                       <>
                                         <span className="text-sm font-medium text-slate-100">{config.name}</span>
-                                        <span className="text-xs text-slate-400">·</span>
+                                        <span className="text-xs text-slate-400">Â·</span>
                                         <span className="text-xs text-slate-400">{durationStr}</span>
-                                        <span className="text-xs text-slate-400">·</span>
+                                        <span className="text-xs text-slate-400">Â·</span>
                                         <span className="text-xs text-slate-100 font-medium">${config.price.toFixed(2)}</span>
                                         {selectedCentresPreview.length > 0 && (
                                           <>
-                                            <span className="text-xs text-slate-400">·</span>
+                                            <span className="text-xs text-slate-400">Â·</span>
                                             <div className="flex flex-wrap gap-1">
                                               {selectedCentresPreview.map((name, idx) => (
                                                 <span key={idx} className="text-xs bg-blue-900/40 text-blue-200 px-1.5 py-0.5 rounded">
-                                                  ☑ {name}
+                                                  â˜‘ {name}
                                                 </span>
                                               ))}
                                               {moreCount > 0 && (
@@ -1039,13 +1039,13 @@ export default function SettingsPage() {
                                         </div>
                                         {config.testCentreIds && config.testCentreIds.length > 0 && (
                                           <div className="bg-slate-950 border border-blue-700/30 rounded p-2">
-                                            <p className="text-xs text-blue-300 font-medium mb-1">✓ Selected Centres:</p>
+                                            <p className="text-xs text-blue-300 font-medium mb-1">âœ“ Selected Centres:</p>
                                             <div className="flex flex-wrap gap-1">
                                               {config.testCentreIds.map(centreId => {
                                                 const centre = testCentres.find(c => c.id === centreId)
                                                 return centre ? (
                                                   <span key={centreId} className="text-xs bg-blue-900/40 text-blue-200 px-2 py-0.5 rounded">
-                                                    ☑ {centre.name}
+                                                    â˜‘ {centre.name}
                                                   </span>
                                                 ) : null
                                               })}
@@ -1117,7 +1117,7 @@ export default function SettingsPage() {
                   
                   <div className="mt-4 bg-slate-950 border border-blue-700 rounded-lg p-3">
                     <p className="text-sm text-blue-300">
-                      <strong>💡 Tip:</strong> Create multiple configs with different durations and test centres. Students see all available options when booking.
+                      <strong>ðŸ’¡ Tip:</strong> Create multiple configs with different durations and test centres. Students see all available options when booking.
                     </p>
                   </div>
                 </>
@@ -1164,9 +1164,24 @@ export default function SettingsPage() {
               </div>
               {!formData.acceptingBookings && (
                 <p className="mt-3 text-sm text-amber-200 bg-amber-950/20 rounded-lg px-3 py-2">
-                  ⚠️ New bookings are paused. Save settings to apply this change.
+                  âš ï¸ New bookings are paused. Save settings to apply this change.
                 </p>
               )}
+            </div>
+
+            {/* Cancellation Policy */}
+            <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
+              <h2 className="text-xl font-bold mb-1 flex items-center gap-2 text-slate-100">
+                <span className="text-base">📋</span>
+                Platform Cancellation Policy
+              </h2>
+              <p className="text-xs text-slate-500 mb-4">DriveBook standard policy  applied on all bookings.</p>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between py-2 border-b border-slate-800"><span className="text-sm text-slate-300"> 48+ hours notice</span><span className="text-sm font-medium text-slate-200">Full refund (100%)</span></div>
+                <div className="flex items-center justify-between py-2 border-b border-slate-800"><span className="text-sm text-slate-300"> 2448 hours notice</span><span className="text-sm font-medium text-slate-200">50% refund</span></div>
+                <div className="flex items-center justify-between py-2"><span className="text-sm text-slate-300">❌ Under 24 hours</span><span className="text-sm font-medium text-slate-200">No refund</span></div>
+              </div>
+              <p className="text-xs text-slate-500 mt-4">Students see this under Before You Book on your booking page.</p>
             </div>
 
             {/* Save Button */}

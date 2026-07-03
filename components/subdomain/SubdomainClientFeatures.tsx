@@ -47,11 +47,7 @@ export default function SubdomainClientFeatures({ primary, instructorName, isAcc
   };
 
   const openBooking = () => {
-    if (window.innerWidth < 768) {
-      setBookingOpen(true);
-    } else {
-      scrollTo('booking-form');
-    }
+    setBookingOpen(true);
   };
 
   return (
@@ -89,9 +85,9 @@ export default function SubdomainClientFeatures({ primary, instructorName, isAcc
         <div style={{ height: 'env(safe-area-inset-bottom)', backgroundColor: 'white' }} />
       </nav>
 
-      {/* ── Full-screen booking drawer (mobile) ────────────────────────── */}
+      {/* ── Full-screen booking overlay (all screen sizes) ─────────────── */}
       <div
-        className={`fixed inset-0 z-[60] flex flex-col bg-white md:hidden transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-0 z-[60] flex flex-col bg-white transition-transform duration-300 ease-in-out ${
           bookingOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
         aria-modal="true"

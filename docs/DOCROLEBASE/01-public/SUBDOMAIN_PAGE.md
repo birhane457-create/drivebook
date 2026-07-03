@@ -2,7 +2,9 @@
 
 **Route:** `/subdomain/[slug]` (served at `[slug].drivebook.com.au`)  
 **Auth required:** No  
-**File:** `app/subdomain/[slug]/page.tsx`, `components/subdomain/SubdomainBookingEntry.tsx`, `components/subdomain/SubdomainBookingWizard.tsx`  
+**File:** `app/subdomain/[slug]/page.tsx`, `components/subdomain/SubdomainBookingEntry.tsx`, `components/subdomain/SubdomainBookingWizard.tsx`, `components/subdomain/SubdomainClientFeatures.tsx`
+
+> `components/subdomain/SubdomainPageShell.tsx` also exists but is **not used** by the current page — legacy file from an earlier architecture, can be removed.  
 **Full reference:** `docs/SUBDOMAIN_SYSTEM.md`
 
 ---
@@ -50,15 +52,16 @@ Data fetched server-side: instructor profile, last 5 reviews (completed bookings
 
 ## Booking Flow
 
-When the student clicks "Book Your Lesson →", a **full-screen overlay** opens on top of the profile page. The profile stays open underneath — the student can close the overlay and return to the profile at any time.
+When the student clicks "Book Your Lesson →", a **full-screen overlay** opens on top of the profile page (on both desktop and mobile). The profile stays open underneath — the student can close the overlay and return to the profile at any time.
 
 **Overlay components:**
-- `components/subdomain/SubdomainBookingEntry.tsx` — CTA button + overlay wrapper
-- `components/subdomain/SubdomainBookingWizard.tsx` — multi-step wizard
+- `components/subdomain/SubdomainBookingEntry.tsx` — CTA button + overlay wrapper (desktop right column)
+- `components/subdomain/SubdomainClientFeatures.tsx` — mobile bottom nav bar; "Book Now" opens the same full-screen overlay
+- `components/subdomain/SubdomainBookingWizard.tsx` — multi-step wizard (shared by both)
 
 **Wizard steps:**
 1. Package — standard (6/10/15 hrs) or custom hours
-2. Test Package — only if `instructor.offersTestPackage = true`
+2. Test Pack — only if `instructor.offersTestPackage = true`; shows a "Yes, add it / Skip" card before moving on
 3. When to Book — Book Now or Book Later
 4. Schedule — only if Book Now (date/time/duration, duration from `instructor.allowedDurations`)
 5. Your Details — name, email, phone, password
@@ -137,7 +140,7 @@ const trustBadges = [
 `components/subdomain/SubdomainClientFeatures.tsx` — client component (isolated from the Server Component page).
 
 - Fixed bottom nav bar: About / Services / Contact / Book Now
-- "Book Now" opens the same full-screen overlay as the desktop button
+- "Book Now" opens the same full-screen overlay as the desktop button (both desktop and mobile use the identical overlay — no scroll-to-form behaviour)
 - Body scroll locked while overlay is open
 - iPhone safe area inset handled via `env(safe-area-inset-bottom)`
 

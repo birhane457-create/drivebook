@@ -19,24 +19,38 @@ interface SubdomainBookingEntryProps {
     allowedDurations?: number[];
   };
   primary: string;
+  /** Optional: pre-select a package when opening the overlay from a pricing row */
+  initialPackage?: { packageType: string; hours: number; label: string };
 }
 
-export default function SubdomainBookingEntry({ instructor, primary }: SubdomainBookingEntryProps) {
+export default function SubdomainBookingEntry({ instructor, primary, initialPackage }: SubdomainBookingEntryProps) {
   const [open, setOpen] = useState(false);
+  const [preSelected, setPreSelected] = useState<{ packageType: string; hours: number; label: string } | null>(null);
 
+  const openOverlay = (pkg?: { packageType: string; hours: number; label: string }) => {
+    setPreSelected(pkg ?? null);
+    setOpen(true);
+  };
+
+  // Expose openOverlay so pricing buttons on the same page can call it.
+  // We attach it to a DOM data attribute so the Server Component can wire up
+  // client buttons via a thin wrapper instead — but the cleanest pattern here
+  // is to render the pricing buttons as part of this Client Component via a
+  // render-prop / slot approach. Instead we export a companion hook-free trigger
+  // by rendering the pricing rows as children passed from the page.
   return (
     <>
-      {/* CTA button — shown on the profile page */}
+      {/* Primary CTA button */}
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => openOverlay()}
         className="w-full py-4 rounded-xl text-white font-bold text-lg transition-all hover:opacity-90 active:scale-95"
         style={{ backgroundColor: primary }}
       >
         Book Your Lesson →
       </button>
 
-      {/* Full-screen booking overlay — hides the rest of the page */}
+      {/* Full-screen booking overlay */}
       {open && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-y-auto">
           {/* Compact header */}
@@ -52,6 +66,9 @@ export default function SubdomainBookingEntry({ instructor, primary }: Subdomain
                 <span className="font-semibold text-white/90 text-sm truncate max-w-[200px]">
                   {instructor.name}
                 </span>
+                {preSelected && (
+                  <span className="text-white/40 text-xs hidden sm:inline">· {preSelected.label}</span>
+                )}
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -68,7 +85,11 @@ export default function SubdomainBookingEntry({ instructor, primary }: Subdomain
           {/* Wizard */}
           <div className="max-w-4xl mx-auto px-4 py-6">
             <BookingProvider>
-              <SubdomainBookingWizard instructor={instructor} primary={primary} />
+              <SubdomainBookingWizard
+                instructor={instructor}
+                primary={primary}
+                initialPackage={preSelected ?? undefined}
+              />
             </BookingProvider>
           </div>
         </div>

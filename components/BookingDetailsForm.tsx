@@ -676,16 +676,10 @@ export default function BookingDetailsForm() {
                   <label htmlFor="pickupLocation" className="block text-sm font-medium text-white/90 mb-1">
                     Pickup Location *
                   </label>
-                  <input
-                    type="text"
-                    id="pickupLocation"
+                  <PickupLocationInput
                     value={pickupLocation}
-                    onChange={(e) => setPickupLocation(e.target.value)}
-                    placeholder="Enter your pickup address"
-                    aria-label="Pickup location"
-                    aria-required="true"
-                    aria-invalid={!pickupLocation}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
+                    onChange={setPickupLocation}
+                    instructorId={instructor?.id ?? ''}
                   />
                 </div>
 
@@ -1028,6 +1022,108 @@ export default function BookingDetailsForm() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Pickup Location Input with service-area validation ───────────────────────
+// Debounces the address, calls /api/public/check-service-area, and shows an
+// inline warning if the address is outside the instructor's radius.
+// Does NOT block the booking — it's informational only.
+
+type ServiceAreaResult = 'in' | 'out' | 'unknown' | 'checking' | 'idle';
+
+interface PickupLocationInputProps {
+  value: string;
+  onChange: (v: string) => void;
+  instructorId: string;
+}
+
+function PickupLocationInput({ value, onChange, instructorId }: PickupLocationInputProps) {
+  const [checkResult, setCheckResult] = React.useState<ServiceAreaResult>('idle');
+  const [distanceKm, setDistanceKm] = React.useState<number | null>(null);
+  const [radiusKm, setRadiusKm] = React.useState<number | null>(null);
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    // Reset on empty
+    if (!value.trim() || value.trim().length < 5) {
+      setCheckResult('idle');
+      setDistanceKm(null);
+      return;
+    }
+
+    // Debounce — wait 800ms after typing stops
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setCheckResult('checking');
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/public/check-service-area?instructorId=${encodeURIComponent(instructorId)}&address=${encodeURIComponent(value.trim())}`
+        );
+        if (!res.ok) { setCheckResult('unknown'); return; }
+        const data = await res.json();
+        setCheckResult(data.result as ServiceAreaResult);
+        setDistanceKm(data.distanceKm ?? null);
+        setRadiusKm(data.radiusKm ?? null);
+      } catch {
+        setCheckResult('unknown');
+      }
+    }, 800);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [value, instructorId]);
+
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <input
+          type="text"
+          id="pickupLocation"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter your pickup address"
+          aria-label="Pickup location"
+          aria-required="true"
+          aria-invalid={!value}
+          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
+        />
+        {/* Spinner while checking */}
+        {checkResult === 'checking' && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <svg className="w-4 h-4 text-white/40 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+          </div>
+        )}
+        {/* In-range tick */}
+        {checkResult === 'in' && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-400 text-sm">✓</div>
+        )}
+      </div>
+
+      {/* Out of range — amber warning, non-blocking */}
+      {checkResult === 'out' && (
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs">
+          <span className="shrink-0 mt-0.5">⚠️</span>
+          <span>
+            This address appears to be{distanceKm != null ? ` ~${distanceKm} km` : ''} from the instructor's base
+            {radiusKm != null ? `, outside their ${radiusKm} km service area` : ''}.
+            You can still book — confirm with your instructor that they cover this location.
+          </span>
+        </div>
+      )}
+
+      {/* Unknown — grey note, non-blocking */}
+      {checkResult === 'unknown' && value.trim().length >= 5 && (
+        <p className="text-xs text-white/30 px-1">
+          Service area check unavailable — please confirm your address with the instructor.
+        </p>
+      )}
     </div>
   );
 }

@@ -159,6 +159,10 @@ model Instructor {
   facebook        String?
   yearsExperience Int?
 
+  // Profile content — instructor-configurable
+  videoUrl        String?   // YouTube or Vimeo URL shown as an embed on the booking page
+  specialties     String?   // comma-separated tags e.g. "Nervous learners,Intensive,Manual"
+
   // PDA / Driving Test Package ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â instructor-controlled
   offersTestPackage    Boolean  @default(false)
   testPackagePrice     Float?

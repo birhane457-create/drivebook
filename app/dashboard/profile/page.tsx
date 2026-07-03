@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Camera, Car, Save, MapPin, Plus, X, ChevronDown } from 'lucide-react'
+import { Camera, Car, Save, MapPin, Plus, X, ChevronDown, Video, Tag } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
@@ -25,6 +25,8 @@ export default function ProfilePage() {
   const [vehicleOpen, setVehicleOpen] = useState(true)
   const [locationOpen, setLocationOpen] = useState(true)
   const [langOpen, setLangOpen] = useState(true)
+  const [videoOpen, setVideoOpen] = useState(true)
+  const [specialtiesOpen, setSpecialtiesOpen] = useState(true)
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -36,6 +38,8 @@ export default function ProfilePage() {
     languages: [] as string[],
     yearsExperience: '',
     vehicleTypes: [] as string[],
+    videoUrl: '',
+    specialties: [] as string[],
   })
   const [newLanguage, setNewLanguage] = useState('')
 
@@ -70,6 +74,12 @@ export default function ProfilePage() {
           languages: languagesArray,
           yearsExperience: data.yearsExperience?.toString() || '',
           vehicleTypes: vehicleTypesArray,
+          videoUrl: data.videoUrl || '',
+          specialties: data.specialties
+            ? (typeof data.specialties === 'string'
+                ? data.specialties.split(',').map((s: string) => s.trim()).filter(Boolean)
+                : data.specialties)
+            : [],
         })
         setProfileImage(data.profileImage || '')
         setCarImage(data.carImage || '')
@@ -127,6 +137,8 @@ export default function ProfilePage() {
           yearsExperience: formData.yearsExperience ? parseInt(formData.yearsExperience) : null,
           baseAddress: formData.baseAddress || null,
           languages: formData.languages,
+          videoUrl: formData.videoUrl || null,
+          specialties: formData.specialties,
         }),
       })
       // Also save vehicleTypes through settings API (stored as comma-string in DB)
@@ -523,6 +535,133 @@ export default function ProfilePage() {
               </button>
             </div>
           </div>
+          )}
+        </section>
+
+        {/* ── Video Intro ── */}
+        <section className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setVideoOpen(o => !o)}
+            className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-800/50 transition-colors"
+          >
+            <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              <Video className="h-4 w-4 text-slate-400" />
+              Video Intro
+            </h2>
+            <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${videoOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {videoOpen && (
+            <div className="px-5 pb-5 space-y-3">
+              <p className="text-[11px] text-slate-500">
+                Paste a YouTube or Vimeo link. A short "meet your instructor" video builds trust better than any written bio.
+              </p>
+              <input
+                type="url"
+                value={formData.videoUrl}
+                onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+              />
+              {formData.videoUrl && (() => {
+                // Live preview — extract video ID and show thumbnail
+                const ytMatch = formData.videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&\s?/]+)/)
+                const viMatch = formData.videoUrl.match(/vimeo\.com\/(\d+)/)
+                if (ytMatch) {
+                  return (
+                    <div className="rounded-lg overflow-hidden border border-slate-700 mt-2">
+                      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                        <iframe
+                          src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                          className="absolute inset-0 w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          title="Video preview"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-500 px-3 py-2">Preview of what students will see</p>
+                    </div>
+                  )
+                }
+                if (viMatch) {
+                  return (
+                    <div className="rounded-lg overflow-hidden border border-slate-700 mt-2">
+                      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                        <iframe
+                          src={`https://player.vimeo.com/video/${viMatch[1]}`}
+                          className="absolute inset-0 w-full h-full"
+                          allow="autoplay; fullscreen; picture-in-picture"
+                          allowFullScreen
+                          title="Video preview"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-500 px-3 py-2">Preview of what students will see</p>
+                    </div>
+                  )
+                }
+                return (
+                  <p className="text-[11px] text-amber-400 mt-1">⚠️ Paste a YouTube or Vimeo URL to see a preview</p>
+                )
+              })()}
+            </div>
+          )}
+        </section>
+
+        {/* ── Teaching Specialties ── */}
+        <section className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setSpecialtiesOpen(o => !o)}
+            className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-800/50 transition-colors"
+          >
+            <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              <Tag className="h-4 w-4 text-slate-400" />
+              Teaching Specialties
+            </h2>
+            <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${specialtiesOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {specialtiesOpen && (
+            <div className="px-5 pb-5 space-y-3">
+              <p className="text-[11px] text-slate-500">
+                Select tags that describe who you teach best. Shown as chips on your booking page — students scan these quickly.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'Nervous learners', 'First-timers', 'Intensive lessons',
+                  'Manual specialist', 'Automatic specialist',
+                  'International licence holders', 'Seniors', 'Teenagers',
+                  'ADHD-friendly', 'Anxiety support', 'Test prep focus',
+                  'Refresher lessons', 'Highway / Freeway', 'Defensive driving',
+                ].map((tag) => {
+                  const selected = formData.specialties.includes(tag)
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        if (selected) {
+                          setFormData({ ...formData, specialties: formData.specialties.filter(s => s !== tag) })
+                        } else {
+                          setFormData({ ...formData, specialties: [...formData.specialties, tag] })
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                        selected
+                          ? 'bg-violet-600 border-violet-500 text-white'
+                          : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
+                      }`}
+                    >
+                      {selected ? '✓ ' : ''}{tag}
+                    </button>
+                  )
+                })}
+              </div>
+              {formData.specialties.length > 0 && (
+                <p className="text-[11px] text-slate-500">{formData.specialties.length} selected</p>
+              )}
+            </div>
           )}
         </section>
 

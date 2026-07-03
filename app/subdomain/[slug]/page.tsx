@@ -3,10 +3,11 @@ import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { MapPin, Car, Star, Phone, Globe, Clock, CheckCircle, MessageCircle, Instagram, Facebook, Users, Award, Calendar, ShieldCheck, ChevronDown, AlertTriangle } from 'lucide-react';
-import BulkBookingForm from '@/components/BulkBookingForm';
 import SubdomainClientFeatures from '@/components/subdomain/SubdomainClientFeatures';
 import SubdomainDesktopNav from '@/components/subdomain/SubdomainDesktopNav';
 import SubdomainBookingEntry from '@/components/subdomain/SubdomainBookingEntry';
+import SubdomainPricingBooking from '@/components/subdomain/SubdomainPricingBooking';
+import { getPlatformPricing } from '@/lib/services/platform-pricing';
 import type { Metadata } from 'next';
 
 export const revalidate = 300; // cache 5 minutes — instructor profiles don't change by the second
@@ -118,7 +119,20 @@ export default async function SubdomainBookingPage({
       subscriptionStatus: true,
       trialEndsAt: true,
     },
-  });
+  }) as any;
+
+  // Fetch the two new fields separately — Prisma client types lag behind schema
+  // until `prisma generate` runs; this avoids the TypeScript error.
+  const instructorExtra = instructor
+    ? await (prisma.instructor as any).findUnique({
+        where: { id: (instructor as any).id },
+        select: { videoUrl: true, specialties: true },
+      })
+    : null;
+  if (instructor && instructorExtra) {
+    (instructor as any).videoUrl = instructorExtra.videoUrl;
+    (instructor as any).specialties = instructorExtra.specialties;
+  }
 
   if (!instructor) notFound();
 
@@ -193,11 +207,26 @@ export default async function SubdomainBookingPage({
 
   let nextAvailableLabel: string | null = null;
   const nextAvailableSlots: string[] = [];
-  const minBookableTime = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2hrs from now
+
+  // Minimum bookable time: 2 hours from now, rounded UP to the next whole hour.
+  // This ensures we never show a slot that has already passed or is too imminent,
+  // even when the page is served from a 5-minute ISR cache.
+  const twoHrsFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  // Ceil to next whole hour: if already on the hour, keep it; otherwise advance
+  const minBookableTime = new Date(twoHrsFromNow);
+  if (minBookableTime.getMinutes() !== 0 || minBookableTime.getSeconds() !== 0) {
+    minBookableTime.setHours(minBookableTime.getHours() + 1, 0, 0, 0);
+  } else {
+    minBookableTime.setSeconds(0, 0);
+  }
 
   for (let i = 0; i < 14 && nextAvailableSlots.length < 3; i++) {
+    // Build a clean date for this calendar day (midnight) to avoid time-of-day
+    // contamination from 'now' when calling setHours below
     const d = new Date(now);
     d.setDate(now.getDate() + i);
+    d.setHours(0, 0, 0, 0); // reset to midnight so setHours for slot times is clean
+
     const dayName = days[d.getDay()];
     const daySlots = getDaySlots(workingHours, dayName);
     if (daySlots.length === 0) continue;
@@ -206,15 +235,20 @@ export default async function SubdomainBookingPage({
       if (nextAvailableSlots.length >= 3) break;
       const [startH, startM] = slot.start.split(':').map(Number);
       const [endH, endM] = slot.end.split(':').map(Number);
+
       const dayStart = new Date(d);
       dayStart.setHours(startH, startM, 0, 0);
       const dayEnd = new Date(d);
       dayEnd.setHours(endH, endM, 0, 0);
 
-      // Start cursor at the later of: slot start, or minBookableTime (rounded up to next hour)
+      // Cursor starts at the later of: working hours start, or minBookableTime.
+      // minBookableTime is already ceiled to a whole hour so no further rounding needed.
       let cursor = new Date(Math.max(dayStart.getTime(), minBookableTime.getTime()));
-      cursor.setMinutes(0, 0, 0);
-      if (cursor < minBookableTime) cursor = new Date(cursor.getTime() + 60 * 60 * 1000);
+      // Ensure cursor is on a whole hour boundary (it should be, but guard against
+      // edge cases where dayStart itself has non-zero minutes)
+      if (cursor.getMinutes() !== 0 || cursor.getSeconds() !== 0) {
+        cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
+      }
 
       while (cursor < dayEnd && nextAvailableSlots.length < 3) {
         const slotEnd = new Date(cursor.getTime() + 60 * 60 * 1000);
@@ -224,7 +258,15 @@ export default async function SubdomainBookingPage({
           return cursor < be && slotEnd > bs;
         });
         if (!blocked) {
-          const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' });
+          // Re-derive day label from the clean midnight date
+          const labelDate = new Date(d);
+          const todayMidnight = new Date(now);
+          todayMidnight.setHours(0, 0, 0, 0);
+          const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
+          const label =
+            labelDate.getTime() === todayMidnight.getTime() ? 'Today' :
+            labelDate.getTime() === tomorrowMidnight.getTime() ? 'Tomorrow' :
+            labelDate.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' });
           const timeStr = cursor.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
           nextAvailableSlots.push(`${label} ${timeStr}`);
         }
@@ -257,22 +299,75 @@ export default async function SubdomainBookingPage({
     return lines;
   })();
 
-  const searchedLocation = searchParams.location || null;
-  const languages = instructor.languages ? instructor.languages.split(',').map(l => l.trim()) : [];
-  const vehicleTypes = instructor.vehicleTypes ? instructor.vehicleTypes.split(',').map(v => v.trim()) : [];
+  // Fetch platform pricing for live discount percentages
+  const platformPricing = await getPlatformPricing();
 
-  // Extract suburb only from baseAddress — handles "Maylands WA 6051" or "12 Smith St, Maylands WA 6051"
+  // Popular package — count completed/paid bookings by package size for this instructor
+  const packageCounts = await prisma.booking.groupBy({
+    by: ['packageHours'],
+    where: {
+      instructorId: instructor.id,
+      isPackageBooking: true,
+      isPaid: true,
+      packageHours: { in: [6, 10, 15] },
+    },
+    _count: { id: true },
+    orderBy: { _count: { id: 'desc' } },
+    take: 1,
+  });
+  const popularPackageHours: number | null =
+    packageCounts.length > 0 && (packageCounts[0]._count.id ?? 0) >= 3
+      ? (packageCounts[0].packageHours as number)
+      : null;
+
+  // Test centres this instructor covers (via their PDA configs)
+  const pdaConfigs = instructor.offersTestPackage
+    ? await prisma.pDATestConfig.findMany({
+        where: { instructorId: instructor.id, isActive: true },
+        select: {
+          testCentres: {
+            select: { testCentre: { select: { name: true, suburb: true } } },
+          },
+        },
+      })
+    : [];
+  const coveredTestCentres: string[] = Array.from(
+    new Set(
+      pdaConfigs.flatMap((c: any) =>
+        c.testCentres.map((tc: any) => tc.testCentre.suburb || tc.testCentre.name)
+      )
+    )
+  ) as string[];
+
+  const searchedLocation = searchParams.location || null;
+  const languages = instructor.languages ? instructor.languages.split(',').map((l: string) => l.trim()) : [];
+  const vehicleTypes = instructor.vehicleTypes ? instructor.vehicleTypes.split(',').map((v: string) => v.trim()) : [];
+
+  // Extract suburb from baseAddress — handles multiple formats:
+  // "Maylands WA 6051", "12 Smith St, Maylands WA 6051", "Maylands"
   const baseSuburb = (() => {
     if (!instructor.baseAddress) return null;
-    const parts = instructor.baseAddress.split(',').map((s: string) => s.trim());
-    // Walk from the end — find the first part that contains a suburb (letters, no leading digit)
-    for (let i = parts.length - 1; i >= 0; i--) {
-      // Strip state code (2-3 uppercase letters) and postcode (4 digits)
-      const clean = parts[i]
+    const addr = instructor.baseAddress.trim();
+    // Split on commas first
+    const commaParts = addr.split(',').map((s: string) => s.trim()).filter(Boolean);
+    // Work through each part from the end to find a suburb-like token
+    for (let i = commaParts.length - 1; i >= 0; i--) {
+      // Strip state codes (2–3 uppercase letters) and postcodes (4 digits)
+      const clean = commaParts[i]
         .replace(/\b[A-Z]{2,3}\b/g, '')
-        .replace(/\b\d{4}\b/g, '')
+        .replace(/\b\d{4,}\b/g, '')
         .trim();
       if (clean && !/^\d/.test(clean)) return clean;
+    }
+    // No comma — try splitting on spaces and working backwards through tokens
+    const tokens = addr.split(/\s+/);
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const t = tokens[i];
+      // Skip state codes, postcodes, and pure numbers
+      if (/^[A-Z]{2,3}$/.test(t)) continue;
+      if (/^\d+$/.test(t)) continue;
+      // First token with a capital letter and no digits is likely the suburb
+      if (/[A-Za-z]/.test(t) && !/^\d/.test(t)) return t;
     }
     return null;
   })();
@@ -293,6 +388,23 @@ export default async function SubdomainBookingPage({
   const instagram = instructor.instagram;
   const facebook = instructor.facebook;
   const yearsExperience = instructor.yearsExperience;
+
+  // Parse specialties from comma-string
+  const specialties: string[] = (instructor as any).specialties
+    ? (instructor as any).specialties.split(',').map((s: string) => s.trim()).filter(Boolean)
+    : [];
+
+  // Extract video embed from videoUrl (YouTube or Vimeo)
+  const videoUrl: string | null = (instructor as any).videoUrl || null;
+  const videoEmbed = (() => {
+    if (!videoUrl) return null;
+    // Handles: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/shorts/ID, youtube.com/embed/ID
+    const ytMatch = videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&\s?/]+)/);
+    if (ytMatch) return { type: 'youtube' as const, id: ytMatch[1] };
+    const viMatch = videoUrl.match(/vimeo\.com\/(\d+)/);
+    if (viMatch) return { type: 'vimeo' as const, id: viMatch[1] };
+    return null;
+  })();
 
   // Trust badges — only show what we actually know is true
   const trustBadges = [
@@ -317,7 +429,7 @@ export default async function SubdomainBookingPage({
     },
     {
       q: "What's the cancellation policy?",
-      a: '100% refund if you cancel 48+ hours before your lesson. 50% refund for 24–48 hours notice. No refund for cancellations under 24 hours.',
+      a: `100% refund if you cancel ${platformPricing.lateCancellationWindowHours * 2}+ hours before your lesson. 50% refund for ${platformPricing.lateCancellationWindowHours}–${platformPricing.lateCancellationWindowHours * 2} hours notice. No refund for cancellations under ${platformPricing.lateCancellationWindowHours} hours.`,
     },
     {
       q: "I've never driven before — is that okay?",
@@ -414,7 +526,7 @@ export default async function SubdomainBookingPage({
                 </div>
               )}
             </div>
-            <div className="text-white">
+              <div className="text-white">
               <h1 className="text-2xl sm:text-3xl font-bold">{instructor.name}</h1>
               <div className="flex items-center gap-1 mt-1">
                 {instructor.totalReviews > 0 ? (
@@ -442,6 +554,12 @@ export default async function SubdomainBookingPage({
                   {baseSuburb}{instructor.serviceRadiusKm ? ` & surrounding areas` : ''}
                 </div>
               )}
+              {!instructor.serviceAreas && !baseSuburb && instructor.serviceRadiusKm && (
+                <div className="flex items-center gap-1 mt-1 text-white/80 text-sm">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Serves up to {instructor.serviceRadiusKm} km radius
+                </div>
+              )}
               {vehicleTypes.length > 0 && (
                 <div className="flex items-center gap-1 mt-1 text-white/70 text-xs">
                   <Car className="h-3.5 w-3.5" />
@@ -464,10 +582,22 @@ export default async function SubdomainBookingPage({
                 {nextAvailableLabel && (
                   <div className="flex items-center gap-1 text-white/90 text-xs">
                     <Calendar className="h-3.5 w-3.5" />
-                    {nextAvailableSlots.slice(0, 2).join(' · ')}
+                    {nextAvailableSlots[0]}
                   </div>
                 )}
               </div>
+              {/* Hero CTA — visible on all screen sizes, scrolls to booking form on desktop */}
+              {isAcceptingBookings && (
+                <div className="mt-4">
+                  <a
+                    href="#booking-form"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-white/15 hover:bg-white/25 border border-white/30 text-white transition-all"
+                  >
+                    <Calendar className="h-4 w-4" />
+                    Book a lesson
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -487,20 +617,44 @@ export default async function SubdomainBookingPage({
         </div>
       )}
 
+      {/* ── How it works strip ───────────────────────────────────────────────
+          Static, zero cost, reduces first-timer confusion about the flow.
+          Only shown when the instructor is accepting bookings. */}
+      {isAcceptingBookings && (
+        <div className="bg-white border-b border-gray-100">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 text-center">How booking works</p>
+            <div className="grid grid-cols-3 gap-4 sm:gap-8 max-w-2xl mx-auto">
+              {[
+                { step: '1', icon: '📦', title: 'Choose a package', desc: 'Pick hours that suit you — single lesson or a bundle' },
+                { step: '2', icon: '💳', title: 'Pay once upfront', desc: 'Credit goes into your wallet — no card needed later' },
+                { step: '3', icon: '📅', title: 'Book your lessons', desc: 'Schedule from your dashboard anytime, at your pace' },
+              ].map(({ step, icon, title, desc }) => (
+                <div key={step} className="flex flex-col items-center text-center gap-1.5">
+                  <div className="text-2xl">{icon}</div>
+                  <p className="text-sm font-semibold text-gray-800">{title}</p>
+                  <p className="text-xs text-gray-400 leading-snug hidden sm:block">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid lg:grid-cols-3 gap-8">
 
-          {/* Left: Profile card */}
-          <div className="lg:col-span-1 space-y-4">
+          {/* Left: Profile card — on mobile renders second (order-2), desktop order restored */}
+          <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
 
-            {/* Next availability callout */}
+            {/* Next availability callout — max 2 slots */}
             {nextAvailableSlots.length > 0 && (
               <div className="rounded-xl p-4 border-2 flex items-start gap-3" style={{ backgroundColor: `${primary}10`, borderColor: `${primary}40` }}>
                 <Calendar className="h-5 w-5 shrink-0 mt-0.5" style={{ color: primary }} />
                 <div>
                   <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">Next Available</p>
                   <div className="space-y-0.5">
-                    {nextAvailableSlots.map((slot, i) => (
+                    {nextAvailableSlots.slice(0, 2).map((slot, i) => (
                       <p key={i} className={`font-semibold ${i === 0 ? 'text-gray-900' : 'text-gray-500 text-sm font-normal'}`}>{slot}</p>
                     ))}
                   </div>
@@ -513,6 +667,27 @@ export default async function SubdomainBookingPage({
               <div id="section-about" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-semibold text-gray-900 mb-2 text-base">About</h2>
                 <p className="text-base text-gray-600 leading-relaxed">{instructor.bio}</p>
+                {specialties.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Teaching style</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {specialties.map((s: string) => (
+                        <span key={s} className="text-xs bg-violet-50 text-violet-700 border border-violet-100 px-2.5 py-1 rounded-full font-medium">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Specialties without bio */}
+            {!instructor.bio?.trim() && specialties.length > 0 && (
+              <div id="section-about" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h2 className="font-semibold text-gray-900 mb-3 text-base">Teaching style</h2>
+                <div className="flex flex-wrap gap-1.5">
+                  {specialties.map((s: string) => (
+                    <span key={s} className="text-xs bg-violet-50 text-violet-700 border border-violet-100 px-2.5 py-1 rounded-full font-medium">{s}</span>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -546,45 +721,44 @@ export default async function SubdomainBookingPage({
                 )}
 
                 {/* Service area */}
-                {(baseSuburb || instructor.serviceRadiusKm) && (
+                {(instructor.serviceAreas || baseSuburb || instructor.serviceRadiusKm) && (
                   <div className="flex items-center gap-2 py-2 border-b border-gray-50">
                     <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
                     <span className="text-sm text-gray-600">
-                      {baseSuburb ? `Based in ${baseSuburb}` : 'Local area'}
-                      {instructor.serviceRadiusKm ? ` · up to ${instructor.serviceRadiusKm} km radius` : ''}
+                      {instructor.serviceAreas
+                        ? instructor.serviceAreas
+                        : baseSuburb
+                          ? `Based in ${baseSuburb}${instructor.serviceRadiusKm ? ` · up to ${instructor.serviceRadiusKm} km radius` : ''}`
+                          : `Serves up to ${instructor.serviceRadiusKm} km radius`}
                     </span>
                   </div>
                 )}
 
-                {/* Bulk packages (6 / 10 / 15 hrs) + optional PDA test pack */}
-                <div className="py-2 border-b border-gray-50">
-                  <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide font-medium">Bulk lesson packages</p>
-                  <div className="space-y-2">
-                    {[6, 10, 15].map((hours) => {
-                      const base = instructor.hourlyRate * hours;
-                      const discountPct = hours >= 15 ? 12 : hours >= 10 ? 10 : 5;
-                      const price = base * (1 - discountPct / 100);
-                      return (
-                        <div key={hours} className="flex justify-between items-center">
-                          <div>
-                            <p className="text-base font-medium text-gray-800">{hours} hours</p>
-                            <p className="text-xs text-gray-400">{discountPct}% bulk discount</p>
-                          </div>
-                          <p className="font-bold" style={{ color: secondary }}>${price.toFixed(0)}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                {instructor.offersTestPackage && instructor.testPackagePrice && (
-                  <div className="flex justify-between items-start py-2 border-b border-gray-50">
-                    <div>
-                      <p className="text-base font-medium text-gray-800">PDA test pack</p>
-                      <p className="text-sm text-gray-400">Configured by instructor</p>
-                    </div>
-                    <p className="font-bold" style={{ color: secondary }}>${instructor.testPackagePrice.toFixed(2)}</p>
-                  </div>
-                )}
+                {/* Bulk packages + PDA test pack + CTA — interactive, handled by client component */}
+                <SubdomainPricingBooking
+                  instructor={{
+                    id: instructor.id,
+                    name: instructor.name,
+                    profileImage: instructor.profileImage,
+                    hourlyRate: instructor.hourlyRate,
+                    averageRating: instructor.averageRating,
+                    totalReviews: instructor.totalReviews,
+                    offersTestPackage: instructor.offersTestPackage ?? false,
+                    testPackagePrice: instructor.testPackagePrice ?? null,
+                    testPackageDuration: instructor.testPackageDuration ?? null,
+                    testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
+                    allowedDurations: allowedDurations,
+                  }}
+                  primary={primary}
+                  secondary={secondary}
+                  packages={[
+                    { packageType: 'PACKAGE_6',  hours: 6,  label: '6 hr package',  discountPct: platformPricing.package6Discount,  price: instructor.hourlyRate * 6  * (1 - platformPricing.package6Discount  / 100) },
+                    { packageType: 'PACKAGE_10', hours: 10, label: '10 hr package', discountPct: platformPricing.package10Discount, price: instructor.hourlyRate * 10 * (1 - platformPricing.package10Discount / 100) },
+                    { packageType: 'PACKAGE_15', hours: 15, label: '15 hr package', discountPct: platformPricing.package15Discount, price: instructor.hourlyRate * 15 * (1 - platformPricing.package15Discount / 100) },
+                  ]}
+                  pdaPackage={instructor.offersTestPackage && instructor.testPackagePrice ? { price: instructor.testPackagePrice } : null}
+                  popularHours={popularPackageHours}
+                />
               </div>
             </div>
 
@@ -596,7 +770,7 @@ export default async function SubdomainBookingPage({
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Vehicle types</p>
                     <div className="flex flex-wrap gap-1">
-                      {vehicleTypes.map(v => (
+                      {vehicleTypes.map((v: string) => (
                         <span key={v} className="text-sm bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{v}</span>
                       ))}
                     </div>
@@ -637,6 +811,19 @@ export default async function SubdomainBookingPage({
                   <p className="text-base text-gray-600">Verified instructor</p>
                 </div>
               )}
+              {coveredTestCentres.length > 0 && (
+                <div className="flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Test centres covered</p>
+                    <div className="flex flex-wrap gap-1">
+                      {coveredTestCentres.map(tc => (
+                        <span key={tc} className="text-sm bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">{tc}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               {instructor.phone && (
                 <div className="flex items-center gap-2">
                   <Phone className="h-4 w-4 text-gray-400 shrink-0" />
@@ -675,11 +862,26 @@ export default async function SubdomainBookingPage({
               </div>
             )}
 
-            {/* Vehicle photo */}
+            {/* Vehicle photo — hover expands the image */}
             {instructor.carImage && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="relative h-40">
-                  <Image src={instructor.carImage} alt="Training vehicle" fill className="object-cover" />
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden group">
+                <div className="relative h-40 transition-all duration-300 ease-in-out group-hover:h-56 overflow-hidden">
+                  <Image
+                    src={instructor.carImage}
+                    alt="Training vehicle"
+                    fill
+                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  {/* Vehicle type badges overlay */}
+                  {vehicleTypes.length > 0 && (
+                    <div className="absolute top-2 left-2 flex gap-1">
+                      {vehicleTypes.map((v: string) => (
+                        <span key={v} className="text-xs font-semibold bg-black/50 text-white px-2 py-0.5 rounded-full backdrop-blur-sm">
+                          {v}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {(instructor.carMake || instructor.carModel) && (
                   <div className="px-4 py-2 text-sm text-gray-600">
@@ -709,8 +911,8 @@ export default async function SubdomainBookingPage({
             </div>
           </div>
 
-          {/* Right: Booking form + reviews */}
-          <div className="lg:col-span-2 space-y-6">
+          {/* Right: Reviews + Booking form — on mobile renders first (order-1) */}
+          <div className="lg:col-span-2 space-y-6 order-1 lg:order-2">
             {searchedLocation && (
               <div className="rounded-xl p-4 border-2" style={{ backgroundColor: `${primary}10`, borderColor: `${primary}40` }}>
                 <div className="flex items-start gap-3">
@@ -723,53 +925,9 @@ export default async function SubdomainBookingPage({
               </div>
             )}
 
-            <div id="booking-form" className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl shadow-purple-900/30 border border-white/10 p-6 backdrop-blur-sm">
-              {/* Social proof banner */}
-              {(instructor.totalReviews > 0 || nextAvailableLabel) && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4 text-sm text-gray-600">
-                  {instructor.totalReviews > 0 && (
-                    <span>⭐ {instructor.averageRating?.toFixed(1) ?? '5.0'} from {instructor.totalReviews} reviews</span>
-                  )}
-                  {nextAvailableLabel && (
-                    <span>⏱ Next available: {nextAvailableSlots.slice(0, 2).join(' · ')}</span>
-                  )}
-                  <span>🔒 No account required</span>
-                </div>
-              )}
-              <h2 className="text-xl font-bold text-gray-900 mb-0.5">Book Your Lesson</h2>
-              <p className="text-sm text-gray-500 mb-6">Takes less than 60 seconds · No account required</p>
-              {isAcceptingBookings ? (
-                <SubdomainBookingEntry
-                  instructor={{
-                    id: instructor.id,
-                    name: instructor.name,
-                    profileImage: instructor.profileImage,
-                    hourlyRate: instructor.hourlyRate,
-                    averageRating: instructor.averageRating,
-                    totalReviews: instructor.totalReviews,
-                    offersTestPackage: instructor.offersTestPackage ?? false,
-                    testPackagePrice: instructor.testPackagePrice ?? null,
-                    testPackageDuration: instructor.testPackageDuration ?? null,
-                    testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
-                    allowedDurations: allowedDurations,
-                  }}
-                  primary={primary}
-                />
-              ) : (
-                <div className="text-center py-8">
-                  <AlertTriangle className="h-12 w-12 text-amber-400 mx-auto mb-3" />
-                  <p className="font-semibold text-gray-900 mb-1">{instructor.name} is not currently accepting bookings</p>
-                  <p className="text-sm text-gray-500 mb-5">This instructor's account is temporarily inactive. Please check back later or find another instructor.</p>
-                  <a href="/book" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
-                    Find Another Instructor
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* Reviews section */}
-              {recentReviews.length > 0 ? (
-              <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl shadow-purple-900/30 border border-white/10 p-6 backdrop-blur-sm">
+            {/* Reviews — shown first so social proof is visible before the CTA */}
+            {recentReviews.length > 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-gray-900">Student Reviews</h2>
                   <div className="flex items-center gap-1">
@@ -799,17 +957,70 @@ export default async function SubdomainBookingPage({
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center">
-                <div className="flex justify-center gap-0.5 mb-2">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 text-gray-200" />
-                  ))}
+            ) : null}
+
+            {/* Video intro — shown above the booking card when set */}
+            {videoEmbed && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                  <iframe
+                    src={
+                      videoEmbed.type === 'youtube'
+                        ? `https://www.youtube.com/embed/${videoEmbed.id}`
+                        : `https://player.vimeo.com/video/${videoEmbed.id}`
+                    }
+                    className="absolute inset-0 w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title={`Meet ${instructor.name}`}
+                  />
                 </div>
-                <p className="text-sm font-medium text-gray-700">No reviews yet</p>
-                <p className="text-xs text-gray-400 mt-1">Be the first to book and leave a review</p>
+                <div className="px-4 py-2.5 border-t border-gray-50">
+                  <p className="text-xs text-gray-400">🎬 Meet your instructor</p>
+                </div>
               </div>
             )}
+
+            {/* Booking card — social proof + single CTA button only.
+                Package rows are in the left column Services card. */}
+            <div id="booking-form" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              {/* Social proof banner */}
+              {instructor.totalReviews > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4 text-sm text-gray-600">
+                  <span>⭐ {instructor.averageRating?.toFixed(1) ?? '5.0'} from {instructor.totalReviews} reviews</span>
+                  <span>🔒 No app install required</span>
+                </div>
+              )}
+              <h2 className="text-xl font-bold text-gray-900 mb-0.5">Book Your Lesson</h2>
+              <p className="text-sm text-gray-500 mb-6">Takes less than 60 seconds · No app install required</p>
+              {isAcceptingBookings ? (
+                <SubdomainBookingEntry
+                  instructor={{
+                    id: instructor.id,
+                    name: instructor.name,
+                    profileImage: instructor.profileImage,
+                    hourlyRate: instructor.hourlyRate,
+                    averageRating: instructor.averageRating,
+                    totalReviews: instructor.totalReviews,
+                    offersTestPackage: instructor.offersTestPackage ?? false,
+                    testPackagePrice: instructor.testPackagePrice ?? null,
+                    testPackageDuration: instructor.testPackageDuration ?? null,
+                    testPackageIncludes: (instructor.testPackageIncludes as string[]) ?? [],
+                    allowedDurations: allowedDurations,
+                  }}
+                  primary={primary}
+                />
+              ) : (
+                <div className="text-center py-8">
+                  <AlertTriangle className="h-12 w-12 text-amber-400 mx-auto mb-3" />
+                  <p className="font-semibold text-gray-900 mb-1">{instructor.name} is not currently accepting bookings</p>
+                  <p className="text-sm text-gray-500 mb-5">This instructor's account is temporarily inactive. Please check back later or find another instructor.</p>
+                  <a href="/book" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
+                    Find Another Instructor
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -829,7 +1040,7 @@ export default async function SubdomainBookingPage({
           {isAcceptingBookings ? (
             <>
               <h2 className="text-xl font-bold text-gray-900">Book a Lesson</h2>
-              <SubdomainBookingEntry
+              <SubdomainPricingBooking
                 instructor={{
                   id: instructor.id,
                   name: instructor.name,
@@ -844,6 +1055,13 @@ export default async function SubdomainBookingPage({
                   allowedDurations: allowedDurations,
                 }}
                 primary={primary}
+                secondary={secondary}
+                packages={[
+                  { packageType: 'PACKAGE_6',  hours: 6,  label: '6 hr package',  discountPct: platformPricing.package6Discount,  price: instructor.hourlyRate * 6  * (1 - platformPricing.package6Discount  / 100) },
+                  { packageType: 'PACKAGE_10', hours: 10, label: '10 hr package', discountPct: platformPricing.package10Discount, price: instructor.hourlyRate * 10 * (1 - platformPricing.package10Discount / 100) },
+                  { packageType: 'PACKAGE_15', hours: 15, label: '15 hr package', discountPct: platformPricing.package15Discount, price: instructor.hourlyRate * 15 * (1 - platformPricing.package15Discount / 100) },
+                ]}
+                pdaPackage={instructor.offersTestPackage && instructor.testPackagePrice ? { price: instructor.testPackagePrice } : null}
               />
             </>
           ) : (

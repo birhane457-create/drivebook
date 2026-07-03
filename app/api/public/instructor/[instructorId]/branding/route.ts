@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: { instructorId: string } }
 ) {
   try {
@@ -25,10 +25,12 @@ export async function GET(
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Only return branding if enabled and PRO/BUSINESS tier
+    // Only return branding if enabled and PRO/STUDIO/BUSINESS tier
     if (
       !instructor.showBrandingOnBookingPage ||
-      (instructor.subscriptionTier !== 'PRO' && instructor.subscriptionTier !== 'BUSINESS')
+      (instructor.subscriptionTier !== 'PRO' &&
+       instructor.subscriptionTier !== 'STUDIO' &&
+       instructor.subscriptionTier !== 'BUSINESS')
     ) {
       return NextResponse.json({
         enabled: false,
