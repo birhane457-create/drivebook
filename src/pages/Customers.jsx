@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, Users, Star, Wallet, ShoppingBag } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Plus, Users, Star, Wallet, ShoppingBag, UserCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
 import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import Field from '@/components/shared/Field';
+import FormDialog from '@/components/dialogs/FormDialog';
+import FormSection from '@/components/shared/FormSection';
 
 export default function Customers() {
   const [showForm, setShowForm] = useState(false);
@@ -81,28 +81,31 @@ export default function Customers() {
         emptyMessage="No customers yet. Add your first customer to start tracking loyalty."
       />
 
-      <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditing(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? 'Edit Customer' : 'New Customer'}</DialogTitle></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(form); }} className="space-y-4">
-            <Field label="Name" htmlFor="cust-name" required>
-              <Input id="cust-name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} required />
-            </Field>
-            <Field label="Email" htmlFor="cust-email">
-              <Input id="cust-email" type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
-            </Field>
-            <Field label="Phone" htmlFor="cust-phone">
-              <Input id="cust-phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
-            </Field>
-            <Field label="Address" htmlFor="cust-address">
-              <Input id="cust-address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
-            </Field>
-            <Button type="submit" className="w-full" disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? 'Saving...' : (editing ? 'Update' : 'Create Customer')}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={showForm}
+        onOpenChange={(open) => { setShowForm(open); if (!open) setEditing(null); }}
+        title={editing ? 'Edit Customer' : 'New Customer'}
+        description={editing ? 'Update the customer details below.' : 'Fill in the details to add a new customer.'}
+        submitLabel={editing ? 'Update' : 'Create Customer'}
+        isPending={saveMutation.isPending}
+        submitDisabled={!form.name.trim()}
+        onSubmit={() => saveMutation.mutate(form)}
+      >
+        <FormSection title="Customer Details" icon={UserCircle} columns={2}>
+          <Field label="Name" htmlFor="cust-name" required>
+            <Input id="cust-name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+          </Field>
+          <Field label="Email" htmlFor="cust-email">
+            <Input id="cust-email" type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
+          </Field>
+          <Field label="Phone" htmlFor="cust-phone">
+            <Input id="cust-phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+          </Field>
+          <Field label="Address" htmlFor="cust-address" className="sm:col-span-2">
+            <Input id="cust-address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
+          </Field>
+        </FormSection>
+      </FormDialog>
     </EnterprisePageLayout>
   );
 }

@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, Building2, Users, Wallet, AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Plus, Building2, Users, Wallet, AlertTriangle, User } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
 import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import StatusBadge from '@/components/shared/StatusBadge';
+import FormDialog from '@/components/dialogs/FormDialog';
+import FormSection from '@/components/shared/FormSection';
+import Field from '@/components/shared/Field';
 
 export default function Suppliers() {
   const [showForm, setShowForm] = useState(false);
@@ -72,21 +72,34 @@ export default function Suppliers() {
         emptyMessage="No suppliers yet. Add your first vendor to start purchasing."
       />
 
-      <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditing(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? 'Edit Supplier' : 'New Supplier'}</DialogTitle></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(form); }} className="space-y-4">
-            <div><Label>Company Name *</Label><Input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} required /></div>
-            <div><Label>Contact Person</Label><Input value={form.contact_person} onChange={(e) => setForm(p => ({ ...p, contact_person: e.target.value }))} /></div>
-            <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-            <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-            <div><Label>Address</Label><Input value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} /></div>
-            <Button type="submit" className="w-full" disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? 'Saving...' : (editing ? 'Update' : 'Create Supplier')}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={showForm}
+        onOpenChange={(open) => { setShowForm(open); if (!open) setEditing(null); }}
+        title={editing ? 'Edit Supplier' : 'New Supplier'}
+        description={editing ? 'Update the supplier details below.' : 'Fill in the details to add a new supplier.'}
+        submitLabel={editing ? 'Update' : 'Create Supplier'}
+        isPending={saveMutation.isPending}
+        submitDisabled={!form.name.trim()}
+        onSubmit={() => saveMutation.mutate(form)}
+      >
+        <FormSection title="Supplier Details" icon={User} columns={2}>
+          <Field label="Company Name" htmlFor="sup-name" required>
+            <Input id="sup-name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+          </Field>
+          <Field label="Contact Person" htmlFor="sup-contact">
+            <Input id="sup-contact" value={form.contact_person} onChange={(e) => setForm(p => ({ ...p, contact_person: e.target.value }))} />
+          </Field>
+          <Field label="Email" htmlFor="sup-email">
+            <Input id="sup-email" type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
+          </Field>
+          <Field label="Phone" htmlFor="sup-phone">
+            <Input id="sup-phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+          </Field>
+          <Field label="Address" htmlFor="sup-address" className="sm:col-span-2">
+            <Input id="sup-address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
+          </Field>
+        </FormSection>
+      </FormDialog>
     </EnterprisePageLayout>
   );
 }

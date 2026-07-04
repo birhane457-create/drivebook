@@ -4,7 +4,7 @@ import Breadcrumbs from '@/components/ux/Breadcrumbs';
 import ActivityFeed from '@/components/enterprise/ActivityFeed';
 import { Star, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import StatCard from '@/components/shared/StatCard';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -124,18 +124,14 @@ export default function EnterprisePageLayout({
       {showKpis && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {kpis.map((kpi, idx) => (
-            <Card key={idx} className="p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{kpi.label}</p>
-                {kpi.icon && <kpi.icon className="w-4 h-4 text-muted-foreground" />}
-              </div>
-              <p className="text-2xl font-bold mt-2">{kpi.value}</p>
-              {kpi.trend != null && (
-                <p className={cn("text-xs mt-1", kpi.trend >= 0 ? "text-emerald-600" : "text-red-600")}>
-                  {kpi.trend >= 0 ? "↑" : "↓"} {Math.abs(kpi.trend)}% vs last period
-                </p>
-              )}
-            </Card>
+            <StatCard
+              key={idx}
+              title={kpi.label}
+              value={kpi.value}
+              icon={kpi.icon}
+              trend={kpi.trend}
+              trendUp={kpi.trendUp}
+            />
           ))}
         </div>
       )}

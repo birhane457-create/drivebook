@@ -1,15 +1,15 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Package, MapPin, AlertTriangle, Boxes, Layers, SlidersHorizontal } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Package, MapPin, AlertTriangle, Boxes, Layers, SlidersHorizontal, Sliders } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
 import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import Field from '@/components/shared/Field';
+import FormDialog from '@/components/dialogs/FormDialog';
+import FormSection from '@/components/shared/FormSection';
 
 export default function Inventory() {
   const [showAdjust, setShowAdjust] = useState(false);
@@ -106,29 +106,28 @@ export default function Inventory() {
         emptyMessage="No stock records. Receive purchase orders to build up inventory."
       />
 
-      <Dialog open={showAdjust} onOpenChange={setShowAdjust}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Adjust Stock — {adjustItem?.product_name}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <Field label="Current Quantity" htmlFor="adj-current">
-              <Input id="adj-current" value={adjustItem?.quantity ?? ''} readOnly className="bg-muted/50" />
-            </Field>
-            <Field label="New Quantity" htmlFor="adj-qty" required>
-              <Input id="adj-qty" type="number" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
-            </Field>
-            <Field label="Reason" htmlFor="adj-reason" help="Used for the inventory audit log.">
-              <Textarea id="adj-reason" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Why is this adjustment being made?" />
-            </Field>
-            <Button
-              className="w-full"
-              disabled={adjustMutation.isPending}
-              onClick={() => adjustMutation.mutate({ stockLevel: adjustItem, newQty: parseInt(adjustQty), reason: adjustReason })}
-            >
-              {adjustMutation.isPending ? 'Saving...' : 'Confirm Adjustment'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={showAdjust}
+        onOpenChange={setShowAdjust}
+        title={`Adjust Stock — ${adjustItem?.product_name || ''}`}
+        description="Correct the on-hand quantity. This change is recorded in the inventory audit log."
+        submitLabel="Confirm Adjustment"
+        isPending={adjustMutation.isPending}
+        submitDisabled={adjustQty === '' || isNaN(Number(adjustQty))}
+        onSubmit={() => adjustMutation.mutate({ stockLevel: adjustItem, newQty: parseInt(adjustQty), reason: adjustReason })}
+      >
+        <FormSection title="Quantity" icon={Sliders} columns={2}>
+          <Field label="Current Quantity" htmlFor="adj-current">
+            <Input id="adj-current" value={adjustItem?.quantity ?? ''} readOnly className="bg-muted/50" />
+          </Field>
+          <Field label="New Quantity" htmlFor="adj-qty" required>
+            <Input id="adj-qty" type="number" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
+          </Field>
+          <Field label="Reason" htmlFor="adj-reason" help="Used for the inventory audit log." className="sm:col-span-2">
+            <Textarea id="adj-reason" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Why is this adjustment being made?" />
+          </Field>
+        </FormSection>
+      </FormDialog>
     </EnterprisePageLayout>
   );
 }
