@@ -9,6 +9,7 @@ import FilterBar from '@/components/shared/FilterBar';
 import StatusBadge from '@/components/shared/StatusBadge';
 import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import FormPatternsDemo from '@/components/forms/FormPatternsDemo';
+import ReceivingWorkflowDemo from '@/components/workflow/ReceivingWorkflowDemo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -21,7 +22,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
-  Table2
+  Table2, Workflow
 } from 'lucide-react';
 
 const chartData = [
@@ -220,6 +221,26 @@ export default function DesignSystem() {
         {/* Forms */}
         <SectionCard title="Form Patterns" description="Validation UI, required fields, help text, sections, tabs, wizard forms, auto-save & unsaved changes warning" icon={Edit}>
           <FormPatternsDemo />
+        </SectionCard>
+
+        {/* Workflow UI */}
+        <SectionCard title="Workflow UI" description="Steppers & timelines that make multi-step processes feel guided — PO → Receive → Inspect → Putaway → Complete" icon={Workflow}>
+          <ReceivingWorkflowDemo />
+        </SectionCard>
+
+        {/* Empty States */}
+        <SectionCard title="Empty States" description="Illustration, description, why-it-matters, and a create action — never a bare 'No data'" icon={Inbox}>
+          <div className="grid sm:grid-cols-3 gap-4">
+            <Card className="border">
+              <EmptyState illustration="empty-box" title="No products yet" description="Add your first product to start tracking stock." why="Products are the backbone of every module — without them, purchasing, picking, and POS have nothing to act on." actionLabel="Add product" onAction={() => {}} />
+            </Card>
+            <Card className="border">
+              <EmptyState illustration="no-results" title="No matching results" description="Try adjusting your filters or search query." why="Filtering helps operators find the right record fast — an empty result should guide them, not dead-end." />
+            </Card>
+            <Card className="border">
+              <EmptyState illustration="inbox" title="Nothing to action" description="You're all caught up — no pending tasks." why="A clear 'all done' state reassures users and reduces unnecessary checking throughout the day." />
+            </Card>
+          </div>
         </SectionCard>
 
         {/* Charts */}

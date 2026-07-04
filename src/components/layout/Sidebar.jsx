@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Warehouse, ShoppingCart, Users, 
-  Truck, ArrowLeftRight, ClipboardList, BarChart3, Bell,
+  Truck, ArrowLeftRight, ClipboardList, BarChart3, Bell, Boxes,
   Settings, LogOut, ChevronLeft, ChevronRight, Store,
   Brain, ClipboardCheck, Star, Award, Building2, PieChart,
   Grid3x3, Factory, DollarSign, CheckSquare, Smartphone,
@@ -49,6 +49,7 @@ const ROLE_MENUS = {
     {
       label: 'Warehouse',
       items: [
+        { path: '/warehouse', icon: Warehouse, label: 'Warehouse' },
         { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution' },
         { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH' },
         { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting' },
@@ -164,7 +165,8 @@ const ROLE_MENUS = {
     {
       label: 'Warehouse',
       items: [
-        { path: '/inventory', icon: Warehouse, label: 'Inventory' },
+        { path: '/warehouse', icon: Warehouse, label: 'Warehouse' },
+        { path: '/inventory', icon: Boxes, label: 'Inventory' },
         { path: '/warehouse-execution', icon: Grid3x3, label: 'WH Execution' },
         { path: '/mobile-warehouse', icon: Smartphone, label: 'Mobile WH' },
         { path: '/cycle-counting', icon: ClipboardCheck, label: 'Cycle Counting' },

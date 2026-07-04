@@ -7,6 +7,7 @@ export const ROUTE_ACCESS = {
   '/pos':               { label: 'Point of Sale',       roles: ['store_manager', 'cashier'], keywords: ['checkout', 'register', 'sale', 'terminal', 'cart'] },
   '/products':          { label: 'Products',            roles: ['warehouse_manager', 'store_manager', 'inventory_staff'], keywords: ['catalog', 'sku', 'items', 'goods'] },
   '/inventory':         { label: 'Inventory',           roles: ['warehouse_manager', 'store_manager', 'inventory_staff'], keywords: ['stock', 'levels', 'warehouse', 'quantity'] },
+  '/warehouse':         { label: 'Warehouse',            roles: ['warehouse_manager', 'store_manager', 'inventory_staff'], keywords: ['operations', 'receiving', 'putaway', 'picking', 'modules'] },
   '/purchases':         { label: 'Purchase Orders',     roles: ['warehouse_manager'], keywords: ['po', 'procurement', 'orders', 'suppliers', 'receiving'] },
   '/transfers':         { label: 'Stock Transfers',     roles: ['warehouse_manager', 'store_manager', 'inventory_staff'], keywords: ['move', 'transfer', 'relocate', 'dispatch'] },
   '/approvals':         { label: 'Approvals',           roles: ['warehouse_manager', 'store_manager'], keywords: ['workflow', 'approve', 'reject', 'pending'] },

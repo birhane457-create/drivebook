@@ -32,6 +32,7 @@ import SupplierScorecard from '@/pages/SupplierScorecard';
 import LoyaltyProgram from '@/pages/LoyaltyProgram';
 import EnterpriseSettings from '@/pages/EnterpriseSettings';
 import WarehouseExecution from '@/pages/WarehouseExecution';
+import WarehouseModule from '@/pages/WarehouseModule';
 import Manufacturing from '@/pages/Manufacturing';
 import Financials from '@/pages/Financials';
 import ApprovalWorkflow from '@/pages/ApprovalWorkflow';
@@ -140,6 +141,7 @@ const AuthenticatedApp = () => {
           <Route path="/loyalty" element={<LoyaltyProgram />} />
           <Route path="/enterprise-settings" element={<EnterpriseSettings />} />
           <Route path="/warehouse-execution" element={<WarehouseExecution />} />
+          <Route path="/warehouse" element={<WarehouseModule />} />
           <Route path="/manufacturing" element={<Manufacturing />} />
           <Route path="/financials" element={<Financials />} />
           <Route path="/approvals" element={<ApprovalWorkflow />} />
