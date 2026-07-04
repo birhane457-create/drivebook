@@ -5,9 +5,9 @@ import { Plus, Edit2, Star, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import PageHeader from '@/components/shared/PageHeader';
 import DataTable from '@/components/shared/DataTable';
+import Field from '@/components/shared/Field';
 import { Badge } from '@/components/ui/badge';
 
 export default function Customers() {
@@ -81,10 +81,18 @@ export default function Customers() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editing ? 'Edit Customer' : 'New Customer'}</DialogTitle></DialogHeader>
           <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(form); }} className="space-y-4">
-            <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} required /></div>
-            <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-            <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-            <div><Label>Address</Label><Input value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} /></div>
+            <Field label="Name" htmlFor="cust-name" required>
+              <Input id="cust-name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} required />
+            </Field>
+            <Field label="Email" htmlFor="cust-email">
+              <Input id="cust-email" type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
+            </Field>
+            <Field label="Phone" htmlFor="cust-phone">
+              <Input id="cust-phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+            </Field>
+            <Field label="Address" htmlFor="cust-address">
+              <Input id="cust-address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
+            </Field>
             <Button type="submit" className="w-full" disabled={saveMutation.isPending}>
               {saveMutation.isPending ? 'Saving...' : (editing ? 'Update' : 'Create Customer')}
             </Button>

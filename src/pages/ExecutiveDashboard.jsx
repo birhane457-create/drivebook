@@ -51,7 +51,7 @@ export default function ExecutiveDashboard() {
   ];
 
   return (
-    <div className="p-6">
+    <div>
       <PageHeader title="Executive Dashboard" subtitle="Real-time KPIs across all enterprise modules">
         <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
           <span className="w-2 h-2 rounded-full bg-green-500 inline-block mr-2 animate-pulse" />

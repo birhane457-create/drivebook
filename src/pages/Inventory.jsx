@@ -7,10 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import PageHeader from '@/components/shared/PageHeader';
 import DataTable from '@/components/shared/DataTable';
+import Field from '@/components/shared/Field';
 
 export default function Inventory() {
   const [locationFilter, setLocationFilter] = useState('all');
@@ -127,19 +127,17 @@ export default function Inventory() {
             <DialogTitle>Adjust Stock — {adjustItem?.product_name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Current Quantity: {adjustItem?.quantity}</Label>
-            </div>
-            <div>
-              <Label>New Quantity</Label>
-              <Input type="number" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
-            </div>
-            <div>
-              <Label>Reason</Label>
-              <Textarea value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Why is this adjustment being made?" />
-            </div>
-            <Button 
-              className="w-full" 
+            <Field label="Current Quantity" htmlFor="adj-current">
+              <Input id="adj-current" value={adjustItem?.quantity ?? ''} readOnly className="bg-muted/50" />
+            </Field>
+            <Field label="New Quantity" htmlFor="adj-qty" required>
+              <Input id="adj-qty" type="number" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
+            </Field>
+            <Field label="Reason" htmlFor="adj-reason" help="Used for the inventory audit log.">
+              <Textarea id="adj-reason" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Why is this adjustment being made?" />
+            </Field>
+            <Button
+              className="w-full"
               disabled={adjustMutation.isPending}
               onClick={() => adjustMutation.mutate({ stockLevel: adjustItem, newQty: parseInt(adjustQty), reason: adjustReason })}
             >

@@ -1,18 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { 
-  DollarSign, Package, ShoppingCart, TrendingUp, 
-  AlertTriangle, ArrowUpRight, ArrowDownRight 
-} from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { DollarSign, Package, ShoppingCart, AlertTriangle } from 'lucide-react';
 import StatCard from '@/components/shared/StatCard';
 import StatusBadge from '@/components/shared/StatusBadge';
 import PageHeader from '@/components/shared/PageHeader';
+import SectionCard from '@/components/shared/SectionCard';
+import EmptyState from '@/components/shared/EmptyState';
+import ChartCard from '@/components/charts/ChartCard';
+import { BarSeriesChart, DonutChart } from '@/components/charts/StandardCharts';
 import { format } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-
-const COLORS = ['hsl(243, 75%, 59%)', 'hsl(262, 83%, 58%)', 'hsl(173, 58%, 39%)', 'hsl(43, 74%, 66%)', 'hsl(12, 76%, 61%)'];
 
 export default function Dashboard() {
   const { data: sales = [] } = useQuery({
@@ -87,107 +83,67 @@ export default function Dashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Sales Trend (Last 7 Days)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" fontSize={12} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis fontSize={12} stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip 
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                    labelStyle={{ color: 'hsl(var(--foreground))' }}
-                  />
-                  <Bar dataKey="total" fill="hsl(243, 75%, 59%)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[280px] flex items-center justify-center text-muted-foreground">
-                No sales data yet
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <ChartCard title="Sales Trend" description="Last 7 days" icon={DollarSign} className="lg:col-span-2">
+          {chartData.length > 0 ? (
+            <BarSeriesChart data={chartData} keys={['total']} xKey="date" height={280} format={(v) => `$${Number(v).toLocaleString()}`} />
+          ) : (
+            <EmptyState illustration="empty-box" title="No sales data yet" description="Sales will appear here once you make your first transaction." className="py-10" />
+          )}
+        </ChartCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Product Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {categoryData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={categoryData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                    {categoryData.map((_, idx) => (
-                      <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[280px] flex items-center justify-center text-muted-foreground">
-                No products yet
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ChartCard title="Product Categories" description="Distribution" icon={Package}>
+          {categoryData.length > 0 ? (
+            <DonutChart data={categoryData} height={280} />
+          ) : (
+            <EmptyState illustration="empty-box" title="No products yet" description="Add products to see category mix." className="py-10" />
+          )}
+        </ChartCard>
       </div>
 
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Sales */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Recent Sales</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {sales.slice(0, 5).map(sale => (
-              <div key={sale.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                <div>
-                  <p className="text-sm font-medium">{sale.sale_number}</p>
-                  <p className="text-xs text-muted-foreground">{sale.customer_name || 'Walk-in'}</p>
+        <SectionCard title="Recent Sales" icon={ShoppingCart}>
+          {sales.length > 0 ? (
+            <div className="space-y-3">
+              {sales.slice(0, 5).map(sale => (
+                <div key={sale.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div>
+                    <p className="text-sm font-medium">{sale.sale_number}</p>
+                    <p className="text-xs text-muted-foreground">{sale.customer_name || 'Walk-in'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold">${sale.grand_total?.toFixed(2)}</p>
+                    <StatusBadge status={sale.status} />
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold">${sale.grand_total?.toFixed(2)}</p>
-                  <StatusBadge status={sale.status} />
-                </div>
-              </div>
-            ))}
-            {sales.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">No sales yet</p>
-            )}
-          </CardContent>
-        </Card>
+              ))}
+            </div>
+          ) : (
+            <EmptyState illustration="inbox" title="No sales yet" description="Recent transactions will appear here." className="py-10" />
+          )}
+        </SectionCard>
 
-        {/* Alerts */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Active Alerts</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {alerts.map(alert => (
-              <div key={alert.id} className="flex items-start gap-3 py-2 border-b last:border-0">
-                <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                  alert.severity === 'critical' ? 'text-red-500' : alert.severity === 'warning' ? 'text-amber-500' : 'text-blue-500'
-                }`} />
-                <div>
-                  <p className="text-sm font-medium">{alert.title}</p>
-                  <p className="text-xs text-muted-foreground">{alert.message}</p>
+        <SectionCard title="Active Alerts" icon={AlertTriangle}>
+          {alerts.length > 0 ? (
+            <div className="space-y-3">
+              {alerts.map(alert => (
+                <div key={alert.id} className="flex items-start gap-3 py-2 border-b last:border-0">
+                  <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                    alert.severity === 'critical' ? 'text-red-500' : alert.severity === 'warning' ? 'text-amber-500' : 'text-blue-500'
+                  }`} />
+                  <div>
+                    <p className="text-sm font-medium">{alert.title}</p>
+                    <p className="text-xs text-muted-foreground">{alert.message}</p>
+                  </div>
+                  <StatusBadge status={alert.severity} className="ml-auto flex-shrink-0" />
                 </div>
-                <StatusBadge status={alert.severity} className="ml-auto flex-shrink-0" />
-              </div>
-            ))}
-            {alerts.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">No active alerts</p>
-            )}
-          </CardContent>
-        </Card>
+              ))}
+            </div>
+          ) : (
+            <EmptyState illustration="inbox" title="No active alerts" description="All stock levels are healthy." className="py-10" />
+          )}
+        </SectionCard>
       </div>
     </div>
   );

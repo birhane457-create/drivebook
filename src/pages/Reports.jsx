@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageHeader from '@/components/shared/PageHeader';
 import StatCard from '@/components/shared/StatCard';
+import SectionCard from '@/components/shared/SectionCard';
+import EmptyState from '@/components/shared/EmptyState';
+import ChartCard from '@/components/charts/ChartCard';
+import { TrendAreaChart, BarSeriesChart } from '@/components/charts/StandardCharts';
 import { DollarSign, Package, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subDays } from 'date-fns';
 
 export default function Reports() {
   const { data: sales = [] } = useQuery({
@@ -106,80 +108,58 @@ export default function Reports() {
         </TabsList>
 
         <TabsContent value="sales">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Daily Sales (Last 30 Days)</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={dailyChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" fontSize={11} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                  <Line type="monotone" dataKey="total" stroke="hsl(243, 75%, 59%)" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <ChartCard title="Daily Sales" description="Last 30 days" icon={TrendingUp}>
+            <TrendAreaChart data={dailyChartData} dataKey="total" xKey="date" height={350} format={(v) => `$${Number(v).toLocaleString()}`} />
+          </ChartCard>
         </TabsContent>
 
         <TabsContent value="products">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="w-4 h-4 text-emerald-500" /> Top Selling Products</CardTitle></CardHeader>
-              <CardContent>
-                {topProducts.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={topProducts} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" fontSize={11} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis type="category" dataKey="name" fontSize={11} width={120} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                      <Bar dataKey="revenue" fill="hsl(243, 75%, 59%)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <p className="text-center py-10 text-muted-foreground">No sales data</p>}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingDown className="w-4 h-4 text-red-500" /> Slow Moving Products</CardTitle></CardHeader>
-              <CardContent>
-                {slowProducts.length > 0 ? (
-                  <div className="space-y-3">
-                    {slowProducts.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-                        <span className="text-sm">{p.name}</span>
-                        <div className="text-right">
-                          <p className="text-sm font-medium">{p.quantity} units</p>
-                          <p className="text-xs text-muted-foreground">${p.revenue?.toFixed(2)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p className="text-center py-10 text-muted-foreground">No data</p>}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="inventory">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Low Stock Alerts</CardTitle></CardHeader>
-            <CardContent>
-              {lowStockItems.length > 0 ? (
+            <ChartCard title="Top Selling Products" description="By revenue" icon={TrendingUp}>
+              {topProducts.length > 0 ? (
+                <BarSeriesChart data={topProducts} keys={['revenue']} xKey="name" height={300} format={(v) => `$${Number(v).toLocaleString()}`} />
+              ) : (
+                <EmptyState illustration="empty-box" title="No sales data" description="Top products will appear once you have sales." className="py-10" />
+              )}
+            </ChartCard>
+            <SectionCard title="Slow Moving Products" icon={TrendingDown}>
+              {slowProducts.length > 0 ? (
                 <div className="space-y-3">
-                  {lowStockItems.map((item, i) => (
+                  {slowProducts.map((p, i) => (
                     <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="text-sm">{p.name}</span>
                       <div className="text-right">
-                        <span className="text-sm text-red-500 font-medium">{item.quantity} in stock</span>
-                        <p className="text-xs text-muted-foreground">Reorder at {item.reorder}</p>
+                        <p className="text-sm font-medium">{p.quantity} units</p>
+                        <p className="text-xs text-muted-foreground">${p.revenue?.toFixed(2)}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : <p className="text-center py-10 text-muted-foreground">All stock levels are healthy</p>}
-            </CardContent>
-          </Card>
+              ) : (
+                <EmptyState illustration="no-results" title="No data" description="Every product is selling well." className="py-10" />
+              )}
+            </SectionCard>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="inventory">
+          <SectionCard title="Low Stock Alerts" icon={Package}>
+            {lowStockItems.length > 0 ? (
+              <div className="space-y-3">
+                {lowStockItems.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <span className="text-sm font-medium">{item.name}</span>
+                    <div className="text-right">
+                      <span className="text-sm text-destructive font-medium">{item.quantity} in stock</span>
+                      <p className="text-xs text-muted-foreground">Reorder at {item.reorder}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState illustration="inbox" title="All stock levels are healthy" description="No products are below their reorder point." className="py-10" />
+            )}
+          </SectionCard>
         </TabsContent>
       </Tabs>
     </div>

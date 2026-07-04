@@ -1,16 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Bell, Check, AlertTriangle, Info, AlertOctagon } from 'lucide-react';
+import { Check, AlertTriangle, Info, AlertOctagon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
+import PageLoader from '@/components/shared/PageLoader';
+import EmptyState from '@/components/shared/EmptyState';
 import { format } from 'date-fns';
 
 const SEVERITY_ICONS = {
   info: Info,
   warning: AlertTriangle,
   critical: AlertOctagon,
+};
+
+const SEVERITY_STYLES = {
+  critical: 'bg-red-500/10 text-red-500',
+  warning: 'bg-amber-500/10 text-amber-500',
+  info: 'bg-blue-500/10 text-blue-500',
 };
 
 export default function Alerts() {
@@ -39,7 +47,7 @@ export default function Alerts() {
   const unreadCount = alerts.filter(a => !a.is_read).length;
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>;
+    return <PageLoader label="Loading alerts..." />;
   }
 
   return (
@@ -52,25 +60,16 @@ export default function Alerts() {
         )}
       </PageHeader>
 
+      {alerts.length === 0 ? (
+        <EmptyState illustration="inbox" title="No alerts" description="You're all caught up — nothing needs your attention right now." className="py-20" />
+      ) : (
       <div className="space-y-3">
-        {alerts.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Bell className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground">No alerts</p>
-          </Card>
-        ) : (
-          alerts.map(alert => {
+          {alerts.map(alert => {
             const Icon = SEVERITY_ICONS[alert.severity] || Info;
             return (
               <Card key={alert.id} className={`p-4 flex items-start gap-4 transition-all ${!alert.is_read ? 'border-primary/30 bg-primary/5' : ''}`}>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  alert.severity === 'critical' ? 'bg-red-100 dark:bg-red-900/30' :
-                  alert.severity === 'warning' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-blue-100 dark:bg-blue-900/30'
-                }`}>
-                  <Icon className={`w-5 h-5 ${
-                    alert.severity === 'critical' ? 'text-red-600' :
-                    alert.severity === 'warning' ? 'text-amber-600' : 'text-blue-600'
-                  }`} />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${SEVERITY_STYLES[alert.severity] || SEVERITY_STYLES.info}`}>
+                  <Icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -90,9 +89,9 @@ export default function Alerts() {
                 )}
               </Card>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }
