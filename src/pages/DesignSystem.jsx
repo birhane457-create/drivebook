@@ -28,6 +28,7 @@ import DialogShowcase from '@/components/showcase/DialogShowcase';
 import WidgetsShowcase from '@/components/showcase/WidgetsShowcase';
 import ChartsShowcase from '@/components/showcase/ChartsShowcase';
 import AnimationsShowcase from '@/components/showcase/AnimationsShowcase';
+import EnterpriseLibraryShowcase from '@/components/showcase/EnterpriseLibraryShowcase';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
@@ -302,6 +303,11 @@ export default function DesignSystem() {
         {/* Animation System */}
         <SectionCard title="Animation System" description="Page transitions, drawer slides, card hover lift, table row stagger, loading spinners & skeletons, success checkmark, toast pop-in & stagger containers — reusable framer-motion presets" icon={Sparkles}>
           <AnimationsShowcase />
+        </SectionCard>
+
+        {/* Enterprise Component Library */}
+        <SectionCard title="Enterprise Component Library" description="EntityCard, AnalyticsCard, ApprovalTimeline, FilterBuilder, QueryBuilder, DynamicFormBuilder — reusable building blocks for data-driven apps" icon={Layers}>
+          <EnterpriseLibraryShowcase />
         </SectionCard>
 
         {/* Workflow Screens */}

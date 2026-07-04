@@ -1,0 +1,27 @@
+// Enterprise Component Library — barrel export
+export { default as EntityCard } from './EntityCard';
+export { default as AnalyticsCard } from './AnalyticsCard';
+export { default as ApprovalTimeline } from './ApprovalTimeline';
+export { default as FilterBuilder } from './FilterBuilder';
+export { default as QueryBuilder } from './QueryBuilder';
+export { default as DynamicFormBuilder, DynamicFormPreview } from './DynamicFormBuilder';
+export { default as Timeline } from './Timeline';
+export { default as ActivityFeed } from './ActivityFeed';
+export { default as PropertyPanel } from './PropertyPanel';
+export { default as MasterDetail } from './MasterDetail';
+export { default as KanbanBoard } from './KanbanBoard';
+export { default as MiniCalendar } from './MiniCalendar';
+export { default as GanttChart } from './GanttChart';
+export { default as Scheduler } from './Scheduler';
+export { default as SplitView } from './SplitView';
+export { default as TreeView } from './TreeView';
+export { default as OrgChart } from './OrgChart';
+export { default as KpiWidget } from './KpiWidget';
+export { default as PivotTable } from './PivotTable';
+export { default as MapWidget } from './MapWidget';
+export { default as Heatmap } from './Heatmap';
+export { default as FormulaBuilder } from './FormulaBuilder';
+export { default as WidgetLibrary } from './WidgetLibrary';
+export { default as WorkflowDesigner } from './WorkflowDesigner';
+export { default as DashboardBuilder } from './DashboardBuilder';
+export { default as RuleBuilder } from './RuleBuilder';
