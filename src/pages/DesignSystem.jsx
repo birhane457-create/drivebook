@@ -27,10 +27,11 @@ import LayoutShowcase from '@/components/showcase/LayoutShowcase';
 import DialogShowcase from '@/components/showcase/DialogShowcase';
 import WidgetsShowcase from '@/components/showcase/WidgetsShowcase';
 import ChartsShowcase from '@/components/showcase/ChartsShowcase';
+import AnimationsShowcase from '@/components/showcase/AnimationsShowcase';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
-  Table2, Workflow, Layers, LayoutTemplate, MessageSquare, LayoutGrid, BarChart3, Boxes
+  Table2, Workflow, Layers, LayoutTemplate, MessageSquare, LayoutGrid, BarChart3, Boxes, Sparkles
 } from 'lucide-react';
 
 const chartData = [
@@ -296,6 +297,11 @@ export default function DesignSystem() {
         {/* Advanced Charts */}
         <SectionCard title="Advanced Charts" description="Sankey, Treemap, Waterfall, Radar, Bubble, KPI Gauge, Timeline, Funnel, Heatmap, Calendar Heatmap, Pareto & Control charts — all reusable" icon={BarChart3}>
           <ChartsShowcase />
+        </SectionCard>
+
+        {/* Animation System */}
+        <SectionCard title="Animation System" description="Page transitions, drawer slides, card hover lift, table row stagger, loading spinners & skeletons, success checkmark, toast pop-in & stagger containers — reusable framer-motion presets" icon={Sparkles}>
+          <AnimationsShowcase />
         </SectionCard>
 
         {/* Workflow Screens */}
