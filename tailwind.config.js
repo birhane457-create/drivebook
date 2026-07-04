@@ -7,7 +7,26 @@ module.exports = {
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)'
+  			sm: 'calc(var(--radius) - 4px)',
+  			xl: 'calc(var(--radius) + 4px)'
+  		},
+  		boxShadow: {
+  			'2xs': 'var(--shadow-2xs)',
+  			xs: 'var(--shadow-xs)',
+  			soft: 'var(--shadow-sm)',
+			elevated: 'var(--shadow-md)',
+			floating: 'var(--shadow-lg)',
+			ring: 'var(--shadow-ring)',
+  			DEFAULT: 'var(--shadow-sm)',
+  			sm: 'var(--shadow-xs)',
+  			md: 'var(--shadow-md)',
+  			lg: 'var(--shadow-lg)',
+  			xl: 'var(--shadow-lg)'
+  		},
+  		letterSpacing: {
+  			tighter: '-0.02em',
+  			tight: '-0.011em',
+  			normal: '-0.006em'
   		},
   		colors: {
   			background: 'hsl(var(--background))',
