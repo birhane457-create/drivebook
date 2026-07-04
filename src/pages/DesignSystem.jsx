@@ -22,10 +22,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import ChartCard from '@/components/charts/ChartCard';
 import { TrendAreaChart, DonutChart, BarSeriesChart } from '@/components/charts/StandardCharts';
 import EnterpriseShowcase from '@/components/enterprise/EnterpriseShowcase';
+import LayoutShowcase from '@/components/showcase/LayoutShowcase';
+import DialogShowcase from '@/components/showcase/DialogShowcase';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
-  Table2, Workflow, Layers
+  Table2, Workflow, Layers, LayoutTemplate, MessageSquare
 } from 'lucide-react';
 
 const chartData = [
@@ -271,6 +273,16 @@ export default function DesignSystem() {
         {/* Enterprise Components */}
         <SectionCard title="Enterprise Components" description="Reusable building blocks inspired by SAP Fiori, Dynamics 365, Oracle Fusion & Odoo — Timeline, Kanban, Scheduler, Gantt, Calendar, Tree View, Org Chart, Split View, Master-Detail, Property Panel, Activity Feed, KPI Widgets, Heatmap, Map, Pivot Builder, Formula Builder, Rule Builder, Workflow Designer, Dashboard Builder & Widget Library" icon={Layers}>
           <EnterpriseShowcase />
+        </SectionCard>
+
+        {/* Layout Templates */}
+        <SectionCard title="Layout Templates" description="Reusable page skeletons — Dashboard, List, Detail, Master-Detail, Wizard, Approval, Analytics, Administration, Mobile & Executive — every page can adopt one" icon={LayoutTemplate}>
+          <LayoutShowcase />
+        </SectionCard>
+
+        {/* Enterprise Dialogs */}
+        <SectionCard title="Enterprise Dialogs" description="Create, Edit, Approval, Confirmation, Import / Export / Merge / Duplicate / Archive / Delete Wizards & Bulk Edit — click any tile to open it" icon={MessageSquare}>
+          <DialogShowcase />
         </SectionCard>
 
         {/* States */}
