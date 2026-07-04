@@ -1,14 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, Edit2, Star, DollarSign } from 'lucide-react';
+import { Plus, Users, Star, Wallet, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import PageHeader from '@/components/shared/PageHeader';
-import DataTable from '@/components/shared/DataTable';
+import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
+import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import Field from '@/components/shared/Field';
-import { Badge } from '@/components/ui/badge';
 
 export default function Customers() {
   const [showForm, setShowForm] = useState(false);
@@ -22,14 +21,8 @@ export default function Customers() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (data) => editing
-      ? base44.entities.Customer.update(editing.id, data)
-      : base44.entities.Customer.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      setShowForm(false);
-      setEditing(null);
-    },
+    mutationFn: (data) => editing ? base44.entities.Customer.update(editing.id, data) : base44.entities.Customer.create(data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['customers'] }); setShowForm(false); setEditing(null); },
   });
 
   const openForm = (customer = null) => {
@@ -38,44 +31,55 @@ export default function Customers() {
     setShowForm(true);
   };
 
+  const totalLoyalty = customers.reduce((a, c) => a + (c.loyalty_points || 0), 0);
+  const totalCredit = customers.reduce((a, c) => a + (c.credit_balance || 0), 0);
+  const totalPurchases = customers.reduce((a, c) => a + (c.total_purchases || 0), 0);
+
+  const kpis = [
+    { label: 'Customers', value: customers.length, icon: Users },
+    { label: 'Loyalty Points', value: totalLoyalty.toLocaleString(), icon: Star },
+    { label: 'Store Credit', value: `$${totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Wallet },
+    { label: 'Lifetime Sales', value: `$${totalPurchases.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: ShoppingBag },
+  ];
+
   const columns = [
-    { key: 'name', label: 'Customer', render: (row) => (
+    { key: 'name', label: 'Customer', render: (r) => (
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{row.name?.[0]}</div>
+        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{r.name?.[0]}</div>
         <div>
-          <p className="font-medium">{row.name}</p>
-          <p className="text-xs text-muted-foreground">{row.email || row.phone || '—'}</p>
+          <p className="font-medium">{r.name}</p>
+          <p className="text-xs text-muted-foreground">{r.email || r.phone || '—'}</p>
         </div>
       </div>
     )},
-    { key: 'loyalty_points', label: 'Loyalty', render: (row) => (
-      <div className="flex items-center gap-1">
+    { key: 'phone', label: 'Phone', render: (r) => r.phone || '—' },
+    { key: 'loyalty_points', label: 'Loyalty', align: 'right', render: (r) => (
+      <div className="flex items-center gap-1 justify-end">
         <Star className="w-3 h-3 text-amber-500" />
-        <span>{row.loyalty_points || 0} pts</span>
+        <span>{r.loyalty_points || 0}</span>
       </div>
     )},
-    { key: 'credit_balance', label: 'Credit', render: (row) => (
-      <span className={row.credit_balance > 0 ? 'text-emerald-600 font-medium' : ''}>
-        ${(row.credit_balance || 0).toFixed(2)}
-      </span>
+    { key: 'credit_balance', label: 'Credit', align: 'right', render: (r) => (
+      <span className={r.credit_balance > 0 ? 'text-emerald-600 font-medium' : ''}>${(r.credit_balance || 0).toFixed(2)}</span>
     )},
-    { key: 'total_purchases', label: 'Total Purchases', render: (row) => `$${(row.total_purchases || 0).toFixed(2)}` },
-    { key: 'actions', label: '', render: (row) => (
-      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openForm(row); }}>
-        <Edit2 className="w-4 h-4" />
-      </Button>
-    )},
+    { key: 'total_purchases', label: 'Total Spent', align: 'right', render: (r) => `$${(r.total_purchases || 0).toFixed(2)}` },
+    { key: 'actions', label: '', type: 'actions', align: 'right', actions: [{ label: 'Edit', icon: null, onClick: (r) => openForm(r) }] },
   ];
 
   return (
-    <div>
-      <PageHeader title="Customers" subtitle={`${customers.length} registered customers`}>
-        <Button onClick={() => openForm()}>
-          <Plus className="w-4 h-4 mr-2" /> Add Customer
-        </Button>
-      </PageHeader>
-
-      <DataTable columns={columns} data={customers} isLoading={isLoading} searchField="name" />
+    <EnterprisePageLayout
+      title="Customers"
+      description="Manage your customer database, loyalty points, and store credit."
+      primaryAction={{ label: 'Add Customer', icon: Plus, onClick: () => openForm() }}
+      kpis={kpis}
+    >
+      <AdvancedDataTable
+        tableId="customers"
+        columns={columns}
+        data={customers}
+        isLoading={isLoading}
+        emptyMessage="No customers yet. Add your first customer to start tracking loyalty."
+      />
 
       <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditing(null); }}>
         <DialogContent>
@@ -99,6 +103,6 @@ export default function Customers() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </EnterprisePageLayout>
   );
 }

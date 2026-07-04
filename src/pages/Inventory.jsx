@@ -1,39 +1,26 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Package, MapPin, AlertTriangle, Plus } from 'lucide-react';
+import { Package, MapPin, AlertTriangle, Boxes, Layers, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import PageHeader from '@/components/shared/PageHeader';
-import DataTable from '@/components/shared/DataTable';
+import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
+import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import Field from '@/components/shared/Field';
 
 export default function Inventory() {
-  const [locationFilter, setLocationFilter] = useState('all');
   const [showAdjust, setShowAdjust] = useState(false);
   const [adjustItem, setAdjustItem] = useState(null);
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
   const queryClient = useQueryClient();
 
-  const { data: stockLevels = [], isLoading } = useQuery({
-    queryKey: ['stock-levels'],
-    queryFn: () => base44.entities.StockLevel.list(),
-  });
-
-  const { data: products = [] } = useQuery({
-    queryKey: ['products'],
-    queryFn: () => base44.entities.Product.list(),
-  });
-
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
-  });
+  const { data: stockLevels = [], isLoading } = useQuery({ queryKey: ['stock-levels'], queryFn: () => base44.entities.StockLevel.list() });
+  const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: () => base44.entities.Product.list() });
+  const { data: locations = [] } = useQuery({ queryKey: ['locations'], queryFn: () => base44.entities.Location.list() });
 
   const adjustMutation = useMutation({
     mutationFn: async ({ stockLevel, newQty, reason }) => {
@@ -41,25 +28,16 @@ export default function Inventory() {
       const location = locations.find(l => l.id === stockLevel.location_id);
       await base44.entities.StockLevel.update(stockLevel.id, { quantity: newQty });
       await base44.entities.InventoryLog.create({
-        product_id: stockLevel.product_id,
-        product_name: product?.name || '',
-        location_id: stockLevel.location_id,
-        location_name: location?.name || '',
-        type: 'adjustment',
-        quantity_change: newQty - stockLevel.quantity,
-        quantity_before: stockLevel.quantity,
-        quantity_after: newQty,
-        notes: reason,
+        product_id: stockLevel.product_id, product_name: product?.name || '',
+        location_id: stockLevel.location_id, location_name: location?.name || '',
+        type: 'adjustment', quantity_change: newQty - stockLevel.quantity,
+        quantity_before: stockLevel.quantity, quantity_after: newQty, notes: reason,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stock-levels'] });
-      setShowAdjust(false);
-      setAdjustItem(null);
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['stock-levels'] }); setShowAdjust(false); setAdjustItem(null); },
   });
 
-  const enriched = stockLevels.map(sl => {
+  const enriched = useMemo(() => stockLevels.map(sl => {
     const product = products.find(p => p.id === sl.product_id);
     const location = locations.find(l => l.id === sl.location_id);
     return {
@@ -71,61 +49,66 @@ export default function Inventory() {
       reorder_level: product?.reorder_level || 10,
       is_low: sl.quantity <= (product?.reorder_level || 10),
     };
-  });
+  }), [stockLevels, products, locations]);
 
-  const filtered = locationFilter === 'all' ? enriched : enriched.filter(e => e.location_id === locationFilter);
+  const totalUnits = enriched.reduce((a, e) => a + (e.quantity || 0), 0);
+  const lowStockCount = enriched.filter(e => e.is_low).length;
+  const damagedCount = enriched.reduce((a, e) => a + (e.damaged_quantity || 0), 0);
+
+  const kpis = [
+    { label: 'Stock Records', value: enriched.length, icon: Boxes },
+    { label: 'Total Units', value: totalUnits.toLocaleString(), icon: Package },
+    { label: 'Low Stock', value: lowStockCount, icon: AlertTriangle },
+    { label: 'Damaged', value: damagedCount, icon: Layers },
+  ];
+
+  const locationOptions = useMemo(() => locations.map(l => ({ value: l.name, label: l.name })), [locations]);
 
   const columns = [
-    { key: 'product_name', label: 'Product', render: (row) => (
+    { key: 'product_name', label: 'Product', render: (r) => (
       <div>
-        <p className="font-medium">{row.product_name}</p>
-        <p className="text-xs text-muted-foreground">{row.product_sku}</p>
+        <p className="font-medium">{r.product_name}</p>
+        <p className="text-xs text-muted-foreground">{r.product_sku}</p>
       </div>
     )},
-    { key: 'location_name', label: 'Location', render: (row) => (
+    { key: 'location_name', label: 'Location', filterType: 'select', filterOptions: locationOptions, render: (r) => (
       <div className="flex items-center gap-2">
         <MapPin className="w-3 h-3 text-muted-foreground" />
-        <span>{row.location_name}</span>
-        <Badge variant="secondary" className="text-xs capitalize">{row.location_type}</Badge>
+        <span>{r.location_name}</span>
+        <Badge variant="secondary" className="text-xs capitalize">{r.location_type}</Badge>
       </div>
     )},
-    { key: 'quantity', label: 'In Stock', render: (row) => (
-      <div className="flex items-center gap-2">
-        <span className={`font-semibold ${row.is_low ? 'text-red-500' : ''}`}>{row.quantity}</span>
-        {row.is_low && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+    { key: 'quantity', label: 'In Stock', align: 'right', render: (r) => (
+      <div className="flex items-center gap-2 justify-end">
+        <span className={`font-semibold ${r.is_low ? 'text-red-500' : ''}`}>{r.quantity}</span>
+        {r.is_low && <AlertTriangle className="w-4 h-4 text-amber-500" />}
       </div>
     )},
-    { key: 'damaged_quantity', label: 'Damaged', render: (row) => row.damaged_quantity || 0 },
-    { key: 'batch_number', label: 'Batch', render: (row) => row.batch_number || '—' },
-    { key: 'expiry_date', label: 'Expiry', render: (row) => row.expiry_date || '—' },
-    { key: 'actions', label: '', render: (row) => (
-      <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setAdjustItem(row); setAdjustQty(String(row.quantity)); setShowAdjust(true); }}>
-        Adjust
-      </Button>
-    )},
+    { key: 'damaged_quantity', label: 'Damaged', align: 'right', render: (r) => r.damaged_quantity || 0 },
+    { key: 'batch_number', label: 'Batch', render: (r) => r.batch_number || '—' },
+    { key: 'expiry_date', label: 'Expiry', render: (r) => r.expiry_date || '—' },
+    { key: 'actions', label: '', type: 'actions', align: 'right', actions: [
+      { label: 'Adjust', icon: SlidersHorizontal, onClick: (r) => { setAdjustItem(r); setAdjustQty(String(r.quantity)); setShowAdjust(true); } },
+    ]},
   ];
 
   return (
-    <div>
-      <PageHeader title="Inventory" subtitle="Track stock levels across all locations">
-        <Select value={locationFilter} onValueChange={setLocationFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="All Locations" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Locations</SelectItem>
-            {locations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </PageHeader>
-
-      <DataTable columns={columns} data={filtered} isLoading={isLoading} searchField="product_name" />
+    <EnterprisePageLayout
+      title="Inventory"
+      description="Track stock levels across all warehouses and store locations."
+      kpis={kpis}
+    >
+      <AdvancedDataTable
+        tableId="inventory"
+        columns={columns}
+        data={enriched}
+        isLoading={isLoading}
+        emptyMessage="No stock records. Receive purchase orders to build up inventory."
+      />
 
       <Dialog open={showAdjust} onOpenChange={setShowAdjust}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Adjust Stock — {adjustItem?.product_name}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Adjust Stock — {adjustItem?.product_name}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <Field label="Current Quantity" htmlFor="adj-current">
               <Input id="adj-current" value={adjustItem?.quantity ?? ''} readOnly className="bg-muted/50" />
@@ -146,6 +129,6 @@ export default function Inventory() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </EnterprisePageLayout>
   );
 }

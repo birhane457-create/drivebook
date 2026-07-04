@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, Edit2 } from 'lucide-react';
+import { Plus, Building2, Users, Wallet, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import PageHeader from '@/components/shared/PageHeader';
-import DataTable from '@/components/shared/DataTable';
+import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
+import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import StatusBadge from '@/components/shared/StatusBadge';
 
 export default function Suppliers() {
@@ -22,43 +22,55 @@ export default function Suppliers() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (data) => editing
-      ? base44.entities.Supplier.update(editing.id, data)
-      : base44.entities.Supplier.create(data),
+    mutationFn: (data) => editing ? base44.entities.Supplier.update(editing.id, data) : base44.entities.Supplier.create(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['suppliers'] }); setShowForm(false); setEditing(null); },
   });
 
   const openForm = (supplier = null) => {
     setEditing(supplier);
-    setForm(supplier ? { name: supplier.name, contact_person: supplier.contact_person || '', email: supplier.email || '', phone: supplier.phone || '', address: supplier.address || '' } : { name: '', contact_person: '', email: '', phone: '', address: '' });
+    setForm(supplier
+      ? { name: supplier.name, contact_person: supplier.contact_person || '', email: supplier.email || '', phone: supplier.phone || '', address: supplier.address || '' }
+      : { name: '', contact_person: '', email: '', phone: '', address: '' });
     setShowForm(true);
   };
 
+  const activeCount = suppliers.filter(s => s.is_active !== false).length;
+  const totalPayable = suppliers.reduce((a, s) => a + (s.balance || 0), 0);
+  const withBalance = suppliers.filter(s => (s.balance || 0) > 0).length;
+
+  const kpis = [
+    { label: 'Suppliers', value: suppliers.length, icon: Building2 },
+    { label: 'Active', value: activeCount, icon: Users },
+    { label: 'Outstanding', value: `$${totalPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Wallet },
+    { label: 'With Balance', value: withBalance, icon: AlertTriangle },
+  ];
+
   const columns = [
-    { key: 'name', label: 'Supplier', render: (row) => <span className="font-medium">{row.name}</span> },
-    { key: 'contact_person', label: 'Contact', render: (row) => row.contact_person || '—' },
-    { key: 'email', label: 'Email', render: (row) => row.email || '—' },
-    { key: 'phone', label: 'Phone', render: (row) => row.phone || '—' },
-    { key: 'balance', label: 'Balance', render: (row) => (
-      <span className={row.balance > 0 ? 'text-red-500 font-medium' : ''}>${(row.balance || 0).toFixed(2)}</span>
+    { key: 'name', label: 'Supplier', render: (r) => <span className="font-medium">{r.name}</span> },
+    { key: 'contact_person', label: 'Contact', render: (r) => r.contact_person || '—' },
+    { key: 'email', label: 'Email', render: (r) => r.email || '—' },
+    { key: 'phone', label: 'Phone', render: (r) => r.phone || '—' },
+    { key: 'balance', label: 'Balance', align: 'right', filterType: 'select', filterOptions: [{ value: 'due', label: 'Has balance' }], render: (r) => (
+      <span className={r.balance > 0 ? 'text-red-500 font-medium' : ''}>${(r.balance || 0).toFixed(2)}</span>
     )},
-    { key: 'is_active', label: 'Status', render: (row) => <StatusBadge status={row.is_active !== false ? 'active' : 'inactive'} /> },
-    { key: 'actions', label: '', render: (row) => (
-      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openForm(row); }}>
-        <Edit2 className="w-4 h-4" />
-      </Button>
-    )},
+    { key: 'is_active', label: 'Status', filterType: 'select', filterOptions: [{ value: 'true', label: 'Active' }, { value: 'false', label: 'Inactive' }], render: (r) => <StatusBadge status={r.is_active !== false ? 'active' : 'inactive'} /> },
+    { key: 'actions', label: '', type: 'actions', align: 'right', actions: [{ label: 'Edit', icon: null, onClick: (r) => openForm(r) }] },
   ];
 
   return (
-    <div>
-      <PageHeader title="Suppliers" subtitle="Manage your vendor database">
-        <Button onClick={() => openForm()}>
-          <Plus className="w-4 h-4 mr-2" /> Add Supplier
-        </Button>
-      </PageHeader>
-
-      <DataTable columns={columns} data={suppliers} isLoading={isLoading} searchField="name" />
+    <EnterprisePageLayout
+      title="Suppliers"
+      description="Manage your vendor database and outstanding payables."
+      primaryAction={{ label: 'Add Supplier', icon: Plus, onClick: () => openForm() }}
+      kpis={kpis}
+    >
+      <AdvancedDataTable
+        tableId="suppliers"
+        columns={columns}
+        data={suppliers}
+        isLoading={isLoading}
+        emptyMessage="No suppliers yet. Add your first vendor to start purchasing."
+      />
 
       <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditing(null); }}>
         <DialogContent>
@@ -75,6 +87,6 @@ export default function Suppliers() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </EnterprisePageLayout>
   );
 }
