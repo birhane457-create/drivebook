@@ -8,6 +8,7 @@ import PageLoader from '@/components/shared/PageLoader';
 import FilterBar from '@/components/shared/FilterBar';
 import StatusBadge from '@/components/shared/StatusBadge';
 import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
+import FormPatternsDemo from '@/components/forms/FormPatternsDemo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -217,28 +218,8 @@ export default function DesignSystem() {
         </SectionCard>
 
         {/* Forms */}
-        <SectionCard title="Form Controls" description="Consistent inputs, labels, selects" icon={Edit}>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-1.5 block">Product Name</Label>
-              <Input placeholder="Enter product name" />
-            </div>
-            <div>
-              <Label className="mb-1.5 block">Category</Label>
-              <Select defaultValue="all">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  <SelectItem value="electronics">Electronics</SelectItem>
-                  <SelectItem value="office">Office</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="mb-1.5 block">Progress Indicator</Label>
-              <Progress value={68} className="mt-2" />
-            </div>
-          </div>
+        <SectionCard title="Form Patterns" description="Validation UI, required fields, help text, sections, tabs, wizard forms, auto-save & unsaved changes warning" icon={Edit}>
+          <FormPatternsDemo />
         </SectionCard>
 
         {/* Charts */}
