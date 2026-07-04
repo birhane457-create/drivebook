@@ -5,6 +5,7 @@ import ActivityFeed from '@/components/enterprise/ActivityFeed';
 import { Star, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StatCard from '@/components/shared/StatCard';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -49,6 +50,7 @@ export default function EnterprisePageLayout({
   rightPanel,
   activityFeed,
   activity,
+  isLoading,
   isFavorite,
   onToggleFavorite,
   children,
@@ -123,16 +125,18 @@ export default function EnterprisePageLayout({
       {/* 6. KPIs */}
       {showKpis && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {kpis.map((kpi, idx) => (
-            <StatCard
-              key={idx}
-              title={kpi.label}
-              value={kpi.value}
-              icon={kpi.icon}
-              trend={kpi.trend}
-              trendUp={kpi.trendUp}
-            />
-          ))}
+          {isLoading
+            ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)
+            : kpis.map((kpi, idx) => (
+                <StatCard
+                  key={idx}
+                  title={kpi.label}
+                  value={kpi.value}
+                  icon={kpi.icon}
+                  trend={kpi.trend}
+                  trendUp={kpi.trendUp}
+                />
+              ))}
         </div>
       )}
 
@@ -147,7 +151,13 @@ export default function EnterprisePageLayout({
       {/* 9-11. Content + Right Panel */}
       <div className={cn("flex gap-6", !hasRightPanel && "flex-col")}>
         <div className={cn("flex-1 min-w-0", hasRightPanel && "max-w-[calc(100%-340px)]")}>
-          {children}
+          {isLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-10 w-full max-w-sm rounded-lg" />
+              <Skeleton className="h-72 w-full rounded-xl" />
+              <Skeleton className="h-72 w-full rounded-xl" />
+            </div>
+          ) : children}
         </div>
         {hasRightPanel && (
           <aside className="w-80 flex-shrink-0 hidden xl:block">
