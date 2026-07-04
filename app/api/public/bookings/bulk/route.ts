@@ -768,17 +768,15 @@ export async function POST(req: NextRequest) {
         const { emailService } = await import('@/lib/services/email');
 
         // Format lesson details for email
-        const dateStr = startTime.toLocaleDateString('en-AU', {
+        const dateStr = startTime.toLocaleDateString('en-US', {
           weekday: 'long',
           month: 'long',
-          day: 'numeric',
-          timeZone: 'Australia/Perth',
+          day: 'numeric'
         });
         
-        const timeStr = startTime.toLocaleTimeString('en-AU', {
+        const timeStr = startTime.toLocaleTimeString('en-US', {
           hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Australia/Perth',
+          minute: '2-digit'
         });
         
         const durationHours = firstLessonDurationHours;

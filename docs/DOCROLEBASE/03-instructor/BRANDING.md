@@ -1,4 +1,4 @@
-# Instructor Branding
+﻿# Instructor Branding
 
 **Route:** `/dashboard/branding`  
 **Auth required:** INSTRUCTOR role (PRO or BUSINESS tier for full access)  
@@ -14,7 +14,7 @@
 | Brand logo | `brandLogo` (Cloudinary URL) | PRO / BUSINESS |
 | Primary color | `brandColorPrimary` (hex) | All tiers |
 | Secondary color | `brandColorSecondary` (hex) | All tiers |
-| Subdomain slug | `customDomain` | All tiers |
+| Subdomain slug | `customSlug` | All tiers |
 | Social links | `whatsapp`, `instagram`, `facebook` | All tiers |
 | Show branding on booking page | `showBrandingOnBookingPage` | PRO / BUSINESS |
 
@@ -22,7 +22,7 @@
 
 ## Tier Gate
 
-BASIC tier instructors see an "Upgrade to PRO" wall for logo upload and the `showBrandingOnBookingPage` toggle. Color pickers and subdomain are available to all tiers.
+BASIC tier instructors see an upgrade prompt for logo upload and the `showBrandingOnBookingPage` toggle. Color pickers and slug are available to all tiers. PRO, STUDIO, and BUSINESS tiers unlock full branding.
 
 The gate is enforced client-side on the branding page. The API itself allows all tiers to save branding data.
 
@@ -47,8 +47,8 @@ The branding page shows a live preview of how the subdomain page will look with 
 
 ## Subdomain
 
-The `customDomain` field sets the slug for the instructor's public booking page:
-- URL: `[slug].drivebook.com.au` → served by `/subdomain/[slug]`
+The `customSlug` field sets the slug for the instructor's public booking page:
+- URL: `[slug].drivebook.com.au` â†’ served by `/subdomain/[slug]`
 - Must be unique across all instructors
 - Lowercase, alphanumeric, hyphens allowed
 
@@ -65,6 +65,6 @@ Displayed on the subdomain page as clickable icons:
 
 ## Related
 
-- [SUBDOMAIN_PAGE.md](../01-public/SUBDOMAIN_PAGE.md) — How branding appears publicly
-- `docs/07-subscriptions/TIERS.md` — Feature access by tier
-- `docs/04-business/DOMAIN_SETUP.md` — Custom domain for BUSINESS tier
+- [SUBDOMAIN_PAGE.md](../01-public/SUBDOMAIN_PAGE.md) â€” How branding appears publicly
+- `docs/07-subscriptions/TIERS.md` â€” Feature access by tier
+- `docs/04-business/DOMAIN_SETUP.md` â€” Custom domain for BUSINESS tier

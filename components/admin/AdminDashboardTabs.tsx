@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -16,7 +16,7 @@ import AdminAIChat from './AdminAIChat'
 import BookingPaymentStatus from './BookingPaymentStatus'
 import InstructorRetentionStatus from './InstructorRetentionStatus'
 
-// ── Types passed in from the server component ────────────────────────────────
+// â”€â”€ Types passed in from the server component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface DashboardProps {
   // Stats
   totalInstructors: number
@@ -69,7 +69,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
 
   return (
     <div>
-      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Tab bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex gap-1 border-b border-slate-800 mb-6 overflow-x-auto">
         {TABS.map((tab) => (
           <button
@@ -93,7 +93,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
         ))}
       </div>
 
-      {/* ── Overview tab ────────────────────────────────────────────────── */}
+      {/* â”€â”€ Overview tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
 
@@ -104,28 +104,28 @@ export default function AdminDashboardTabs(props: DashboardProps) {
           {alertCount > 0 && (
             <div className="space-y-2">
               {pendingInstructors > 0 && (
-                <Alert color="amber" icon="👨‍🏫" href="/admin/instructors?status=PENDING" action="Review now →">
+                <Alert color="amber" icon="ðŸ‘¨â€ðŸ«" href="/admin/instructors?status=PENDING" action="Review now â†’">
                   {pendingInstructors} instructor{pendingInstructors > 1 ? 's' : ''} awaiting approval
                 </Alert>
               )}
               {endedConfirmed > 0 && (
-                <Alert color="violet" icon="🕐" href="/admin/bookings" action="Go to Bookings →">
-                  {endedConfirmed} lesson{endedConfirmed > 1 ? 's' : ''} ended but still CONFIRMED — mark complete to release payouts
+                <Alert color="violet" icon="ðŸ•" href="/admin/bookings" action="Go to Bookings â†’">
+                  {endedConfirmed} lesson{endedConfirmed > 1 ? 's' : ''} ended but still CONFIRMED â€” mark complete to release payouts
                 </Alert>
               )}
               {expiringDocs > 0 && (
-                <Alert color="yellow" icon="⚠️" href="/admin/documents" action="Review Docs →">
+                <Alert color="yellow" icon="âš ï¸" href="/admin/documents" action="Review Docs â†’">
                   {expiringDocs} instructor{expiringDocs > 1 ? 's have' : ' has'} documents expiring within 30 days
                 </Alert>
               )}
               {unverifiedABNs > 0 && (
-                <Alert color="orange" icon="🔴" href="/admin/instructors" action="Verify ABNs →">
-                  {unverifiedABNs} approved instructor{unverifiedABNs > 1 ? 's have' : ' has'} unverified ABN — 47% withholding applies
+                <Alert color="orange" icon="ðŸ”´" href="/admin/instructors" action="Verify ABNs â†’">
+                  {unverifiedABNs} approved instructor{unverifiedABNs > 1 ? 's have' : ' has'} unverified ABN â€” 47% withholding applies
                 </Alert>
               )}
               {openDisputes > 0 && (
-                <Alert color="red" icon="⚠️" href="/admin/disputes" action="Review Disputes →">
-                  {openDisputes} open chargeback{openDisputes > 1 ? 's' : ''} — payouts frozen pending resolution
+                <Alert color="red" icon="âš ï¸" href="/admin/disputes" action="Review Disputes â†’">
+                  {openDisputes} open chargeback{openDisputes > 1 ? 's' : ''} â€” payouts frozen pending resolution
                 </Alert>
               )}
             </div>
@@ -134,7 +134,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
           {/* Stats grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard icon={<Users className="w-4 h-4 text-violet-400" />} label="Instructors" value={totalInstructors}
-              sub={`${approvedInstructors} approved · ${pendingInstructors} pending`} />
+              sub={`${approvedInstructors} approved Â· ${pendingInstructors} pending`} />
             <StatCard icon={<Calendar className="w-4 h-4 text-blue-400" />} label="Bookings" value={totalBookings}
               sub={`+${bookingsThisMonth} this month`} />
             <StatCard icon={<Users className="w-4 h-4 text-emerald-400" />} label="Students" value={totalClients} />
@@ -181,8 +181,8 @@ export default function AdminDashboardTabs(props: DashboardProps) {
           {/* Recent bookings */}
           <div className="bg-slate-900 rounded-xl border border-slate-800">
             <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-slate-100">Recent Bookings (Top 3)</h2>
-              <Link href="/admin/bookings" className="text-xs text-blue-400 hover:text-blue-300 transition">View all →</Link>
+              <h2 className="text-sm font-semibold text-slate-100">Recent Bookings</h2>
+              <Link href="/admin/bookings" className="text-xs text-blue-400 hover:text-blue-300 transition">View all â†’</Link>
             </div>
             
             {/* Desktop table view */}
@@ -198,17 +198,17 @@ export default function AdminDashboardTabs(props: DashboardProps) {
                 <tbody className="divide-y divide-slate-800">
                   {recentBookings.length === 0 ? (
                     <tr><td colSpan={6} className="px-5 py-8 text-center text-slate-500">No bookings yet</td></tr>
-                  ) : recentBookings.slice(0, 3).map((b: any) => {
+                  ) : recentBookings.slice(0, 5).map((b: any) => {
                     let sourceBadge = 'Platform'
                     let sourceBadgeColor = 'bg-blue-900/40 text-blue-300'
                     if (b.source === 'offline') {
-                      sourceBadge = `Offline · ${b.offlinePaymentMethod === 'cash' ? 'Cash' : b.offlinePaymentMethod === 'bank_transfer' ? 'Bank' : 'Other'}`
+                      sourceBadge = `Offline Â· ${b.offlinePaymentMethod === 'cash' ? 'Cash' : b.offlinePaymentMethod === 'bank_transfer' ? 'Bank' : 'Other'}`
                       sourceBadgeColor = 'bg-amber-900/40 text-amber-300'
                     } else if (b.paymentIntentId) {
-                      sourceBadge = 'Platform · Stripe'
+                      sourceBadge = 'Platform Â· Stripe'
                       sourceBadgeColor = 'bg-blue-900/40 text-blue-300'
                     } else if (b.status === 'CONFIRMED' || b.status === 'COMPLETED') {
-                      sourceBadge = 'Platform · Wallet'
+                      sourceBadge = 'Platform Â· Wallet'
                       sourceBadgeColor = 'bg-emerald-900/40 text-emerald-300'
                     } else if (b.status === 'PENDING_PAYMENT') {
                       sourceBadge = 'Awaiting Payment'
@@ -217,12 +217,12 @@ export default function AdminDashboardTabs(props: DashboardProps) {
                     return (
                       <tr key={b.id} className="hover:bg-slate-800/60 transition">
                         <td className="px-5 py-3">
-                          <p className="font-medium text-slate-100">{b.client?.name || b.clientName || '—'}</p>
+                          <p className="font-medium text-slate-100">{b.client?.name || b.clientName || 'â€”'}</p>
                           <p className="text-xs text-slate-500">{b.client?.phone || b.clientPhone || ''}</p>
                         </td>
-                        <td className="px-5 py-3 text-slate-300">{b.instructor?.name || '—'}</td>
+                        <td className="px-5 py-3 text-slate-300">{b.instructor?.name || 'â€”'}</td>
                         <td className="px-5 py-3 text-slate-500">
-                          {b.startTime ? new Date(b.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}
+                          {b.startTime ? new Date(b.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : 'â€”'}
                         </td>
                         <td className="px-5 py-3">
                           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${STATUS_COLORS[b.status] ?? 'bg-slate-800 text-slate-400'}`}>
@@ -248,17 +248,17 @@ export default function AdminDashboardTabs(props: DashboardProps) {
                 <div className="px-5 py-8 text-center text-slate-500">No bookings yet</div>
               ) : (
                 <ul className="divide-y divide-slate-800">
-                  {recentBookings.slice(0, 3).map((b: any) => {
+                  {recentBookings.slice(0, 5).map((b: any) => {
                     let sourceBadge = 'Platform'
                     let sourceBadgeColor = 'bg-blue-900/40 text-blue-300'
                     if (b.source === 'offline') {
-                      sourceBadge = `Offline · ${b.offlinePaymentMethod === 'cash' ? 'Cash' : b.offlinePaymentMethod === 'bank_transfer' ? 'Bank' : 'Other'}`
+                      sourceBadge = `Offline Â· ${b.offlinePaymentMethod === 'cash' ? 'Cash' : b.offlinePaymentMethod === 'bank_transfer' ? 'Bank' : 'Other'}`
                       sourceBadgeColor = 'bg-amber-900/40 text-amber-300'
                     } else if (b.paymentIntentId) {
-                      sourceBadge = 'Platform · Stripe'
+                      sourceBadge = 'Platform Â· Stripe'
                       sourceBadgeColor = 'bg-blue-900/40 text-blue-300'
                     } else if (b.status === 'CONFIRMED' || b.status === 'COMPLETED') {
-                      sourceBadge = 'Platform · Wallet'
+                      sourceBadge = 'Platform Â· Wallet'
                       sourceBadgeColor = 'bg-emerald-900/40 text-emerald-300'
                     } else if (b.status === 'PENDING_PAYMENT') {
                       sourceBadge = 'Awaiting Payment'
@@ -269,15 +269,15 @@ export default function AdminDashboardTabs(props: DashboardProps) {
                         <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium text-slate-100 truncate">{b.client?.name || b.clientName || '—'}</p>
+                              <p className="font-medium text-slate-100 truncate">{b.client?.name || b.clientName || 'â€”'}</p>
                               <p className="text-xs text-slate-500">{b.client?.phone || b.clientPhone || ''}</p>
                             </div>
                             <p className="font-medium text-slate-100 shrink-0">${(b.price || 0).toFixed(2)}</p>
                           </div>
                           <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="text-slate-400">{b.instructor?.name || '—'}</span>
+                            <span className="text-slate-400">{b.instructor?.name || 'â€”'}</span>
                             <span className="text-slate-500">
-                              {b.startTime ? new Date(b.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}
+                              {b.startTime ? new Date(b.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : 'â€”'}
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-2">
@@ -299,7 +299,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
         </div>
       )}
 
-      {/* ── Operations tab ──────────────────────────────────────────────── */}
+      {/* â”€â”€ Operations tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'operations' && (
         <div className="space-y-6">
           <AdminDailySummary />
@@ -309,7 +309,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
         </div>
       )}
 
-      {/* ── Intelligence tab ────────────────────────────────────────────── */}
+      {/* â”€â”€ Intelligence tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'intelligence' && (
         <div className="space-y-6">
           <AdminWeeklyReport />
@@ -318,7 +318,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
         </div>
       )}
 
-      {/* ── Risk tab ────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Risk tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'risk' && (
         <div className="space-y-6">
           <AdminInstructorRisk />
@@ -328,7 +328,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
   )
 }
 
-// ── Small helpers ────────────────────────────────────────────────────────────
+// â”€â”€ Small helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function StatCard({ icon, label, value, sub, valueColor = 'text-slate-100' }: {
   icon: React.ReactNode

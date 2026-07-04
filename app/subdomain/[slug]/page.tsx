@@ -60,6 +60,10 @@ export async function generateMetadata({
       description,
       images: instructor.profileImage ? [instructor.profileImage] : [],
     },
+    alternates: {
+      // Canonical points to the subdomain URL, not the internal /subdomain/ rewrite path
+      canonical: `https://${params.slug}.drivebook.com.au`,
+    },
   };
 }
 

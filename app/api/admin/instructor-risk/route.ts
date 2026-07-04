@@ -195,7 +195,7 @@ export async function GET(req: NextRequest) {
       flags.push({ label: 'Stripe onboarding incomplete', severity: 'medium', points: 8 })
     }
 
-    // 5. Expiring documents within 30 days (max 15pts)
+    // 5. Expiring documents within 30 days (max 15pts total across all docs)
     const expiryChecks = [
       { field: 'Driving licence', date: instructor.licenseExpiry },
       { field: 'Insurance policy', date: instructor.insuranceExpiry },
@@ -203,24 +203,23 @@ export async function GET(req: NextRequest) {
       { field: 'Working With Children Check', date: instructor.wwcCheckExpiry },
     ]
 
+    let docPoints = 0
     for (const check of expiryChecks) {
       if (!check.date) continue
       const daysLeft = Math.ceil((check.date.getTime() - now.getTime()) / 86400000)
       if (daysLeft <= 0) {
-        riskScore += 15
         flags.push({ label: `${check.field} has expired`, severity: 'high', points: 15 })
-        break // one expired doc is enough to max this signal
-      } else if (daysLeft <= 14) {
-        riskScore += 12
-        flags.push({ label: `${check.field} expires in ${daysLeft} days`, severity: 'high', points: 12 })
-      } else if (daysLeft <= 30) {
-        const pts = flags.some(f => f.label.includes('expires')) ? 0 : 8
-        if (pts > 0) {
-          riskScore += pts
-          flags.push({ label: `${check.field} expires in ${daysLeft} days`, severity: 'medium', points: pts })
-        }
+        docPoints = 15 // max — expired doc already caps the signal
+      } else if (daysLeft <= 14 && docPoints < 15) {
+        const pts = Math.min(12, 15 - docPoints)
+        docPoints = Math.min(15, docPoints + pts)
+        flags.push({ label: `${check.field} expires in ${daysLeft} days`, severity: 'high', points: pts })
+      } else if (daysLeft <= 30 && docPoints < 8) {
+        flags.push({ label: `${check.field} expires in ${daysLeft} days`, severity: 'medium', points: 8 })
+        docPoints = Math.min(15, docPoints + 8)
       }
     }
+    riskScore += docPoints
 
     // 6. Low booking volume trend (max 5pts)
     if (lw > 0 && tw < lw * 0.5) {

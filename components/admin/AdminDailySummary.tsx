@@ -205,10 +205,10 @@ export default function AdminDailySummary() {
                 <span className="text-xs text-slate-400">Revenue</span>
               </div>
               <p className="text-2xl font-bold text-slate-100">
-                ${y.revenueCollected > 0 ? (y.revenueCollected / 100).toFixed(0) : y.revenueCollected.toFixed(0)}
+                ${y.revenueCollected.toFixed(0)}
               </p>
               <p className="text-xs text-slate-500 mt-0.5">
-                ${y.platformFee > 0 ? (y.platformFee / 100).toFixed(0) : '0'} platform fee
+                ${y.platformFee.toFixed(0)} platform fee
               </p>
             </div>
 

@@ -44,6 +44,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: `${BASE_URL}/blog/tag/${params.tag}`,
     },
     alternates: { canonical: `${BASE_URL}/blog/tag/${params.tag}` },
+    // Tag archives are navigation aids — noindex keeps crawl budget on the actual posts
+    robots: { index: false, follow: true },
   }
 }
 

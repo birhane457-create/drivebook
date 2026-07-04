@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
           status: { in: ['CONFIRMED', 'COMPLETED'] },
           endTime: { lte: bufferCutoff },
           deletedAt: null,
+          source: { not: 'offline' }, // offline/cash bookings handled by instructor — no platform payout
         },
       },
       include: {
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
           status: { in: ['CONFIRMED', 'COMPLETED'] },
           endTime: { lte: bufferCutoff },
           deletedAt: null,
+          source: { not: 'offline' },
         },
       },
     });

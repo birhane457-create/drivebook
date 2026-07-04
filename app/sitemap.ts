@@ -48,12 +48,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly',
       priority: 0.5,
     },
-    {
-      url: `${BASE_URL}/register`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
+    // /register is intentionally excluded — it's in robots.txt disallow and doesn't need indexing
     {
       url: `${BASE_URL}/blog`,
       lastModified: now,
@@ -150,8 +145,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
 
   // ── Instructor subdomain pages — the highest-value SEO pages ────────────────
-  // Each approved instructor gets their own indexable page at /subdomain/[slug]
-  // which already has JSON-LD structured data, title, and description.
+  // Each approved instructor gets their own indexable page.
+  // Canonical URL is [slug].drivebook.com.au — not the internal /subdomain/[slug] rewrite path.
+  // This is what Google should index and what the subdomain page's canonical tag points to.
   let instructorPages: MetadataRoute.Sitemap = []
   try {
     const instructors = await prisma.instructor.findMany({
@@ -169,10 +165,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       },
     })
 
+    // Use the subdomain URL as the canonical — middlewar rewrites it to /subdomain/[slug] internally
+    const domainBase = BASE_URL.replace('https://', 'https://').replace('http://', 'http://')
+    const domainSuffix = domainBase.replace(/^https?:\/\//, '')
+
     instructorPages = instructors.map((i) => {
       const slug = i.customSlug || i.id
       return {
-        url: `${BASE_URL}/subdomain/${slug}`,
+        url: `https://${slug}.${domainSuffix}`,
         lastModified: now,
         changeFrequency: 'weekly' as const,
         priority: 0.8,
@@ -184,7 +184,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // ── Blog posts ──────────────────────────────────────────────────────────────
   let blogPages: MetadataRoute.Sitemap = []
-  let tagPages: MetadataRoute.Sitemap = []
   try {
     const posts = getAllPosts()
     blogPages = posts.map(post => ({
@@ -194,20 +193,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.75,
     }))
 
-    // Unique tag archive pages
-    const allTags = new Set<string>()
-    posts.forEach(p => p.tags?.forEach(t => allTags.add(
-      encodeURIComponent(t.toLowerCase().replace(/\s+/g, '-'))
-    )))
-    tagPages = Array.from(allTags).map(tagSlug => ({
-      url: `${BASE_URL}/blog/tag/${tagSlug}`,
-      lastModified: now,
-      changeFrequency: 'weekly' as const,
-      priority: 0.6,
-    }))
+    // Tag archive pages are noindexed (navigation aids, not content pages)
+    // — excluded from sitemap to avoid submitting noindexed URLs
   } catch {
     // content dir unavailable at build time — skip blog entries
   }
 
-  return [...staticPages, ...blogPages, ...tagPages, ...instructorPages]
+  return [...staticPages, ...blogPages, ...instructorPages]
 }

@@ -18,23 +18,42 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get all pending transactions grouped by instructor
-    const pendingTransactions = await (prisma as any).transaction.findMany({
-      where: { status: 'PENDING' },
+    // Get all settled BOOKING_PAYMENT transactions not yet covered by a payout,
+    // grouped by instructor. Mirror the eligibility criteria in process-all.
+    const bufferCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    const coveredTxIds = await prisma.payoutTransaction.findMany({
+      where: { payout: { status: { in: ['PAID', 'PROCESSING', 'PENDING_TRANSFER', 'SENT', 'ON_HOLD'] } } },
+      select: { transactionId: true },
+    });
+    const excludeIds = coveredTxIds.map((p) => p.transactionId);
+
+    const pendingTransactions = await prisma.transaction.findMany({
+      where: {
+        status: 'SETTLED',
+        type: 'BOOKING_PAYMENT',
+        id: excludeIds.length ? { notIn: excludeIds } : undefined,
+        booking: {
+          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          endTime: { lte: bufferCutoff },
+          deletedAt: null,
+          source: { not: 'offline' }, // offline/cash bookings are instructor-handled
+        },
+      },
       include: {
-        instructor: {
+        booking: {
           select: {
-            id: true,
-            name: true,
-            phone: true,
-            user: {
+            instructor: {
               select: {
-                email: true
-              }
-            }
-          }
-        }
-      }
+                id: true,
+                name: true,
+                phone: true,
+                user: { select: { email: true } },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (pendingTransactions.length === 0) {
@@ -59,17 +78,19 @@ export async function GET(req: NextRequest) {
     }>();
 
     pendingTransactions.forEach((transaction: any) => {
-      const instructorId = transaction.instructorId;
+      const inst = transaction.booking?.instructor;
+      if (!inst) return;
+      const instructorId = inst.id;
       
       if (!instructorMap.has(instructorId)) {
         instructorMap.set(instructorId, {
           id: instructorId,
-          name: transaction.instructor.name,
-          phone: transaction.instructor.phone,
-          email: transaction.instructor.user.email,
+          name: inst.name,
+          phone: inst.phone,
+          email: inst.user?.email ?? '',
           amount: 0,
           transactionCount: 0,
-          transactionIds: []
+          transactionIds: [],
         });
       }
       

@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+﻿import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import AdminNav from '@/components/admin/AdminNav';
@@ -15,7 +15,7 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 function ConfigRow({ label, value, masked }: { label: string; value?: string; masked?: boolean }) {
-  const display = masked ? '••••••••' : (value || '—');
+  const display = masked ? 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : (value || 'â€”');
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-slate-800 last:border-0">
       <span className="text-sm text-slate-400">{label}</span>
@@ -39,9 +39,6 @@ export default async function AdminSettingsPage() {
   const basicCommission = process.env.BASIC_COMMISSION_RATE || '15';
   const proCommission = process.env.PRO_COMMISSION_RATE || '12';
   const businessCommission = process.env.BUSINESS_COMMISSION_RATE || '10';
-  const basicBonus = process.env.BASIC_NEW_STUDENT_BONUS || '8';
-  const proBonus = process.env.PRO_NEW_STUDENT_BONUS || '10';
-  const businessBonus = process.env.BUSINESS_NEW_STUDENT_BONUS || '12';
   const basicTrial = process.env.BASIC_TRIAL_DAYS || '14';
   const proTrial = process.env.PRO_TRIAL_DAYS || '14';
   const businessTrial = process.env.BUSINESS_TRIAL_DAYS || '30';
@@ -56,9 +53,9 @@ export default async function AdminSettingsPage() {
   const hasRedis = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_URL.length > 0);
 
   const tiers = [
-    { name: 'Basic', color: 'text-slate-300', border: 'border-slate-700', monthly: basicMonthly, annual: basicAnnual, commission: basicCommission, bonus: basicBonus, trial: basicTrial },
-    { name: 'Pro', color: 'text-blue-700', border: 'border-blue-700/50 bg-blue-900/20', monthly: proMonthly, annual: proAnnual, commission: proCommission, bonus: proBonus, trial: proTrial },
-    { name: 'Business', color: 'text-purple-700', border: 'border-violet-700/50 bg-violet-900/20', monthly: businessMonthly, annual: businessAnnual, commission: businessCommission, bonus: businessBonus, trial: businessTrial },
+    { name: 'Basic', color: 'text-slate-300', border: 'border-slate-700', monthly: basicMonthly, annual: basicAnnual, commission: basicCommission, trial: basicTrial },
+    { name: 'Pro', color: 'text-blue-700', border: 'border-blue-700/50 bg-blue-900/20', monthly: proMonthly, annual: proAnnual, commission: proCommission, trial: proTrial },
+    { name: 'Business', color: 'text-purple-700', border: 'border-violet-700/50 bg-violet-900/20', monthly: businessMonthly, annual: businessAnnual, commission: businessCommission, trial: businessTrial },
   ];
 
   return (
@@ -79,11 +76,11 @@ export default async function AdminSettingsPage() {
         {/* Editable: Booking Rules + Notification Matrix */}
         <PlatformSettingsForm />
 
-        {/* Subscription Tiers — read-only reference */}
+        {/* Subscription Tiers â€” read-only reference */}
         <div className="bg-slate-900 rounded-xl border border-slate-800">
           <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
             <h2 className="font-semibold text-slate-100">Subscription Tiers</h2>
-            <span className="text-xs text-slate-500">Prices from env · commissions editable on Pricing page</span>
+            <span className="text-xs text-slate-500">Prices from env Â· commissions editable on Pricing page</span>
           </div>
           <div className="p-6">
             <div className="grid sm:grid-cols-3 gap-4">
@@ -91,10 +88,9 @@ export default async function AdminSettingsPage() {
                 <div key={t.name} className={`border-2 ${t.border} rounded-xl p-4`}>
                   <p className={`font-bold text-sm mb-2 ${t.color}`}>{t.name}</p>
                   <p className="text-2xl font-bold text-slate-100">${t.monthly}<span className="text-sm font-normal text-slate-500">/mo</span></p>
-                  <p className="text-xs text-slate-500 mb-3">${t.annual}/yr · {t.trial}-day trial</p>
+                  <p className="text-xs text-slate-500 mb-3">${t.annual}/yr Â· {t.trial}-day trial</p>
                   <div className="space-y-1 text-xs text-slate-400">
                     <div className="flex justify-between"><span>Commission</span><span className="font-medium">{t.commission}%</span></div>
-                    <div className="flex justify-between"><span>New student bonus</span><span className="font-medium">{t.bonus}%</span></div>
                   </div>
                 </div>
               ))}
@@ -146,7 +142,7 @@ export default async function AdminSettingsPage() {
         <div className="bg-slate-900 rounded-xl border border-slate-800">
           <div className="px-6 py-4 border-b border-slate-800"><h2 className="font-semibold text-slate-100">SMS (Twilio)</h2></div>
           <div className="px-6 py-2">
-            <ConfigRow label="Account SID" value={process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.slice(0, 8) + '••••••••' : undefined} />
+            <ConfigRow label="Account SID" value={process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.slice(0, 8) + 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : undefined} />
             <ConfigRow label="Phone number" value={process.env.TWILIO_PHONE_NUMBER} />
             <ConfigRow label="Auth token" masked />
           </div>

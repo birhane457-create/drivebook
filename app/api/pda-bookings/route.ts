@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
             instructorId: config.instructorId,
             testCentreId: data.testCentreId,
             testDate: { gte: new Date(`${data.testDate}T00:00:00.000Z`), lt: new Date(`${data.testDate}T23:59:59.999Z`) },
-            status: { in: ['PENDING', 'CONFIRMED'] }
+            status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] }
           },
           include: { config: { select: { durationMinutes: true } } }
         });
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
             testTime: data.testTime,
             price: finalPrice,
             discountPercent: config.discountPercent,
-            status: 'PENDING',
+            status: 'PENDING_PAYMENT',
             parentBookingId: data.parentBookingId
           },
           include: {

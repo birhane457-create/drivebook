@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
           status: { in: ['CONFIRMED', 'COMPLETED'] },
           endTime: { lte: bufferCutoff },
           deletedAt: null,
+          source: { not: 'offline' }, // offline/cash bookings are instructor-handled — no platform payout
         },
       },
       select: { instructorId: true },
