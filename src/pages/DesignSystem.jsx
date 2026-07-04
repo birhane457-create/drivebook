@@ -7,6 +7,7 @@ import ErrorState from '@/components/shared/ErrorState';
 import PageLoader from '@/components/shared/PageLoader';
 import FilterBar from '@/components/shared/FilterBar';
 import StatusBadge from '@/components/shared/StatusBadge';
+import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -18,7 +19,8 @@ import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
-  TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2
+  TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
+  Table2
 } from 'lucide-react';
 
 const chartData = [
@@ -39,6 +41,42 @@ const swatches = [
 ];
 
 const statusList = ['draft', 'pending', 'approved', 'partial', 'received', 'completed', 'cancelled', 'in_transit', 'active', 'critical'];
+
+const demoColumns = [
+  { key: 'name', label: 'Product', sortable: true, filterable: true, hideable: false },
+  { key: 'sku', label: 'SKU', sortable: true, filterable: true, width: 140 },
+  { key: 'category', label: 'Category', sortable: true, filterable: true, filterType: 'select', filterOptions: [
+    { value: 'Electronics', label: 'Electronics' },
+    { value: 'Office', label: 'Office' },
+    { value: 'Furniture', label: 'Furniture' },
+  ] },
+  { key: 'stock', label: 'Stock', sortable: true, filterable: true, align: 'right' },
+  { key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select', filterOptions: [
+    { value: 'active', label: 'Active' },
+    { value: 'critical', label: 'Critical' },
+    { value: 'pending', label: 'Pending' },
+  ], render: (r) => <StatusBadge status={r.status} /> },
+  { key: 'actions', label: 'Actions', type: 'actions', sortable: false, filterable: false, resizable: false, align: 'right', actions: [
+    { label: 'View', icon: Eye, onClick: () => {} },
+    { label: 'Edit', icon: Edit, onClick: () => {} },
+    { label: 'Delete', icon: Trash2, onClick: () => {} },
+  ] },
+];
+
+const demoData = [
+  { id: '1', name: 'Wireless Mouse', sku: 'WM-001', category: 'Electronics', stock: 48, status: 'active' },
+  { id: '2', name: 'USB-C Cable 2m', sku: 'UC-200', category: 'Electronics', stock: 3, status: 'critical' },
+  { id: '3', name: 'Desk Lamp LED', sku: 'DL-310', category: 'Furniture', stock: 22, status: 'pending' },
+  { id: '4', name: 'Notebook A5', sku: 'NB-045', category: 'Office', stock: 140, status: 'active' },
+  { id: '5', name: 'Mechanical Keyboard', sku: 'KB-890', category: 'Electronics', stock: 8, status: 'critical' },
+  { id: '6', name: 'Office Chair', sku: 'OC-777', category: 'Furniture', stock: 15, status: 'active' },
+  { id: '7', name: 'Pen Pack 10', sku: 'PP-012', category: 'Office', stock: 64, status: 'active' },
+  { id: '8', name: 'Monitor 27"', sku: 'MN-270', category: 'Electronics', stock: 5, status: 'pending' },
+  { id: '9', name: 'Sticky Notes', sku: 'SN-300', category: 'Office', stock: 0, status: 'critical' },
+  { id: '10', name: 'Filing Cabinet', sku: 'FC-500', category: 'Furniture', stock: 9, status: 'active' },
+  { id: '11', name: 'Webcam HD', sku: 'WC-108', category: 'Electronics', stock: 31, status: 'active' },
+  { id: '12', name: 'Whiteboard Marker', sku: 'WM-020', category: 'Office', stock: 4, status: 'critical' },
+];
 
 export default function DesignSystem() {
   const [search, setSearch] = useState('');
@@ -162,6 +200,20 @@ export default function DesignSystem() {
               </TableBody>
             </Table>
           </div>
+        </SectionCard>
+
+        {/* Advanced Table */}
+        <SectionCard title="Advanced Data Table" description="The ERP-grade table: sticky headers, resize, column chooser, saved views, advanced filters, bulk actions, export, pagination, row actions, density" icon={Table2}>
+          <AdvancedDataTable
+            tableId="design-system-demo"
+            columns={demoColumns}
+            data={demoData}
+            enableSelection
+            bulkActions={[
+              { label: 'Export selected', icon: Download, onClick: () => {} },
+              { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: () => {} },
+            ]}
+          />
         </SectionCard>
 
         {/* Forms */}
