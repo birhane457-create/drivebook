@@ -9,6 +9,7 @@ import CommandPalette from '@/components/CommandPalette';
 import NotificationCenter from '@/components/NotificationCenter';
 import GlobalSearchBar from '@/components/ux/GlobalSearchBar';
 import Breadcrumbs from '@/components/ux/Breadcrumbs';
+import PageFooter from '@/components/shared/PageFooter';
 import { ROUTE_ACCESS } from '@/lib/route-access';
 import { Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -84,6 +85,7 @@ export default function AppLayout() {
         <div className="p-4 sm:p-6 max-w-[1600px] mx-auto">
           <Outlet context={{ user }} />
         </div>
+        <PageFooter />
       </main>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
