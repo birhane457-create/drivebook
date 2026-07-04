@@ -95,6 +95,7 @@ import Home from '@/pages/Home';
 import DataSeeder from '@/pages/DataSeeder';
 import AppDocumentation from '@/pages/AppDocumentation';
 import DesignSystem from '@/pages/DesignSystem';
+import UXPatterns from '@/pages/UXPatterns';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -209,6 +210,7 @@ const AuthenticatedApp = () => {
           <Route path="/data-seeder" element={<DataSeeder />} />
           <Route path="/app-documentation" element={<AppDocumentation />} />
           <Route path="/design-system" element={<DesignSystem />} />
+          <Route path="/ux-patterns" element={<UXPatterns />} />
         </Route>
         <Route path="/pos" element={<POS />} />
         </Route>
