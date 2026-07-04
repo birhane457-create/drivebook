@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import ChartCard from '@/components/charts/ChartCard';
+import { TrendAreaChart, DonutChart, BarSeriesChart } from '@/components/charts/StandardCharts';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
@@ -32,6 +34,13 @@ const chartData = [
   { month: 'Apr', sales: 4600, orders: 260 },
   { month: 'May', sales: 6200, orders: 340 },
   { month: 'Jun', sales: 5800, orders: 310 },
+];
+
+const pieData = [
+  { name: 'Electronics', value: 12 },
+  { name: 'Apparel', value: 8 },
+  { name: 'Grocery', value: 15 },
+  { name: 'Home', value: 6 },
 ];
 
 const swatches = [
@@ -244,18 +253,17 @@ export default function DesignSystem() {
         </SectionCard>
 
         {/* Charts */}
-        <SectionCard title="Charts" description="Recharts with primary/accent palette tokens" icon={TrendingUp}>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} className="text-xs" />
-                <YAxis tickLine={false} axisLine={false} className="text-xs" />
-                <Tooltip contentStyle={{ borderRadius: '0.625rem', border: '1px solid hsl(var(--border))' }} />
-                <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="orders" fill="hsl(var(--accent))" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <SectionCard title="Standardized Charts" description="Token-driven chart components (ChartCard + TrendAreaChart + DonutChart + BarSeriesChart) shared across dashboards" icon={TrendingUp}>
+          <div className="grid lg:grid-cols-3 gap-4">
+            <ChartCard title="Revenue Trend" description="Monthly" icon={TrendingUp}>
+              <TrendAreaChart data={chartData} dataKey="sales" xKey="month" format={(v) => `$${Number(v).toLocaleString()}`} />
+            </ChartCard>
+            <ChartCard title="Orders" description="Monthly" icon={TrendingDown}>
+              <DonutChart data={pieData} />
+            </ChartCard>
+            <ChartCard title="Sales vs Orders" description="Bar series" icon={Table2}>
+              <BarSeriesChart data={chartData} keys={['sales', 'orders']} xKey="month" />
+            </ChartCard>
           </div>
         </SectionCard>
 

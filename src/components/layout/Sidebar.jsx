@@ -277,7 +277,7 @@ const ROLE_MENUS = {
   ],
 };
 
-export default function Sidebar({ user, alertCount = 0, onOpenSearch }) {
+export default function Sidebar({ user, alertCount = 0, onOpenSearch, mobileOpen = false, onCloseMobile }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
@@ -289,10 +289,17 @@ export default function Sidebar({ user, alertCount = 0, onOpenSearch }) {
     setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
+  // Close the mobile drawer on navigation
+  const handleNavClick = () => {
+    if (onCloseMobile) onCloseMobile();
+  };
+
   return (
     <aside className={cn(
-      "h-screen bg-sidebar text-sidebar-foreground flex flex-col border-r border-sidebar-border transition-all duration-300 fixed left-0 top-0 z-40",
-      collapsed ? "w-[68px]" : "w-[240px]"
+      "h-screen bg-sidebar text-sidebar-foreground flex flex-col border-r border-sidebar-border fixed left-0 top-0 z-40 transition-transform duration-300",
+      collapsed ? "w-[68px]" : "w-[240px]",
+      mobileOpen ? "translate-x-0" : "-translate-x-full",
+      "lg:translate-x-0"
     )}>
       {/* Logo */}
       <div className="h-16 flex items-center px-4 border-b border-sidebar-border flex-shrink-0">
@@ -353,6 +360,7 @@ export default function Sidebar({ user, alertCount = 0, onOpenSearch }) {
                   <Link
                     key={item.path}
                     to={item.path}
+                    onClick={handleNavClick}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
                       isActive

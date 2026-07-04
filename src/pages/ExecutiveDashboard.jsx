@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/shared/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import ChartCard from '@/components/charts/ChartCard';
+import { TrendAreaChart, DonutChart } from '@/components/charts/StandardCharts';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, Package, Users, ShoppingCart, AlertTriangle, CheckCircle, Zap, Globe } from 'lucide-react';
-
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+import { TrendingUp, TrendingDown, DollarSign, Package, Users, ShoppingCart, AlertTriangle, CheckCircle, Globe } from 'lucide-react';
 
 export default function ExecutiveDashboard() {
   const { data: sales = [] } = useQuery({ queryKey: ['sales'], queryFn: () => base44.entities.Sale.list('-created_date', 100) });
@@ -77,43 +76,13 @@ export default function ExecutiveDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
-        {/* Revenue Chart */}
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle className="text-base">Revenue Trend (14 days)</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={salesChartData}>
-                <defs>
-                  <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={v => [`$${v.toLocaleString()}`, 'Revenue']} />
-                <Area type="monotone" dataKey="revenue" stroke="#6366f1" fill="url(#revGrad)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ChartCard title="Revenue Trend" description="Last 14 days" icon={DollarSign} className="lg:col-span-2">
+          <TrendAreaChart data={salesChartData} dataKey="revenue" xKey="date" format={(v) => `$${Number(v).toLocaleString()}`} />
+        </ChartCard>
 
-        {/* Product Categories */}
-        <Card>
-          <CardHeader><CardTitle className="text-base">Product Mix</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-                <Legend iconSize={10} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ChartCard title="Product Mix" description="By category" icon={Package}>
+          <DonutChart data={pieData} />
+        </ChartCard>
       </div>
 
       {/* Module Status Grid */}
