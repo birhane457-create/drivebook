@@ -11,6 +11,7 @@ import GlobalSearchBar from '@/components/ux/GlobalSearchBar';
 import Breadcrumbs from '@/components/ux/Breadcrumbs';
 import { ROUTE_ACCESS } from '@/lib/route-access';
 import { Menu } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 export default function AppLayout() {
@@ -18,6 +19,7 @@ export default function AppLayout() {
   const location = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const { addItem } = useRecentItems();
 
   // Track recently visited pages
@@ -48,6 +50,8 @@ export default function AppLayout() {
         onOpenSearch={() => setPaletteOpen(true)}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed(c => !c)}
       />
       {mobileOpen && (
         <div
@@ -56,7 +60,7 @@ export default function AppLayout() {
           aria-hidden="true"
         />
       )}
-      <main className="lg:ml-[240px] min-h-screen transition-all duration-300">
+      <main className={cn("lg:ml-[240px] min-h-screen transition-all duration-300", collapsed && "lg:ml-[68px]")}>
         <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
           <div className="flex items-center justify-between gap-3 h-14 px-4">
             <div className="flex items-center gap-3 flex-1 min-w-0">

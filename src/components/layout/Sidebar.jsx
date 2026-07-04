@@ -277,9 +277,8 @@ const ROLE_MENUS = {
   ],
 };
 
-export default function Sidebar({ user, alertCount = 0, onOpenSearch, mobileOpen = false, onCloseMobile }) {
+export default function Sidebar({ user, alertCount = 0, onOpenSearch, mobileOpen = false, onCloseMobile, collapsed = false, onToggleCollapsed }) {
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const userRole = user?.role || 'cashier';
 
@@ -401,7 +400,7 @@ export default function Sidebar({ user, alertCount = 0, onOpenSearch, mobileOpen
             variant="ghost"
             size="sm"
             className="flex-1 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => onToggleCollapsed?.()}
           >
             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </Button>

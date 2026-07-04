@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useToastMutation } from '@/hooks/useToastMutation';
 import { Plus, Users, Star, Wallet, ShoppingBag, UserCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
@@ -13,16 +14,24 @@ export default function Customers() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', phone: '', address: '' });
-  const queryClient = useQueryClient();
-
-  const { data: customers = [], isLoading } = useQuery({
+  const { data: customers = [], isLoading, error, refetch } = useQuery({
     queryKey: ['customers'],
     queryFn: () => base44.entities.Customer.list('-created_date'),
   });
 
-  const saveMutation = useMutation({
+  const saveMutation = useToastMutation({
     mutationFn: (data) => editing ? base44.entities.Customer.update(editing.id, data) : base44.entities.Customer.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['customers'] }); setShowForm(false); setEditing(null); },
+    queryKeys: [['customers']],
+    successMessage: editing ? 'Customer updated' : 'Customer added',
+    optimisticUpdater: (qc, data) => {
+      if (!editing) return undefined;
+      const key = ['customers'];
+      qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      qc.setQueryData(key, (old = []) => old.map(r => r.id === editing.id ? { ...r, ...data } : r));
+      return () => qc.setQueryData(key, prev);
+    },
+    onSuccess: () => { setShowForm(false); setEditing(null); },
   });
 
   const openForm = (customer = null) => {
@@ -78,6 +87,8 @@ export default function Customers() {
         columns={columns}
         data={customers}
         isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
         emptyMessage="No customers yet. Add your first customer to start tracking loyalty."
       />
 

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
+import ErrorState from '@/components/shared/ErrorState';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,8 @@ export default function AdvancedDataTable({
   columns,
   data,
   isLoading,
+  error,
+  onRetry,
   onRowClick,
   emptyMessage = 'No data found',
   getRowId = (r) => r.id ?? r._id,
@@ -188,6 +191,16 @@ export default function AdvancedDataTable({
       <div className="space-y-3">
         {Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
       </div>
+    );
+  }
+
+  if (error && (!data || data.length === 0)) {
+    return (
+      <ErrorState
+        title="Couldn't load this data"
+        message={error?.message || 'An unexpected error occurred while fetching.'}
+        onRetry={onRetry}
+      />
     );
   }
 

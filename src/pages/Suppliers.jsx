@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useToastMutation } from '@/hooks/useToastMutation';
 import { Plus, Building2, Users, Wallet, AlertTriangle, User } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
@@ -14,16 +15,24 @@ export default function Suppliers() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', contact_person: '', email: '', phone: '', address: '' });
-  const queryClient = useQueryClient();
-
-  const { data: suppliers = [], isLoading } = useQuery({
+  const { data: suppliers = [], isLoading, error, refetch } = useQuery({
     queryKey: ['suppliers'],
     queryFn: () => base44.entities.Supplier.list('-created_date'),
   });
 
-  const saveMutation = useMutation({
+  const saveMutation = useToastMutation({
     mutationFn: (data) => editing ? base44.entities.Supplier.update(editing.id, data) : base44.entities.Supplier.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['suppliers'] }); setShowForm(false); setEditing(null); },
+    queryKeys: [['suppliers']],
+    successMessage: editing ? 'Supplier updated' : 'Supplier added',
+    optimisticUpdater: (qc, data) => {
+      if (!editing) return undefined;
+      const key = ['suppliers'];
+      qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      qc.setQueryData(key, (old = []) => old.map(r => r.id === editing.id ? { ...r, ...data } : r));
+      return () => qc.setQueryData(key, prev);
+    },
+    onSuccess: () => { setShowForm(false); setEditing(null); },
   });
 
   const openForm = (supplier = null) => {
@@ -69,6 +78,8 @@ export default function Suppliers() {
         columns={columns}
         data={suppliers}
         isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
         emptyMessage="No suppliers yet. Add your first vendor to start purchasing."
       />
 

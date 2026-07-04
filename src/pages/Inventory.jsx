@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useToastMutation } from '@/hooks/useToastMutation';
 import { Package, MapPin, AlertTriangle, Boxes, Layers, SlidersHorizontal, Sliders } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -16,13 +17,11 @@ export default function Inventory() {
   const [adjustItem, setAdjustItem] = useState(null);
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
-  const queryClient = useQueryClient();
-
-  const { data: stockLevels = [], isLoading } = useQuery({ queryKey: ['stock-levels'], queryFn: () => base44.entities.StockLevel.list() });
+  const { data: stockLevels = [], isLoading, error, refetch } = useQuery({ queryKey: ['stock-levels'], queryFn: () => base44.entities.StockLevel.list() });
   const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: () => base44.entities.Product.list() });
   const { data: locations = [] } = useQuery({ queryKey: ['locations'], queryFn: () => base44.entities.Location.list() });
 
-  const adjustMutation = useMutation({
+  const adjustMutation = useToastMutation({
     mutationFn: async ({ stockLevel, newQty, reason }) => {
       const product = products.find(p => p.id === stockLevel.product_id);
       const location = locations.find(l => l.id === stockLevel.location_id);
@@ -34,7 +33,16 @@ export default function Inventory() {
         quantity_before: stockLevel.quantity, quantity_after: newQty, notes: reason,
       });
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['stock-levels'] }); setShowAdjust(false); setAdjustItem(null); },
+    queryKeys: [['stock-levels']],
+    successMessage: 'Stock adjusted',
+    optimisticUpdater: (qc, { stockLevel, newQty }) => {
+      const key = ['stock-levels'];
+      qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      qc.setQueryData(key, (old = []) => old.map(r => r.id === stockLevel.id ? { ...r, quantity: newQty } : r));
+      return () => qc.setQueryData(key, prev);
+    },
+    onSuccess: () => { setShowAdjust(false); setAdjustItem(null); },
   });
 
   const enriched = useMemo(() => stockLevels.map(sl => {
@@ -103,6 +111,8 @@ export default function Inventory() {
         columns={columns}
         data={enriched}
         isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
         emptyMessage="No stock records. Receive purchase orders to build up inventory."
       />
 

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useToastMutation } from '@/hooks/useToastMutation';
 import { Plus, PackageCheck, ClipboardList, CheckCircle2, DollarSign, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
@@ -15,16 +16,18 @@ export default function Purchases() {
   const [showReceive, setShowReceive] = useState(null);
   const queryClient = useQueryClient();
 
-  const { data: orders = [], isLoading } = useQuery({
+  const { data: orders = [], isLoading, error, refetch } = useQuery({
     queryKey: ['purchase-orders'],
     queryFn: () => base44.entities.PurchaseOrder.list('-created_date'),
   });
   const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers'], queryFn: () => base44.entities.Supplier.list() });
   const { data: locations = [] } = useQuery({ queryKey: ['locations'], queryFn: () => base44.entities.Location.list() });
 
-  const createMutation = useMutation({
+  const createMutation = useToastMutation({
     mutationFn: (data) => base44.entities.PurchaseOrder.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }); setShowForm(false); },
+    queryKeys: [['purchase-orders']],
+    successMessage: 'Purchase order created',
+    onSuccess: () => setShowForm(false),
   });
 
   const enriched = useMemo(() => orders.map(o => ({
@@ -82,6 +85,8 @@ export default function Purchases() {
         columns={columns}
         data={enriched}
         isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
         emptyMessage="No purchase orders yet. Create one to start receiving stock."
       />
 

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useToastMutation } from '@/hooks/useToastMutation';
 import { Plus, Edit2, ToggleLeft, ToggleRight, Package, Layers, DollarSign, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,20 +13,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 export default function Products() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const queryClient = useQueryClient();
-
-  const { data: products = [], isLoading } = useQuery({
+  const { data: products = [], isLoading, error, refetch } = useQuery({
     queryKey: ['products'],
     queryFn: () => base44.entities.Product.list('-created_date'),
   });
 
-  const createMutation = useMutation({
+  const createMutation = useToastMutation({
     mutationFn: (data) => base44.entities.Product.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['products'] }); setShowForm(false); },
+    queryKeys: [['products']],
+    successMessage: 'Product added',
+    onSuccess: () => setShowForm(false),
   });
-  const updateMutation = useMutation({
+  const updateMutation = useToastMutation({
     mutationFn: ({ id, data }) => base44.entities.Product.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['products'] }); setShowForm(false); setEditing(null); },
+    queryKeys: [['products']],
+    successMessage: 'Product updated',
+    optimisticUpdater: (qc, { id, data }) => {
+      const key = ['products'];
+      qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      qc.setQueryData(key, (old = []) => old.map(r => r.id === id ? { ...r, ...data } : r));
+      return () => qc.setQueryData(key, prev);
+    },
+    onSuccess: () => { setShowForm(false); setEditing(null); },
   });
 
   const handleSave = (data) => editing ? updateMutation.mutate({ id: editing.id, data }) : createMutation.mutate(data);
@@ -90,6 +100,8 @@ export default function Products() {
         columns={columns}
         data={products}
         isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
         emptyMessage="No products yet. Add your first product to start selling."
       />
 
