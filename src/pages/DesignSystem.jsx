@@ -29,6 +29,7 @@ import WidgetsShowcase from '@/components/showcase/WidgetsShowcase';
 import ChartsShowcase from '@/components/showcase/ChartsShowcase';
 import AnimationsShowcase from '@/components/showcase/AnimationsShowcase';
 import EnterpriseLibraryShowcase from '@/components/showcase/EnterpriseLibraryShowcase';
+import DesignTokensShowcase from '@/components/showcase/DesignTokensShowcase';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
@@ -105,6 +106,9 @@ export default function DesignSystem() {
       <PageHeader title="Design System" subtitle="The unified visual language for WMS Pro — every page should follow these components and patterns" />
 
       <div className="space-y-8">
+
+        {/* Design Tokens: Icons, Cards, Alerts, Elevation, Spacing, Tables, Status Colors */}
+        <DesignTokensShowcase />
 
         {/* Color Tokens */}
         <SectionCard title="Color Tokens" description="Semantic colors mapped from CSS variables in index.css" icon={Eye}>
