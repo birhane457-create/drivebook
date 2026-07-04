@@ -86,6 +86,7 @@ import DeveloperPortal from '@/pages/DeveloperPortal';
 import Home from '@/pages/Home';
 import DataSeeder from '@/pages/DataSeeder';
 import AppDocumentation from '@/pages/AppDocumentation';
+import DesignSystem from '@/pages/DesignSystem';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -191,6 +192,7 @@ const AuthenticatedApp = () => {
           <Route path="/implementation-toolkit" element={<ImplementationToolkit />} />
           <Route path="/data-seeder" element={<DataSeeder />} />
           <Route path="/app-documentation" element={<AppDocumentation />} />
+          <Route path="/design-system" element={<DesignSystem />} />
         </Route>
         <Route path="/pos" element={<POS />} />
         </Route>

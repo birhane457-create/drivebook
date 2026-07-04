@@ -147,6 +147,7 @@ const ROLE_MENUS = {
         { path: '/settings', icon: Settings, label: 'Settings' },
         { path: '/enterprise-settings', icon: Building2, label: 'Enterprise' },
         { path: '/alerts', icon: Bell, label: 'Alerts' },
+        { path: '/design-system', icon: Palette, label: 'Design System' },
       ]
     },
   ],

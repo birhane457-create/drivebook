@@ -76,6 +76,7 @@ export const ROUTE_ACCESS = {
   '/investor-metrics':  { label: 'Investor Metrics',    roles: [], keywords: ['investors', 'financials', 'growth', 'valuation'] },
   '/data-seeder':       { label: 'Data Seeder',          roles: [], keywords: ['sample', 'seed', 'demo data', 'fixtures'] },
   '/app-documentation': { label: 'App Documentation',    roles: [], keywords: ['docs', 'api', 'reference'] },
+  '/design-system':     { label: 'Design System',         roles: [], keywords: ['style', 'guide', 'components', 'ui', 'theme'] },
 };
 
 // super_admin implicitly accesses everything; otherwise check the roles list.
