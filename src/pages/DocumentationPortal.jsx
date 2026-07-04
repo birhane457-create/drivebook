@@ -1,82 +1,86 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import ReactMarkdown from 'react-markdown';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import {
-  BookOpen, FileText, Code2, Shield, Users, Rocket, Search,
-  Bot, CheckCircle2, Clock, Eye, Download, Sparkles, ChevronRight
+  BookOpen, Code2, Shield, Users, Rocket, Search,
+  Bot, CheckCircle2, Clock, Eye, Sparkles, Warehouse, Monitor, Palette, Download
 } from 'lucide-react';
 
 const GUIDE_CATALOG = [
   {
-    id: 'admin', title: 'Admin Guide', icon: Shield, color: 'text-blue-600', bg: 'bg-blue-50',
-    description: 'System configuration, tenant management, IAM, billing, white-label setup.',
-    sections: ['System Configuration', 'Tenant Management', 'User & Role Management', 'Billing & Plans', 'White-Label Setup', 'Security Policies'],
-    status: 'published', coverage: 100, pages: 48,
-  },
-  {
     id: 'user', title: 'User Guide', icon: Users, color: 'text-green-600', bg: 'bg-green-50',
-    description: 'End-user documentation for all modules — POS, WMS, Purchasing, Inventory, etc.',
-    sections: ['Getting Started', 'Inventory Management', 'Sales & POS', 'Purchasing', 'Manufacturing', 'Finance'],
-    status: 'published', coverage: 94, pages: 112,
+    description: 'End-user documentation — inventory, sales, purchasing, reports, alerts.',
+    sections: ['Getting Started', 'Inventory Management', 'Sales & POS', 'Purchasing', 'Reports', 'Alerts'],
   },
   {
-    id: 'api', title: 'API Reference', icon: Code2, color: 'text-purple-600', bg: 'bg-purple-50',
-    description: 'Full OpenAPI 3.0 specification for all REST endpoints with examples and schemas.',
+    id: 'admin', title: 'Administrator Guide', icon: Shield, color: 'text-blue-600', bg: 'bg-blue-50',
+    description: 'System config, user & role management, tenants, billing, white-label, compliance.',
+    sections: ['System Configuration', 'User & Role Management', 'Tenant Management', 'Billing & Plans', 'White-Label Setup', 'Audit & Compliance'],
+  },
+  {
+    id: 'warehouse', title: 'Warehouse Guide', icon: Warehouse, color: 'text-amber-600', bg: 'bg-amber-50',
+    description: 'Receiving, putaway, picking, packing, shipping, transfers, cycle counting, bin management.',
+    sections: ['Receiving & Putaway', 'Picking & Packing', 'Shipping', 'Stock Transfers', 'Cycle Counting', 'Bin Management'],
+  },
+  {
+    id: 'pos', title: 'POS Guide', icon: Monitor, color: 'text-purple-600', bg: 'bg-purple-50',
+    description: 'Point of sale operations — sales, payments, receipts, returns, offline mode, reconciliation.',
+    sections: ['Starting a Sale', 'Cart Management', 'Payment Processing', 'Receipts & Printing', 'Returns & Refunds', 'End-of-Day Reconciliation'],
+  },
+  {
+    id: 'api', title: 'API Integration Guide', icon: Code2, color: 'text-cyan-600', bg: 'bg-cyan-50',
+    description: 'Authentication, entity CRUD, webhooks, rate limits, error codes, SDKs.',
     sections: ['Authentication', 'Entities API', 'Webhooks', 'Rate Limits', 'Error Codes', 'SDKs'],
-    status: 'published', coverage: 98, pages: 76,
+  },
+  {
+    id: 'components', title: 'UI Component Guide', icon: Palette, color: 'text-pink-600', bg: 'bg-pink-50',
+    description: 'Design tokens, core & shared components, enterprise components, charts, UX patterns.',
+    sections: ['Design Tokens', 'Core Components', 'Shared Components', 'Enterprise Components', 'Charts', 'UX Patterns'],
   },
   {
     id: 'developer', title: 'Developer Guide', icon: Rocket, color: 'text-orange-600', bg: 'bg-orange-50',
-    description: 'Integration patterns, plugin development, workflow engine, event bus, and SDK docs.',
-    sections: ['Plugin Development', 'Event Bus Integration', 'Custom Workflows', 'Webhook Setup', 'SDK Reference'],
-    status: 'in_review', coverage: 78, pages: 38,
+    description: 'Architecture, entities, backend functions, automations, integrations, agents, SDK.',
+    sections: ['Architecture', 'Creating Entities', 'Backend Functions', 'Automations', 'Integrations', 'Agents'],
   },
   {
-    id: 'implementation', title: 'Implementation Guide', icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-50',
-    description: 'Step-by-step enterprise onboarding: discovery, migration, cutover, UAT, go-live.',
-    sections: ['Discovery & Scoping', 'Data Migration', 'Configuration Playbook', 'UAT Checklist', 'Go-Live & Cutover', 'Hypercare'],
-    status: 'in_review', coverage: 72, pages: 29,
+    id: 'theme', title: 'Theme Guide', icon: Palette, color: 'text-indigo-600', bg: 'bg-indigo-50',
+    description: 'Design tokens, color palette, typography, dark mode, custom themes, white-label branding.',
+    sections: ['Design Token System', 'Color Palette', 'Typography', 'Dark Mode', 'Custom Themes', 'White-Label Branding'],
   },
 ];
-
-const STATUS_CONFIG = {
-  published: { label: 'Published', class: 'bg-green-100 text-green-700' },
-  in_review: { label: 'In Review', class: 'bg-yellow-100 text-yellow-700' },
-  draft: { label: 'Draft', class: 'bg-muted text-muted-foreground' },
-};
 
 export default function DocumentationPortal() {
   const [search, setSearch] = useState('');
   const [generating, setGenerating] = useState(null);
   const [selectedGuide, setSelectedGuide] = useState(GUIDE_CATALOG[0]);
-  const [aiDraft, setAiDraft] = useState(null);
-
-  const { data: articles = [] } = useQuery({
-    queryKey: ['knowledge-articles'],
-    queryFn: () => base44.entities.KnowledgeArticle.list('-updated_date', 50),
-  });
+  const [draft, setDraft] = useState({});
+  const [error, setError] = useState({});
 
   const qc = useQueryClient();
 
-  const createArticle = useMutation({
-    mutationFn: (data) => base44.entities.KnowledgeArticle.create(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['knowledge-articles'] }),
+  const { data: articles = [] } = useQuery({
+    queryKey: ['knowledge-articles'],
+    queryFn: () => base44.entities.KnowledgeArticle.list('-updated_date', 100),
   });
 
-  const generateDraft = async (guide) => {
+  const generateGuide = async (guide) => {
     setGenerating(guide.id);
-    setAiDraft(null);
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a technical writer for an enterprise SaaS ERP platform. Generate a concise, structured first draft for the "${guide.title}". Include: an overview paragraph, key sections (${guide.sections.join(', ')}), and a quick-start checklist. Format with markdown headers and bullet points. Be practical and specific. Max 600 words.`,
-    });
-    setAiDraft({ guide: guide.title, content: result });
-    setGenerating(null);
+    setError(prev => ({ ...prev, [guide.id]: null }));
+    try {
+      const res = await base44.functions.invoke('generateDocGuide', { guideId: guide.id });
+      setDraft(prev => ({ ...prev, [guide.id]: res.data.content }));
+      qc.invalidateQueries({ queryKey: ['knowledge-articles'] });
+    } catch (e) {
+      setError(prev => ({ ...prev, [guide.id]: e.response?.data?.error || e.message || 'Generation failed' }));
+    } finally {
+      setGenerating(null);
+    }
   };
 
   const filtered = GUIDE_CATALOG.filter(g =>
@@ -84,18 +88,18 @@ export default function DocumentationPortal() {
     g.description.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalPages = GUIDE_CATALOG.reduce((a, g) => a + g.pages, 0);
-  const avgCoverage = Math.round(GUIDE_CATALOG.reduce((a, g) => a + g.coverage, 0) / GUIDE_CATALOG.length);
+  const guideArticles = (guideId) => articles.filter(a => a.tags?.includes(guideId) && a.status === 'published');
+  const publishedCount = GUIDE_CATALOG.filter(g => guideArticles(g.id).length > 0).length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documentation Portal</h1>
-          <p className="text-muted-foreground mt-1">Admin, User, API, Developer & Implementation guides — with AI drafting</p>
+          <p className="text-muted-foreground mt-1">User, Admin, Warehouse, POS, API, UI Component, Developer & Theme guides — AI-generated and published</p>
         </div>
         <Badge className="bg-green-100 text-green-700 border-0 px-3 py-1.5">
-          <BookOpen className="w-3.5 h-3.5 mr-1.5" />{totalPages} pages across {GUIDE_CATALOG.length} guides
+          <BookOpen className="w-3.5 h-3.5 mr-1.5" />{articles.length} articles across {GUIDE_CATALOG.length} guides
         </Badge>
       </div>
 
@@ -106,16 +110,16 @@ export default function DocumentationPortal() {
           <p className="text-3xl font-bold mt-1">{GUIDE_CATALOG.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-5">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Pages</p>
-          <p className="text-3xl font-bold mt-1">{totalPages}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Published Guides</p>
+          <p className="text-3xl font-bold mt-1 text-green-600">{publishedCount}/{GUIDE_CATALOG.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-5">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">Avg Coverage</p>
-          <p className="text-3xl font-bold mt-1 text-blue-600">{avgCoverage}%</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">KB Articles</p>
+          <p className="text-3xl font-bold mt-1">{articles.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-5">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">Published</p>
-          <p className="text-3xl font-bold mt-1 text-green-600">{GUIDE_CATALOG.filter(g => g.status === 'published').length}/{GUIDE_CATALOG.length}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Pending</p>
+          <p className="text-3xl font-bold mt-1 text-amber-600">{GUIDE_CATALOG.length - publishedCount}</p>
         </CardContent></Card>
       </div>
 
@@ -128,7 +132,7 @@ export default function DocumentationPortal() {
           </div>
           {filtered.map(guide => {
             const GI = guide.icon;
-            const sc = STATUS_CONFIG[guide.status];
+            const isPublished = guideArticles(guide.id).length > 0;
             const isSelected = selectedGuide.id === guide.id;
             return (
               <button
@@ -143,12 +147,13 @@ export default function DocumentationPortal() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-semibold text-sm">{guide.title}</p>
-                      <Badge className={`text-xs border-0 flex-shrink-0 ${sc.class}`}>{sc.label}</Badge>
+                      {isPublished ? (
+                        <Badge className="text-xs border-0 flex-shrink-0 bg-green-100 text-green-700">Published</Badge>
+                      ) : (
+                        <Badge className="text-xs border-0 flex-shrink-0 bg-muted text-muted-foreground">Not generated</Badge>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <Progress value={guide.coverage} className="h-1.5 flex-1" />
-                      <span className="text-xs text-muted-foreground">{guide.coverage}%</span>
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{guide.description}</p>
                   </div>
                 </div>
               </button>
@@ -171,8 +176,18 @@ export default function DocumentationPortal() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm"><Eye className="w-4 h-4 mr-1" />Preview</Button>
-                  <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-1" />Export PDF</Button>
+                  <Button
+                    size="sm"
+                    onClick={() => generateGuide(selectedGuide)}
+                    disabled={generating === selectedGuide.id}
+                    className="border-purple-200"
+                  >
+                    {generating === selectedGuide.id ? (
+                      <><Clock className="w-4 h-4 mr-2 animate-spin" />Generating...</>
+                    ) : (
+                      <><Bot className="w-4 h-4 mr-2" />Generate & Publish</>
+                    )}
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -189,48 +204,51 @@ export default function DocumentationPortal() {
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-500" />
-                    AI Draft Generator
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => generateDraft(selectedGuide)}
-                    disabled={generating === selectedGuide.id}
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                  >
-                    {generating === selectedGuide.id ? (
-                      <><Clock className="w-4 h-4 mr-2 animate-spin" />Generating...</>
-                    ) : (
-                      <><Bot className="w-4 h-4 mr-2" />Generate Draft</>
-                    )}
-                  </Button>
+              {error[selectedGuide.id] && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                  <p className="text-xs text-red-700">{error[selectedGuide.id]}</p>
                 </div>
-                {aiDraft && aiDraft.guide === selectedGuide.title && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-purple-600 mb-2 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" />AI-Generated Draft — {selectedGuide.title}
-                    </p>
-                    <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed max-h-64 overflow-y-auto">{aiDraft.content}</pre>
-                    <Button
-                      size="sm"
-                      className="mt-3 bg-purple-600 hover:bg-purple-700 text-white"
-                      onClick={() => createArticle.mutate({
-                        title: `[Draft] ${selectedGuide.title}`,
-                        type: 'guide',
-                        content: aiDraft.content,
-                        status: 'draft',
-                        module: selectedGuide.title,
-                      })}
-                    >
-                      Save to Knowledge Base
-                    </Button>
+              )}
+
+              {/* Published article from KB */}
+              {guideArticles(selectedGuide.id).length > 0 && (
+                <div className="border-t pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> Published Articles ({guideArticles(selectedGuide.id).length})
+                  </p>
+                  <div className="space-y-2">
+                    {guideArticles(selectedGuide.id).map(a => (
+                      <details key={a.id} className="border rounded-lg overflow-hidden">
+                        <summary className="cursor-pointer p-3 bg-muted/40 text-sm font-medium hover:bg-muted/60">
+                          {a.title} <span className="text-xs text-muted-foreground ml-2">v{a.version || '1.0'}</span>
+                        </summary>
+                        <div className="p-4 bg-background max-h-96 overflow-y-auto">
+                          <ReactMarkdown className="text-sm prose prose-sm max-w-none">{a.content || ''}</ReactMarkdown>
+                        </div>
+                      </details>
+                    ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* Live draft preview */}
+              {draft[selectedGuide.id] && (
+                <div className="border-t pt-4">
+                  <p className="text-xs font-semibold text-purple-600 mb-2 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />Generated Preview
+                  </p>
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 max-h-96 overflow-y-auto">
+                    <ReactMarkdown className="text-sm prose prose-sm max-w-none">{draft[selectedGuide.id]}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+
+              {!guideArticles(selectedGuide.id).length && !draft[selectedGuide.id] && !generating && (
+                <div className="border-t pt-4 text-center py-8">
+                  <Bot className="w-10 h-10 text-purple-300 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Click "Generate & Publish" to create this guide with AI.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
