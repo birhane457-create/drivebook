@@ -81,6 +81,13 @@ import LaunchReadiness from '@/pages/LaunchReadiness';
 import TestAutomation from '@/pages/TestAutomation';
 import DocumentationPortal from '@/pages/DocumentationPortal';
 import ImplementationToolkit from '@/pages/ImplementationToolkit';
+import ReceivingWorkflow from '@/pages/workflows/ReceivingWorkflow';
+import ShippingWorkflow from '@/pages/workflows/ShippingWorkflow';
+import ReturnsWorkflow from '@/pages/workflows/ReturnsWorkflow';
+import PickingWorkflow from '@/pages/workflows/PickingWorkflow';
+import PackingWorkflow from '@/pages/workflows/PackingWorkflow';
+import ManufacturingWorkflow from '@/pages/workflows/ManufacturingWorkflow';
+import InspectionWorkflow from '@/pages/workflows/InspectionWorkflow';
 
 import WhiteLabel from '@/pages/WhiteLabel';
 import DeveloperPortal from '@/pages/DeveloperPortal';
@@ -192,6 +199,13 @@ const AuthenticatedApp = () => {
           <Route path="/test-automation" element={<TestAutomation />} />
           <Route path="/documentation" element={<DocumentationPortal />} />
           <Route path="/implementation-toolkit" element={<ImplementationToolkit />} />
+          <Route path="/workflows/receiving" element={<ReceivingWorkflow />} />
+          <Route path="/workflows/shipping" element={<ShippingWorkflow />} />
+          <Route path="/workflows/returns" element={<ReturnsWorkflow />} />
+          <Route path="/workflows/picking" element={<PickingWorkflow />} />
+          <Route path="/workflows/packing" element={<PackingWorkflow />} />
+          <Route path="/workflows/manufacturing" element={<ManufacturingWorkflow />} />
+          <Route path="/workflows/inspection" element={<InspectionWorkflow />} />
           <Route path="/data-seeder" element={<DataSeeder />} />
           <Route path="/app-documentation" element={<AppDocumentation />} />
           <Route path="/design-system" element={<DesignSystem />} />

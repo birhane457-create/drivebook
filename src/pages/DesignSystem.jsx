@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import SectionCard from '@/components/shared/SectionCard';
 import StatCard from '@/components/shared/StatCard';
@@ -24,10 +25,12 @@ import { TrendAreaChart, DonutChart, BarSeriesChart } from '@/components/charts/
 import EnterpriseShowcase from '@/components/enterprise/EnterpriseShowcase';
 import LayoutShowcase from '@/components/showcase/LayoutShowcase';
 import DialogShowcase from '@/components/showcase/DialogShowcase';
+import WidgetsShowcase from '@/components/showcase/WidgetsShowcase';
+import ChartsShowcase from '@/components/showcase/ChartsShowcase';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
-  Table2, Workflow, Layers, LayoutTemplate, MessageSquare
+  Table2, Workflow, Layers, LayoutTemplate, MessageSquare, LayoutGrid, BarChart3, Boxes
 } from 'lucide-react';
 
 const chartData = [
@@ -283,6 +286,36 @@ export default function DesignSystem() {
         {/* Enterprise Dialogs */}
         <SectionCard title="Enterprise Dialogs" description="Create, Edit, Approval, Confirmation, Import / Export / Merge / Duplicate / Archive / Delete Wizards & Bulk Edit — click any tile to open it" icon={MessageSquare}>
           <DialogShowcase />
+        </SectionCard>
+
+        {/* Executive Widgets */}
+        <SectionCard title="Executive Dashboard Widgets" description="52 reusable KPI widgets across 14 domains — each composable and token-styled" icon={LayoutGrid}>
+          <WidgetsShowcase />
+        </SectionCard>
+
+        {/* Advanced Charts */}
+        <SectionCard title="Advanced Charts" description="Sankey, Treemap, Waterfall, Radar, Bubble, KPI Gauge, Timeline, Funnel, Heatmap, Calendar Heatmap, Pareto & Control charts — all reusable" icon={BarChart3}>
+          <ChartsShowcase />
+        </SectionCard>
+
+        {/* Workflow Screens */}
+        <SectionCard title="Workflow Screens" description="End-to-end workflow boards — Receiving, Shipping, Returns, Picking, Packing, Manufacturing & Inspection" icon={Boxes}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {[
+              { to: '/workflows/receiving', label: 'Receiving' },
+              { to: '/workflows/shipping', label: 'Shipping' },
+              { to: '/workflows/returns', label: 'Returns' },
+              { to: '/workflows/picking', label: 'Picking' },
+              { to: '/workflows/packing', label: 'Packing' },
+              { to: '/workflows/manufacturing', label: 'Manufacturing' },
+              { to: '/workflows/inspection', label: 'Inspection' },
+            ].map((w) => (
+              <Link key={w.to} to={w.to} className="rounded-lg border bg-card p-4 hover:border-primary/50 hover:shadow-md transition-all flex items-center justify-between">
+                <span className="text-sm font-medium">{w.label}</span>
+                <span className="text-xs text-muted-foreground">Open →</span>
+              </Link>
+            ))}
+          </div>
         </SectionCard>
 
         {/* States */}
