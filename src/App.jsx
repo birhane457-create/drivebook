@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
@@ -7,95 +8,97 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import RoleGuard from '@/components/RoleGuard';
+import PageLoader from '@/components/shared/PageLoader';
+import AppLayout from '@/components/layout/AppLayout';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
-import AppLayout from '@/components/layout/AppLayout';
-import Dashboard from '@/pages/Dashboard';
-import Products from '@/pages/Products';
-import BarcodeLabels from '@/pages/BarcodeLabels';
-import Inventory from '@/pages/Inventory';
-import POS from '@/pages/POS';
-import Purchases from '@/pages/Purchases';
-import Transfers from '@/pages/Transfers';
-import Customers from '@/pages/Customers';
-import Suppliers from '@/pages/Suppliers';
-import SalesHistory from '@/pages/SalesHistory';
-import Reports from '@/pages/Reports';
-import Alerts from '@/pages/Alerts';
-import Settings from '@/pages/Settings';
-import InventoryAnalytics from '@/pages/InventoryAnalytics';
-import AIForecasting from '@/pages/AIForecasting';
-import CycleCounting from '@/pages/CycleCounting';
-import SupplierScorecard from '@/pages/SupplierScorecard';
-import LoyaltyProgram from '@/pages/LoyaltyProgram';
-import EnterpriseSettings from '@/pages/EnterpriseSettings';
-import WarehouseExecution from '@/pages/WarehouseExecution';
-import WarehouseModule from '@/pages/WarehouseModule';
-import Manufacturing from '@/pages/Manufacturing';
-import Financials from '@/pages/Financials';
-import ApprovalWorkflow from '@/pages/ApprovalWorkflow';
-import MobileWarehouse from '@/pages/MobileWarehouse';
-import TransportationManagement from '@/pages/TransportationManagement';
-import MultiChannel from '@/pages/MultiChannel';
-import ThreePL from '@/pages/ThreePL';
-import ExecutiveDashboard from '@/pages/ExecutiveDashboard';
-import WorkflowAutomation from '@/pages/WorkflowAutomation';
-import MasterData from '@/pages/MasterData';
-import PricingEngine from '@/pages/PricingEngine';
-import InventoryOptimization from '@/pages/InventoryOptimization';
-import QualityManagement from '@/pages/QualityManagement';
-import AssetManagement from '@/pages/AssetManagement';
-import APIHub from '@/pages/APIHub';
-import DocumentManagement from '@/pages/DocumentManagement';
-import DataWarehouse from '@/pages/DataWarehouse';
-import PlatformAdmin from '@/pages/PlatformAdmin';
-import AuditCompliance from '@/pages/AuditCompliance';
-import IAMPage from '@/pages/IAMPage';
-import BusinessRulesEngine from '@/pages/BusinessRulesEngine';
-import SchedulerEngine from '@/pages/SchedulerEngine';
-import CommunicationHub from '@/pages/CommunicationHub';
-import MonitoringDashboard from '@/pages/MonitoringDashboard';
-import SupplierPortal from '@/pages/SupplierPortal';
-import AICopilot from '@/pages/AICopilot';
-import KnowledgeBase from '@/pages/KnowledgeBase';
-import EventBus from '@/pages/EventBus';
-import Observability from '@/pages/Observability';
-import DevOps from '@/pages/DevOps';
-import SecurityCenter from '@/pages/SecurityCenter';
-import CustomerPortal from '@/pages/CustomerPortal';
-import AppMarketplace from '@/pages/AppMarketplace';
-import BillingPlatform from '@/pages/BillingPlatform';
-import AIInsightHub from '@/pages/AIInsightHub';
-import OnboardingCenter from '@/pages/OnboardingCenter';
-import DataMigration from '@/pages/DataMigration';
-import CustomerSuccess from '@/pages/CustomerSuccess';
-import ReleaseManagement from '@/pages/ReleaseManagement';
-import AIOps from '@/pages/AIOps';
-import Benchmarking from '@/pages/Benchmarking';
-import DemoEnvironment from '@/pages/DemoEnvironment';
-import DemoScript from '@/pages/DemoScript';
-import InvestorMetrics from '@/pages/InvestorMetrics';
-import LaunchReadiness from '@/pages/LaunchReadiness';
-import TestAutomation from '@/pages/TestAutomation';
-import DocumentationPortal from '@/pages/DocumentationPortal';
-import ImplementationToolkit from '@/pages/ImplementationToolkit';
-import ReceivingWorkflow from '@/pages/workflows/ReceivingWorkflow';
-import ShippingWorkflow from '@/pages/workflows/ShippingWorkflow';
-import ReturnsWorkflow from '@/pages/workflows/ReturnsWorkflow';
-import PickingWorkflow from '@/pages/workflows/PickingWorkflow';
-import PackingWorkflow from '@/pages/workflows/PackingWorkflow';
-import ManufacturingWorkflow from '@/pages/workflows/ManufacturingWorkflow';
-import InspectionWorkflow from '@/pages/workflows/InspectionWorkflow';
-
-import WhiteLabel from '@/pages/WhiteLabel';
-import DeveloperPortal from '@/pages/DeveloperPortal';
 import Home from '@/pages/Home';
-import DataSeeder from '@/pages/DataSeeder';
-import AppDocumentation from '@/pages/AppDocumentation';
-import DesignSystem from '@/pages/DesignSystem';
-import UXPatterns from '@/pages/UXPatterns';
+
+// Route-level code splitting — each page becomes its own chunk.
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Products = lazy(() => import('@/pages/Products'));
+const BarcodeLabels = lazy(() => import('@/pages/BarcodeLabels'));
+const Inventory = lazy(() => import('@/pages/Inventory'));
+const POS = lazy(() => import('@/pages/POS'));
+const Purchases = lazy(() => import('@/pages/Purchases'));
+const Transfers = lazy(() => import('@/pages/Transfers'));
+const Customers = lazy(() => import('@/pages/Customers'));
+const Suppliers = lazy(() => import('@/pages/Suppliers'));
+const SalesHistory = lazy(() => import('@/pages/SalesHistory'));
+const Reports = lazy(() => import('@/pages/Reports'));
+const Alerts = lazy(() => import('@/pages/Alerts'));
+const Settings = lazy(() => import('@/pages/Settings'));
+const InventoryAnalytics = lazy(() => import('@/pages/InventoryAnalytics'));
+const AIForecasting = lazy(() => import('@/pages/AIForecasting'));
+const CycleCounting = lazy(() => import('@/pages/CycleCounting'));
+const SupplierScorecard = lazy(() => import('@/pages/SupplierScorecard'));
+const LoyaltyProgram = lazy(() => import('@/pages/LoyaltyProgram'));
+const EnterpriseSettings = lazy(() => import('@/pages/EnterpriseSettings'));
+const WarehouseExecution = lazy(() => import('@/pages/WarehouseExecution'));
+const WarehouseModule = lazy(() => import('@/pages/WarehouseModule'));
+const Manufacturing = lazy(() => import('@/pages/Manufacturing'));
+const Financials = lazy(() => import('@/pages/Financials'));
+const ApprovalWorkflow = lazy(() => import('@/pages/ApprovalWorkflow'));
+const MobileWarehouse = lazy(() => import('@/pages/MobileWarehouse'));
+const TransportationManagement = lazy(() => import('@/pages/TransportationManagement'));
+const MultiChannel = lazy(() => import('@/pages/MultiChannel'));
+const ThreePL = lazy(() => import('@/pages/ThreePL'));
+const ExecutiveDashboard = lazy(() => import('@/pages/ExecutiveDashboard'));
+const WorkflowAutomation = lazy(() => import('@/pages/WorkflowAutomation'));
+const MasterData = lazy(() => import('@/pages/MasterData'));
+const PricingEngine = lazy(() => import('@/pages/PricingEngine'));
+const InventoryOptimization = lazy(() => import('@/pages/InventoryOptimization'));
+const QualityManagement = lazy(() => import('@/pages/QualityManagement'));
+const AssetManagement = lazy(() => import('@/pages/AssetManagement'));
+const APIHub = lazy(() => import('@/pages/APIHub'));
+const DocumentManagement = lazy(() => import('@/pages/DocumentManagement'));
+const DataWarehouse = lazy(() => import('@/pages/DataWarehouse'));
+const PlatformAdmin = lazy(() => import('@/pages/PlatformAdmin'));
+const AuditCompliance = lazy(() => import('@/pages/AuditCompliance'));
+const IAMPage = lazy(() => import('@/pages/IAMPage'));
+const BusinessRulesEngine = lazy(() => import('@/pages/BusinessRulesEngine'));
+const SchedulerEngine = lazy(() => import('@/pages/SchedulerEngine'));
+const CommunicationHub = lazy(() => import('@/pages/CommunicationHub'));
+const MonitoringDashboard = lazy(() => import('@/pages/MonitoringDashboard'));
+const SupplierPortal = lazy(() => import('@/pages/SupplierPortal'));
+const AICopilot = lazy(() => import('@/pages/AICopilot'));
+const KnowledgeBase = lazy(() => import('@/pages/KnowledgeBase'));
+const EventBus = lazy(() => import('@/pages/EventBus'));
+const Observability = lazy(() => import('@/pages/Observability'));
+const DevOps = lazy(() => import('@/pages/DevOps'));
+const SecurityCenter = lazy(() => import('@/pages/SecurityCenter'));
+const CustomerPortal = lazy(() => import('@/pages/CustomerPortal'));
+const AppMarketplace = lazy(() => import('@/pages/AppMarketplace'));
+const BillingPlatform = lazy(() => import('@/pages/BillingPlatform'));
+const WhiteLabel = lazy(() => import('@/pages/WhiteLabel'));
+const DeveloperPortal = lazy(() => import('@/pages/DeveloperPortal'));
+const AIInsightHub = lazy(() => import('@/pages/AIInsightHub'));
+const OnboardingCenter = lazy(() => import('@/pages/OnboardingCenter'));
+const DataMigration = lazy(() => import('@/pages/DataMigration'));
+const CustomerSuccess = lazy(() => import('@/pages/CustomerSuccess'));
+const ReleaseManagement = lazy(() => import('@/pages/ReleaseManagement'));
+const AIOps = lazy(() => import('@/pages/AIOps'));
+const Benchmarking = lazy(() => import('@/pages/Benchmarking'));
+const DemoEnvironment = lazy(() => import('@/pages/DemoEnvironment'));
+const DemoScript = lazy(() => import('@/pages/DemoScript'));
+const InvestorMetrics = lazy(() => import('@/pages/InvestorMetrics'));
+const LaunchReadiness = lazy(() => import('@/pages/LaunchReadiness'));
+const TestAutomation = lazy(() => import('@/pages/TestAutomation'));
+const DocumentationPortal = lazy(() => import('@/pages/DocumentationPortal'));
+const ImplementationToolkit = lazy(() => import('@/pages/ImplementationToolkit'));
+const ReceivingWorkflow = lazy(() => import('@/pages/workflows/ReceivingWorkflow'));
+const ShippingWorkflow = lazy(() => import('@/pages/workflows/ShippingWorkflow'));
+const ReturnsWorkflow = lazy(() => import('@/pages/workflows/ReturnsWorkflow'));
+const PickingWorkflow = lazy(() => import('@/pages/workflows/PickingWorkflow'));
+const PackingWorkflow = lazy(() => import('@/pages/workflows/PackingWorkflow'));
+const ManufacturingWorkflow = lazy(() => import('@/pages/workflows/ManufacturingWorkflow'));
+const InspectionWorkflow = lazy(() => import('@/pages/workflows/InspectionWorkflow'));
+const DataSeeder = lazy(() => import('@/pages/DataSeeder'));
+const AppDocumentation = lazy(() => import('@/pages/AppDocumentation'));
+const DesignSystem = lazy(() => import('@/pages/DesignSystem'));
+const UXPatterns = lazy(() => import('@/pages/UXPatterns'));
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -121,6 +124,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <Suspense fallback={<PageLoader fullscreen />}>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
@@ -217,6 +221,7 @@ const AuthenticatedApp = () => {
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </Suspense>
   );
 };
 
