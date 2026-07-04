@@ -21,10 +21,11 @@ import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import ChartCard from '@/components/charts/ChartCard';
 import { TrendAreaChart, DonutChart, BarSeriesChart } from '@/components/charts/StandardCharts';
+import EnterpriseShowcase from '@/components/enterprise/EnterpriseShowcase';
 import {
   Package, Plus, Download, Search, AlertCircle, Inbox, CheckCircle2,
   TrendingUp, TrendingDown, Users, DollarSign, Filter, Eye, Edit, Trash2,
-  Table2, Workflow
+  Table2, Workflow, Layers
 } from 'lucide-react';
 
 const chartData = [
@@ -265,6 +266,11 @@ export default function DesignSystem() {
               <BarSeriesChart data={chartData} keys={['sales', 'orders']} xKey="month" />
             </ChartCard>
           </div>
+        </SectionCard>
+
+        {/* Enterprise Components */}
+        <SectionCard title="Enterprise Components" description="Reusable building blocks inspired by SAP Fiori, Dynamics 365, Oracle Fusion & Odoo — Timeline, Kanban, Scheduler, Gantt, Calendar, Tree View, Org Chart, Split View, Master-Detail, Property Panel, Activity Feed, KPI Widgets, Heatmap, Map, Pivot Builder, Formula Builder, Rule Builder, Workflow Designer, Dashboard Builder & Widget Library" icon={Layers}>
+          <EnterpriseShowcase />
         </SectionCard>
 
         {/* States */}
