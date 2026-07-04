@@ -1,50 +1,45 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, Edit2, MapPin, Warehouse, Store } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useToastMutation } from '@/hooks/useToastMutation';
+import { Plus, Edit2, MapPin, Warehouse, Store, Users, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import PageHeader from '@/components/shared/PageHeader';
-import DataTable from '@/components/shared/DataTable';
+import { Skeleton } from '@/components/ui/skeleton';
+import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
+import AdvancedDataTable from '@/components/data-table/AdvancedDataTable';
+import FormDialog from '@/components/dialogs/FormDialog';
+import FormSection from '@/components/shared/FormSection';
+import Field from '@/components/shared/Field';
 import StatusBadge from '@/components/shared/StatusBadge';
+
+const EMPTY_LOC = { name: '', type: 'warehouse', address: '', phone: '', manager_name: '' };
 
 export default function Settings() {
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [editingLocation, setEditingLocation] = useState(null);
-  const [locationForm, setLocationForm] = useState({ name: '', type: 'warehouse', address: '', phone: '', manager_name: '' });
-  const queryClient = useQueryClient();
+  const [locationForm, setLocationForm] = useState(EMPTY_LOC);
 
-  const { data: locations = [], isLoading: loadingLocations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
-  });
+  const locationsQ = useQuery({ queryKey: ['locations'], queryFn: () => base44.entities.Location.list() });
+  const usersQ = useQuery({ queryKey: ['users'], queryFn: () => base44.entities.User.list() });
+  const logsQ = useQuery({ queryKey: ['inventory-logs'], queryFn: () => base44.entities.InventoryLog.list('-created_date', 50) });
+  const locations = locationsQ.data || [];
+  const users = usersQ.data || [];
+  const logs = logsQ.data || [];
+  const isLoading = locationsQ.isLoading || usersQ.isLoading;
 
-  const { data: users = [], isLoading: loadingUsers } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
-  });
-
-  const { data: logs = [] } = useQuery({
-    queryKey: ['inventory-logs'],
-    queryFn: () => base44.entities.InventoryLog.list('-created_date', 50),
-  });
-
-  const locationMutation = useMutation({
-    mutationFn: (data) => editingLocation
-      ? base44.entities.Location.update(editingLocation.id, data)
-      : base44.entities.Location.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['locations'] }); setShowLocationForm(false); setEditingLocation(null); },
+  const locationMutation = useToastMutation({
+    mutationFn: (data) => editingLocation ? base44.entities.Location.update(editingLocation.id, data) : base44.entities.Location.create(data),
+    queryKeys: [['locations']],
+    successMessage: editingLocation ? 'Location updated' : 'Location created',
+    onSuccess: () => { setShowLocationForm(false); setEditingLocation(null); },
   });
 
   const openLocationForm = (location = null) => {
     setEditingLocation(location);
-    setLocationForm(location || { name: '', type: 'warehouse', address: '', phone: '', manager_name: '' });
+    setLocationForm(location ? { name: location.name, type: location.type, address: location.address || '', phone: location.phone || '', manager_name: location.manager_name || '' } : EMPTY_LOC);
     setShowLocationForm(true);
   };
 
@@ -59,11 +54,9 @@ export default function Settings() {
     { key: 'address', label: 'Address', render: (row) => row.address || '—' },
     { key: 'manager_name', label: 'Manager', render: (row) => row.manager_name || '—' },
     { key: 'is_active', label: 'Status', render: (row) => <StatusBadge status={row.is_active !== false ? 'active' : 'inactive'} /> },
-    { key: 'actions', label: '', render: (row) => (
-      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openLocationForm(row); }}>
-        <Edit2 className="w-4 h-4" />
-      </Button>
-    )},
+    { key: 'actions', label: '', type: 'actions', align: 'right', actions: [
+      { label: 'Edit', icon: Edit2, onClick: (row) => openLocationForm(row) },
+    ]},
   ];
 
   const userColumns = [
@@ -72,10 +65,21 @@ export default function Settings() {
     { key: 'role', label: 'Role', render: (row) => <StatusBadge status={row.role || 'user'} /> },
   ];
 
-  return (
-    <div>
-      <PageHeader title="Settings" subtitle="System configuration and management" />
+  const kpis = [
+    { label: 'Locations', value: locations.length, icon: MapPin },
+    { label: 'Active Locations', value: locations.filter(l => l.is_active !== false).length, icon: Warehouse },
+    { label: 'Users', value: users.length, icon: Users },
+    { label: 'Audit Entries', value: logs.length, icon: ClipboardList },
+  ];
 
+  return (
+    <EnterprisePageLayout
+      title="Settings"
+      description="System configuration and management"
+      primaryAction={{ label: 'Add Location', icon: Plus, onClick: () => openLocationForm() }}
+      kpis={kpis}
+      isLoading={isLoading}
+    >
       <Tabs defaultValue="locations" className="space-y-6">
         <TabsList>
           <TabsTrigger value="locations">Locations</TabsTrigger>
@@ -84,73 +88,91 @@ export default function Settings() {
         </TabsList>
 
         <TabsContent value="locations">
-          <div className="mb-4 flex justify-end">
-            <Button onClick={() => openLocationForm()}>
-              <Plus className="w-4 h-4 mr-2" /> Add Location
-            </Button>
-          </div>
-          <DataTable columns={locationColumns} data={locations} isLoading={loadingLocations} searchField="name" />
+          <AdvancedDataTable
+            tableId="settings-locations"
+            columns={locationColumns}
+            data={locations}
+            isLoading={locationsQ.isLoading}
+            error={locationsQ.error}
+            onRetry={locationsQ.refetch}
+            emptyMessage="No locations configured yet."
+          />
         </TabsContent>
 
         <TabsContent value="users">
-          <DataTable columns={userColumns} data={users} isLoading={loadingUsers} searchField="full_name" />
+          <AdvancedDataTable
+            tableId="settings-users"
+            columns={userColumns}
+            data={users}
+            isLoading={usersQ.isLoading}
+            error={usersQ.error}
+            onRetry={usersQ.refetch}
+            emptyMessage="No users found."
+          />
         </TabsContent>
 
         <TabsContent value="audit">
           <Card>
             <CardHeader><CardTitle className="text-base">Recent Inventory Changes</CardTitle></CardHeader>
             <CardContent>
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {logs.map(log => (
-                  <div key={log.id} className="flex items-start justify-between py-2 border-b last:border-0">
-                    <div>
-                      <p className="text-sm font-medium">{log.product_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {log.type?.replace(/_/g, ' ')} at {log.location_name} — {log.notes || ''}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {log.created_date ? new Date(log.created_date).toLocaleString() : ''}
-                      </p>
+              {logsQ.isLoading ? (
+                <div className="space-y-3">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+              ) : (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {logs.map(log => (
+                    <div key={log.id} className="flex items-start justify-between py-2 border-b last:border-0">
+                      <div>
+                        <p className="text-sm font-medium">{log.product_name}</p>
+                        <p className="text-xs text-muted-foreground">{log.type?.replace(/_/g, ' ')} at {log.location_name} — {log.notes || ''}</p>
+                        <p className="text-xs text-muted-foreground">{log.created_date ? new Date(log.created_date).toLocaleString() : ''}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-sm font-semibold ${log.quantity_change > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{log.quantity_change > 0 ? '+' : ''}{log.quantity_change}</span>
+                        <p className="text-xs text-muted-foreground">{log.quantity_before} → {log.quantity_after}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`text-sm font-semibold ${log.quantity_change > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {log.quantity_change > 0 ? '+' : ''}{log.quantity_change}
-                      </span>
-                      <p className="text-xs text-muted-foreground">{log.quantity_before} → {log.quantity_after}</p>
-                    </div>
-                  </div>
-                ))}
-                {logs.length === 0 && <p className="text-center py-6 text-muted-foreground">No activity yet</p>}
-              </div>
+                  ))}
+                  {logs.length === 0 && <p className="text-center py-6 text-muted-foreground">No activity yet</p>}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showLocationForm} onOpenChange={(open) => { setShowLocationForm(open); if (!open) setEditingLocation(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingLocation ? 'Edit Location' : 'New Location'}</DialogTitle></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); locationMutation.mutate(locationForm); }} className="space-y-4">
-            <div><Label>Name *</Label><Input value={locationForm.name} onChange={(e) => setLocationForm(p => ({ ...p, name: e.target.value }))} required /></div>
-            <div>
-              <Label>Type</Label>
-              <Select value={locationForm.type} onValueChange={(v) => setLocationForm(p => ({ ...p, type: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="warehouse">Warehouse</SelectItem>
-                  <SelectItem value="store">Store</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div><Label>Address</Label><Input value={locationForm.address} onChange={(e) => setLocationForm(p => ({ ...p, address: e.target.value }))} /></div>
-            <div><Label>Phone</Label><Input value={locationForm.phone} onChange={(e) => setLocationForm(p => ({ ...p, phone: e.target.value }))} /></div>
-            <div><Label>Manager Name</Label><Input value={locationForm.manager_name} onChange={(e) => setLocationForm(p => ({ ...p, manager_name: e.target.value }))} /></div>
-            <Button type="submit" className="w-full" disabled={locationMutation.isPending}>
-              {locationMutation.isPending ? 'Saving...' : (editingLocation ? 'Update' : 'Create Location')}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+      <FormDialog
+        open={showLocationForm}
+        onOpenChange={(open) => { setShowLocationForm(open); if (!open) setEditingLocation(null); }}
+        title={editingLocation ? 'Edit Location' : 'New Location'}
+        submitLabel={editingLocation ? 'Update' : 'Create Location'}
+        isPending={locationMutation.isPending}
+        submitDisabled={!locationForm.name}
+        onSubmit={() => locationMutation.mutate(locationForm)}
+      >
+        <FormSection title="Location Details" icon={MapPin} columns={2}>
+          <Field label="Name" required htmlFor="loc-name">
+            <Input id="loc-name" value={locationForm.name} onChange={(e) => setLocationForm(p => ({ ...p, name: e.target.value }))} />
+          </Field>
+          <Field label="Type" htmlFor="loc-type">
+            <Select value={locationForm.type} onValueChange={(v) => setLocationForm(p => ({ ...p, type: v }))}>
+              <SelectTrigger id="loc-type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="warehouse">Warehouse</SelectItem>
+                <SelectItem value="store">Store</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Address" htmlFor="loc-address">
+            <Input id="loc-address" value={locationForm.address} onChange={(e) => setLocationForm(p => ({ ...p, address: e.target.value }))} />
+          </Field>
+          <Field label="Phone" htmlFor="loc-phone">
+            <Input id="loc-phone" value={locationForm.phone} onChange={(e) => setLocationForm(p => ({ ...p, phone: e.target.value }))} />
+          </Field>
+          <Field label="Manager Name" htmlFor="loc-manager">
+            <Input id="loc-manager" value={locationForm.manager_name} onChange={(e) => setLocationForm(p => ({ ...p, manager_name: e.target.value }))} />
+          </Field>
+        </FormSection>
+      </FormDialog>
+    </EnterprisePageLayout>
   );
 }

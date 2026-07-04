@@ -1,20 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Check, AlertTriangle, Info, AlertOctagon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useToastMutation } from '@/hooks/useToastMutation';
+import { Check, AlertTriangle, Info, AlertOctagon, Bell } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import PageHeader from '@/components/shared/PageHeader';
+import { Skeleton } from '@/components/ui/skeleton';
+import EnterprisePageLayout from '@/components/layout/EnterprisePageLayout';
 import StatusBadge from '@/components/shared/StatusBadge';
-import PageLoader from '@/components/shared/PageLoader';
 import EmptyState from '@/components/shared/EmptyState';
+import ErrorState from '@/components/shared/ErrorState';
 import { format } from 'date-fns';
 
-const SEVERITY_ICONS = {
-  info: Info,
-  warning: AlertTriangle,
-  critical: AlertOctagon,
-};
-
+const SEVERITY_ICONS = { info: Info, warning: AlertTriangle, critical: AlertOctagon };
 const SEVERITY_STYLES = {
   critical: 'bg-red-500/10 text-red-500',
   warning: 'bg-amber-500/10 text-amber-500',
@@ -22,48 +18,49 @@ const SEVERITY_STYLES = {
 };
 
 export default function Alerts() {
-  const queryClient = useQueryClient();
+  const alertsQ = useQuery({ queryKey: ['alerts'], queryFn: () => base44.entities.Alert.list('-created_date', 100) });
+  const alerts = alertsQ.data || [];
 
-  const { data: alerts = [], isLoading } = useQuery({
-    queryKey: ['alerts'],
-    queryFn: () => base44.entities.Alert.list('-created_date', 100),
-  });
-
-  const markReadMutation = useMutation({
+  const markReadMutation = useToastMutation({
     mutationFn: (id) => base44.entities.Alert.update(id, { is_read: true }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alerts'] }),
+    queryKeys: [['alerts']],
+    successMessage: 'Alert marked as read',
   });
-
-  const markAllReadMutation = useMutation({
+  const markAllReadMutation = useToastMutation({
     mutationFn: async () => {
       const unread = alerts.filter(a => !a.is_read);
-      for (const alert of unread) {
-        await base44.entities.Alert.update(alert.id, { is_read: true });
-      }
+      for (const alert of unread) await base44.entities.Alert.update(alert.id, { is_read: true });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alerts'] }),
+    queryKeys: [['alerts']],
+    successMessage: 'All alerts marked as read',
   });
 
   const unreadCount = alerts.filter(a => !a.is_read).length;
+  const criticalCount = alerts.filter(a => a.severity === 'critical' && !a.is_read).length;
+  const warningCount = alerts.filter(a => a.severity === 'warning' && !a.is_read).length;
 
-  if (isLoading) {
-    return <PageLoader label="Loading alerts..." />;
-  }
+  const kpis = [
+    { label: 'Total', value: alerts.length, icon: Bell },
+    { label: 'Unread', value: unreadCount, icon: AlertTriangle },
+    { label: 'Critical', value: criticalCount, icon: AlertOctagon },
+    { label: 'Warnings', value: warningCount, icon: AlertTriangle },
+  ];
 
   return (
-    <div>
-      <PageHeader title="Alerts & Notifications" subtitle={`${unreadCount} unread alerts`}>
-        {unreadCount > 0 && (
-          <Button variant="outline" onClick={() => markAllReadMutation.mutate()} disabled={markAllReadMutation.isPending}>
-            <Check className="w-4 h-4 mr-2" /> Mark All Read
-          </Button>
-        )}
-      </PageHeader>
-
-      {alerts.length === 0 ? (
+    <EnterprisePageLayout
+      title="Alerts & Notifications"
+      description={`${unreadCount} unread alerts`}
+      primaryAction={unreadCount > 0 ? { label: 'Mark All Read', icon: Check, onClick: () => markAllReadMutation.mutate() } : undefined}
+      kpis={kpis}
+    >
+      {alertsQ.error ? (
+        <ErrorState title="Couldn't load alerts" message={alertsQ.error?.message} onRetry={alertsQ.refetch} />
+      ) : alertsQ.isLoading ? (
+        <div className="space-y-3">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
+      ) : alerts.length === 0 ? (
         <EmptyState illustration="inbox" title="No alerts" description="You're all caught up — nothing needs your attention right now." className="py-20" />
       ) : (
-      <div className="space-y-3">
+        <div className="space-y-3">
           {alerts.map(alert => {
             const Icon = SEVERITY_ICONS[alert.severity] || Info;
             return (
@@ -78,20 +75,18 @@ export default function Alerts() {
                     {!alert.is_read && <div className="w-2 h-2 rounded-full bg-primary" />}
                   </div>
                   <p className="text-sm text-muted-foreground">{alert.message}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {alert.created_date ? format(new Date(alert.created_date), 'MMM d, yyyy h:mm a') : ''}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{alert.created_date ? format(new Date(alert.created_date), 'MMM d, yyyy h:mm a') : ''}</p>
                 </div>
                 {!alert.is_read && (
-                  <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(alert.id)}>
+                  <button onClick={() => markReadMutation.mutate(alert.id)} className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground" title="Mark as read">
                     <Check className="w-4 h-4" />
-                  </Button>
+                  </button>
                 )}
               </Card>
             );
           })}
         </div>
       )}
-    </div>
+    </EnterprisePageLayout>
   );
 }
