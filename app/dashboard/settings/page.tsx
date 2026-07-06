@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Zap, Check } from 'lucide-react'
 import GoogleCalendarSettings from '@/components/GoogleCalendarSettings'
+import VoiceLineDisplay from '@/components/instructor/VoiceLineDisplay'
 
 interface TimeSlot {
   start: string
@@ -48,6 +49,11 @@ export default function SettingsPage() {
   const [workingHoursExpanded, setWorkingHoursExpanded] = useState(false)
   const [bookingPrefsExpanded, setBookingPrefsExpanded] = useState(false)
   const [pdaConfigsExpanded, setPdaConfigsExpanded] = useState(false)
+  const [voiceLineData, setVoiceLineData] = useState<{
+    voiceLine: string | null
+    voiceLineStatus: 'NONE' | 'ACTIVE' | 'SUSPENDED'
+    subscriptionTier: string
+  } | null>(null)
   const [expandedPDAConfig, setExpandedPDAConfig] = useState<string | null>(null)
   const [testCentres, setTestCentres] = useState<TestCentre[]>([])
   const [loadingCentres, setLoadingCentres] = useState(true)
@@ -116,10 +122,21 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const [settingsRes, pdaConfigsRes] = await Promise.all([
+        const [settingsRes, pdaConfigsRes, voiceLineRes] = await Promise.all([
           fetch('/api/instructor/settings'),
-          fetch('/api/instructor/pda-configs')
+          fetch('/api/instructor/pda-configs'),
+          fetch('/api/instructor/voice-line'),
         ])
+
+        // Voice line status
+        if (voiceLineRes.ok) {
+          const vl = await voiceLineRes.json()
+          setVoiceLineData({
+            voiceLine: vl.voiceLine,
+            voiceLineStatus: vl.voiceLineStatus ?? 'NONE',
+            subscriptionTier: vl.subscriptionTier ?? 'BASIC',
+          })
+        }
 
         let pdaConfigs: PDAConfig[] = []
         
@@ -1130,6 +1147,17 @@ export default function SettingsPage() {
 
             {/* Google Calendar Settings */}
             <GoogleCalendarSettings />
+
+            {/* AI Receptionist Voice Line */}
+            {voiceLineData && (
+              <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
+                <VoiceLineDisplay
+                  voiceLine={voiceLineData.voiceLine}
+                  voiceLineStatus={voiceLineData.voiceLineStatus}
+                  subscriptionTier={voiceLineData.subscriptionTier}
+                />
+              </div>
+            )}
 
             {/* Accepting Bookings Section */}
             <div className={`rounded-3xl shadow-sm border p-6 ${!formData.acceptingBookings ? 'bg-slate-950 border-amber-700' : 'bg-slate-950 border-slate-800'}`}>

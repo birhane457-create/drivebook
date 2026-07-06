@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
-import { Calendar, Users, DollarSign, Car, TrendingUp, Clock, Wallet, Package, CreditCard, Settings, AlertTriangle, Star } from 'lucide-react'
+import { Calendar, Users, DollarSign, Car, TrendingUp, Clock, Wallet, Package, CreditCard, Settings, AlertTriangle, Star, Phone } from 'lucide-react'
 import Link from 'next/link'
 import { EarningsThisWeekCard } from '@/components/instructor/EarningsThisWeekCard'
 
@@ -380,6 +380,66 @@ export default async function DashboardPage() {
           <Link href="/dashboard/subscription" className="shrink-0 bg-yellow-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-yellow-700">
             Fix Now
           </Link>
+        </div>
+      )}
+
+      {/* AI Receptionist Voice Line — shown to PRO+ instructors */}
+      {['PRO', 'STUDIO', 'BUSINESS'].includes((instructor.subscriptionTier ?? '').toUpperCase()) && (
+        <div className="mb-5">
+          {(instructor as any).voiceLine && (instructor as any).voiceLineStatus === 'ACTIVE' ? (
+            /* Active line — show the number prominently */
+            <div className="rounded-3xl border border-green-500/30 bg-green-950/20 p-4 flex items-center gap-4">
+              <div className="rounded-2xl bg-green-500/10 p-3 shrink-0">
+                <Phone className="h-6 w-6 text-green-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-widest text-green-400/80 mb-0.5">AI Receptionist</p>
+                <p className="text-xl font-bold text-white tracking-wide font-mono">
+                  {(instructor as any).voiceLine
+                    .replace(/^\+61(\d)/, '0$1')
+                    .replace(/(\d{2})(\d{4})(\d{4})/, '$1 $2 $3')}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">Active 24/7 — answers bookings, cancellations and reschedules</p>
+              </div>
+              <Link
+                href="/dashboard/settings"
+                className="shrink-0 text-xs text-slate-400 hover:text-white underline underline-offset-2"
+              >
+                Details
+              </Link>
+            </div>
+          ) : (instructor as any).voiceLineStatus === 'SUSPENDED' ? (
+            /* Suspended */
+            <div className="rounded-3xl border border-red-500/30 bg-red-950/20 p-4 flex items-center gap-4">
+              <div className="rounded-2xl bg-red-500/10 p-3 shrink-0">
+                <Phone className="h-6 w-6 text-red-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-red-300">AI Receptionist — Suspended</p>
+                <p className="text-xs text-slate-400 mt-0.5">Your booking line is temporarily offline. Contact support to reactivate.</p>
+              </div>
+            </div>
+          ) : (
+            /* PRO+ but number not yet assigned — "being set up" */
+            <div className="rounded-3xl border border-amber-500/20 bg-amber-950/10 p-4 flex items-center gap-4">
+              <div className="rounded-2xl bg-amber-500/10 p-3 shrink-0">
+                <Phone className="h-6 w-6 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-300">AI Receptionist Line — Being Set Up</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Your dedicated booking number is being provisioned. Usually ready within a day.
+                  Until then, students can book at drivebook.com.au.
+                </p>
+              </div>
+              <Link
+                href="/dashboard/settings"
+                className="shrink-0 text-xs text-slate-400 hover:text-white underline underline-offset-2"
+              >
+                Details
+              </Link>
+            </div>
+          )}
         </div>
       )}
 

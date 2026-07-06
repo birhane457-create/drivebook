@@ -15,8 +15,9 @@ async function findInstructorByPhone(phone) {
   const normalized = parsed.data;
   
   try {
-    // Try DriveBook API first
-    logger.logInfo('Querying DriveBook API for instructor', { phone: normalized });
+    // Query by voiceLine (the assigned Twilio number) — NOT by instructor's personal phone.
+    // Only ACTIVE voice lines are returned. SUSPENDED lines fall to the general DriveBook line.
+    logger.logInfo('Querying DriveBook API for instructor by voice line', { phone: normalized });
     const instructor = await driveBook.findInstructorByPhone(normalized);
     const ms = Date.now() - start;
     

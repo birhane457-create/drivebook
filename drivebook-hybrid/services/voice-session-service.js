@@ -160,10 +160,18 @@ async function redisDel(phone) {
  */
 async function saveSession(phoneNumber, data) {
   const key = normalisePhone(phoneNumber);
+  const now = Date.now();
 
   if (usingRedis && redisClient) {
     const existing = await redisGet(key) || {};
-    await redisSet(key, { ...existing, ...data, phoneNumber: key });
+    await redisSet(key, {
+      ...existing,
+      ...data,
+      phoneNumber: key,
+      // Preserve original createdAt so minutesAgo() measures from call start,
+      // not from the last saveSession() call (e.g. PAYMENT_LINK_SENT update).
+      createdAt: existing.createdAt || now,
+    });
     return;
   }
 
@@ -173,7 +181,8 @@ async function saveSession(phoneNumber, data) {
     ...existing,
     ...data,
     phoneNumber: key,
-    expiresAt: Date.now() + SESSION_TTL_MS,
+    expiresAt: now + SESSION_TTL_MS,
+    createdAt: existing.createdAt || now,
   });
 }
 
@@ -224,13 +233,18 @@ async function clearSession(phoneNumber) {
  * @returns {number}  minutes since session was saved
  */
 function minutesAgo(session) {
+  // Use createdAt if present — works in both Redis and Map modes
+  if (session.createdAt) {
+    const elapsed = Date.now() - session.createdAt;
+    return Math.round((elapsed / 60000) * 10) / 10;
+  }
+  // Legacy fallback: Map sessions saved before createdAt was added
   if (session.expiresAt) {
-    // Map mode — exact
     const remaining = session.expiresAt - Date.now();
     const elapsed = SESSION_TTL_MS - remaining;
     return Math.round((elapsed / 60000) * 10) / 10;
   }
-  // Redis mode — no expiresAt stored, return 0 as safe default
+  // Redis session with no timestamp — cannot calculate, return 0
   return 0;
 }
 

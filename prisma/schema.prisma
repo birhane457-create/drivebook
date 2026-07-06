@@ -169,6 +169,13 @@ model Instructor {
   testPackageDuration  Int?     // minutes
   testPackageIncludes  Json?    // string[]
 
+  // AI Voice Receptionist — dedicated Twilio number (PRO+ feature)
+  // Null = instructor uses the shared DriveBook general line (BASIC/TRIAL)
+  // Set automatically when instructor upgrades to PRO via voice line assignment service
+  voiceLine          String?   // E.164 Twilio number e.g. "+61894001234"
+  voiceLineStatus    String    @default("NONE") // NONE | ACTIVE | SUSPENDED
+  voiceLineSid       String?   // Twilio PhoneNumber SID (PN...) for pool management
+
   bookings      Booking[]
   clients       Client[]
   subscriptions Subscription[]
@@ -176,6 +183,40 @@ model Instructor {
   slotReservations SlotReservation[]
   pdaConfigs    PDATestConfig[]
   pdaBookings   PDATestBooking[]
+  voiceLineRecord TwilioPhoneNumber? @relation("AssignedToInstructor")
+}
+
+// Platform pool of Twilio numbers available for assignment to PRO+ instructors.
+// Admin stocks this pool via the admin panel (enter SID + number from Twilio console).
+// Assignment service picks the first AVAILABLE number when an instructor upgrades to PRO.
+// Released numbers (downgrade/cancel) return to AVAILABLE for reassignment.
+//
+// Pool sizing: one number per PRO+ instructor. AU numbers ~$1.60/month each.
+// All numbers share the same webhook: https://voice.drivebook.com.au/api/voice/incoming
+model TwilioPhoneNumber {
+  id           String    @id @default(cuid())
+  sid          String    @unique  // Twilio SID (PNxxxx) — used for Twilio API calls
+  phoneNumber  String    @unique  // E.164 e.g. "+61894001234"
+  friendlyName String?            // Human display e.g. "(08) 9400 1234"
+  areaCode     String?            // e.g. "08" for Perth metro — for regional matching
+  status       String    @default("AVAILABLE") // AVAILABLE | ASSIGNED | RELEASED
+
+  // Assignment
+  assignedTo   String?   @unique  // instructorId — null means available
+  instructor   Instructor? @relation("AssignedToInstructor", fields: [assignedTo], references: [id], onDelete: SetNull)
+  assignedAt   DateTime?
+  assignedBy   String?            // admin userId
+
+  // Release
+  releasedAt   DateTime?
+  releasedBy   String?            // admin userId
+
+  notes        String?            // admin notes
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status])
+  @@index([assignedTo])
 }
 
 model InstructorExpense {

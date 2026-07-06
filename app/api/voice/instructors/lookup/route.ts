@@ -1,89 +1,64 @@
-// @ts-nocheck
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
 /**
- * Voice Service: Instructor Lookup by Phone
- * 
- * Used by AI voice receptionist to find instructor by their Twilio phone number
+ * GET /api/voice/instructors/lookup?phone=+61894001234
+ *
+ * Internal endpoint — called exclusively by the voice service (drivebook-hybrid)
+ * to resolve which instructor owns a dialled Twilio number.
+ *
+ * Auth: VOICE_SERVICE_API_KEY header (x-api-key).
+ * Never exposed to the public or to the AI agent.
+ *
+ * Returns the instructor's profile fields needed to:
+ *   1. Confirm the dedicated line greeting ("Hi, you've reached [Name]'s booking line")
+ *   2. Pre-load the system prompt context for this instructor
+ *
+ * Returns 404 if no instructor owns that number — voice service falls back
+ * to the general DriveBook line greeting.
+ *
+ * Lookup is by Instructor.voiceLine (the assigned Twilio number),
+ * NOT by Instructor.phone (the instructor's personal mobile).
+ *
+ * Only returns instructors with voiceLineStatus = ACTIVE.
+ * SUSPENDED lines return 404 so the call falls to the general line.
  */
-
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { withVoiceServiceAuth } from '@/lib/middleware/voiceServiceAuth';
-
-export const dynamic = 'force-dynamic';
-
-async function handler(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const phone = searchParams.get('phone');
-
-    if (!phone) {
-      return NextResponse.json(
-        { error: 'Phone number is required' },
-        { status: 400 }
-      );
-    }
-
-    // Normalize phone number (remove spaces, dashes, etc.)
-    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-
-    // Find instructor by phone number
-    const instructor = await prisma.instructor.findFirst({
-      where: {
-        OR: [
-          { phone: normalizedPhone },
-          { phone: phone },
-        ],
-        approvalStatus: 'APPROVED',
-        subscriptionStatus: { in: ['ACTIVE', 'TRIAL'] }
-      },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        hourlyRate: true,
-        serviceAreas: true,
-        baseLatitude: true,
-        baseLongitude: true,
-        serviceRadiusKm: true,
-        workingHours: true,
-        copilotAgentEndpoint: true,
-        approvalStatus: true,
-        subscriptionStatus: true,
-        user: { select: { email: true } },
-      }
-    });
-
-    if (!instructor) {
-      return NextResponse.json(
-        { error: 'Instructor not found' },
-        { status: 404 }
-      );
-    }
-
-    // Return instructor data in voice service format
-    return NextResponse.json({
-      id: instructor.id,
-      name: instructor.name,
-      phone: instructor.phone,
-      email: instructor.user?.email ?? null,
-      hourlyRate: instructor.hourlyRate,
-      serviceAreas: instructor.serviceAreas || 'Multiple areas',
-      baseLatitude: instructor.baseLatitude,
-      baseLongitude: instructor.baseLongitude,
-      serviceRadiusKm: instructor.serviceRadiusKm,
-      workingHours: instructor.workingHours,
-      copilotAgentEndpoint: instructor.copilotAgentEndpoint,
-      available: instructor.approvalStatus === 'APPROVED' &&
-                 ['ACTIVE', 'TRIAL'].includes(instructor.subscriptionStatus || '')
-    });
-
-  } catch (error) {
-    console.error('Voice service instructor lookup error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+export async function GET(req: NextRequest) {
+  // Voice service auth
+  const apiKey = req.headers.get('x-api-key')
+  if (!apiKey || apiKey !== process.env.VOICE_SERVICE_API_KEY) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-}
 
-export const GET = withVoiceServiceAuth(handler);
+  const phone = req.nextUrl.searchParams.get('phone')
+  if (!phone) {
+    return NextResponse.json({ error: 'Missing phone parameter' }, { status: 400 })
+  }
+
+  const instructor = await prisma.instructor.findFirst({
+    where: {
+      voiceLine: phone,
+      voiceLineStatus: 'ACTIVE', // SUSPENDED lines fall to general line
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      hourlyRate: true,
+      serviceAreas: true,
+      baseLatitude: true,
+      baseLongitude: true,
+      serviceRadiusKm: true,
+      copilotAgentEndpoint: true,
+      voiceLine: true,
+      voiceLineStatus: true,
+      subscriptionTier: true,
+    },
+  })
+
+  if (!instructor) {
+    return NextResponse.json({ error: 'No active instructor found for this number' }, { status: 404 })
+  }
+
+  return NextResponse.json(instructor)
+}

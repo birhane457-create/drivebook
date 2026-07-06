@@ -109,6 +109,12 @@ async function proxyRequest(req, res, targetPath) {
 
 router.get('/health', (req, res) => proxyRequest(req, res, '/api/health'));
 
+// Voice line instructor lookup — resolves which instructor owns a dialled Twilio number
+// Called by voice-webhook.js on every incoming call to determine line type
+router.get('/voice/instructors/lookup', (req, res) =>
+  proxyRequest(req, res, '/api/voice/instructors/lookup')
+);
+
 router.post('/locations/validate', (req, res) =>
   proxyRequest(req, res, '/api/locations/validate')
 );

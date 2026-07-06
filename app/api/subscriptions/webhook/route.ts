@@ -85,6 +85,12 @@ async function handleSubscriptionUpdate(subscription: any) {
 
   const plan = SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS];
 
+  // Fetch current instructor tier BEFORE updating — needed for voice line logic
+  const currentInstructor = await prisma.instructor.findUnique({
+    where: { id: instructorId },
+    select: { subscriptionTier: true, voiceLine: true, voiceLineStatus: true },
+  });
+
   // Update instructor
   await prisma.instructor.update({
     where: { id: instructorId },
@@ -98,6 +104,29 @@ async function handleSubscriptionUpdate(subscription: any) {
       stripeCustomerId: subscription.customer,
     },
   });
+
+  // ── Voice line: auto-assign when upgrading to PRO+ ────────────────────────
+  // If instructor is moving from a non-dedicated tier (BASIC/TRIAL) to a
+  // dedicated-line tier (PRO/STUDIO/BUSINESS), and they don't already have a
+  // line, try to assign one from the pool. Non-fatal if pool is empty.
+  try {
+    const { isDedicatedLineTier, assignVoiceLine, releaseVoiceLine } = await import('@/lib/services/voice-line-service');
+    const wasOnDedicatedTier = currentInstructor?.subscriptionTier ? isDedicatedLineTier(currentInstructor.subscriptionTier) : false;
+    const isNowOnDedicatedTier = isDedicatedLineTier(tier);
+
+    if (!wasOnDedicatedTier && isNowOnDedicatedTier && !currentInstructor?.voiceLine) {
+      // Upgraded to PRO+ — assign a number
+      const assigned = await assignVoiceLine(instructorId);
+      console.log(`[VoiceLine] Auto-assigned ${assigned.phoneNumber} to instructor ${instructorId} on ${tier} upgrade`);
+    } else if (wasOnDedicatedTier && !isNowOnDedicatedTier && currentInstructor?.voiceLine) {
+      // Downgraded from PRO+ to BASIC — release the number back to the pool
+      await releaseVoiceLine(instructorId);
+      console.log(`[VoiceLine] Released voice line from instructor ${instructorId} on downgrade to ${tier}`);
+    }
+  } catch (voiceErr: any) {
+    // Non-fatal — subscription still updates even if voice line pool is empty
+    console.error(`[VoiceLine] Voice line assignment/release failed for instructor ${instructorId}:`, voiceErr.message);
+  }
 
   // Update or create subscription record
   const existingSubscription = await prisma.subscription.findFirst({
@@ -175,6 +204,21 @@ async function handleSubscriptionCancelled(subscription: any) {
       cancelledAt: new Date(),
     },
   });
+
+  // ── Voice line: release on cancellation ──────────────────────────────────
+  try {
+    const { releaseVoiceLine } = await import('@/lib/services/voice-line-service');
+    const instructor = await prisma.instructor.findUnique({
+      where: { id: instructorId },
+      select: { voiceLine: true },
+    });
+    if (instructor?.voiceLine) {
+      await releaseVoiceLine(instructorId);
+      console.log(`[VoiceLine] Released voice line from instructor ${instructorId} on subscription cancellation`);
+    }
+  } catch (voiceErr: any) {
+    console.error(`[VoiceLine] Release failed on cancellation for instructor ${instructorId}:`, voiceErr.message);
+  }
 
   // Send cancellation email
   const instructor = await prisma.instructor.findUnique({
