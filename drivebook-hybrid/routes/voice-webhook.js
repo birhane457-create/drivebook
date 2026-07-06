@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const twilio = require('twilio');
 const config = require('../utils/config');
@@ -74,19 +74,87 @@ router.post('/incoming', validateTwilioRequest, async (req, res) => {
         requestId,
       });
 
-      // Resend payment link in the background — non-blocking so TwiML responds fast
+      // ── Payment status check before recovery ──────────────────────────────
+      // If the caller previously created a booking and is ringing back,
+      // check whether Stripe already confirmed payment before offering to
+      // resend the payment link. The AI must never bypass payment — it only
+      // reads the status that Stripe and the webhook have already set.
+      // Status transitions are server-side only: PENDING_PAYMENT → CONFIRMED
+      // happens exclusively via the Stripe webhook, never via this service.
       if (
+        existingSession.bookingId &&
         existingSession.checkoutUrl &&
         (existingSession.lastAction === 'BOOKING_CREATED' ||
           existingSession.lastAction === 'PAYMENT_LINK_SENT')
       ) {
+        try {
+          // Extract paymentToken from stored checkoutUrl (?token=<uuid>)
+          const urlObj = new URL(existingSession.checkoutUrl);
+          const paymentToken = urlObj.searchParams.get('token');
+
+          if (paymentToken) {
+            const base = config.DRIVEBOOK_BASE_URL || 'http://localhost:3000';
+            const apiKey = config.DRIVEBOOK_API_KEY || '';
+            const statusUrl = `${base}/api/public/bookings/${existingSession.bookingId}/payment-status?token=${paymentToken}`;
+
+            const fetchFn = global.fetch || require('node-fetch');
+            const statusRes = await fetchFn(statusUrl, {
+              headers: { 'x-api-key': apiKey },
+              signal: AbortSignal.timeout(4000),
+            });
+
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              logger.logInfo('Payment status on session recovery', {
+                bookingId: existingSession.bookingId,
+                paymentStatus: statusData.paymentStatus,
+                requestId,
+              });
+
+              // Payment already succeeded — clear the session and confirm to caller.
+              // The AI does NOT change status — it only reads what Stripe already set.
+              if (statusData.paymentStatus === 'succeeded') {
+                await voiceSession.clearSession(From);
+                twiml.say(
+                  'Welcome back. Good news — your payment went through and your booking is confirmed. ' +
+                  'You should receive an SMS confirmation shortly. Is there anything else I can help with?'
+                );
+                return res.type('text/xml').send(twiml.toString());
+              }
+
+              // Payment expired — slot was automatically released by the cleanup cron.
+              // Offer to start fresh. Do NOT attempt to reinstate the old booking.
+              if (statusData.paymentStatus === 'expired') {
+                await voiceSession.clearSession(From);
+                twiml.say(
+                  'Welcome back. Unfortunately the payment window closed before payment was received, ' +
+                  'so the slot was released. I can start a new booking for you — ' +
+                  'would you like to try the same time, or would you prefer a different slot?'
+                );
+                return res.type('text/xml').send(twiml.toString());
+              }
+            }
+          }
+        } catch (statusErr) {
+          // Non-fatal — if we can't check payment status, fall through to normal recovery
+          logger.logWarning('Could not check payment status on session recovery', {
+            bookingId: existingSession.bookingId,
+            err: statusErr.message,
+            requestId,
+          });
+        }
+
+        // Payment still pending  resend the payment link so the caller can complete it.
+        // The booking status will only change when Stripe fires the webhook.
+        // Gemini concern 3: speak a filler phrase immediately so caller hears activity.
+        // The twiml.say call below executes before the async SMS send.
+        twiml.say('Just a moment  checking your booking now.');
         smsService
           .resendPaymentLink(From, existingSession.checkoutUrl)
           .catch((smsErr) =>
             logger.logError(smsErr, { requestId, context: 'session-recovery-sms' })
           );
 
-        // Mark as resent so we don't flood on subsequent call-backs
         await voiceSession.saveSession(From, { lastAction: 'PAYMENT_LINK_SENT' });
       }
 
@@ -98,20 +166,26 @@ router.post('/incoming', validateTwilioRequest, async (req, res) => {
     const instructor = await instructorService.findInstructorByPhone(To);
 
     if (instructor) {
-      // Attempt to connect to Copilot agent
+      // DEDICATED LINE: specific instructor owns this number
+      logger.logInfo('Dedicated instructor line', { instructorId: instructor.id, requestId });
       const agentResponse = await copilotService.connectToCopilotAgent(instructor.id, { callerPhone: From });
       if (agentResponse && agentResponse.type === 'dial') {
         twiml.dial({ callerId: To }, agentResponse.number);
       } else if (agentResponse && agentResponse.type === 'say') {
         twiml.say(agentResponse.text);
       } else {
-        // fallback - take message
-        twiml.say('The instructor is currently unavailable. Please leave a message after the beep.');
+        twiml.say(`You've reached ${instructor.name}'s booking line. Please leave a message after the beep.`);
         twiml.record({ maxLength: config.VOICEMAIL_MAX_LENGTH, action: '/api/voice/voicemail' });
       }
     } else {
-      twiml.say('We could not find the instructor. Please leave a message after the beep.');
-      twiml.record({ maxLength: config.VOICEMAIL_MAX_LENGTH, action: '/api/voice/voicemail' });
+      // GENERAL LINE: shared DriveBook number, no specific instructor
+      logger.logInfo('General DriveBook line', { dialledNumber: To, requestId });
+      const agentResponse = await copilotService.connectToCopilotAgent(null, { callerPhone: From, lineType: 'general' });
+      if (agentResponse && agentResponse.type === 'say') {
+        twiml.say(agentResponse.text);
+      } else {
+        twiml.say('Hi, thanks for calling DriveBook. How can I help you today?');
+      }
     }
 
     res.type('text/xml').send(twiml.toString());

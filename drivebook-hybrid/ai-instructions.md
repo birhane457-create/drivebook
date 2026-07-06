@@ -1,6 +1,6 @@
-# DriveBook AI Instructions
+﻿# DriveBook AI Instructions
 
-**Last updated:** May 2026
+**Last updated:** July 2026
 **Status:** Accurate — matches actual API implementation
 
 ## Purpose
@@ -36,6 +36,10 @@ Present instructors by **name only**. Use the `id` silently for all API calls.
 | `POST /api/public/bookings/{id}/cancel` | Cancel booking (no auth required) |
 | `POST /api/public/bookings/{id}/reschedule` | Reschedule booking (no auth; pass verificationToken) |
 | `GET /api/health` | Health check |
+| `GET /api/bookings/{id}/cancellation-policy` | Check cancellation eligibility and exact refund amount — call BEFORE cancelling |
+| `GET /api/public/bookings/{id}?phone=` | Get booking detail including `canCancel` and `canReschedule` flags |
+| `GET /api/public/bookings/{id}/payment-status?token=` | Poll payment status  use `canPay` field directly, never infer from status |
+| `GET /api/public/bookings/{id}/timeline?token=` | Get human-readable booking event history for AI to read aloud |
 
 ## AI workflow: New Booking
 
@@ -55,11 +59,29 @@ Present instructors by **name only**. Use the `id` silently for all API calls.
    > "Just to confirm — 10 hours with Debesay on Tuesday 25 March at 9am, pickup at 123 Main St Joondalup, total $790, payment link to 0400 123 456. Is that all correct?"
    - If caller says no or wants to change anything: go back to the relevant step
    - **Do NOT call the booking API until the caller confirms**
-10. Call `POST /api/public/bookings/bulk` with `instructorId` from step 4
-    - Do NOT send `pricing` — backend calculates it
-    - Do NOT ask for password — backend auto-generates it
-11. Send `checkoutUrl` from response via SMS
-12. Confirm: "Done. Payment link sent. Your time slot is held for 10 minutes."
+10. Call `POST /api/public/bookings/bulk` with:
+    - `instructorId` from step 4
+    - `bookingType`: `"now"` (scheduling immediately) or `"later"` (buying credit hours for future use)
+    - `registrationType`: `"myself"` (default) or `"someone-else"` (booking for another person)
+      - If `"someone-else"`: also collect `learnerName`, `learnerPhone`, and `learnerRelationship` (child/partner/grandchild/parent/friend/other)
+    - `packageType`: from packages API response (e.g. `"PACKAGE_10"`)
+    - `accountHolderName`, `accountHolderEmail`, `accountHolderPhone`\n    - `scheduledBookings`: `[{ date, time, duration, pickupLocation }]` — use `formattedAddress` from step 2
+    - `includeTestPackage`: `true` only if caller explicitly requests the PDA test pack (default: false)
+    - If booking is within 2 hours of now: set `isShortNotice: true` on the scheduledBookings item
+    - Do NOT send `pricing`  backend calculates it
+    - Do NOT ask for password  backend auto-generates it
+11. Check the response:
+
+    **Normal booking** (status `PENDING_PAYMENT`, `isShortNotice: false`):
+    - Send `checkoutUrl` via SMS immediately
+    - Say: "Done. Payment link sent to your phone. Your slot is held for 10 minutes while you pay."
+
+    **Short-notice booking** (status `PENDING`, `isShortNotice: true`):
+    - `checkoutUrl` is NOT returned  no payment until instructor approves
+    - Say: "Your booking is pending instructor approval. You'll receive an SMS once they confirm -- usually within a few minutes."
+    - Do NOT send a payment link
+
+12. Call ends after confirmation. Session saved for call-back recovery.
 
 ## AI workflow: Cancel Booking
 
@@ -68,17 +90,23 @@ Present instructors by **name only**. Use the `id` silently for all API calls.
    - If multiple bookings, list them and ask caller to confirm which one
 3. Read back the booking details:
    > "I found a booking with Debesay on Tuesday 25 March at 9am. Is that the one you want to cancel?"
-4. Call `POST /api/verifications/otp` with `{ phone, purpose: "cancel" }`
+4. Call `GET /api/bookings/{bookingId}/cancellation-policy` to get the exact refund details
+   - If `canCancel: false`: "Unfortunately this booking can't be cancelled at this stage. Would you like me to connect you with support?"  stop here
+   - If `isPendingPayment: true`: "This booking hasn't been paid yet. I can release the slot immediately  no refund needed. Shall I go ahead?"  skip OTP, proceed to step 8
+   - Otherwise: note `refundAmount` and `refundPercentage` for step 7. Never guess or calculate the refund  always use `refundAmount` from this response.
+5. Call `POST /api/verifications/otp` with `{ phone, purpose: "cancel" }`
    - Response: `{ verificationId, expiresAt }`
-5. Ask caller for the 6-digit code
-6. Call `POST /api/verifications/otp/confirm` with `{ verificationId, code, phone }`
-   - Response: `{ valid: true, verificationToken }`
-7. State the refund and get final confirmation before acting:
-   > "Cancelling now will give you a 100% refund of $790. Are you sure you want to cancel?"
+6. Ask caller for the 6-digit code
+7. State the refund amount and get final confirmation before acting:
+   > "Cancelling now will give you a [100% / 50% / no] refund of $[refundAmount]. Are you sure you want to cancel?"
+   - Use `refundAmount` from step 4 — never state a refund amount from memory
    - **Do NOT cancel until the caller says yes**
-8. Call `POST /api/public/bookings/{bookingId}/cancel` with `{ reason: "student_request" }`
-9. Confirm: "Done. Your booking is cancelled. You'll receive a $790 refund confirmation by SMS."
-
+8. Call `POST /api/verifications/otp/confirm` with `{ verificationId, code, phone }`
+   - Response: `{ verified: true, verificationToken }`
+9. Call `POST /api/public/bookings/{bookingId}/cancel` with `{ reason: "student_request" }`
+   - Send `verificationToken` as `X-Verification-Token` header
+   - If `requiresManualAction: true` in response: "Done. Your booking is cancelled. The automatic refund couldn't be processed  our team will handle it manually within 1 business day."
+   - Otherwise: "Done. Your booking is cancelled. A $[refundAmount] refund will be returned to your wallet within a few minutes."
 ## AI workflow: Reschedule Booking
 
 1. Ask for phone number

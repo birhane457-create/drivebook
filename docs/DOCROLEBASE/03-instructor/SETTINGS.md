@@ -10,13 +10,15 @@
 
 - Display name
 - Phone number
-- Bio (shown on public profile)
+- Bio (shown on public profile) — **75-word minimum enforced in UI** — live word counter in dashboard; auto-generated content block shown on subdomain page when bio < 75 words
 - Years of experience
 - Profile photo (Cloudinary upload)
 - Base address (used for service radius calculation)
 - Service radius (km)
 - Service areas (text description)
 - Languages spoken
+- Video intro URL (`videoUrl`) — YouTube or Vimeo link; displayed as embed on subdomain page; supports Shorts, `/watch?v=`, `youtu.be/`, Vimeo formats
+- Teaching specialties (`specialties`) — comma-separated tags from preset list (e.g. "Nervous learners,Manual specialist"); shown as chips on subdomain page under "Teaching style"
 
 ---
 

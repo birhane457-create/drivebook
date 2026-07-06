@@ -18,7 +18,8 @@
 | 6 | Verify `GOOGLE_REDIRECT_URI=https://drivebook.com.au/api/calendar/callback` | Vercel env vars + Google Cloud Console |
 | 7 | Set `NEXT_PUBLIC_VOICE_PHONE_NUMBER` with real AU number | Vercel env vars — AIReceptionistShowcase shows "coming soon" without it |
 | 8 | Replace placeholder ABN on about page | One line in `app/about/page.tsx` |
-| 9 | Run `npx prisma migrate deploy` on production DB | Terminal against production DB — includes DeviceToken + NotificationRetry models |
+| 9 | Run `npx prisma migrate deploy` on production DB | ⚠️ PARTIAL — `add_instructor_video_specialties` migration applied manually via `prisma db execute`. Remaining migrations (DeviceToken, NotificationRetry) still need `migrate deploy` |
+| 9a | Regenerate Prisma client (`npx prisma generate`) | Required on the server — locked DLL prevented local generation. `videoUrl`/`specialties` types will be stale until this runs |
 | 10 | Set `connection_limit=20` in `DATABASE_URL` | Vercel env vars — Prisma default is 5, causes queueing under load |
 | 11 | Set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Vercel env vars — required for mobile push notifications |
 | 12 | Submit sitemap to Google Search Console | https://search.google.com/search-console → Sitemaps → `https://drivebook.com.au/sitemap.xml` |
@@ -59,7 +60,20 @@
 
 ## 🔵 PENDING CODE WORK
 
-### Fix #5 — DB connection pool (5 min, config only)
+### Fix #10 — Data export feature (deferred)
+`can-i-export-my-students-drivebook.mdx` is marked `draft: true` pending implementation of `Settings → Data → Export` UI. No code exists yet. Build when ready, then undraft the blog post.
+
+### Fix #11 — C drive disk space (pre-deploy blocker)
+C drive is at ~10MB free. `npx prisma generate` fails, `str_replace` tool fails on large files. Must free C drive space before next deploy or Prisma client regeneration. Clear `C:\Users\[user]\AppData\Local\Temp`, browser caches, and any large files on C.
+
+### Fix #12 — Request indexing in Google Search Console
+After next deploy, manually request indexing for:
+- `https://drivebook.com.au/about`
+- `https://drivebook.com.au/book`
+- `https://drivebook.com.au/contact`
+- `https://drivebook.com.au/teach-with-drivebook`
+- `https://drivebook.com.au/blog/how-to-choose-the-right-driving-instructor-perth`
+- `https://drivebook.com.au/blog/pricing-your-driving-lessons-guide-instructors`
 Add `?connection_limit=20` to `DATABASE_URL` in Vercel env vars.
 
 ### Fix #6 — No tests (5–8 days)
@@ -69,9 +83,9 @@ Zero `*.test.ts` / `*.spec.ts` files. Add Jest. Priority: Stripe webhook → wal
 `voice-session-service.js` stores booking state but not OpenAI message history. Each utterance starts fresh.  
 Fix: Store message history in Redis session keyed by `CallSid`.
 
-### Fix #9 — AI hallucination prevention (3 days)
-No output validation in any voice or AI route.  
-Fix: Ground system prompt with live data at call start. Validate booking data against DB before confirming.
+### Fix #9 — AI hallucination prevention (partially done)
+**Done:** `system-prompt-builder.js` grounds every call with live instructor profile, availability, and packages at call start.  
+**Remaining:** The Copilot agent endpoint must read `systemPrompt` from the POST body and use it as the LLM system prompt. Validate booking data against DB before confirming (output validation layer).
 
 ---
 

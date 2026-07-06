@@ -245,6 +245,8 @@ function buildRecoveryPrompt(session) {
   const name = session.instructorName || 'your instructor';
   const timeStr = mins > 0 ? `about ${mins} minute${mins !== 1 ? 's' : ''} ago` : 'just before';
 
+  // Payment link sent — voice-webhook.js already checked payment status before calling this.
+  // If we reach here, payment is still pending (not succeeded, not expired).
   if (session.lastAction === 'BOOKING_CREATED' || session.lastAction === 'PAYMENT_LINK_SENT') {
     return (
       `Welcome back. I can see you were booking a lesson with ${name} ` +
@@ -254,11 +256,24 @@ function buildRecoveryPrompt(session) {
     );
   }
 
+  // Mid-OTP drop: caller hung up while waiting for verification code.
+  // The previous OTP may have expired — offer to send a fresh one.
   if (session.lastAction === 'AWAITING_OTP') {
+    const purposeStr = session.otpPurpose === 'reschedule' ? 'reschedule your lesson' : 'cancel your booking';
     return (
-      `Welcome back. You were in the middle of verifying your identity ` +
+      `Welcome back. You were in the middle of verifying your identity to ${purposeStr} ` +
       `${timeStr}. ` +
-      `Would you like me to send a new verification code?`
+      `The previous code may have expired — would you like me to send a new one?`
+    );
+  }
+
+  // Short-notice booking awaiting instructor approval — no payment link exists yet.
+  if (session.lastAction === 'AWAITING_APPROVAL') {
+    return (
+      `Welcome back. Your booking with ${name} is still waiting for their approval ` +
+      `${timeStr}. ` +
+      `You'll receive an SMS as soon as they confirm. ` +
+      `Would you like to cancel and rebook for a different time, or is there anything else I can help with?`
     );
   }
 

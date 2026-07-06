@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Main App Proxy
  *
  * Forwards AI/voice service API calls to the main DriveBook application.
@@ -13,6 +13,7 @@
 
 const express = require('express');
 const axios = require('axios');
+const { randomUUID } = require('crypto');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
 const voiceSession = require('../services/voice-session-service');
@@ -146,7 +147,8 @@ router.post('/public/bookings/bulk', async (req, res) => {
     if (!headers['content-type']) headers['content-type'] = 'application/json';
 
     const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'];
-    if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
+    // Gap 4 fix: auto-generate Idempotency-Key if not supplied — prevents duplicate bookings on retry
+    headers['idempotency-key'] = idempotencyKey || randomUUID();
 
     logger.logInfo('Proxying booking creation', { requestId: req.requestId, targetUrl });
 
@@ -159,16 +161,17 @@ router.post('/public/bookings/bulk', async (req, res) => {
       timeout: 8000,
     });
 
-    // FIX #4: Send payment SMS immediately — independent of whether the voice call stays connected.
+    // Gap 4: SMS only sent for normal bookings (isShortNotice=false, checkoutUrl present)
+    // Short-notice bookings return status PENDING with no checkoutUrl — instructor must approve first
     const phone = req.body?.accountHolderPhone;
     const data = response.data;
-    if (data && data.checkoutUrl && phone) {
+    if (data && data.checkoutUrl && phone && !data.isShortNotice) {
       const msg = `Your DriveBook lesson is reserved for 10 minutes. Complete payment here: ${data.checkoutUrl}`;
       smsService.sendSms(phone, msg).catch((smsErr) =>
         logger.logError(smsErr, { requestId: req.requestId, context: 'booking-creation-sms' })
       );
 
-      // SPRINT 3: Persist voice session so a call-back within 10 min triggers recovery
+      // Persist voice session so a call-back within 10 min triggers recovery
       if (data.bookingId) {
         voiceSession.saveSession(phone, {
           lastAction: 'BOOKING_CREATED',
@@ -178,6 +181,18 @@ router.post('/public/bookings/bulk', async (req, res) => {
           instructorName: req.body?._resolvedInstructorName || null,
         });
       }
+    } else if (data && data.isShortNotice && data.bookingId && phone) {
+      // Gap 2: Short-notice booking — save session without checkoutUrl, await instructor approval
+      logger.logInfo('Short-notice booking created — awaiting instructor approval', {
+        requestId: req.requestId,
+        bookingId: data.bookingId,
+      });
+      voiceSession.saveSession(phone, {
+        lastAction: 'AWAITING_APPROVAL',
+        bookingId: data.bookingId,
+        instructorId: req.body?.instructorId || null,
+        instructorName: req.body?._resolvedInstructorName || null,
+      });
     }
 
     return res.status(response.status).json(data);
@@ -191,24 +206,55 @@ router.get('/bookings/lookup', (req, res) =>
   proxyRequest(req, res, '/api/bookings/lookup')
 );
 
-router.post('/verifications/otp', (req, res) =>
-  proxyRequest(req, res, '/api/verifications/otp')
-);
+router.post('/verifications/otp', async (req, res) => {
+  // M5 fix: persist AWAITING_OTP session so call-back recovery knows the context
+  const phone = req.body?.phone;
+  const purpose = req.body?.purpose; // 'cancel' | 'reschedule'
+  if (phone && purpose) {
+    voiceSession.saveSession(phone, {
+      lastAction: 'AWAITING_OTP',
+      otpPurpose: purpose,
+    }).catch(() => {}); // non-fatal
+  }
+  return proxyRequest(req, res, '/api/verifications/otp');
+});
 
 router.post('/verifications/otp/confirm', (req, res) =>
   proxyRequest(req, res, '/api/verifications/otp/confirm')
 );
 
+//  Sub-routes registered BEFORE generic :id to prevent shadowing 
+
+router.post('/public/bookings/:id/cancel', (req, res) => {
+  // Gap 21: auto-generate Idempotency-Key for cancel to prevent double-cancel on retry
+  req.headers['idempotency-key'] = req.headers['idempotency-key'] || randomUUID();
+  return proxyRequest(req, res, `/api/public/bookings/${req.params.id}/cancel`);
+});
+
+router.post('/public/bookings/:id/reschedule', (req, res) => {
+  // Gap 21: auto-generate Idempotency-Key for reschedule to prevent double-reschedule on retry
+  req.headers['idempotency-key'] = req.headers['idempotency-key'] || randomUUID();
+  return proxyRequest(req, res, `/api/public/bookings/${req.params.id}/reschedule`);
+});
+
+// Gap 8: payment status polling  lean endpoint, use canPay field directly
+router.get('/public/bookings/:id/payment-status', (req, res) =>
+  proxyRequest(req, res, `/api/public/bookings/${req.params.id}/payment-status`)
+);
+
+// Gap 9: booking timeline — human-readable events for AI to read aloud
+router.get('/public/bookings/:id/timeline', (req, res) =>
+  proxyRequest(req, res, `/api/public/bookings/${req.params.id}/timeline`)
+);
+
+// Generic booking detail  after sub-routes so it does not shadow them
 router.get('/public/bookings/:id', (req, res) =>
   proxyRequest(req, res, `/api/public/bookings/${req.params.id}`)
 );
 
-router.post('/public/bookings/:id/cancel', (req, res) =>
-  proxyRequest(req, res, `/api/public/bookings/${req.params.id}/cancel`)
-);
-
-router.post('/public/bookings/:id/reschedule', (req, res) =>
-  proxyRequest(req, res, `/api/public/bookings/${req.params.id}/reschedule`)
+// Gap 1: cancellation policy  call BEFORE cancelling to get exact refund amount
+router.get('/bookings/:id/cancellation-policy', (req, res) =>
+  proxyRequest(req, res, `/api/bookings/${req.params.id}/cancellation-policy`)
 );
 
 module.exports = router;

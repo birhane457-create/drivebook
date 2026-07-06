@@ -101,7 +101,7 @@ Default assumption:
 UPDATE EXISTING DOCUMENTATION.
 DO NOT CREATE NEW DOCUMENTATION.
 
-## Current State (As of June 19, 2026)
+## Current State (As of July 2026)
 
 ### ✅ ALL IMPLEMENTATION TASKS COMPLETE
 All 7 original implementation tasks are done and documented in DOCROLEBASE.
@@ -109,9 +109,43 @@ All 4 security issues (MEDIUM #4, #5, #6, #8) are fixed.
 All cron jobs registered in vercel.json and auth-corrected.
 TypeScript: 0 errors. No hardcoded prices. No fake content.
 
+### ✅ SUBDOMAIN PAGE OVERHAUL (July 2026)
+- Booking overlay unified desktop + mobile
+- Clickable pricing rows with package pre-selection (SubdomainPricingBooking)
+- Next available slot calculation fixed (no stale times, whole-hour ceiling)
+- How it works strip, video embed, specialties chips, test centres, popular package badge
+- Bio 75-word minimum enforced (bioIsSubstantial) — auto-generated content for sparse profiles
+- Canonical metadata pointing to subdomain URL
+- Reviews above booking CTA; mobile column order fixed
+
+### ✅ INSTRUCTOR PROFILE ADDITIONS (July 2026)
+- `videoUrl` and `specialties` fields added to schema, API, dashboard, and subdomain page
+- Migration applied to live Supabase (`20260703000001_add_instructor_video_specialties`)
+- Bio word count live indicator in dashboard (amber → emerald at 75 words)
+
+### ✅ ADMIN DASHBOARD FIXES (July 2026)
+- Revenue `/100` display bug fixed (amounts are AUD, not cents)
+- Offline bookings excluded from payout eligibility (3 routes)
+- Instructor risk: expired doc `break` bug fixed
+- Preview-all payout route rewritten to match actual eligibility criteria
+- Stale newStudentBonus removed from admin settings tier cards
+
+### ✅ BLOG CONTENT FIXES (July 2026)
+- 30+ product blogs corrected (tiers, fees, UI navigation paths)
+- Subscription tiers blog rewritten (STUDIO = single instructor)
+- Three navigation guides corrected (cancel plan, block dates, custom domain path)
+
+### ✅ SEO FIXES (July 2026)
+- /register removed from sitemap (robots.txt conflict)
+- Tag archives noindexed and removed from sitemap
+- Instructor pages use canonical subdomain URLs in sitemap
+- Thin content addressed on /instructors page and sparse subdomain profiles
+
 ### ⏳ PENDING (In TODO.md)
-- 9 config tasks in Vercel/Stripe/Google dashboards (no code changes needed)
-- 1 deferred item: /blog — build 2 articles when ready
+- 9 config tasks in Vercel/Stripe/Google dashboards
+- Fix #11: C drive disk space must be cleared before Prisma generate
+- Fix #12: Request indexing in Google Search Console after deploy
+- Fix #10: Data export feature (blog post drafted, UI not built)
 
 ### ✅ VOICE SERVICE FIXES (June 19, 2026)
 - `main-app-proxy.js` — startup crash fixed (generated-client-js path didn't exist). Rewrote to direct axios. Now sends `x-api-key` to authenticate against main app.

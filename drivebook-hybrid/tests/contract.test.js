@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Contract Tests — DriveBook API
  *
  * These tests verify the shape of the API responses the voice service depends
@@ -93,6 +93,39 @@ jest.mock('axios', () => {
     // Reschedule
     if (path.match(/\/api\/public\/bookings\/[^/]+\/reschedule/)) {
       return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: { success: true, oldStartTime: '2050-01-01T09:00:00Z', newStartTime: '2050-01-03T10:00:00Z' } });
+    }
+    // Booking detail with canCancel / canReschedule (Gap 15)
+    if (path.match(/\/api\/public\/bookings\/[^/]+(\/)?$/) && method === 'GET') {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: {
+        bookingId: 'bkg_test_001', status: 'CONFIRMED', canCancel: true, canReschedule: true,
+        startTime: '2050-01-01T09:00:00Z', duration: 60, pickupLocation: '123 Main St Joondalup',
+        instructor: { name: 'Debesay' },
+      }});
+    }
+    // Cancellation policy (Gap 1)
+    if (path.match(/\/api\/bookings\/[^/]+\/cancellation-policy/)) {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: {
+        bookingId: 'bkg_test_001', hoursBeforeLesson: 72,
+        policy: { allowed: true, refundPercentage: 100, refundAmount: 790, cancellationFee: 0, feeAmount: 0, reason: 'more_than_48_hours' },
+        message: 'Cancellation allowed with full refund',
+      }});
+    }
+    // Payment status (Gap 8)
+    if (path.match(/\/api\/public\/bookings\/[^/]+\/payment-status/)) {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: {
+        bookingId: 'bkg_test_001', status: 'CONFIRMED', paymentStatus: 'succeeded', isPaid: true, canPay: false,
+      }});
+    }
+    // Timeline (Gap 9)
+    if (path.match(/\/api\/public\/bookings\/[^/]+\/timeline/)) {
+      return Promise.resolve({ status: 200, headers: { 'content-type': 'application/json' }, data: {
+        bookingId: 'bkg_test_001', status: 'CONFIRMED',
+        events: [
+          { type: 'BOOKING_CREATED', time: '2050-01-01T09:00:00Z', description: 'Booking created' },
+          { type: 'PAYMENT_COMPLETED', time: '2050-01-01T09:03:00Z', description: 'Payment received' },
+          { type: 'BOOKING_CONFIRMED', time: '2050-01-01T09:03:01Z', description: 'Booking confirmed for Tuesday at 9am' },
+        ],
+      }});
     }
     // Fallback
     return Promise.resolve({ status: 404, headers: {}, data: { error: 'Not found' } });
@@ -341,8 +374,63 @@ describe('Contract Tests — API Response Shapes', () => {
 
 // ── Voice session service unit tests ──────────────────────────────────────────
 
-describe('VoiceSessionService', () => {
-  const voiceSession = require('../services/voice-session-service');
+
+  //  Cancellation policy (Gap 1 fix) ──────────────────────────────────────
+  describe('GET /api/bookings/:id/cancellation-policy', () => {
+    test('returns policy with refundAmount, refundPercentage, and allowed', async () => {
+      const res = await request(app)
+        .get('/api/bookings/bkg_test_001/cancellation-policy');
+      expect(res.status).toBe(200);
+      assertShape(res.body, {
+        bookingId: 'string',
+        policy: { allowed: true, refundPercentage: 0, refundAmount: 0 },
+      });
+    });
+  });
+
+  //  Payment status (Gap 8 fix) 
+  describe('GET /api/public/bookings/:id/payment-status', () => {
+    test('returns paymentStatus string and canPay boolean', async () => {
+      const res = await request(app)
+        .get('/api/public/bookings/bkg_test_001/payment-status')
+        .query({ token: 'tok_test_payment' });
+      expect(res.status).toBe(200);
+      assertShape(res.body, {
+        bookingId: 'string',
+        paymentStatus: 'string',
+        canPay: true,
+      });
+    });
+  });
+
+  // ── Booking timeline (Gap 9 fix) 
+  describe('GET /api/public/bookings/:id/timeline', () => {
+    test('returns events array with type, time, and description', async () => {
+      const res = await request(app)
+        .get('/api/public/bookings/bkg_test_001/timeline')
+        .query({ token: 'tok_test_payment' });
+      expect(res.status).toBe(200);
+      assertShape(res.body, {
+        bookingId: 'string',
+        events: [{ type: 'string', time: 'string', description: 'string' }],
+      });
+    });
+  });
+
+  //  Booking detail with canCancel / canReschedule (Gap 15) ───────────
+  describe('GET /api/public/bookings/:id', () => {
+    test('returns canCancel and canReschedule booleans', async () => {
+      const res = await request(app)
+        .get('/api/public/bookings/bkg_test_001')
+        .query({ phone: '0400123456' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('canCancel');
+      expect(res.body).toHaveProperty('canReschedule');
+      expect(typeof res.body.canCancel).toBe('boolean');
+      expect(typeof res.body.canReschedule).toBe('boolean');
+    });
+  });
+describe('VoiceSessionService', () => {  const voiceSession = require('../services/voice-session-service');
 
   afterEach(async () => {
     await voiceSession.clearSession('0400111111');
@@ -388,13 +476,165 @@ describe('VoiceSessionService', () => {
   });
 
   test('buildRecoveryPrompt mentions verification code for AWAITING_OTP', async () => {
-    await voiceSession.saveSession('0400111111', { lastAction: 'AWAITING_OTP' });
+    await voiceSession.saveSession('0400111111', { lastAction: 'AWAITING_OTP', otpPurpose: 'cancel' });
     const session = await voiceSession.getSession('0400111111');
     const prompt = voiceSession.buildRecoveryPrompt(session);
-    expect(prompt).toContain('verification code');
+    // Recovery prompt now says 'previous code may have expired' with purpose context
+    expect(prompt).toContain('verifying your identity');
+    expect(prompt).toContain('code');
   });
 
   test('getStorageMode returns map in test environment', () => {
     expect(voiceSession.getStorageMode()).toBe('map');
+  });
+});
+
+
+// ── System Prompt Builder unit tests ─────────────────────────────────────────
+
+describe('SystemPromptBuilder', () => {
+  // Mock fetch so no real HTTP calls are made
+  const mockFetch = jest.fn();
+  global.fetch = mockFetch;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    // Default: all three fetches return realistic data
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'inst_1',
+          name: 'Debesay',
+          hourlyRate: 79,
+          serviceAreas: 'Joondalup, Wanneroo, Balga',
+          vehicleTypes: 'AUTO,MANUAL',
+          languages: 'English,Tigrinya',
+          yearsExperience: 5,
+          offersTestPackage: true,
+          testPackagePrice: 225,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          slots: [
+            { time: '09:00', available: true },
+            { time: '11:00', available: true },
+            { time: '14:00', available: true },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          packages: [
+            { hours: 6,  price: 450, priceWithFee: 466 },
+            { hours: 10, price: 710, priceWithFee: 736 },
+            { hours: 15, price: 1042, priceWithFee: 1079 },
+          ],
+        }),
+      });
+  });
+
+  const { buildSystemPrompt, buildContextOnly } = require('../services/system-prompt-builder');
+
+  test('buildSystemPrompt returns a non-empty string', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111');
+    expect(typeof prompt).toBe('string');
+    expect(prompt.length).toBeGreaterThan(100);
+  });
+
+  test('prompt contains INSTRUCTOR CONTEXT block', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111');
+    expect(prompt).toContain('[INSTRUCTOR CONTEXT');
+    expect(prompt).toContain('[END CONTEXT]');
+  });
+
+  test('prompt contains instructor name from live data', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111');
+    expect(prompt).toContain('Debesay');
+  });
+
+  test('prompt contains hourly rate', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111');
+    expect(prompt).toContain('$79/hr');
+  });
+
+  test('prompt contains available slots', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111');
+    expect(prompt).toContain('09:00');
+  });
+
+  test('prompt contains core layers (identity, rules, state, voice)', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111');
+    // Key section headings from voice-scenarios.md
+    expect(prompt).toContain('BUSINESS RULES');
+    expect(prompt).toContain('CONVERSATION STATE');
+    expect(prompt).toContain('VOICE RULES');
+  });
+
+  test('prompt contains intent module for booking (default)', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111');
+    // Default intent is 'booking'  booking module contains tool sequence
+    expect(prompt).toContain('BOOKING MODULE');
+  });
+
+  test('buildContextOnly returns context block without intent module text', async () => {
+    const context = await buildContextOnly('inst_1');
+    expect(context).toContain('[INSTRUCTOR CONTEXT');
+    expect(context).toContain('Debesay');
+    // Should NOT contain intent module content
+    expect(context).not.toContain('BOOKING MODULE');
+  });
+
+  test('buildSystemPrompt handles null instructorId gracefully', async () => {
+    // No fetches needed for null instructorId — reset mock
+    mockFetch.mockReset();
+    const prompt = await buildSystemPrompt(null, null);
+    expect(typeof prompt).toBe('string');
+    expect(prompt).toContain('No instructor context available');
+    expect(prompt).toContain('BUSINESS RULES');
+  });
+
+  test('buildSystemPrompt handles fetch failure gracefully', async () => {
+    mockFetch.mockReset();
+    // All fetches fail
+    mockFetch.mockRejectedValue(new Error('Network error'));
+    const prompt = await buildSystemPrompt('inst_bad', null);
+    expect(typeof prompt).toBe('string');
+    // Should still include core layers even without live context
+    expect(prompt).toContain('BUSINESS RULES');
+  });
+
+  test('PDA test pack shown when offersTestPackage is true', async () => {
+    const prompt = await buildSystemPrompt('inst_1', null);
+    expect(prompt).toContain('Offers PDA test pack: Yes');
+    expect(prompt).toContain('$225');
+  });
+
+  test('cancellation intent loads cancellation module, not booking module', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111', 'cancellation');
+    expect(prompt).toContain('CANCELLATION MODULE');
+    expect(prompt).not.toContain('BOOKING MODULE');
+  });
+
+  test('reschedule intent loads reschedule module', async () => {
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111', 'reschedule');
+    expect(prompt).toContain('RESCHEDULE MODULE');
+    expect(prompt).not.toContain('BOOKING MODULE');
+  });
+
+  test('session memory injected when session provided', async () => {
+    const session = {
+      lastAction: 'BOOKING_CREATED',
+      instructorName: 'Debesay',
+      bookingId: 'bkg_001',
+      checkoutUrl: 'https://drivebook.com.au/booking/bkg_001/payment',
+    };
+    const prompt = await buildSystemPrompt('inst_1', '+61400111111', 'booking', session);
+    expect(prompt).toContain('SESSION MEMORY');
+    expect(prompt).toContain('BOOKING_CREATED');
+    expect(prompt).toContain('Debesay');
   });
 });

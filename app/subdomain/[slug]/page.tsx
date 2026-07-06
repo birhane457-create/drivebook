@@ -393,6 +393,13 @@ export default async function SubdomainBookingPage({
   const facebook = instructor.facebook;
   const yearsExperience = instructor.yearsExperience;
 
+  // Bio word count — split on whitespace, exclude empty tokens so spaces don't inflate the count.
+  // 75 words is the minimum for a bio to be considered substantive (avoids thin content).
+  const bioWordCount = instructor.bio?.trim()
+    ? instructor.bio.trim().split(/\s+/).filter(Boolean).length
+    : 0;
+  const bioIsSubstantial = bioWordCount >= 75;
+
   // Parse specialties from comma-string
   const specialties: string[] = (instructor as any).specialties
     ? (instructor as any).specialties.split(',').map((s: string) => s.trim()).filter(Boolean)
@@ -671,6 +678,15 @@ export default async function SubdomainBookingPage({
               <div id="section-about" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-semibold text-gray-900 mb-2 text-base">About</h2>
                 <p className="text-base text-gray-600 leading-relaxed">{instructor.bio}</p>
+                {/* Platform context — adds a sentence for SEO on substantial bios */}
+                {bioIsSubstantial && (
+                  <p className="text-sm text-gray-500 leading-relaxed mt-3 pt-3 border-t border-gray-50">
+                    {instructor.name} is a verified DriveBook instructor
+                    {baseSuburb ? ` based in ${baseSuburb}` : ''}
+                    {vehicleTypes.length > 0 ? `, offering ${vehicleTypes.join(' and ')} driving lessons` : ''}.
+                    {' '}All lessons are booked and paid online — no phone calls or bank transfers required.
+                  </p>
+                )}
                 {specialties.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-gray-100">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Teaching style</p>
@@ -892,6 +908,38 @@ export default async function SubdomainBookingPage({
                     {[instructor.carYear, instructor.carMake, instructor.carModel].filter(Boolean).join(' ')}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* About this instructor — shown when bio is absent or under 75 words.
+                75-word minimum ensures every profile has substantive unique content
+                for Google — short bios don't solve thin content on their own. */}
+            {!bioIsSubstantial && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h2 className="font-semibold text-gray-900 mb-3 text-base">
+                  About {instructor.name}
+                </h2>
+                <div className="space-y-2 text-sm text-gray-600 leading-relaxed">
+                  <p>
+                    {instructor.name} offers driving lessons
+                    {instructor.serviceAreas
+                      ? ` in ${instructor.serviceAreas}`
+                      : baseSuburb
+                      ? ` based in ${baseSuburb}${instructor.serviceRadiusKm ? `, servicing up to ${instructor.serviceRadiusKm} km` : ''}`
+                      : ' in Western Australia'}
+                    {vehicleTypes.length > 0 ? `, with ${vehicleTypes.join(' and ')} lessons available` : ''}.
+                    {' '}Lessons start from ${instructor.hourlyRate}/hr, with discounted packages for students booking 6, 10, or 15 hours.
+                  </p>
+                  <p>
+                    All DriveBook instructors hold a valid Driving Instructor Authorisation (DIA) from the Department of Transport WA and are background checked before being listed on the platform.
+                    {' '}Booking is handled entirely online — choose your package, pay once, and schedule lessons from your student dashboard at any time.
+                  </p>
+                  {yearsExperience ? (
+                    <p>
+                      With {yearsExperience}+ years of teaching experience, {instructor.name} can guide students from their first lesson through to PDA preparation, tailoring each session to the student&apos;s current ability and learning pace.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             )}
 

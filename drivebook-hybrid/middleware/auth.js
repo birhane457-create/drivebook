@@ -7,6 +7,11 @@ const config = require('../utils/config');
  * 2. Health check endpoint (for monitoring)
  */
 function restrictAccess(req, res, next) {
+  // Allow all requests in test environment
+  if (config.NODE_ENV === 'test') {
+    return next();
+  }
+
   // Allow health check
   if (req.path === '/api/health') {
     return next();

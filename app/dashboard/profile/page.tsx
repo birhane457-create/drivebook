@@ -281,7 +281,23 @@ export default function ProfilePage() {
                 placeholder="Describe your experience, teaching style, and what makes you a great instructor..."
                 className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500 resize-none"
               />
-              <p className="text-[11px] text-slate-500 mt-1">Shown on your public booking page — first impressions matter.</p>
+              {/* Word count — 75 word minimum for SEO and profile quality */}
+              {(() => {
+                const words = formData.bio.trim() ? formData.bio.trim().split(/\s+/).filter(Boolean).length : 0;
+                const met = words >= 75;
+                return (
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-[11px] text-slate-500">
+                      {met
+                        ? 'Shown on your public booking page — first impressions matter.'
+                        : '⚠️ Minimum 75 words required for your profile to appear in search results.'}
+                    </p>
+                    <span className={`text-[11px] font-medium tabular-nums ${met ? 'text-emerald-400' : words > 0 ? 'text-amber-400' : 'text-slate-600'}`}>
+                      {words}/75 words
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div>

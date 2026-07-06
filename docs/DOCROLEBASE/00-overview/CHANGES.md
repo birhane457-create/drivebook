@@ -3,6 +3,147 @@
 
 ---
 
+## 🎯 July 2026 — Subdomain Page Overhaul, Admin Fixes, Blog Corrections, SEO
+
+### Summary
+Comprehensive session covering subdomain page UX improvements, admin dashboard bug fixes, blog content accuracy corrections, SEO indexing fixes, and instructor profile content quality enforcement.
+
+### Subdomain Page (`app/subdomain/[slug]/page.tsx`)
+
+**UX & Conversion:**
+- Fixed broken glass CSS on booking card and reviews card (were using dark glassmorphism styles on a light bg)
+- Reviews moved above booking CTA in right column (social proof before action)
+- Right column mobile renders first (`order-1 lg:order-2`)
+- Hero CTA "Book a lesson" button added for above-the-fold action on all screen sizes
+- "Book Your Lesson →" button + overlay unified for desktop and mobile — no scroll-to-form
+
+**Next Available Slots:**
+- Capped at 2 slots (was 3) in left column callout
+- Removed from booking card social proof banner (redundant)
+- Hero shows 1 slot only
+- Slot calculation fixed: `minBookableTime` now ceiled to whole hour, `d.setHours(0,0,0,0)` resets to midnight before slot calculation to prevent time contamination, day labels derived from midnight comparison to avoid `i===0` edge case with ISR cache
+
+**New Sections:**
+- "How it works" strip (3-step: choose package → pay once → book lessons) shown between trust badges and main grid
+- Video intro embed (YouTube + Vimeo + Shorts support) shown in right column above booking CTA
+- Teaching specialties chips with "Teaching style" subheader
+- Test centres covered (from instructor PDA configs) as blue chips in Details card
+- Popular package badge (amber "Most popular" pill) from `prisma.booking.groupBy` — min 3 bookings threshold
+- "About [name]" auto-generated content block for profiles with bio < 75 words
+
+**Bio word count threshold:**
+- `bioWordCount` computed server-side (split on whitespace, filter empty tokens)
+- `bioIsSubstantial = bioWordCount >= 75`
+- Bio ≥ 75 words → bio card + 1 platform context sentence
+- Bio < 75 words → auto-generated "About [name]" card with location, vehicle types, rate, DIA note, years experience
+
+**Pricing rows:**
+- Bulk package rows in Services card are clickable (`SubdomainPricingBooking` client component)
+- Clicking a row pre-selects that package in the wizard (skips package step)
+- Popular package badge shown on matching row
+
+**SEO:**
+- `alternates.canonical` pointing to `[slug].drivebook.com.au` added to `generateMetadata`
+- Fallback description improved to include suburb, vehicle types
+- Platform discounts fetched live from `platformPricing` (not hardcoded)
+- Service area extraction improved for no-comma address formats
+
+**Content quality (`instructors` page):**
+- Added 4 content sections (verification, booking flow, manual vs automatic, pricing)
+- Added related guides row with 6 internal links
+
+### SubdomainBookingWizard (`components/subdomain/SubdomainBookingWizard.tsx`)
+- Test pack step added (only when `offersTestPackage = true`)
+- `getSteps()` wrapped in `useCallback`, `initialPackage` prop skips package step
+- `useEffect` watches `bookingType` change — snaps back to `book-type` if current step is no longer valid
+- Dark overlay theming corrected (progress bar, buttons, error banners)
+- Order summary shows test pack line item
+
+### Dashboard Profile (`app/dashboard/profile/page.tsx`)
+- `videoUrl` field with live YouTube/Vimeo/Shorts preview
+- Teaching specialties tag picker (14 preset tags, toggle chips)
+- Bio word count live indicator: `{words}/75 words`, amber when in progress, emerald when ≥ 75
+- Warning shown when under threshold: "Minimum 75 words required for your profile to appear in search results"
+
+### Profile API (`app/api/instructor/profile/route.ts`)
+- `videoUrl` and `specialties` added to GET select and PUT schema
+- `videoUrl` validated as URL or null
+- `specialties` accepts array or comma-string
+
+### Schema (`prisma/schema.prisma`)
+- `videoUrl String?` — YouTube/Vimeo URL
+- `specialties String?` — comma-separated teaching style tags
+
+### Migration
+- `prisma/migrations/20260703000001_add_instructor_video_specialties/migration.sql` — adds both columns
+- Migration applied to live Supabase via `prisma db execute`
+
+### Branding API (`app/api/public/instructor/[instructorId]/branding/route.ts`)
+- Fixed: STUDIO tier was missing from tier check — `brandedPages` was silently returning `enabled: false` for STUDIO instructors
+
+### Admin Dashboard
+
+**`components/admin/AdminDashboardTabs.tsx`:**
+- "Recent Bookings (Top 3)" label removed; now shows 5 bookings (desktop + mobile)
+
+**`components/admin/AdminDailySummary.tsx`:**
+- Fixed revenue display bug: `revenueCollected / 100` was wrong (amounts are AUD dollars, not cents). Removed the false division. Same fix for `platformFee`.
+
+**`app/admin/settings/page.tsx`:**
+- Removed "New student bonus" row from tier cards — feature removed May 2026
+
+**`app/api/admin/payouts/route.ts`:**
+- Added `source: { not: 'offline' }` to eligible transaction query — offline/cash bookings were incorrectly appearing as payout-eligible
+
+**`app/api/admin/payouts/process-all/route.ts`:**
+- Same offline filter added to bulk processing route
+
+**`app/api/admin/payouts/preview-all/route.ts`:**
+- Was querying `status: 'PENDING'` instead of `status: 'SETTLED'` — showed wrong transactions
+- Rewritten to mirror `process-all` eligibility criteria (SETTLED + BOOKING_PAYMENT + 48hr buffer + offline excluded)
+- Now excludes already-covered transactions (payoutTransaction join)
+
+**`app/api/admin/instructor-risk/route.ts`:**
+- Fixed document expiry loop: `break` after first expired doc was replaced with accumulating all expired/expiring docs up to 15pt cap
+- Previously: multiple expired documents only generated 1 flag
+
+### Sitemap (`app/sitemap.ts`)
+- `/register` removed (was in both sitemap and robots disallow — conflict)
+- Tag archive pages removed from sitemap (noindexed)
+- Instructor pages now use canonical subdomain URL (`[slug].drivebook.com.au`) instead of internal `/subdomain/[slug]` path
+- `tagPages` variable and generation removed
+
+### Tag archive pages (`app/blog/tag/[tag]/page.tsx`)
+- Added `robots: { index: false, follow: true }` — navigation aids, not content pages
+
+### Instructor page (`app/instructors/page.tsx`)
+- Added 4 × 2-paragraph content sections (verification, booking, manual/auto, pricing)
+- Added "Related guides" row with 6 internal links to blog posts and pillar pages
+- Converts thin directory listing to substantive indexable page
+
+### Blog fixes (30+ articles)
+See individual blog files for corrections. Key changes:
+- Subscription tiers corrected (STUDIO = single instructor, BUSINESS = multi-instructor)
+- Offline booking PRO+ tier caveat added across 5 posts
+- Wrong fee percentages corrected (1.5-3% → actual 3.6%)
+- `Settings → Branding → Custom Domain` → corrected to Branding page
+- `Settings → Subscription → Cancel Plan` → corrected to Billing Portal flow
+- `Availability → Block Dates` → corrected to Availability page exceptions section
+- Export blog marked draft (feature not yet built)
+- SMS tier caveat (BASIC = email only) added across multiple posts
+- `does-drivebook-lock-me-in.mdx` — read-only period corrected (was "30 days" → "indefinitely per terms 17.1")
+
+### Cancellation policy
+- `app/dashboard/settings/page.tsx` — Read-only "Platform Cancellation Policy" card added
+- `app/subdomain/[slug]/page.tsx` — FAQ cancellation answer now uses `platformPricing.lateCancellationWindowHours` from DB
+
+### DOCROLEBASE docs updated
+- `01-public/SUBDOMAIN_PAGE.md` — Full rewrite reflecting current state
+- `03-instructor/BRANDING.md` — `customDomain` → `customSlug` field name; tier list fixed (PRO/STUDIO/BUSINESS)
+- `03-instructor/SUBSCRIPTION_TIERS.md` — Duplicate section removed; newStudentBonus removed; rewritten clean
+
+---
+
 ## 🎯 July 2026 — Branding Logo Bug: STUDIO Tier Missing from isPro Check
 
 ### Bug

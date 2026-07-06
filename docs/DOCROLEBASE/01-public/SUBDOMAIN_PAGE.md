@@ -2,6 +2,7 @@
 
 **Route:** `/subdomain/[slug]` (served at `[slug].drivebook.com.au`)  
 **Auth required:** No  
+**Status:** ✅ VERIFIED COMPLETE (July 2026)  
 **File:** `app/subdomain/[slug]/page.tsx`, `components/subdomain/SubdomainBookingEntry.tsx`, `components/subdomain/SubdomainBookingWizard.tsx`, `components/subdomain/SubdomainClientFeatures.tsx`  
 **Full reference:** `docs/SUBDOMAIN_SYSTEM.md`
 
