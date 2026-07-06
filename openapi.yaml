@@ -2,6 +2,8 @@ swagger: '2.0'
 info:
   title: DriveBook Voice Service API
   version: '3.0.0'
+  contact:
+    name: DriveBook Support
   description: |
     Full API contract for the DriveBook voice service and AI agent.
     This is the authoritative documentation spec — shared externally, used for Swagger UI.
@@ -101,9 +103,6 @@ info:
     - BearerAuth: JWT session token for authenticated instructor/admin endpoints
     - VerificationToken: Short-lived OTP token for public cancel/reschedule (X-Verification-Token header)
     - VoiceServiceKey: Internal API key for voice service endpoints (X-Voice-Service-Key header)
-  version: 2.0.0
-  contact:
-    name: DriveBook Support
 host: drivebook.com.au
 basePath: /api
 schemes:

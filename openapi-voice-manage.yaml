@@ -1,0 +1,245 @@
+swagger: '2.0'
+info:
+  title: DriveBook - Cancel & Reschedule API
+  version: '1.0.0'
+  description: >
+    Cancel and reschedule driving lesson bookings with OTP identity verification.
+    Always check cancellation policy before cancelling. Always verify OTP before
+    cancel or reschedule. Never cancel without verbal yes from caller.
+host: drivebook-production-12ab.up.railway.app
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+  /verifications/otp:
+    post:
+      summary: Send OTP verification code
+      description: Send a 6-digit code to caller's phone. Required before cancel or reschedule. Rate limited to 3 per hour per phone.
+      operationId: sendOtp
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - phone
+              - purpose
+            properties:
+              phone:
+                type: string
+                example: "+61412345678"
+              purpose:
+                type: string
+                enum: [cancel, reschedule]
+      responses:
+        '200':
+          description: OTP sent
+          schema:
+            type: object
+            properties:
+              verificationId:
+                type: string
+              expiresAt:
+                type: string
+        '429':
+          description: Rate limit exceeded
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /verifications/otp/confirm:
+    post:
+      summary: Confirm OTP code
+      description: Confirm the 6-digit code. Returns verificationToken (10 min TTL, single use). Never retry this endpoint - each attempt consumes an attempt counter.
+      operationId: confirmOtp
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - verificationId
+              - code
+              - phone
+            properties:
+              verificationId:
+                type: string
+              code:
+                type: string
+              phone:
+                type: string
+      responses:
+        '200':
+          description: OTP confirmed
+          schema:
+            type: object
+            properties:
+              verified:
+                type: boolean
+              verificationToken:
+                type: string
+              attemptsRemaining:
+                type: integer
+        '400':
+          description: Invalid code
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              attemptsRemaining:
+                type: integer
+
+  /bookings/{id}/cancellation-policy:
+    get:
+      summary: Check cancellation eligibility and refund
+      description: >
+        Call this BEFORE cancelling. Returns exact refund amount to quote to caller.
+        If canCancel is false, do not proceed. If isPendingPayment is true, skip OTP.
+        Never guess refund amount - always use refundAmount from this response.
+      operationId: getCancellationPolicy
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID
+      responses:
+        '200':
+          description: Cancellation policy
+          schema:
+            type: object
+            properties:
+              canCancel:
+                type: boolean
+              isPendingPayment:
+                type: boolean
+              refundPercentage:
+                type: integer
+                enum: [0, 50, 100]
+              refundAmount:
+                type: number
+              hoursUntilLesson:
+                type: number
+              reason:
+                type: string
+
+  /public/bookings/{id}/cancel:
+    post:
+      summary: Cancel a booking
+      description: >
+        Cancel after OTP verified and caller says yes. Send verificationToken in header.
+        Never retry automatically - cancellation may have completed.
+        Check requiresManualAction in response.
+      operationId: cancelBooking
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: true
+          description: Token from confirmOtp response
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              reason:
+                type: string
+                default: "student_request"
+      responses:
+        '200':
+          description: Booking cancelled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              refundAmount:
+                type: number
+              requiresManualAction:
+                type: boolean
+
+  /public/bookings/{id}/reschedule:
+    post:
+      summary: Reschedule a booking
+      description: >
+        Reschedule after OTP verified and new slot confirmed available.
+        Get verbal confirmation before calling. Never retry automatically.
+        Send verificationToken in both header and body.
+      operationId: rescheduleBooking
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: true
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - newDate
+              - newTime
+              - duration
+              - phone
+              - verificationToken
+            properties:
+              newDate:
+                type: string
+                example: "2026-03-27"
+              newTime:
+                type: string
+                example: "10:00"
+              duration:
+                type: integer
+                example: 60
+              reason:
+                type: string
+                default: "Client request"
+              phone:
+                type: string
+              verificationToken:
+                type: string
+      responses:
+        '200':
+          description: Booking rescheduled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              newStartTime:
+                type: string
+        '409':
+          description: Slot taken - offer alternative times
+          schema:
+            type: object
+            properties:
+              error:
+                type: string

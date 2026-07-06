@@ -1,0 +1,208 @@
+swagger: '2.0'
+info:
+  title: DriveBook - Booking Lookup API
+  version: '1.0.0'
+  description: >
+    Look up existing bookings, check payment status, and retrieve booking history.
+    Use bookings/lookup to find a booking by phone number. Use payment-status to
+    check if Stripe payment completed. Use timeline to read booking history aloud.
+host: drivebook-production-12ab.up.railway.app
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+  /bookings/lookup:
+    get:
+      summary: Find bookings by phone number
+      description: >
+        Look up all bookings for a phone number. Use to identify the booking
+        before cancel or reschedule. Note - instructor phone is NOT returned
+        here (caller not yet OTP-verified).
+      operationId: lookupBookings
+      parameters:
+        - name: phone
+          in: query
+          type: string
+          required: true
+          description: "Australian mobile number e.g. 0412345678 or +61412345678"
+      responses:
+        '200':
+          description: Bookings found
+          schema:
+            type: object
+            properties:
+              bookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    status:
+                      type: string
+                    startTime:
+                      type: string
+                    instructorName:
+                      type: string
+                    pickupAddress:
+                      type: string
+                    duration:
+                      type: integer
+        '404':
+          description: No bookings found
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/bookings/{id}:
+    get:
+      summary: Get booking details
+      description: >
+        Get booking details by ID. Pass phone query param for limited details
+        (no PII). Pass X-Verification-Token header for full details including
+        instructor phone and pricing. Use canCancel and canReschedule fields
+        directly - never infer eligibility from status alone.
+      operationId: getBookingDetails
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: phone
+          in: query
+          type: string
+          required: false
+          description: Must match booking clientPhone. Returns limited details.
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: false
+          description: From confirmOtp. Returns full details including instructor phone.
+      responses:
+        '200':
+          description: Booking details
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                type: string
+              canCancel:
+                type: boolean
+              canReschedule:
+                type: boolean
+              startTime:
+                type: string
+              endTime:
+                type: string
+              duration:
+                type: integer
+              pickupLocation:
+                type: string
+              instructor:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                    description: Only returned with verificationToken
+        '404':
+          description: Not found
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/bookings/{id}/payment-status:
+    get:
+      summary: Check if payment completed
+      description: >
+        Poll this when caller says they just paid. Check paymentStatus field.
+        pending=awaiting payment, succeeded=confirmed, expired=slot released.
+        Poll max 3 times with 5 second gaps then stop.
+      operationId: getPaymentStatus
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: paymentToken from the SMS checkout link
+      responses:
+        '200':
+          description: Payment status
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              paymentStatus:
+                type: string
+                enum: [pending, awaiting_approval, succeeded, expired, cancelled]
+              canPay:
+                type: boolean
+        '404':
+          description: Not found or token mismatch
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/bookings/{id}/timeline:
+    get:
+      summary: Get booking event history
+      description: >
+        Returns chronological events for a booking. AI reads events aloud when
+        caller asks "what happened to my booking?" Requires paymentToken.
+      operationId: getBookingTimeline
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: paymentToken from the SMS checkout link
+      responses:
+        '200':
+          description: Booking timeline
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                type: string
+              events:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    timestamp:
+                      type: string
+                    description:
+                      type: string
+                      description: Human-readable text for AI to read aloud
+        '404':
+          description: Not found or token mismatch
+          schema:
+            type: object
+            properties:
+              error:
+                type: string

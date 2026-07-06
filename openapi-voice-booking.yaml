@@ -1,0 +1,279 @@
+swagger: '2.0'
+info:
+  title: DriveBook - Booking API
+  version: '1.0.0'
+  description: >
+    Find instructors, check availability, get pricing, and create driving lesson bookings.
+    Always validate location first, then find instructor, check slots, get packages,
+    confirm with caller, then create booking. Never send pricing field - backend calculates it.
+host: drivebook-production-12ab.up.railway.app
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+  /locations/validate:
+    post:
+      summary: Validate and geocode pickup location
+      description: Call this first before searching for instructors. Returns formattedAddress to use in all subsequent calls.
+      operationId: validateLocation
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - pickupLocation
+            properties:
+              pickupLocation:
+                type: string
+                example: "123 Main St Joondalup"
+      responses:
+        '200':
+          description: Location validated
+          schema:
+            type: object
+            properties:
+              valid:
+                type: boolean
+              formattedAddress:
+                type: string
+              suburb:
+                type: string
+              suggestions:
+                type: array
+                items:
+                  type: string
+
+  /instructors/search:
+    get:
+      summary: Find instructors by location or name
+      description: >
+        Search for instructors by location (suburb, postcode, address) or by name.
+        Use for both "find me someone near Maylands" and "find instructor named Debesay".
+        Returns instructors with id, name, hourlyRate, vehicleTypes, distance.
+        Always use the id from this response in subsequent availability and booking calls.
+      operationId: findInstructors
+      parameters:
+        - name: location
+          in: query
+          type: string
+          description: "Suburb, postcode or address e.g. 'Maylands WA' or '6051'"
+        - name: name
+          in: query
+          type: string
+          description: "Instructor name (partial match) e.g. 'Debesay'"
+        - name: vehicleType
+          in: query
+          type: string
+          description: "AUTO or MANUAL"
+        - name: language
+          in: query
+          type: string
+          description: "e.g. English, Arabic, Mandarin"
+      responses:
+        '200':
+          description: Matching instructors
+          schema:
+            type: object
+            properties:
+              instructors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    hourlyRate:
+                      type: number
+                    averageRating:
+                      type: number
+                    distance:
+                      type: number
+                    vehicleTypes:
+                      type: array
+                      items:
+                        type: string
+                    languages:
+                      type: array
+                      items:
+                        type: string
+                    offersTestPackage:
+                      type: boolean
+
+  /availability/slots:
+    get:
+      summary: Get available time slots for an instructor
+      description: Check availability before confirming any booking. Returns slots with available flag.
+      operationId: getAvailableSlots
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+        - name: date
+          in: query
+          type: string
+          required: true
+          description: "Date in YYYY-MM-DD format"
+        - name: duration
+          in: query
+          type: integer
+          description: "Lesson duration in minutes (default 60)"
+      responses:
+        '200':
+          description: Available time slots
+          schema:
+            type: object
+            properties:
+              slots:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    time:
+                      type: string
+                      example: "09:00"
+                    available:
+                      type: boolean
+
+  /packages:
+    get:
+      summary: Get lesson package pricing
+      description: Always call this before quoting prices. Never quote from memory.
+      operationId: getPackages
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Available packages with pricing
+          schema:
+            type: object
+            properties:
+              packages:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    packageType:
+                      type: string
+                      enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15]
+                    hours:
+                      type: integer
+                    price:
+                      type: number
+                    priceWithFee:
+                      type: number
+                    discountPercent:
+                      type: number
+              offersTestPackage:
+                type: boolean
+              testPackagePrice:
+                type: number
+
+  /public/bookings/bulk:
+    post:
+      summary: Create a booking
+      description: >
+        Only call after full verbal confirmation from caller. Do not send pricing field.
+        Set isShortNotice=true if lesson starts within 120 minutes.
+        Response includes checkoutUrl for SMS (normal booking) or PENDING status (short notice).
+      operationId: createBooking
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - packageType
+              - bookingType
+              - registrationType
+              - accountHolderName
+              - accountHolderEmail
+              - accountHolderPhone
+            properties:
+              instructorId:
+                type: string
+              instructorQuery:
+                type: string
+              packageType:
+                type: string
+                enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
+              hours:
+                type: number
+              includeTestPackage:
+                type: boolean
+                default: false
+              bookingType:
+                type: string
+                enum: [now, later]
+              registrationType:
+                type: string
+                enum: [myself, someone-else]
+              accountHolderName:
+                type: string
+              accountHolderEmail:
+                type: string
+              accountHolderPhone:
+                type: string
+              learnerName:
+                type: string
+              learnerPhone:
+                type: string
+              learnerRelationship:
+                type: string
+                enum: [child, partner, grandchild, parent, friend, other]
+              scheduledBookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                    time:
+                      type: string
+                    duration:
+                      type: integer
+                    pickupLocation:
+                      type: string
+                    isShortNotice:
+                      type: boolean
+      responses:
+        '201':
+          description: Booking created
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                type: string
+              isShortNotice:
+                type: boolean
+              checkoutUrl:
+                type: string
+        '409':
+          description: Slot taken or email conflict
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+                enum: [SLOT_UNAVAILABLE, EMAIL_EXISTS]
