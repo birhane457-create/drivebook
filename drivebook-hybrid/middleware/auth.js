@@ -22,6 +22,19 @@ function restrictAccess(req, res, next) {
     return next();
   }
 
+  // Allow all API proxy routes used by Copilot Studio / AI agent
+  if (
+    req.path.startsWith('/api/locations') ||
+    req.path.startsWith('/api/instructors') ||
+    req.path.startsWith('/api/availability') ||
+    req.path.startsWith('/api/packages') ||
+    req.path.startsWith('/api/public') ||
+    req.path.startsWith('/api/verifications') ||
+    req.path.startsWith('/api/voice')
+  ) {
+    return next();
+  }
+
   // Block all other access
   res.status(403).json({ 
     error: 'Forbidden',
