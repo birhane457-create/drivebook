@@ -1,42 +1,150 @@
-const fs = require('fs');
-const path = require('path');
-const config = require('./config');
+﻿'use strict';
 
-function maskPhone(p) {
-  if (!p) return p;
-  return p.replace(/(\+?\d{2})(\d+)(\d{2})/, (m, a, b, c) => `${a}${b.replace(/\d/g, '*')}${c}`);
+/**
+ * logger.js
+ *
+ * Lightweight structured JSON logger for the drivebook-hybrid service.
+ *
+ * Outputs to stdout/stderr in all environments (Railway, Docker, Vercel all
+ * capture stdout natively). Filesystem log files are not used  they require
+ * disk access, don't survive container restarts, and aren't visible in cloud
+ * log aggregators.
+ *
+ * Log level is controlled by the LOG_LEVEL env var (default: info).
+ * Levels in ascending severity: debug < info < warn < error
+ * Setting LOG_LEVEL=warn suppresses info and debug output.
+ *
+ * PII masking is applied before any field reaches the output stream.
+ */
+
+//  Log level configuration 
+const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+
+const configuredLevel = (process.env.LOG_LEVEL || 'info').toLowerCase();
+const MIN_LEVEL = LEVELS[configuredLevel] ?? LEVELS.info;
+
+function shouldLog(level) {
+  return (LEVELS[level] ?? 0) >= MIN_LEVEL;
 }
 
-function writeLogAsync(file, line) {
-  fs.mkdir(path.dirname(file), { recursive: true }, (mkdirErr) => {
-    if (mkdirErr) {
-      // Fallback to console if we can't write to disk
-      console.error('Logger mkdir error', mkdirErr);
-      return;
+//  PII masking 
+// Any key in this set will have its value masked before logging.
+// Add fields here as new PII surfaces  never remove entries.
+const PII_KEYS = new Set([
+  'phone',
+  'to',
+  'from',
+  'callerPhone',
+  'accountHolderPhone',
+  'accountHolderEmail',
+  'clientPhone',
+  'clientEmail',
+  'email',
+  'verificationId',
+  'verificationToken',
+  'checkoutUrl',
+  'recordingUrl',
+]);
+
+function maskPhone(value) {
+  if (!value) return value;
+  // Keep country code prefix (up to 4 chars) and last 2 digits, mask the middle
+  return String(value).replace(/^(\+?\d{1,4})(\d+)(\d{2})$/, (_, prefix, middle, suffix) =>
+    `${prefix}${'*'.repeat(middle.length)}${suffix}`
+  );
+}
+
+/**
+ * Recursively walk a meta object and mask PII field values.
+ * Returns a new object  never mutates the caller's data.
+ *
+ * @param {unknown} obj
+ * @param {number} depth   guards against circular references (max 4 levels)
+ * @returns {unknown}
+ */
+function maskMeta(obj, depth = 0) {
+  if (depth > 4 || obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map((item) => maskMeta(item, depth + 1));
+
+  const masked = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (PII_KEYS.has(key)) {
+      // Phone-like fields get partial masking; others get full redaction
+      const isPhone = key.toLowerCase().includes('phone') || key === 'to' || key === 'from';
+      masked[key] = isPhone ? maskPhone(value) : '[REDACTED]';
+    } else {
+      masked[key] = maskMeta(value, depth + 1);
     }
-    fs.appendFile(file, line + '\n', (appendErr) => {
-      if (appendErr) {
-        console.error('Logger append error', appendErr);
-      }
-    });
-  });
+  }
+  return masked;
 }
 
-function log(level, msg, meta) {
-  const entry = { timestamp: new Date().toISOString(), level, msg, meta };
-  if (meta && meta.phone) meta.phone = maskPhone(meta.phone);
+//  Core write 
+/**
+ * Write a structured JSON log entry to stdout (info/debug/warn) or stderr (error).
+ * Never throws  logging must not break the calling code path.
+ */
+function write(level, msg, meta) {
+  if (!shouldLog(level)) return;
 
-  if (config.NODE_ENV === 'production') {
-    const file = path.resolve(process.cwd(), 'logs', `${level}.log`);
-    writeLogAsync(file, JSON.stringify(entry));
-  } else {
-    console.log(JSON.stringify(entry));
+  // Build entry without mutating caller's meta object (fix: spread into new object)
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level,
+    msg: String(msg),
+  };
+
+  if (meta !== undefined && meta !== null) {
+    entry.meta = maskMeta(typeof meta === 'object' ? meta : { value: meta });
+  }
+
+  const line = JSON.stringify(entry);
+
+  try {
+    if (level === 'error') {
+      process.stderr.write(line + '\n');
+    } else {
+      process.stdout.write(line + '\n');
+    }
+  } catch {
+    // Last-resort fallback if stdout/stderr write fails (e.g. closed pipe)
   }
 }
 
-function logInfo(msg, meta) { log('info', msg, meta); }
-function logError(err, meta) { log('error', err && err.message ? err.message : String(err), meta); }
-function logWarning(msg, meta) { log('warn', msg, meta); }
-function logDebug(msg, meta) { if (config.NODE_ENV !== 'production') log('debug', msg, meta); }
+//  Public API 
+
+function logInfo(msg, meta) {
+  write('info', msg, meta);
+}
+
+function logWarning(msg, meta) {
+  write('warn', msg, meta);
+}
+
+/**
+ * Log an error with full stack trace.
+ * Accepts either an Error object (stack captured) or a plain message string.
+ *
+ * @param {Error|string} err
+ * @param {object} [meta]   additional context fields
+ */
+function logError(err, meta) {
+  const isError = err instanceof Error;
+  const message = isError ? err.message : String(err);
+  const stack   = isError ? err.stack   : undefined;
+
+  write('error', message, {
+    ...(typeof meta === 'object' && meta !== null ? meta : {}),
+    ...(stack ? { stack } : {}),
+  });
+}
+
+/**
+ * Debug-level logging  suppressed unless LOG_LEVEL=debug.
+ * Use for high-frequency internal state that is only useful during development.
+ */
+function logDebug(msg, meta) {
+  write('debug', msg, meta);
+}
 
 module.exports = { logInfo, logError, logWarning, logDebug };

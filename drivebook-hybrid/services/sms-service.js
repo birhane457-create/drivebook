@@ -1,68 +1,83 @@
-const Twilio = require('twilio');
-const config = require('../utils/config');
-const logger = require('../utils/logger');
-
-const client = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
-
-// P2-10 FIX: Normalise Australian numbers robustly.
-// Handles: 04xx, +614xx, 614xx (no leading +), and numbers with spaces/dashes.
-// Non-Australian numbers are returned unchanged.
-function normalizeAustralian(phone) {
-  if (!phone) return phone;
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('614')) return '+' + digits;   // 61412345678 → +61412345678
-  if (digits.startsWith('04')) return '+61' + digits.slice(1); // 0412345678 → +61412345678
-  // International or already E.164 — return with + prefix if digits only
-  if (phone.startsWith('+')) return phone;
-  return phone; // leave unchanged (could be international)
-}
-
-async function sendBookingConfirmation(phoneNumber, bookingDetails) {
-  const to = normalizeAustralian(phoneNumber);
-  const body = `Booking confirmed with ${bookingDetails.instructorName} on ${bookingDetails.date} at ${bookingDetails.time}. Booking ID: ${bookingDetails.bookingId}`;
-  let attempts = 0;
-  while (attempts < 2) {
-    try {
-      attempts += 1;
-      const msg = await client.messages.create({
-        from: config.TWILIO_PHONE_NUMBER,
-        to,
-        body
-      });
-      logger.logInfo('SMS sent', { to, sid: msg.sid });
-      return { success: true, sid: msg.sid };
-    } catch (err) {
-      logger.logWarning('SMS send failed', { attempt: attempts, err: err.message });
-      if (attempts >= 2) {
-        logger.logError(err);
-        return { success: false, error: err.message };
-      }
-    }
-  }
-}
+﻿'use strict';
 
 /**
- * Generic single SMS send — used by main-app-proxy for payment link delivery
- * and by voice-webhook for session recovery resend.
+ * sms-service.js
  *
- * @param {string} phoneNumber  destination (normalised internally)
+ * Thin wrapper around the Twilio Messages API.
+ * Used by main-app-proxy for payment link delivery and session recovery resend.
+ *
+ * Phone normalisation is delegated to voice-session-service.normalisePhone
+ * (single source of truth for E.164 formatting).
+ */
+
+const config = require('../utils/config');
+const logger = require('../utils/logger');
+const { normalisePhone } = require('./voice-session-service');
+
+//  Lazy Twilio client 
+// Initialised on first use, not at module load. This prevents the Twilio
+// constructor from throwing during tests and startup when credentials may
+// not be set yet.
+let _twilioClient = null;
+
+function getTwilioClient() {
+  if (_twilioClient) return _twilioClient;
+  if (!config.TWILIO_ACCOUNT_SID || !config.TWILIO_AUTH_TOKEN) {
+    throw new Error(
+      'Twilio credentials not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.'
+    );
+  }
+  const Twilio = require('twilio');
+  _twilioClient = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
+  return _twilioClient;
+}
+
+//  Core send with retry 
+/**
+ * Send a single SMS with one automatic retry on failure.
+ *
+ * @param {string} phoneNumber  destination  normalised internally to E.164
  * @param {string} message      body text
  * @returns {Promise<{success: boolean, sid?: string, error?: string}>}
  */
 async function sendSms(phoneNumber, message) {
-  const to = normalizeAustralian(phoneNumber);
-  try {
-    const msg = await client.messages.create({
-      from: config.TWILIO_PHONE_NUMBER,
-      to,
-      body: message,
-    });
-    logger.logInfo('SMS sent', { to, sid: msg.sid });
-    return { success: true, sid: msg.sid };
-  } catch (err) {
-    logger.logError(err, { to });
-    return { success: false, error: err.message };
+  const to = normalisePhone(phoneNumber);
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const msg = await getTwilioClient().messages.create({
+        from: config.TWILIO_PHONE_NUMBER,
+        to,
+        body: message,
+      });
+      logger.logInfo('SMS sent', { to, sid: msg.sid, attempt });
+      return { success: true, sid: msg.sid };
+    } catch (err) {
+      logger.logWarning('SMS send attempt failed', { attempt, to, error: err.message });
+      if (attempt === 2) {
+        logger.logError(err, { context: 'sms-send-final-failure', to });
+        return { success: false, error: err.message };
+      }
+      // Brief pause before retry
+      await new Promise((r) => setTimeout(r, 500));
+    }
   }
+}
+
+//  Higher-level helpers 
+
+/**
+ * Send booking confirmation SMS.
+ * Called by booking-api.js after a local SQLite booking is created.
+ *
+ * @param {string} phoneNumber
+ * @param {{ instructorName: string, date: string, time: string, bookingId: string }} bookingDetails
+ */
+async function sendBookingConfirmation(phoneNumber, bookingDetails) {
+  const body =
+    `Booking confirmed with ${bookingDetails.instructorName} on ${bookingDetails.date} ` +
+    `at ${bookingDetails.time}. Booking ID: ${bookingDetails.bookingId}`;
+  return sendSms(phoneNumber, body);
 }
 
 /**
@@ -70,7 +85,6 @@ async function sendSms(phoneNumber, message) {
  *
  * @param {string} phoneNumber
  * @param {string} checkoutUrl
- * @returns {Promise<{success: boolean}>}
  */
 async function resendPaymentLink(phoneNumber, checkoutUrl) {
   const body =
@@ -78,4 +92,4 @@ async function resendPaymentLink(phoneNumber, checkoutUrl) {
   return sendSms(phoneNumber, body);
 }
 
-module.exports = { sendBookingConfirmation, sendSms, resendPaymentLink };
+module.exports = { sendSms, sendBookingConfirmation, resendPaymentLink };
