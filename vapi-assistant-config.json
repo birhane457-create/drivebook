@@ -1,0 +1,329 @@
+{
+  "name": "DriveBook AI Receptionist",
+  "firstMessage": "Hi, thanks for calling DriveBook. I can help you book a lesson, change an existing booking, or cancel. What can I help you with today?",
+  "model": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0.7,
+    "systemPrompt": "You are the DriveBook AI Receptionist — a professional, warm voice assistant for driving lesson bookings in Western Australia. You speak conversationally, ask ONE question at a time, and always confirm before taking action.\n\nVOICE STYLE:\n- Short sentences. Natural speech.\n- Never say 'Would you like to disconnect?' Just close warmly: 'Have a great day. Goodbye!'\n- When caller says yes to a confirmation, act immediately. Do not ask them to confirm again.\n- After completing an action say what happened and ask 'Is there anything else I can help with?'\n\nBOOKING FLOW:\n1. Ask for pickup location\n2. Call validateLocation. Store the formattedAddress for all future calls.\n3. Ask if they have a preferred instructor or want a recommendation\n4. Call findInstructors with location=formattedAddress. ALWAYS pass location. Never call with no parameters.\n5. Present instructor name, rate, vehicle type. IMMEDIATELY call getPackages and present:\n   - 6 hours for $X (5% saving)\n   - 10 hours for $X (10% off, most popular)\n   - 15 hours for $X (12% off, best value)\n   Ask which package they want.\n6. Ask for preferred date\n7. Call getAvailableSlots with instructorId, date as YYYY-MM-DD, lessonDurationMinutes=60. Present 2-3 available times.\n8. Ask which time they prefer\n9. Collect: full name, email, phone (10-digit Australian mobile, no spaces e.g. 0400123456)\n10. Read back summary once: 'Just to confirm — [package] hours with [Name], first lesson [date] at [time], pickup at [address], total $[price]. Name [name], email [email], phone [phone]. Is that right?'\n11. Wait for yes. Call createBooking immediately.\n12. After booking: 'Done. A payment link has been sent to your phone. Your slot is held for 10 minutes. Remaining hours stay as credit for future lessons. Is there anything else I can help with?'\n\nCREATING A BOOKING — exact payload:\n- packageType: PACKAGE_6, PACKAGE_10, or PACKAGE_15\n- hours: 6, 10, or 15\n- bookingType: now\n- registrationType: myself\n- includeTestPackage: false\n- accountHolderPhone: 10 digits no spaces no country code\n- scheduledBookings array item: date YYYY-MM-DD, time HH:MM 24hr, duration 60, pickupLocation from validateLocation, notes empty string, isShortNotice false\n- DO NOT send pricing field\n\nCANCELLATION FLOW:\n1. Ask for phone number\n2. Call lookupBookings\n3. Confirm the booking\n4. Call getCancellationPolicy\n5. If canCancel=false: offer support transfer\n6. If isPendingPayment=true: cancel directly, no OTP needed\n7. If paid: state refund amount, then OTP\n\nRESCHEDULE FLOW:\n1. Ask for phone number\n2. Call lookupBookings\n3. Confirm booking\n4. If PENDING_PAYMENT: offer cancel and rebook\n5. If CONFIRMED: proceed to OTP\n\nOTP VERIFICATION — CRITICAL:\n1. Call sendOtp with phone and purpose\n2. Store the verificationId INTERNALLY. NEVER ask caller for verificationId.\n3. Say: 'I have sent a 6-digit code to your phone. What is the code?'\n4. When caller reads the 6-digit code, call confirmOtp with:\n   - verificationId: from sendOtp response (not the code)\n   - code: the 6-digit number caller just said\n   - phone: caller phone\n5. Store verificationToken for cancel/reschedule call\n\nGEOGRAPHY: Only service Western Australia. If caller asks about other states or countries politely explain we only operate in WA.\n\nHUMAN HANDOFF: If caller wants a human say 'I will connect you with our support team. You can also reach us through drivebook.com.au.'"
+  },
+  "voice": {
+    "provider": "11labs",
+    "voiceId": "21m00Tcm4TlvDq8ikWAM",
+    "stability": 0.5,
+    "similarityBoost": 0.75,
+    "speed": 1.0
+  },
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-2",
+    "language": "en-AU"
+  },
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "validateLocation",
+        "description": "Validate and geocode a pickup location. Call this first before searching for instructors. Returns formattedAddress to use in all subsequent calls.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pickupLocation": {
+              "type": "string",
+              "description": "Suburb, postcode or address provided by the caller e.g. 'Maylands 6051'"
+            }
+          },
+          "required": ["pickupLocation"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/locations/validate",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "findInstructors",
+        "description": "Find driving instructors by location or name. Always pass location parameter. Returns instructors with id, name, hourlyRate. Use the id in all subsequent calls.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "Suburb, postcode or address. ALWAYS provide this when searching by area."
+            },
+            "name": {
+              "type": "string",
+              "description": "Instructor name for searching a specific instructor."
+            }
+          }
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/instructors/search",
+        "method": "GET"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "getPackages",
+        "description": "Get lesson package pricing for an instructor. Always call this after finding the instructor to get current prices.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "instructorId": {
+              "type": "string",
+              "description": "Instructor ID from findInstructors response"
+            }
+          },
+          "required": ["instructorId"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/packages",
+        "method": "GET"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "getAvailableSlots",
+        "description": "Get available lesson time slots for an instructor on a specific date.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "instructorId": {
+              "type": "string",
+              "description": "Instructor ID"
+            },
+            "date": {
+              "type": "string",
+              "description": "Date in YYYY-MM-DD format e.g. 2026-07-22"
+            },
+            "lessonDurationMinutes": {
+              "type": "integer",
+              "description": "Lesson duration in minutes. Always use 60.",
+              "default": 60
+            }
+          },
+          "required": ["instructorId", "date"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/availability/slots",
+        "method": "GET"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "createBooking",
+        "description": "Create a driving lesson booking. Only call after full verbal confirmation from caller. Never send a pricing field.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "instructorId": { "type": "string" },
+            "packageType": {
+              "type": "string",
+              "enum": ["PACKAGE_6", "PACKAGE_10", "PACKAGE_15"]
+            },
+            "hours": { "type": "integer", "description": "6, 10, or 15" },
+            "bookingType": { "type": "string", "enum": ["now"] },
+            "registrationType": { "type": "string", "enum": ["myself"] },
+            "includeTestPackage": { "type": "boolean", "default": false },
+            "accountHolderName": { "type": "string" },
+            "accountHolderEmail": { "type": "string" },
+            "accountHolderPhone": {
+              "type": "string",
+              "description": "10-digit Australian mobile, no spaces, no country code e.g. 0400123456"
+            },
+            "scheduledBookings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "date": { "type": "string", "description": "YYYY-MM-DD" },
+                  "time": { "type": "string", "description": "HH:MM 24-hour" },
+                  "duration": { "type": "integer", "default": 60 },
+                  "pickupLocation": { "type": "string" },
+                  "notes": { "type": "string", "default": "" },
+                  "isShortNotice": { "type": "boolean", "default": false }
+                },
+                "required": ["date", "time", "duration", "pickupLocation"]
+              }
+            }
+          },
+          "required": ["instructorId", "packageType", "hours", "bookingType", "registrationType", "accountHolderName", "accountHolderEmail", "accountHolderPhone", "scheduledBookings"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/public/bookings/bulk",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "lookupBookings",
+        "description": "Find existing bookings by caller phone number.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "phone": {
+              "type": "string",
+              "description": "Australian mobile number"
+            }
+          },
+          "required": ["phone"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/bookings/lookup",
+        "method": "GET"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "getCancellationPolicy",
+        "description": "Check if a booking can be cancelled and get exact refund amount. Always call before cancelling.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Booking ID from lookupBookings"
+            }
+          },
+          "required": ["id"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/bookings/{id}/cancellation-policy",
+        "method": "GET"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "sendOtp",
+        "description": "Send a 6-digit OTP to caller phone for identity verification before cancel or reschedule. Store the verificationId from the response internally.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "phone": { "type": "string" },
+            "purpose": {
+              "type": "string",
+              "enum": ["cancel", "reschedule"]
+            }
+          },
+          "required": ["phone", "purpose"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/verifications/otp",
+        "method": "POST",
+        "headers": { "Content-Type": "application/json" }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "confirmOtp",
+        "description": "Confirm the OTP code the caller read aloud. Use the verificationId stored from sendOtp, NOT the code the caller said.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "verificationId": {
+              "type": "string",
+              "description": "The ID returned by sendOtp. Never ask the caller for this."
+            },
+            "code": {
+              "type": "string",
+              "description": "The 6-digit code the caller read aloud"
+            },
+            "phone": { "type": "string" }
+          },
+          "required": ["verificationId", "code", "phone"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/verifications/otp/confirm",
+        "method": "POST",
+        "headers": { "Content-Type": "application/json" }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cancelBooking",
+        "description": "Cancel a booking after OTP verified and caller said yes.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Booking ID" },
+            "verificationToken": {
+              "type": "string",
+              "description": "Token from confirmOtp response"
+            },
+            "reason": {
+              "type": "string",
+              "default": "student_request"
+            }
+          },
+          "required": ["id", "verificationToken"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/public/bookings/{id}/cancel",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Verification-Token": "{verificationToken}"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "rescheduleBooking",
+        "description": "Reschedule a booking after OTP verified and caller confirmed new time.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "verificationToken": { "type": "string" },
+            "newDate": { "type": "string", "description": "YYYY-MM-DD" },
+            "newTime": { "type": "string", "description": "HH:MM 24-hour" },
+            "duration": { "type": "integer", "default": 60 },
+            "phone": { "type": "string" },
+            "reason": { "type": "string", "default": "Client request" }
+          },
+          "required": ["id", "verificationToken", "newDate", "newTime", "phone"]
+        }
+      },
+      "server": {
+        "url": "https://drivebook-production-12ab.up.railway.app/api/public/bookings/{id}/reschedule",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Verification-Token": "{verificationToken}"
+        }
+      }
+    }
+  ],
+  "endCallFunctionEnabled": true,
+  "endCallMessage": "Have a great day. Goodbye!",
+  "maxDurationSeconds": 600,
+  "backgroundSound": "off",
+  "backchannelingEnabled": false,
+  "responseDelaySeconds": 0
+}

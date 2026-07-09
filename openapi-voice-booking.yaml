@@ -63,11 +63,12 @@ paths:
         - name: location
           in: query
           type: string
-          description: "Suburb, postcode or address e.g. 'Maylands WA' or '6051'"
+          required: true
+          description: "Suburb, postcode or address e.g. 'Maylands WA' or '6051'. Use the location the caller provided. REQUIRED unless searching by instructor name."
         - name: name
           in: query
           type: string
-          description: "Instructor name (partial match) e.g. 'Debesay'"
+          description: "Instructor name (partial match) e.g. 'Debesay'. Use when caller names a specific instructor."
         - name: vehicleType
           in: query
           type: string

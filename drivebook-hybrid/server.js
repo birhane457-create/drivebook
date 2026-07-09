@@ -11,7 +11,7 @@ const { PrismaClient } = require('@prisma/client');
 const bookingRouter = require('./routes/booking-api');
 const instructorRouter = require('./routes/instructor-api');
 const mainAppProxyRouter = require('./routes/main-app-proxy');
-const { restrictAccess, hideApiDocs } = require('./middleware/auth');
+const { restrictAccess, hideApiDocs, verifyVapiSecret, ipRateLimit } = require('./middleware/auth');
 const voiceSession = require('./services/voice-session-service');
 
 const app = express();
@@ -55,9 +55,15 @@ app.use((req, res, next) => {
 // Vapi calls this service's proxy endpoints directly as tool calls.
 
 // =========================================================================
-// 1. SECURITY SECURITY PERIMETER (Applied strictly to all subsequent endpoints)
+// 1. SECURITY PERIMETER (Applied strictly to all subsequent endpoints)
 // =========================================================================
 app.use(hideApiDocs);
+// Verify Vapi tool calls carry the correct shared secret (x-vapi-secret header).
+// Skipped for health check and legacy local endpoints.
+// No-ops in dev when VAPI_WEBHOOK_SECRET is unset; hard-fails in production.
+app.use(verifyVapiSecret);
+// Per-IP rate limit: 60 requests/minute. Defence-in-depth before forwarding to main app.
+app.use(ipRateLimit);
 app.use(restrictAccess);
 
 // =========================================================================

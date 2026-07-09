@@ -159,6 +159,7 @@ const RETRYABLE_GET_PATHS = [
   '/instructors/search',
   '/bookings/lookup',
   '/payment-status',
+  '/public/check-service-area',
 ];
 
 function isRetryableGet(req, targetPath) {
@@ -280,6 +281,14 @@ router.post('/availability', (req, res) =>
   proxyRequest(req, res, '/api/availability')
 );
 
+// Service area check — used after pickup address is collected to verify the
+// selected instructor covers that location. Returns 'in', 'out', or 'unknown'.
+// 'unknown' means the check couldn't be completed (geocode failed, no API key,
+// or instructor has no base address configured) — treat as non-blocking.
+router.get('/public/check-service-area', (req, res) =>
+  proxyRequest(req, res, '/api/public/check-service-area')
+);
+
 //  Routes (Part 2  State-bearing routes) 
 
 /**
@@ -298,6 +307,22 @@ router.post('/public/bookings/bulk', async (req, res) => {
     headers['idempotency-key'] = idempotencyKey || randomUUID();
 
     const cleanBody = extractBodyPayload(req);
+
+    // ── Idempotency key derivation ────────────────────────────────────────────
+    // If Vapi times out and retries, a fresh randomUUID() would produce a different
+    // key each time — creating duplicate bookings. Instead we derive a stable key
+    // from the Vapi call ID (present in every tool call) so retries within the same
+    // call are deduplicated by the bulk booking route.
+    //
+    // Priority:
+    //   1. Caller-supplied Idempotency-Key header (explicit control)
+    //   2. Vapi call ID extracted from the message payload (automatic retry-safety)
+    //   3. Random UUID fallback (non-Vapi callers, e.g. web UI)
+    const vapiCallId = cleanBody?.message?.call?.id || cleanBody?.call?.id || null;
+    const stableKey = vapiCallId
+      ? `vapi-booking-${vapiCallId}`
+      : (idempotencyKey || randomUUID());
+    headers['idempotency-key'] = stableKey;
 
     // Improvement #8: normalise phone before using as session key
     const rawPhone = cleanBody?.accountHolderPhone;
@@ -379,6 +404,32 @@ router.post('/public/bookings/bulk', async (req, res) => {
         return res.status(response.status).json({
           ...upstreamData,
           summary: 'This is a short-notice request. The reservation is pending instructor confirmation.',
+        });
+
+      } else if (upstreamData.bookingType === 'later' && upstreamData.checkoutUrl && phone) {
+        // Book Later path: Stripe Checkout Session created — send the URL directly via SMS.
+        let smsStatus = 'sent';
+        try {
+          await smsService.sendSms(
+            phone,
+            `Your DriveBook lesson package is ready. Complete payment here: ${upstreamData.checkoutUrl}`
+          );
+        } catch (smsErr) {
+          smsStatus = 'failed';
+          logger.logError(smsErr, { requestId: req.requestId, context: 'book-later-sms' });
+        }
+
+        logger.logInfo('Book-later Checkout Session created', {
+          requestId: req.requestId,
+          smsStatus,
+        });
+
+        return res.status(response.status).json({
+          ...upstreamData,
+          smsStatus,
+          summary: smsStatus === 'sent'
+            ? `Lesson package set up. Payment link sent to ${phone}. Wallet will be credited once payment is complete.`
+            : `Lesson package set up but SMS could not be sent. Student should visit the payment link to complete payment.`,
         });
       }
     }

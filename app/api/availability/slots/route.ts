@@ -68,10 +68,47 @@ export async function GET(req: NextRequest) {
       instructorId: query.instructorId,
       date: query.date,
       lessonDurationMinutes: query.lessonDurationMinutes,
-      availableSlots: availableSlots.map(slot => ({
-        startTime: slot.toISOString(),
-        endTime: new Date(slot.getTime() + query.lessonDurationMinutes * 60 * 1000).toISOString()
-      }))
+      // Timezone is fixed for all WA instructors — documented here so API consumers never guess.
+      timezone: 'Australia/Perth',
+      availableSlots: availableSlots.map(slot => {
+        const endTime = new Date(slot.getTime() + query.lessonDurationMinutes * 60 * 1000);
+
+        const speakTime = slot.toLocaleTimeString('en-AU', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'Australia/Perth',
+        });
+        const speakDate = slot.toLocaleDateString('en-AU', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          timeZone: 'Australia/Perth',
+        });
+
+        return {
+          // Machine-readable timestamps — use for createBooking payload
+          startTime: slot.toISOString(),
+          endTime: endTime.toISOString(),
+          // HH:MM 24-hour string required by createBooking.scheduledBookings[].time
+          bookingTime: slot.toLocaleTimeString('en-AU', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'Australia/Perth',
+          }),
+          lessonDuration: query.lessonDurationMinutes,
+          // voice — all fields the AI needs to read aloud, grouped for clarity.
+          // Web and mobile clients can ignore this object and use the fields above.
+          voice: {
+            speakTime,  // e.g. "4:00 PM"
+            speakDate,  // e.g. "Monday 20 July"
+            // Pre-assembled confirmation string the AI can read verbatim.
+            // e.g. "Monday 20 July at 4:00 PM"
+            confirmation: `${speakDate} at ${speakTime}`,
+          },
+        };
+      })
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

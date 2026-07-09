@@ -173,6 +173,18 @@ export async function GET(req: NextRequest) {
             totalBookings > 100 && 'Experienced',
             distance < 3 && 'Nearby',
           ].filter(Boolean),
+          // voice — all fields the AI needs to present this instructor, grouped for clarity.
+          // Web and mobile clients can ignore this object and use the structured fields above.
+          voice: {
+            // Pre-assembled string read verbatim by the AI.
+            // e.g. "Top Rated • Automatic • English • $75 per hour"
+            summary: [
+              reason,
+              instructor.vehicleTypes || null,
+              instructor.languages ? instructor.languages.split(',')[0].trim() : null,
+              `$${instructor.hourlyRate} per hour`,
+            ].filter(Boolean).join(' • '),
+          },
         };
       })
       .filter(Boolean) // Remove nulls (instructors outside service radius)

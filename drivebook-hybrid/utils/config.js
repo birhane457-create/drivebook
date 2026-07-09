@@ -27,6 +27,7 @@ if (missingAlways.length) {
 const securityRequired = [
   'DRIVEBOOK_API_KEY',
   'INTERNAL_API_KEY',
+  'VAPI_WEBHOOK_SECRET',
 ];
 
 // SMS vars are security-critical only when Twilio is actually configured.
@@ -91,6 +92,11 @@ module.exports = {
   //  Vapi (AI voice) 
   VAPI_API_KEY:      process.env.VAPI_API_KEY      || '',
   VAPI_ASSISTANT_ID: process.env.VAPI_ASSISTANT_ID || '',
+  // Secret token configured in Vapi Dashboard → Assistant → Server URL → Secret.
+  // Every inbound Vapi tool call includes this as x-vapi-secret header.
+  // If set, the proxy rejects any request that doesn't present this value.
+  // Generate with: openssl rand -hex 32
+  VAPI_WEBHOOK_SECRET: process.env.VAPI_WEBHOOK_SECRET || '',
 
   //  Security 
   // INTERNAL_API_KEY gates access to /docs and the root API endpoint.

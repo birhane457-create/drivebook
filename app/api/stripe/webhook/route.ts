@@ -249,9 +249,82 @@ async function handleCheckoutCompleted(
   checkoutSession: Stripe.Checkout.Session,
   idempotencyKey: string
 ): Promise<void> {
-  const { customer, metadata } = checkoutSession;
-  const { instructorId } = metadata || {};
+  const { customer, metadata, payment_intent } = checkoutSession;
+  const { type, instructorId, userId, hours, packageType } = metadata || {};
 
+  // ── Wallet credit (Book Later flow) ─────────────────────────────────────────
+  // These sessions are created by POST /api/public/bookings/bulk with bookingType="later".
+  // Metadata contains type="wallet_credit", userId, instructorId, hours, packageType.
+  // We credit the wallet here instead of in payment_intent.succeeded because Checkout
+  // Sessions embed the PaymentIntent internally and fire this event on success.
+  if (type === 'wallet_credit') {
+    if (!userId) {
+      logger.error('❌ wallet_credit checkout missing userId in metadata', { sessionId: checkoutSession.id });
+      await recordWebhookEvent(idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
+        error: 'Missing userId for wallet_credit'
+      });
+      return;
+    }
+
+    const amountPaid = checkoutSession.amount_total ? checkoutSession.amount_total / 100 : 0;
+    logger.info(`💰 Wallet credit checkout completed: userId=${userId} amount=${amountPaid}`);
+
+    await prisma.$transaction(async (tx) => {
+      await recordWebhookEvent(idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
+        type: 'wallet_credit',
+        userId,
+        amount: amountPaid,
+      });
+
+      // Find or create wallet
+      let wallet = await tx.clientWallet.findUnique({ where: { userId } });
+      if (!wallet) {
+        wallet = await tx.clientWallet.create({ data: { userId } });
+      }
+
+      // Credit the wallet
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'CREDIT',
+          amount: amountPaid,
+          description: `Package purchase — ${hours ?? '?'} hours via Stripe Checkout`,
+          status: 'CONFIRMED',
+        },
+      });
+
+      logger.info(`✅ Wallet credited: +$${amountPaid} for userId=${userId}`);
+    });
+
+    // Send wallet top-up receipt (non-critical)
+    try {
+      const { sendWalletTopUpReceipt } = await import('@/lib/services/receipt-email');
+      const { getWalletBalance } = await import('@/lib/services/wallet-helpers');
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (user?.email) {
+        const balanceResult = await getWalletBalance(userId);
+        await sendWalletTopUpReceipt({
+          clientName: user.name || user.email,
+          clientEmail: user.email,
+          receiptId: checkoutSession.id,
+          paidAt: new Date(),
+          amountAdded: amountPaid,
+          walletBalanceBefore: balanceResult.balance - amountPaid,
+          walletBalanceAfter: balanceResult.balance,
+          stripeRef: typeof payment_intent === 'string' ? payment_intent : checkoutSession.id,
+          paymentMethod: 'Card',
+        });
+      }
+    } catch (receiptErr) {
+      logger.error('Wallet top-up receipt failed (non-critical)', {
+        error: receiptErr instanceof Error ? receiptErr.message : String(receiptErr),
+      });
+    }
+
+    return;
+  }
+
+  // ── Instructor subscription checkout ─────────────────────────────────────────
   if (!instructorId || !customer) {
     logger.error('❌ Missing instructorId or customer in checkout session');
     await recordWebhookEvent(idempotencyKey, 'checkout.session.completed', checkoutSession.id, {

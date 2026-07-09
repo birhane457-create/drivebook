@@ -27,9 +27,16 @@ const bulkBookingSchema = z.object({
     date: z.string(),
     time: z.string(),
     duration: z.number(),
-    pickupLocation: z.string(),
-    notes: z.string(),
-    isShortNotice: z.boolean().optional().default(false),
+    // pickupLocation accepts any spoken or typed address.
+    // pickupValidated: false means geocoding failed or was skipped — instructor confirms later.
+    // An empty string is also accepted (Buy Later flow has no pickup address).
+    pickupLocation: z.string().default(''),
+    // Optional flag from voice AI — set to false when validateLocation() failed.
+    // Stored on the booking so the instructor dashboard can flag it for manual follow-up.
+    pickupValidated: z.boolean().optional().default(true),
+    notes: z.string().default(''),
+    // isShortNotice is computed server-side from startTime vs now — ignored if sent by caller
+    isShortNotice: z.boolean().optional(),
   })).optional(),
   registrationType: z.enum(['myself', 'someone-else']),
   // Account holder (always required)
@@ -524,7 +531,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const isShortNotice = data.scheduledBookings?.[0]?.isShortNotice ?? false;
     const firstLessonDurationMinutes = data.scheduledBookings?.[0]?.duration ?? 60;
     const firstLessonDurationHours = firstLessonDurationMinutes / 60;
     const firstLessonPrice = parseFloat((instructor.hourlyRate * firstLessonDurationHours).toFixed(2));
@@ -547,16 +553,32 @@ export async function POST(req: NextRequest) {
     //   1. The client UI may show "you have credit" before payment is confirmed
     //   2. The 10-minute cleanup cron expires the PENDING transaction, leaving
     //      the user with no credit even after a successful payment
-    // Correct flow: create a Stripe PaymentIntent, redirect to checkout, and only
-    // credit the wallet in the Stripe webhook (payment_intent.succeeded).
+    // Correct flow: create a Stripe Checkout Session, redirect student to the URL,
+    // and only credit the wallet in the Stripe webhook (checkout.session.completed).
+    // Using Checkout (not raw PaymentIntent) so we get a hosted URL the voice AI
+    // can SMS to the student — a raw client_secret cannot be sent over SMS.
     if (data.bookingType === 'later') {
       try {
         const Stripe = (await import('stripe')).default;
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
 
-        const paymentIntent = await stripe.paymentIntents.create({
-          amount: Math.round(verifiedTotal * 100),
-          currency: 'aud',
+        const baseUrl = process.env.NEXTAUTH_URL || 'https://drivebook.com.au';
+
+        const session = await stripe.checkout.sessions.create({
+          mode: 'payment',
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: 'aud',
+                unit_amount: Math.round(verifiedTotal * 100),
+                product_data: {
+                  name: `DriveBook Lesson Package — ${data.hours} Hours`,
+                  description: `With ${instructor.name}. Valid for 12 months from purchase.`,
+                },
+              },
+            },
+          ],
           metadata: {
             type: 'wallet_credit',
             userId: userId!,
@@ -564,19 +586,24 @@ export async function POST(req: NextRequest) {
             hours: String(data.hours),
             packageType: data.packageType,
           },
-          automatic_payment_methods: { enabled: true },
+          success_url: `${baseUrl}/client-dashboard/wallet?payment=success`,
+          cancel_url:  `${baseUrl}/client-dashboard/wallet?payment=cancelled`,
+          // Pre-fill email so returning students don't have to type it again
+          customer_email: data.accountHolderEmail,
         });
 
         return NextResponse.json({
           success: true,
           bookingType: 'later',
           total: verifiedTotal,
-          checkoutClientSecret: paymentIntent.client_secret,
-          paymentIntentId: paymentIntent.id,
-          // Wallet is credited in the Stripe webhook after payment_intent.succeeded
+          // checkoutUrl is the hosted Stripe page — can be sent as an SMS link
+          checkoutUrl: session.url,
+          // Keep paymentIntentId for webhook correlation (Checkout creates a PaymentIntent internally)
+          paymentIntentId: session.payment_intent as string | null,
+          // Wallet is credited in the Stripe webhook after checkout.session.completed
         }, { status: 201 });
       } catch (stripeErr) {
-        logger.error('Stripe PaymentIntent creation failed for book-later', {
+        logger.error('Stripe Checkout Session creation failed for book-later', {
           error: stripeErr instanceof Error ? stripeErr.message : String(stripeErr),
         });
         return NextResponse.json({ error: 'Failed to initialise payment' }, { status: 500 });
@@ -595,6 +622,12 @@ export async function POST(req: NextRequest) {
       startTime.setHours(h, m, 0, 0);
       endTime = new Date(startTime.getTime() + firstLessonDurationMinutes * 60 * 1000);
     }
+
+    // isShortNotice is computed server-side — never trust caller input.
+    // Rule: lesson starts within 2 hours of now → requires instructor approval first.
+    const isShortNotice = startTime
+      ? (startTime.getTime() - Date.now()) < 2 * 60 * 60 * 1000
+      : false;
 
     let booking: any;
     try {
@@ -922,16 +955,73 @@ export async function POST(req: NextRequest) {
     }
 
     // Persist idempotency response so retries get same result
+    const checkoutUrl = (!isShortNotice)
+      ? `${process.env.NEXTAUTH_URL}/booking/${booking.id}/payment?token=${(booking as any).paymentToken}`
+      : undefined;
+
+    // ── Voice-friendly summary block ─────────────────────────────────────────
+    // Backend is the source of truth for these values — AI should not calculate them.
+    //   instructor:       name to read aloud in confirmation
+    //   package:          human label e.g. "10 Hour Package"
+    //   packageHours:     total hours purchased
+    //   scheduledHours:   hours consumed by lessons booked in this call
+    //   scheduledLessons: number of lessons actually scheduled (for multi-lesson voice flow)
+    //   remainingHours:   hours still available after this booking
+    //   firstLesson:      pre-formatted Perth local time e.g. "Monday 10:00 AM"
+    //   paymentRequired:  false for short-notice (instructor approves first)
+    //   slotHeldMinutes:  how long the SlotReservation holds before expiry
+    //   pickupVerified:   false when address was spoken but geocoding failed
+    const firstLessonDisplay = startTime
+      ? startTime.toLocaleString('en-AU', {
+          weekday: 'long',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'Australia/Perth',
+        })
+      : null;
+
+    const packageLabels: Record<string, string> = {
+      PACKAGE_6:  '6 Hour Package',
+      PACKAGE_10: '10 Hour Package',
+      PACKAGE_15: '15 Hour Package',
+      CUSTOM:     'Custom Package',
+    };
+
+    // Count lessons scheduled in this request (voice flow books one at a time,
+    // but the field is accurate even if scheduledBookings[] grows in Phase 2).
+    const scheduledLessons = data.scheduledBookings?.length ?? (startTime ? 1 : 0);
+    const scheduledHours   = scheduledLessons * firstLessonDurationHours;
+    const remainingHours   = data.hours - scheduledHours;
+
     const responsePayload: Record<string, any> = {
       success: true,
       bookingId: booking.id,
+      bookingType: 'now',
       isShortNotice,
       total: isShortNotice ? 0 : verifiedTotal,
       status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
       includeTestPackage: data.includeTestPackage,
-      ...(((!data.pricing && !isShortNotice) && {
-        checkoutUrl: `${process.env.NEXTAUTH_URL}/booking/${booking.id}/payment?token=${(booking as any).paymentToken}`,
-      })),
+      ...(checkoutUrl ? { checkoutUrl } : {}),
+      // voice — all fields the AI needs to read after booking, grouped under one key.
+      // Web and mobile clients can ignore this object.
+      voice: {
+        instructor:       instructor.name,
+        package:          packageLabels[data.packageType] ?? data.packageType,
+        packageHours:     data.hours,
+        scheduledHours:   Math.round(scheduledHours * 10) / 10,
+        scheduledLessons,
+        remainingHours:   Math.round(remainingHours * 10) / 10,
+        firstLesson:      firstLessonDisplay,
+        paymentRequired:  !isShortNotice,
+        slotHeldMinutes:  10,
+        pickupVerified:   data.scheduledBookings?.[0]?.pickupValidated !== false,
+        // Pre-assembled confirmation string the AI reads verbatim.
+        // Avoids template construction in the prompt.
+        confirmation: isShortNotice
+          ? `${instructor.name} needs to approve this booking first. You will be notified within a few minutes.`
+          : `Your ${packageLabels[data.packageType] ?? data.packageType} with ${instructor.name} is reserved for ${10} minutes. A payment link has been sent to your phone.`,
+      },
     };
     // (Idempotency key was already persisted inside the $transaction above)
     return NextResponse.json(responsePayload, { status: 201 });
