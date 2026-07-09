@@ -178,7 +178,7 @@ x-short-notice:
   description: |
     A booking is short-notice when any scheduled lesson starts within
     thresholdMinutes (120) of the current time at booking creation.
-    The AI/frontend determines this and sets isShortNotice=true in the scheduledBookings array.
+    The backend computes this automatically — callers must NOT send isShortNotice.
     Short-notice bookings:
       - status: PENDING (not PENDING_PAYMENT)
       - total: 0 (no payment until instructor approves)

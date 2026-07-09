@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { geocodeAddress, calculateDistance, getBoundingBox } from '@/lib/utils/distance';
@@ -7,17 +7,19 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/instructors/recommendations
- * Smart instructor recommendation engine with ranking algorithm
- * Returns top instructors based on location, preferences, and intelligent scoring
+ * Smart instructor recommendation engine with ranking algorithm.
+ *
+ * Uses pre-aggregated averageRating + totalReviews stored on the Instructor row.
+ * The schema has no separate Review relation on Instructor, so we never query it.
  */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const location = searchParams.get('location');
-    const vehicleType = searchParams.get('vehicleType'); // AUTO, MANUAL
+    const vehicleType = searchParams.get('vehicleType');
     const language = searchParams.get('language');
     const maxBudget = searchParams.get('budget') ? parseFloat(searchParams.get('budget')!) : null;
-    const experienceLevel = searchParams.get('experienceLevel'); // beginner, intermediate, advanced
+    const experienceLevel = searchParams.get('experienceLevel');
     const limit = parseInt(searchParams.get('limit') || '3');
 
     if (!location) {
@@ -27,9 +29,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Geocode the location
     const coords = await geocodeAddress(location);
-    
+
     if (!coords) {
       return NextResponse.json(
         { error: 'Location not found', message: 'Could not find coordinates for the specified location' },
@@ -37,33 +38,33 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get bounding box for pre-filtering (50km radius)
+    if (!isFinite(coords.lat) || !isFinite(coords.lng)) {
+      return NextResponse.json(
+        { error: 'Location not found', message: 'Could not resolve coordinates for the specified location' },
+        { status: 404 }
+      );
+    }
+
     const bbox = getBoundingBox(coords.lat, coords.lng, 50);
 
-    // Build filter conditions
     const whereConditions: any = {
       isActive: true,
       approvalStatus: 'APPROVED',
-      baseLatitude: { gte: bbox.minLat, lte: bbox.maxLat },
-      baseLongitude: { gte: bbox.minLng, lte: bbox.maxLng },
+      baseLatitude: { gte: bbox.minLat, lte: bbox.maxLat, not: null },
+      baseLongitude: { gte: bbox.minLng, lte: bbox.maxLng, not: null },
     };
 
-    // Filter by vehicle type if specified
     if (vehicleType) {
       whereConditions.vehicleTypes = { contains: vehicleType.toUpperCase() };
     }
-
-    // Filter by language if specified
     if (language) {
       whereConditions.languages = { contains: language };
     }
-
-    // Filter by budget if specified
     if (maxBudget) {
       whereConditions.hourlyRate = { lte: maxBudget };
     }
 
-    // Get instructors
+    // Use stored averageRating + totalReviews  no Review relation exists on Instructor
     const instructors = await prisma.instructor.findMany({
       where: whereConditions,
       select: {
@@ -81,23 +82,27 @@ export async function GET(req: NextRequest) {
         carMake: true,
         carModel: true,
         carYear: true,
+        averageRating: true,
+        totalReviews: true,
         _count: {
           select: {
             bookings: true,
-            reviews: true,
-          },
-        },
-        reviews: {
-          select: {
-            rating: true,
           },
         },
       },
-    } as any); // Type assertion until Prisma client is regenerated
+    });
 
-    // Calculate scores and filter by service radius
     const scoredInstructors = instructors
-      .map((instructor: any) => { // Type assertion for each instructor
+      .map((instructor: any) => {
+        if (
+          instructor.baseLatitude == null ||
+          instructor.baseLongitude == null ||
+          !isFinite(instructor.baseLatitude) ||
+          !isFinite(instructor.baseLongitude)
+        ) {
+          return null;
+        }
+
         const distance = calculateDistance(
           instructor.baseLatitude,
           instructor.baseLongitude,
@@ -105,43 +110,22 @@ export async function GET(req: NextRequest) {
           coords.lng
         );
 
-        // Skip if outside service radius
         if (distance > (instructor.serviceRadiusKm || 50)) {
           return null;
         }
 
-        // Calculate average rating from reviews
-        const averageRating = instructor.reviews.length > 0
-          ? instructor.reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / instructor.reviews.length
-          : 0;
-
-        const totalReviews = instructor._count.reviews;
+        const averageRating = instructor.averageRating ?? 0;
+        const totalReviews = instructor.totalReviews ?? 0;
         const totalBookings = instructor._count.bookings;
 
-        // Scoring algorithm (0-100 scale)
-        
-        // 1. Rating score (40% weight) - 0-40 points
-        const ratingScore = averageRating * 8; // 5 stars = 40 points
-        
-        // 2. Distance score (25% weight) - 0-25 points
-        // Closer = better. 0km = 25 points, 20km+ = 0 points
+        const ratingScore = averageRating * 8;
         const distanceScore = Math.max(0, 25 - (distance * 1.25));
-        
-        // 3. Price score (20% weight) - 0-20 points
-        // Lower price = better. $50 = 20 points, $100 = 0 points
         const priceScore = Math.max(0, 20 - ((instructor.hourlyRate - 50) * 0.4));
-        
-        // 4. Experience score (15% weight) - 0-15 points
-        // More bookings = better. 100+ bookings = 15 points
         const experienceScore = Math.min(15, totalBookings * 0.15);
-        
-        // Total score
+
         let totalScore = ratingScore + distanceScore + priceScore + experienceScore;
-        
-        // Bonus points
         if (totalReviews > 50) totalScore += 5;
-        
-        // Determine recommendation reason
+
         let reason = 'Recommended for you';
         if (ratingScore >= 38) {
           reason = 'Top rated instructor near you';
@@ -157,10 +141,10 @@ export async function GET(req: NextRequest) {
           id: instructor.id,
           name: instructor.name,
           hourlyRate: instructor.hourlyRate,
-          distance: Math.round(distance * 10) / 10, // Round to 1 decimal
+          distance: Math.round(distance * 10) / 10,
           rating: Math.round(averageRating * 10) / 10,
           reviews: totalReviews,
-          totalBookings: totalBookings,
+          totalBookings,
           vehicleTypes: instructor.vehicleTypes,
           languages: instructor.languages,
           bio: instructor.bio,
@@ -173,57 +157,35 @@ export async function GET(req: NextRequest) {
             totalBookings > 100 && 'Experienced',
             distance < 3 && 'Nearby',
           ].filter(Boolean),
-          // voice — all fields the AI needs to present this instructor, grouped for clarity.
-          // Web and mobile clients can ignore this object and use the structured fields above.
           voice: {
-            // Pre-assembled string read verbatim by the AI.
-            // e.g. "Top Rated • Automatic • English • $75 per hour"
             summary: [
               reason,
               instructor.vehicleTypes || null,
               instructor.languages ? instructor.languages.split(',')[0].trim() : null,
               `$${instructor.hourlyRate} per hour`,
-            ].filter(Boolean).join(' • '),
+            ].filter(Boolean).join('  '),
           },
         };
       })
-      .filter(Boolean) // Remove nulls (instructors outside service radius)
-      .sort((a, b) => b!.score - a!.score) // Sort by score descending
-      .slice(0, limit); // Take top N
+      .filter(Boolean)
+      .sort((a, b) => b!.score - a!.score)
+      .slice(0, limit);
 
     if (scoredInstructors.length === 0) {
       return NextResponse.json({
         recommendations: [],
         count: 0,
         message: 'No instructors found matching your criteria',
-        searchLocation: {
-          displayName: coords.displayName,
-          lat: coords.lat,
-          lng: coords.lng,
-        },
-        filters: {
-          vehicleType,
-          language,
-          maxBudget,
-          experienceLevel,
-        },
+        searchLocation: { displayName: coords.displayName, lat: coords.lat, lng: coords.lng },
+        filters: { vehicleType, language, maxBudget, experienceLevel },
       });
     }
 
     return NextResponse.json({
       recommendations: scoredInstructors,
       count: scoredInstructors.length,
-      searchLocation: {
-        displayName: coords.displayName,
-        lat: coords.lat,
-        lng: coords.lng,
-      },
-      filters: {
-        vehicleType,
-        language,
-        maxBudget,
-        experienceLevel,
-      },
+      searchLocation: { displayName: coords.displayName, lat: coords.lat, lng: coords.lng },
+      filters: { vehicleType, language, maxBudget, experienceLevel },
       message: `Found ${scoredInstructors.length} recommended instructor${scoredInstructors.length > 1 ? 's' : ''} near you`,
     });
   } catch (error) {

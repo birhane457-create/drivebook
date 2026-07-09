@@ -194,11 +194,14 @@ paths:
                 items:
                   type: object
                   properties:
-                    timestamp:
+                    type:
                       type: string
+                    time:
+                      type: string
+                      description: ISO timestamp of the event
                     description:
                       type: string
-                      description: Human-readable text for AI to read aloud
+                      description: Human-readable text — read aloud to caller
         '404':
           description: Not found or token mismatch
           schema:

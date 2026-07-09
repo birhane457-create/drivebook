@@ -85,15 +85,25 @@ const { normalisePhone } = voiceSession;
 function buildTargetUrl(req, targetPath) {
   // Improvement #4: URL construction is already safe  base URL validated at startup.
   const url = new URL(`${config.DRIVEBOOK_BASE_URL}${targetPath}`);
-  // Improvement #3 (GET-only query promotion): Body args promoted to query params
-  // only for GET requests  never for POST/PUT to avoid polluting the URL with payload data.
-  let querySource = req.query || {};
+
+  // Start with any URL-level query params (e.g. passed directly by non-Vapi callers).
+  const querySource = { ...(req.query || {}) };
+
+  // GET-only query promotion: Vapi tool calls arrive as POST bodies even for GET
+  // endpoints (message.toolCalls[0].function.arguments). Merge those args into the
+  // query string so the upstream route receives them as standard query params.
+  // Body args do NOT overwrite explicit URL params — URL params take precedence.
   if (req.method === 'GET' && req.body?.message?.type === 'tool-calls') {
     const args = extractBodyPayload(req);
-    if (Object.keys(querySource).length === 0 && Object.keys(args).length > 0) {
-      querySource = args;
+    if (Object.keys(args).length > 0) {
+      Object.entries(args).forEach(([key, value]) => {
+        if (!(key in querySource) && value !== undefined && value !== null) {
+          querySource[key] = value;
+        }
+      });
     }
   }
+
   Object.entries(querySource).forEach(([key, value]) => {
     if (Array.isArray(value)) {
       value.forEach((item) => url.searchParams.append(key, item));
