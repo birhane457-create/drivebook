@@ -19,10 +19,9 @@ const smsService = require('../services/sms-service');
 
 const router = express.Router();
 
-//  Improvement #10: Request size limit 
-// Applied at router level as a defence-in-depth layer (server.js also limits at 1mb).
-// Vapi tool payloads are small  512kb is generous; anything larger is suspicious.
-router.use(express.json({ limit: '512kb' }));
+// Note: express.json() is NOT added here  it is already registered globally in server.js.
+// Adding a second json() parser at router level causes the body to be consumed twice,
+// resulting in an empty {} being forwarded to the main app on all POST tool calls.
 
 //  Improvement #4: Validate base URL once at startup 
 try {
