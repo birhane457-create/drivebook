@@ -6,7 +6,7 @@
 
 ---
 
-## Executive Summary
+## Executive Summary.
 
 | # | Finding | Severity | Component Affected | Status |
 |---|---------|----------|--------------------|--------|
