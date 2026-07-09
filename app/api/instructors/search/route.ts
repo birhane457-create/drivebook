@@ -14,6 +14,14 @@ export async function GET(req: NextRequest) {
     const nameQuery = searchParams.get('name') || '';
     const languageFilter = searchParams.get('language') || '';
     const vehicleTypeFilter = searchParams.get('vehicleType') || '';
+    // Normalise UI-friendly names ("Automatic", "Manual") to DB values ("AUTO", "MANUAL")
+    const normaliseVehicleType = (v: string) => {
+      const u = v.toUpperCase();
+      if (u === 'AUTOMATIC') return 'AUTO';
+      if (u === 'MANUAL')    return 'MANUAL';
+      return u; // already normalised or unknown
+    };
+    const normalisedVehicleType = vehicleTypeFilter ? normaliseVehicleType(vehicleTypeFilter) : '';
     // ?admin=true — skip approved-only filter, return extra fields
     // SECURITY: Only allow admin bypass if the request comes from an authenticated admin
     // This is a server-side API route — we check the session here
@@ -65,6 +73,8 @@ export async function GET(req: NextRequest) {
         bio: true,
         serviceAreas: true,
         baseAddress: true,
+        baseLatitude: true,
+        baseLongitude: true,
         serviceRadiusKm: true,
         offersTestPackage: true,
         testPackagePrice: true,
@@ -84,7 +94,7 @@ export async function GET(req: NextRequest) {
         matched = matched.filter(i => i.languages?.toLowerCase().includes(lf));
       }
       if (vehicleTypeFilter) {
-        const vf = vehicleTypeFilter.toUpperCase();
+        const vf = normalisedVehicleType;
         matched = matched.filter(i => i.vehicleTypes?.toUpperCase().includes(vf));
       }
       const total = matched.length;
@@ -114,7 +124,7 @@ export async function GET(req: NextRequest) {
         fallback = fallback.filter(i => i.languages?.toLowerCase().includes(lf));
       }
       if (vehicleTypeFilter) {
-        const vf = vehicleTypeFilter.toUpperCase();
+        const vf = normalisedVehicleType;
         fallback = fallback.filter(i => i.vehicleTypes?.toUpperCase().includes(vf));
       }
       const total = fallback.length;
@@ -130,23 +140,34 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 2. For each instructor geocode their base address, then check radius
+    // 2. For each instructor use stored lat/lng (fast) or geocode baseAddress (fallback)
     const results: { instructor: typeof instructors[0]; distKm: number }[] = [];
 
     await Promise.all(
       instructors.map(async (i) => {
-        if (!i.baseAddress) return;
-        // Apply optional language/vehicleType filters before geocoding (cheap check first)
+        // Apply optional language/vehicleType filters before distance check (cheap check first)
         if (languageFilter) {
           const lf = languageFilter.toLowerCase();
           if (!i.languages?.toLowerCase().includes(lf)) return;
         }
         if (vehicleTypeFilter) {
-          const vf = vehicleTypeFilter.toUpperCase();
+          const vf = normalisedVehicleType;
           if (!i.vehicleTypes?.toUpperCase().includes(vf)) return;
         }
-        const base = await geocode(i.baseAddress);
+
+        let base: { lat: number; lng: number } | null = null;
+
+        // Use stored coordinates if available (fast, no API call)
+        if (i.baseLatitude != null && i.baseLongitude != null &&
+            isFinite(i.baseLatitude) && isFinite(i.baseLongitude)) {
+          base = { lat: i.baseLatitude, lng: i.baseLongitude };
+        } else if (i.baseAddress) {
+          // Fall back to geocoding the address
+          base = await geocode(i.baseAddress);
+        }
+
         if (!base) return;
+
         const radius = i.serviceRadiusKm ?? DEFAULT_RADIUS_KM;
         const dist = distanceKm(searchPoint, base);
         if (dist <= radius) {
@@ -185,7 +206,9 @@ function format(
     carMake: string | null; carModel: string | null; carYear: string | number | null;
     hourlyRate: number; vehicleTypes: string | null; languages: string | null;
     averageRating: number | null; totalReviews: number; bio: string | null;
-    serviceAreas: string | null; baseAddress: string | null; serviceRadiusKm: number | null;
+    serviceAreas: string | null; baseAddress: string | null;
+    baseLatitude: number | null; baseLongitude: number | null;
+    serviceRadiusKm: number | null;
     offersTestPackage: boolean; testPackagePrice: number | null;
     testPackageDuration: number | null; testPackageIncludes: unknown;
     _count: { bookings: number };

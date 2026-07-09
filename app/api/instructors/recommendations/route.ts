@@ -160,10 +160,14 @@ export async function GET(req: NextRequest) {
           voice: {
             summary: [
               reason,
-              instructor.vehicleTypes || null,
-              instructor.languages ? instructor.languages.split(',')[0].trim() : null,
+              instructor.vehicleTypes
+                ? instructor.vehicleTypes.replace('AUTO', 'Automatic').replace('MANUAL', 'Manual')
+                : null,
+              instructor.languages && instructor.languages.trim()
+                ? instructor.languages.split(',')[0].trim()
+                : null,
               `$${instructor.hourlyRate} per hour`,
-            ].filter(Boolean).join('  '),
+            ].filter(Boolean).join(' \u2022 '),
           },
         };
       })
