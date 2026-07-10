@@ -65,7 +65,31 @@ const bulkBookingSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+
+    // Sanitize spoken email format from voice AI
+    // e.g. "john 1 2 3 at g mail dot com" → "john123@gmail.com"
+    if (rawBody.accountHolderEmail && typeof rawBody.accountHolderEmail === 'string') {
+      const e = rawBody.accountHolderEmail.trim().toLowerCase();
+      if (!e.includes('@')) {
+        // Convert spoken format: "john 1 2 3 at gmail dot com" → "john123@gmail.com"
+        const normalized = e
+          .replace(/\s+at\s+/gi, '@')
+          .replace(/\s+dot\s+/gi, '.')
+          .replace(/\s+/g, '');
+        rawBody.accountHolderEmail = normalized;
+      }
+    }
+
+    // Normalize phone: remove spaces (e.g. "0 4 7 0 2 7 5 3 0 5" → "0470275305")
+    if (rawBody.accountHolderPhone && typeof rawBody.accountHolderPhone === 'string') {
+      rawBody.accountHolderPhone = rawBody.accountHolderPhone.replace(/\s+/g, '');
+    }
+    if (rawBody.learnerPhone && typeof rawBody.learnerPhone === 'string') {
+      rawBody.learnerPhone = rawBody.learnerPhone.replace(/\s+/g, '');
+    }
+
+    const body = rawBody;
     const data = bulkBookingSchema.parse(body);
     // P2-1 FIX: Do not log full request body — it contains PII (name, email, phone)
     logger.info('Bulk booking request:', { packageType: data.packageType, hours: data.hours, instructorId: data.instructorId ?? data.instructorQuery, bookingType: data.bookingType });
