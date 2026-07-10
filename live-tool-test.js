@@ -7,7 +7,7 @@
  * Usage: node live-tool-test.js
  */
 
-const BASE = "http://localhost:3001";
+const BASE = process.env.TEST_BASE || "https://drivebook-production-12ab.up.railway.app";
 const INSTRUCTOR_ID = "cmp8bq7s70001qby7fceboaoo"; // Debesay - live instructor
 
 // VAPI sends this header on every tool call — required by verifyVapiSecret middleware

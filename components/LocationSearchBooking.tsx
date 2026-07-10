@@ -7,7 +7,11 @@ import CompactInstructorCard from './CompactInstructorCard';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import { useInstructorSearch } from '@/lib/hooks/useInstructorSearch';
 
-const VEHICLE_OPTIONS = ['Any', 'Manual', 'Automatic'];
+const VEHICLE_OPTIONS = [
+  { label: 'Any',       value: '' },
+  { label: 'Manual',    value: 'MANUAL' },
+  { label: 'Automatic', value: 'AUTO' },
+];
 const LANGUAGE_OPTIONS = ['Any', 'English', 'Arabic', 'Mandarin', 'Hindi', 'Vietnamese', 'Spanish', 'Italian', 'Greek'];
 
 export default function LocationSearchBooking() {
@@ -15,7 +19,7 @@ export default function LocationSearchBooking() {
   const { setInstructor } = useBooking();
   const [searchQuery, setSearchQuery] = useState('');
   const [searched, setSearched] = useState(false);
-  const [vehicleType, setVehicleType] = useState('Any');
+  const [vehicleType, setVehicleType] = useState({ label: 'Any', value: '' });
   const [language, setLanguage] = useState('Any');
 
   const { results: instructors, loading, error, geocodeFailed, search } = useInstructorSearch();
@@ -27,7 +31,7 @@ export default function LocationSearchBooking() {
     await search(
       searchQuery,
       'location',
-      vehicleType !== 'Any' ? vehicleType : undefined,
+      vehicleType.value || undefined,
       language !== 'Any' ? language : undefined,
     );
   };
@@ -87,12 +91,15 @@ export default function LocationSearchBooking() {
               <label className="block text-xs font-medium text-gray-500 mb-1">Transmission</label>
               <div className="relative">
                 <select
-                  value={vehicleType}
-                  onChange={(e) => setVehicleType(e.target.value)}
+                  value={vehicleType.value}
+                  onChange={(e) => {
+                    const opt = VEHICLE_OPTIONS.find(o => o.value === e.target.value) || VEHICLE_OPTIONS[0];
+                    setVehicleType(opt);
+                  }}
                   className="appearance-none border border-gray-200 rounded-lg px-3 py-2 pr-8 text-sm text-gray-700 bg-white focus:border-blue-500 focus:outline-none cursor-pointer"
                 >
                   {VEHICLE_OPTIONS.map(v => (
-                    <option key={v} value={v}>{v}</option>
+                    <option key={v.value} value={v.value}>{v.label}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -117,12 +124,12 @@ export default function LocationSearchBooking() {
             </div>
 
             {/* Active filter pills */}
-            {(vehicleType !== 'Any' || language !== 'Any') && (
+            {(vehicleType.value !== '' || language !== 'Any') && (
               <div className="flex items-end gap-2">
-                {vehicleType !== 'Any' && (
+                {vehicleType.value !== '' && (
                   <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-medium px-2.5 py-1.5 rounded-full">
-                    {vehicleType}
-                    <button type="button" onClick={() => setVehicleType('Any')} className="ml-0.5 hover:text-blue-900 text-base leading-none">×</button>
+                    {vehicleType.label}
+                    <button type="button" onClick={() => setVehicleType({ label: 'Any', value: '' })} className="ml-0.5 hover:text-blue-900 text-base leading-none">×</button>
                   </span>
                 )}
                 {language !== 'Any' && (
@@ -158,11 +165,11 @@ export default function LocationSearchBooking() {
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">No instructors found in this area</h3>
               <p className="text-gray-600 mb-4">
-                {vehicleType !== 'Any' || language !== 'Any'
+                {vehicleType.value !== '' || language !== 'Any'
                   ? 'Try adjusting your filters or a different suburb'
                   : 'Try a different suburb or postcode'}
               </p>
-              <button onClick={() => { setSearchQuery(''); setSearched(false); setVehicleType('Any'); setLanguage('Any'); }}
+              <button onClick={() => { setSearchQuery(''); setSearched(false); setVehicleType({ label: 'Any', value: '' }); setLanguage('Any'); }}
                 className="text-blue-600 hover:text-blue-700 font-medium">Clear search</button>
             </div>
           ) : (
