@@ -75,7 +75,14 @@ function verifyVapiSecret(req, res, next) {
     return next();
   }
 
-  const provided = req.headers['x-vapi-secret'];
+  const provided = req.headers['x-vapi-secret']
+    || (() => {
+      // Also accept Bearer token from Authorization header
+      // (VAPI Credential system sends: Authorization: Bearer <secret>)
+      const auth = req.headers['authorization'] || '';
+      return auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    })();
+
   if (!provided || provided !== secret) {
     return res.status(401).json({
       error: 'Unauthorized',
