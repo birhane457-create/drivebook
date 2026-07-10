@@ -248,9 +248,9 @@ export async function POST(req: NextRequest) {
         throw txError
       }
 
-      // Send "top up to confirm" email — includes set-password link if account is new
+      // Send "top up to confirm" email — always includes a fresh setup/login link
       try {
-        const clientUser = await prisma.user.findUnique({
+        let clientUser = await prisma.user.findUnique({
           where: { id: client.userId },
           select: { resetToken: true, resetTokenExpiry: true }
         })
@@ -259,13 +259,19 @@ export async function POST(req: NextRequest) {
         const dateStr = newStart.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' })
         const timeStr = newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
 
-        // If account is new (has a resetToken), link to set-password page
-        // Otherwise link to login page
-        const isNewAccount = !!(clientUser?.resetToken && clientUser.resetTokenExpiry && clientUser.resetTokenExpiry > new Date())
-        const actionUrl = isNewAccount
-          ? `${process.env.NEXTAUTH_URL}/reset-password?token=${clientUser!.resetToken}`
-          : `${process.env.NEXTAUTH_URL}/login`
-        const actionLabel = isNewAccount ? 'Set Password & Top Up →' : 'Log In & Top Up →'
+        // Always generate a fresh setup/reset token so the email link works
+        // regardless of whether account was just created or was added days ago.
+        // This is safe — it only lets them set a password, not bypass payment.
+        const { randomUUID } = await import('crypto')
+        const freshToken = randomUUID()
+        const freshExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        await prisma.user.update({
+          where: { id: client.userId! },
+          data: { resetToken: freshToken, resetTokenExpiry: freshExpiry },
+        })
+
+        const actionUrl = `${process.env.NEXTAUTH_URL}/set-password?token=${freshToken}`
+        const actionLabel = 'Set up your account & Top Up →'
 
         await emailService.sendGenericEmail({
           to: client.email,

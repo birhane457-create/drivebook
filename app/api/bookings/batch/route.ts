@@ -506,15 +506,16 @@ async function createPendingBooking(ctx: {
     })
     const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
 
-    const isNewAccount = !!(
-      client.user?.resetToken &&
-      client.user.resetTokenExpiry &&
-      client.user.resetTokenExpiry > now
-    )
-    const actionUrl = isNewAccount
-      ? `${process.env.NEXTAUTH_URL}/reset-password?token=${client.user!.resetToken}`
-      : `${process.env.NEXTAUTH_URL}/login`
-    const actionLabel = isNewAccount ? 'Set Password & Top Up →' : 'Log In & Top Up →'
+    // Always generate a fresh setup token — works for new accounts and old ones whose token expired
+    const { randomUUID } = await import('crypto')
+    const freshToken = randomUUID()
+    const freshExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    await prisma.user.update({
+      where: { id: client.userId! },
+      data: { resetToken: freshToken, resetTokenExpiry: freshExpiry },
+    })
+    const actionUrl = `${process.env.NEXTAUTH_URL}/set-password?token=${freshToken}`
+    const actionLabel = 'Set up your account & Top Up →'
 
     await emailService.sendGenericEmail({
       to: client.email,
