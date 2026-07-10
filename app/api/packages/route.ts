@@ -104,6 +104,16 @@ export async function GET(req: NextRequest) {
         savings: Math.round(pkg.savings * 100) / 100,
         priceWithFee: Math.round(pkg.price * (1 + platformFeePercentage / 100) * 100) / 100,
       })),
+      // voicePackages: pre-formatted strings for the AI to read verbatim — no calculation needed
+      voicePackages: packages.map(pkg => {
+        const priceWithFee = Math.round(pkg.price * (1 + platformFeePercentage / 100) * 100) / 100;
+        const labels: Record<string, string> = {
+          PACKAGE_6:  `6 hours for ${priceWithFee} dollars, that is 5 percent off`,
+          PACKAGE_10: `10 hours for ${priceWithFee} dollars, 10 percent off, the most popular choice`,
+          PACKAGE_15: `15 hours for ${priceWithFee} dollars, 12 percent off, the best savings`,
+        };
+        return labels[pkg.type] || `${pkg.hours} hours for ${priceWithFee} dollars`;
+      }),
       testPackage,
       platformFee: {
         percentage: platformFeePercentage,

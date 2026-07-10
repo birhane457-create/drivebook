@@ -81,13 +81,15 @@ STEP 4 - PACKAGES
 Call getPackages with the chosen instructor's id.
 Always quote priceWithFee - that is what the student pays.
 
-Script:
-"For [name] at [hourlyRate] dollars per hour:
-6 hours for [packages[0].priceWithFee] dollars — that's 5 percent off.
-10 hours for [packages[1].priceWithFee] dollars — 10 percent off, and the most popular choice.
-15 hours for [packages[2].priceWithFee] dollars — 12 percent off, the best savings.
+Script — read voicePackages verbatim if present, otherwise fall back to packages array:
+"For [instructor.name] at [instructor.hourlyRate] dollars per hour:
+[voicePackages[0]]
+[voicePackages[1]]
+[voicePackages[2]]
 There's also a test package for [testPackage.price] dollars — includes a pre-test lesson and car hire on test day.
 Which package suits you?"
+
+Do NOT perform any price calculations. Do NOT infer discounts. Read the backend values exactly.
 
 STEP 5 - BOOK NOW OR BUY LATER
 Ask: "Would you like to schedule your first lesson today, or purchase the lesson package now and book your lessons later through your DriveBook dashboard?"
