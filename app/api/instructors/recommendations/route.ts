@@ -35,7 +35,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const coords = await geocodeAddress(location);
+    // Normalise spaced-out postcodes from voice STT: "6 0 5 1" → "6051"
+    // Also handles "6 051", "60 51", etc.
+    const normalisedLocation = /^[\d\s]+$/.test(location.trim())
+      ? location.replace(/\s+/g, '')
+      : location;
+
+    const coords = await geocodeAddress(normalisedLocation);
 
     if (!coords) {
       return NextResponse.json(
