@@ -295,15 +295,8 @@ async function main() {
       method: toolDef.method,
       url: toolDef.url,
       async: false,
-      headers: {
-        type: "object",
-        properties: {
-          "x-vapi-secret": {
-            type: "string",
-            value: VAPI_WEBHOOK_SECRET,
-          },
-        },
-      },
+      // body schema drives {{variable}} substitution in the URL for GET requests
+      body: toolDef.inputSchema,
       function: {
         name: toolDef.name,
         description: toolDef.description,

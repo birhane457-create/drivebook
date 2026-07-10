@@ -61,6 +61,7 @@ async function main() {
     model: {
       provider: "openai",
       model: "gpt-4o-mini",
+      temperature: 0.1,
       messages: [{ role: "system", content: SYSTEM_PROMPT }],
     },
   });
