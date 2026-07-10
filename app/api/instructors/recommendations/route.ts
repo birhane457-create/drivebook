@@ -17,6 +17,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const location = searchParams.get('location');
     const vehicleType = searchParams.get('vehicleType');
+    // Normalise voice/UI-friendly names to DB values (AI may send "Automatic" instead of "AUTO")
+    const normalisedVehicleType = vehicleType
+      ? (vehicleType.toUpperCase() === 'AUTOMATIC' ? 'AUTO'
+        : vehicleType.toUpperCase() === 'MANUAL' ? 'MANUAL'
+        : vehicleType.toUpperCase())
+      : null;
     const language = searchParams.get('language');
     const maxBudget = searchParams.get('budget') ? parseFloat(searchParams.get('budget')!) : null;
     const experienceLevel = searchParams.get('experienceLevel');
@@ -54,8 +60,8 @@ export async function GET(req: NextRequest) {
       baseLongitude: { gte: bbox.minLng, lte: bbox.maxLng, not: null },
     };
 
-    if (vehicleType) {
-      whereConditions.vehicleTypes = { contains: vehicleType.toUpperCase() };
+    if (normalisedVehicleType) {
+      whereConditions.vehicleTypes = { contains: normalisedVehicleType };
     }
     if (language) {
       whereConditions.languages = { contains: language };
