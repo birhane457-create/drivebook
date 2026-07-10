@@ -68,16 +68,23 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.json();
 
     // Sanitize spoken email format from voice AI
-    // e.g. "john 1 2 3 at g mail dot com" → "john123@gmail.com"
+    // Handles: "john 1 2 3 at gmail dot com" → "john123@gmail.com"
+    //          "john on 23 at g mail dot com" → best effort normalisation
     if (rawBody.accountHolderEmail && typeof rawBody.accountHolderEmail === 'string') {
-      const e = rawBody.accountHolderEmail.trim().toLowerCase();
+      let e = rawBody.accountHolderEmail.trim().toLowerCase();
       if (!e.includes('@')) {
-        // Convert spoken format: "john 1 2 3 at gmail dot com" → "john123@gmail.com"
-        const normalized = e
-          .replace(/\s+at\s+/gi, '@')
-          .replace(/\s+dot\s+/gi, '.')
-          .replace(/\s+/g, '');
-        rawBody.accountHolderEmail = normalized;
+        // Step 1: replace spoken "at" with @
+        e = e.replace(/\s+at\s+/gi, '@');
+        // Step 2: replace spoken "dot" with .
+        e = e.replace(/\s+dot\s+/gi, '.');
+        // Step 3: remove all remaining spaces (handles digit spacing and stray words)
+        e = e.replace(/\s+/g, '');
+        // Step 4: clean up common STT artifacts (e.g. "gmail" split as "g mail")
+        e = e.replace(/\bgmail\b/gi, 'gmail')
+             .replace(/\byahoo\b/gi, 'yahoo')
+             .replace(/\boutlook\b/gi, 'outlook')
+             .replace(/\bhotmail\b/gi, 'hotmail');
+        rawBody.accountHolderEmail = e;
       }
     }
 
