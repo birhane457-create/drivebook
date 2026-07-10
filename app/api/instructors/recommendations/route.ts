@@ -170,6 +170,10 @@ export async function GET(req: NextRequest) {
             distance < 3 && 'Nearby',
           ].filter(Boolean),
           voice: {
+            // voiceName: phonetic spelling for TTS. AI must read this instead of the raw name.
+            voiceName: instructor.name
+              .replace(/Debesay/gi, 'Deh-beh-say')
+              .replace(/Weldegebriel/gi, 'Wel-deh-geh-bree-el'),
             summary: [
               reason,
               instructor.vehicleTypes
@@ -178,8 +182,8 @@ export async function GET(req: NextRequest) {
               instructor.languages && instructor.languages.trim()
                 ? instructor.languages.split(',')[0].trim()
                 : null,
-              `$${instructor.hourlyRate} per hour`,
-            ].filter(Boolean).join(' \u2022 '),
+              `${instructor.hourlyRate} dollars per hour`,
+            ].filter(Boolean).join(' • '),
           },
         };
       })
