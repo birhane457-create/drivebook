@@ -338,8 +338,10 @@ router.post('/public/bookings/bulk', async (req, res) => {
     const rawPhone = cleanBody?.accountHolderPhone;
     const phone = rawPhone ? normalisePhone(rawPhone) : null;
 
+    // Log Vapi call ID for easy voice call debugging
     logger.logInfo('Proxying booking creation', {
       requestId: req.requestId,
+      callId: vapiCallId || 'unknown',
       targetUrl: maskUrl(targetUrl),
     });
 

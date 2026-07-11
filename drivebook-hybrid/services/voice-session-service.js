@@ -170,11 +170,17 @@ if (cleanupTimer.unref) cleanupTimer.unref();
  */
 function normalisePhone(phone) {
   if (!phone) return phone;
-  const digits = phone.replace(/\D/g, '');
+  const original = phone.trim();
+  const hasPlus = original.startsWith('+');
+  const digits = original.replace(/\D/g, '');
+  // Australian mobile: 04xx  +614xx
+  if (digits.startsWith('04')) return '+61' + digits.slice(1);
+  // Already E.164 with country code: 614xx → +614xx
   if (digits.startsWith('614')) return '+' + digits;
-  if (digits.startsWith('04'))  return '+61' + digits.slice(1);
-  if (phone.startsWith('+'))    return phone;
-  return phone;
+  // Had a leading + but unknown country code — preserve it
+  if (hasPlus) return '+' + digits;
+  // Fallback: return digits only
+  return digits;
 }
 
 //  Redis storage operations 

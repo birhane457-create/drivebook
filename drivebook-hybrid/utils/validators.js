@@ -19,9 +19,17 @@ const { z } = require('zod');
 // Handles common formats from Vapi and callers: spaces, dashes, parentheses.
 const phoneSchema = z
   .string()
-  .transform((s) => s.replace(/[\s\-().]/g, ''))  // strip spaces, dashes, parens, dots
+  .transform((s) => {
+    // Strip formatting chars first
+    const digits = s.replace(/[\s\-().]/g, '');
+    // Normalise Australian formats to E.164
+    if (digits.startsWith('614')) return '+' + digits;
+    if (digits.startsWith('04')) return '+61' + digits.slice(1);
+    if (s.startsWith('+')) return '+' + digits;
+    return digits;
+  })
   .refine((p) => /^\+?\d{9,15}$/.test(p), {
-    message: 'Invalid phone number  must be 915 digits, optionally prefixed with +',
+    message: 'Invalid phone number — must be 9–15 digits, optionally prefixed with +',
   });
 
 //  Date 

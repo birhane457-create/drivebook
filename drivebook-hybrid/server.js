@@ -6,7 +6,8 @@ const morgan = require('morgan');
 const { randomUUID } = require('crypto');
 const config = require('./utils/config');
 const logger = require('./utils/logger');
-const { PrismaClient } = require('@prisma/client');
+// Fix #1: Use shared Prisma client  prevents duplicate connection pools
+const prisma = require('./utils/prisma');
 
 const bookingRouter = require('./routes/booking-api');
 const instructorRouter = require('./routes/instructor-api');
@@ -15,7 +16,8 @@ const { restrictAccess, hideApiDocs, verifyVapiSecret, ipRateLimit } = require('
 const voiceSession = require('./services/voice-session-service');
 
 const app = express();
-const prisma = new PrismaClient();
+// Fix #2: Trust first proxy hop so req.ip reflects real client IP for rate limiting
+app.set('trust proxy', 1);
 
 // Security: Configure CORS properly
 const corsOptions = {

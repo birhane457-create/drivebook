@@ -77,7 +77,8 @@ module.exports = {
   PORT: process.env.PORT || 3000,
 
   //  Database 
-  DATABASE_URL: process.env.DATABASE_URL || 'file:./dev.db',
+  // No fallback: if DATABASE_URL is missing the alwaysRequired check above will warn/throw
+  DATABASE_URL: process.env.DATABASE_URL || '',
 
   //  Main DriveBook app connection 
   DRIVEBOOK_BASE_URL: process.env.DRIVEBOOK_BASE_URL || 'http://localhost:3000',

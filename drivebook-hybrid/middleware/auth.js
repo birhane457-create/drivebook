@@ -102,10 +102,9 @@ function verifyVapiSecret(req, res, next) {
 function ipRateLimit(req, res, next) {
   if (config.NODE_ENV === 'test') return next();
 
-  const ip =
-    req.headers['x-forwarded-for']?.split(',')[0].trim() ||
-    req.socket?.remoteAddress ||
-    'unknown';
+  // Use req.ip — Express resolves this correctly when app.set('trust proxy', 1) is set.
+  // This prevents spoofing via a crafted X-Forwarded-For header.
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
 
   if (!checkIpRateLimit(ip)) {
     return res.status(429).json({
