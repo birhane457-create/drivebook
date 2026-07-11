@@ -189,7 +189,9 @@ export async function POST(req: NextRequest) {
     const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60);
     // Always calculate server-side — never accept client-supplied price
     const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2));
-    const platformFee = parseFloat((lessonPrice * 0.036).toFixed(2));
+    const { getPlatformFeeRate } = await import('@/lib/services/platform-pricing');
+    const platformFeeRate = await getPlatformFeeRate();
+    const platformFee = parseFloat((lessonPrice * (platformFeeRate / 100)).toFixed(2));
     const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC');
     const commissionRate = commissionRatePct / 100;
     const instructorPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2));

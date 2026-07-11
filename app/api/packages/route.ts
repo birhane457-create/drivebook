@@ -86,8 +86,9 @@ export async function GET(req: NextRequest) {
       description: 'Can be added to any package',
     };
 
-    // Platform fee (3.6%)
-    const platformFeePercentage = 3.6;
+    // Get platform fee rate from DB (same source as bulk booking route)
+    const { getPlatformFeeRate } = await import('@/lib/services/platform-pricing');
+    const platformFeePercentage = await getPlatformFeeRate();
 
     return NextResponse.json({
       instructor: {

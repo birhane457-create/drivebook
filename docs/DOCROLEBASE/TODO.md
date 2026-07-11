@@ -60,6 +60,11 @@
 
 ## 🔵 PENDING CODE WORK
 
+### Instructor earnings hardcoded commission fallback
+`app/api/instructor/earnings/route.ts` uses `price * 0.9` as a fallback payout calculation when `instructorPayout` is 0.
+This hardcodes a 10% commission rate. Should use `booking.commissionRate` (stored at booking creation) instead.
+Low priority — only affects old bookings where `instructorPayout` was not set.
+
 ### Voice AI — Deploy to Vercel production
 8 commits on GitHub (`origin/main`) not yet on GitLab (`gitlab/main` → Vercel).
 Run: `git push gitlab main` then merge `main → production-hardening-june-2026` on GitLab.
@@ -80,6 +85,15 @@ Update `rebuild-vapi-assistant.js` voice config then run full rebuild.
 ### Voice AI — `/set-password` page needs testing
 New page at `app/set-password/page.tsx` allows email correction after voice booking.
 Test full flow: call → book later → receive SMS → click link → correct email → set password.
+
+### Instructor profile baseAddress re-geocoding
+`app/api/instructor/profile/route.ts` PUT does not re-geocode when `baseAddress` changes.
+If instructor updates their address, `baseLatitude`/`baseLongitude` stay stale → wrong search results.
+Fix: after updating `baseAddress`, call geocode and update `baseLatitude`/`baseLongitude` automatically.
+
+### VOICE_SERVICE_API_KEY env var
+`app/api/bookings/[id]/cancellation-policy/route.ts` uses `process.env.VOICE_SERVICE_API_KEY` to allow unauthenticated voice service calls.
+Verify this env var is set in Railway. If not set, voice AI cancel flow will always require session auth.
 
 ### Fix #10 — Data export feature (deferred)
 `can-i-export-my-students-drivebook.mdx` is marked `draft: true` pending implementation of `Settings → Data → Export` UI. No code exists yet. Build when ready, then undraft the blog post.
