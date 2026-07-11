@@ -1,4 +1,4 @@
-import { logger } from '@/lib/logger';
+﻿import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
@@ -397,7 +397,7 @@ export async function POST(req: NextRequest) {
                   data: { resetToken, resetTokenExpiry }
                 });
                 
-                const resetLink = `${process.env.NEXTAUTH_URL}/reset-password?token=${resetToken}`;
+                const resetLink = `${process.env.NEXTAUTH_URL}/set-password?token=${resetToken}`;
                 
                 // Send fallback email with reset link
                 const { emailService } = await import('@/lib/services/email');
@@ -860,7 +860,7 @@ export async function POST(req: NextRequest) {
         
         const isNewAccount = !!(clientUser?.resetToken && clientUser.resetTokenExpiry && clientUser.resetTokenExpiry > new Date());
         const actionUrl = isNewAccount
-          ? `${process.env.NEXTAUTH_URL}/reset-password?token=${clientUser!.resetToken}`
+          ? `${process.env.NEXTAUTH_URL}/set-password?token=${clientUser!.resetToken}`
           : `${process.env.NEXTAUTH_URL}/login`;
         
         const actionLabel = isNewAccount ? 'Set Password & Top Up →' : 'Log In & Top Up →';
