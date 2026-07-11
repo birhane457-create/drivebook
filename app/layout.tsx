@@ -38,6 +38,13 @@ export const metadata: Metadata = {
     "test preparation",
     "PDA test",
     "Australia driving school",
+    "AI receptionist for driving schools",
+    "AI phone receptionist",
+    "voice AI booking",
+    "driving school management software",
+    "AI answering service Australia",
+    "driving instructor CRM",
+    "automated booking system",
   ],
   authors: [{ name: "DriveBook", url: BASE_URL }],
   creator: "DriveBook",
@@ -112,13 +119,37 @@ export default function RootLayout({
               url: BASE_URL,
               logo: `${BASE_URL}/logo.png`,
               description:
-                'DriveBook connects learners with approved driving instructors across Australia. Book online or by phone 24/7.',
+                'DriveBook is Australian driving school management software with a built-in AI phone receptionist. The AI answers calls 24/7, books lessons, sends SMS confirmations, and handles cancellations — while instructors are teaching.',
               areaServed: { '@type': 'Country', name: 'Australia' },
+              // sameAs: Add your directory listing URLs here once live, e.g.:
+              // sameAs: [
+              //   'https://www.g2.com/products/drivebook',
+              //   'https://www.capterra.com.au/software/drivebook',
+              //   'https://www.producthunt.com/posts/drivebook',
+              // ],
               contactPoint: {
                 '@type': 'ContactPoint',
                 contactType: 'customer support',
                 availableLanguage: 'English',
                 url: `${BASE_URL}/contact`,
+              },
+              hasOfferCatalog: {
+                '@type': 'OfferCatalog',
+                name: 'DriveBook Platform Features',
+                itemListElement: [
+                  {
+                    '@type': 'Offer',
+                    name: 'AI Phone Receptionist',
+                    description: 'AI voice agent that answers calls 24/7, checks live availability, books driving lessons, and sends SMS confirmations automatically.',
+                    url: `${BASE_URL}/features/ai-receptionist`,
+                  },
+                  {
+                    '@type': 'Offer',
+                    name: 'Online Booking System',
+                    description: 'Students book lessons directly from instructor profiles with real-time availability.',
+                    url: `${BASE_URL}/features/online-booking`,
+                  },
+                ],
               },
             }),
           }}

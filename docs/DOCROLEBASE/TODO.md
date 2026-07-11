@@ -1,7 +1,7 @@
 # DOCROLEBASE TODO
 
 **Purpose:** Track what is genuinely left to do before or after launch.  
-**Last Updated:** July 2026  
+**Last Updated:** July 11, 2026  
 **Note:** Completed items are recorded in `00-overview/CHANGES.md` and relevant DOCROLEBASE docs — not here.
 
 ---
@@ -60,32 +60,39 @@
 
 ## 🔵 PENDING CODE WORK
 
+### Voice AI — Deploy to Vercel production
+8 commits on GitHub (`origin/main`) not yet on GitLab (`gitlab/main` → Vercel).
+Run: `git push gitlab main` then merge `main → production-hardening-june-2026` on GitLab.
+Pending features: `voice.voiceName`, `voicePackages`, email sanitiser, postcode normalisation backend.
+
+### Voice AI — Instructor address typo
+`DEBESAY WELDEGEBRIEL BIRHANE` has `baseAddress = "6/226 whatley Crescent Maylamds"` (typo: "Maylamds").
+Fix in admin dashboard → instructor will re-geocode on next search.
+
+### Voice AI — Support phone placeholder
+`drivebook-hybrid/VAPI_SYSTEM_PROMPT.md` has `0488 000 000` as support SMS number.
+Replace with real number, then: `node update-prompt-only.js VAPI_API_KEY ASSISTANT_ID`
+
+### Voice AI — TTS voice quality
+Adam (11Labs) mispronounces Eritrean names. Consider switching to Azure `en-AU-NatashaNeural`.
+Update `rebuild-vapi-assistant.js` voice config then run full rebuild.
+
+### Voice AI — `/set-password` page needs testing
+New page at `app/set-password/page.tsx` allows email correction after voice booking.
+Test full flow: call → book later → receive SMS → click link → correct email → set password.
+
 ### Fix #10 — Data export feature (deferred)
 `can-i-export-my-students-drivebook.mdx` is marked `draft: true` pending implementation of `Settings → Data → Export` UI. No code exists yet. Build when ready, then undraft the blog post.
 
 ### Fix #11 — C drive disk space (pre-deploy blocker)
-C drive is at ~10MB free. `npx prisma generate` fails, `str_replace` tool fails on large files. Must free C drive space before next deploy or Prisma client regeneration. Clear `C:\Users\[user]\AppData\Local\Temp`, browser caches, and any large files on C.
+C drive at low space. `npx prisma generate` fails on large files. Clear temp files, browser caches, large files on C before next Prisma client regeneration.
 
 ### Fix #12 — Request indexing in Google Search Console
-After next deploy, manually request indexing for:
-- `https://drivebook.com.au/about`
-- `https://drivebook.com.au/book`
-- `https://drivebook.com.au/contact`
-- `https://drivebook.com.au/teach-with-drivebook`
-- `https://drivebook.com.au/blog/how-to-choose-the-right-driving-instructor-perth`
-- `https://drivebook.com.au/blog/pricing-your-driving-lessons-guide-instructors`
+After next deploy, manually request indexing for key pages.
 Add `?connection_limit=20` to `DATABASE_URL` in Vercel env vars.
 
 ### Fix #6 — No tests (5–8 days)
 Zero `*.test.ts` / `*.spec.ts` files. Add Jest. Priority: Stripe webhook → wallet deduction → booking creation → refund flow.
-
-### Fix #8 — Voice AI conversation memory (2 days)
-`voice-session-service.js` stores booking state but not OpenAI message history. Each utterance starts fresh.  
-Fix: Store message history in Redis session keyed by `CallSid`.
-
-### Fix #9 — AI hallucination prevention (partially done)
-**Done:** `system-prompt-builder.js` grounds every call with live instructor profile, availability, and packages at call start.  
-**Remaining:** The Copilot agent endpoint must read `systemPrompt` from the POST body and use it as the LLM system prompt. Validate booking data against DB before confirming (output validation layer).
 
 ---
 

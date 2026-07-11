@@ -44,6 +44,43 @@ function SiteFooter() {
 }
 
 export default function AIReceptionistPage() {
+  const softwareJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'DriveBook AI Receptionist',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web, iOS, Android',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'AUD',
+      description: 'Included in DriveBook PRO plan and above',
+    },
+    featureList: [
+      'AI voice receptionist for driving schools',
+      '24/7 phone answering',
+      'Automated lesson booking via phone',
+      'Real-time calendar integration',
+      'SMS booking confirmation',
+      'Multi-language support',
+      'Cancellation and reschedule handling',
+      'Call drop recovery',
+      'Duplicate booking detection',
+    ],
+    description:
+      'DriveBook AI Receptionist is a voice AI that answers phone calls for driving instructors 24/7. It books lessons, checks live availability, sends SMS confirmations, and handles cancellations — all without the instructor needing to configure anything.',
+    url: `${BASE_URL}/features/ai-receptionist`,
+    provider: {
+      '@type': 'Organization',
+      name: 'DriveBook',
+      url: BASE_URL,
+    },
+    audience: {
+      '@type': 'Audience',
+      audienceType: 'Driving instructors and driving schools in Australia',
+    },
+  }
+
   const breadcrumbJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -79,6 +116,7 @@ export default function AIReceptionistPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <SiteHeader />

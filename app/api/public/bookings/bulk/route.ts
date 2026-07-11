@@ -1,7 +1,6 @@
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -290,10 +289,12 @@ export async function POST(req: NextRequest) {
             
             const setupLink = `${process.env.NEXTAUTH_URL}/set-password?token=${resetToken}`;
             
-            // Track email and SMS delivery success
+            // Send setup link via BOTH email and SMS — voice bookings may have wrong email,
+            // so SMS to the confirmed phone number is the reliable delivery channel.
+            // Student can correct their email after logging in via the SMS link.
             let emailDeliverySuccess = false;
             
-            // Send setup link via email
+            // Send setup link via email (may fail if email was misheard)
             try {
               const { emailService } = await import('@/lib/services/email');
               await emailService.sendGenericEmail({
@@ -367,12 +368,13 @@ export async function POST(req: NextRequest) {
             }
             
             // Optional: Send SMS with link (if SMS service available)
+            // SMS is the reliable delivery channel for voice bookings — phone number confirmed on call
             let smsDeliverySuccess = true;
             try {
               const { smsService } = await import('@/lib/services/sms');
               await smsService.sendSMS({
                 to: data.accountHolderPhone,
-                message: `🔐 Set up your DriveBook account: ${setupLink}`,
+                message: `DriveBook: Set up your account & complete payment here: ${setupLink}\n\nIf your email was incorrect, you can update it after logging in.`,
               });
             } catch (smsErr) {
               logger.info('SMS setup link delivery failed', {
@@ -617,7 +619,7 @@ export async function POST(req: NextRequest) {
             hours: String(data.hours),
             packageType: data.packageType,
           },
-          success_url: `${baseUrl}/client-dashboard/wallet?payment=success`,
+          success_url: `${baseUrl}/client-dashboard/wallet?payment=success&verify_email=1&uid=${userId}`,
           cancel_url:  `${baseUrl}/client-dashboard/wallet?payment=cancelled`,
           // Pre-fill email so returning students don't have to type it again
           customer_email: data.accountHolderEmail,
@@ -627,11 +629,11 @@ export async function POST(req: NextRequest) {
           success: true,
           bookingType: 'later',
           total: verifiedTotal,
-          // checkoutUrl is the hosted Stripe page — can be sent as an SMS link
+          // checkoutUrl is the hosted Stripe page.
+          // The hybrid server (main-app-proxy.js) detects bookingType=later and SMS's
+          // this URL to the student's phone automatically.
           checkoutUrl: session.url,
-          // Keep paymentIntentId for webhook correlation (Checkout creates a PaymentIntent internally)
           paymentIntentId: session.payment_intent as string | null,
-          // Wallet is credited in the Stripe webhook after checkout.session.completed
         }, { status: 201 });
       } catch (stripeErr) {
         logger.error('Stripe Checkout Session creation failed for book-later', {
@@ -1051,7 +1053,7 @@ export async function POST(req: NextRequest) {
         // Avoids template construction in the prompt.
         confirmation: isShortNotice
           ? `${instructor.name} needs to approve this booking first. You will be notified within a few minutes.`
-          : `Your ${packageLabels[data.packageType] ?? data.packageType} with ${instructor.name} is reserved for ${10} minutes. A payment link has been sent to your phone.`,
+          : `Your ${packageLabels[data.packageType] ?? data.packageType} with ${instructor.name} is reserved for 10 minutes. A payment link has been sent to your phone.`,
       },
     };
     // (Idempotency key was already persisted inside the $transaction above)

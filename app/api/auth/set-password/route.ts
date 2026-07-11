@@ -1,88 +1,61 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
-import { logger } from '@/lib/logger'
-import { authRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 
-const MIN_PASSWORD_LENGTH = 8
+export const dynamic = 'force-dynamic';
 
-interface SetPasswordRequest {
-  token: string
-  password: string
-}
+const schema = z.object({
+  token: z.string(),
+  password: z.string().min(8),
+  email: z.string().email(),
+});
 
-interface SetPasswordResponse {
-  success?: boolean
-  error?: string
-  message?: string
-}
-
-export async function POST(req: NextRequest): Promise<NextResponse<SetPasswordResponse>> {
+export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')
-    const rateLimitId = getRateLimitIdentifier(undefined, ip, 'set-password')
-    const rateLimitResult = await checkRateLimitStrict(authRateLimit, rateLimitId)
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: rateLimitResult.error },
-        { status: 429, headers: rateLimitResult.headers }
-      )
-    }
-
-    const { token, password } = (await req.json()) as SetPasswordRequest
-
-    if (!token || !password) {
-      return NextResponse.json({ error: 'Missing token or password' }, { status: 400 })
-    }
-
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      return NextResponse.json(
-        { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
-        { status: 400 }
-      )
-    }
+    const body = await req.json();
+    const { token, password, email } = schema.parse(body);
 
     const user = await prisma.user.findFirst({
       where: {
         resetToken: token,
-        resetTokenExpiry: {
-          gt: new Date(),
-        },
+        resetTokenExpiry: { gt: new Date() },
       },
-    })
+      select: { id: true, email: true },
+    });
 
     if (!user) {
-      logger.warn('Set password attempt with invalid or expired token')
-      return NextResponse.json(
-        { error: 'Setup link expired or invalid. Please request a new link.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid or expired link. Please contact support.' }, { status: 404 });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    // If email is being changed, check it is not already taken
+    if (email !== user.email) {
+      const emailTaken = await prisma.user.findFirst({
+        where: { email, NOT: { id: user.id } },
+        select: { id: true },
+      });
+      if (emailTaken) {
+        return NextResponse.json({ error: 'That email is already registered. Please use a different one.' }, { status: 409 });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
+        email,
         resetToken: null,
         resetTokenExpiry: null,
       },
-    })
+    });
 
-    logger.info(`User password set successfully via reset link: ${user.email}`)
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Password set successfully. You can now log in.',
-      },
-      { status: 200 }
-    )
-  } catch (error) {
-    logger.error('Error in set-password endpoint', {
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return NextResponse.json({ error: 'An error occurred. Please try again.' }, { status: 500 })
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Invalid input', issues: err.issues }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'Failed to set password' }, { status: 500 });
   }
 }

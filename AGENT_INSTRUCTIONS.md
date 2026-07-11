@@ -109,71 +109,14 @@ All 4 security issues (MEDIUM #4, #5, #6, #8) are fixed.
 All cron jobs registered in vercel.json and auth-corrected.
 TypeScript: 0 errors. No hardcoded prices. No fake content.
 
-### ✅ SUBDOMAIN PAGE OVERHAUL (July 2026)
-- Booking overlay unified desktop + mobile
-- Clickable pricing rows with package pre-selection (SubdomainPricingBooking)
-- Next available slot calculation fixed (no stale times, whole-hour ceiling)
-- How it works strip, video embed, specialties chips, test centres, popular package badge
-- Bio 75-word minimum enforced (bioIsSubstantial) — auto-generated content for sparse profiles
-- Canonical metadata pointing to subdomain URL
-- Reviews above booking CTA; mobile column order fixed
-
-### ✅ INSTRUCTOR PROFILE ADDITIONS (July 2026)
-- `videoUrl` and `specialties` fields added to schema, API, dashboard, and subdomain page
-- Migration applied to live Supabase (`20260703000001_add_instructor_video_specialties`)
-- Bio word count live indicator in dashboard (amber → emerald at 75 words)
-
-### ✅ ADMIN DASHBOARD FIXES (July 2026)
-- Revenue `/100` display bug fixed (amounts are AUD, not cents)
-- Offline bookings excluded from payout eligibility (3 routes)
-- Instructor risk: expired doc `break` bug fixed
-- Preview-all payout route rewritten to match actual eligibility criteria
-- Stale newStudentBonus removed from admin settings tier cards
-
-### ✅ BLOG CONTENT FIXES (July 2026)
-- 30+ product blogs corrected (tiers, fees, UI navigation paths)
-- Subscription tiers blog rewritten (STUDIO = single instructor)
-- Three navigation guides corrected (cancel plan, block dates, custom domain path)
-
-### ✅ SEO FIXES (July 2026)
-- /register removed from sitemap (robots.txt conflict)
-- Tag archives noindexed and removed from sitemap
-- Instructor pages use canonical subdomain URLs in sitemap
-- Thin content addressed on /instructors page and sparse subdomain profiles
-
 ### ⏳ PENDING (In TODO.md)
 - 9 config tasks in Vercel/Stripe/Google dashboards
 - Fix #11: C drive disk space must be cleared before Prisma generate
 - Fix #12: Request indexing in Google Search Console after deploy
 - Fix #10: Data export feature (blog post drafted, UI not built)
 
-### ✅ VOICE SERVICE FIXES (June 19, 2026)
-- `main-app-proxy.js` — startup crash fixed (generated-client-js path didn't exist). Rewrote to direct axios. Now sends `x-api-key` to authenticate against main app.
-- `voice-webhook.js` — `getSession()`/`saveSession()` not awaited → every call triggered recovery. Fixed.
-- `package.json` — added `axios` dependency.
-- `.env.example` — completely rewritten with correct voice service vars.
-- `contract.test.js` — replaced broken generated-client mock with axios mock. Session tests now use `await`.
-- `voice-script.md` — OTP 4→6 digits. Booking reference prompts replaced with phone-only asks.
-- `AI_VOICE_RECEPTIONIST_GUIDE.md` — removed `accountHolderPassword` from booking format.
-- Webhook idempotency: now hard-fail (was soft-fail)
-- Commission rate: locked at booking creation in both booking routes
-- Email failure: SMS + in-app fallback added
-- Slot double-booking: verified already fixed (inside $transaction)
-
-### ✅ CRON FIXES APPLIED (June 19, 2026)
-- 4 missing crons added to vercel.json (check-trial-expiry, send-trial-expiry-alerts, slot-cleanup, notifications)
-- slot-cleanup and notifications cron auth bugs fixed (were returning 401 on every Vercel call)
-- @ts-nocheck removed from bookingReminders.ts and packageExpiryAlerts.ts
-
-### ✅ OTHER FIXES APPLIED (June 19, 2026)
-- Trial emails: all prices/rates now from SUBSCRIPTION_PLANS config (no hardcoded values)
-- 3-day trial reminder email added (was only 7-day + expiry)
-- Subscription page banner: escalates at ≤3 days, shows payment nudge when no card added
-- Fake testimonials removed from homepage (ACL risk)
-- error.tsx: production now shows generic message (was exposing Prisma errors)
-- .env.example: added NEXT_PUBLIC_VOICE_PHONE_NUMBER and NEXT_PUBLIC_COPILOT_DIRECT_LINE_TOKEN
-- AIReceptionistShowcase: removed hardcoded US fallback phone number
-- Mobile TODO stubs closed — Capacitor wrapper uses web UI, not separate native screens
+See `docs/DOCROLEBASE/TODO.md` for current gaps.  
+See `docs/DOCROLEBASE/` for all permanent system documentation.
 
 ---
 
@@ -221,7 +164,7 @@ When starting next session, say:
 
 ---
 
-**Last Updated:** June 19, 2026 (full pre-production hardening session complete)
+**Last Updated:** July 2026
 
 ---
 
