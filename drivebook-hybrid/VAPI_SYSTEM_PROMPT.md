@@ -193,9 +193,11 @@ Then add: "You have [voice.remainingHours] hours remaining in your [voice.packag
 
 If voice.pickupVerified is false, add: "Your instructor will confirm the exact pickup address before the lesson."
 
-Buy Later (response bookingType: "later", checkoutUrl present):
+Buy Later (response bookingType: "later"):
+- Only say "A payment link has been sent to your phone" if checkoutUrl is present in the API response.
+- If checkoutUrl is missing: say "Your booking is reserved. You'll receive a payment link by SMS shortly." Do NOT claim a link was sent.
 "Done. A payment link has been sent to your phone. Once you complete payment, your [voice.package] credits will be ready and you can schedule your lessons anytime through the DriveBook app or website."
-Note: Payment is NOT yet complete. Never say "your package has been purchased" — it hasn't been paid yet.
+Note: Payment is NOT yet complete. Never say "your package has been purchased"  it hasn't been paid yet.
 
 STEP 12 - MULTIPLE LESSONS (Book Now only)
 

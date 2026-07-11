@@ -28,7 +28,15 @@ function getTwilioClient() {
     );
   }
   const Twilio = require('twilio');
-  _twilioClient = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
+  _twilioClient = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN, {
+    // autoRetry: SDK-level retry on Twilio HTTP 429s (rate limiting).
+    // Complements our own retry loop which handles general network failures.
+    autoRetry: true,
+    maxRetries: 3,
+    // keepAlive: reuse TLS connections across requests  reduces overhead for
+    // long-running services sending multiple SMS per call session.
+    keepAlive: true,
+  });
   return _twilioClient;
 }
 
@@ -56,7 +64,16 @@ async function sendSms(phoneNumber, message) {
       logger.logWarning('SMS send attempt failed', { attempt, to, error: err.message });
       if (attempt === 2) {
         logger.logError(err, { context: 'sms-send-final-failure', to });
-        return { success: false, error: err.message };
+        // Expose Twilio error code + HTTP status so callers can distinguish
+        // invalid number / auth failure / rate limit / carrier rejection
+        // without parsing the error message string.
+        return {
+          success: false,
+          error: err.message,
+          code: err.code,       // Twilio error code (e.g. 21211 = invalid number)
+          status: err.status,   // HTTP status from Twilio API (e.g. 400, 429)
+          retryAvailable: true, // callers (and Vapi AI) can offer to retry
+        };
       }
       // Brief pause before retry
       await new Promise((r) => setTimeout(r, 500));

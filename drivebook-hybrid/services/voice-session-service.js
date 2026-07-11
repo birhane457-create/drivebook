@@ -244,6 +244,11 @@ async function saveSession(phoneNumber, data) {
 
   if (usingRedis && redisClient) {
     try {
+      // Note: read-modify-write (get existing  merge  set) is not atomic.
+      // Two concurrent saves for the same caller could race; last write wins and
+      // the first update is lost. In practice Vapi executes tool calls sequentially
+      // within a single call, so genuine concurrency here is rare. If multi-call
+      // concurrency becomes a concern, replace with a Redis hash (HSET) or Lua script.
       const existing = await redisGet(key) || {};
       await redisSet(key, {
         ...existing,

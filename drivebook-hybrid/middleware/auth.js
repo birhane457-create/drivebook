@@ -146,7 +146,12 @@ function restrictAccess(req, res, next) {
     return next();
   }
 
-  // Vapi tool call endpoints — all go through main-app-proxy
+  // Internal docs — gated by hideApiDocs (INTERNAL_API_KEY) not by this middleware
+  if (req.path.startsWith('/docs') || req.path === '/HOMEPAGE.html') {
+    return next();
+  }
+
+  // Vapi tool call endpoints  all go through main-app-proxy
   if (
     req.path.startsWith('/api/locations')    ||
     req.path.startsWith('/api/instructors')  ||

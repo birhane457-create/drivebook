@@ -16,6 +16,8 @@ const { restrictAccess, hideApiDocs, verifyVapiSecret, ipRateLimit } = require('
 const voiceSession = require('./services/voice-session-service');
 
 const app = express();
+// Harden: remove X-Powered-By header (helmet does not remove this automatically)
+app.disable('x-powered-by');
 // Fix #2: Trust first proxy hop so req.ip reflects real client IP for rate limiting
 app.set('trust proxy', 1);
 
@@ -149,11 +151,6 @@ app.use((err, req, res, _next) => {
   const status = err.status || 500;
   const message = config.NODE_ENV === 'production' ? 'Internal Server Error' : err.message;
   res.status(status).json({ error: message, requestId: req.requestId });
-});
-
-// Prisma connection cleanup (Vital for serverless Vercel execution)
-process.on('beforeExit', async () => {
-  await prisma.$disconnect();
 });
 
 // Long-running server (Railway / Docker / local) 

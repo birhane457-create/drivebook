@@ -58,13 +58,25 @@ function maskPhone(value) {
  * Recursively walk a meta object and mask PII field values.
  * Returns a new object  never mutates the caller's data.
  *
+ * Circular reference handling: a WeakSet tracks every object visited in the
+ * current traversal. If the same reference is encountered again, it is replaced
+ * with the string "[Circular]" rather than recursing into it. The depth cap
+ * remains as a secondary guard against pathologically deep (but non-circular)
+ * object graphs.
+ *
  * @param {unknown} obj
- * @param {number} depth   guards against circular references (max 4 levels)
+ * @param {number}  depth    secondary guard: max nesting depth (4 levels)
+ * @param {WeakSet} visited  tracks visited object references (circular detection)
  * @returns {unknown}
  */
-function maskMeta(obj, depth = 0) {
+function maskMeta(obj, depth = 0, visited = new WeakSet()) {
   if (depth > 4 || obj === null || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map((item) => maskMeta(item, depth + 1));
+
+  // Circular reference detected — replace with a safe sentinel rather than looping
+  if (visited.has(obj)) return '[Circular]';
+  visited.add(obj);
+
+  if (Array.isArray(obj)) return obj.map((item) => maskMeta(item, depth + 1, visited));
 
   const masked = {};
   for (const [key, value] of Object.entries(obj)) {
@@ -73,7 +85,7 @@ function maskMeta(obj, depth = 0) {
       const isPhone = key.toLowerCase().includes('phone') || key === 'to' || key === 'from';
       masked[key] = isPhone ? maskPhone(value) : '[REDACTED]';
     } else {
-      masked[key] = maskMeta(value, depth + 1);
+      masked[key] = maskMeta(value, depth + 1, visited);
     }
   }
   return masked;
