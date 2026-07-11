@@ -660,3 +660,138 @@ CUSTOM:     0% discount
 **Last Updated:** June 13, 2026  
 **Maintained by:** Development Team  
 **Related Files:** BookingContext.tsx, MultiStepBookingLayout.tsx, BookingDetailsForm.tsx
+
+
+---
+
+## Voice AI Booking Flow (VAPI)
+
+**Entry Point:** VAPI assistant  `POST /api/public/bookings/bulk`  
+**Added:** July 2026  
+**Status:** ✅ Production-ready (commit c6dac2cd)
+
+The voice AI uses the same `/api/public/bookings/bulk` endpoint as the web booking wizard, but drives it via VAPI tool calls instead of a browser form. The account creation and payment flow is identical.
+
+---
+
+### Voice Booking Steps (System Prompt  Code)
+
+| Prompt Step | API Call | Code Path |
+|-------------|----------|-----------|
+| 1. Postcode/suburb | `findInstructors` | `GET /api/instructors/recommendations?location=...&vehicleType=...` |
+| 2. Transmission type | (stored in session) |  |
+| 3. Instructor selected | `getPackages` | `GET /api/packages?instructorId=...` |
+| 4. Package selected |  |  |
+| 5. Book Now or Later |  | Sets `bookingType: "now"` or `"later"` |
+| 6. Date/time (Book Now) | `getAvailableSlots` | `GET /api/availability/slots?instructorId=...&date=...` |
+| 7. Student details |  | Collected for createBooking payload |
+| 8. Pickup address | `validateLocation`, `checkServiceArea` | `POST /api/locations/validate`, `/api/public/instructors/.../check-service-area` |
+| 9. Confirmation |  | AI reads summary back |
+| 10. Create booking | `createBooking` | `POST /api/public/bookings/bulk` |
+
+---
+
+### Account Creation During Voice Booking
+
+Account is **always created before payment**  the moment `createBooking` is called.
+
+**New user:**
+1. `prisma.user.create` with auto-generated cryptographically-secure password
+2. `resetToken` generated + stored with 24h expiry
+3. Setup link sent via **email** (`/set-password?token=...`)
+4. Setup link sent via **SMS** (reliable channel  phone number confirmed on call)
+5. Booking created / Stripe Checkout Session created
+6. Response includes `checkoutUrl`
+7. Hybrid service (`main-app-proxy.js`) SMS's `checkoutUrl` to student's phone
+
+**Existing user (email already in DB):**
+- No account created  booking linked to existing account
+- No setup link sent (they already have a password)
+- `checkoutUrl` still SMS'd by hybrid service
+
+---
+
+### Buy Later Payment Flow
+
+```
+Voice call ends
+  
+SMS to student phone: "Click to pay: https://checkout.stripe.com/..."
+  
+Student taps link  Stripe Checkout hosted page
+  
+Student pays  Stripe fires checkout.session.completed
+  
+Webhook handler (stripe/webhook/route.ts):
+  metadata.type === "wallet_credit"
+   credits student wallet with full package amount
+  
+Student logs in  sets password at /set-password?token=...
+  
+Student schedules lessons from dashboard
+```
+
+---
+
+### Book Now Payment Flow
+
+```
+Voice call ends
+  
+SMS to student phone: "Click to pay: /booking/{id}/payment?token=..."
+  
+Student taps link  DriveBook payment page (Stripe Elements)
+  
+Student pays  Stripe fires payment_intent.succeeded
+  
+Webhook handler (stripe/webhook/route.ts):
+  bookingId present  confirms booking  credits wallet with package total  debits first lesson
+  
+Booking status: PENDING_PAYMENT  CONFIRMED
+  
+Student logs in  sets password  sees booking in dashboard
+```
+
+---
+
+### Key Differences vs Web Flow
+
+| Aspect | Web Wizard | Voice AI |
+|--------|-----------|----------|
+| Account creation | During registration step | Before payment, triggered by createBooking |
+| Password | User sets it during registration | Auto-generated; student sets via /set-password link |
+| Payment redirect | Browser navigates to Stripe | SMS link to student's phone |
+| Slot reservation | POST /api/availability/check-and-reserve | Created inside $transaction in bulk/route.ts |
+| Email normalisation | Browser form validates | Server-side: "at"  "@", "dot"  ".", spaces removed |
+| Postcode normalisation | Browser handles | Server-side: "6 0 5 1"  "6051" |
+
+---
+
+### Bug Fixed  July 11, 2026
+
+**Bug:** Book Now notification email sent `/reset-password?token=...` instead of `/set-password?token=...`.
+
+`/reset-password` is a generic password reset flow. `/set-password` is the voice booking dedicated page that:
+- Calls `/api/auth/verify-setup-token` (not the reset-password endpoint)
+- Also shows the current email so the student can **correct it** if the AI misheard
+
+**Fix:** `app/api/public/bookings/bulk/route.ts`  all three link generation points now use `/set-password`.  
+**Commit:** `c6dac2cd`
+
+---
+
+### Voice AI Files
+
+| File | Purpose |
+|------|---------|
+| `drivebook-hybrid/VAPI_SYSTEM_PROMPT.md` | AI conversation script and tool execution rules |
+| `drivebook-hybrid/routes/main-app-proxy.js` | Proxies VAPI tool calls to main app + sends SMS |
+| `drivebook-hybrid/services/voice-session-service.js` | Redis session for call recovery |
+| `app/api/instructors/recommendations/route.ts` | findInstructors tool |
+| `app/api/packages/route.ts` | getPackages tool |
+| `app/api/availability/slots/route.ts` | getAvailableSlots tool |
+| `app/api/public/bookings/bulk/route.ts` | createBooking tool (also creates account) |
+| `app/api/locations/validate/route.ts` | validateLocation tool |
+| `app/set-password/page.tsx` | Student sets password + corrects email post-booking |
+| `app/api/auth/set-password/route.ts` | API for /set-password form |
+| `app/api/auth/verify-setup-token/route.ts` | Validates resetToken for /set-password |
