@@ -349,7 +349,7 @@ async function main() {
     },
     endCallMessage: "Have a great day. Goodbye!",
     maxDurationSeconds: 600,
-    silenceTimeoutSeconds: 30,
+    silenceTimeoutSeconds: 55, // increased from 30 — tool calls (geocode) can take 10-30s on cold start
   };
 
   let result;
