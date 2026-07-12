@@ -20,6 +20,7 @@ if (!apiKey) {
 }
 
 const BASE_URL = "drivebook-production-12ab.up.railway.app";
+const VAPI_WEBHOOK_SECRET = "194cad50a0fe4bd22dbfad9940abc8dea55b2058bd52c42d59cb0be9e76b560c";
 
 function vapiRequest(method, urlPath, body) {
   return new Promise((resolve, reject) => {
@@ -349,7 +350,9 @@ async function main() {
     },
     endCallMessage: "Have a great day. Goodbye!",
     maxDurationSeconds: 600,
-    silenceTimeoutSeconds: 55, // increased from 30 — tool calls (geocode) can take 10-30s on cold start
+    silenceTimeoutSeconds: 55,
+    serverUrl: "https://" + BASE_URL,
+    serverUrlSecret: VAPI_WEBHOOK_SECRET,
   };
 
   let result;

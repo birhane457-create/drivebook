@@ -1,4 +1,4 @@
-# Voice AI Receptionist
+﻿# Voice AI Receptionist
 
 **Status:** ✅ PRODUCTION (July 2026)
 
@@ -21,7 +21,7 @@ DriveBook's AI phone receptionist handles inbound calls for booking, reschedulin
 | Next.js API | Next.js 14 | Vercel |
 | Session storage | In-process Map (single instance) or Redis if `REDIS_URL` set | Railway |
 
-**VAPI Assistant ID:** `46bbc1fc-37cc-4173-92f8-45142e89c421`  
+**VAPI Assistant ID:** `a97b2303-b75c-4764-abb8-28e13e0416b9`  
 **Railway service:** watches GitHub `birhane457-create/drivebook` branch `main`  
 **Vercel app:** watches GitLab `debesay304/drivebook2` branch `production-hardening-june-2026`
 

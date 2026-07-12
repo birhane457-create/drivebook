@@ -1,4 +1,4 @@
-/**
+﻿/**
  * rebuild-vapi-assistant.js
  *
  * Deletes the existing VAPI assistant (and all its tools), then creates
