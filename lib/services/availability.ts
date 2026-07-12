@@ -1,4 +1,4 @@
-import { prisma } from '../prisma'
+﻿import { prisma } from '../prisma'
 import { addMinutes, format } from 'date-fns'
 
 interface TimeSlot {
@@ -10,11 +10,16 @@ interface WorkingHours {
   [key: string]: TimeSlot[]
 }
 
-// Parse HH:mm string into a UTC Date on the given date's YYYY-MM-DD.
-// Avoids date-fns parse() shifting by the server's local TZ offset.
+// Parse HH:mm string (Perth local time) into a UTC Date for the given YYYY-MM-DD.
+// Working hours in the DB are always Perth wall-clock time (AWST = UTC+8).
+// Constructing with +08:00 offset instead of Z ensures 09:00 Perth = 01:00 UTC,
+// fixing the previous 8-hour shift that showed 9 AM hours as 5 PM slots.
+// Perth does not observe daylight saving -- AWST (+08:00) is constant year-round.
 function parseTimeUTC(hhMm: string, dateStr: string): Date {
   const [h, m] = hhMm.split(':').map(Number)
-  return new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00.000Z`)
+  const hh = String(h).padStart(2, '0')
+  const mm = String(m).padStart(2, '0')
+  return new Date(`${dateStr}T${hh}:${mm}:00.000+08:00`)
 }
 
 export class AvailabilityService {

@@ -163,6 +163,15 @@ Interpret the result:
 IMPORTANT: This check is informational, not a blocker. Never cancel a booking because of it. The instructor can always confirm travel arrangements with the student directly.
 
 STEP 9 - CONFIRMATION
+ONLY reach this step after ALL of the following have been collected:
+- Instructor chosen (Step 3)
+- Package chosen (Step 4)
+- Book Now or Later chosen (Step 5)
+- Date and slot chosen (Step 6, Book Now only)
+- Student full name, email, phone, registration type (Step 7)
+- Pickup address (Step 8, Book Now only)
+If any of the above are missing, go back and collect them before running this step.
+
 Read back a full summary and wait for "yes" before calling createBooking.
 
 Script:

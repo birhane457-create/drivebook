@@ -58,6 +58,17 @@ export async function GET(req: NextRequest) {
     }
 
     // Get available slots using the availability service
+    // Year sanity check: reject dates > 1 year in the past (catches AI year bug)
+    const oneYearAgo = new Date()
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+    if (date < oneYearAgo) {
+      return NextResponse.json({
+        error: 'Date is in the past',
+        hint: `Use the current year ()  the requested date  is over 1 year ago.`,
+        currentYear: new Date().getFullYear(),
+      }, { status: 400 })
+    }
+
     const availableSlots = await availabilityService.getAvailableSlots(
       query.instructorId,
       date,
