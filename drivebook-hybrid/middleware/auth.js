@@ -151,6 +151,13 @@ function restrictAccess(req, res, next) {
     return next();
   }
 
+  // Vapi server event webhook  VAPI POSTs call lifecycle events (start, end, status)
+  // to serverUrl (the root of the hybrid service). These are verified by verifyVapiSecret
+  // before reaching here. Return 200 to acknowledge; we can process events as needed.
+  if (req.path === '/' && req.method === 'POST') {
+    return next();
+  }
+
   // Vapi tool call endpoints  all go through main-app-proxy
   if (
     req.path.startsWith('/api/locations')    ||

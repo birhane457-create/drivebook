@@ -11,6 +11,8 @@
 
 const express = require('express');
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
 const { randomUUID } = require('crypto');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
@@ -18,6 +20,13 @@ const voiceSession = require('../services/voice-session-service');
 const smsService = require('../services/sms-service');
 
 const router = express.Router();
+
+// Keep-alive agents: reuse TCP connections to Railway/Vercel targets.
+// Without these, Railway closes idle sockets between VAPI tool calls,
+// causing ECONNRESET on the first request of each call session.
+// With keep-alive, the connection stays warm for the entire call duration.
+const httpAgent  = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 20 });
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 20 });
 
 // Note: express.json() is NOT added here  it is already registered globally in server.js.
 // Adding a second json() parser at router level causes the body to be consumed twice,
@@ -231,6 +240,9 @@ async function proxyRequest(req, res, targetPath) {
       validateStatus: () => true,
       // Improvement #3: Timeout from config  no hardcoded 8000
       timeout: config.PROXY_TIMEOUT_MS,
+      // Keep-alive: reuse TCP connections to prevent ECONNRESET on idle sockets
+      httpAgent,
+      httpsAgent,
     };
 
     // Improvement #9: Retry on transient failures for safe GET endpoints
@@ -352,6 +364,8 @@ router.post('/public/bookings/bulk', async (req, res) => {
       data: cleanBody,
       validateStatus: () => true,
       timeout: config.PROXY_TIMEOUT_MS,
+      httpAgent,
+      httpsAgent,
     });
 
     const upstreamData = response.data;

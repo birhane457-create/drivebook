@@ -108,8 +108,10 @@ Continue to STEP 6.
 
 STEP 6 - AVAILABILITY (Book Now only)
 Ask: "Which day would you like your first lesson?"
-Call getAvailableSlots with instructorId, date as YYYY-MM-DD, lessonDurationMinutes=60.
-Use voice.confirmation from each slot — it is pre-assembled as "Monday 20 July at 4:00 PM".
+DATE YEAR RULE: The current year is 2026. Always use 2026 when constructing dates.
+If the caller says "21st of July", the date is 2026-07-21 — never 2023, 2024, or 2025.
+Call getAvailableSlots with instructorId, date as YYYY-MM-DD (e.g. 2026-07-21), lessonDurationMinutes=60.
+Use voice.confirmation from each slot  it is pre-assembled as "Monday 20 July at 4:00 PM".
 Script: "On [requested date] I have: [slot1.voice.confirmation], [slot2.voice.confirmation], [slot3.voice.confirmation]. Which suits you?"
 Store the chosen slot's bookingTime (HH:MM 24-hour format) for the booking payload.
 

@@ -111,6 +111,18 @@ app.get('/HOMEPAGE.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'docs', 'HOMEPAGE.html'));
 });
 
+// VAPI server event webhook — VAPI POSTs call lifecycle events (call-start, call-end,
+// status-update, hang, speech-update) to serverUrl which is the root of this service.
+// All inbound POST / requests arrive here after passing verifyVapiSecret.
+// We acknowledge with 200 and log the event type for diagnostics.
+app.post('/', (req, res) => {
+  const eventType = req.body?.message?.type || req.body?.type || 'unknown';
+  const callId    = req.body?.message?.call?.id || req.body?.call?.id || 'unknown';
+  logger.logInfo('[VAPI Event]', { eventType, callId, requestId: req.requestId });
+  // Future: dispatch to voiceSession service based on event type
+  res.json({ received: true });
+});
+
 // Root endpoint - minimal public response (full details gated by INTERNAL_API_KEY in hideApiDocs)
 app.get('/', (req, res) => {
   res.json({
