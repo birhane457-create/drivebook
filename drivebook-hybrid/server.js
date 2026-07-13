@@ -119,7 +119,16 @@ app.post('/', (req, res) => {
   const eventType = req.body?.message?.type || req.body?.type || 'unknown';
   const callId    = req.body?.message?.call?.id || req.body?.call?.id || 'unknown';
   logger.logInfo('[VAPI Event]', { eventType, callId, requestId: req.requestId });
-  // Future: dispatch to voiceSession service based on event type
+
+  // assistant-request: Vapi asks "which assistant should handle this call?"
+  // Must respond with {} (empty object) to tell Vapi to use the phone number's
+  // linked assistant. Any other response (including {"received":true}) may
+  // cause Vapi to treat this as an error and trigger the fallback destination.
+  if (eventType === 'assistant-request') {
+    return res.json({});
+  }
+
+  // All other lifecycle events (call-start, call-end, status-update, etc.)
   res.json({ received: true });
 });
 

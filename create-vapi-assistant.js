@@ -54,13 +54,14 @@ const TOOL_DEFINITIONS = [
     name: "findInstructors",
     description: "Find and rank driving instructors for a suburb. Returns voice.summary per instructor - read it verbatim. Never say X km away.",
     method: "GET",
-    // LiquidJS template: Vapi substitutes {{location}} and {{vehicleType}} into the URL as query params.
-    url: "https://" + BASE_URL + "/api/instructors/recommendations?location={{location}}&vehicleType={{vehicleType}}",
+    // Do NOT include query params in the URL for GET requests.
+    // Vapi automatically appends schema properties as query params for GET apiRequest tools.
+    url: "https://" + BASE_URL + "/api/instructors/recommendations",
     inputSchema: {
       type: "object",
       required: ["location"],
       properties: {
-        location: { type: "string", description: "Suburb name e.g. Maylands. NOT a pickup address." },
+        location: { type: "string", description: "Suburb name or 4-digit postcode e.g. Maylands or 6051. NOT a pickup address." },
         vehicleType: { type: "string", enum: ["AUTO", "MANUAL"], description: "Ask caller before calling." },
         language: { type: "string", description: "Optional caller language preference e.g. Arabic" },
       },
@@ -70,7 +71,7 @@ const TOOL_DEFINITIONS = [
     name: "getPackages",
     description: "Get lesson package pricing for a specific instructor. Always quote priceWithFee, never price.",
     method: "GET",
-    url: "https://" + BASE_URL + "/api/packages?instructorId={{instructorId}}",
+    url: "https://" + BASE_URL + "/api/packages",
     inputSchema: {
       type: "object",
       required: ["instructorId"],
@@ -83,7 +84,7 @@ const TOOL_DEFINITIONS = [
     name: "getAvailableSlots",
     description: "Get available lesson times for a date. Use voice.confirmation from each slot to read times aloud. Store bookingTime for createBooking.",
     method: "GET",
-    url: "https://" + BASE_URL + "/api/availability/slots?instructorId={{instructorId}}&date={{date}}&lessonDurationMinutes={{lessonDurationMinutes}}",
+    url: "https://" + BASE_URL + "/api/availability/slots",
     inputSchema: {
       type: "object",
       required: ["instructorId", "date"],
@@ -111,7 +112,7 @@ const TOOL_DEFINITIONS = [
     name: "checkServiceArea",
     description: "Check if a pickup address is within the instructor service area. result=in: continue silently. result=out: tell caller and offer another instructor. result=unknown: continue silently. Never block a booking.",
     method: "GET",
-    url: "https://" + BASE_URL + "/api/public/check-service-area?instructorId={{instructorId}}&address={{address}}",
+    url: "https://" + BASE_URL + "/api/public/check-service-area",
     inputSchema: {
       type: "object",
       required: ["instructorId", "address"],
@@ -166,7 +167,7 @@ const TOOL_DEFINITIONS = [
     name: "lookupBookings",
     description: "Find existing bookings by caller phone number. Use before cancel or reschedule.",
     method: "GET",
-    url: "https://" + BASE_URL + "/api/bookings/lookup?phone={{phone}}",
+    url: "https://" + BASE_URL + "/api/bookings/lookup",
     inputSchema: {
       type: "object",
       required: ["phone"],
@@ -347,6 +348,13 @@ async function main() {
   }
 
   // Step 3: Create or update assistant
+  // Note: serverUrl is intentionally omitted. For apiRequest tools, Vapi calls
+  // the tool URLs directly — Railway does not need to be the serverUrl.
+  // Including a serverUrl causes Vapi to fire an assistant-request webhook at
+  // call start; if Railway is slow to respond (~900ms), the call fails with
+  // call.start.error-get-assistant before the assistant ever speaks.
+  // On PATCH, Vapi preserves existing fields that are not sent — so we
+  // explicitly set serverUrl and serverUrlSecret to null to clear them.
   const assistantPayload = {
     name: "DriveBook AI Receptionist",
     firstMessage: "Hi, thanks for calling DriveBook. I can help you book a driving lesson, reschedule, or cancel. What can I help you with today?",
@@ -371,8 +379,8 @@ async function main() {
     endCallMessage: "Have a great day. Goodbye!",
     maxDurationSeconds: 600,
     silenceTimeoutSeconds: 55,
-    serverUrl: "https://" + BASE_URL,
-    serverUrlSecret: VAPI_WEBHOOK_SECRET,
+    serverUrl: null,
+    serverUrlSecret: null,
   };
 
   let result;
