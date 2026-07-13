@@ -171,9 +171,11 @@ export async function GET(req: NextRequest) {
           ].filter(Boolean),
           voice: {
             // voiceName: phonetic spelling for TTS. AI must read this instead of the raw name.
+            // Each segment is separated by two spaces to encourage a brief pause between parts.
             voiceName: instructor.name
-              .replace(/Debesay/gi, 'Deh-beh-say')
-              .replace(/Weldegebriel/gi, 'Wel-deh-geh-bree-el'),
+              .replace(/Debesay/gi,      'DEH-beh-say')
+              .replace(/Weldegebriel/gi, 'Wel-deh-geh-bree-EL')
+              .replace(/Birhane?/gi,     'Bir-han'),
             summary: [
               reason,
               instructor.vehicleTypes

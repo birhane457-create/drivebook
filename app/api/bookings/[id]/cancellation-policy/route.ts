@@ -29,8 +29,14 @@ export async function GET(
     const bookingId = params.id
 
     // Auth: voice service key or authenticated session
+    // Accepts either:
+    //   x-api-key: VOICE_SERVICE_API_KEY  (Railway → Vercel internal key)
+    //   x-vapi-secret: VAPI_WEBHOOK_SECRET (direct Vapi tool call, forwarded by proxy)
     const apiKey = req.headers.get('x-api-key')
-    const isVoiceService = apiKey && apiKey === process.env.VOICE_SERVICE_API_KEY
+    const vapiSecret = req.headers.get('x-vapi-secret')
+    const isVoiceService =
+      (apiKey && apiKey === process.env.VOICE_SERVICE_API_KEY) ||
+      (vapiSecret && vapiSecret === process.env.VAPI_WEBHOOK_SECRET)
 
     if (!isVoiceService) {
       const session = await getServerSession(authOptions)

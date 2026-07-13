@@ -111,7 +111,17 @@ jest.mock('axios', () => {
       return Promise.resolve({
         status: 200,
         headers: { 'content-type': 'application/json' },
-        data: { packages: [{ type: 'PACKAGE_10', hours: 10, price: 790, priceWithFee: 818.44 }] },
+        data: {
+          instructor: { id: 'inst_1', name: 'Debesay', hourlyRate: 79 },
+          packages: [{ type: 'PACKAGE_10', hours: 10, price: 790, priceWithFee: 818.44 }],
+          voicePackages: [
+            '6 hours for 427.50 dollars, that is 5 percent off',
+            '10 hours for 712.44 dollars, 10 percent off, the most popular choice',
+            '15 hours for 1044.36 dollars, 12 percent off, the best savings',
+          ],
+          testPackage: { available: true, price: 150, name: 'Driving Test Package' },
+          platformFee: { percentage: 2.99, description: 'Platform fee covers payment processing and booking services' },
+        },
       });
     }
 
@@ -371,6 +381,35 @@ describe('Contract Tests — API Response Shapes', () => {
         .query({ location: 'Maylands' });
       expect(res.status).toBe(200);
       assertShape(res.body, { instructors: [{ id: 'string', name: 'string' }] });
+    });
+  });
+
+  // ── Packages ─────────────────────────────────────────────────────────────────
+  describe('GET /api/packages', () => {
+    test('returns voicePackages array and testPackage with price', async () => {
+      const res = await request(app)
+        .get('/api/packages')
+        .query({ instructorId: 'inst_1' });
+      expect(res.status).toBe(200);
+      assertShape(res.body, {
+        instructor: { id: 'string', name: 'string', hourlyRate: 0 },
+        packages: [{ type: 'string', hours: 0, priceWithFee: 0 }],
+        voicePackages: ['string'],
+        testPackage: { price: 0 },
+      });
+    });
+
+    test('voicePackages has 3 entries (6h, 10h, 15h)', async () => {
+      const res = await request(app)
+        .get('/api/packages')
+        .query({ instructorId: 'inst_1' });
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.voicePackages)).toBe(true);
+      expect(res.body.voicePackages.length).toBe(3);
+      res.body.voicePackages.forEach((line) => {
+        expect(typeof line).toBe('string');
+        expect(line.length).toBeGreaterThan(0);
+      });
     });
   });
 

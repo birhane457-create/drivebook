@@ -80,16 +80,21 @@ export async function geocodeAddress(address: string): Promise<{
   displayName: string;
 } | null> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?` +
       `q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=au`,
       {
         headers: {
           'User-Agent': 'DriveBook-Platform/1.0'
-        }
+        },
+        signal: controller.signal,
       }
     );
 
+    clearTimeout(timeoutId);
     const data = await response.json();
     
     if (data && data.length > 0) {
@@ -112,16 +117,21 @@ export async function geocodeAddress(address: string): Promise<{
  */
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?` +
       `lat=${lat}&lon=${lng}&format=json`,
       {
         headers: {
           'User-Agent': 'DriveBook-Platform/1.0'
-        }
+        },
+        signal: controller.signal,
       }
     );
 
+    clearTimeout(timeoutId);
     const data = await response.json();
     return data.display_name || null;
   } catch (error) {

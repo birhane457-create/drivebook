@@ -27,8 +27,13 @@ export function authenticateVoiceService(req: NextRequest): {
   response?: NextResponse;
 } {
   const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
-  
-  if (!apiKey) {
+  const vapiSecret = req.headers.get('x-vapi-secret');
+
+  // Accept either the internal API key or the Vapi webhook secret (forwarded by the proxy)
+  const isValidApiKey = apiKey && VOICE_SERVICE_API_KEY && apiKey === VOICE_SERVICE_API_KEY;
+  const isValidVapiSecret = vapiSecret && process.env.VAPI_WEBHOOK_SECRET && vapiSecret === process.env.VAPI_WEBHOOK_SECRET;
+
+  if (!apiKey && !vapiSecret) {
     return {
       authenticated: false,
       error: 'Missing API key',
@@ -39,8 +44,7 @@ export function authenticateVoiceService(req: NextRequest): {
     };
   }
 
-  // Reject if key not configured or doesn't match
-  if (!VOICE_SERVICE_API_KEY || apiKey !== VOICE_SERVICE_API_KEY) {
+  if (!isValidApiKey && !isValidVapiSecret) {
     return {
       authenticated: false,
       error: 'Invalid API key',

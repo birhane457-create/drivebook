@@ -62,12 +62,23 @@ if (insecure.length) {
   }
 }
 
-//  Stale Copilot vars warning 
+// Stale Copilot vars warning
 // If someone accidentally sets these (e.g. copied old .env), warn clearly.
 if (!isTest && process.env.COPILOT_DIRECT_LINE_SECRET) {
   console.warn(
     'WARNING: [config] COPILOT_DIRECT_LINE_SECRET is set but Copilot Studio has been replaced by Vapi. ' +
     'Remove this var from your environment.'
+  );
+}
+
+//  Production localhost guard 
+// DRIVEBOOK_BASE_URL pointing at localhost in production means the hybrid
+// server cannot reach the main app — all proxied API calls will fail silently.
+if (isProduction && (process.env.DRIVEBOOK_BASE_URL || '').includes('localhost')) {
+  throw new Error(
+    '[config] DRIVEBOOK_BASE_URL is set to a localhost URL in production. ' +
+    'Set it to the real Vercel URL in your Railway environment variables, e.g. ' +
+    'DRIVEBOOK_BASE_URL=https://drivebook.com.au'
   );
 }
 
@@ -108,7 +119,7 @@ module.exports = {
 
   //  Proxy & timeouts 
   REQUEST_TIMEOUT:   parseInt(process.env.REQUEST_TIMEOUT    || '30000', 10),
-  PROXY_TIMEOUT_MS:  parseInt(process.env.PROXY_TIMEOUT_MS   || '8000',  10),
+  PROXY_TIMEOUT_MS:  parseInt(process.env.PROXY_TIMEOUT_MS   || '15000', 10),
   PROXY_GET_RETRIES: parseInt(process.env.PROXY_GET_RETRIES  || '2',     10),
 
   //  Session 

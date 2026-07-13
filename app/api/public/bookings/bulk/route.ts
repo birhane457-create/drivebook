@@ -20,7 +20,7 @@ const bulkBookingSchema = z.object({
   instructorQuery: z.string().optional(),
   packageType: z.enum(['CUSTOM', 'PACKAGE_6', 'PACKAGE_10', 'PACKAGE_15']),
   hours: z.coerce.number(),
-  includeTestPackage: z.boolean(),
+  includeTestPackage: z.boolean().default(false),
   bookingType: z.enum(['now', 'later']),
   scheduledBookings: z.array(z.object({
     date: z.string(),

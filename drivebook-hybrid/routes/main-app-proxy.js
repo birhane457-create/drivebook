@@ -146,6 +146,9 @@ function buildForwardHeaders(req) {
   headers['x-forwarded-for'] = req.socket?.remoteAddress || req.ip || 'unknown';
   if (req.requestId) headers['x-request-id'] = req.requestId;
   if (config.DRIVEBOOK_API_KEY) headers['x-api-key'] = config.DRIVEBOOK_API_KEY;
+  // Forward the Vapi secret so the main app can use it as a fallback auth method
+  // on endpoints like cancellation-policy that accept either x-api-key or x-vapi-secret.
+  if (config.VAPI_WEBHOOK_SECRET) headers['x-vapi-secret'] = config.VAPI_WEBHOOK_SECRET;
   return headers;
 }
 
