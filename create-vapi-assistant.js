@@ -266,27 +266,47 @@ async function main() {
   console.log("Prompt: " + SYSTEM_PROMPT.length + " chars");
   console.log("");
 
-  // Step 1: Delete old tools if updating existing assistant
+  // Step 1: Delete old tools if updating existing assistant.
+  // Strategy: delete ALL tools in the account that share a name with our tool definitions.
+  // This catches both toolIds attached to the assistant AND orphaned tools from previous runs.
   if (existingAssistantId) {
-    console.log("Fetching existing assistant to find old tools...");
+    console.log("Cleaning up existing tools (assistant-attached + orphans)...");
+
+    // 1a: Delete tools listed on the assistant's toolIds array
     const existing = await vapiRequest("GET", "/assistant/" + existingAssistantId, null);
     if (existing.status === 200) {
       const oldToolIds = existing.body && existing.body.model && existing.body.model.toolIds ? existing.body.model.toolIds : [];
       if (oldToolIds.length > 0) {
-        console.log("  Found " + oldToolIds.length + " existing tool(s) - deleting...");
+        console.log("  Deleting " + oldToolIds.length + " tool(s) from assistant...");
         for (const oldId of oldToolIds) {
           const del = await vapiRequest("DELETE", "/tool/" + oldId, null);
           if (del.status === 200 || del.status === 204) {
             console.log("  deleted " + oldId);
           } else {
-            console.warn("  could not delete " + oldId + " (" + del.status + ") - continuing");
+            console.warn("  could not delete " + oldId + " (" + del.status + ")");
+          }
+        }
+      }
+    }
+
+    // 1b: Sweep the global tool library for orphans with matching names
+    const knownNames = new Set(TOOL_DEFINITIONS.map(t => t.name));
+    const allTools = await vapiRequest("GET", "/tool?limit=100", null);
+    if (allTools.status === 200 && Array.isArray(allTools.body)) {
+      const orphans = allTools.body.filter(t => t.function && knownNames.has(t.function.name));
+      if (orphans.length > 0) {
+        console.log("  Found " + orphans.length + " orphan tool(s) in account — deleting...");
+        for (const t of orphans) {
+          const del = await vapiRequest("DELETE", "/tool/" + t.id, null);
+          if (del.status === 200 || del.status === 204) {
+            console.log("  deleted orphan " + t.id + " (" + t.function.name + ")");
+          } else {
+            console.warn("  could not delete orphan " + t.id + " (" + del.status + ")");
           }
         }
       } else {
-        console.log("  No existing tools found.");
+        console.log("  No orphan tools found.");
       }
-    } else {
-      console.warn("  Could not fetch assistant (" + existing.status + ") - proceeding without cleanup");
     }
     console.log("");
   }
@@ -366,10 +386,28 @@ async function main() {
 
   if (result.status === 200 || result.status === 201) {
     const action = existingAssistantId ? "updated" : "created";
+
+    // Verify toolIds actually stuck (Vapi PATCH can silently ignore toolIds in some cases)
+    const attached = result.body.model && result.body.model.toolIds || [];
+    const missing = toolIds.filter(id => !attached.includes(id));
+    if (missing.length > 0 && existingAssistantId) {
+      console.warn("\nWARN: " + missing.length + " tool(s) not attached after PATCH — forcing toolIds update...");
+      const fixResult = await vapiRequest("PATCH", "/assistant/" + existingAssistantId, {
+        model: { provider: "openai", model: "gpt-4o-mini", toolIds: toolIds },
+      });
+      if (fixResult.status === 200) {
+        const fixedAttached = fixResult.body.model && fixResult.body.model.toolIds || [];
+        console.log("  Force-patched toolIds. Now attached:", fixedAttached.length);
+      } else {
+        console.error("  Force-patch failed:", JSON.stringify(fixResult.body).substring(0, 200));
+      }
+    }
+
     console.log("\nAssistant " + action + " successfully");
     console.log("   ID:    " + result.body.id);
     console.log("   Name:  " + result.body.name);
     console.log("   Tools: " + toolIds.length);
+    console.log("   ToolIds attached: " + attached.length + (missing.length > 0 ? " (fixed)" : " ✓"));
     if (!existingAssistantId) {
       console.log("\nNext steps:");
       console.log("  1. Vapi Dashboard -> Phone Numbers -> select your AU number");

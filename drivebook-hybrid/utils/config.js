@@ -74,7 +74,10 @@ if (!isTest && process.env.COPILOT_DIRECT_LINE_SECRET) {
 //  Production localhost guard 
 // DRIVEBOOK_BASE_URL pointing at localhost in production means the hybrid
 // server cannot reach the main app — all proxied API calls will fail silently.
-if (isProduction && (process.env.DRIVEBOOK_BASE_URL || '').includes('localhost')) {
+if (isProduction && (
+  (process.env.DRIVEBOOK_BASE_URL || '').includes('localhost') ||
+  (process.env.DRIVEBOOK_BASE_URL || '').includes('127.0.0.1')
+)) {
   throw new Error(
     '[config] DRIVEBOOK_BASE_URL is set to a localhost URL in production. ' +
     'Set it to the real Vercel URL in your Railway environment variables, e.g. ' +

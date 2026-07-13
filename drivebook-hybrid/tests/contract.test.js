@@ -33,6 +33,9 @@
 
 process.env.NODE_ENV = 'test';
 process.env.SKIP_TWILIO_VALIDATION = 'true';
+// Clear Vapi secret so verifyVapiSecret middleware bypasses auth in tests.
+// The .env file has a real secret which would cause 401 on all requests.
+process.env.VAPI_WEBHOOK_SECRET = '';
 
 const request = require('supertest');
 
@@ -298,6 +301,10 @@ const app = require('../server');
 /**
  * Assert every key in `shape` exists on `obj` (deep, non-strict).
  * Arrays: checked to have at least one element matching the item shape.
+ * Primitives: validated by type when the shape value is a sentinel:
+ *   'string'  → typeof actual === 'string'
+ *   0 (number) → typeof actual === 'number'
+ *   true/false (boolean) → typeof actual === 'boolean'
  */
 function assertShape(obj, shape, path = '') {
   for (const [key, expected] of Object.entries(shape)) {
@@ -309,6 +316,12 @@ function assertShape(obj, shape, path = '') {
     } else if (Array.isArray(expected) && expected.length > 0) {
       expect(Array.isArray(actual)).toBe(true);
       if (actual.length > 0) assertShape(actual[0], expected[0], `${fullPath}[0]`);
+    } else if (typeof expected === 'string') {
+      expect(typeof actual).toBe('string');
+    } else if (typeof expected === 'number') {
+      expect(typeof actual).toBe('number');
+    } else if (typeof expected === 'boolean') {
+      expect(typeof actual).toBe('boolean');
     }
   }
 }
