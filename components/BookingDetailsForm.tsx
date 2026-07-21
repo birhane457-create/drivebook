@@ -1,17 +1,64 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
+import { AU_STATES } from '@/lib/data/au-locations';
 
 interface AvailableSlot {
   time: string;
   available: boolean;
 }
 
+// ── Inline notification helpers ────────────────────────────────────────────────
+type InlineError = string | null;
+
+function FieldError({ message }: { message: InlineError }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="mt-1.5 text-sm font-semibold text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
+      ⚠️ {message}
+    </p>
+  );
+}
+
+interface ConfirmDialogProps {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+function ConfirmDialog({ message, onConfirm, onCancel }: ConfirmDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm px-4">
+      <div className="bg-slate-900 border-2 border-slate-700 rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+        <p className="text-white font-semibold mb-5 text-center">{message}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 font-bold text-sm transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm transition-colors border-2 border-transparent"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BookingDetailsForm() {
   const { bookingState, addScheduledBooking, removeScheduledBooking, setPdaTestBooking, getSessionId, reserveSlot, releaseSlot } = useBooking();
   const { instructor, hours, scheduledBookings, includeTestPackage, pdaTestBooking } = bookingState;
   const showPdaPackage = includeTestPackage;
+
+  // Inline error and confirm-dialog state (replaces alert() / confirm())
+  const [formError, setFormError] = useState<InlineError>(null);
+  const [pdaError, setPdaError] = useState<InlineError>(null);
+  const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
 
   // Tab state: 'lessons' or 'pda-test'
   const [activeTab, setActiveTab] = useState<'lessons' | 'pda-test'>('lessons');
@@ -28,6 +75,8 @@ export default function BookingDetailsForm() {
   const [notes, setNotes] = useState('');
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // PDA test scheduling state
   const [pdaConfigs, setPdaConfigs] = useState<any[]>([]);
@@ -48,25 +97,16 @@ export default function BookingDetailsForm() {
   // Get instructor's allowed durations
   const allowedDurations = (instructor as any)?.allowedDurations || [60, 120];
 
-  // Generate time slots (9 AM to 5 PM in 30-minute intervals)
-  const generateTimeSlots = (): string[] => {
-    const slots: string[] = [];
-    for (let hour = 9; hour <= 17; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        if (hour === 17 && minute > 0) break; // Stop at 5:00 PM
-        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        slots.push(timeStr);
-      }
-    }
-    return slots;
-  };
-
-  // Fetch available slots when date changes
+  // Fetch available slots when date OR duration changes.
+  // Duration is included here so React state is guaranteed settled before the fetch runs —
+  // calling fetchAvailableSlots() directly inside the duration onChange would read stale
+  // selectedDuration (React batches state updates asynchronously).
   useEffect(() => {
     if (selectedDate && instructor) {
       fetchAvailableSlots();
     }
-  }, [selectedDate, instructor]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedDuration, instructor]);
 
   // Fetch PDA configs when includeTestPackage is enabled
   useEffect(() => {
@@ -82,21 +122,29 @@ export default function BookingDetailsForm() {
     }
   }, [showPdaPackage, remainingHours, activeTab]);
 
-  // Cleanup: Release all reserved slots when component unmounts or user leaves
+  // Keep a ref to the latest bookings so the unmount cleanup sees current state
+  // without listing scheduledBookings as a dep (which would fire cleanup prematurely).
+  const bookingsRef = React.useRef(scheduledBookings);
+  const instructorIdRef = React.useRef(instructor?.id);
+  React.useEffect(() => { bookingsRef.current = scheduledBookings; }, [scheduledBookings]);
+  React.useEffect(() => { instructorIdRef.current = instructor?.id; }, [instructor?.id]);
+
+  // Cleanup: Release all reserved slots ONLY when component unmounts
   useEffect(() => {
     return () => {
-      // Release all reserved slots
-      scheduledBookings.forEach((booking) => {
-        const slotKey = `${instructor?.id}:${booking.date}:${booking.time}:${booking.duration}`;
+      bookingsRef.current.forEach((booking) => {
+        const slotKey = `${instructorIdRef.current}:${booking.date}:${booking.time}:${booking.duration}`;
         releaseSlot(slotKey);
       });
     };
-  }, [scheduledBookings, instructor?.id, releaseSlot]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // empty deps — intentionally runs cleanup only on unmount
 
   const fetchAvailableSlots = async () => {
     if (!selectedDate || !instructor) return;
 
     setIsLoadingSlots(true);
+    setSlotsError(null);
     try {
       const response = await fetch(
         `/api/availability/slots?instructorId=${instructor.id}&date=${selectedDate}&duration=${selectedDuration}`
@@ -121,31 +169,16 @@ export default function BookingDetailsForm() {
         
         setAvailableSlots(filteredSlots);
       } else {
-        // Fallback: generate all slots as available
-        const allSlots = generateTimeSlots();
-        const filteredSlots = allSlots.map(time => {
-          const isScheduledInSession = scheduledBookings.some(
-            booking => booking.date === selectedDate && 
-                      booking.time === time && 
-                      booking.duration === selectedDuration
-          );
-          return { time, available: !isScheduledInSession };
-        });
-        setAvailableSlots(filteredSlots);
+        // Do NOT fall back to generated slots — the server is the only source of truth.
+        // Showing fabricated availability would let users pick slots that may already be booked.
+        setAvailableSlots([]);
+        setSlotsError('Unable to load available times. Please try again.');
       }
     } catch (error) {
       console.error('Error fetching slots:', error);
-      // Fallback: generate all slots as available
-      const allSlots = generateTimeSlots();
-      const filteredSlots = allSlots.map(time => {
-        const isScheduledInSession = scheduledBookings.some(
-          booking => booking.date === selectedDate && 
-                    booking.time === time && 
-                    booking.duration === selectedDuration
-        );
-        return { time, available: !isScheduledInSession };
-      });
-      setAvailableSlots(filteredSlots);
+      // Network or parse error — show error, never fabricate slots.
+      setAvailableSlots([]);
+      setSlotsError('Unable to load available times. Please check your connection and try again.');
     } finally {
       setIsLoadingSlots(false);
     }
@@ -214,28 +247,29 @@ export default function BookingDetailsForm() {
   };
 
   const handleAddPdaTest = async () => {
+    setPdaError(null);
     // Validation
     if (!selectedPdaConfig) {
-      alert('Please select a PDA test configuration');
+      setPdaError('Please select a PDA test configuration');
       return;
     }
     if (!selectedTestCentre) {
-      alert('Please select a test centre');
+      setPdaError('Please select a test centre');
       return;
     }
     if (!selectedTestDate) {
-      alert('Please select a test date');
+      setPdaError('Please select a test date');
       return;
     }
     if (!selectedTestTime) {
-      alert('Please select a test time');
+      setPdaError('Please select a test time');
       return;
     }
 
     // Check if pickup address is required but not provided
     const includes = getConfigIncludes();
     if ((pickupOption === 'pickup' || includes.pickup) && !pdaPickupLocation.trim()) {
-      alert('Please enter a pickup location');
+      setPdaError('Please enter a pickup location');
       return;
     }
 
@@ -256,7 +290,7 @@ export default function BookingDetailsForm() {
 
       if (!response.ok) {
         const error = await response.json();
-        alert(error.error || 'Failed to book PDA test');
+        setPdaError(error.error || 'Failed to book PDA test');
         return;
       }
 
@@ -295,32 +329,39 @@ export default function BookingDetailsForm() {
       // Switch back to lessons tab
       setActiveTab('lessons');
       
-      alert(`PDA Test booked successfully! Booking ID: ${result.booking.id}`);
+      // Show inline success — no alert()
+      setPdaError(null);
     } catch (error) {
       console.error('Error booking PDA test:', error);
-      alert('Failed to book PDA test. Please try again.');
+      setPdaError('Failed to book PDA test. Please try again.');
     }
   };
 
   const handleAddBooking = async () => {
+    setFormError(null);
+    // Guard: instructor must be loaded
+    if (!instructor) return;
+    // Guard: prevent double-submit
+    if (isSubmitting) return;
+
     // Validation
     if (!selectedDate) {
-      alert('Please select a date');
+      setFormError('Please select a date');
       return;
     }
     if (!selectedTime) {
-      alert('Please select a time');
+      setFormError('Please select a time');
       return;
     }
     if (!pickupLocation.trim()) {
-      alert('Please enter a pickup location');
+      setFormError('Please enter a pickup location');
       return;
     }
 
     // Check if adding this booking would exceed total hours
     const bookingHours = selectedDuration / 60;
     if (bookedHours + bookingHours > hours) {
-      alert(`Cannot add booking. You only have ${remainingHours.toFixed(1)} hours remaining.`);
+      setFormError(`Cannot add booking. You only have ${remainingHours.toFixed(1)} hours remaining.`);
       return;
     }
 
@@ -333,17 +374,18 @@ export default function BookingDetailsForm() {
       return newStart < bEnd && newEnd > bStart;
     });
     if (hasLocalConflict) {
-      alert('This time overlaps with a lesson you already scheduled. Please choose a different time.');
+      setFormError('This time overlaps with a lesson you already scheduled. Please choose a different time.');
       return;
     }
 
     // Reserve the slot before adding
+    setIsSubmitting(true);
     try {
       const response = await fetch('/api/availability/check-and-reserve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instructorId: instructor!.id,
+          instructorId: instructor.id,
           date: selectedDate,
           time: selectedTime,
           duration: selectedDuration,
@@ -354,7 +396,7 @@ export default function BookingDetailsForm() {
       const result = await response.json();
 
       if (!response.ok || !result.available) {
-        alert(result.reason || 'This time slot is no longer available. Please select another time.');
+        setFormError(result.reason || 'This time slot is no longer available. Please select another time.');
         // Refresh available slots
         fetchAvailableSlots();
         return;
@@ -370,38 +412,44 @@ export default function BookingDetailsForm() {
       });
 
       // Track reserved slot in context
-      reserveSlot(instructor!.id, selectedDate, selectedTime, selectedDuration);
+      reserveSlot(instructor.id, selectedDate, selectedTime, selectedDuration);
 
-      // Reset form
+      // Reset form — keep pickup location so the next lesson doesn't need re-entry
       setSelectedTime('');
-      setPickupLocation('');
       setNotes('');
+      setFormError(null);
       
       // Refresh available slots
       fetchAvailableSlots();
     } catch (error) {
       console.error('Error reserving slot:', error);
-      alert('Failed to reserve time slot. Please try again.');
+      setFormError('Failed to reserve time slot. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleRemoveBooking = async (index: number) => {
-    if (confirm('Are you sure you want to remove this booking?')) {
-      const booking = scheduledBookings[index];
-      
-      // Release the reserved slot from both context and server
+    setConfirmRemoveIndex(index);
+  };
+
+  const executeRemoveBooking = async (index: number) => {
+    setConfirmRemoveIndex(null);
+    const booking = scheduledBookings[index];
+    
+    // Release the reserved slot from both context and server
       try {
-        // Call server DELETE to release the reservation
-        await fetch('/api/availability/check-and-reserve', {
+        // Call server DELETE to release the reservation — params must be in URL query string,
+        // not in body (HTTP spec: DELETE body is not guaranteed to be read by servers)
+        const params = new URLSearchParams({
+          instructorId: instructor!.id,
+          date: booking.date,
+          time: booking.time,
+          duration: String(booking.duration),
+          sessionId
+        });
+        await fetch(`/api/availability/check-and-reserve?${params.toString()}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instructorId: instructor!.id,
-            date: booking.date,
-            time: booking.time,
-            duration: booking.duration,
-            sessionId
-          })
         });
       } catch (error) {
         console.error('Failed to release server reservation:', error);
@@ -419,7 +467,6 @@ export default function BookingDetailsForm() {
       if (selectedDate) {
         fetchAvailableSlots();
       }
-    }
   };
 
   // Get minimum date (today)
@@ -451,34 +498,49 @@ export default function BookingDetailsForm() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Progress Bar */}
-      <div className="bg-gradient-to-br from-white/8 to-white/4 rounded-lg border border-white/20 p-4 sm:p-6">
+    <div className="space-y-3">
+      {/* Confirm remove dialog — replaces window.confirm() */}
+      {confirmRemoveIndex !== null && (
+        <ConfirmDialog
+          message="Are you sure you want to remove this booking?"
+          onConfirm={() => executeRemoveBooking(confirmRemoveIndex)}
+          onCancel={() => setConfirmRemoveIndex(null)}
+        />
+      )}
+
+      {/* Top-level form error (replaces alert()) */}
+      {formError && <FieldError message={formError} />}
+
+      {/* Progress Bar Container - High Visibility 3D Style */}
+      <div className="bg-slate-900 rounded-xl border-2 border-slate-700 p-4 sm:p-6 shadow-[0_6px_0_0_#1e293b,0_20px_30px_0_rgba(0,0,0,0.5)]">
         <div className="flex justify-between items-center mb-3">
-          <span className="text-sm font-medium text-white">Hours Scheduled</span>
-          <span className="text-base font-bold text-blue-300">
+          <span className="text-xs font-black text-slate-300 uppercase tracking-wider">Hours Scheduled</span>
+          <span className="text-base font-black text-sky-400 bg-slate-950 px-2.5 py-0.5 rounded-md border border-slate-800">
             {bookedHours.toFixed(1)} / {hours}
           </span>
         </div>
-        <div className="w-full bg-white/8 rounded-full h-4 border border-white/10">
+        
+        {/* Progress Track - Opaque and Flat */}
+        <div className="w-full bg-slate-950 rounded-full h-5 border-2 border-slate-800 overflow-hidden shadow-inner">
           <div
-            className="bg-gradient-to-r from-blue-400 to-blue-600 h-4 rounded-full transition-all duration-300 flex items-center justify-end pr-1"
+            className="bg-sky-500 h-full rounded-full transition-all duration-300 flex items-center justify-end pr-2 border-r-2 border-white shadow-[inset_-4px_0_0_0_#0284c7]"
             style={{ width: `${(bookedHours / hours) * 100}%` }}
           >
-            {(bookedHours / hours) * 100 > 10 && (
-              <span className="text-xs font-semibold text-white drop-shadow">
+            {(bookedHours / hours) * 100 > 12 && (
+              <span className="text-[10px] font-black text-white uppercase tracking-wider">
                 {Math.round((bookedHours / hours) * 100)}%
               </span>
             )}
           </div>
         </div>
-        <div className="flex justify-between items-center mt-3">
-          <p className="text-xs text-white/70">
+        
+        <div className="flex justify-between items-center mt-3 font-bold text-sm">
+          <p className={`text-xs uppercase tracking-wide ${remainingHours > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
             {remainingHours > 0 
-              ? `${remainingHours.toFixed(1)} hours remaining` 
+              ? `⚠️ ${remainingHours.toFixed(1)} hours remaining` 
               : '✓ All hours scheduled'}
           </p>
-          <p className="text-xs text-white/70 font-mono">
+          <p className="text-xs text-slate-400 font-mono tracking-tight bg-slate-950 px-1.5 py-0.5 rounded">
             {bookedHours.toFixed(1)}h / {hours}h
           </p>
         </div>
@@ -486,40 +548,51 @@ export default function BookingDetailsForm() {
 
       {/* Scheduled Bookings List */}
       {scheduledBookings.length > 0 && (
-        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-lg border border-white/10 p-4 sm:p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            Scheduled Lessons ({scheduledBookings.length})
+        <div className="bg-slate-900 rounded-xl border-2 border-slate-700 p-4 sm:p-6 shadow-[0_6px_0_0_#1e293b,0_20px_30px_0_rgba(0,0,0,0.5)]">
+          <h3 className="text-lg font-black text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span>Scheduled Lessons</span>
+            <span className="bg-sky-600 text-white text-xs font-black px-2.5 py-0.5 rounded-full border border-sky-400">
+              {scheduledBookings.length}
+            </span>
           </h3>
-          <div className="space-y-3">
+          
+          <div className="space-y-4">
             {scheduledBookings.map((booking, index) => (
               <div
                 key={index}
-                className="flex items-start justify-between p-4 bg-green-500/10 border border-green-500/30 rounded-lg"
+                className="flex items-start justify-between p-4 bg-slate-950 border-2 border-emerald-500 rounded-xl shadow-[0_4px_0_0_#064e3b]"
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-800">
+                    <svg className="w-5 h-5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span className="font-semibold text-white">
+                    <span className="font-extrabold text-white text-base tracking-tight">
                       {formatDate(booking.date)} at {booking.time}
                     </span>
                   </div>
-                  <p className="text-sm text-white/70">
-                    Duration: {formatDuration(booking.duration)}
-                  </p>
-                  <p className="text-sm text-white/70">
-                    Pickup: {booking.pickupLocation}
-                  </p>
-                  {booking.notes && (
-                    <p className="text-sm text-white/60 mt-1">
-                      Notes: {booking.notes}
+                  
+                  <div className="space-y-1.5 font-bold text-sm">
+                    <p className="text-slate-200 flex items-center gap-1.5">
+                      <span className="text-slate-500 text-xs uppercase tracking-wider font-black">Duration:</span> 
+                      {formatDuration(booking.duration)}
                     </p>
-                  )}
+                    <p className="text-slate-200 flex items-center gap-1.5 truncate">
+                      <span className="text-slate-500 text-xs uppercase tracking-wider font-black">Pickup:</span> 
+                      {booking.pickupLocation}
+                    </p>
+                    {booking.notes && (
+                      <p className="text-amber-300 bg-amber-950/60 border border-amber-900 rounded px-2 py-1 mt-2 text-xs font-semibold">
+                        <span className="font-black uppercase tracking-wider block text-[10px] text-amber-400 mb-0.5">Notes:</span>
+                        {booking.notes}
+                      </p>
+                    )}
+                  </div>
                 </div>
+                
                 <button
                   onClick={() => handleRemoveBooking(index)}
-                  className="text-red-400 hover:text-red-300 p-2"
+                  className="text-red-400 hover:text-red-300 p-2 ml-2 transition-all duration-100 bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-900 rounded-lg shadow-sm active:scale-95 shrink-0"
                   title="Remove booking"
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -532,12 +605,12 @@ export default function BookingDetailsForm() {
         </div>
       )}
 
-      {/* Add New Booking Form */}
+        {/* Add New Booking Form Container */}
       {(remainingHours > 0 || showPdaPackage) && (
-        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-lg border border-white/10 p-4 sm:p-6">
+        <div className="bg-slate-900 rounded-xl border-2 border-slate-700 p-4 sm:p-6 shadow-[0_6px_0_0_#1e293b,0_20px_30px_0_rgba(0,0,0,0.5)]">
           {remainingHours > 0 && (
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="text-lg font-black text-white uppercase tracking-wide">
                 {scheduledBookings.length === 0 ? 'Schedule Your First Lesson' : 'Add Another Lesson'}
               </h3>
             </div>
@@ -545,24 +618,24 @@ export default function BookingDetailsForm() {
 
           {!remainingHours && showPdaPackage && (
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="text-lg font-black text-white uppercase tracking-wide">
                 Schedule Your PDA Test
               </h3>
             </div>
           )}
 
-          {/* Tab Switcher - Show if PDA test is included AND have remaining hours */}
+          {/* Tab Switcher - Upgraded to Solid 3D Dashboard Selection Tabs */}
           {showPdaPackage && remainingHours > 0 && (
-            <div className="mb-6 flex gap-2 border-b border-white/10">
+            <div className="mb-6 grid grid-cols-2 gap-3 p-1.5 bg-slate-950 rounded-xl border-2 border-slate-800">
               <button
                 onClick={() => setActiveTab('lessons')}
-                className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                className={`px-4 py-2.5 rounded-lg font-black text-sm uppercase tracking-wider text-center transition-all duration-100 border-2 ${
                   activeTab === 'lessons'
-                    ? 'border-blue-400 text-blue-300'
-                    : 'border-transparent text-white/60 hover:text-white/90'
+                    ? 'border-white bg-sky-600 text-white shadow-[0_3px_0_0_#0369a1]'
+                    : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-700'
                 }`}
               >
-                📅 Schedule Lessons
+                📅 Lessons
               </button>
               <button
                 onClick={() => {
@@ -571,109 +644,131 @@ export default function BookingDetailsForm() {
                     fetchPdaConfigs();
                   }
                 }}
-                className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                className={`px-4 py-2.5 rounded-lg font-black text-sm uppercase tracking-wider text-center transition-all duration-100 border-2 ${
                   activeTab === 'pda-test'
-                    ? 'border-blue-400 text-blue-300'
-                    : 'border-transparent text-white/60 hover:text-white/90'
+                    ? 'border-white bg-sky-600 text-white shadow-[0_3px_0_0_#0369a1]'
+                    : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-700'
                 }`}
               >
-                🧪 Schedule PDA Test
+                🧪 PDA Test
               </button>
             </div>
           )}
 
-          {/* If no remaining hours but PDA is included, auto-switch to PDA tab */}
+
+                  {/* If no remaining hours but PDA is included, auto-switch to PDA tab */}
           {showPdaPackage && !remainingHours && (
-            <div className="mb-6 text-sm text-white/70 bg-white/5 border border-white/10 rounded p-3">
+            <div className="mb-6 text-sm font-bold text-amber-300 bg-slate-950 border-2 border-amber-900 rounded-xl p-4 shadow-[0_4px_0_0_#451a03]">
               ℹ️ All lesson hours scheduled. You can now add your PDA test below.
             </div>
           )}
 
           <div className="space-y-4">
-            {/* LESSONS TAB - Only show if remaining hours */}
+                      {/* LESSONS TAB - Only show if remaining hours */}
             {activeTab === 'lessons' && remainingHours > 0 && (
               <>
                 {/* Date Selection */}
                 <div>
-                  <label htmlFor="date" className="block text-sm font-medium text-white/90 mb-1">
+                  <label htmlFor="date" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                     Date *
                   </label>
-                  <input
-                    type="date"
-                    id="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    min={getMinDate()}
-                    max={getMaxDate()}
-                    aria-label="Select lesson date"
-                    aria-required="true"
-                    aria-invalid={!selectedDate}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                  />
+                  <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                    <input
+                      type="date"
+                      id="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      min={getMinDate()}
+                      max={getMaxDate()}
+                      aria-label="Select lesson date"
+                      aria-required="true"
+                      aria-invalid={!selectedDate}
+                      className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] [color-scheme:dark]"
+                    />
+                  </div>
                 </div>
 
                 {/* Duration Selection */}
                 <div>
-                  <label htmlFor="duration" className="block text-sm font-medium text-white/90 mb-1">
+                  <label htmlFor="duration" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                     Duration *
                   </label>
-                  <select
-                    id="duration"
-                    value={selectedDuration}
-                    onChange={(e) => {
-                      setSelectedDuration(Number(e.target.value));
-                      if (selectedDate) {
-                        fetchAvailableSlots();
-                      }
-                    }}
-                    aria-label="Select lesson duration"
-                    aria-required="true"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                  >
-                    {allowedDurations.map((duration: number) => (
-                      <option key={duration} value={duration}>
-                        {formatDuration(duration)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                    <select
+                      id="duration"
+                      value={selectedDuration}
+                      onChange={(e) => {
+                        setSelectedDuration(Number(e.target.value));
+                        // No manual fetch needed — the useEffect on [selectedDate, selectedDuration]
+                        // fires automatically after the state update settles.
+                      }}
+                      aria-label="Select lesson duration"
+                      aria-required="true"
+                      className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
+                    >
+                      {allowedDurations.map((duration: number) => (
+                        <option key={duration} value={duration} className="bg-slate-950 font-bold text-white">
+                          {formatDuration(duration)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Time Selection */}
                 <div>
-                  <label htmlFor="time" className="block text-sm font-medium text-white/90 mb-1">
+                  <label htmlFor="time" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                     Time *
                   </label>
                   {!selectedDate ? (
-                    <p className="text-sm text-white/50 py-3">Please select a date first</p>
+                    <p className="text-sm font-bold text-amber-400 bg-amber-950/40 border border-amber-900 rounded-xl px-4 py-3 shadow-[0_4px_0_0_#451a03]">
+                      ⚠️ Please select a date first
+                    </p>
                   ) : isLoadingSlots ? (
-                    <p className="text-sm text-white/50 py-3">Loading available times...</p>
+                    <p className="text-sm font-bold text-sky-400 bg-sky-950/40 border border-sky-900 rounded-xl px-4 py-3 animate-pulse shadow-[0_4px_0_0_#0c4a6e]">
+                      🔄 Loading available times...
+                    </p>
+                  ) : slotsError ? (
+                    <div className="bg-red-950/40 border-2 border-red-900 rounded-xl px-4 py-3 shadow-[0_4px_0_0_#450a0a]">
+                      <p className="text-sm font-bold text-red-400 mb-2">⚠️ {slotsError}</p>
+                      <button
+                        type="button"
+                        onClick={fetchAvailableSlots}
+                        className="text-xs font-black text-sky-400 hover:text-white uppercase tracking-wider transition-colors"
+                      >
+                        ↻ Try again
+                      </button>
+                    </div>
                   ) : (
-                    <select
-                      id="time"
-                      value={selectedTime}
-                      onChange={(e) => setSelectedTime(e.target.value)}
-                      aria-label="Select lesson time"
-                      aria-required="true"
-                      aria-invalid={!selectedTime}
-                      className="w-full px-4 py-3 bg-slate-700 dark:bg-slate-700 border-2 border-slate-600 rounded-lg text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-slate-600 transition-colors font-semibold"
-                    >
-                      <option value="">Select a time</option>
-                      {availableSlots.map(slot => (
-                        <option 
-                          key={slot.time} 
-                          value={slot.time}
-                          disabled={!slot.available}
-                        >
-                          {slot.time} {!slot.available ? '(Unavailable)' : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                      <select
+                        id="time"
+                        value={selectedTime}
+                        onChange={(e) => setSelectedTime(e.target.value)}
+                        aria-label="Select lesson time"
+                        aria-required="true"
+                        aria-invalid={!selectedTime}
+                        className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-black transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
+                      >
+                        <option value="" className="bg-slate-950 font-bold text-slate-400">Select a time</option>
+                        {availableSlots.map(slot => (
+                          <option 
+                            key={slot.time} 
+                            value={slot.time}
+                            disabled={!slot.available}
+                            className="bg-slate-950 font-bold text-white disabled:text-slate-600"
+                          >
+                            {slot.time} {!slot.available ? '(Unavailable)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
 
                 {/* Pickup Location */}
                 <div>
-                  <label htmlFor="pickupLocation" className="block text-sm font-medium text-white/90 mb-1">
+                  <label htmlFor="pickupLocation" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                     Pickup Location *
                   </label>
                   <PickupLocationInput
@@ -685,18 +780,20 @@ export default function BookingDetailsForm() {
 
                 {/* Notes */}
                 <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-white/90 mb-1">
+                  <label htmlFor="notes" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                     Notes (Optional)
                   </label>
-                  <textarea
-                    id="notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    aria-label="Special instructions or notes for your lesson"
-                    placeholder="Any special requests or information for the instructor"
-                    rows={3}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                  />
+                  <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                    <textarea
+                      id="notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      aria-label="Special instructions or notes for your lesson"
+                      placeholder="Any special requests or information for the instructor"
+                      rows={3}
+                      className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold placeholder-slate-500 transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] resize-none"
+                    />
+                  </div>
                 </div>
               </>
             )}
@@ -719,64 +816,74 @@ export default function BookingDetailsForm() {
                   </div>
                 )}
 
-                {/* PDA Config Selection */}
+                              {/* PDA Config Selection */}
                 <div>
-                  <label htmlFor="pda-config" className="block text-sm font-medium text-white/90 mb-1">
+                  <label htmlFor="pda-config" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                     PDA Test Package *
                   </label>
                   {isLoadingPda ? (
-                    <p className="text-sm text-white/50 py-3">Loading PDA options...</p>
+                    <p className="text-sm font-bold text-sky-400 bg-sky-950/40 border border-sky-900 rounded-xl px-4 py-3 animate-pulse shadow-[0_4px_0_0_#0c4a6e]">
+                      🔄 Loading PDA options...
+                    </p>
                   ) : pdaConfigs.length === 0 ? (
-                    <p className="text-sm text-red-400">No PDA test configurations available</p>
+                    <p className="text-sm font-bold text-red-400 bg-red-950/40 border border-red-900 rounded-xl px-4 py-3 shadow-[0_4px_0_0_#7f1d1d]">
+                      ❌ No PDA test configurations available
+                    </p>
                   ) : (
-                    <select
-                      id="pda-config"
-                      value={selectedPdaConfig}
-                      onChange={(e) => {
-                        setSelectedPdaConfig(e.target.value);
-                        fetchTestCentres(e.target.value);
-                        setPdaTestCentres([]);
-                        setSelectedTestCentre('');
-                        setPickupOption('pickup');
-                      }}
-                      aria-label="Select PDA test package"
-                      aria-required="true"
-                      aria-invalid={!selectedPdaConfig}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                    >
-                      <option value="">Select a test package</option>
-                      {pdaConfigs.map((config: any) => (
-                        <option key={config.id} value={config.id}>
-                          {config.name} - ${config.price} ({formatDurationMinutes(config.durationMinutes)})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                      <select
+                        id="pda-config"
+                        value={selectedPdaConfig}
+                        onChange={(e) => {
+                          setSelectedPdaConfig(e.target.value);
+                          fetchTestCentres(e.target.value);
+                          setPdaTestCentres([]);
+                          setSelectedTestCentre('');
+                          setPickupOption('pickup');
+                        }}
+                        aria-label="Select PDA test package"
+                        aria-required="true"
+                        aria-invalid={!selectedPdaConfig}
+                        className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
+                      >
+                        <option value="" className="bg-slate-950 font-bold text-slate-400">Select a test package</option>
+                        {pdaConfigs.map((config: any) => (
+                          <option key={config.id} value={config.id} className="bg-slate-950 font-bold text-white">
+                            {config.name} - ${config.price} ({formatDurationMinutes(config.durationMinutes)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
 
-                {/* Config Info Header - Show when config selected */}
+                              {/* Config Info Header - Show when config selected */}
                 {selectedPdaConfig && getSelectedPdaConfig() && (
-                  <div className="bg-gradient-to-br from-blue-600/20 to-cyan-600/20 rounded-lg p-4 border border-blue-500/40 mb-4">
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs text-white/60 font-semibold uppercase mb-1">Selected Package:</p>
-                        <p className="font-semibold text-white mb-1">{getSelectedPdaConfig().name}</p>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-blue-300">${getSelectedPdaConfig().price}</span>
-                          <span className="text-white/70">|</span>
-                          <span className="text-blue-300">{formatDurationMinutes(getSelectedPdaConfig().durationMinutes)}</span>
+                  <div className="bg-slate-950 rounded-xl p-4 border-2 border-blue-500 shadow-[0_4px_0_0_#2563eb] mb-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] text-sky-400 font-black uppercase tracking-wider mb-1">Selected Package:</p>
+                        <p className="font-extrabold text-white text-base mb-1.5 tracking-tight">{getSelectedPdaConfig().name}</p>
+                        <div className="flex items-center gap-3 text-sm font-bold">
+                          <span className="bg-blue-900 text-blue-100 border border-blue-700 px-2 py-0.5 rounded font-black">${getSelectedPdaConfig().price}</span>
+                          <span className="text-slate-600">|</span>
+                          <span className="text-slate-300">{formatDurationMinutes(getSelectedPdaConfig().durationMinutes)}</span>
                         </div>
                         {getConfigIncludes().pickup && (
-                          <p className="text-xs text-green-300 mt-2">✓ Includes Pickup</p>
+                          <p className="text-xs font-black text-emerald-400 uppercase tracking-wide mt-2.5 flex items-center gap-1">
+                            <span>✓</span> Includes Pickup
+                          </p>
                         )}
                       </div>
+                      
+                      {/* Upgraded from plain link text to a clear high-contrast solid 3D action pill button */}
                       <button
                         onClick={() => {
                           setSelectedPdaConfig('');
                           setPdaTestCentres([]);
                           setSelectedTestCentre('');
                         }}
-                        className="text-sm text-blue-300 hover:text-blue-200 whitespace-nowrap"
+                        className="w-full sm:w-auto px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider border-2 border-slate-600 bg-slate-900 text-slate-200 hover:text-white hover:border-slate-400 shadow-[0_3px_0_0_#334155] transition-all duration-100 active:translate-y-[3px] active:shadow-none whitespace-nowrap text-center shrink-0"
                       >
                         Change Package
                       </button>
@@ -784,96 +891,115 @@ export default function BookingDetailsForm() {
                   </div>
                 )}
 
-                {/* Test Centre Selection */}
+                              {/* Test Centre Selection */}
                 {selectedPdaConfig && pdaTestCentres.length > 1 && (
                   <div>
-                    <label htmlFor="test-centre" className="block text-sm font-medium text-white/90 mb-1">
+                    <label htmlFor="test-centre" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                       Test Centre *
                     </label>
                     {pdaTestCentres.length === 0 ? (
-                      <p className="text-sm text-red-400">No test centres available for this configuration</p>
+                      <p className="text-sm font-bold text-red-400 bg-red-950/40 border border-red-900 rounded-xl px-4 py-3 shadow-[0_4px_0_0_#7f1d1d]">
+                        ❌ No test centres available for this configuration
+                      </p>
                     ) : (
-                      <select
-                        id="test-centre"
-                        value={selectedTestCentre}
-                        onChange={(e) => setSelectedTestCentre(e.target.value)}
-                        aria-label="Select test centre"
-                        aria-required="true"
-                        aria-invalid={!selectedTestCentre}
-                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                      >
-                        <option value="">Select a test centre</option>
-                        {pdaTestCentres.map((centre: any) => (
-                          <option key={centre.id} value={centre.id}>
-                            {centre.name} - {centre.address}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                        <select
+                          id="test-centre"
+                          value={selectedTestCentre}
+                          onChange={(e) => setSelectedTestCentre(e.target.value)}
+                          aria-label="Select test centre"
+                          aria-required="true"
+                          aria-invalid={!selectedTestCentre}
+                          className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
+                        >
+                          <option value="" className="bg-slate-950 font-bold text-slate-400">Select a test centre</option>
+                          {pdaTestCentres.map((centre: any) => (
+                            <option key={centre.id} value={centre.id} className="bg-slate-950 font-bold text-white">
+                              {centre.name} — {centre.address}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     )}
                   </div>
                 )}
 
-                {/* Test Date Selection */}
+
+                              {/* Test Date Selection */}
                 {selectedPdaConfig && selectedTestCentre && (
                   <div>
-                    <label htmlFor="test-date" className="block text-sm font-medium text-white/90 mb-1">
+                    <label htmlFor="test-date" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                       Select Date *
                     </label>
-                    <input
-                      type="date"
-                      id="test-date"
-                      value={selectedTestDate}
-                      onChange={(e) => setSelectedTestDate(e.target.value)}
-                      min={getMinDate()}
-                      max={getMaxDate()}
-                      aria-label="Select test date"
-                      aria-required="true"
-                      aria-invalid={!selectedTestDate}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                    />
+                    <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                      <input
+                        type="date"
+                        id="test-date"
+                        value={selectedTestDate}
+                        onChange={(e) => setSelectedTestDate(e.target.value)}
+                        min={getMinDate()}
+                        max={getMaxDate()}
+                        aria-label="Select test date"
+                        aria-required="true"
+                        aria-invalid={!selectedTestDate}
+                        className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] [color-scheme:dark]"
+                      />
+                    </div>
                   </div>
                 )}
 
-                {/* Duration Display (Read-only) */}
+
+                              {/* Duration Display (Read-only) */}
                 {selectedPdaConfig && (
                   <div>
-                    <label className="block text-sm font-medium text-white/90 mb-1">
+                    <label className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                       Duration
                     </label>
-                    <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white/70">
-                      {formatDurationMinutes(getSelectedPdaConfig()?.durationMinutes || 0)}
+                    <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                      <div className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-700 rounded-xl text-slate-200 font-extrabold text-sm tracking-wide">
+                        {formatDurationMinutes(getSelectedPdaConfig()?.durationMinutes || 0)}
+                      </div>
                     </div>
-                    <p className="text-xs text-white/50 mt-1">Fixed duration based on your selected package</p>
+                    <p className="text-xs font-semibold text-slate-400 mt-2">Fixed duration based on your selected package</p>
                   </div>
                 )}
 
-                {/* Test Time Selection */}
+                             {/* Test Time Selection */}
                 {selectedPdaConfig && selectedTestDate && (
                   <div>
-                    <label htmlFor="test-time" className="block text-sm font-medium text-white/90 mb-1">
+                    <label htmlFor="test-time" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                       Select Time *
                     </label>
-                    <select
-                      id="test-time"
-                      value={selectedTestTime}
-                      onChange={(e) => setSelectedTestTime(e.target.value)}
-                      aria-label="Select test time"
-                      aria-required="true"
-                      aria-invalid={!selectedTestTime}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                    >
-                      <option value="">Select a time</option>
-                      {generateTimeSlots().map(time => (
-                        <option key={time} value={time}>{time}</option>
-                      ))}
-                    </select>
+                    <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                      <select
+                        id="test-time"
+                        value={selectedTestTime}
+                        onChange={(e) => setSelectedTestTime(e.target.value)}
+                        aria-label="Select test time"
+                        aria-required="true"
+                        aria-invalid={!selectedTestTime}
+                        className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
+                      >
+                        <option value="" className="bg-slate-950 font-bold text-slate-400">Select a time</option>
+                        {Array.from({ length: 17 * 2 - 18 }, (_, i) => {
+                          const totalMins = (9 * 60) + (i * 30);
+                          const h = Math.floor(totalMins / 60);
+                          const m = totalMins % 60;
+                          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                        }).map((time: string) => (
+                          <option key={time} value={time} className="bg-slate-950 font-bold text-white">
+                            {time}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 )}
 
-                {/* Pickup Location - Conditional based on config */}
+                               {/* Pickup Location - Conditional based on config */}
                 {selectedPdaConfig && selectedTestTime && (
                   <div>
-                    <label className="block text-sm font-medium text-white/90 mb-2">
+                    <label className="block text-xs font-black text-slate-300 mb-2 uppercase tracking-wider">
                       Pickup & Location {getConfigIncludes().pickup ? '' : '*'}
                     </label>
 
@@ -881,7 +1007,12 @@ export default function BookingDetailsForm() {
                       <>
                         {/* Has Pickup */}
                         <div className="space-y-3">
-                          <div className="flex items-center gap-2">
+                          {/* Radio Item 1 */}
+                          <div className={`p-3.5 rounded-xl border-2 transition-all duration-100 flex items-center gap-3 bg-slate-950 ${
+                            pickupOption === 'pickup' 
+                              ? 'border-white shadow-[0_3px_0_0_#0284c7]' 
+                              : 'border-slate-800 shadow-[0_3px_0_0_#1e293b]'
+                          }`}>
                             <input
                               type="radio"
                               id="pickup-yes"
@@ -889,24 +1020,31 @@ export default function BookingDetailsForm() {
                               value="pickup"
                               checked={pickupOption === 'pickup'}
                               onChange={(e) => setPickupOption(e.target.value as 'pickup' | 'centre' | 'none')}
-                              className="w-4 h-4"
+                              className="w-4 h-4 text-sky-500 bg-slate-900 border-slate-700 focus:ring-0 focus:ring-offset-0"
                             />
-                            <label htmlFor="pickup-yes" className="text-white/90 cursor-pointer">
+                            <label htmlFor="pickup-yes" className="text-sm font-bold text-white cursor-pointer select-none">
                               Pick me up at my address
                             </label>
                           </div>
                           
                           {pickupOption === 'pickup' && (
-                            <input
-                              type="text"
-                              value={pdaPickupLocation}
-                              onChange={(e) => setPdaPickupLocation(e.target.value)}
-                              placeholder="Enter your pickup address"
-                              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                            />
+                            <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                              <input
+                                type="text"
+                                value={pdaPickupLocation}
+                                onChange={(e) => setPdaPickupLocation(e.target.value)}
+                                placeholder="Enter your pickup address"
+                                className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold placeholder-slate-500 transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
+                              />
+                            </div>
                           )}
 
-                          <div className="flex items-center gap-2">
+                          {/* Radio Item 2 */}
+                          <div className={`p-3.5 rounded-xl border-2 transition-all duration-100 flex items-center gap-3 bg-slate-950 ${
+                            pickupOption === 'centre' 
+                              ? 'border-white shadow-[0_3px_0_0_#0284c7]' 
+                              : 'border-slate-800 shadow-[0_3px_0_0_#1e293b]'
+                          }`}>
                             <input
                               type="radio"
                               id="pickup-no"
@@ -914,9 +1052,9 @@ export default function BookingDetailsForm() {
                               value="centre"
                               checked={pickupOption === 'centre'}
                               onChange={(e) => setPickupOption(e.target.value as 'pickup' | 'centre' | 'none')}
-                              className="w-4 h-4"
+                              className="w-4 h-4 text-sky-500 bg-slate-900 border-slate-700 focus:ring-0 focus:ring-offset-0"
                             />
-                            <label htmlFor="pickup-no" className="text-white/90 cursor-pointer">
+                            <label htmlFor="pickup-no" className="text-sm font-bold text-white cursor-pointer select-none">
                               Meet me at test centre
                             </label>
                           </div>
@@ -924,79 +1062,96 @@ export default function BookingDetailsForm() {
                       </>
                     ) : (
                       <>
-                        {/* No Pickup - Meet at centre only */}
-                        <div className="px-4 py-3 bg-white/6 border border-white/10 rounded-lg">
-                          <p className="text-white/90 mb-2">○ Meet at test centre</p>
+                        {/* No Pickup - Meet at centre only (Opaque Solid Card) */}
+                        <div className="px-4 py-4 bg-slate-950 border-2 border-slate-700 rounded-xl shadow-[0_4px_0_0_#1e293b]">
+                          <p className="text-sm font-black text-white uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-slate-400 block" /> Meet at test centre
+                          </p>
                           {pdaTestCentres.find(c => c.id === selectedTestCentre) && (
-                            <p className="text-sm text-white/60 flex items-center gap-2">
+                            <p className="text-sm font-extrabold text-sky-400 bg-slate-900 border border-slate-800 rounded px-3 py-1.5 flex items-center gap-2">
                               📍 {pdaTestCentres.find(c => c.id === selectedTestCentre)?.name}
                             </p>
                           )}
-                          <p className="text-xs text-white/50 mt-2">This package does not include pickup service</p>
+                          <p className="text-xs font-semibold text-slate-400 mt-2.5">This package does not include pickup service</p>
                         </div>
                       </>
                     )}
                   </div>
                 )}
 
-                {/* Notes - Optional */}
+                             {/* Notes - Optional */}
                 {selectedPdaConfig && selectedTestTime && (
                   <div>
-                    <label htmlFor="pda-notes" className="block text-sm font-medium text-white/90 mb-1">
+                    <label htmlFor="pda-notes" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                       Notes (Optional)
                     </label>
-                    <textarea
-                      id="pda-notes"
-                      value={pdaNotes}
-                      onChange={(e) => setPdaNotes(e.target.value)}
-                      placeholder="Any special requests or information for the test coordinator"
-                      rows={3}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-                    />
+                    <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+                      <textarea
+                        id="pda-notes"
+                        value={pdaNotes}
+                        onChange={(e) => setPdaNotes(e.target.value)}
+                        placeholder="Any special requests or information for the test coordinator"
+                        rows={3}
+                        className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold placeholder-slate-500 transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] resize-none"
+                      />
+                    </div>
                   </div>
                 )}
 
-                {/* Add PDA Test Button */}
+                {/* Inline PDA error (replaces alert()) */}
+                {pdaError && <FieldError message={pdaError} />}
+
+                {/* Add PDA Test Button - High Contrast 3D Action Tile */}
                 <button
                   onClick={handleAddPdaTest}
                   disabled={!selectedPdaConfig || !selectedTestCentre || !selectedTestDate || !selectedTestTime}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg font-semibold hover:from-blue-500 hover:to-blue-600 transition-colors disabled:from-white/20 disabled:to-white/20 disabled:cursor-not-allowed mb-32 lg:mb-0"
+                  className={`w-full px-6 py-3.5 rounded-xl font-black text-sm uppercase tracking-wider text-center transition-all duration-100 border-2 select-none mb-32 lg:mb-0 ${
+                    !selectedPdaConfig || !selectedTestCentre || !selectedTestDate || !selectedTestTime
+                      ? 'border-slate-800 bg-slate-950 text-slate-600 cursor-not-allowed shadow-[0_4px_0_0_#0f172a]'
+                      : 'border-white bg-blue-600 text-white shadow-[0_5px_0_0_#1d4ed8,0_15px_25px_0_rgba(37,99,235,0.4)] hover:bg-blue-500 hover:translate-y-[-2px] hover:shadow-[0_7px_0_0_#1d4ed8,0_20px_30px_0_rgba(37,99,235,0.5)] active:translate-y-[5px] active:shadow-none'
+                  }`}
                 >
                   + Add This PDA Test
                 </button>
               </>
             )}
 
-            {/* PDA Test Option - Info (for Lessons Tab) */}
+                    {/* PDA Test Option - Info (for Lessons Tab) - Solid 3D Information Panel */}
             {activeTab === 'lessons' && showPdaPackage && (
-              <div className="bg-blue-500/10 rounded-lg p-3 sm:p-4 border border-blue-500/30">
+              <div className="bg-slate-950 border-2 border-blue-500 rounded-xl p-4 shadow-[0_4px_0_0_#2563eb] mb-2">
                 <div className="flex gap-3">
-                  <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-sky-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
-                  <div className="text-sm text-blue-200">
-                    <p className="font-semibold mb-1">PDA Test Included</p>
-                    <p>Use the "Schedule PDA Test" tab to schedule your test on a specific date and centre</p>
+                  <div className="text-sm font-bold text-slate-100">
+                    <p className="text-base font-black text-white uppercase tracking-wide mb-1">PDA Test Included</p>
+                    <p className="text-slate-300">Use the "Schedule PDA Test" tab to schedule your test on a specific date and centre</p>
                   </div>
                 </div>
               </div>
             )}
+            
+                        {/* Add Lesson Button - High Contrast 3D Action Tile */}
 
-            {/* Add Lesson Button (visible only in lessons tab with remaining hours) */}
             {activeTab === 'lessons' && remainingHours > 0 && (
               <button
                 onClick={handleAddBooking}
-                className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg font-semibold hover:from-green-500 hover:to-green-600 transition-colors mb-32 lg:mb-0"
+                disabled={isSubmitting}
+                className={`w-full px-6 py-3.5 rounded-xl border-2 font-black text-sm uppercase tracking-wider text-center transition-all duration-100 mb-32 lg:mb-0 select-none ${
+                  isSubmitting
+                    ? 'border-slate-800 bg-slate-950 text-slate-500 cursor-not-allowed shadow-[0_4px_0_0_#0f172a]'
+                    : 'bg-emerald-600 text-white border-white shadow-[0_5px_0_0_#047857,0_15px_25px_0_rgba(16,185,129,0.4)] hover:bg-emerald-500 hover:translate-y-[-2px] hover:shadow-[0_7px_0_0_#047857,0_20px_30px_0_rgba(16,185,129,0.5)] active:translate-y-[5px] active:shadow-none'
+                }`}
               >
-                + Add This Lesson
+                {isSubmitting ? '⏳ Reserving...' : '+ Add This Lesson'}
               </button>
             )}
 
-            {/* No remaining hours message */}
+            {/* No remaining hours message - Solid High Visibility Frame */}
             {activeTab === 'lessons' && remainingHours === 0 && (
-              <div className="bg-green-500/10 rounded-lg p-4 border border-green-500/30 text-center">
-                <p className="text-green-300 font-semibold">✓ All lesson hours scheduled</p>
-                <p className="text-white/70 text-sm mt-1">
+              <div className="bg-slate-950 rounded-xl p-4 border-2 border-emerald-500 text-center shadow-[0_4px_0_0_#064e3b]">
+                <p className="text-emerald-400 font-black text-base uppercase tracking-wide">✓ All lesson hours scheduled</p>
+                <p className="text-slate-300 font-bold text-sm mt-1.5">
                   {showPdaPackage ? 'Switch to the PDA Test tab to schedule your test.' : 'You can schedule more hours from your dashboard.'}
                 </p>
               </div>
@@ -1005,19 +1160,33 @@ export default function BookingDetailsForm() {
         </div>
       )}
 
-      {/* Info Box */}
-      <div className="bg-blue-500/10 rounded-lg p-3 sm:p-4 border border-blue-500/30">
+      {/* Info Box - Solid 3D Tips Layout Block */}
+      <div className="bg-slate-900 rounded-xl p-4 sm:p-5 border-2 border-slate-700 shadow-[0_6px_0_0_#1e293b,0_20px_30px_0_rgba(0,0,0,0.5)]">
         <div className="flex gap-3">
-          <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-5 h-5 text-sky-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
-          <div className="text-sm text-blue-200">
-            <p className="font-semibold mb-1">Scheduling Tips</p>
-            <ul className="space-y-1 list-disc list-inside">
-              <li>You can schedule all hours now or leave some for later</li>
-              <li>Remaining hours can be scheduled from your dashboard</li>
-              {showPdaPackage && <li>You can add your PDA test using the Schedule PDA Test tab</li>}
-              <li>You must schedule at least one lesson{showPdaPackage ? ' or a PDA test' : ''} to continue</li>
+          <div className="text-sm font-bold text-slate-200 w-full">
+            <p className="text-base font-black text-white uppercase tracking-wide mb-2">Scheduling Tips</p>
+            <ul className="space-y-2 list-none pl-0">
+              <li className="flex items-start gap-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                <span className="text-sky-400 font-black shrink-0 mt-0.5">•</span>
+                <span>You can schedule all hours now or leave some for later</span>
+              </li>
+              <li className="flex items-start gap-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                <span className="text-sky-400 font-black shrink-0 mt-0.5">•</span>
+                <span>Remaining hours can be scheduled from your dashboard</span>
+              </li>
+              {showPdaPackage && (
+                <li className="flex items-start gap-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  <span className="text-sky-400 font-black shrink-0 mt-0.5">•</span>
+                  <span>You can add your PDA test using the Schedule PDA Test tab</span>
+                </li>
+              )}
+              <li className="flex items-start gap-2 bg-slate-950/40 p-2 rounded-lg border border-amber-900/60 text-amber-300 font-extrabold">
+                <span className="text-amber-400 font-black shrink-0 mt-0.5">⚠️</span>
+                <span>You must schedule at least one lesson{showPdaPackage ? ' or a PDA test' : ''} to continue</span>
+              </li>
             </ul>
           </div>
         </div>
@@ -1026,12 +1195,58 @@ export default function BookingDetailsForm() {
   );
 }
 
-// ── Pickup Location Input with service-area validation ───────────────────────
-// Debounces the address, calls /api/public/check-service-area, and shows an
-// inline warning if the address is outside the instructor's radius.
-// Does NOT block the booking — it's informational only.
+
+// ── Pickup Location Input with suburb autocomplete + service-area validation ──
+//
+// Two-step UX:
+//   1. Suburb/postcode autocomplete (backed by au-locations static data, no API)
+//      → populates "Balga WA 6061" as the suburb portion
+//   2. Street address free-text field (house number + street name)
+//      → combined result sent to parent: "42 Smith St, Balga WA 6061"
+//
+// Service-area check runs on the combined address (debounced, non-blocking).
 
 type ServiceAreaResult = 'in' | 'out' | 'unknown' | 'checking' | 'idle';
+
+interface SuburbEntry {
+  suburb:    string;
+  state:     string;
+  postcode:  string;
+  lat:       number;
+  lng:       number;
+  searchKey: string;
+}
+
+// Lazily built search index from static data
+let _pickupIndex: SuburbEntry[] | null = null;
+function getPickupIndex(): SuburbEntry[] {
+  if (_pickupIndex) return _pickupIndex;
+  const entries: SuburbEntry[] = [];
+  for (const st of AU_STATES) {
+    for (const sub of st.suburbs) {
+      entries.push({
+        suburb:    sub.displayName,
+        state:     st.code,
+        postcode:  sub.postcode,
+        lat:       sub.lat,
+        lng:       sub.lng,
+        searchKey: `${sub.displayName.toLowerCase()} ${sub.postcode} ${st.code.toLowerCase()}`,
+      });
+    }
+  }
+  _pickupIndex = entries;
+  return entries;
+}
+
+function searchSuburbs(query: string, limit = 8): SuburbEntry[] {
+  if (!query || query.trim().length < 2) return [];
+  const q = query.trim().toLowerCase();
+  const index = getPickupIndex();
+  if (/^\d+$/.test(q)) return index.filter(e => e.postcode.startsWith(q)).slice(0, limit);
+  const prefix   = index.filter(e =>  e.suburb.toLowerCase().startsWith(q));
+  const contains = index.filter(e => !e.suburb.toLowerCase().startsWith(q) && e.suburb.toLowerCase().includes(q));
+  return [...prefix, ...contains].slice(0, limit);
+}
 
 interface PickupLocationInputProps {
   value: string;
@@ -1040,23 +1255,72 @@ interface PickupLocationInputProps {
 }
 
 function PickupLocationInput({ value, onChange, instructorId }: PickupLocationInputProps) {
+  // ── suburb autocomplete state ──
+  const [suburbQuery, setSuburbQuery]   = React.useState('');
+  const [suburbPicked, setSuburbPicked] = React.useState(''); // "Balga WA 6061"
+  const [suggestions, setSuggestions]   = React.useState<SuburbEntry[]>([]);
+  const [dropdownOpen, setDropdownOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // ── street address state ──
+  const [streetAddress, setStreetAddress] = React.useState('');
+
+  // ── service-area check state ──
   const [checkResult, setCheckResult] = React.useState<ServiceAreaResult>('idle');
-  const [distanceKm, setDistanceKm] = React.useState<number | null>(null);
-  const [radiusKm, setRadiusKm] = React.useState<number | null>(null);
+  const [distanceKm, setDistanceKm]   = React.useState<number | null>(null);
+  const [radiusKm, setRadiusKm]       = React.useState<number | null>(null);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Close dropdown on outside click
   React.useEffect(() => {
-    // Reset on empty
-    if (!value.trim() || value.trim().length < 5) {
-      setCheckResult('idle');
-      setDistanceKm(null);
-      return;
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
     }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
-    // Debounce — wait 800ms after typing stops
+  // Rebuild combined value and push to parent whenever either part changes
+  React.useEffect(() => {
+    if (!suburbPicked) { onChange(''); return; }
+    const combined = streetAddress.trim()
+      ? `${streetAddress.trim()}, ${suburbPicked}`
+      : suburbPicked;
+    onChange(combined);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suburbPicked, streetAddress]);
+
+  // Pre-populate from an existing value (edit flow) — parse suburb back out
+  React.useEffect(() => {
+    if (value && !suburbPicked) {
+      // e.g. "42 Smith St, Balga WA 6061" → street="42 Smith St", suburb="Balga WA 6061"
+      const commaIdx = value.lastIndexOf(',');
+      if (commaIdx > 0) {
+        const possibleSuburb = value.slice(commaIdx + 1).trim();
+        const possibleStreet = value.slice(0, commaIdx).trim();
+        // Check it looks like "Suburb STATE postcode"
+        if (/[A-Z]{2,3}\s+\d{4}$/.test(possibleSuburb)) {
+          setSuburbPicked(possibleSuburb);
+          setSuburbQuery(possibleSuburb);
+          setStreetAddress(possibleStreet);
+          return;
+        }
+      }
+      // Fallback: treat entire value as street
+      setStreetAddress(value);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Service-area check (runs on the combined value from parent)
+  React.useEffect(() => {
+    if (!value || value.trim().length < 8) {
+      setCheckResult('idle'); setDistanceKm(null); return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setCheckResult('checking');
-
     debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(
@@ -1067,60 +1331,146 @@ function PickupLocationInput({ value, onChange, instructorId }: PickupLocationIn
         setCheckResult(data.result as ServiceAreaResult);
         setDistanceKm(data.distanceKm ?? null);
         setRadiusKm(data.radiusKm ?? null);
-      } catch {
-        setCheckResult('unknown');
-      }
+      } catch { setCheckResult('unknown'); }
     }, 800);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [value, instructorId]);
 
+  const handleSuburbInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const q = e.target.value;
+    setSuburbQuery(q);
+    setSuburbPicked('');          // clear selection when user edits
+    onChange('');                  // clear parent value
+    setCheckResult('idle');
+    if (q.length >= 2) { setSuggestions(searchSuburbs(q)); setDropdownOpen(true); }
+    else { setSuggestions([]); setDropdownOpen(false); }
+  };
+
+  const handleSuburbSelect = (entry: SuburbEntry) => {
+    const label = `${entry.suburb} ${entry.state} ${entry.postcode}`;
+    setSuburbQuery(label);
+    setSuburbPicked(label);
+    setSuggestions([]);
+    setDropdownOpen(false);
+  };
+
+  const handleClearSuburb = () => {
+    setSuburbQuery(''); setSuburbPicked('');
+    setStreetAddress(''); onChange('');
+    setCheckResult('idle'); setSuggestions([]); setDropdownOpen(false);
+  };
+
+  const isComplete = !!suburbPicked && !!streetAddress.trim();
+
   return (
-    <div className="space-y-1.5">
-      <div className="relative">
-        <input
-          type="text"
-          id="pickupLocation"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Enter your pickup address"
-          aria-label="Pickup location"
-          aria-required="true"
-          aria-invalid={!value}
-          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white/10 transition-colors"
-        />
-        {/* Spinner while checking */}
-        {checkResult === 'checking' && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <svg className="w-4 h-4 text-white/40 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-            </svg>
+    <div className="space-y-3">
+      {/* ── Step 1: Suburb / Postcode ── */}
+      <div ref={containerRef} className="relative">
+        <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+          Step 1 — Suburb or Postcode
+        </p>
+        <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+          <input
+            type="text"
+            value={suburbQuery}
+            onChange={handleSuburbInput}
+            onFocus={() => { if (suggestions.length > 0) setDropdownOpen(true); }}
+            placeholder="e.g. Balga or 6061"
+            autoComplete="off"
+            aria-label="Search suburb or postcode"
+            className={`w-full pl-4 pr-10 py-3 bg-slate-950 border-2 rounded-xl text-white font-bold placeholder-slate-500 transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] ${
+              suburbPicked ? 'border-emerald-500' : 'border-slate-400'
+            }`}
+          />
+          {/* Status icon */}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">
+            {suburbPicked
+              ? <button type="button" onClick={handleClearSuburb} className="text-slate-500 hover:text-white transition-colors" title="Clear suburb">✕</button>
+              : suburbQuery.length >= 2
+              ? <span className="text-slate-500">🔍</span>
+              : null
+            }
+          </div>
+        </div>
+
+        {/* Dropdown */}
+        {dropdownOpen && suggestions.length > 0 && (
+          <div className="absolute z-50 mt-1 w-full bg-slate-900 border-2 border-slate-700 rounded-xl shadow-[0_8px_0_0_#1e293b,0_20px_30px_0_rgba(0,0,0,0.7)] overflow-hidden">
+            {suggestions.map((entry, i) => (
+              <button
+                key={`${entry.postcode}-${entry.suburb}-${i}`}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); handleSuburbSelect(entry); }}
+                className="w-full text-left px-4 py-2.5 hover:bg-sky-600 transition-colors flex items-center justify-between gap-3 border-b border-slate-800 last:border-0"
+              >
+                <span className="font-bold text-white text-sm">{entry.suburb}</span>
+                <span className="text-xs font-black text-slate-400 shrink-0">
+                  {entry.state} {entry.postcode}
+                </span>
+              </button>
+            ))}
           </div>
         )}
-        {/* In-range tick */}
-        {checkResult === 'in' && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-400 text-sm">✓</div>
+
+        {/* "No results" hint */}
+        {dropdownOpen && suburbQuery.length >= 2 && suggestions.length === 0 && (
+          <div className="absolute z-50 mt-1 w-full bg-slate-900 border-2 border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-400 font-medium">
+            No suburbs found — try a different spelling or postcode
+          </div>
         )}
       </div>
 
-      {/* Out of range — amber warning, non-blocking */}
+      {/* ── Step 2: Street address (shown once suburb is picked) ── */}
+      {suburbPicked && (
+        <div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+            Step 2 — Street Address
+          </p>
+          <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
+            <input
+              type="text"
+              value={streetAddress}
+              onChange={(e) => setStreetAddress(e.target.value)}
+              placeholder="e.g. 42 Smith Street"
+              aria-label="Street address"
+              autoComplete="street-address"
+              className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-bold placeholder-slate-500 transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
+            />
+            {/* Service area spinner / tick */}
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              {checkResult === 'checking' && (
+                <svg className="w-4 h-4 text-sky-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+              )}
+              {checkResult === 'in' && <span className="text-emerald-400 font-black text-sm">✓</span>}
+            </div>
+          </div>
+
+          {/* Preview of full combined address */}
+          {isComplete && (
+            <p className="mt-2 text-xs font-bold text-sky-300 bg-sky-950/40 border border-sky-900 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+              <span className="text-sky-500">📍</span>
+              {streetAddress.trim()}, {suburbPicked}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Service-area feedback */}
       {checkResult === 'out' && (
-        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs">
-          <span className="shrink-0 mt-0.5">⚠️</span>
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-950/50 border-2 border-amber-800 text-amber-200 text-xs font-bold shadow-[0_3px_0_0_#451a03]">
+          <span className="shrink-0">⚠️</span>
           <span>
-            This address appears to be{distanceKm != null ? ` ~${distanceKm} km` : ''} from the instructor's base
+            This address is{distanceKm != null ? ` ~${distanceKm} km` : ''} from the instructor's base
             {radiusKm != null ? `, outside their ${radiusKm} km service area` : ''}.
             You can still book — confirm with your instructor that they cover this location.
           </span>
         </div>
       )}
-
-      {/* Unknown — grey note, non-blocking */}
       {checkResult === 'unknown' && value.trim().length >= 5 && (
-        <p className="text-xs text-white/30 px-1">
+        <p className="text-xs font-semibold text-slate-500 px-1">
           Service area check unavailable — please confirm your address with the instructor.
         </p>
       )}

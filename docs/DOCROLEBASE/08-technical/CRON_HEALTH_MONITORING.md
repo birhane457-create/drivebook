@@ -2,7 +2,102 @@
 
 **Purpose:** Track cron job execution health and alert when jobs fail or become stale.
 
-**Status:** ✅ AS IS (Partially Implemented) | ⏳ AS IT SHOULD BE (Recommendations)
+**Status:** ✅ COMPLETE (July 2026)
+
+---
+
+## Implementation
+
+### Database Model
+
+**Location:** `prisma/schema.prisma`
+
+```prisma
+model CronHealth {
+  id          String    @id @default(cuid())
+  jobName     String    @unique
+  lastRunAt   DateTime
+  lastStatus  String    @default("OK")    // OK | FAILED
+  lastError   String?
+  runCount    Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+
+  @@index([jobName])
+}
+```
+
+### How It Works
+
+Every cron job calls:
+- `pingCronHealth(jobName)` — on successful completion
+- `failCronHealth(jobName, error)` — on failure
+
+`failCronHealth` **immediately fires `sendAlert()`** (CRITICAL severity) so admins are notified at the point of failure — not just at the next health-check poll 30 minutes later. Alert is throttled once per hour per job to prevent spam.
+
+**File:** `lib/services/cron-health.ts`
+
+### Registered Jobs
+
+| Job | Max Age | Description |
+|-----|---------|-------------|
+| `cleanup-expired-bookings` | 15 min | Expires PENDING_PAYMENT bookings after 10 min |
+| `lesson-reminders` | 25 hr | Sends 24h lesson reminders (daily 10pm UTC) |
+| `document-expiry-check` | 7 days | Alerts on expiring instructor documents (weekly) |
+| `recheck-abn` | 7 days | Re-verifies instructor ABNs (weekly) |
+| `reconcile-stripe` | 25 hr | Stripe payment reconciliation (daily 3am AWST) |
+| `apply-rate-changes` | 25 hr | Applies scheduled commission rate changes (daily) |
+| `weekly-payouts` | 7 days | Stripe Connect payouts (Tuesday 2am AWST) |
+| `check-trial-expiry` | 25 hr | Marks expired trials daily |
+| `send-trial-expiry-alerts` | 25 hr | Sends trial expiry warnings daily |
+| `notification-retry` | 10 min | Retries failed email/SMS (every 5 min) |
+
+### Health Check Cron
+
+**Endpoint:** `GET /api/cron/health-check`  
+**Schedule:** Every 30 minutes (`*/30 * * * *`)  
+**Auth:** `Authorization: Bearer CRON_SECRET`
+
+Reads all `CronHealth` records and fires `sendAlert()` (WARNING) if any job is:
+- Never run
+- Last run FAILED
+- Stale (age > `maxAgeMinutes` in config)
+
+### Admin Dashboard
+
+**Route:** `/admin/cron-jobs`  
+**API:** `GET /api/admin/cron-jobs` (ADMIN auth required)  
+**File:** `app/admin/cron-jobs/page.tsx`
+
+Shows all registered jobs with:
+- Status badge: OK / FAILED / STALE / NEVER_RUN (colour-coded)
+- Last run time and age
+- Run count
+- Last error message (when FAILED)
+- Summary card row (total / healthy / failed / stale)
+- Alert banner when any job has issues
+- Auto-refreshes every 60 seconds, manual refresh button
+
+---
+
+## Alert Conditions
+
+| Condition | Severity | When |
+|-----------|----------|------|
+| Job crash / exception | CRITICAL | Immediately via `failCronHealth()` |
+| Job never run | WARNING | At next health-check poll |
+| Job stale (age > max) | WARNING | At next health-check poll |
+| Payout batch cap hit | WARNING | In weekly-payouts cron directly |
+
+---
+
+## References
+
+- `lib/services/cron-health.ts` — `pingCronHealth`, `failCronHealth`, `CRON_JOB_CONFIG`
+- `lib/services/alert-service.ts` — `sendAlert`
+- `app/api/cron/health-check/route.ts` — polling health check
+- `app/api/admin/cron-jobs/route.ts` — dashboard API
+- `app/admin/cron-jobs/page.tsx` — dashboard UI
+
 
 ---
 

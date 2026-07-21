@@ -8,6 +8,7 @@ import {
   RefreshCw, AlertTriangle, Pencil, X, CheckCircle,
   XCircle, Ban, ExternalLink, Clock, Info, Package, User, UserX
 } from 'lucide-react';
+import { getStatusConfig } from '@/lib/config/booking-status';
 
 interface Booking {
   id: string; startTime: string; endTime: string; status: string;
@@ -25,13 +26,7 @@ interface Stats {
   completed: number; cancelled: number; noShow: number; endedConfirmed: number;
 }
 
-const STATUS_STYLE: Record<string, string> = {
-  CONFIRMED: 'bg-green-900/40 text-green-300',
-  PENDING: 'bg-yellow-900/40 text-yellow-300',
-  COMPLETED: 'bg-blue-900/40 text-blue-300',
-  CANCELLED: 'bg-red-900/40 text-red-300',
-  NO_SHOW: 'bg-orange-900/40 text-orange-300',
-};
+// Status styles now come from lib/config/booking-status.ts (getStatusConfig)
 
 function getActionRules(b: Booking, now: Date) {
   const started = b.startTime ? new Date(b.startTime) <= now : false;
@@ -337,11 +332,12 @@ function BookingEditDrawer({
         {step === 'actions' && (
           <div className="px-5 py-3 border-b border-slate-800 flex items-center gap-2">
             <span className="text-xs text-slate-500">Status:</span>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[booking.status] || 'bg-slate-800 text-slate-400'}`}>
-              {booking.status}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusConfig(booking.status).badge}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${getStatusConfig(booking.status).dot}`} />
+              {getStatusConfig(booking.status).label}
             </span>
             {rules.ended && booking.status === 'CONFIRMED' && (
-              <span className="text-xs text-purple-600 font-medium flex items-center gap-1">
+              <span className="text-xs text-purple-400 font-medium flex items-center gap-1">
                 <Clock className="h-3 w-3" /> Lesson ended
               </span>
             )}
@@ -613,11 +609,12 @@ export default function AdminBookingsPage() {
                       <p className="text-xs">{fmtTime(b.startTime)} – {b.endTime ? fmtTime(b.endTime) : '?'}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[b.status] || 'bg-slate-800 text-slate-400'}`}>
-                        {b.status}
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusConfig(b.status).badge}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${getStatusConfig(b.status).dot}`} />
+                        {getStatusConfig(b.status).label}
                       </span>
                       {hasAlert && (
-                        <span className="ml-1.5 text-xs text-purple-600 font-medium flex items-center gap-0.5 mt-0.5">
+                        <span className="ml-1.5 text-xs text-purple-400 font-medium flex items-center gap-0.5 mt-0.5">
                           <Clock className="h-3 w-3" /> ended
                         </span>
                       )}

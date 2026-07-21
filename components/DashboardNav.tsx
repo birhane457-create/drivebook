@@ -6,7 +6,7 @@ import { signOut } from 'next-auth/react';
 import {
   Home, Calendar, Users, DollarSign, Settings, LogOut,
   Menu, X, Bell, FileText, Palette, CreditCard, BarChart2,
-  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, Star, TrendingUp, Landmark,
+  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, Star, TrendingUp, Landmark, CalendarDays,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '@/lib/hooks/useNotifications';
@@ -102,10 +102,11 @@ const navGroups = {
   core: {
     label: null, // always visible, no dropdown
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: Home },
-      { href: '/dashboard/bookings', label: 'Bookings', icon: Calendar },
-      { href: '/dashboard/clients', label: 'Clients', icon: Users },
-      { href: '/dashboard/earnings', label: 'Earnings', icon: DollarSign },
+      { href: '/dashboard',          label: 'Dashboard', icon: Home },
+      { href: '/dashboard/bookings', label: 'Bookings',  icon: Calendar },
+      { href: '/dashboard/schedule', label: 'Schedule',  icon: CalendarDays },
+      { href: '/dashboard/clients',  label: 'Clients',   icon: Users },
+      { href: '/dashboard/earnings', label: 'Earnings',  icon: DollarSign },
     ],
   },
   business: {
@@ -245,11 +246,11 @@ export default function DashboardNav() {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="flex items-center gap-2.5 no-underline group">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/40 group-hover:shadow-blue-600/60 transition-shadow">
+              <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/40 group-hover:shadow-blue-600/60 transition-shadow">
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-              </div>
+              </span>
               <span className="text-lg font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
                 DriveBook
               </span>

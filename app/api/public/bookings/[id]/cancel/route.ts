@@ -186,13 +186,20 @@ export async function POST(
       ? (bookingTime.getTime() - now.getTime()) / (1000 * 60 * 60)
       : 0
 
+    // Read cancellation window from PlatformSettings — never hardcode
+    const pricingSettings = await prisma.platformSettings.findFirst({
+      select: { lateCancellationWindowHours: true },
+    }).catch(() => null)
+    const lateWindow = pricingSettings?.lateCancellationWindowHours ?? 24
+    const fullRefundWindow = lateWindow * 2
+
     let refundPercentage = 0
     let refundAmount = 0
 
-    if (hoursUntilBooking >= 48) {
+    if (hoursUntilBooking >= fullRefundWindow) {
       refundPercentage = 100
       refundAmount = booking.price
-    } else if (hoursUntilBooking >= 24) {
+    } else if (hoursUntilBooking >= lateWindow) {
       refundPercentage = 50
       refundAmount = parseFloat((booking.price * 0.5).toFixed(2))
     }
@@ -271,6 +278,17 @@ export async function POST(
         console.warn(`⚠️ No paymentIntentId on booking ${params.id} — refund must be processed manually`)
       }
     }
+
+    // Waiting list — notify first person waiting (non-fatal, fire-and-forget)
+    void import('@/lib/services/waiting-list-notify').then(({ notifyWaitingList }) =>
+      notifyWaitingList({
+        instructorId: booking.instructorId,
+        slotDate: booking.startTime?.toISOString() ?? null,
+        slotTime: booking.startTime
+          ? booking.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Perth' })
+          : null,
+      })
+    )
 
     return NextResponse.json({
       success: true,

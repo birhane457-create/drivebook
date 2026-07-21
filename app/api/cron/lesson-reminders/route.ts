@@ -41,12 +41,13 @@ export async function GET(req: NextRequest) {
         startTime: { gte: windowStart, lte: windowEnd },
       },
       include: {
-        instructor: { select: { userId: true, name: true, phone: true } },
+        instructor: { select: { userId: true, name: true, businessName: true, accountType: true, phone: true } },
         client: { include: { user: { select: { id: true, email: true } } } },
       },
     });
 
     const { smsService } = await import('@/lib/services/sms');
+    const { getDisplayName } = await import('@/lib/utils/account');
 
     let sent = 0;
     let failed = 0;
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
       try {
         const startTime = booking.startTime!;
         const clientName = booking.clientName || booking.client?.name || 'Student';
-        const instructorName = booking.instructor.name;
+        const instructorName = getDisplayName(booking.instructor);
         const pickupAddress = booking.pickupAddress ?? undefined;
         const isOffline = (booking as any).source === 'offline';
 

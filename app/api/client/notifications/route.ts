@@ -82,6 +82,19 @@ export async function GET(req: NextRequest) {
       },
       skip,
       take: limit,
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        title: true,
+        message: true,
+        isRead: true,
+        createdAt: true,
+        link: true,
+        metadata: true,
+        // relatedEntityId / relatedEntityType / reminderStage / channel
+        // not selected — columns not yet added to this DB instance
+      },
     });
 
     return NextResponse.json({

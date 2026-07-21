@@ -1,456 +1,117 @@
-# DriveBook Hybrid System Architecture
+# DriveBook Hybrid — Architecture
+
+**Last Updated:** July 2026  
+**Status:** Production
+
+---
 
 ## System Overview
 
+DriveBook is a two-service architecture:
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         DriveBook Ecosystem                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌──────────────────┐     ┌──────────────────┐   ┌─────────────────┐   │
-│  │   Clients        │     │   Instructors    │   │   Admin Portal  │   │
-│  │  (Web/Mobile)    │     │   (Mobile/Web)   │   │   (Dashboard)   │   │
-│  └────────┬─────────┘     └────────┬─────────┘   └────────┬────────┘   │
-│           │                        │                      │             │
-│           └────────────────────────┼──────────────────────┘             │
-│                                    │                                     │
-│                    ┌───────────────────────────────┐                     │
-│                    │   DriveBook Main (Next.js)   │                     │
-│                    │   - Booking API              │                     │
-│                    │   - Availability API         │                     │
-│                    │   - Payment Processing       │                     │
-│                    │   - User Management          │                     │
-│                    │   - Calendar Sync            │                     │
-│                    └───────────┬───────────────────┘                     │
-│                                │                                         │
-│              ┌─────────────────┴─────────────────┐                       │
-│              │                                   │                       │
-│    ┌─────────────────────┐         ┌─────────────────────┐              │
-│    │  MongoDB (Main DB)  │         │  Stripe (Payments)  │              │
-│    │  - Users            │         │  - Payment Intents  │              │
-│    │  - Bookings         │         │  - Transfers        │              │
-│    │  - Instructors      │         │  - Webhook Events   │              │
-│    │  - Transactions     │         │  - Refunds          │              │
-│    │  - Clients          │         └─────────────────────┘              │
-│    └─────────────────────┘                                              │
-│                                                                          │
-└──────────────────────────────┬───────────────────────────────────────────┘
-                               │
-                ┌──────────────┴──────────────┐
-                │                             │
-    ┌───────────────────────────┐   ┌─────────────────────┐
-    │  DriveBook-Hybrid (REST)  │   │  Twilio            │
-    │  - Voice Webhook Handler  │◄──┤  - Incoming Calls  │
-    │  - Availability Sync      │   │  - SMS Service     │
-    │  - Message Storage        │   │  - Recordings      │
-    │  - Instructor Cache       │   └─────────────────────┘
-    └────────┬──────────────────┘
-             │
-    ┌────────────────────────────┐
-    │  SQLite (Hybrid Cache)     │
-    │  - Instructor replica      │
-    │  - Voicemails             │
-    │  - Sync logs              │
-    └────────────────────────────┘
-                │
-    ┌───────────────────────────┐
-    │  Copilot Studio Agent     │
-    │  - Call handling          │
-    │  - Booking dialog         │
-    │  - Payment confirmation   │
-    │  - Natural language input │
-    └───────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    DriveBook (Vercel)                    │
+│  Next.js app — bookings, payments, dashboards, admin     │
+│  PostgreSQL (Neon) · Prisma · NextAuth · Stripe          │
+└────────────────────┬────────────────────────────────────┘
+                     │ REST API + webhooks
+                     │
+┌────────────────────┴────────────────────────────────────┐
+│              drivebook-hybrid (Railway)                  │
+│  Node.js/Express — voice AI receptionist                 │
+│  VAPI voice AI · Twilio SMS · main-app-proxy             │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Call Flow: Voice → Booking → Payment
+## Voice AI Flow
 
 ```
-STEP 1: Incoming Call
-───────────────────────────────────────────
-  Caller               Twilio                Hybrid
-     │                   │                     │
-     ├──[Call]──────────►│                     │
-     │                   ├─[Webhook POST]────►│
-     │                   │   /api/voice/incoming
-     │                   │   {From, To}        │
-     │                   │                ◄────┤ Parse caller/instructor
-     │                   │                ◄────┤ Lookup instructor
-     │                   │                ◄────┤ Check availability
-     │                   │◄─[TwiML]───────┤   
-     │                   │   <Connect>        │
-     │                   │   <Copilot>        │
-
-
-STEP 2: Copilot Agent Conversation
-───────────────────────────────────────────
-  Caller           Copilot Agent          Hybrid
-     │                   │                   │
-     ├──[Voice]─────────►│                   │
-     │   "Book lesson"   │                   │
-     │                   ├──[HTTP]──────────►│
-     │                   │   POST /availability/check
-     │                   │   instructorId, date, time
-     │                   │   ◄────────────────┤ Query slots
-     │                   │◄[Available slots]──┤
-     │◄──[Say]───────────┤                   │
-     │   "Morning slots" │                   │
-     │                   │                   │
-     ├──[Voice]─────────►│                   │
-     │   "9am, tuesday"  │                   │
-     │                   ├──[HTTP]──────────►│
-     │                   │   POST /bookings
-     │                   │   {instructorId, clientName,
-     │                   │    date, time, duration, phone}
-     │                   │   ◄────────────────┤ Create booking
-     │                   │◄[Booking Created]──┤ {bookingId}
-     │◄──[Say]───────────┤                   │
-     │   "Booked!"       │                   │
-     │   "Text confirm"  │                   │
-     │                   │                   ├─[SMS]─► Caller
-     │                   │                   │  "Your booking #123"
-     │                   │                   │  Payment link
-
-
-STEP 3: Payment Processing
-───────────────────────────────────────────
-  Caller              Hybrid             DriveBook/Stripe
-     │                 │                      │
-     ├─[SMS]──────────►│                      │
-     │  Payment link   │                      │
-     │                 ├─[HTTP]──────────────►│
-     │                 │ POST /create-payment-intent
-     │                 │ {bookingId, amount}
-     │                 │ ◄──────────────────┤ paymentIntentId
-     │                 │ ◄──────────────────┤ clientSecret
-     │                 │                     │
-     ├─[Open link]───►Stripe Hosted Form     │
-     │  (Checkout)    │                      │
-     │                │                      │
-     ├─[Card info]───►│                      │
-     │                ├──[Confirm]───────────►│
-     │                │                  [Verify]
-     │                │◄─[Payment Success]────┤
-     │◄─[Confirm]─────┤                      │
-     │                │                      │
-     │                │  ◄─[Webhook]─────────┤
-     │                │  payment_intent.succeeded
-
-
-STEP 4: Instructor Notification
-───────────────────────────────────────────
-  Hybrid          Instructor App        Instructor
-    │                 │                    │
-    ├─[Update]──────►DriveBook             │
-    │  Booking:      Dashboard             │
-    │  status=CONFIRMED
-    │  isPaid=true
-    │                 ├─[Realtime]────────►│
-    │                 │  Notification:     │
-    │                 │  "New booking"     │
-    │                 │  Date: Tue 9am     │
-    │                 │  Client: John      │
-    │                 │  Amount: $60       │
-    │                 │                    │
-    │                 │ ◄─[Accept]────────┤
-    │                 │  (auto if enabled)
-    │
-    ├─[SMS]──────────────────────────────►│
-    │ "Lesson confirmed - Tue 9am"
+Student calls instructor's AI line
+        ↓
+Twilio routes to VAPI webhook
+        ↓
+VAPI assistant runs conversation (see VAPI_SYSTEM_PROMPT.md)
+        ↓
+VAPI calls tools via main-app-proxy.js:
+  ├── findInstructors (GET /api/instructors/recommendations)
+  ├── getAvailableSlots (GET /api/availability/slots)
+  ├── getPackages (GET /api/packages)
+  ├── createBooking (POST /api/public/bookings/bulk)
+  ├── validateLocation (POST /api/locations/validate)
+  └── checkServiceArea (POST /api/public/instructors/{id}/check-service-area)
+        ↓
+createBooking creates user account + booking in DB
+        ↓
+main-app-proxy.js SMS's payment link to student
+        ↓
+Student taps link → pays → webhook confirms booking
 ```
 
 ---
 
-## Data Flow: Sync & Cache Management
+## Components
 
+### main-app-proxy.js
+The core of the hybrid service. Runs an Express server that:
+- Receives VAPI tool calls (HTTP POST from VAPI)
+- Proxies them to the main DriveBook API
+- Handles SMS delivery via Twilio after booking creation
+- Manages voice session recovery (Redis)
+
+### VAPI System Prompt (`VAPI_SYSTEM_PROMPT.md`)
+Defines the AI assistant's conversation flow, tool contracts, and error handling scripts. Built with `scripts/build-vapi-prompt.js` from source + env vars.
+
+### voice-session-service.js
+Redis-backed session recovery. If a call drops mid-booking, the student can call back and resume.
+
+---
+
+## Deployment
+
+**Service:** Railway  
+**URL:** `https://voice.drivebook.com.au`  
+**Build:** Node 18, `npm start`  
+**ENV required:** See `.env.voice-service.example`
+
+Key env vars:
 ```
-Every 6 Hours or On-Demand
-───────────────────────────────────────────
-
-  Hybrid              DriveBook          MongoDB
-    │                    │                  │
-    ├─[HTTP GET]────────►│                  │
-    │ /api/instructors   │                  │
-    │ ?updatedAfter=..   │                  │
-    │                    ├─[Query]─────────►│
-    │                    │ Select instructors
-    │                    │ where updatedAt > time
-    │                    │ ◄─[Result set]────┤
-    │◄─[JSON]────────────┤                  │
-    │ [{id, name, phone,
-    │   hourlyRate,
-    │   approvalStatus,
-    │   subscriptionStatus,
-    │   workingHours,
-    │   serviceRadius}]
-    │
-    ├─[Upsert]──────────►SQLite             │
-    │  instructor cache   │                  │
-    │  (107 records)      │                  │
-    │
-    ├─[Insert]──────────►SQLite             │
-    │  sync_log           │                  │
-    │  {timestamp, count}
+VAPI_API_KEY          — VAPI dashboard key
+VAPI_PHONE_NUMBER     — Assigned VAPI number
+MAIN_APP_URL          — https://drivebook.com.au
+VOICE_SERVICE_API_KEY — Auth token for /api/* calls
+TWILIO_ACCOUNT_SID    — Twilio credentials
+TWILIO_AUTH_TOKEN
+TWILIO_PHONE_NUMBER
+UPSTASH_REDIS_REST_URL      — Session recovery
+UPSTASH_REDIS_REST_TOKEN
 ```
 
 ---
 
-## Component Details
+## Database
 
-### DriveBook Main (Next.js)
-**Responsibilities:**
-- RESTful API for all business logic
-- MongoDB ORM through Prisma
-- Stripe payment processing
-- Google Calendar integration
-- User authentication (NextAuth)
-- Admin dashboard
-- Mobile app backend
-
-**Key Routes:**
-```
-/api/bookings              - Booking CRUD
-/api/instructors           - Instructor search
-/api/availability/check    - Slot availability
-/api/create-payment-intent - Stripe payment
-/api/reviews               - Client feedback
-/api/stripe/webhook        - Payment webhooks
-```
-
-### DriveBook-Hybrid (Express.js)
-**Responsibilities:**
-- Twilio webhook handler
-- Copilot Studio connector
-- Local instructor cache (SQLite)
-- Voicemail storage
-- SMS notifications
-- Request routing to DriveBook APIs
-
-**Key Routes:**
-```
-POST /api/voice/incoming   - Twilio incoming call
-POST /api/voice/voicemail  - Record voicemail
-GET  /api/health           - Health check
-POST /sync/instructors     - Refresh cache (internal)
-```
-
-### Copilot Studio
-**Responsibilities:**
-- Natural language understanding
-- Call conversation flow
-- Booking intent extraction
-- Error handling & fallbacks
-- Voice synthesis & audio playback
-
-**Inputs from Hybrid:**
-```
-{
-  "callerPhone": "+61400000000",
-  "instructorId": "uuid",
-  "instructorName": "John Smith",
-  "availableSlots": [
-    {"date": "2026-03-01", "time": "09:00"},
-    {"date": "2026-03-01", "time": "14:00"}
-  ]
-}
-```
-
-### SQLite Cache (Hybrid)
-**Purpose:** Local replica of instructor data for resilience
-
-**Schema:**
-```sql
-instructors
-├─ id (PK)
-├─ name
-├─ phone (UNIQUE)
-├─ hourlyRate
-├─ serviceRadiusKm
-├─ approvalStatus
-├─ subscriptionStatus
-├─ workingHours (JSON)
-├─ baseLatitude
-├─ baseLongitude
-├─ copilotAgentEndpoint
-└─ updatedAt (INDEX)
-
-messages
-├─ id (PK)
-├─ callerNumber
-├─ callerName
-├─ message
-├─ voicemailUrl
-├─ status
-└─ createdAt
-
-sync_log
-├─ id (PK)
-├─ entity
-├─ lastSyncAt
-└─ recordCount
-```
+**No local database.** The hybrid service is stateless:
+- All booking/availability data → main DriveBook PostgreSQL via API
+- Session recovery → Upstash Redis (ephemeral, 1h TTL)
+- No SQLite, no MongoDB, no local cache
 
 ---
 
-## Error Handling Strategy
+## Auth
 
-```
-SCENARIO: DriveBook API Unavailable
-──────────────────────────────────────┐
-                                       ▼
-  Hybrid Cache Hit?
-  ├─ YES: Use local SQLite data
-  │       ├─ Try to create booking (will fail)
-  │       └─ Store in local queue for retry
-  │
-  └─ NO: Return voicemail prompt
-         └─ "Instructor unavailable, leave message"
-
-
-SCENARIO: Copilot Agent Timeout (>5s)
-──────────────────────────────────────┐
-                                       ▼
-  Return TwiML with fallback:
-  "Sorry, our agent is busy.
-   Please try again or leave a message"
-
-
-SCENARIO: Payment Intent Fails
-──────────────────────────────────────┐
-                                       ▼
-  Booking created but unpaid:
-  - status = PENDING
-  - isPaid = false
-  - SMS reminder in 6 hours
-  - Auto-cancel if unpaid after 24h
-
-
-SCENARIO: Instructor Not Found
-──────────────────────────────────────┐
-                                       ▼
-  Return: "We couldn't find that instructor.
-           Would you like to leave a message?"
-  - Store voicemail with unknown instructorId
-  - Admin reviews in morning report
-```
+The hybrid service calls the main app with `X-API-Key: VOICE_SERVICE_API_KEY` on protected routes. Public booking routes (`/api/public/*`) need no auth.
 
 ---
 
-## Security Model
+## Related Files
 
-```
-┌─────────────────────────────────────────┐
-│  Caller & Instructor Data               │
-├─────────────────────────────────────────┤
-│  Phone numbers: Hashed or masked in logs│
-│  Voice recordings: Encrypted in transit │
-│  Payment info: Never logged (PCI-DSS)   │
-│  Timing: HTTPS only, no HTTP fallback   │
-└─────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│  API Secrets                            │
-├─────────────────────────────────────────┤
-│  Hybrid ← DriveBook: API Key in header  │
-│  Hybrid ← Twilio: Account SID + Token   │
-│  Hybrid ← Stripe: Secret Key (never    │
-│           in frontend)                  │
-│  All stored in .env, never in git       │
-└─────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│  Request Authentication                 │
-├─────────────────────────────────────────┤
-│  Twilio ─X─ DriveBook (direct)         │
-│           (use Twilio signing)         │
-│                                         │
-│  Twilio ──► Hybrid                     │
-│           (validate X-Twilio-Signature)│
-│                                         │
-│  Hybrid ──► DriveBook                  │
-│           (X-API-Key header)           │
-└─────────────────────────────────────────┘
-```
-
----
-
-## Deployment Topology
-
-```
-┌─────────────────────────────────────────┐
-│         Production AWS                   │
-├─────────────────────────────────────────┤
-│                                          │
-│  ┌──────────────────────────────────┐   │
-│  │  EC2 or ECS Cluster              │   │
-│  │  drivebook-hybrid container      │   │
-│  │  - Node.js 18                    │   │
-│  │  - Port 3000                     │   │
-│  │  - 2+ replicas (HA)              │   │
-│  └──┬───────────────────────────────┘   │
-│     │                                    │
-│  ┌──┴────────────────────────────────┐  │
-│  │  Load Balancer (ALB)              │  │
-│  │  - HTTPS termination              │  │
-│  │  - Route /api/voice → Hybrid       │  │
-│  │  - Route /* → DriveBook            │  │
-│  └──┬───────────────────────────────┘   │
-│     │                                    │
-│  ┌──┴────────────────────────────────┐  │
-│  │  EBS Volume                       │  │
-│  │  - SQLite database (shared mount) │  │
-│  │  - Backups: daily to S3           │  │
-│  └──────────────────────────────────┘   │
-│                                          │
-│  Secrets Manager:                        │
-│  - DRIVEBOOK_API_KEY                    │
-│  - TWILIO_ACCOUNT_SID                   │
-│  - TWILIO_AUTH_TOKEN                    │
-│  - STRIPE_SECRET_KEY                    │
-│                                          │
-└─────────────────────────────────────────┘
-        │                      │
-        │                      │
-    ┌───┴──────────┐       ┌───┴──────────┐
-    │ Twilio       │       │ CloudWatch   │
-    │ ├─ Webhooks  │       │ ├─ Metrics   │
-    │ ├─ SMS API   │       │ ├─ Logs      │
-    │ └─ Recording │       │ └─ Alarms    │
-    │    Storage   │       └──────────────┘
-    └──────────────┘
-```
-
----
-
-## Monitoring Dashboard
-
-Key metrics visible in real-time:
-
-| Metric | Target | Alert Threshold |
-|--------|--------|-----------------|
-| Call Volume (per hour) | 100-500 | > 1000 |
-| Copilot Success Rate | >95% | < 85% |
-| Booking Completion Rate | >20% | < 10% |
-| Payment Success Rate | >98% | < 95% |
-| API Latency (p95) | <500ms | > 2000ms |
-| Cache Hit Rate | >90% | < 75% |
-| SMS Delivery Rate | >99% | < 98% |
-| Database Sync Success | 100% | 1 failure |
-
----
-
-## Summary
-
-DriveBook-Hybrid operates as a **specialized microservice** that:
-
-1. **Listens** for incoming Twilio calls
-2. **Routes** to Copilot AI agents for conversation
-3. **Queries** DriveBook APIs for availability & booking
-4. **Caches** instructor data locally for resilience
-5. **Triggers** SMS confirmations
-6. **Logs** all interactions securely
-7. **Falls back** to voicemail when agents unavailable
-8. **Syncs** with DriveBook every 6 hours
-
-The system is **stateless** (can scale horizontally), **resilient** (local cache), and **secure** (encrypted, masked PII, API keys).
+| File | Purpose |
+|------|---------|
+| `routes/main-app-proxy.js` | VAPI tool handler + SMS dispatch |
+| `services/voice-session-service.js` | Redis session recovery |
+| `VAPI_SYSTEM_PROMPT.md` | AI conversation script |
+| `scripts/build-vapi-prompt.js` | Builds prompt from source + env |
+| `.env.voice-service.example` | All required environment variables |

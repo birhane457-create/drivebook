@@ -57,13 +57,13 @@ export async function GET(req: NextRequest) {
         startDate = startOfMonth(new Date());
     }
 
-    // Get instructor's commission rate
+    // Get instructor's commission rate from platform settings (DB-backed, not per-instructor field)
     const instructor = await prisma.instructor.findUnique({
       where: { id: decoded.instructorId },
-      select: { commissionRate: true }
+      select: { subscriptionTier: true },
     });
-
-    const commissionRate = instructor?.commissionRate || 15;
+    const { getCommissionRate } = await import('@/lib/services/platform-pricing');
+    const commissionRate = await getCommissionRate(instructor?.subscriptionTier ?? 'BASIC');
 
     // Get bookings in period (for counts only)
     const bookings = await prisma.booking.findMany({

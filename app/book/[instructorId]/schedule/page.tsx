@@ -20,7 +20,7 @@ export default function ScheduleRedirectPage() {
   }, [params, router]);
 
   return (
-    <MultiStepBookingLayout currentStep={4}>
+    <MultiStepBookingLayout currentStep={3}>
       <div className="flex items-center justify-center min-h-[300px]">
         <div className="text-center text-white/80">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>

@@ -10,8 +10,7 @@ function SetPasswordForm() {
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [email, setEmail] = useState('');
-  const [currentEmail, setCurrentEmail] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(true);
   const [error, setError] = useState('');
@@ -22,7 +21,7 @@ function SetPasswordForm() {
     fetch(`/api/auth/verify-setup-token?token=${token}`)
       .then(r => r.json())
       .then(d => {
-        if (d.email) { setCurrentEmail(d.email); setEmail(d.email); }
+        if (d.email) { setAccountEmail(d.email); }
         else setError('This link is invalid or has expired. Please contact support.');
         setVerifying(false);
       })
@@ -36,10 +35,13 @@ function SetPasswordForm() {
     setLoading(true);
     setError('');
     try {
+      // Only token + password are sent — email changes are not allowed via this route.
+      // If the email was misheard during booking, it can be corrected in account settings
+      // after logging in with this password.
       const res = await fetch('/api/auth/set-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password, email: email.trim() }),
+        body: JSON.stringify({ token, password }),
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error || 'Failed to set password.'); setLoading(false); return; }
@@ -86,27 +88,19 @@ function SetPasswordForm() {
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-700 text-sm">{error}</div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email address
-              <span className="text-xs text-amber-600 ml-2 font-normal">— correct this if the AI got it wrong</span>
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-              placeholder="your@email.com"
-            />
-            {currentEmail && email !== currentEmail && (
-              <p className="text-xs text-amber-600 mt-1">
-                ⚠️ Changing email from <strong>{currentEmail}</strong>
-              </p>
-            )}
+        {/* Show the account email as read-only — email cannot be changed here for security.
+            If the AI misheard the email, the user can update it in account settings after login. */}
+        {accountEmail && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-4">
+            <p className="text-xs text-slate-500 mb-0.5">Account email</p>
+            <p className="text-sm font-medium text-slate-800">{accountEmail}</p>
+            <p className="text-xs text-slate-400 mt-1">
+              If this is incorrect, you can update it in account settings after logging in.
+            </p>
           </div>
+        )}
 
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">New password</label>
             <input

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect } from 'react';
@@ -26,11 +26,11 @@ export default function BookTypePage() {
   // While instructor is loading, show loading state
   if (!instructor) {
     return (
-      <MultiStepBookingLayout currentStep={4}>
+      <MultiStepBookingLayout currentStep={3}>
         <div className="space-y-6 flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
-            <p className="text-white/70">Loading booking options...</p>
+            <p className="text-white/85">Loading booking options...</p>
           </div>
         </div>
       </MultiStepBookingLayout>
@@ -51,17 +51,17 @@ export default function BookTypePage() {
   };
 
   return (
-    <MultiStepBookingLayout currentStep={4}>
+    <MultiStepBookingLayout currentStep={3}>
       <div className="space-y-6 text-white">
         {/* Book Now/Later Selection */}
         <BookNowOrLater />
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/6">
+        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/15">
           <button
             onClick={() => router.back()}
             type="button"
-            className="flex-1 bg-white/5 text-white/90 px-8 py-4 rounded-lg font-semibold hover:bg-white/6 transition-colors border border-white/8"
+            className="flex-1 bg-white/8 text-white px-8 py-4 rounded-lg font-semibold hover:bg-white/10 transition-colors border border-white/20"
           >
             ← Back
           </button>

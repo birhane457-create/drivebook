@@ -88,6 +88,8 @@ export default function ClientBookingDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
@@ -117,18 +119,19 @@ export default function ClientBookingDetailPage() {
 
   const handleCancel = async () => {
     if (!booking) return;
-    if (!confirm('Are you sure you want to cancel this booking? Cancellation policy applies.')) return;
+    setCancelError(null);
     try {
       setCancelling(true);
       const res = await fetch(`/api/bookings/${booking.id}/cancel`, { method: 'POST' });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Failed to cancel booking.');
+        setCancelError(data.error || 'Failed to cancel booking.');
         return;
       }
+      setCancelConfirm(false);
       await loadBooking();
     } catch {
-      alert('Failed to cancel booking.');
+      setCancelError('Failed to cancel booking. Please try again.');
     } finally {
       setCancelling(false);
     }
@@ -404,14 +407,43 @@ export default function ClientBookingDetailPage() {
           )}
 
           {canCancel && (
-            <button
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-red-300 text-red-600 font-semibold rounded-xl hover:bg-red-50 transition disabled:opacity-50"
-            >
-              {cancelling ? <Loader2 className="w-5 h-5 animate-spin" /> : <XCircle className="w-5 h-5" />}
-              Cancel Booking
-            </button>
+            <>
+              {cancelError && (
+                <div role="alert" className="flex items-start gap-2 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm text-red-700">
+                  <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {cancelError}
+                </div>
+              )}
+              {!cancelConfirm ? (
+                <button
+                  onClick={() => setCancelConfirm(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-red-300 text-red-600 font-semibold rounded-xl hover:bg-red-50 transition"
+                >
+                  <XCircle className="w-5 h-5" />
+                  Cancel Booking
+                </button>
+              ) : (
+                <div className="border border-red-200 rounded-xl p-4 bg-red-50 space-y-3">
+                  <p className="text-sm font-semibold text-red-800">Cancel this booking? Cancellation policy applies.</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCancel}
+                      disabled={cancelling}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition disabled:opacity-50 text-sm"
+                    >
+                      {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                      {cancelling ? 'Cancelling...' : 'Yes, cancel'}
+                    </button>
+                    <button
+                      onClick={() => { setCancelConfirm(false); setCancelError(null); }}
+                      className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition text-sm"
+                    >
+                      Keep booking
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {canCancel && (

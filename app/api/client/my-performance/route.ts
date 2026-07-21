@@ -67,6 +67,9 @@ export async function GET(req: NextRequest) {
         studentStrengths: true,
         focusAreas: true,
         performanceScore: true,
+        assessmentType: true,
+        lessonTopics: true,
+        passed: true,
         instructor: {
           select: { name: true, profileImage: true },
         },
@@ -98,23 +101,27 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Average performance
+    // Average performance — MOCK assessments only (coaching has no score)
     const performance = bookingsWithFeedback
-      .map((b) => b.performanceScore)
-      .filter((score): score is number => score !== null);
+      .filter((b: any) => b.assessmentType === 'MOCK')
+      .map((b: any) => b.performanceScore)
+      .filter((score: any): score is number => score !== null);
     const averagePerformance =
       performance.length > 0
-        ? Math.round(
-            performance.reduce((a, b) => a + b, 0) / performance.length
-          )
+        ? Math.round(performance.reduce((a: number, b: number) => a + b, 0) / performance.length)
         : null;
 
-    // Recent feedback (all lessons, not limited)
-    const recentFeedback = bookingsWithFeedback.map((booking) => ({
+    // Recent feedback timeline — all entries, type-aware
+    const recentFeedback = bookingsWithFeedback.map((booking: any) => ({
       id: booking.id,
       date: booking.startTime,
       instructor: booking.instructor.name,
       performanceScore: booking.performanceScore,
+      assessmentType: booking.assessmentType ?? 'COACHING',
+      lessonTopics: booking.lessonTopics
+        ? booking.lessonTopics.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : [],
+      passed: booking.passed ?? null,
       feedback: decodeFeedback(booking.lessonFeedback).slice(0, 3),
       strengths: decodeFeedback(booking.studentStrengths),
       notes: booking.instructorNotes,
@@ -146,15 +153,18 @@ export async function GET(req: NextRequest) {
       .slice(0, 5)
       .map(([code]) => decodeFeedback([Number(code)])[0]);
 
-    // Progress chart (performance over last 10 lessons)
-    const progressChart = bookingsWithFeedback
+    // Progress chart — only MOCK assessments plot on the score chart
+    const scoredAssessments = bookingsWithFeedback
+      .filter((b: any) => b.assessmentType === 'MOCK' && b.performanceScore !== null)
       .slice(0, 10)
       .reverse()
-      .map((booking, index) => ({
-        lesson: index + 1,
-        date: booking.startTime.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }),
-        score: booking.performanceScore,
-      }));
+    const progressChart = scoredAssessments.map((booking: any, index: number) => ({
+      lesson: index + 1,
+      date: booking.startTime.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }),
+      score: booking.performanceScore,
+      assessmentType: booking.assessmentType,
+      passed: booking.passed ?? null,
+    }));
 
     return NextResponse.json({
       success: true,

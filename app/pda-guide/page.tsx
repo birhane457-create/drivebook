@@ -27,7 +27,8 @@ function SiteHeader() {
           <Link href="/pda-guide" className="text-white px-3 py-2 rounded-lg bg-white/10 no-underline font-semibold">PDA Guide</Link>
           <Link href="/for-instructors" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">For Instructors</Link>
           <Link href="/blog" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Blog</Link>
-          <Link href="/book" className="ml-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-sm no-underline hover:from-violet-500 hover:to-indigo-500 transition-all">Find Instructor</Link>
+          <Link href="/driving-lessons" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Find Instructors</Link>
+          <Link href="/book" className="ml-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-sm no-underline hover:from-violet-500 hover:to-indigo-500 transition-all">Book Now</Link>
         </nav>
       </div>
     </header>

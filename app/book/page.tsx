@@ -69,10 +69,10 @@ export default function BookingLandingPage() {
           <h1 className="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-300 via-pink-300 to-purple-300 mb-4">
             Book Your Driving Lesson
           </h1>
-          <p className="text-xl text-white/70 mb-2">
+          <p className="text-xl text-white/85 mb-2">
             Find qualified instructors in your area
           </p>
-          <p className="text-lg text-white/60 mb-4">
+          <p className="text-lg text-white/75 mb-4">
             Search by location → Choose instructor → Book instantly
           </p>
           <div className="flex flex-wrap justify-center gap-3 mt-2">
@@ -105,7 +105,7 @@ export default function BookingLandingPage() {
                 </svg>
               </div>
               <h3 className="text-lg font-bold mb-2 text-white">{title}</h3>
-              <p className="text-white/60 text-sm leading-relaxed">{desc}</p>
+              <p className="text-white/70 text-sm leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>

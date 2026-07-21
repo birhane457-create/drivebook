@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
+import { getDisplayName } from '@/lib/utils/account';
 
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,9 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             name: true,
+            businessName: true,
+            accountType: true,
+            subscriptionTier: true,
             phone: true,
             profileImage: true,
             averageRating: true,
@@ -67,6 +71,9 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             name: true,
+            businessName: true,
+            accountType: true,
+            subscriptionTier: true,
             phone: true,
             profileImage: true,
             hourlyRate: true,
@@ -99,7 +106,7 @@ export async function GET(req: NextRequest) {
     // Format upcoming lessons
     const formattedLessons = upcomingBookings.map((booking: typeof upcomingBookings[number]) => ({
       id: booking.id,
-      instructorName: booking.instructor.name,
+      instructorName: getDisplayName(booking.instructor),
       date: booking.startTime.toISOString().split('T')[0],
       time: booking.startTime.toISOString().split('T')[1].substring(0, 5),
       location: booking.pickupAddress || 'Location TBD',
@@ -110,7 +117,7 @@ export async function GET(req: NextRequest) {
     const currentInstructor = lastBooking
       ? {
           id: lastBooking.instructor.id,
-          name: lastBooking.instructor.name,
+          name: getDisplayName(lastBooking.instructor),
           phone: lastBooking.instructor.phone,
           email: lastBooking.instructor.user.email,
           averageRating: lastBooking.instructor.averageRating || 0,

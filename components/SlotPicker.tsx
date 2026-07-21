@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -86,17 +86,17 @@ export default function SlotPicker({
           type="button"
           onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
           disabled={weekOffset === 0}
-          className="p-1.5 rounded-lg border border-white/10 bg-slate-900/40 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed text-slate-400 transition-colors"
+          className="p-2 rounded-lg border border-white/25 bg-slate-800/80 hover:bg-slate-700 hover:border-white/40 disabled:opacity-30 disabled:cursor-not-allowed text-white/80 hover:text-white transition-all duration-200"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-sm font-medium text-slate-300">
+        <span className="text-sm font-medium text-white/85">
           {weekOffset === 0 ? 'This week' : weekOffset === 1 ? 'Next week' : `+${weekOffset} weeks`}
         </span>
         <button
           type="button"
           onClick={() => setWeekOffset(w => w + 1)}
-          className="p-1.5 rounded-lg border border-white/10 bg-slate-900/40 hover:bg-white/5 text-slate-400 transition-colors"
+          className="p-2 rounded-lg border border-white/25 bg-slate-800/80 hover:bg-slate-700 hover:border-white/40 text-white/80 hover:text-white transition-all duration-200"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -114,12 +114,12 @@ export default function SlotPicker({
               type="button"
               disabled={isPast}
               onClick={() => handleDateSelect(date)}
-              className={`flex flex-col items-center py-2 px-1 rounded-lg text-xs font-medium transition-all border
+              className={`flex flex-col items-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 border
                 ${isSelected
-                  ? 'text-white border-transparent'
+                  ? 'text-white border-transparent shadow-[0_0_0_2px_rgba(56,189,248,0.5)]'
                   : isPast
-                  ? 'text-slate-500 border-white/5 cursor-not-allowed'
-                  : 'text-slate-300 border-white/10 hover:border-sky-400 hover:bg-sky-500/10'
+                  ? 'text-white/35 border-white/10 cursor-not-allowed'
+                  : 'text-white/85 border-white/20 hover:border-sky-400/70 hover:bg-sky-500/10 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.2)]'
                 }`}
               style={isSelected ? { backgroundColor: primaryColor, borderColor: primaryColor } : {}}
             >
@@ -135,15 +135,15 @@ export default function SlotPicker({
         <div>
           <div className="flex items-center gap-2 mb-2">
             <Clock className="h-4 w-4 text-slate-400" />
-            <span className="text-sm font-medium text-slate-300">
+            <span className="text-sm font-medium text-white/85">
               {formatDateLabel(selectedDate)}
             </span>
           </div>
 
           {loadingSlots ? (
-            <div className="text-center py-6 text-slate-400 text-sm">Loading available times...</div>
+            <div className="text-center py-6 text-white/65 text-sm">Loading available times...</div>
           ) : noAvailability ? (
-            <div className="text-center py-6 text-slate-400 text-sm">
+            <div className="text-center py-6 text-white/65 text-sm">
               No availability on this day — try another date
             </div>
           ) : (
@@ -156,12 +156,12 @@ export default function SlotPicker({
                     key={slot.time}
                     type="button"
                     onClick={() => handleTimeSelect(slot.time)}
-                    className={`py-2 px-1 rounded-lg text-sm font-semibold border-2 transition-all
+                    className={`py-2 px-1 rounded-lg text-sm font-semibold border-2 transition-all duration-200
                       ${isChosen
-                        ? 'text-white border-transparent'
+                        ? 'text-white border-transparent shadow-[0_0_0_2px_rgba(56,189,248,0.5)]'
                         : isShortNotice
-                        ? 'text-amber-100 border-amber-600 bg-amber-700/30 hover:bg-amber-700/50'
-                        : 'text-slate-100 border-slate-600 bg-slate-700 hover:border-sky-400 hover:bg-slate-600'
+                        ? 'text-amber-100 border-amber-500/60 bg-amber-700/30 hover:bg-amber-700/50 hover:border-amber-400 hover:shadow-[0_0_0_1px_rgba(251,191,36,0.3)]'
+                        : 'text-white border-white/30 bg-slate-700/60 hover:border-sky-400/80 hover:bg-slate-600/80 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.25)]'
                       }`}
                     style={isChosen ? { backgroundColor: isShortNotice ? '#d97706' : primaryColor, borderColor: isShortNotice ? '#d97706' : primaryColor } : {}}
                     title={isShortNotice ? 'Last-minute slot — requires instructor approval' : undefined}
@@ -175,7 +175,7 @@ export default function SlotPicker({
           )}
 
           {selected?.date === selectedDate && selected?.time && (
-            <p className="text-sm mt-2 font-medium text-sky-300">
+            <p className="text-sm mt-2 font-medium text-sky-200">
               ✓ {formatDateLabel(selectedDate)} at {selected.time}
             </p>
           )}
@@ -189,7 +189,7 @@ export default function SlotPicker({
       )}
 
       {!selectedDate && (
-        <p className="text-sm text-slate-400 text-center py-4">Select a day to see available times</p>
+        <p className="text-sm text-white/65 text-center py-4">Select a day to see available times</p>
       )}
     </div>
   );

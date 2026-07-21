@@ -158,7 +158,7 @@ export default function RegistrationForm() {
       {isLoggedIn && (
         <div className="bg-green-900/10 border border-green-500/20 rounded-lg p-4">
           <p className="text-sm text-green-200">
-            ✓ You're logged in! Your details are pre-filled. You can edit them if needed.
+            ? You're logged in! Your details are pre-filled. You can edit them if needed.
           </p>
         </div>
       )}
@@ -177,7 +177,7 @@ export default function RegistrationForm() {
               w-full flex items-start gap-4 p-5 border-2 rounded-xl text-left transition-all
               ${bookingState.registrationType === 'myself'
                 ? 'border-purple-500/50 bg-white/5'
-                : 'border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10'
+                : 'border-white/20 hover:border-white/20 bg-white/5 hover:bg-white/10'
               }
             `}
           >
@@ -202,7 +202,7 @@ export default function RegistrationForm() {
               w-full flex items-start gap-4 p-5 border-2 rounded-xl text-left transition-all
               ${bookingState.registrationType === 'someone-else'
                 ? 'border-purple-500/50 bg-white/5'
-                : 'border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10'
+                : 'border-white/20 hover:border-white/20 bg-white/5 hover:bg-white/10'
               }
             `}
           >
@@ -239,8 +239,8 @@ export default function RegistrationForm() {
             id="accountHolderName"
             value={bookingState.accountHolderName}
             onChange={(e) => handleAccountHolderChange('accountHolderName', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-              errors.accountHolderName ? 'border-red-500' : 'border-white/10'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] ${
+              errors.accountHolderName ? 'border-red-500' : 'border-white/30'
             }`}
             placeholder="Enter your full name"
           />
@@ -258,8 +258,8 @@ export default function RegistrationForm() {
             id="accountHolderEmail"
             value={bookingState.accountHolderEmail}
             onChange={(e) => handleAccountHolderChange('accountHolderEmail', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-              errors.accountHolderEmail ? 'border-red-500' : 'border-white/10'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] ${
+              errors.accountHolderEmail ? 'border-red-500' : 'border-white/30'
             }`}
             placeholder="your.email@example.com"
           />
@@ -267,7 +267,7 @@ export default function RegistrationForm() {
             <p className="mt-1 text-sm text-white/60">Checking email...</p>
           )}
           {emailCheckStatus === 'available' && !checkingEmail && (
-            <p className="mt-1 text-sm text-green-300">✓ Email is available</p>
+            <p className="mt-1 text-sm text-green-300">? Email is available</p>
           )}
           {errors.accountHolderEmail && (
             <p className="mt-1 text-sm text-red-600">{errors.accountHolderEmail}</p>
@@ -302,7 +302,7 @@ export default function RegistrationForm() {
                   </button>
                 </div>
                 <p className="text-xs text-yellow-200 mt-2">
-                  ⚠️ If you continue, you won't be able to create a new account with this email. Please use a different email or login to your existing account.
+                  ?? If you continue, you won't be able to create a new account with this email. Please use a different email or login to your existing account.
                 </p>
               </div>
             </div>
@@ -318,8 +318,8 @@ export default function RegistrationForm() {
             id="accountHolderPhone"
             value={bookingState.accountHolderPhone}
             onChange={(e) => handleAccountHolderChange('accountHolderPhone', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-              errors.accountHolderPhone ? 'border-red-500' : 'border-white/10'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] ${
+              errors.accountHolderPhone ? 'border-red-500' : 'border-white/30'
             }`}
             placeholder="0400 000 000"
           />
@@ -337,8 +337,8 @@ export default function RegistrationForm() {
             id="accountHolderPassword"
             value={bookingState.accountHolderPassword}
             onChange={(e) => handleAccountHolderChange('accountHolderPassword', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-              errors.accountHolderPassword ? 'border-red-500' : 'border-white/10'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] ${
+              errors.accountHolderPassword ? 'border-red-500' : 'border-white/30'
             }`}
             placeholder="At least 6 characters"
           />
@@ -356,8 +356,8 @@ export default function RegistrationForm() {
             id="accountHolderConfirmPassword"
             value={bookingState.accountHolderConfirmPassword}
             onChange={(e) => handleAccountHolderChange('accountHolderConfirmPassword', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-              errors.accountHolderConfirmPassword ? 'border-red-500' : 'border-white/10'
+            className={`w-full px-4 py-3 border rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] ${
+              errors.accountHolderConfirmPassword ? 'border-red-500' : 'border-white/30'
             }`}
             placeholder="Re-enter your password"
           />
@@ -369,7 +369,7 @@ export default function RegistrationForm() {
 
       {/* Learner Details (if someone else) */}
       {bookingState.registrationType === 'someone-else' && (
-        <div className="space-y-4 border-t border-white/10 pt-6">
+        <div className="space-y-4 border-t border-white/20 pt-6">
           <h3 className="text-lg font-semibold text-white/90">Learner's Details</h3>
 
           <div>
@@ -381,8 +381,8 @@ export default function RegistrationForm() {
               id="learnerName"
               value={bookingState.learnerName}
               onChange={(e) => handleLearnerChange('learnerName', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-                errors.learnerName ? 'border-red-500' : 'border-white/10'
+              className={`w-full px-4 py-3 border rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] ${
+                errors.learnerName ? 'border-red-500' : 'border-white/30'
               }`}
               placeholder="Enter learner's full name"
             />
@@ -400,7 +400,7 @@ export default function RegistrationForm() {
               id="learnerPhone"
               value={bookingState.learnerPhone}
               onChange={(e) => handleLearnerChange('learnerPhone', e.target.value)}
-              className="w-full px-4 py-3 border border-white/10 rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full px-4 py-3 border border-white/30 rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)]"
               placeholder="0400 000 000"
             />
           </div>
@@ -413,8 +413,8 @@ export default function RegistrationForm() {
               id="learnerRelationship"
               value={bookingState.learnerRelationship}
               onChange={(e) => handleLearnerChange('learnerRelationship', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-lg bg-slate-950/70 text-white placeholder:text-white/40 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-                errors.learnerRelationship ? 'border-red-500' : 'border-white/10'
+              className={`w-full px-4 py-3 border rounded-lg bg-slate-800/70 text-white placeholder:text-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] ${
+                errors.learnerRelationship ? 'border-red-500' : 'border-white/30'
               }`}
             >
               <option value="">Select relationship</option>
@@ -433,7 +433,7 @@ export default function RegistrationForm() {
       )}
 
       {/* Info Box */}
-      <div className="bg-white/5 rounded-lg border border-white/10 p-4">
+      <div className="bg-white/5 rounded-lg border border-white/20 p-4">
         <div className="flex gap-3">
           <svg className="w-5 h-5 text-purple-300 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />

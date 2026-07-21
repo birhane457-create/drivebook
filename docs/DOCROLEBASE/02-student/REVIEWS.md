@@ -20,11 +20,13 @@ After a lesson has passed (startTime in the past) and the booking is `CONFIRMED`
 - One review per booking — once submitted, the button disappears
 - Booking must have a past `startTime` — cannot review future lessons
 - Only the client who made the booking can review it
+- **Race condition prevention:** `POST /api/reviews` uses `updateMany` with `reviewGivenAt: null` as an atomic WHERE guard — only the first concurrent request wins. A DB-level partial unique index (`Booking_review_once_idx ON Booking(id) WHERE reviewGivenAt IS NOT NULL`) enforces this at the database layer as well (migration `20260714000001_add_review_unique_index`).
+- **Rate limiting:** `POST /api/reviews` applies `reviewRateLimit` — 10 submissions per hour per user.
 
 **Stored on the `Booking` model:**
 - `clientRating` — integer 1–5
 - `clientReview` — text comment
-- `reviewGivenAt` — timestamp
+- `reviewGivenAt` — timestamp (set atomically — used as the race condition guard)
 - `isReviewed` — boolean flag (set to `true` after submission)
 
 ---
@@ -50,6 +52,8 @@ On successful review:
 - Instructor's public booking page (`/book/[instructorId]`)
 - Instructor's subdomain page (`/subdomain/[slug]`)
 - Admin reviews page (`/admin/reviews`) — read-only moderation view
+
+**Privacy:** The public reviews endpoint (`GET /api/reviews?instructorId=`) is unauthenticated. `clientName` is masked to first name + last initial (e.g. "Sarah T.") before being returned. Full names are never exposed on this endpoint.
 
 ---
 

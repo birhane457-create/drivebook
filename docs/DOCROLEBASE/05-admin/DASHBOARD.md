@@ -98,6 +98,10 @@ Admin nav groups:
 | Credits | `/admin/credits` | Client credit overview and statistics |
 | Staff Governance | `/admin/staff-governance` | Operational controls, refund monitoring, SLA stats |
 | Test Centres | `/admin/test-centres` | Add/edit/deactivate WA DVS test centres |
+| Copilot | `/admin/copilot` | AI-powered admin query interface (natural language DB queries) |
+| Voice Lines | `/admin/voice-lines` | Twilio number pool — assign/release/suspend PRO+ instructor lines |
+| Disputes | `/admin/disputes` | Stripe chargeback management and payout hold release |
+| Cron Jobs | `/admin/cron-jobs` | Cron health monitoring dashboard |
 
 ---
 
@@ -108,6 +112,8 @@ The dashboard requires these records to exist in the database:
 - `PlatformLedger` (key: `default`) — created by `node seed-platform-data.js`
 
 If these are missing, the dashboard renders with zero stats (no crash). Run `node seed-platform-data.js` after any fresh migration.
+
+**Last Updated:** July 2026 (admin inspection — all `confirm()`/`alert()`/`prompt()` calls replaced with inline UI throughout)
 
 ---
 

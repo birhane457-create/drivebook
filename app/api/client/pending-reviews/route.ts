@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getDisplayName } from '@/lib/utils/account';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ export async function GET() {
         reviewGivenAt: null,
       },
       include: {
-        instructor: { select: { name: true } },
+        instructor: { select: { name: true, businessName: true, accountType: true, subscriptionTier: true } },
       },
       orderBy: { startTime: 'desc' },
       take: 20,
@@ -43,7 +44,7 @@ export async function GET() {
     const pending = bookings.map(b => ({
       id: b.id,
       bookingId: b.id,
-      instructorName: b.instructor.name,
+      instructorName: getDisplayName(b.instructor),
       // Guard null startTime — page renders new Date(bookingDate) so empty string → Invalid Date
       bookingDate: b.startTime ? b.startTime.toISOString() : null,
     }));

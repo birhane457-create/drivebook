@@ -1,136 +1,200 @@
-// Job to generate booking reminder notifications
-// Runs every 15 min via notifications cron: sends reminders 24h before and 1h before lessons
+// Job to generate booking reminder notifications.
+// Runs every 15 min via the notifications cron and sends reminders for
+// bookings that fall within rolling windows around their actual start time.
 
 import { prisma } from '@/lib/prisma';
-import { createNotification } from '@/lib/services/notificationService';
+import { createBatchNotifications } from '@/lib/services/notificationService';
 
 interface BookingWithRelations {
   id: string;
-  startTime: Date;
+  startTime: Date | null;
+  timezone?: string | null;
   instructor: {
     name: string;
+    timezone?: string | null;
   };
   client: {
     userId: string | null;
   } | null;
 }
 
+const BOOKING_REMINDER_TYPE = 'BOOKING_REMINDER';
+const REMINDER_STAGES = [
+  {
+    key: 'DAY_BEFORE',
+    title: 'Lesson Reminder',
+    channels: ['APP'],
+    windowStartMs: 23 * 60 * 60 * 1000 + 45 * 60 * 1000,
+    windowEndMs: 24 * 60 * 60 * 1000 + 15 * 60 * 1000,
+  },
+  {
+    key: 'ONE_HOUR',
+    title: '⏰ Lesson Starting Soon',
+    channels: ['APP', 'SMS'],
+    windowStartMs: 45 * 60 * 1000,
+    windowEndMs: 75 * 60 * 1000,
+  },
+] as const;
+
+function resolveReminderTimezone(booking: BookingWithRelations) {
+  // Fallback chain: booking TZ → instructor TZ → env var → Perth (never UTC — platform is WA-based)
+  return booking.timezone || booking.instructor?.timezone || process.env.DEFAULT_TIMEZONE || 'Australia/Perth';
+}
+
+function formatReminderDateTime(date: Date, timezone: string) {
+  try {
+    return new Intl.DateTimeFormat('en-AU', {
+      timeZone: timezone,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  } catch {
+    // Invalid timezone string passed — fall back to Perth, never UTC
+    return new Intl.DateTimeFormat('en-AU', {
+      timeZone: 'Australia/Perth',
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+}
+
+function buildReminderMessage(booking: BookingWithRelations, stageKey: string, startTime: Date, timezone: string) {
+  const formattedStart = formatReminderDateTime(startTime, timezone);
+
+  if (stageKey === 'ONE_HOUR') {
+    return `Your lesson with ${booking.instructor.name} starts at ${formattedStart}.`;
+  }
+
+  return `Your lesson with ${booking.instructor.name} is scheduled for ${formattedStart}.`;
+}
+
 export async function generateBookingReminders() {
   try {
     console.log('⏰ Starting booking reminders job...');
 
-    // Get tomorrow at 9:00 AM (Sydney time)
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStart = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 9, 0, 0, 0);
-    const tomorrowEnd = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 9, 59, 59, 999);
+    const earliestStart = new Date(now.getTime() + 45 * 60 * 1000);
+    const latestStart = new Date(now.getTime() + 24 * 60 * 60 * 1000 + 15 * 60 * 1000);
 
-    // Get bookings starting tomorrow at 9:00 AM
-    const bookingsTomorrow = await prisma.booking.findMany({
+    const bookings = (await prisma.booking.findMany({
       where: {
         startTime: {
-          gte: tomorrowStart,
-          lte: tomorrowEnd,
-        },
-        status: 'CONFIRMED',
-        feedbackGivenAt: null, // Not yet completed
-      },
-      include: {
-        instructor: { select: { name: true } },
-        client: { select: { userId: true } },
-      },
-    }) as BookingWithRelations[];
-
-    // Generate "Your lesson starts tomorrow" notifications
-    for (const booking of bookingsTomorrow) {
-      if (!booking.client?.userId) continue;
-
-      // Check if notification already exists (within last 23 hours)
-      const existingNotif = await prisma.notification.findFirst({
-        where: {
-          userId: booking.client.userId,
-          type: 'BOOKING_REMINDER',
-          metadata: {
-            path: ['relatedEntityId'],
-            equals: booking.id,
-          },
-          createdAt: {
-            gte: new Date(Date.now() - 23 * 60 * 60 * 1000),
-          },
-        },
-      });
-
-      if (!existingNotif) {
-        await createNotification({
-          userId: booking.client.userId,
-          type: 'BOOKING_REMINDER',
-          title: 'Lesson Reminder',
-          message: `Your lesson starts tomorrow at 9:00 AM with ${booking.instructor.name}`,
-          relatedEntityId: booking.id,
-          relatedEntityType: 'BOOKING',
-          actionUrl: '/client-dashboard/bookings',
-          actionButtonLabel: 'View Lesson',
-        });
-        console.log(`✅ Created "tomorrow" reminder for booking ${booking.id}`);
-      }
-    }
-
-    // Get bookings starting in 1 hour
-    const inOneHour = new Date(now.getTime() + 60 * 60 * 1000);
-    const oneHourStart = new Date(inOneHour.getFullYear(), inOneHour.getMonth(), inOneHour.getDate(), inOneHour.getHours(), 0, 0, 0);
-    const oneHourEnd = new Date(inOneHour.getFullYear(), inOneHour.getMonth(), inOneHour.getDate(), inOneHour.getHours(), 59, 59, 999);
-
-    const bookingsInOneHour = await prisma.booking.findMany({
-      where: {
-        startTime: {
-          gte: oneHourStart,
-          lte: oneHourEnd,
+          gte: earliestStart,
+          lte: latestStart,
         },
         status: 'CONFIRMED',
         feedbackGivenAt: null,
       },
-      include: {
-        instructor: { select: { name: true } },
+      select: {
+        id: true,
+        startTime: true,
+        timezone: true,
+        instructor: { select: { name: true, timezone: true } },
         client: { select: { userId: true } },
-      },
-    }) as BookingWithRelations[];
+      } as any,
+    })) as unknown as BookingWithRelations[];
 
-    // Generate "Your lesson starts in 1 hour" notifications
-    for (const booking of bookingsInOneHour) {
-      if (!booking.client?.userId) continue;
+    if (bookings.length === 0) {
+      console.log('✅ No relevant bookings found for reminder processing');
+      return { success: true };
+    }
 
-      // Check if notification already exists (within last 30 minutes)
-      const existingNotif = await prisma.notification.findFirst({
-        where: {
-          userId: booking.client.userId,
-          type: 'BOOKING_REMINDER',
-          metadata: {
-            path: ['relatedEntityId'],
-            equals: booking.id,
-          },
-          createdAt: {
-            gte: new Date(Date.now() - 30 * 60 * 1000),
-          },
+    const bookingIds = bookings.map((booking) => booking.id);
+    const reminderStages = REMINDER_STAGES.map((stage) => stage.key);
+    const cutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const recentReminderNotifications = await prisma.notification.findMany({
+      where: {
+        type: BOOKING_REMINDER_TYPE,
+        createdAt: {
+          gte: cutoff,
         },
-      });
+        relatedEntityId: {
+          in: bookingIds,
+        },
+        reminderStage: {
+          in: reminderStages,
+        },
+      } as any,
+      select: {
+        relatedEntityId: true,
+        reminderStage: true,
+      } as any,
+    });
 
-      if (!existingNotif) {
-        await createNotification({
+    const sentReminderKeys = new Set<string>();
+    for (const reminder of recentReminderNotifications) {
+      if (typeof reminder.relatedEntityId === 'string' && typeof reminder.reminderStage === 'string') {
+        sentReminderKeys.add(`${reminder.relatedEntityId}:${reminder.reminderStage}`);
+      }
+    }
+
+    const notificationsToCreate = [] as Array<{
+      userId: string;
+      type: string;
+      title: string;
+      message: string;
+      relatedEntityId: string;
+      relatedEntityType: string;
+      actionUrl: string;
+      actionButtonLabel: string;
+      metadata: Record<string, string>;
+    }>;
+
+    for (const booking of bookings) {
+      if (!booking.client?.userId || !booking.startTime) continue;
+
+      const timezone = resolveReminderTimezone(booking);
+      const msUntilStart = booking.startTime.getTime() - now.getTime();
+      if (msUntilStart <= 0) continue;
+
+      for (const stage of REMINDER_STAGES) {
+        if (msUntilStart < stage.windowStartMs || msUntilStart > stage.windowEndMs) {
+          continue;
+        }
+
+        const reminderKey = `${booking.id}:${stage.key}`;
+        if (sentReminderKeys.has(reminderKey)) {
+          continue;
+        }
+
+        notificationsToCreate.push({
           userId: booking.client.userId,
-          type: 'BOOKING_REMINDER',
-          title: '⏰ Lesson Starting Soon',
-          message: `Your lesson starts in 1 hour with ${booking.instructor.name}`,
+          type: BOOKING_REMINDER_TYPE,
+          title: stage.title,
+          message: buildReminderMessage(booking, stage.key, booking.startTime, timezone),
           relatedEntityId: booking.id,
           relatedEntityType: 'BOOKING',
           actionUrl: '/client-dashboard/bookings',
           actionButtonLabel: 'View Lesson',
-        });
-        console.log(`✅ Created "1 hour" reminder for booking ${booking.id}`);
+          reminderStage: stage.key,
+          channel: stage.channels[0],
+          metadata: {
+            reminderStage: stage.key,
+            reminderChannels: stage.channels.join(','),
+            bookingTimezone: timezone,
+            bookingStartTime: booking.startTime.toISOString(),
+          },
+        } as any);
+
+        sentReminderKeys.add(reminderKey);
+        console.log(`✅ Prepared ${stage.key} reminder for booking ${booking.id}`);
       }
     }
 
-    console.log('✅ Booking reminders job completed');
+    const startedAt = Date.now();
+    if (notificationsToCreate.length > 0) {
+      const result = await createBatchNotifications(notificationsToCreate);
+      console.log(`📬 Batch inserted ${result.count} reminder notifications`);
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    console.log(`✅ Booking reminders job completed | Bookings scanned: ${bookings.length} | Reminders prepared: ${notificationsToCreate.length} | Duplicates skipped: ${Math.max(0, notificationsToCreate.length - (notificationsToCreate.length))} | Elapsed: ${elapsedMs}ms`);
     return { success: true };
   } catch (error) {
     console.error('❌ Error in booking reminders job:', error);

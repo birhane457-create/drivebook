@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { TrendingUp, Star, BookOpen, AlertCircle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { TrendingUp, Star, BookOpen, AlertCircle, ChevronDown, ChevronUp, Loader2, Target, Award } from 'lucide-react';
 import Link from 'next/link';
 
 interface FeedbackItem {
@@ -9,9 +9,20 @@ interface FeedbackItem {
   date: string;
   instructor: string;
   performanceScore: number | null;
+  assessmentType: 'COACHING' | 'MOCK' | 'OFFICIAL';
+  lessonTopics: string[];
+  passed: boolean | null;
   feedback: string[];
   strengths: string[];
   notes: string | null;
+}
+
+interface ProgressChartItem {
+  lesson: number;
+  date: string;
+  score: number | null;
+  assessmentType: string;
+  passed: boolean | null;
 }
 
 interface PerformanceData {
@@ -22,7 +33,13 @@ interface PerformanceData {
   recentFeedback: FeedbackItem[];
   strengths: string[];
   focusAreas: string[];
-  progressChart: Array<{ lesson: number; date: string; score: number | null }>;
+  progressChart: ProgressChartItem[];
+}
+
+const ASSESSMENT_BADGE: Record<string, { label: string; icon: string; bg: string; text: string }> = {
+  COACHING: { label: 'Coaching Lesson',   icon: '🟢', bg: 'bg-emerald-900/40', text: 'text-emerald-300' },
+  MOCK:     { label: 'Mock Assessment',   icon: '🎯', bg: 'bg-blue-900/40',    text: 'text-blue-300' },
+  // OFFICIAL and future types render as MOCK styling until explicitly supported
 }
 
 export default function ClientProgressPage() {
@@ -49,38 +66,19 @@ export default function ClientProgressPage() {
     );
   }
 
-  // If no data or error
   if (!data || !data.success) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
         <div className="max-w-4xl mx-auto px-4 py-8">
-          <h1 className="text-3xl font-bold text-slate-100 mb-2">Your Progress</h1>
-          <p className="text-slate-400 mb-8">Track how you're progressing based on instructor feedback</p>
-
-          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-12 text-center">
+          <h1 className="text-3xl font-bold mb-2">Your Progress</h1>
+          <p className="text-slate-400 mb-8">Track your learning journey based on instructor feedback</p>
+          <div className="bg-slate-900/60 rounded-3xl border border-white/10 p-12 text-center">
             <TrendingUp className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-100 mb-2">No feedback data yet</h3>
-            <p className="text-slate-400 text-sm mb-6">
-              Complete lessons and have your instructor provide feedback. Your progress will appear here.
-            </p>
-            <Link
-              href="/client-dashboard/bookings"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 border border-slate-700 transition"
-            >
-              <BookOpen className="h-4 w-4" />
-              View Your Bookings
+            <h3 className="text-lg font-semibold mb-2">No feedback yet</h3>
+            <p className="text-slate-400 text-sm mb-6">Complete lessons and your instructor will add coaching notes here.</p>
+            <Link href="/client-dashboard/bookings" className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-800 rounded-lg text-sm font-semibold hover:bg-slate-700 border border-slate-700 transition">
+              <BookOpen className="h-4 w-4" /> View Bookings
             </Link>
-          </div>
-
-          <div className="mt-6 bg-slate-900/60 backdrop-blur border border-white/10 rounded-3xl p-5 shadow-sm">
-            <h3 className="font-semibold text-slate-100 mb-2">How lesson feedback works</h3>
-            <ul className="text-sm text-slate-400 space-y-1.5">
-              <li>• After each lesson, your instructor provides feedback on your performance</li>
-              <li>• They rate your overall performance and note areas of strength</li>
-              <li>• Areas to focus on are highlighted to help you improve</li>
-              <li>• Your progress is tracked over time to show improvement trends</li>
-              <li>• You can view detailed feedback and instructor notes for each lesson</li>
-            </ul>
           </div>
         </div>
       </div>
@@ -88,110 +86,99 @@ export default function ClientProgressPage() {
   }
 
   const feedbackRate = data.totalLessons > 0
-    ? Math.round((data.lessonsWithFeedback / data.totalLessons) * 100)
-    : 0;
+    ? Math.round((data.lessonsWithFeedback / data.totalLessons) * 100) : 0;
+
+  const mockCount = data.recentFeedback.filter(f => f.assessmentType === 'MOCK').length;
+  const latestMock = data.recentFeedback.find(f => f.assessmentType === 'MOCK');
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-slate-100 mb-2">Your Progress</h1>
-        <p className="text-slate-400 mb-8">Feedback from your instructors on your lessons</p>
+        <h1 className="text-3xl font-bold mb-2">Your Progress</h1>
+        <p className="text-slate-400 mb-6">Your learning journey with instructor coaching notes and assessments</p>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* Stats row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
           {[
-            { label: 'Total Lessons', value: data.totalLessons, icon: <BookOpen className="h-5 w-5 text-blue-400" /> },
-            { label: 'With Feedback', value: data.lessonsWithFeedback, icon: <Star className="h-5 w-5 text-yellow-400" /> },
-            { label: 'Feedback Rate', value: `${feedbackRate}%`, icon: <TrendingUp className="h-5 w-5 text-green-400" /> },
-            { label: 'Avg Score', value: data.averagePerformance ? `${data.averagePerformance}%` : '—', icon: <AlertCircle className="h-5 w-5 text-purple-400" /> },
+            { label: 'Total Lessons', value: data.totalLessons, icon: <BookOpen className="h-4 w-4 text-blue-400" /> },
+            { label: 'With Feedback', value: data.lessonsWithFeedback, icon: <Star className="h-4 w-4 text-yellow-400" /> },
+            { label: 'Mock Tests', value: mockCount, icon: <Target className="h-4 w-4 text-blue-400" /> },
+            {
+              label: data.averagePerformance !== null ? 'Mock Avg Score' : 'Avg Score',
+              value: data.averagePerformance !== null ? `${data.averagePerformance}%` : '—',
+              icon: <TrendingUp className="h-4 w-4 text-purple-400" />
+            },
           ].map(({ label, value, icon }) => (
-            <div key={label} className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-4 hover:bg-slate-900/80 transition">
-              <div className="flex items-center gap-2 mb-1">{icon}<p className="text-xs text-slate-400">{label}</p></div>
-              <p className="text-2xl font-bold text-slate-100">{value}</p>
+            <div key={label} className="bg-slate-900/60 rounded-2xl border border-white/10 p-4">
+              <div className="flex items-center gap-1.5 mb-1">{icon}<p className="text-xs text-slate-400">{label}</p></div>
+              <p className="text-2xl font-bold">{value}</p>
             </div>
           ))}
         </div>
 
-        {/* Strengths & Focus Areas */}
-        {(data.strengths.length > 0 || data.focusAreas.length > 0) && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {/* Strengths */}
-            {data.strengths.length > 0 && (
-              <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-6">
-                <h3 className="font-semibold text-emerald-300 mb-4 flex items-center gap-2">
-                  <Star className="h-5 w-5" />
-                  Your Strengths
-                </h3>
-                <div className="space-y-2">
-                  {data.strengths.map((strength, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 bg-green-900/20 border border-green-700/30 rounded-lg">
-                      <span className="text-green-400">✓</span>
-                      <span className="text-slate-300">{strength}</span>
-                    </div>
-                  ))}
-                </div>
+        {/* Latest mock result — highlighted card */}
+        {latestMock && (
+          <div className={`mb-6 rounded-2xl border p-5 ${
+            latestMock.passed === true
+              ? 'border-green-700/60 bg-green-950/30'
+              : latestMock.passed === false
+              ? 'border-amber-700/60 bg-amber-950/20'
+              : 'border-blue-700/60 bg-blue-950/20'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Latest Mock Assessment</p>
+                <p className="text-sm text-slate-300">{new Date(latestMock.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} · {latestMock.instructor}</p>
               </div>
-            )}
-
-            {/* Focus Areas */}
-            {data.focusAreas.length > 0 && (
-              <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-6">
-                <h3 className="font-semibold text-amber-300 mb-4 flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Areas to Focus
-                </h3>
-                <div className="space-y-2">
-                  {data.focusAreas.map((area, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 bg-amber-900/20 border border-amber-700/30 rounded-lg">
-                      <span className="text-amber-400">→</span>
-                      <span className="text-slate-300">{area}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="text-right">
+                {latestMock.performanceScore !== null && (
+                  <p className={`text-3xl font-bold ${
+                    latestMock.performanceScore >= 80 ? 'text-green-400' :
+                    latestMock.performanceScore >= 65 ? 'text-yellow-400' : 'text-red-400'
+                  }`}>{latestMock.performanceScore}%</p>
+                )}
+                {latestMock.passed !== null && (
+                  <p className={`text-sm font-bold mt-0.5 ${latestMock.passed ? 'text-green-400' : 'text-amber-400'}`}>
+                    {latestMock.passed ? '✓ Ready for test' : 'Keep practising'}
+                  </p>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
-        {/* Progress Chart */}
+        {/* Mock score chart — only when there are scored assessments */}
         {data.progressChart.length > 0 && (
-          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-6 mb-8">
-            <h3 className="font-semibold text-slate-100 mb-4">Performance Trend (Last 10 Lessons)</h3>
-            <div className="space-y-3">
-              {data.progressChart.map((item) => (
-                <div key={item.lesson} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1">
-                    <span className="text-xs font-semibold text-slate-500 w-12">Lesson {item.lesson}</span>
-                    <span className="text-xs text-slate-400">{item.date}</span>
-                  </div>
+          <div className="bg-slate-900/60 rounded-3xl border border-white/10 p-5 mb-8">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Award className="h-4 w-4 text-blue-400" />
+              Assessment History
+            </h3>
+            <div className="space-y-2.5">
+              {data.progressChart.map(item => (
+                <div key={item.lesson} className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500 w-10 flex-shrink-0">{item.date}</span>
                   {item.score !== null ? (
                     <>
-                      <div className="flex-1 max-w-xs mx-4">
+                      <div className="flex-1 max-w-xs">
                         <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
                           <div
-                            className={`h-full transition-all ${
-                              item.score >= 85
-                                ? 'bg-green-500'
-                                : item.score >= 70
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }`}
-                            style={{ width: `${Math.min(item.score, 100)}%` }}
+                            className={`h-full transition-all ${item.score >= 80 ? 'bg-green-500' : item.score >= 65 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                            style={{ width: `${item.score}%` }}
                           />
                         </div>
                       </div>
                       <span className={`text-sm font-bold w-12 text-right ${
-                        item.score >= 85
-                          ? 'text-green-400'
-                          : item.score >= 70
-                          ? 'text-yellow-400'
-                          : 'text-red-400'
-                      }`}>
-                        {item.score}%
-                      </span>
+                        item.score >= 80 ? 'text-green-400' : item.score >= 65 ? 'text-yellow-400' : 'text-red-400'
+                      }`}>{item.score}%</span>
+                      {item.passed !== null && (
+                        <span className={`text-xs ${item.passed ? 'text-green-500' : 'text-amber-500'}`}>
+                          {item.passed ? '✓' : '✗'}
+                        </span>
+                      )}
                     </>
                   ) : (
-                    <span className="text-sm text-slate-500">No score</span>
+                    <span className="text-sm text-slate-500">—</span>
                   )}
                 </div>
               ))}
@@ -199,94 +186,134 @@ export default function ClientProgressPage() {
           </div>
         )}
 
-        {/* Recent Feedback */}
-        {data.recentFeedback.length > 0 && (
-          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/10">
-              <h2 className="font-semibold text-slate-100">Recent Feedback</h2>
-            </div>
-            <div className="divide-y divide-slate-700">
-              {data.recentFeedback.map(fb => {
-                const isExpanded = expandedId === fb.id;
-                return (
-                  <div key={fb.id}>
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : fb.id)}
-                      className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-800/50 transition text-left"
-                    >
-                      <div className="flex-1">
-                        <p className="font-medium text-slate-100">{fb.instructor}</p>
+        {/* Strengths & Focus areas */}
+        {(data.strengths.length > 0 || data.focusAreas.length > 0) && (
+          <div className="grid sm:grid-cols-2 gap-4 mb-8">
+            {data.strengths.length > 0 && (
+              <div className="bg-slate-900/60 rounded-3xl border border-white/10 p-5">
+                <h3 className="font-semibold text-emerald-300 mb-3 flex items-center gap-2">
+                  <Star className="h-4 w-4" /> Your Strengths
+                </h3>
+                <div className="space-y-1.5">
+                  {data.strengths.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-green-900/20 border border-green-700/30 rounded-lg text-sm text-slate-300">
+                      <span className="text-green-400">✓</span>{s}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {data.focusAreas.length > 0 && (
+              <div className="bg-slate-900/60 rounded-3xl border border-white/10 p-5">
+                <h3 className="font-semibold text-amber-300 mb-3 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" /> Areas to Focus
+                </h3>
+                <div className="space-y-1.5">
+                  {data.focusAreas.map((a, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-amber-900/20 border border-amber-700/30 rounded-lg text-sm text-slate-300">
+                      <span className="text-amber-400">→</span>{a}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Lesson timeline ── */}
+        <div>
+          <h3 className="font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-slate-400" />
+            Lesson History
+          </h3>
+          <div className="space-y-3">
+            {data.recentFeedback.map(item => {
+              const badge = ASSESSMENT_BADGE[item.assessmentType] ?? ASSESSMENT_BADGE.COACHING
+              const isExpanded = expandedId === item.id
+              const hasDetail = item.feedback.length > 0 || item.notes || item.lessonTopics.length > 0
+
+              return (
+                <div key={item.id} className="bg-slate-900/60 rounded-2xl border border-white/10 overflow-hidden">
+                  <button
+                    onClick={() => hasDetail ? setExpandedId(isExpanded ? null : item.id) : undefined}
+                    className={`w-full flex items-start gap-3 p-4 text-left ${hasDetail ? 'hover:bg-slate-800/40 transition-colors' : ''}`}
+                  >
+                    {/* Date column */}
+                    <div className="flex-shrink-0 w-14 text-center">
+                      <p className="text-xs text-slate-500 leading-tight">
+                        {new Date(item.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+                          {badge.icon} {badge.label}
+                        </span>
+                        {item.assessmentType !== 'COACHING' && item.performanceScore !== null && (
+                          <span className={`text-sm font-bold ${
+                            item.performanceScore >= 80 ? 'text-green-400' :
+                            item.performanceScore >= 65 ? 'text-yellow-400' : 'text-red-400'
+                          }`}>{item.performanceScore}%</span>
+                        )}
+                        {item.passed !== null && (
+                          <span className={`text-xs font-semibold ${item.passed ? 'text-green-400' : 'text-amber-400'}`}>
+                            {item.passed ? '✓ Ready' : '✗ Not yet'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">{item.instructor}</p>
+                      {item.lessonTopics.length > 0 && (
                         <p className="text-xs text-slate-400 mt-0.5">
-                          {new Date(fb.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          Topics: {item.lessonTopics.join(', ')}
                         </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {fb.performanceScore !== null && (
-                          <span className={`text-sm font-bold px-2.5 py-1 rounded-full ${
-                            fb.performanceScore >= 85 ? 'bg-green-900/30 text-green-300 border border-green-700/50' :
-                            fb.performanceScore >= 70 ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50' :
-                            'bg-red-900/30 text-red-300 border border-red-700/50'
-                          }`}>{fb.performanceScore}%</span>
-                        )}
-                        {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-                      </div>
-                    </button>
-                    {isExpanded && (
-                      <div className="px-6 pb-4 bg-slate-800/30 space-y-3 text-sm border-t border-white/5">
-                        {/* Strengths */}
-                        {fb.strengths.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-emerald-400 mb-2">Your Strengths:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {fb.strengths.map((s, i) => (
-                                <span key={i} className="px-2 py-1 bg-green-900/20 text-green-300 text-xs rounded-full border border-green-700/30">
-                                  {s}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                      )}
+                    </div>
 
-                        {/* Focus Areas */}
-                        {fb.feedback.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-amber-400 mb-2">Areas to Focus:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {fb.feedback.map((f, i) => (
-                                <span key={i} className="px-2 py-1 bg-amber-900/20 text-amber-300 text-xs rounded-full border border-amber-700/30">
-                                  {f}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Instructor Notes */}
-                        {fb.notes && (
-                          <div>
-                            <p className="text-xs font-semibold text-blue-400 mb-2">Instructor Notes:</p>
-                            <p className="text-slate-300 bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 text-sm">
-                              💬 {fb.notes}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                    {hasDetail && (
+                      isExpanded
+                        ? <ChevronUp className="h-4 w-4 text-slate-500 flex-shrink-0 mt-1" />
+                        : <ChevronDown className="h-4 w-4 text-slate-500 flex-shrink-0 mt-1" />
                     )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                  </button>
 
-        {/* Empty State for Recent Feedback */}
-        {data.lessonsWithFeedback === 0 && (
-          <div className="text-center py-12">
-            <BookOpen className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-400">No feedback yet</p>
-            <p className="text-sm text-slate-500 mt-2">Complete a lesson to receive feedback from your instructor</p>
+                  {isExpanded && hasDetail && (
+                    <div className="px-4 pb-4 space-y-2 border-t border-white/5 pt-3">
+                      {item.feedback.length > 0 && (
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">Areas to work on:</p>
+                          <div className="space-y-1">
+                            {item.feedback.map((f, i) => (
+                              <div key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
+                                <span className="text-amber-400 mt-0.5">→</span>{f}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {item.notes && (
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">Instructor notes:</p>
+                          <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{item.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
-        )}
+        </div>
+
+        {/* Footer note */}
+        <div className="mt-8 p-4 bg-slate-900/40 border border-white/5 rounded-2xl">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            <span className="font-semibold text-slate-400">🟢 Coaching lessons</span> show topics covered and coaching notes — no score, just progress.
+            {' '}<span className="font-semibold text-slate-400">🎯 Mock assessments</span> show a formal score like the real PDA test.
+            {' '}Scores are a guide only — always follow your instructor's advice on test readiness.
+          </p>
+        </div>
       </div>
     </div>
   );

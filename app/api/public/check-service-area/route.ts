@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { geocodeAddress, calculateDistance } from '@/lib/utils/distance';
+import { resolveLocationStatic } from '@/lib/services/resolve-location';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,8 +33,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Geocode the pickup address using Nominatim (free, consistent with rest of app)
-    const pickupCoords = await geocodeAddress(pickupAddress);
+    // Resolve pickup address — static lookup first (postcode/suburb), fall back to Nominatim
+    const staticPickup = resolveLocationStatic(pickupAddress);
+    const pickupCoords = staticPickup
+      ? { lat: staticPickup.lat, lng: staticPickup.lng }
+      : await geocodeAddress(pickupAddress);
     if (!pickupCoords) {
       return NextResponse.json({ result: 'unknown', reason: 'geocode_failed' });
     }

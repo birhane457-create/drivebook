@@ -1,8 +1,63 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+
+// The Transaction model is accessed via (prisma as any).transaction because it may not
+// be present in older generated Prisma client types. Once types are regenerated after
+// the next migration, replace (prisma as any).transaction with prisma.transaction.
+
+/** Aggregate result shape returned by Prisma for transaction queries */
+interface TxAggregate {
+  _sum: { instructorPayout: number | null; amount?: number | null; platformFee?: number | null };
+  _count: number;
+}
+
+/** Shape of a scheduled platform booking selected from the DB */
+interface ScheduledBooking {
+  id: string;
+  startTime: Date;
+  endTime: Date | null;
+  duration: number | null;
+  price: number;
+  platformFee: number | null;
+  instructorPayout: number | null;
+  client: { name: string | null } | null;
+  isPackageBooking: boolean;
+  parentBookingId: string | null;
+}
+
+/** Shape of a scheduled offline booking selected from the DB */
+interface ScheduledOfflineBooking {
+  id: string;
+  startTime: Date;
+  endTime: Date | null;
+  duration: number | null;
+  offlineAmountPaid: number | null;
+  clientName: string | null;
+  offlinePaymentMethod: string | null;
+}
+
+/** Shape of a transaction row returned by findMany */
+interface TxRow {
+  id: string;
+  amount: number;
+  platformFee: number;
+  instructorPayout: number;
+  status: string;
+  description?: string;
+  createdAt: Date;
+  booking: {
+    id: string;
+    startTime: Date;
+    endTime: Date | null;
+    isPackageBooking: boolean;
+    packageHours: number | null;
+    parentBookingId: string | null;
+    source: string | null;
+    client: { name: string | null } | null;
+  } | null;
+}
 
 
 export const dynamic = 'force-dynamic';
@@ -45,8 +100,7 @@ export async function GET(req: NextRequest) {
       scheduledBookings,
       scheduledOfflineBookings,
       recentTransactions
-    ] = await Promise.all([
-      // Completed earnings (all)
+    ] = (await Promise.all([      // Completed earnings (all)
       (prisma as any).transaction.aggregate({
         where: {
           instructorId,
@@ -213,7 +267,16 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' },
         take: 100
       })
-    ]);
+    ])) as unknown as [
+      TxAggregate, TxAggregate, // completedStats, completedPlatformStats
+      { _sum: { offlineAmountPaid: number | null }; _count: number }, // completedOfflineStats
+      TxAggregate, TxAggregate, TxAggregate, // pendingStats, thisMonthStats, thisMonthPlatformStats
+      { _sum: { offlineAmountPaid: number | null }; _count: number }, // thisMonthOfflineStats
+      TxAggregate, // lastMonthStats
+      ScheduledBooking[],
+      ScheduledOfflineBooking[],
+      TxRow[]
+    ];
 
     // Filter out package purchase transactions (parent bookings)
     const lessonTransactions = recentTransactions.filter((t: any) => {
@@ -304,7 +367,7 @@ export async function GET(req: NextRequest) {
           startTime: booking.startTime,
           endTime: booking.endTime,
           duration: booking.duration,
-          clientName: booking.client?.name ?? (booking as any).clientName ?? 'Guest',
+          clientName: booking.client?.name ?? 'Guest',
           instructorPayout: payout || 0,
           price: booking.price,
           isFromPackage: booking.isPackageBooking && booking.parentBookingId !== null

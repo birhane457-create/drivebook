@@ -54,6 +54,7 @@ export default function AdminDisputesPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -84,7 +85,7 @@ export default function AdminDisputesPage() {
       if (!res.ok) throw new Error('Failed to release hold');
       await load();
     } catch (e: any) {
-      alert(e.message);
+      setActionError(e.message);
     } finally {
       setActionLoading(null);
     }
@@ -110,8 +111,14 @@ export default function AdminDisputesPage() {
         )}
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 mb-6">
+      {actionError && (
+        <div role="alert" className="mb-4 rounded-lg bg-red-900/20 border border-red-700/50 px-4 py-3 text-sm text-red-300 flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="ml-3 text-red-400 hover:text-white">✕</button>
+        </div>
+      )}
+
+      {/* Filter tabs */}      <div className="flex gap-2 mb-6">
         {(['open', 'won', 'lost', 'all'] as const).map((f) => (
           <button
             key={f}

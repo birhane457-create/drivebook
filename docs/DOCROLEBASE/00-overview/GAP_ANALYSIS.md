@@ -1,7 +1,7 @@
 # Open Items & Known Gaps
 
 **Purpose:** What still needs to be done. This is a forward-looking list only.  
-**Last updated:** May 2026 (post deep pre-launch inspection)  
+**Last updated:** July 2026 (post production-readiness audit)  
 **For system documentation, read the feature docs in `DOCROLEBASE/`.**
 
 ---
@@ -19,9 +19,7 @@
 
 ### OPEN-04: Rate Limiting — Redis Not Configured
 
-**Status:** In-memory fallback only. Unsafe in serverless (resets on cold start). Rate limits are effectively disabled.  
-**Action:** Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Vercel env vars.  
-**Risk:** Without Redis, brute-force and booking spam attacks are not blocked in production.
+**Status:** ✅ RESOLVED — `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` set (TODO.md item #5 marked done).
 
 ---
 
@@ -116,7 +114,7 @@
 
 ---
 
-## Resolved — Previously Open (closed May 2026)
+## Resolved — Previously Open (closed May–July 2026)
 
 | Item | Resolution |
 |------|-----------|
@@ -137,6 +135,21 @@
 | Billing Portal return didn't sync tier changes | Fixed — `POST /api/instructor/subscription/sync` added |
 | Instructor expense tracking | Added — `/dashboard/expenses` + DB model |
 | Scheduled rate changes | Added — `PlatformRateChange` model + admin UI + cron |
+| OPEN-04: Rate limiting Redis not configured | ✅ Fixed — Upstash env vars set July 2026 |
+| Booking flow — slot DELETE sent params in body (server reads query params) | ✅ Fixed July 2026 — `BookingDetailsForm` now sends query params |
+| Booking flow — `confirm()` + `alert()` throughout booking funnel | ✅ Fixed July 2026 — inline UI throughout (19 issues resolved) |
+| Booking flow — password saved to localStorage on every keystroke | ✅ Fixed July 2026 — excluded from `saveToLocalStorage` |
+| Booking flow — 3DS `requires_action` not handled | ✅ Fixed July 2026 — `stripe.handleNextAction()` called |
+| Booking flow — timezone bug in `validate-slots` + `check-and-reserve` | ✅ Fixed July 2026 — dates now parsed as `+08:00` Perth offset |
+| Booking flow — `COMPLETED` bookings blocked future slots in validation | ✅ Fixed July 2026 — removed from status filter |
+| Booking flow — `customer@example.com` hardcoded in payment intent | ✅ Fixed July 2026 — replaced with `null` |
+| Booking flow — availability fallback fabricated 9am–5pm slots on API error | ✅ Fixed July 2026 — shows error + retry instead |
+| Booking flow — duration race condition in slot fetch | ✅ Fixed July 2026 — `useEffect` deps include `selectedDuration` |
+| Instructor dashboard — `@ts-nocheck` on earnings route | ✅ Fixed July 2026 — proper types added |
+| Instructor dashboard — `alert()` in `PlatformEarningsSection` | ✅ Fixed July 2026 — toast pattern |
+| Instructor dashboard — Schedule missing from mobile bottom nav | ✅ Fixed July 2026 |
+| Student dashboard — `confirm()`/`alert()` on cancel and profile save | ✅ Fixed July 2026 — inline confirm panels + toast |
+| Student dashboard — mobile nav Profile tab linked to wrong route | ✅ Fixed July 2026 — `/client-dashboard/profile` |
 
 ---
 
@@ -158,6 +171,6 @@
 
 | Category | Count |
 |----------|-------|
-| Open — deployment/config (must fix before go-live) | 4 (OPEN-02, OPEN-04, OPEN-05, OPEN-11) + OPEN-16 |
+| Open — deployment/config (must fix before go-live) | 3 (OPEN-02, OPEN-05, OPEN-11) + OPEN-16 |
 | Open — feature gap (acceptable for launch) | 6 (OPEN-10, OPEN-12, OPEN-13, OPEN-14, OPEN-15, OPEN-17, OPEN-18) |
 | Deferred — future tier | 1 (OPEN-01) |

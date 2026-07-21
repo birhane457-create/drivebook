@@ -26,6 +26,8 @@ export async function GET(req: NextRequest) {
         domainVerified: true,
         domainVerifiedAt: true,
         subscriptionTier: true,
+        accountType: true,
+        businessName: true,
       },
     });
 
@@ -70,7 +72,26 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { brandLogo, brandColorPrimary, brandColorSecondary, showBrandingOnBookingPage, customSlug, customDomain } = body;
+    const { brandLogo, brandColorPrimary, brandColorSecondary, showBrandingOnBookingPage, customSlug, customDomain, businessName } = body;
+
+    // businessName available to ALL tiers — any instructor can set a display/trading name.
+    // Sole instructors use it for nicknames or trading names; schools use it for the school name.
+    // It never replaces instructor.name in legal/payout contexts — display only.
+    let cleanBusinessName: string | null | undefined = undefined;
+    if (businessName !== undefined) {
+      cleanBusinessName = businessName ? businessName.trim().slice(0, 80) || null : null;
+    }
+
+    // BUSINESS tier: school name is required — the business entity cannot be nameless
+    const { validateBusinessName } = await import('@/lib/branding/getDisplayIdentity')
+    const nameValidation = validateBusinessName({
+      subscriptionTier: instructor.subscriptionTier,
+      // Check against the incoming value (if being updated) or the existing DB value
+      businessName: cleanBusinessName !== undefined ? cleanBusinessName : (instructor as any).businessName,
+    })
+    if (!nameValidation.valid) {
+      return NextResponse.json({ error: nameValidation.error }, { status: 400 })
+    }
 
     // Validate slug if provided
     if (customSlug) {
@@ -107,6 +128,7 @@ export async function PUT(req: NextRequest) {
         showBrandingOnBookingPage: showBrandingOnBookingPage === true,
         customSlug: customSlug || null,
         customDomain: customDomain || null,
+        ...(cleanBusinessName !== undefined && { businessName: cleanBusinessName }),
       },
       select: {
         brandLogo: true,
@@ -115,6 +137,7 @@ export async function PUT(req: NextRequest) {
         showBrandingOnBookingPage: true,
         customSlug: true,
         customDomain: true,
+        businessName: true,
       },
     });
 

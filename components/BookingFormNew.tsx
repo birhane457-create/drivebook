@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { Calendar, Clock, User, Mail, Phone, MapPin, DollarSign, AlertCircle, CheckCircle2 } from 'lucide-react'
@@ -27,6 +27,10 @@ interface BookingFormProps {
     status: string
   }
   redirectAfterUpdate?: string // URL to redirect to after successful update
+  /** Pre-fill the date picker (YYYY-MM-DD) — used by Find Next Slot */
+  initialDate?: string
+  /** Pre-fill the time picker (HH:MM 24h) — used by Find Next Slot */
+  initialTime?: string
 }
 
 export default function BookingForm({ 
@@ -35,7 +39,9 @@ export default function BookingForm({
   preselectedClient,
   isInstructorBooking = false,
   existingBooking,
-  redirectAfterUpdate
+  redirectAfterUpdate,
+  initialDate,
+  initialTime,
 }: BookingFormProps) {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -86,8 +92,8 @@ export default function BookingForm({
       address: preselectedClient?.addressText || '',
       dropoffAddress: '',
       sameAsPickup: true,
-      date: '',
-      time: '',
+      date: initialDate || '',
+      time: initialTime || '',
       duration: 60,
       notes: '',
       joinWaitingList: false,
@@ -291,7 +297,7 @@ export default function BookingForm({
               <AlertCircle className="h-7 w-7 text-amber-400" />
             </div>
             <h3 className="text-lg font-bold text-white mb-1">Booking Created — Awaiting Payment</h3>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-300">
               The booking slot is reserved. The client needs to top up their wallet to confirm it.
             </p>
           </div>
@@ -301,7 +307,7 @@ export default function BookingForm({
             <p className="font-semibold text-amber-200">📋 Booking Details</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-300">
               <span className="font-medium">Booking ID:</span>
-              <span className="font-mono text-xs text-slate-400">{bookingId}</span>
+              <span className="font-mono text-xs text-slate-300">{bookingId}</span>
               <span className="font-medium">Date:</span>
               <span>{new Date(formData.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
               <span className="font-medium">Time:</span>
@@ -367,16 +373,16 @@ export default function BookingForm({
           <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-4 mb-4">
             <p className="text-sm font-medium text-sky-200 mb-2">Your Booking ID:</p>
             <p className="text-2xl font-bold text-sky-300 font-mono">{bookingId}</p>
-            <p className="text-xs text-sky-300/70 mt-2">
+            <p className="text-xs text-sky-300/90 mt-2">
               Save this ID to manage your booking
             </p>
           </div>
 
           <div className="space-y-2 text-sm text-left bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
-            <p><span className="font-medium text-slate-300">Date:</span> <span className="text-slate-400">{new Date(formData.date).toLocaleDateString()}</span></p>
-            <p><span className="font-medium text-slate-300">Time:</span> <span className="text-slate-400">{formData.time}</span></p>
-            <p><span className="font-medium text-slate-300">Duration:</span> <span className="text-slate-400">{formData.duration} minutes</span></p>
-            <p><span className="font-medium text-slate-300">Pickup:</span> <span className="text-slate-400">{formData.address}</span></p>
+            <p><span className="font-medium text-slate-300">Date:</span> <span className="text-slate-300">{new Date(formData.date).toLocaleDateString()}</span></p>
+            <p><span className="font-medium text-slate-300">Time:</span> <span className="text-slate-300">{formData.time}</span></p>
+            <p><span className="font-medium text-slate-300">Duration:</span> <span className="text-slate-300">{formData.duration} minutes</span></p>
+            <p><span className="font-medium text-slate-300">Pickup:</span> <span className="text-slate-300">{formData.address}</span></p>
             <p><span className="font-medium text-slate-300">Price:</span> <span className="text-sky-300 font-semibold">${calculatePrice()}</span></p>
           </div>
 
@@ -446,7 +452,7 @@ export default function BookingForm({
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 rounded-lg text-white placeholder-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)]"
                 placeholder="John Smith"
               />
             </div>
@@ -461,7 +467,7 @@ export default function BookingForm({
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 rounded-lg text-white placeholder-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)]"
                 placeholder="john@example.com"
               />
             </div>
@@ -477,7 +483,7 @@ export default function BookingForm({
               required
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 rounded-lg text-white placeholder-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)]"
               placeholder="0412 345 678"
             />
           </div>
@@ -494,7 +500,7 @@ export default function BookingForm({
           required
           value={formData.address}
           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 rounded-lg text-white placeholder-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)]"
           placeholder="123 Main St, Perth WA 6000"
         />
       </div>
@@ -505,7 +511,7 @@ export default function BookingForm({
             <MapPin className="inline h-4 w-4 mr-1 text-red-400" />
             Dropoff Address
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none hover:text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer select-none hover:text-white">
             <input
               type="checkbox"
               checked={formData.sameAsPickup}
@@ -520,7 +526,7 @@ export default function BookingForm({
             type="text"
             value={formData.dropoffAddress}
             onChange={(e) => setFormData({ ...formData, dropoffAddress: e.target.value })}
-            className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 rounded-lg text-white placeholder-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)]"
             placeholder="456 End St, Perth WA 6000"
           />
         )}
@@ -537,7 +543,7 @@ export default function BookingForm({
         <select
           value={formData.duration}
           onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value), time: '' })}
-          className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 rounded-lg text-white placeholder-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)]"
         >
           <option value="30">30 minutes</option>
           <option value="60">1 hour</option>
@@ -565,7 +571,7 @@ export default function BookingForm({
           value={formData.notes}
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           rows={3}
-          className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none"
+          className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 rounded-lg text-white placeholder-slate-400 transition-all duration-200 hover:border-white/50 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15)] focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.15)] resize-none"
           placeholder="Any special requirements or notes..."
         />
       </div>
@@ -596,7 +602,7 @@ export default function BookingForm({
           </span>
         </div>
         {instructorData && (
-          <p className="text-xs text-sky-300/70 mt-2">
+          <p className="text-xs text-sky-300/90 mt-2">
             ${instructorData.hourlyRate}/hour × {formData.duration / 60} hour(s)
           </p>
         )}
@@ -604,7 +610,7 @@ export default function BookingForm({
 
       {!existingBooking && (
         <div className="bg-white/5 border border-white/10 rounded-lg p-3">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-300">
             <AlertCircle className="inline h-3 w-3 mr-1" />
             Cancellation Policy: 48+ hours (100% refund) • 24-48 hours (50% refund) • Less than 24 hours (No refund)
           </p>
@@ -688,7 +694,7 @@ export default function BookingForm({
             </div>
           )}
           {linkSent && (
-            <p className="text-xs text-slate-400">Once the client tops up, retry the booking.</p>
+            <p className="text-xs text-slate-300">Once the client tops up, retry the booking.</p>
           )}
         </div>
       )}

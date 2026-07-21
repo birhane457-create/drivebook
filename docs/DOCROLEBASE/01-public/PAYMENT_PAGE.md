@@ -1,76 +1,97 @@
-# Payment Page
+# Payment Pages
+
+There are **two separate payment pages** in the platform. They share the same Stripe integration but serve different flows.
+
+---
+
+## 1. SMS-Link Payment Page
 
 **Route:** `/booking/[id]/payment`  
-**Auth required:** No  
+**Auth required:** No (uses `?token=` payment token)  
 **File:** `app/booking/[id]/payment/page.tsx`
 
----
+### Purpose
 
-## Purpose
+Collects Stripe payment for a booking in `PENDING_PAYMENT` status. Used when students arrive via SMS/email link (voice AI flow, instructor-created bookings, send-payment-link).
 
-Collects Stripe payment for a booking that is in `PENDING_PAYMENT` status. The slot is held for 10 minutes from booking creation.
+### Page Load
 
----
-
-## Page Load
-
-1. Fetches booking via `GET /api/public/bookings/[id]`
+1. Fetches booking via `GET /api/public/bookings/[id]?token=...`
 2. Checks `booking.status`:
-   - `EXPIRED` → shows "Slot Expired" screen with a back button — no payment form rendered
+   - `EXPIRED` → shows "Slot Expired" screen — no payment form rendered
    - `CONFIRMED` (already paid) → redirects to confirmation page
    - `PENDING_PAYMENT` → proceeds to payment form
-3. Calls `POST /api/payments/create-intent` with `{ bookingId }` to get a Stripe `clientSecret`
+3. Calls `POST /api/payments/create-intent` with `{ bookingId, paymentToken }` to get a Stripe `clientSecret`
 
 **Charge amount:** `booking.packageTotalPaid || booking.price`
-- Package bookings: `packageTotalPaid` (full package amount, e.g. $600 for 10 hours)
-- Single lesson: `booking.price` (1hr × hourlyRate)
+
+### Stripe Elements
+
+Uses Stripe's `PaymentElement` (single unified component). On submit:
+1. `stripe.confirmPayment()` is called with a `return_url` — handles 3DS via redirect automatically
+2. Stripe redirects to `/booking/[id]/confirmation?redirect_status=succeeded`
+3. The webhook (`payment_intent.succeeded`) fires asynchronously and confirms the booking
+
+### Countdown Timer
+
+Shows a countdown from `booking.createdAt + 10 minutes`. When it hits zero, shows the expired state.
 
 ---
 
-## Payment Intent Reuse
+## 2. Wizard Payment Page
 
-The API reuses an existing `paymentIntentId` only if its Stripe status is one of:
-- `requires_payment_method`
-- `requires_confirmation`
-- `requires_action`
-- `processing`
+**Route:** `/book/[instructorId]/payment`  
+**Auth required:** No (unauthenticated guest checkout)  
+**File:** `app/book/[instructorId]/payment/page.tsx`
 
-Any other status (expired, cancelled, failed) → creates a fresh intent.
+### Purpose
+
+Final step of the multi-step public booking wizard (`/book/[instructorId]/...`). Used by students booking directly from the website.
+
+### Payment Flow
+
+1. `POST /api/public/bookings/bulk` → creates booking in `PENDING_PAYMENT`, returns `bookingId`
+2. `POST /api/payments/create-intent` with `{ bookingId, amount }` → returns `clientSecret`
+3. `stripe.confirmCardPayment(clientSecret)` — uses split card fields (`CardNumberElement`, `CardExpiryElement`, `CardCvcElement`)
+4. On `paymentIntent.status === 'succeeded'` → redirect to `/booking/{id}/confirmation`
+5. On `paymentIntent.status === 'requires_action'` → calls `stripe.handleNextAction({ clientSecret })` for 3DS (fixed July 2026)
+6. On `paymentIntent.status === 'processing'` → redirect to confirmation with `?payment=processing`
+
+### Key Differences from SMS-Link Page
+
+| | SMS-Link (`/booking/[id]/payment`) | Wizard (`/book/[instructorId]/payment`) |
+|---|---|---|
+| Stripe component | `PaymentElement` (unified) | `CardNumberElement` + `CardExpiryElement` + `CardCvcElement` (split) |
+| 3DS handling | Via `return_url` redirect (automatic) | Via `stripe.handleNextAction()` (explicit) |
+| Booking pre-exists | Yes (created by instructor or voice AI) | No — wizard creates it at payment time |
+| Auth | Payment token in URL | None (guest checkout) |
+| Book Later | Not applicable | Handled — bulk API returns `checkoutUrl` for wallet top-up; wizard uses separate PaymentIntent path via `transactionId` |
 
 ---
 
-## Stripe Elements
+## Commission Applied (both pages)
 
-The page renders Stripe's `PaymentElement` component. On submit:
-1. Stripe confirms the payment
-2. On success → Stripe redirects to the `return_url` (confirmation page)
-3. The Stripe webhook (`payment_intent.succeeded`) fires asynchronously and:
-   - Sets `booking.status → CONFIRMED`
-   - Sets `booking.isPaid = true`, `paymentCaptured = true`
-   - Credits the client wallet with `packageTotalPaid`
-   - Debits the wallet for the first lesson (`booking.price`)
-   - Sends in-app notification to instructor
+At payment intent creation:
+1. Instructor's `subscriptionTier` fetched
+2. `getCommissionRate(tier)` called from `lib/services/platform-pricing.ts`
+3. Commission rate stored in Stripe metadata
+4. `platformFee` and `instructorPayout` stored on the booking
 
 ---
 
-## Countdown Timer
+## Post-Payment (both pages)
 
-The page shows a countdown from the booking's `createdAt + 10 minutes`. When it hits zero, the page refreshes and shows the expired state.
-
----
-
-## Commission Applied
-
-At payment intent creation, the API:
-1. Fetches the instructor's `subscriptionTier`
-2. Calls `getCommissionRate(tier)` from `lib/services/platform-pricing.ts`
-3. Stores the rate in Stripe metadata for auditability
-4. Calculates `platformFee` and `instructorPayout` and stores on the booking
+The Stripe webhook (`payment_intent.succeeded`) fires for both pages and:
+- Sets `booking.status → CONFIRMED`
+- Sets `booking.isPaid = true`
+- Credits the client wallet with `packageTotalPaid`
+- Debits the wallet for the first lesson (`booking.price`)
+- Sends in-app notification to instructor
 
 ---
 
 ## Related
 
-- [BOOKING_FLOW.md](./BOOKING_FLOW.md) — Steps 1–3 (search → booking creation)
+- `docs/01-public/BOOKING_FLOW_COMPLETE.md` — Full wizard booking flow
 - `docs/06-payments/STRIPE.md` — Stripe configuration
 - `docs/06-payments/WALLET.md` — Wallet credit mechanics

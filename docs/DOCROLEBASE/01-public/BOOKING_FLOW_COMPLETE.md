@@ -539,14 +539,19 @@ CUSTOM:     0% discount
 ✅ **Email Notifications** - All 3 booking methods send professional emails  
 ✅ **PDA Test Linking** - Tests consolidated with parent booking (cascade delete)  
 ✅ **Payment Deduplication** - PostgreSQL advisory lock prevents duplicate Stripe intents  
-✅ **LocalStorage Recovery** - Auto-saves booking state, recovers on page reload (< 24h)  
+✅ **LocalStorage Recovery** - Auto-saves booking state (passwords excluded), recovers on page reload (< 24h)  
 ✅ **Idempotency Keys** - Twilio SMS retries don't create duplicate bookings  
-✅ **Auto-Generated Passwords** - AI voice flow generates secure passwords, sends via email  
+✅ **Auto-Generated Passwords** - AI voice flow generates secure passwords, sends via email + SMS  
 ✅ **Test Package Upsell** - Conditional step if instructor offers PDA test package  
 ✅ **Book Now vs Later** - Flexible scheduling (immediate or deferred)  
 ✅ **Instructor Pause** - Instructors can pause new bookings without subscription change  
 ✅ **Server-Side Pricing** - Never trusts client calculations  
 ✅ **Subscription Gate** - Inactive instructors can't accept new bookings  
+✅ **3DS / SCA** - `stripe.handleNextAction()` called for `requires_action`; all 3DS cards work (July 2026)  
+✅ **Perth Timezone** - Slot validation + reservation uses `+08:00` offset parse, not server UTC (July 2026)  
+✅ **Slot Release** - DELETE sends params as URL query string (server reads `searchParams`); slots released correctly (July 2026)  
+✅ **No Fake Slots** - API failure shows error + retry, never fabricated availability (July 2026)  
+✅ **Duration Fetch** - `useEffect` on `[selectedDate, selectedDuration]` eliminates stale-state race (July 2026)  
 
 ---
 
@@ -604,46 +609,53 @@ CUSTOM:     0% discount
 
 ## Potential Issues & Areas for Enhancement
 
-### Slot Reservation Persistence
-**Legacy issue:** Earlier implementations used a JavaScript Map and lost all 10-minute reservations on server restart.  
-**Current state:** Slot reservations are now persisted in PostgreSQL via the `SlotReservation` table, with server-side expiry cleanup and session ownership validation.  
-**Recommendation:** Add a frontend countdown timer and monitoring for reservation expiry conflicts.
+> **Note:** Many of the issues in the original version of this section were resolved in the July 2026 production-readiness audit. The list below reflects the current state.
 
-### No Concurrency Control on Bookings
-**Issue:** Multiple users booking same slot simultaneously could cause race conditions. Uses Stripe's idempotency but DB slot validation happens after.  
-**Recommendation:** Implement database-level slot locking or optimistic concurrency with version numbers.
+### Slot Expiry Warning (open)
+No countdown timer shown to the student on the payment page; they don't know the 10-minute slot hold is running until payment fails.  
+**Recommendation:** Add countdown on the payment page, warn before expiry.
 
-### Auto-Generated Password Delivery
-**Issue:** SMS/email failures silently logged; user won't know their password if both fail.  
-**Recommendation:** Show warning to user if password delivery fails, provide fallback (link to reset).
+### Mobile Experience (open)
+Bottom-fixed summary may overlap form inputs on small screens.  
+**Recommendation:** Further test responsive layout on <375px screens.
 
-### PDA Test Booking
-**Issue:** Stored separately as PDATestBooking, not linked to main booking lessons. Could cause billing discrepancies.  
-**Recommendation:** Link PDA booking to parent package booking; consolidate billing.
+### Error Recovery — EMAIL_EXISTS (open)
+`EMAIL_EXISTS` error shows helpful actions but the workflow is disrupted — no seamless one-click login redirect.  
+**Recommendation:** Add quick login option in the error modal; auto-fill email.
 
-### Slot Expiry Warning
-**Issue:** No countdown timer shown to user; they don't know 10 min timer is running until payment fails.  
-**Recommendation:** Add countdown timer on payment page, warn before expiry.
-
-### Mobile Experience
-**Issue:** Bottom-fixed summary may overlap form inputs on small screens.  
-**Recommendation:** Further test responsive layout; consider sticky header instead.
-
-### Error Recovery
-**Issue:** "EMAIL_EXISTS" error provides helpful actions but workflow is disrupted—no seamless login redirect.  
-**Recommendation:** Add quick login option in error modal; auto-fill email.
-
-### Accessibility
-**Issue:** Color-coded form fields, form validation feedback could be clearer for screen readers.  
-**Recommendation:** Add ARIA labels, expand error messages for accessibility.
-
-### Account Linking
-**Issue:** New account created even if user already has account (email exists). Manual merge needed by admin.  
-**Recommendation:** Check for existing account; prompt to login instead of creating duplicate.
-
-### Package Expiry Handling
-**Issue:** No frontend indication when hours expire; users only see error at booking time.  
+### Package Expiry Handling (open)
+No frontend indication when hours expire; students only see an error at booking time.  
 **Recommendation:** Show expiry countdown in dashboard; warn before expiry.
+
+### ~~No Concurrency Control on Bookings~~ — ✅ Resolved
+PostgreSQL advisory lock added in `create-intent` route prevents duplicate PaymentIntents. Slot conflict check is inside a `$transaction`.
+
+### ~~Auto-Generated Password Delivery~~ — ✅ Resolved
+Setup link sent via both SMS and email. Fallback reset email sent if both fail. See `bulk/route.ts`.
+
+### ~~PDA Test Booking~~ — ✅ Resolved
+PDA test linked to parent booking via `parentBookingId` (cascade delete).
+
+### ~~Slot Reservation Persistence~~ — ✅ Resolved
+Slot reservations persisted in `SlotReservation` DB table since June 2026.
+
+### ~~Availability fallback fabricated slots~~ — ✅ Resolved (July 2026)
+`fetchAvailableSlots` no longer generates fake 9am–5pm slots on API failure. Shows error state with "Try again" button instead.
+
+### ~~Duration race condition~~ — ✅ Resolved (July 2026)
+`useEffect` on `[selectedDate, selectedDuration]` replaced the manual `fetchAvailableSlots()` call in the duration `onChange`.
+
+### ~~Password in localStorage~~ — ✅ Resolved (July 2026)
+`saveToLocalStorage` destructures out password fields before persisting.
+
+### ~~3DS not handled~~ — ✅ Resolved (July 2026)
+`stripe.handleNextAction()` is called for `requires_action` status.
+
+### ~~Slot DELETE body not read by server~~ — ✅ Resolved (July 2026)
+`BookingDetailsForm` sends slot release params as URL query string.
+
+### ~~Timezone bug in slot validation~~ — ✅ Resolved (July 2026)
+Both `validate-slots` and `check-and-reserve` now parse dates as Perth AWST (`+08:00`).
 
 ---
 
@@ -657,9 +669,7 @@ CUSTOM:     0% discount
 
 ---
 
-**Last Updated:** June 13, 2026  
-**Maintained by:** Development Team  
-**Related Files:** BookingContext.tsx, MultiStepBookingLayout.tsx, BookingDetailsForm.tsx
+**Last Updated:** July 2026 (production-readiness audit fixes applied)
 
 
 ---

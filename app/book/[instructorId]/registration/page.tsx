@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect } from 'react';
@@ -78,13 +78,13 @@ export default function RegistrationPage() {
   };
 
   return (
-    <MultiStepBookingLayout currentStep={bookingState.bookingType === 'now' ? 6 : 5}>
+    <MultiStepBookingLayout currentStep={bookingState.bookingType === 'now' ? 5 : 4}>
       <div className="space-y-6 text-white">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-white/95 mb-2">
             Create Your Account
           </h2>
-          <p className="text-white/70">
+          <p className="text-white/85">
             Register to manage your bookings and track your progress
           </p>
         </div>
@@ -93,11 +93,11 @@ export default function RegistrationPage() {
         <RegistrationForm />
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/6">
+        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/15">
           <button
             onClick={() => router.back()}
             type="button"
-            className="flex-1 bg-white/5 text-white/90 px-8 py-4 rounded-lg font-semibold hover:bg-white/6 transition-colors border border-white/8"
+            className="flex-1 bg-white/8 text-white px-8 py-4 rounded-lg font-semibold hover:bg-white/10 transition-colors border border-white/20"
           >
             ← Back
           </button>

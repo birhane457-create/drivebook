@@ -2,7 +2,9 @@
 
 **Route:** `/dashboard/settings`  
 **Auth required:** INSTRUCTOR role  
-**APIs:** `GET /api/instructor/profile`, `PATCH /api/instructor/profile`
+**APIs:** `GET /api/instructor/settings`, `PUT /api/instructor/settings`, `GET /api/instructor/pda-configs`, `POST /api/instructor/pda-configs`
+
+> Note: The **profile page** (`/dashboard/profile`) uses `GET/PUT /api/instructor/profile` for name, bio, photos, and social links. The **settings page** (`/dashboard/settings`) uses `GET/PUT /api/instructor/settings` for pricing, working hours, service radius, booking preferences, and PDA configs. These are separate endpoints.
 
 ---
 
@@ -13,7 +15,7 @@
 - Bio (shown on public profile) — **75-word minimum enforced in UI** — live word counter in dashboard; auto-generated content block shown on subdomain page when bio < 75 words
 - Years of experience
 - Profile photo (Cloudinary upload)
-- Base address (used for service radius calculation)
+- Base address (used for service radius calculation) — when saved, `suburb`, `state`, and `postcode` are automatically extracted from the address string using `parseAuAddress()` and written to the DB. These fields power the `/driving-lessons/[state]/[suburb]` SEO location pages.
 - Service radius (km)
 - Service areas (text description)
 - Languages spoken

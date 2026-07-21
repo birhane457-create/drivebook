@@ -130,7 +130,7 @@ jest.mock('axios', () => {
 
     if (path === '/api/public/bookings/bulk' && method === 'POST') {
       return Promise.resolve({
-        status: 200,
+        status: 201,   // server returns 201 Created — confirmed from bulk/route.ts
         headers: { 'content-type': 'application/json' },
         data: {
           success: true,
@@ -163,10 +163,12 @@ jest.mock('axios', () => {
         headers: { 'content-type': 'application/json' },
         data: {
           bookings: [{
-            bookingId: 'bkg_test_001',
+            id: 'bkg_test_001',          // server returns `id`, not `bookingId`
             startTime: '2050-01-01T09:00:00Z',
-            instructor: { name: 'Debesay' },
+            instructor: { id: 'inst_1', name: 'Debesay' },
             status: 'CONFIRMED',
+            duration: 60,
+            pickupLocation: '123 Main St Joondalup',
           }],
         },
       });
@@ -184,7 +186,8 @@ jest.mock('axios', () => {
       return Promise.resolve({
         status: 200,
         headers: { 'content-type': 'application/json' },
-        data: { verified: true, verificationToken: 'tok_abc123' },
+        // Server returns `valid` (not `verified`) — confirmed from route.ts source
+        data: { success: true, valid: true, verificationToken: 'tok_abc123', expiresAt: '2050-01-01T09:10:00Z' },
       });
     }
 
@@ -244,9 +247,10 @@ jest.mock('axios', () => {
         data: {
           bookingId: 'bkg_test_001',
           status: 'CONFIRMED',
+          // Server returns `timestamp` and `description` — confirmed from timeline/route.ts
           events: [
-            { type: 'BOOKING_CREATED', time: '2050-01-01T09:00:00Z', description: 'Booking created' },
-            { type: 'PAYMENT_COMPLETED', time: '2050-01-01T09:03:00Z', description: 'Payment received' },
+            { timestamp: '2050-01-01T09:00:00.000Z', description: 'Booking created with Debesay' },
+            { timestamp: '2050-01-01T09:03:00.000Z', description: 'Payment received — booking confirmed' },
           ],
         },
       });
@@ -449,7 +453,7 @@ describe('Contract Tests — API Response Shapes', () => {
       const res = await request(app)
         .post('/api/public/bookings/bulk')
         .send(validPayload);
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201); // server returns 201 Created
       assertShape(res.body, {
         success: true,
         bookingId: 'string',
@@ -490,6 +494,54 @@ describe('Contract Tests — API Response Shapes', () => {
       expect(res.body.status).toBe('PENDING_PAYMENT');
     });
 
+    test('short-notice booking returns status PENDING, isShortNotice:true, no checkoutUrl', async () => {
+      // Temporarily override the mock to simulate a short-notice response
+      const axios = require('axios');
+      const originalImpl = axios.getMockImplementation();
+      axios.mockImplementationOnce(({ url, method }) => {
+        const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        if (path === '/api/public/bookings/bulk' && method === 'POST') {
+          return Promise.resolve({
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+            data: {
+              success: true,
+              bookingId: 'bkg_short_001',
+              bookingType: 'now',
+              status: 'PENDING',
+              isShortNotice: true,
+              total: 0,
+              // No checkoutUrl — short-notice bookings await instructor approval first
+              voice: {
+                instructor: 'Debesay',
+                package: '10 Hour Package',
+                packageHours: 10,
+                scheduledHours: 1,
+                scheduledLessons: 1,
+                remainingHours: 9,
+                firstLesson: 'Wednesday 1 January at 9:00 AM',
+                paymentRequired: false,
+                slotHeldMinutes: 10,
+                pickupVerified: true,
+                confirmation: 'Debesay needs to approve this booking first. You will be notified within a few minutes.',
+              },
+            },
+          });
+        }
+        return Promise.resolve({ status: 404, headers: {}, data: { error: 'Not found' } });
+      });
+
+      const res = await request(app)
+        .post('/api/public/bookings/bulk')
+        .send(validPayload);
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('PENDING');
+      expect(res.body.isShortNotice).toBe(true);
+      expect(res.body.checkoutUrl).toBeUndefined();
+      expect(res.body.voice.paymentRequired).toBe(false);
+      expect(typeof res.body.voice.confirmation).toBe('string');
+    });
+
     test('accepts pickupValidated:false (spoken address fallback)', async () => {
       const res = await request(app)
         .post('/api/public/bookings/bulk')
@@ -501,20 +553,21 @@ describe('Contract Tests — API Response Shapes', () => {
             pickupLocation: 'Eighty one King William Street Bayswater',
           }],
         });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201); // server returns 201 Created
       expect(res.body.success).toBe(true);
     });
   });
 
   // ── Booking lookup ─────────────────────────────────────────────────────────
   describe('GET /api/bookings/lookup', () => {
-    test('returns bookings with bookingId, startTime, instructor.name, status', async () => {
+    test('returns bookings with id, startTime, instructor.name, status', async () => {
       const res = await request(app)
         .get('/api/bookings/lookup')
         .query({ phone: '0400123456' });
       expect(res.status).toBe(200);
+      // Server returns `id` (not `bookingId`) — confirmed from lookup/route.ts
       assertShape(res.body, {
-        bookings: [{ bookingId: 'string', startTime: 'string', instructor: { name: 'string' }, status: 'string' }],
+        bookings: [{ id: 'string', startTime: 'string', instructor: { name: 'string' }, status: 'string' }],
       });
     });
   });
@@ -531,28 +584,110 @@ describe('Contract Tests — API Response Shapes', () => {
   });
 
   describe('POST /api/verifications/otp/confirm', () => {
-    test('returns verified:true and verificationToken', async () => {
+    test('returns valid:true and verificationToken', async () => {
       const res = await request(app)
         .post('/api/verifications/otp/confirm')
         .send({ verificationId: 'vrf_001', code: '123456' });
       expect(res.status).toBe(200);
-      expect(res.body.verified).toBe(true);
+      // Server returns `valid` (not `verified`) — field confirmed from route.ts
+      expect(res.body.valid).toBe(true);
       expect(typeof res.body.verificationToken).toBe('string');
     });
   });
 
   // ── Cancellation policy ──────────────────────────────────────────────────────
   describe('GET /api/bookings/:id/cancellation-policy', () => {
-    test('returns canCancel, refundPercentage, refundAmount, hoursUntilLesson', async () => {
+    test('returns canCancel, isPendingPayment, refundPercentage, refundAmount, hoursUntilLesson, reason', async () => {
       const res = await request(app)
         .get('/api/bookings/bkg_test_001/cancellation-policy');
       expect(res.status).toBe(200);
       assertShape(res.body, {
         canCancel: true,
+        isPendingPayment: false,
         refundPercentage: 0,
         refundAmount: 0,
         hoursUntilLesson: 0,
+        reason: 'string',
       });
+    });
+
+    test('canCancel:false when booking already cancelled', async () => {
+      const axios = require('axios');
+      axios.mockImplementationOnce(({ url }) => {
+        const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        if (path.match(/\/api\/bookings\/[^/]+\/cancellation-policy/)) {
+          return Promise.resolve({
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            data: { canCancel: false, isPendingPayment: false, refundPercentage: 0, refundAmount: 0, hoursUntilLesson: null, reason: 'This booking has already been cancelled.' },
+          });
+        }
+        return Promise.resolve({ status: 404, headers: {}, data: {} });
+      });
+      const res = await request(app).get('/api/bookings/bkg_test_001/cancellation-policy');
+      expect(res.status).toBe(200);
+      expect(res.body.canCancel).toBe(false);
+      expect(typeof res.body.reason).toBe('string');
+    });
+
+    test('isPendingPayment:true for unpaid booking — no refund needed', async () => {
+      const axios = require('axios');
+      axios.mockImplementationOnce(({ url }) => {
+        const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        if (path.match(/\/api\/bookings\/[^/]+\/cancellation-policy/)) {
+          return Promise.resolve({
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            data: { canCancel: true, isPendingPayment: true, refundPercentage: 0, refundAmount: 0, hoursUntilLesson: 48, reason: 'Booking has not been paid — slot will be released immediately, no refund required.' },
+          });
+        }
+        return Promise.resolve({ status: 404, headers: {}, data: {} });
+      });
+      const res = await request(app).get('/api/bookings/bkg_test_001/cancellation-policy');
+      expect(res.status).toBe(200);
+      expect(res.body.canCancel).toBe(true);
+      expect(res.body.isPendingPayment).toBe(true);
+      expect(res.body.refundAmount).toBe(0);
+    });
+
+    test('50% refund when 24-48 hours notice', async () => {
+      const axios = require('axios');
+      axios.mockImplementationOnce(({ url }) => {
+        const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        if (path.match(/\/api\/bookings\/[^/]+\/cancellation-policy/)) {
+          return Promise.resolve({
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            data: { canCancel: true, isPendingPayment: false, refundPercentage: 50, refundAmount: 409.22, hoursUntilLesson: 30, reason: '24–48 hours notice — 50% refund.' },
+          });
+        }
+        return Promise.resolve({ status: 404, headers: {}, data: {} });
+      });
+      const res = await request(app).get('/api/bookings/bkg_test_001/cancellation-policy');
+      expect(res.status).toBe(200);
+      expect(res.body.refundPercentage).toBe(50);
+      expect(typeof res.body.refundAmount).toBe('number');
+      expect(res.body.refundAmount).toBeGreaterThan(0);
+    });
+
+    test('0% refund when less than 24 hours notice', async () => {
+      const axios = require('axios');
+      axios.mockImplementationOnce(({ url }) => {
+        const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        if (path.match(/\/api\/bookings\/[^/]+\/cancellation-policy/)) {
+          return Promise.resolve({
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            data: { canCancel: true, isPendingPayment: false, refundPercentage: 0, refundAmount: 0, hoursUntilLesson: 6, reason: 'Less than 24 hours notice — no refund.' },
+          });
+        }
+        return Promise.resolve({ status: 404, headers: {}, data: {} });
+      });
+      const res = await request(app).get('/api/bookings/bkg_test_001/cancellation-policy');
+      expect(res.status).toBe(200);
+      expect(res.body.refundPercentage).toBe(0);
+      expect(res.body.refundAmount).toBe(0);
+      expect(typeof res.body.reason).toBe('string');
     });
   });
 
@@ -568,13 +703,15 @@ describe('Contract Tests — API Response Shapes', () => {
 
   // ── Timeline ─────────────────────────────────────────────────────────────────
   describe('GET /api/public/bookings/:id/timeline', () => {
-    test('returns events array with type, time, description', async () => {
+    test('returns events array with timestamp and description', async () => {
       const res = await request(app)
         .get('/api/public/bookings/bkg_test_001/timeline');
       expect(res.status).toBe(200);
+      // Server returns `timestamp` and `description` (not `type`/`time`) — confirmed from timeline/route.ts
       assertShape(res.body, {
         bookingId: 'string',
-        events: [{ type: 'string', time: 'string', description: 'string' }],
+        status: 'string',
+        events: [{ timestamp: 'string', description: 'string' }],
       });
     });
   });

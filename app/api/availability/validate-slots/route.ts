@@ -23,13 +23,10 @@ export async function POST(req: NextRequest) {
     const now = new Date();
 
     for (const slot of data.slots) {
-      // Parse date and time
-      const [hours, minutes] = slot.time.split(':').map(Number);
-      const startDateTime = new Date(slot.date + 'T00:00:00');
-      startDateTime.setHours(hours, minutes, 0, 0);
-      
-      const endDateTime = new Date(startDateTime);
-      endDateTime.setMinutes(endDateTime.getMinutes() + slot.duration);
+      // Parse date (YYYY-MM-DD) + time (HH:MM) as Perth wall-clock time (AWST = UTC+8).
+      // Using ISO 8601 with explicit offset avoids server-timezone ambiguity (Vercel = UTC).
+      const startDateTime = new Date(`${slot.date}T${slot.time}:00+08:00`);
+      const endDateTime = new Date(startDateTime.getTime() + slot.duration * 60 * 1000);
 
       // Clean up expired reservations for this instructor
       await prisma.slotReservation.deleteMany({
@@ -54,12 +51,13 @@ export async function POST(req: NextRequest) {
         select: { id: true },
       });
 
-      // Check for overlapping confirmed bookings in database
+      // Check for overlapping active bookings in database.
+      // COMPLETED bookings are past lessons and must NOT block future slots.
       const overlappingBookings = await prisma.booking.count({
         where: {
           instructorId: data.instructorId,
           status: {
-            in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED']
+            in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED']
           },
           OR: [
             {

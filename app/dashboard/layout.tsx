@@ -33,23 +33,25 @@ export default async function DashboardLayout({
     redirect('/admin')
   }
 
-  // Check subscription access — determines if read-only banner is shown
-  const access = await checkSubscriptionAccess(session.user.id)
-  const isReadOnly = access.valid && (access as any).readOnly === true
+  // Run subscription check and approval status lookup in parallel — both are
+  // independent DB queries. Avoids sequential waterfall on every page load.
+  const [access, approvalStatusResult] = await Promise.all([
+    checkSubscriptionAccess(session.user.id),
+    session.user.instructorId
+      ? prisma.instructor
+          .findUnique({
+            where: { id: session.user.instructorId },
+            select: { approvalStatus: true },
+          })
+          .catch((error: unknown) => {
+            console.error('Dashboard approval status lookup failed:', error)
+            return null
+          })
+      : Promise.resolve(null),
+  ])
 
-  // Check approval status — determines if pending approval banner is shown
-  let approvalStatus = 'PENDING'
-  if (session.user.instructorId) {
-    try {
-      const instructor = await prisma.instructor.findUnique({
-        where: { id: session.user.instructorId },
-        select: { approvalStatus: true }
-      })
-      approvalStatus = instructor?.approvalStatus ?? 'PENDING'
-    } catch (error) {
-      console.error('Dashboard approval status lookup failed:', error)
-    }
-  }
+  const isReadOnly = access.valid && (access as any).readOnly === true
+  const approvalStatus = approvalStatusResult?.approvalStatus ?? 'PENDING'
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">

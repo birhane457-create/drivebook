@@ -150,20 +150,21 @@ export async function GET(
       select: { lateCancellationWindowHours: true },
     })
     const lateWindow = settings?.lateCancellationWindowHours ?? 24
+    const fullRefundWindow = lateWindow * 2
 
     // Standard tiered refund policy:
-    //   48+ hours notice  → 100%
-    //   24–48 hours       → 50%
-    //   < 24 hours        → 0%
+    //   fullRefundWindow+ hours notice  → 100%
+    //   lateWindow–fullRefundWindow     → 50%
+    //   < lateWindow                    → 0%
     let refundPercentage = 0
     let reason = `Less than ${lateWindow} hours notice — no refund.`
 
-    if (hoursUntilLesson === null || hoursUntilLesson >= 48) {
+    if (hoursUntilLesson === null || hoursUntilLesson >= fullRefundWindow) {
       refundPercentage = 100
-      reason = '48+ hours notice — full refund.'
+      reason = `${fullRefundWindow}+ hours notice — full refund.`
     } else if (hoursUntilLesson >= lateWindow) {
       refundPercentage = 50
-      reason = `${lateWindow}–48 hours notice — 50% refund.`
+      reason = `${lateWindow}–${fullRefundWindow} hours notice — 50% refund.`
     }
 
     // Use packageTotalPaid if this is a package booking, otherwise use price

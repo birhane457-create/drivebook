@@ -10,37 +10,40 @@ export interface CommissionCalculation {
 
 export class PaymentService {
   /**
-   * Calculate commission for a booking
+   * Calculate commission for a booking.
+   *
+   * Commission rate is derived from the instructor's subscription tier via
+   * getCommissionRate() (DB-backed PlatformSettings, not per-instructor field).
+   *
+   * newStudentBonus was removed in May 2026 — commission is a flat rate per tier.
+   * isFirstBooking is still recorded for analytics but does NOT affect the rate.
    */
   async calculateCommission(
     instructorId: string,
     clientId: string,
     bookingAmount: number
   ): Promise<CommissionCalculation> {
-    // Get instructor's subscription tier and rates
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
+      select: { subscriptionTier: true },
     });
 
     if (!instructor) {
       throw new Error('Instructor not found');
     }
 
-    // Check if this is the first booking with this client
     const isFirstBooking = await this.isFirstBookingWithClient(instructorId, clientId);
 
-    // Use fixed commission rates since commissionRate/newStudentBonus aren't in schema
-    // Base rate: 10%, first booking bonus: +5%
-    const baseRate = 10;
-    const commissionRate = isFirstBooking ? baseRate + 5 : baseRate;
+    // Always use platform-level commission rate — never a per-instructor value
+    const { getCommissionRate } = await import('@/lib/services/platform-pricing');
+    const commissionRate = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC');
 
-    // Calculate fees
     const platformFee = bookingAmount * (commissionRate / 100);
     const instructorPayout = bookingAmount - platformFee;
 
     return {
       totalAmount: bookingAmount,
-      platformFee: Math.round(platformFee * 100) / 100, // Round to 2 decimals
+      platformFee: Math.round(platformFee * 100) / 100,
       instructorPayout: Math.round(instructorPayout * 100) / 100,
       commissionRate,
       isFirstBooking,
@@ -48,7 +51,8 @@ export class PaymentService {
   }
 
   /**
-   * Check if this is the first completed booking between instructor and client
+   * Check if this is the first completed booking between instructor and client.
+   * Recorded on bookings for analytics — no longer affects commission rate.
    */
   async isFirstBookingWithClient(
     instructorId: string,
@@ -66,8 +70,7 @@ export class PaymentService {
   }
 
   /**
-   * Create transaction record for a booking
-   * Note: Transaction model exists in Prisma schema but TypeScript cache may not reflect it
+   * Create transaction record for a booking.
    */
   async createBookingTransaction(
     bookingId: string,
@@ -86,7 +89,7 @@ export class PaymentService {
         commissionRate: calculation.commissionRate,
         status: 'PENDING',
         stripePaymentIntentId: paymentIntentId,
-        description: `Booking payment - ${calculation.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
+        description: `Booking payment — ${calculation.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
         metadata: {
           isFirstBooking: calculation.isFirstBooking,
         },
@@ -95,8 +98,7 @@ export class PaymentService {
   }
 
   /**
-   * Update booking with commission details
-   * Note: These fields exist in Prisma schema but TypeScript cache may not reflect them
+   * Update booking with commission details.
    */
   async updateBookingCommission(
     bookingId: string,
@@ -109,136 +111,39 @@ export class PaymentService {
         instructorPayout: calculation.instructorPayout,
         commissionRate: calculation.commissionRate,
         isFirstBooking: calculation.isFirstBooking,
-      } as any, // TypeScript cache issue - fields exist in schema
+      } as any,
     });
   }
 
   /**
-   * Get subscription pricing based on tier
-   */
-  getSubscriptionPricing(tier: 'PRO' | 'BUSINESS') {
-    const pricing = {
-      PRO: {
-        monthlyPrice: 29.00,
-        commissionRate: 12.0,
-        features: [
-          'Unlimited clients',
-          'Google Calendar sync',
-          'Analytics dashboard',
-          'Email notifications',
-          '12% commission per booking',
-        ],
-      },
-      BUSINESS: {
-        monthlyPrice: 59.00,
-        commissionRate: 7.0,
-        features: [
-          'Everything in PRO',
-          'Multiple instructors',
-          'Branded booking page',
-          'Priority support',
-          'Custom domain',
-          '7% commission per booking',
-        ],
-      },
-    };
-
-    return pricing[tier];
-  }
-
-  /**
-   * Calculate monthly revenue projection for instructor
-   */
-  calculateRevenueProjection(
-    tier: 'PRO' | 'BUSINESS',
-    estimatedMonthlyBookings: number,
-    averageBookingPrice: number,
-    newStudentPercentage: number = 20 // % of bookings that are new students
-  ) {
-    const pricing = this.getSubscriptionPricing(tier);
-    const newStudentBonus = 8.0; // Default new student bonus
-
-    // Calculate bookings
-    const newStudentBookings = Math.round(estimatedMonthlyBookings * (newStudentPercentage / 100));
-    const repeatBookings = estimatedMonthlyBookings - newStudentBookings;
-
-    // Calculate commissions
-    const newStudentCommission = (pricing.commissionRate + newStudentBonus) / 100;
-    const repeatCommission = pricing.commissionRate / 100;
-
-    const newStudentFees = newStudentBookings * averageBookingPrice * newStudentCommission;
-    const repeatFees = repeatBookings * averageBookingPrice * repeatCommission;
-    const totalCommissionFees = newStudentFees + repeatFees;
-
-    // Total platform cost
-    const totalPlatformCost = pricing.monthlyPrice + totalCommissionFees;
-
-    // Instructor revenue
-    const grossRevenue = estimatedMonthlyBookings * averageBookingPrice;
-    const netRevenue = grossRevenue - totalPlatformCost;
-
-    return {
-      tier,
-      subscriptionFee: pricing.monthlyPrice,
-      estimatedBookings: estimatedMonthlyBookings,
-      newStudentBookings,
-      repeatBookings,
-      averageBookingPrice,
-      grossRevenue: Math.round(grossRevenue * 100) / 100,
-      commissionFees: Math.round(totalCommissionFees * 100) / 100,
-      totalPlatformCost: Math.round(totalPlatformCost * 100) / 100,
-      netRevenue: Math.round(netRevenue * 100) / 100,
-      effectiveCommissionRate: Math.round((totalPlatformCost / grossRevenue) * 10000) / 100, // %
-    };
-  }
-
-  /**
-   * Get instructor's financial summary
+   * Get instructor's financial summary for a period.
    */
   async getInstructorFinancials(instructorId: string, startDate: Date, endDate: Date) {
-    // Get all completed bookings in period
     const bookings = await prisma.booking.findMany({
       where: {
         instructorId,
         status: 'COMPLETED',
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+        createdAt: { gte: startDate, lte: endDate },
       },
     });
 
-    // Get subscription info (TypeScript cache issue - model exists in schema)
     const subscription = await (prisma as any).subscription.findFirst({
-      where: {
-        instructorId,
-        status: 'ACTIVE',
-      },
+      where: { instructorId, status: 'ACTIVE' },
     });
 
-    // Calculate totals (fields exist in schema but TypeScript cache may not reflect them)
     const totalBookings = bookings.length;
     const firstBookings = bookings.filter((b: any) => b.isFirstBooking).length;
     const repeatBookings = totalBookings - firstBookings;
-    
     const grossRevenue = bookings.reduce((sum, b) => sum + b.price, 0);
     const platformFees = bookings.reduce((sum, b: any) => sum + (b.platformFee || 0), 0);
     const netRevenue = bookings.reduce((sum, b: any) => sum + (b.instructorPayout || 0), 0);
 
     return {
-      period: {
-        start: startDate,
-        end: endDate,
-      },
-      subscription: subscription ? {
-        tier: subscription.tier,
-        monthlyFee: subscription.monthlyAmount,
-      } : null,
-      bookings: {
-        total: totalBookings,
-        firstBookings,
-        repeatBookings,
-      },
+      period: { start: startDate, end: endDate },
+      subscription: subscription
+        ? { tier: subscription.tier, monthlyFee: subscription.monthlyAmount }
+        : null,
+      bookings: { total: totalBookings, firstBookings, repeatBookings },
       revenue: {
         gross: Math.round(grossRevenue * 100) / 100,
         platformFees: Math.round(platformFees * 100) / 100,
@@ -251,3 +156,4 @@ export class PaymentService {
 }
 
 export const paymentService = new PaymentService();
+

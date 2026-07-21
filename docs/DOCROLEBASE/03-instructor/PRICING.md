@@ -1,8 +1,10 @@
 # Instructor Pricing
 
-**Route:** `/dashboard/settings/pricing` (or `/dashboard/pricing`)  
+**Route:** `/dashboard/settings` (Pricing section)  
 **Auth required:** INSTRUCTOR role  
-**APIs:** `GET /api/instructor/profile`, `PATCH /api/instructor/profile`
+**APIs:** `GET /api/instructor/settings`, `PUT /api/instructor/settings`
+
+> Pricing is configured in the Settings page, not a separate `/pricing` route.
 
 ---
 

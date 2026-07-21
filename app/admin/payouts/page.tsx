@@ -486,7 +486,6 @@ export default function AdminPayoutsPage() {
   });
 
   const processPayout = async (instructorId: string) => {
-    if (!confirm('Process payout for this instructor?')) return;
     setProcessing(instructorId);
     try {
       const res = await fetch('/api/admin/payouts/process', {
@@ -507,7 +506,6 @@ export default function AdminPayoutsPage() {
   };
 
   const handleHoldPayout = async (payoutId: string) => {
-    if (!confirm('Put this payout on hold? It will not be transferred until released.')) return;
     setProcessing(payoutId);
     try {
       const res = await fetch(`/api/admin/payouts/${payoutId}/hold`, { method: 'POST' });

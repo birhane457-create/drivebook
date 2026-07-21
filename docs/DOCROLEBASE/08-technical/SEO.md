@@ -270,25 +270,33 @@ After each deploy, submit to Google Search Console:
 | Blog posts | ✅ Complete | 100 |
 | Tag archive pages | ✅ Auto-generated | ~120 unique tags |
 | RSS feed | ✅ Live | All 100 posts |
-| Sitemap | ✅ Dynamic, hourly | All posts + tags + instructors + pillar + feature + compare pages |
+| Sitemap | ✅ Dynamic, hourly | All posts + tags + instructors + pillar + feature + compare + location pages |
 | Pillar pages | ✅ Complete | 4 |
 | Feature landing pages | ✅ 6 of 10 done | 4 LOW pending |
 | Comparison pages | ✅ 3 of 5 done | 2 pending |
+| Location pages | ✅ WA complete — other states pending instructor sign-up | 40+ WA suburbs live |
 | Instructor microsite pages | ✅ Live | Dynamic from DB |
-| JSON-LD structured data | ✅ All pages | BlogPosting, FAQPage, LocalBusiness, Organization, WebSite, SoftwareApplication |
-| Internal linking | ✅ Complete | Feature/compare pages linked from footer, teach-with-drivebook, for-instructors |
-| Middleware public paths | ✅ Updated | `/features/*` and `/compare/*` added |
+| JSON-LD structured data | ✅ All pages | BlogPosting, FAQPage, LocalBusiness, ItemList, BreadcrumbList, Organization, WebSite, SoftwareApplication |
+| Internal linking | ✅ Complete | Feature/compare/location pages linked from nav + footer |
+| Middleware public paths | ✅ Updated | `/features/*`, `/compare/*`, `/driving-lessons/*` |
 
 ---
 
-## Pending SEO Work (see TODO.md for full roadmap)
+## Location Pages (SEO Phase 4)
 
-| Phase | What | Priority |
-|-------|------|----------|
-| 2 | Feature landing pages (`/features/*`) | High |
-| 3 | Comparison pages (`/compare/*`) | High |
-| 4 | Location pages (`/perth`, `/joondalup` etc.) | Medium |
-| 5 | Documentation centre (`/docs`) | Medium |
-| 6 | Interactive tools (calculators, quizzes) | Low |
-| — | OG images per post (1200×630) | When design assets ready |
-| — | Add pillar pages to middleware public paths | Before deploy |
+**Routes:**
+- `/driving-lessons` — state index with live instructor counts per state
+- `/driving-lessons/[state]` — suburb grid with per-suburb instructor counts
+- `/driving-lessons/[state]/[suburb]` — live instructor cards + location FAQ + JSON-LD
+
+**Data source:** `lib/data/au-locations.ts` — canonical slugs, display names, postcodes for WA (40+ suburbs), NSW, VIC, QLD, SA. Static file — no DB dependency.
+
+**DB fields:** `Instructor.suburb`, `Instructor.state`, `Instructor.postcode` — extracted automatically from `baseAddress` on settings save via `parseAuAddress()`. Migration: `20260714000002_add_instructor_location_fields`.
+
+**Rendering:** `generateStaticParams` + ISR (1h revalidation). All pages in sitemap.
+
+**JSON-LD on suburb pages:** `BreadcrumbList` + `ItemList` (suburb) + `LocalBusiness` per instructor card.
+
+**Navigation:** "Find Instructors" → `/driving-lessons` in homepage nav (desktop + mobile), learn-to-drive, pda-guide, for-instructors page navs. Footer Locations column with 6 direct suburb links.
+
+**Current state (July 2026):** All WA pages live. NSW/VIC/QLD/SA pages exist and are in sitemap — show "coming soon" state until instructors register in those states.

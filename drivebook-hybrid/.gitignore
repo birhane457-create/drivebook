@@ -45,3 +45,6 @@ generated-client-js/
 generated-server/
 openapitools.json
 mock-drivebook-server.js
+
+# Built VAPI prompt (contains real support contact details — never commit)
+VAPI_SYSTEM_PROMPT.built.md

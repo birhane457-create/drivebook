@@ -47,6 +47,9 @@ export default function ClientsPage() {
     notes: ''
   })
   const [editData, setEditData] = useState<Client | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [formSuccess, setFormSuccess] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchClients(1)
@@ -81,6 +84,7 @@ export default function ClientsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError(null)
     try {
       const res = await fetch('/api/clients', {
         method: 'POST',
@@ -91,15 +95,16 @@ export default function ClientsPage() {
       if (res.ok) {
         setFormData({ name: '', phone: '', email: '', addressText: '', notes: '' })
         setShowForm(false)
+        setFormSuccess(true)
+        setTimeout(() => setFormSuccess(false), 3000)
         fetchClients(1)
-        alert('Client added successfully!')
       } else {
         const error = await res.json()
-        alert(error.details || error.error || 'Failed to create client. Please ensure all required fields are filled.')
+        setFormError(error.details || error.error || 'Failed to create client. Please ensure all required fields are filled.')
       }
     } catch (error) {
       console.error('Failed to create client:', error)
-      alert('Failed to create client. Please check your internet connection.')
+      setFormError('Failed to create client. Please check your internet connection.')
     }
   }
 
@@ -111,7 +116,7 @@ export default function ClientsPage() {
 
   const handleSaveEdit = async () => {
     if (!editData) return
-    
+    setSaveError(null)
     try {
       const res = await fetch(`/api/clients/${editData.id}`, {
         method: 'PUT',
@@ -128,10 +133,15 @@ export default function ClientsPage() {
       if (res.ok) {
         setEditingId(null)
         setEditData(null)
+        setSaveError(null)
         fetchClients(pagination.page)
+      } else {
+        const err = await res.json()
+        setSaveError(err.error || 'Failed to save changes.')
       }
     } catch (error) {
       console.error('Failed to update client:', error)
+      setSaveError('Network error — please try again.')
     }
   }
 
@@ -241,6 +251,23 @@ export default function ClientsPage() {
           </div>
         )}
 
+        {/* Add-client success toast */}
+        {formSuccess && (
+          <div className="flex items-center gap-2 mb-4 bg-emerald-950/40 border border-emerald-500/40 rounded-xl px-4 py-3 text-emerald-300 text-sm font-medium">
+            <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+            Client added successfully.
+          </div>
+        )}
+
+        {/* Add-client error */}
+        {formError && (
+          <div className="flex items-start gap-2 mb-4 bg-red-950/40 border border-red-500/40 rounded-xl px-4 py-3 text-red-300 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{formError}</span>
+            <button onClick={() => setFormError(null)} className="ml-auto text-red-400 hover:text-white shrink-0"><X className="w-3.5 h-3.5" /></button>
+          </div>
+        )}
+
         <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 h-5 w-5" />
@@ -263,8 +290,8 @@ export default function ClientsPage() {
             <p className="text-slate-400">Add your first client to get started</p>
           </div>
         ) : (
-          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-500 overflow-hidden">
-            <div className="divide-y divide-slate-500">
+          <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 overflow-hidden">
+            <div className="divide-y divide-slate-800">
               {filteredClients.map((client) => {
                 const isExpanded = expandedId === client.id
                 const isEditing = editingId === client.id
@@ -415,6 +442,14 @@ export default function ClientsPage() {
                                 rows={3}
                                 className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
                               />
+                            </div>
+                            <div className="flex gap-2">
+                              {saveError && (
+                                <div className="w-full flex items-center gap-2 bg-red-950/40 border border-red-500/40 rounded-lg px-3 py-2 text-red-300 text-xs mb-1">
+                                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                  {saveError}
+                                </div>
+                              )}
                             </div>
                             <div className="flex gap-2">
                               <button

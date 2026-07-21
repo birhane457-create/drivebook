@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X, RefreshCw, Banknote } from 'lucide-react'
 import Link from 'next/link'
+import { getStatusConfig } from '@/lib/config/booking-status'
 
 interface Booking {
   id: string
@@ -232,15 +233,7 @@ export default function BookingsPage() {
     return matchesSearch && matchesSource
   })
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'CONFIRMED': return 'bg-emerald-900 text-emerald-200'
-      case 'PENDING': return 'bg-amber-900 text-amber-200'
-      case 'COMPLETED': return 'bg-sky-900 text-sky-200'
-      case 'CANCELLED': return 'bg-red-900 text-red-200'
-      default: return 'bg-slate-800 text-slate-200'
-    }
-  }
+  // Status colours now come from lib/config/booking-status.ts (getStatusConfig)
 
   const toggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id)
@@ -346,8 +339,9 @@ export default function BookingsPage() {
                             <h3 className="font-semibold truncate">
                               {booking.client?.name || (booking as any).clientName || 'Unknown Client'}
                             </h3>
-                            <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(booking.status)}`}>
-                              {booking.status}
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusConfig(booking.status).badge}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${getStatusConfig(booking.status).dot}`} />
+                              {getStatusConfig(booking.status).label}
                             </span>
                             {/* Source badge */}
                             {(booking.source ?? 'platform') === 'offline' ? (

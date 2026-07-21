@@ -1,586 +1,118 @@
-# Platform Owner Management Guide
+# Platform Owner Guide
 
-## Overview
-As the platform owner of DriveBook, you manage multiple driving instructors, handle subscriptions, and oversee the entire platform. This guide covers all management tasks.
-
----
-
-## User Roles
-
-### 1. SUPER_ADMIN (You - Platform Owner)
-- Full access to everything
-- Manage all instructors
-- View platform revenue
-- Approve/reject/suspend instructors
-- Access admin dashboard at `/admin`
-- Can create other admins
-
-### 2. ADMIN (Your Staff)
-- Same as SUPER_ADMIN but cannot create other admins
-- Manage instructors
-- View analytics
-- Handle support
-
-### 3. INSTRUCTOR
-- Manage their own bookings and clients
-- Configure their schedule and pricing
-- Access instructor dashboard at `/dashboard`
-- Pay subscription fees to you
-
-### 4. CLIENT
-- Book lessons
-- Manage their bookings
-- Leave reviews
+**Last Updated:** July 2026  
+**For:** Platform owner (SUPER_ADMIN)
 
 ---
 
-## Getting Started as Platform Owner
+## Your Role
 
-### Step 1: Create Your Admin Account
-```bash
-npm run create:admin
-```
-This creates your SUPER_ADMIN account. Use this to login at `/login`
-
-### Step 2: Access Admin Dashboard
-- Login at: `http://localhost:3000/login`
-- Navigate to: `http://localhost:3000/admin`
-
-### Step 3: Initial Setup
-Run these commands to set up the platform:
-```bash
-# Approve any pending instructors
-npm run approve:instructors
-
-# Set default working hours for instructors
-npm run setup:hours
-
-# Set default lesson durations
-npm run setup:durations
-```
+As platform owner you control:
+- Subscription pricing and commission rates
+- Instructor approval and suspension
+- Payout processing and dispute resolution
+- Staff (admin) account management
+- Platform settings and integrations
 
 ---
 
-## Daily Management Tasks
+## Access
 
-### 1. Approve New Instructors
-
-**Via Admin Dashboard (Recommended):**
-1. Go to `/admin/instructors`
-2. See list of pending instructors
-3. Click "Approve" to activate them
-4. Click "Reject" to deny their application
-5. Add rejection reason if needed
-
-**Via Command Line:**
-```bash
-npm run approve:instructors
-```
-
-### 2. Monitor Platform Revenue
-
-**Via Admin Dashboard:**
-1. Go to `/admin`
-2. View dashboard showing:
-   - Total instructors (active/pending)
-   - Total bookings
-   - Revenue breakdown (subscriptions + commissions)
-   - Recent activity
-
-**Via API:**
-```bash
-# Get revenue for current month
-curl http://localhost:3000/api/admin/revenue
-```
-
-### 3. Manage Instructor Status
-
-**Suspend an Instructor:**
-- Go to `/admin/instructors`
-- Click "Suspend" on any instructor
-- They can't receive bookings while suspended
-- Can reactivate later
-
-**Reject an Application:**
-- Go to `/admin/instructors`
-- Click "Reject" on pending instructor
-- Provide reason for rejection
-- They won't appear on platform
-
-### 4. View All Bookings
-
-**Via Admin Dashboard:**
-- Go to `/admin` (coming soon - needs implementation)
-- View all bookings across all instructors
-- Filter by status, date, instructor
-
-**Via Database:**
-```bash
-npx prisma studio
-```
-Opens visual database browser at `http://localhost:5555`
+Login at `/login` with your SUPER_ADMIN account.  
+Bootstrap: `node create-admin.js` (requires `ADMIN_BOOTSTRAP_KEY` env var, disabled once used).
 
 ---
 
-## Managing Your Staff (Creating Admins)
+## Staff Management
 
-### Create Admin Account for Staff Member
-
-**Option 1: Via Script**
-```bash
-npm run create:admin
-```
-Follow prompts to create admin account
-
-**Option 2: Convert Existing User**
-```bash
-npm run make:admin
-```
-Enter email of existing user to make them admin
-
-**Option 3: Via Database**
-```bash
-npx prisma studio
-```
-1. Open User table
-2. Find the user
-3. Change `role` to `ADMIN`
-
-### Admin vs Super Admin
-- **SUPER_ADMIN**: Can create other admins (you)
-- **ADMIN**: Cannot create admins (your staff)
-
-Both have same access to:
-- Instructor management
-- Platform analytics
-- Revenue reports
-- Booking oversight
+Create admin accounts for staff via the admin panel. ADMIN accounts have full access except:
+- Cannot create other admin accounts (SUPER_ADMIN only)
+- Cannot change platform pricing (SUPER_ADMIN only)
 
 ---
 
-## Revenue Management
+## Subscription Tiers
 
-### Understanding Revenue Streams
+| Tier | Monthly | Annual | Commission | Trial |
+|------|---------|--------|------------|-------|
+| BASIC | $29 | $290 | 15% | 14 days |
+| PRO | $79 | $790 | 12% | 14 days |
+| STUDIO | $129 | $1,290 | 11% | 14 days |
+| BUSINESS | $199 | $1,990 | 10% | 30 days |
 
-**1. Subscription Fees (Monthly)**
-- PRO: $29/month per instructor
-- BUSINESS: $59/month per instructor
+**Change rates:** `/admin/pricing` — rates apply to new bookings immediately.  
+**Schedule future changes:** Rate Change Scheduler on the same page — instructors are notified before effective date.
 
-**2. Commission Fees (Per Booking)**
-- PRO: 12% of booking price
-- BUSINESS: 7% of booking price
-- New Student Bonus: +8% on first booking with new client
-
-### View Revenue Reports
-
-**Current Month Revenue:**
-```bash
-curl http://localhost:3000/api/admin/revenue
-```
-
-**Custom Date Range:**
-```bash
-curl "http://localhost:3000/api/admin/revenue?startDate=2026-01-01&endDate=2026-01-31"
-```
-
-**Revenue Breakdown Shows:**
-- Total bookings (first vs repeat)
-- Commission revenue
-- Subscription revenue
-- Revenue by tier (PRO vs BUSINESS)
-- Instructor payouts
-
-### Example Revenue Calculation
-
-**Instructor on PRO Tier:**
-- Monthly subscription: $29
-- 20 bookings @ $70 each = $1,400
-- 5 first bookings: $70 × 20% = $70 commission
-- 15 repeat bookings: $1,050 × 12% = $126 commission
-- **Your revenue: $29 + $70 + $126 = $225**
-- **Instructor keeps: $1,400 - $196 = $1,204**
+Stripe price IDs for each tier are set in Vercel env vars. BUSINESS tier is "Coming Soon" until multi-instructor management is built.
 
 ---
 
-## Instructor Management
+## Weekly Financial Review
 
-### Instructor Lifecycle
+Use `docs/WEEKLY_RECONCILIATION_TEMPLATE.md` as the agenda.
 
-```
-1. REGISTRATION
-   ↓
-2. PENDING (waiting for approval)
-   ↓
-3. APPROVED (active on platform)
-   ↓
-4. SUSPENDED (temporarily disabled)
-   or
-   REJECTED (denied access)
-```
-
-### Approval Checklist
-
-Before approving an instructor, verify:
-- [ ] Valid driving instructor license
-- [ ] Insurance documents uploaded
-- [ ] Profile completed (photo, bio, car details)
-- [ ] Service areas defined
-- [ ] Working hours configured
-- [ ] Pricing set
-
-### Bulk Operations
-
-**Approve All Pending:**
-```bash
-npm run approve:instructors
-```
-
-**Set Default Hours for All:**
-```bash
-npm run setup:hours
-```
-
-**Set Default Durations for All:**
-```bash
-npm run setup:durations
-```
+Key checks:
+1. Platform revenue this month vs last month (`/admin/revenue`)
+2. Pending payouts to process (`/admin/payouts`)
+3. Open disputes needing response (`/admin/disputes`)
+4. Instructors with documents expiring in 30 days (`/admin/documents`)
+5. Unverified ABNs — instructors with 47% withholding tax applied (`/admin/instructors`)
 
 ---
 
-## Subscription Management
+## Key Financial Rules
 
-### View Instructor Subscriptions
-
-**Via API:**
-```bash
-curl http://localhost:3000/api/admin/revenue
-```
-
-Shows:
-- Active subscriptions
-- Trial subscriptions
-- Monthly subscription revenue
-
-### Subscription Tiers
-
-**PRO - $29/month**
-- Unlimited clients
-- Google Calendar sync
-- Analytics dashboard
-- Email notifications
-- 12% commission per booking
-
-**BUSINESS - $59/month**
-- Everything in PRO
-- Multiple instructors under one account
-- Branded booking page
-- Priority support
-- Custom domain
-- 7% commission per booking
-
-### Trial Period
-- New instructors get 14-day free trial
-- Full access to all features
-- Automatically converts to paid after trial
+- **Commission locked at booking time** — rate changes never retroactively affect existing bookings
+- **Withholding tax** — 47% applied if instructor has no verified ABN; 0% with verified ABN
+- **Refund tiers** — ≥48h = 100%, 24–48h = 50%, <24h = 0%
+- **Payout hold** — any booking under dispute has payout frozen until resolved
+- **Platform ledger** — real-time balance visible on `/admin/revenue`
 
 ---
 
-## Platform Configuration
+## Escalation Path
 
-### Update Pricing
-
-Edit `lib/services/payment.ts`:
-```typescript
-getSubscriptionPricing(tier: 'PRO' | 'BUSINESS') {
-  const pricing = {
-    PRO: {
-      monthlyPrice: 29.00,  // Change this
-      commissionRate: 12.0,  // Change this
-      // ...
-    },
-    BUSINESS: {
-      monthlyPrice: 59.00,  // Change this
-      commissionRate: 7.0,   // Change this
-      // ...
-    }
-  }
-}
-```
-
-### Update Platform Settings
-
-Edit `prisma/schema.prisma` Platform model:
-```prisma
-model Platform {
-  proMonthlyPrice      Float    @default(29.00)
-  businessMonthlyPrice Float    @default(59.00)
-  proCommissionRate    Float    @default(12.0)
-  businessCommissionRate Float  @default(7.0)
-  newStudentBonusRate  Float    @default(8.0)
-  trialDays           Int      @default(14)
-}
-```
-
-Then run:
-```bash
-npx prisma db push
-```
+| Level | Who handles | When |
+|-------|-------------|------|
+| 1 | Admin staff | Routine approvals, support requests |
+| 2 | Senior admin | Disputed payouts, large refunds, instructor suspension |
+| 3 | You (Owner) | Chargeback disputes, policy changes, platform settings |
 
 ---
 
-## Monitoring & Analytics
+## Production Infrastructure
 
-### Key Metrics to Track
-
-**Daily:**
-- New instructor registrations
-- Pending approvals
-- Total bookings
-- Revenue
-
-**Weekly:**
-- Active instructors
-- Booking completion rate
-- Average booking value
-- Instructor churn
-
-**Monthly:**
-- Total revenue (subscriptions + commissions)
-- Revenue per instructor
-- Platform growth rate
-- Customer acquisition cost
-
-### Access Analytics
-
-**Admin Dashboard:**
-- Go to `/admin`
-- View real-time metrics
-
-**Database:**
-```bash
-npx prisma studio
-```
-- View all data visually
-- Export reports
-- Run custom queries
+| Service | Provider | URL |
+|---------|----------|-----|
+| Main app | Vercel | drivebook.com.au |
+| Database | Neon (PostgreSQL) | — |
+| Voice AI | Railway | voice.drivebook.com.au |
+| Redis | Upstash | — (session recovery) |
+| Payments | Stripe | — |
+| SMS/Voice | Twilio | — |
+| File uploads | Cloudinary | — |
 
 ---
 
-## Common Management Tasks
+## Monitoring
 
-### 1. Instructor Not Showing on Platform
-```bash
-# Check their status
-npm run test:availability
-
-# Approve them
-npm run approve:instructors
-
-# Set up their schedule
-npm run setup:hours
-npm run setup:durations
-```
-
-### 2. Instructor Can't Receive Bookings
-Check:
-- [ ] Approved status
-- [ ] Working hours configured
-- [ ] Allowed durations set
-- [ ] Service areas defined
-- [ ] Not suspended
-
-### 3. Reset Instructor Password
-```bash
-npm run reset:password
-```
-Enter their email to reset
-
-### 4. View All Platform Data
-```bash
-npx prisma studio
-```
-Opens at `http://localhost:5555`
-
-### 5. Backup Database
-```bash
-# MongoDB backup (if using MongoDB Atlas)
-# Use MongoDB Atlas UI to create backup
-# Or use mongodump command
-```
+- **Cron jobs:** `/admin/cron-jobs` — health of all scheduled tasks
+- **Build errors:** Vercel deployment logs
+- **Stripe:** dashboard.stripe.com — webhook health, dispute deadlines
+- **Voice AI:** Railway logs, VAPI dashboard
 
 ---
 
-## Staff Training
+## Before Going Live Checklist
 
-### For Your Admin Staff
+- [ ] Set live Stripe keys + 8 price IDs in Vercel env vars
+- [ ] Set `STRIPE_WEBHOOK_SECRET` for live webhook endpoint
+- [ ] Verify `GOOGLE_REDIRECT_URI` in Google Cloud Console
+- [ ] Set `NEXT_PUBLIC_VOICE_PHONE_NUMBER` (real AU number)
+- [ ] Set Firebase env vars for mobile push notifications
+- [ ] Set `VOICE_SERVICE_API_KEY` in Railway
+- [ ] Configure Stripe Billing Portal (plan switching + proration)
+- [ ] Submit sitemap to Google Search Console
+- [ ] Replace placeholder ABN on `/about` page
 
-**Give them access to:**
-1. Admin dashboard: `/admin`
-2. This guide
-3. Admin credentials (ADMIN role, not SUPER_ADMIN)
-
-**Train them on:**
-- Approving instructors (check documents first)
-- Handling support tickets
-- Monitoring bookings
-- Viewing revenue reports
-
-**They should NOT:**
-- Create other admins (only you can)
-- Change platform pricing
-- Access database directly
-- Modify instructor subscriptions manually
-
----
-
-## Security Best Practices
-
-### 1. Admin Account Security
-- Use strong passwords
-- Don't share SUPER_ADMIN credentials
-- Create separate ADMIN accounts for staff
-- Regularly review admin access
-
-### 2. Instructor Verification
-- Always verify documents before approval
-- Check license validity
-- Verify insurance coverage
-- Review profile completeness
-
-### 3. Data Protection
-- Regular database backups
-- Secure environment variables
-- HTTPS in production
-- Monitor for suspicious activity
-
----
-
-## Troubleshooting
-
-### Platform Not Loading
-```bash
-# Check if server is running
-npm run dev
-
-# Check database connection
-npx prisma studio
-```
-
-### Can't Login as Admin
-```bash
-# Reset admin password
-npm run reset:password
-
-# Or create new admin
-npm run create:admin
-```
-
-### Instructors Not Appearing
-```bash
-# Check approval status
-node scripts/check-instructors.js
-
-# Approve all pending
-npm run approve:instructors
-```
-
-### No Available Time Slots
-```bash
-# Check instructor configuration
-npm run test:availability
-
-# Set up working hours
-npm run setup:hours
-
-# Set up durations
-npm run setup:durations
-```
-
----
-
-## Quick Reference Commands
-
-```bash
-# Admin Management
-npm run create:admin          # Create new admin account
-npm run make:admin           # Convert user to admin
-npm run reset:password       # Reset any user password
-
-# Instructor Management
-npm run approve:instructors  # Approve all pending instructors
-npm run setup:hours         # Set default working hours
-npm run setup:durations     # Set default lesson durations
-npm run test:availability   # Test instructor availability
-
-# Database
-npx prisma studio           # Visual database browser
-npx prisma db push          # Update database schema
-npx prisma generate         # Regenerate Prisma client
-
-# Development
-npm run dev                 # Start development server
-npm run build              # Build for production
-npm start                  # Start production server
-```
-
----
-
-## Support & Maintenance
-
-### Regular Maintenance Tasks
-
-**Daily:**
-- Review new instructor applications
-- Monitor booking activity
-- Check for support requests
-
-**Weekly:**
-- Review revenue reports
-- Check for suspended/inactive instructors
-- Backup database
-
-**Monthly:**
-- Analyze platform growth
-- Review pricing strategy
-- Update documentation
-- Plan new features
-
-### Getting Help
-
-**Technical Issues:**
-- Check logs: `npm run dev` output
-- Check database: `npx prisma studio`
-- Review error messages
-
-**Business Questions:**
-- Review revenue reports: `/api/admin/revenue`
-- Check instructor metrics: `/admin/instructors`
-- Analyze booking patterns
-
----
-
-## Future Enhancements
-
-**Coming Soon:**
-- Automated billing with Stripe
-- Instructor payout scheduling
-- Advanced analytics dashboard
-- Support ticket system
-- Email notifications for admins
-- Bulk instructor operations
-- Custom reporting tools
-
----
-
-## Contact & Support
-
-For platform issues or questions:
-1. Check this guide first
-2. Review PROJECT_DOCUMENTATION.md
-3. Check database with `npx prisma studio`
-4. Review error logs in terminal
-
----
-
-**Last Updated:** February 2026
-**Platform Version:** 2.1.0
+Full pre-launch checklist: `docs/DOCROLEBASE/TODO.md` → Pre-Launch Config section.

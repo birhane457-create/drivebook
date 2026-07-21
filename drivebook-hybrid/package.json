@@ -10,7 +10,8 @@
     "build": "prisma generate || true",
     "postinstall": "prisma generate || true",
     "vercel-build": "echo 'Vercel build complete'",
-    "check:api-parity": "node scripts/check_api_parity.js"
+    "check:api-parity": "node scripts/check_api_parity.js",
+    "build:vapi-prompt": "node scripts/build-vapi-prompt.js"
   },
   "keywords": [],
   "author": "",

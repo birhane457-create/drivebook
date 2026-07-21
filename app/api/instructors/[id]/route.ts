@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getDisplayName } from '@/lib/utils/account'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ export async function GET(
       select: {
         id: true,
         name: true,
+        businessName: true,
+        accountType: true,
         phone: true,
         bio: true,
         profileImage: true,
@@ -48,6 +51,7 @@ export async function GET(
 
     return NextResponse.json({
       ...instructor,
+      displayName: getDisplayName(instructor as any),
       testPackageIncludes,
     })
   } catch (error) {

@@ -38,6 +38,7 @@ export default function VoiceLinesAdminPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState({ sid: '', phoneNumber: '', friendlyName: '', areaCode: '', notes: '' })
   const [assignForm, setAssignForm] = useState<{ numberId: string; instructorId: string } | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message })
@@ -104,7 +105,6 @@ export default function VoiceLinesAdminPage() {
   }
 
   async function handleDelete(numberId: string) {
-    if (!confirm('Remove this number from the pool? This does NOT cancel it in Twilio.')) return
     setActionLoading(numberId + 'delete')
     try {
       const res = await fetch(`/api/admin/voice-lines/${numberId}`, { method: 'DELETE' })
@@ -291,13 +291,28 @@ export default function VoiceLinesAdminPage() {
                               <UserCheck className="h-3 w-3" /> Assign
                             </button>
                           )}
-                          <button
-                            onClick={() => handleDelete(num.id)}
-                            disabled={actionLoading === num.id + 'delete'}
-                            className="rounded border border-red-900 px-2 py-1 text-xs text-red-400 hover:bg-red-900/20"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+                          {deleteConfirmId === num.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => { handleDelete(num.id); setDeleteConfirmId(null); }}
+                                disabled={actionLoading === num.id + 'delete'}
+                                className="rounded bg-red-700 px-2 py-1 text-xs text-white hover:bg-red-600 disabled:opacity-50"
+                              >
+                                {actionLoading === num.id + 'delete' ? '…' : 'Remove'}
+                              </button>
+                              <button onClick={() => setDeleteConfirmId(null)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:text-white">
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setDeleteConfirmId(num.id)}
+                              className="rounded border border-red-900 px-2 py-1 text-xs text-red-400 hover:bg-red-900/20"
+                              title="Remove from pool — does NOT cancel in Twilio"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </>
                       )}
                       {num.status === 'ASSIGNED' && (

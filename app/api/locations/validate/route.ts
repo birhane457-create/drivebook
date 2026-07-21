@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { geocodeAddress } from '@/lib/utils/distance';
+import { resolveLocationStatic } from '@/lib/services/resolve-location';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,8 +24,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Attempt to geocode the address
-    const coords = await geocodeAddress(pickupLocation);
+    // Attempt to resolve the address — static postcode/suburb lookup first (instant),
+    // fall back to Nominatim geocoding for full street addresses.
+    const staticResolved = resolveLocationStatic(pickupLocation);
+    const coords = staticResolved
+      ? { displayName: staticResolved.displayName, lat: staticResolved.lat, lng: staticResolved.lng }
+      : await geocodeAddress(pickupLocation);
 
     if (!coords) {
       return NextResponse.json({
@@ -46,9 +51,9 @@ export async function POST(req: NextRequest) {
       lat: coords.lat,
       lng: coords.lng,
       components: {
-        suburb: extractSuburb(coords.displayName),
-        state: extractState(coords.displayName),
-        postcode: extractPostcode(coords.displayName),
+        suburb:   staticResolved?.suburb   ?? extractSuburb(coords.displayName),
+        state:    staticResolved?.state    ?? extractState(coords.displayName),
+        postcode: staticResolved?.postcode ?? extractPostcode(coords.displayName),
       },
     });
   } catch (error) {

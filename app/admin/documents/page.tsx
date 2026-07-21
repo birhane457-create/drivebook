@@ -28,6 +28,8 @@ export default function DocumentCompliancePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [deactivateConfirmId, setDeactivateConfirmId] = useState<string | null>(null);
+  const [autoProcessConfirm, setAutoProcessConfirm] = useState(false);
 
   useEffect(() => {
     fetchCompliance();
@@ -66,10 +68,7 @@ export default function DocumentCompliancePage() {
   };
 
   const handleDeactivate = async (instructorId: string) => {
-    if (!confirm('Deactivate this instructor? They will be hidden from search results.')) {
-      return;
-    }
-
+    setDeactivateConfirmId(null);
     try {
       const res = await fetch('/api/admin/documents/compliance', {
         method: 'POST',
@@ -109,10 +108,7 @@ export default function DocumentCompliancePage() {
   };
 
   const handleAutoProcess = async () => {
-    if (!confirm('Auto-process all instructors? This will deactivate expired accounts and send reminders.')) {
-      return;
-    }
-
+    setAutoProcessConfirm(false);
     setProcessing(true);
     try {
       const res = await fetch('/api/admin/documents/compliance', {
@@ -225,13 +221,23 @@ export default function DocumentCompliancePage() {
         <div className="bg-slate-900 p-4 rounded-lg shadow mb-6">
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={handleAutoProcess}
-                disabled={processing}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-slate-600"
-              >
-                {processing ? 'Processing...' : 'Auto-Process All'}
-              </button>
+              {autoProcessConfirm ? (
+                <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-700/50 rounded-lg px-3 py-2">
+                  <span className="text-xs text-amber-300 font-medium">Deactivate expired + send reminders?</span>
+                  <button onClick={handleAutoProcess} disabled={processing} className="rounded bg-amber-600 px-2 py-1 text-xs text-white hover:bg-amber-700 disabled:opacity-50">
+                    {processing ? 'Processing…' : 'Yes, run'}
+                  </button>
+                  <button onClick={() => setAutoProcessConfirm(false)} className="text-xs text-slate-400 hover:text-white">Cancel</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAutoProcessConfirm(true)}
+                  disabled={processing}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-slate-600"
+                >
+                  Auto-Process All
+                </button>
+              )}
               <button
                 onClick={() => setFilter('all')}
                 className={`px-4 py-2 rounded ${filter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
@@ -344,12 +350,29 @@ export default function DocumentCompliancePage() {
                             </button>
                           )}
                           {record.status === 'expired' && record.isActive && (
-                            <button
-                              onClick={() => handleDeactivate(record.instructorId)}
-                              className="text-sm text-red-600 hover:text-red-200"
-                            >
-                              Deactivate
-                            </button>
+                            deactivateConfirmId === record.instructorId ? (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleDeactivate(record.instructorId)}
+                                  className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
+                                >
+                                  Confirm
+                                </button>
+                                <button
+                                  onClick={() => setDeactivateConfirmId(null)}
+                                  className="text-xs text-slate-400 hover:text-white"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeactivateConfirmId(record.instructorId)}
+                                className="text-sm text-red-600 hover:text-red-200"
+                              >
+                                Deactivate
+                              </button>
+                            )
                           )}
                         </div>
                       </td>

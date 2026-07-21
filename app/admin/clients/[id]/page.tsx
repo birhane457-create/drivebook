@@ -214,7 +214,6 @@ export default function AdminClientDetailsPage() {
   };
 
   const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('Cancel this booking? A refund will be issued based on the cancellation policy.')) return;
     setActionLoading(true);
     const res = await fetch(`/api/bookings/${bookingId}/cancel`, { method: 'POST' });
     const data = await res.json();
@@ -227,7 +226,6 @@ export default function AdminClientDetailsPage() {
   };
 
   const handleMarkComplete = async (bookingId: string) => {
-    if (!confirm('Mark this booking as completed?')) return;
     setActionLoading(true);
     const res = await fetch(`/api/bookings/${bookingId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -256,7 +254,6 @@ export default function AdminClientDetailsPage() {
   };
 
   const handleDeleteBooking = async (bookingId: string) => {
-    if (!confirm('Remove this booking? A soft-delete will be performed and an audit log entry created.')) return;
     setActionLoading(true);
     const res = await fetch(`/api/bookings/${bookingId}`, { method: 'DELETE' });
     const data = await res.json();

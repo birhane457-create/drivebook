@@ -2,9 +2,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
-import { Calendar, Users, DollarSign, Car, TrendingUp, Clock, Wallet, Package, CreditCard, Settings, AlertTriangle, Star, Phone } from 'lucide-react'
+import { Calendar, Users, TrendingUp, Car, Settings, AlertTriangle, Phone, Clock, Wallet, DollarSign, Star, Package, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import { EarningsThisWeekCard } from '@/components/instructor/EarningsThisWeekCard'
+import ProfileCompletenessCard from '@/components/instructor/ProfileCompletenessCard'
+import TodayWorkspace from '@/components/instructor/TodayWorkspace'
+import RemindButton from '@/components/instructor/RemindButton'
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
@@ -61,69 +64,69 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+          <div className="bg-slate-900/80 p-6 rounded-xl border border-white/10 shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Wallet Balance</p>
-                <p className="text-2xl md:text-3xl font-bold">${(user.wallet.balance ?? 0).toFixed(2)}</p>
+                <p className="text-slate-400 text-sm">Wallet Balance</p>
+                <p className="text-2xl md:text-3xl font-bold text-white">${(user.wallet.balance ?? 0).toFixed(2)}</p>
               </div>
-              <Wallet className="h-12 w-12 text-blue-600" />
+              <Wallet className="h-12 w-12 text-sky-400" />
             </div>
           </div>
 
-          <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
+          <div className="bg-slate-900/80 p-4 md:p-6 rounded-xl border border-white/10 shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Completed Lessons</p>
-                <p className="text-2xl md:text-3xl font-bold">{completedBookings}</p>
+                <p className="text-slate-400 text-sm">Completed Lessons</p>
+                <p className="text-2xl md:text-3xl font-bold text-white">{completedBookings}</p>
               </div>
-              <DollarSign className="h-12 w-12 text-red-600" />
+              <Star className="h-12 w-12 text-amber-400" />
             </div>
           </div>
 
-          <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
+          <div className="bg-slate-900/80 p-4 md:p-6 rounded-xl border border-white/10 shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Upcoming Lessons</p>
-                <p className="text-2xl md:text-3xl font-bold">{upcomingBookings.length}</p>
+                <p className="text-slate-400 text-sm">Upcoming Lessons</p>
+                <p className="text-2xl md:text-3xl font-bold text-white">{upcomingBookings.length}</p>
               </div>
-              <Calendar className="h-12 w-12 text-green-600" />
+              <Calendar className="h-12 w-12 text-emerald-400" />
             </div>
           </div>
 
-          <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-md transition">
+          <div className="bg-slate-900/80 p-4 md:p-6 rounded-xl border border-white/10 shadow hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Lessons Done</p>
-                <p className="text-2xl md:text-3xl font-bold">{completedBookings}</p>
+                <p className="text-slate-400 text-sm">Recent Transactions</p>
+                <p className="text-2xl md:text-3xl font-bold text-white">{user.wallet.transactions?.length ?? 0}</p>
               </div>
-              <Star className="h-12 w-12 text-yellow-600" />
+              <CreditCard className="h-12 w-12 text-violet-400" />
             </div>
           </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-white rounded-lg shadow p-4 md:p-6">
+          <div className="bg-slate-900/80 rounded-xl border border-white/10 shadow p-4 md:p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Upcoming Lessons</h2>
-              <Link href="/client-dashboard/bookings" className="text-blue-600 hover:text-blue-800 text-sm">
+              <h2 className="text-xl font-bold text-white">Upcoming Lessons</h2>
+              <Link href="/client-dashboard/bookings" className="text-sky-400 hover:text-sky-300 text-sm">
                 View All
               </Link>
             </div>
             {upcomingBookings.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Clock className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+              <div className="text-center py-8 text-slate-400">
+                <Clock className="h-12 w-12 mx-auto mb-2 text-slate-600" />
                 <p>No upcoming lessons scheduled</p>
-                <Link href="/book" className="text-blue-600 hover:underline text-sm">
+                <Link href="/book" className="text-sky-400 hover:underline text-sm">
                   Book a lesson
                 </Link>
               </div>
             ) : (
               <div className="space-y-4">
                 {upcomingBookings.map((booking) => (
-                  <div key={booking.id} className="border-l-4 border-blue-600 pl-4 py-2 hover:bg-gray-50 transition">
-                    <p className="font-semibold">{(booking as any).instructor?.name ?? 'Instructor'}</p>
-                    <p className="text-sm text-gray-600">
+                  <div key={booking.id} className="border-l-4 border-sky-500 pl-4 py-2 hover:bg-white/5 transition rounded-r">
+                    <p className="font-semibold text-white">{(booking as any).instructor?.name ?? 'Instructor'}</p>
+                    <p className="text-sm text-slate-400">
                       {booking.startTime ? new Date(booking.startTime).toLocaleString('en-AU', {
                         weekday: 'short',
                         month: 'short',
@@ -132,61 +135,61 @@ export default async function DashboardPage() {
                         minute: '2-digit'
                       }) : 'TBD'}
                     </p>
-                    <p className="text-sm text-gray-500">{booking.duration} hours</p>
+                    <p className="text-sm text-slate-500">{booking.duration} hours</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow p-4 md:p-6">
+          <div className="bg-slate-900/80 rounded-xl border border-white/10 shadow p-4 md:p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Quick Stats</h2>
+              <h2 className="text-xl font-bold text-white">Quick Stats</h2>
             </div>
             <div className="space-y-3">
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                <p className="text-gray-600">Wallet Balance</p>
-                <p className="font-semibold">${(user.wallet.balance ?? 0).toFixed(2)}</p>
+              <div className="flex justify-between items-center p-3 bg-slate-800/60 rounded-lg border border-white/5">
+                <p className="text-slate-300">Wallet Balance</p>
+                <p className="font-semibold text-white">${(user.wallet.balance ?? 0).toFixed(2)}</p>
               </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                <p className="text-gray-600">Completed Lessons</p>
-                <p className="font-semibold">{completedBookings}</p>
+              <div className="flex justify-between items-center p-3 bg-slate-800/60 rounded-lg border border-white/5">
+                <p className="text-slate-300">Completed Lessons</p>
+                <p className="font-semibold text-white">{completedBookings}</p>
               </div>
-              <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
-                <p className="text-gray-600">Upcoming Lessons</p>
-                <p className="font-bold text-blue-600">{upcomingBookings.length}</p>
+              <div className="flex justify-between items-center p-3 bg-sky-950/40 rounded-lg border border-sky-700/30">
+                <p className="text-slate-300">Upcoming Lessons</p>
+                <p className="font-bold text-sky-400">{upcomingBookings.length}</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow p-4 md:p-6 text-white">
-          <h3 className="text-lg sm:text-xl font-bold mb-2">Quick Actions</h3>
+        <div className="mt-6 bg-slate-900/80 rounded-xl border border-white/10 shadow p-4 md:p-6 text-white">
+          <h3 className="text-lg sm:text-xl font-bold mb-2 text-white">Quick Actions</h3>
           <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4">
             <Link 
               href="/book"
-              className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+              className="bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/20 p-4 rounded-xl transition"
             >
               <Calendar className="h-6 w-6 mb-2" />
               <p className="font-semibold text-sm">Book Lesson</p>
             </Link>
             <Link 
               href="/dashboard/wallet"
-              className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+              className="bg-slate-800/60 hover:bg-slate-700/60 border border-white/10 p-4 rounded-xl transition"
             >
               <Wallet className="h-6 w-6 mb-2" />
               <p className="font-semibold text-sm">View Wallet</p>
             </Link>
             <Link 
               href="/dashboard/packages"
-              className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+              className="bg-slate-800/60 hover:bg-slate-700/60 border border-white/10 p-4 rounded-xl transition"
             >
               <Package className="h-6 w-6 mb-2" />
               <p className="font-semibold text-sm">My Packages</p>
             </Link>
             <Link 
               href="/dashboard/credits/add-funds"
-              className="bg-white/20 hover:bg-white/30 p-4 rounded-lg transition"
+              className="bg-slate-800/60 hover:bg-slate-700/60 border border-white/10 p-4 rounded-xl transition"
             >
               <CreditCard className="h-6 w-6 mb-2" />
               <p className="font-semibold text-sm">Add Funds</p>
@@ -220,7 +223,17 @@ export default async function DashboardPage() {
   const daysElapsedThisMonth = now.getDate()
   const daysInLastMonth = endOfLastMonth.getDate()
 
-  const [instructor, monthlyBookings, totalRevenue, lastMonthRevenue, clientsWithPackages, totalClientCount] = await Promise.all([
+  // Today boundaries (Perth AWST = UTC+8)
+  const perthOffsetMs = 8 * 60 * 60 * 1000
+  const perthNow = new Date(now.getTime() + perthOffsetMs)
+  const startOfToday = new Date(Date.UTC(
+    perthNow.getUTCFullYear(), perthNow.getUTCMonth(), perthNow.getUTCDate(), 0, 0, 0
+  ) - perthOffsetMs)
+  const endOfToday = new Date(Date.UTC(
+    perthNow.getUTCFullYear(), perthNow.getUTCMonth(), perthNow.getUTCDate(), 23, 59, 59, 999
+  ) - perthOffsetMs)
+
+  const [instructor, monthlyBookings, totalRevenue, lastMonthRevenue, clientsWithPackages, inactiveClients, totalClientCount, todayBookings] = await Promise.all([
     prisma.instructor.findUnique({
       where: { id: session.user.instructorId },
       include: {
@@ -283,37 +296,92 @@ export default async function DashboardPage() {
         price: true
       }
     }),
+    // Clients with unused paid package hours — paid only, sorted by oldest activity first
     prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
         isPackageBooking: true,
         packageHoursRemaining: { gt: 0 },
-        status: { in: ['CONFIRMED', 'COMPLETED'] }
+        isPaid: true,
+        status: { in: ['CONFIRMED', 'COMPLETED'] },
       },
       select: {
         id: true,
         updatedAt: true,
         packageHoursRemaining: true,
-        client: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
+        client: { select: { id: true, name: true, phone: true } },
       },
-      orderBy: {
-        updatedAt: 'asc'
+      orderBy: { updatedAt: 'asc' },
+      take: 5,
+    }),
+    // Inactive clients who had lessons but no booking in 21+ days
+    prisma.client.findMany({
+      where: {
+        instructorId: session.user.instructorId,
+        bookings: {
+          some: { status: { in: ['CONFIRMED', 'COMPLETED'] } },
+          none: {
+            status: { in: ['CONFIRMED', 'COMPLETED'] },
+            startTime: { gte: new Date(now.getTime() - 21 * 86400000) },
+          },
+        },
       },
-      take: 5
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        bookings: {
+          where: { status: { in: ['CONFIRMED', 'COMPLETED'] } },
+          orderBy: { startTime: 'desc' },
+          take: 1,
+          select: { id: true, startTime: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 5,
     }),
     prisma.client.count({
       where: { instructorId: session.user.instructorId }
-    })
+    }),
+    // Today's bookings for the Today Workspace — all statuses so progress is accurate
+    prisma.booking.findMany({
+      where: {
+        instructorId: session.user.instructorId,
+        startTime: { gte: startOfToday, lte: endOfToday },
+        deletedAt: null,
+      } as any,
+      select: {
+        id:           true,
+        startTime:    true,
+        endTime:      true,
+        duration:     true,
+        status:       true,
+        clientName:   true,
+        clientPhone:  true,
+        pickupAddress: true,
+        price:        true,
+        client: { select: { phone: true } },
+      },
+      orderBy: { startTime: 'asc' },
+    }),
   ])
 
   if (!instructor) {
     redirect('/login')
   }
+
+  // Normalise today bookings — phone may be on clientPhone or client relation
+  const todayWorkspaceBookings = todayBookings.map((b: any) => ({
+    id:           b.id,
+    startTime:    b.startTime,
+    endTime:      b.endTime,
+    duration:     b.duration,
+    status:       b.status,
+    clientName:   b.clientName ?? null,
+    clientPhone:  b.clientPhone ?? b.client?.phone ?? null,
+    pickupAddress: b.pickupAddress ?? null,
+    price:        b.price ?? 0,
+  }))
 
   // Calculate daily averages
   const thisMonthRevenue = totalRevenue._sum.price || 0
@@ -347,41 +415,44 @@ export default async function DashboardPage() {
 
       {/* Subscription status banner */}
       {subStatus === 'TRIAL' && trialExpired && (
-        <div className="mb-5 bg-red-50 border-2 border-red-300 rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+        <div className="mb-5 bg-red-950/30 border-2 border-red-500/50 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="font-semibold text-red-900">Your free trial has expired</p>
-            <p className="text-sm text-red-700 mt-0.5">Choose a plan to continue accepting bookings.</p>
+            <p className="font-semibold text-red-200">Your free trial has expired</p>
+            <p className="text-sm text-red-300/80 mt-0.5">Choose a plan to continue accepting bookings.</p>
           </div>
-          <Link href="/dashboard/subscription" className="shrink-0 bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-red-700">
+          <Link href="/dashboard/subscription" className="shrink-0 bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-red-500">
             Choose Plan
           </Link>
         </div>
       )}
       {subStatus === 'TRIAL' && !trialExpired && daysLeftInTrial <= 7 && (
-        <div className="mb-5 bg-amber-50 border-2 border-amber-300 rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        <div className="mb-5 bg-amber-950/30 border-2 border-amber-500/40 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="font-semibold text-amber-900">Trial ends in {daysLeftInTrial} day{daysLeftInTrial !== 1 ? 's' : ''}</p>
-            <p className="text-sm text-amber-700 mt-0.5">Add a payment method now to avoid interruption.</p>
+            <p className="font-semibold text-amber-200">Trial ends in {daysLeftInTrial} day{daysLeftInTrial !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-amber-300/80 mt-0.5">Add a payment method now to avoid interruption.</p>
           </div>
-          <Link href="/dashboard/subscription" className="shrink-0 bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-700">
+          <Link href="/dashboard/subscription" className="shrink-0 bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-500">
             Upgrade
           </Link>
         </div>
       )}
       {subStatus === 'PAST_DUE' && (
-        <div className="mb-5 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
+        <div className="mb-5 bg-yellow-950/30 border-2 border-yellow-500/40 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="font-semibold text-yellow-900">Payment past due</p>
-            <p className="text-sm text-yellow-700 mt-0.5">Update your payment method to keep your account active.</p>
+            <p className="font-semibold text-yellow-200">Payment past due</p>
+            <p className="text-sm text-yellow-300/80 mt-0.5">Update your payment method to keep your account active.</p>
           </div>
-          <Link href="/dashboard/subscription" className="shrink-0 bg-yellow-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-yellow-700">
+          <Link href="/dashboard/subscription" className="shrink-0 bg-yellow-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-yellow-500">
             Fix Now
           </Link>
         </div>
       )}
+
+      {/* Profile completeness nudge */}
+      <ProfileCompletenessCard instructor={instructor} />
 
       {/* AI Receptionist Voice Line — shown to PRO+ instructors */}
       {['PRO', 'STUDIO', 'BUSINESS'].includes((instructor.subscriptionTier ?? '').toUpperCase()) && (
@@ -443,17 +514,7 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 p-5 shadow-lg shadow-slate-950/20 transition hover:bg-slate-900/90">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Upcoming Lessons</p>
-              <p className="text-3xl font-semibold text-white">{instructor.bookings.length}</p>
-            </div>
-            <Calendar className="h-12 w-12 text-sky-400" />
-          </div>
-        </div>
-
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 p-5 shadow-lg shadow-slate-950/20 transition hover:bg-slate-900/90">
           <div className="flex items-center justify-between">
             <div>
@@ -490,12 +551,23 @@ export default async function DashboardPage() {
         <EarningsThisWeekCard />
       </div>
 
+      {/* ── TODAY WORKSPACE ─────────────────────────────────────────────────── */}
+      <TodayWorkspace
+        bookings={todayWorkspaceBookings}
+        instructorName={instructor.name}
+      />
+
       <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
         <div className="rounded-3xl border border-white/10 bg-slate-900/80 shadow-lg shadow-slate-950/20 p-4 md:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div>
-              <h2 className="text-xl font-semibold text-white">Upcoming Lessons</h2>
-              <p className="text-sm text-slate-400">Next bookings on your calendar</p>
+              <h2 className="text-xl font-semibold text-white">
+                Upcoming Lessons
+                {instructor.bookings.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-slate-400">({instructor.bookings.length})</span>
+                )}
+              </h2>
+              <p className="text-sm text-slate-400">Next bookings after today</p>
             </div>
             <Link href="/dashboard/bookings" className="text-sky-300 hover:text-white text-sm font-medium">
               View All
@@ -512,44 +584,37 @@ export default async function DashboardPage() {
           ) : (
             <div className="space-y-0">
               {instructor.bookings.map((booking, index) => (
-                <div 
-                  key={booking.id} 
-                  className={`border-t border-white/10 px-4 py-3 hover:bg-slate-900/80 transition-colors ${
+                <Link
+                  key={booking.id}
+                  href={`/dashboard/bookings/${booking.id}`}
+                  className={`flex items-center justify-between border-t border-white/10 px-4 py-3 hover:bg-slate-900/80 transition-colors no-underline ${
                     index % 2 === 0 ? 'bg-slate-950/40' : 'bg-slate-950/80'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-white text-sm">
-                      {booking.client?.name ?? (booking as any).clientName ?? 'Guest'}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span>
-                        {booking.startTime && booking.endTime ? (
-                          <>
-                            {new Date(booking.startTime).toLocaleString('en-AU', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })} - {new Date(booking.endTime).toLocaleString('en-AU', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </>
-                        ) : 'TBD'}
-                      </span>
-                      {booking.duration && (
-                        <>
-                          <span className="text-slate-500">·</span>
-                          <span className="text-sky-300 font-medium">
-                            {booking.duration} min
-                          </span>
-                        </>
-                      )}
-                    </div>
+                  <p className="font-semibold text-white text-sm">
+                    {booking.client?.name ?? (booking as any).clientName ?? 'Guest'}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>
+                      {booking.startTime
+                        ? new Date(booking.startTime).toLocaleString('en-AU', {
+                            weekday: 'short',
+                            month:   'short',
+                            day:     'numeric',
+                            hour:    '2-digit',
+                            minute:  '2-digit',
+                            timeZone: 'Australia/Perth',
+                          })
+                        : 'TBD'}
+                    </span>
+                    {booking.duration && (
+                      <>
+                        <span className="text-slate-500">·</span>
+                        <span className="text-sky-300 font-medium">{booking.duration} min</span>
+                      </>
+                    )}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -559,52 +624,97 @@ export default async function DashboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div>
               <h2 className="text-xl font-semibold text-white">Clients Needing Attention</h2>
-              <p className="text-sm text-slate-400">Clients with unused hours or overdue follow-up</p>
+              <p className="text-sm text-slate-400">Unused hours or inactive follow-up</p>
             </div>
             <Link href="/dashboard/packages" className="text-sky-300 hover:text-white text-sm font-medium">
               View All Packages
             </Link>
           </div>
-          {clientsWithPackages.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
-              <Users className="h-12 w-12 mx-auto mb-2 text-slate-500" />
-              <p>No clients with unused hours</p>
-              <Link href="/dashboard/packages" className="text-sky-300 hover:text-white text-sm">
-                View packages
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {clientsWithPackages.map((pkg) => {
-                const daysSinceUpdate = Math.floor((now.getTime() - new Date(pkg.updatedAt).getTime()) / (1000 * 60 * 60 * 24))
-                const isInactive = daysSinceUpdate > 14
-                const packageValue = (pkg.packageHoursRemaining || 0) * instructor.hourlyRate
-                
-                return (
-                  <div key={pkg.id} className={`rounded-3xl border border-white/10 p-4 ${isInactive ? 'bg-rose-500/10 border-rose-400/20' : 'bg-slate-950/60'}`}>
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white">{pkg.client?.name ?? 'Client'}</p>
-                        <p className="text-sm text-slate-400">
-                          {pkg.packageHoursRemaining} hours unused (${packageValue.toFixed(0)} value)
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Last booked: {daysSinceUpdate} days ago
-                          {isInactive && <span className="ml-2 text-rose-300 font-semibold">⚠️ Inactive</span>}
-                        </p>
+          {(() => {
+            // Deduplicate: inactive clients already shown in package list should not appear twice
+            const packageClientIds = new Set(clientsWithPackages.map(p => p.client?.id).filter(Boolean))
+            const filteredInactive = inactiveClients.filter(c => !packageClientIds.has(c.id))
+            const hasAny = clientsWithPackages.length > 0 || filteredInactive.length > 0
+
+            if (!hasAny) return (
+              <div className="text-center py-8 text-slate-400">
+                <Users className="h-12 w-12 mx-auto mb-2 text-slate-500" />
+                <p>All clients are active — great work!</p>
+              </div>
+            )
+
+            return (
+              <div className="space-y-2">
+                {/* Package clients first — highest priority (already paid) */}
+                {clientsWithPackages.map((pkg) => {
+                  const daysSinceUpdate = Math.floor((now.getTime() - new Date(pkg.updatedAt).getTime()) / (1000 * 60 * 60 * 24))
+                  const isInactive = daysSinceUpdate > 14
+                  const packageValue = (pkg.packageHoursRemaining || 0) * instructor.hourlyRate
+                  return (
+                    <div key={pkg.id} className={`rounded-2xl border p-3.5 transition-all ${isInactive ? 'bg-rose-500/10 border-rose-400/20' : 'bg-slate-950/60 border-white/10'}`}>
+                      <div className="flex items-start gap-3">
+                        <Link
+                          href={`/dashboard/clients/${pkg.client?.id ?? ''}`}
+                          className="flex-1 min-w-0 no-underline hover:opacity-80 transition"
+                        >
+                          <p className="font-semibold text-white text-sm">{pkg.client?.name ?? 'Client'}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            📦 {pkg.packageHoursRemaining}h unused · ${packageValue.toFixed(0)} value
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {daysSinceUpdate} days since last booking
+                            {isInactive && <span className="ml-1.5 text-rose-300 font-medium">⚠️ Inactive</span>}
+                          </p>
+                        </Link>
+                        <RemindButton
+                          bookingId={pkg.id}
+                          clientId={pkg.client?.id ?? ''}
+                          clientFirstName={(pkg.client?.name ?? 'Client').split(' ')[0]}
+                        />
                       </div>
-                      <Link 
-                        href={`/dashboard/clients/${pkg.client?.id ?? ''}`}
-                        className="inline-flex items-center justify-center rounded-full bg-sky-500 px-3 py-1 text-xs font-semibold text-white hover:bg-sky-400 transition"
-                      >
-                        Remind
-                      </Link>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                  )
+                })}
+                {/* Inactive clients without packages */}
+                {filteredInactive.map((client) => {
+                  const lastBooking = client.bookings[0]
+                  const daysSince = lastBooking?.startTime
+                    ? Math.floor((now.getTime() - new Date(lastBooking.startTime).getTime()) / (1000 * 60 * 60 * 24))
+                    : null
+                  return (
+                    <div key={client.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-3.5">
+                      <div className="flex items-start gap-3">
+                        <Link
+                          href={`/dashboard/clients/${client.id}`}
+                          className="flex-1 min-w-0 no-underline hover:opacity-80 transition"
+                        >
+                          <p className="font-semibold text-white text-sm">{client.name}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {daysSince !== null ? `Last lesson: ${daysSince} days ago` : 'No completed lessons yet'}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5">No upcoming bookings</p>
+                        </Link>
+                        {lastBooking?.id ? (
+                          <RemindButton
+                            bookingId={lastBooking.id}
+                            clientId={client.id}
+                            clientFirstName={client.name.split(' ')[0]}
+                          />
+                        ) : (
+                          <Link
+                            href={`/dashboard/clients/${client.id}`}
+                            className="shrink-0 inline-flex items-center rounded-full bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs font-semibold text-white transition"
+                          >
+                            View
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
       </div>
 

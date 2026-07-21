@@ -23,6 +23,7 @@ export default function BrandingPage() {
   const [showBrandingOnBookingPage, setShowBrandingOnBookingPage] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
+  const [businessName, setBusinessName] = useState('');
 
   // Slug (PRO+)
   const [slug, setSlug] = useState('');
@@ -69,7 +70,8 @@ export default function BrandingPage() {
         setLogoPreview(d.brandLogo || '');
         setDomainVerified(d.domainVerified || false);
         setDomainVerifiedAt(d.domainVerifiedAt || null);
-        setInstructor((prev: any) => ({ ...prev, subscriptionTier: d.subscriptionTier }));
+        setInstructor((prev: any) => ({ ...prev, subscriptionTier: d.subscriptionTier, accountType: d.accountType ?? 'INDIVIDUAL' }));
+        setBusinessName(d.businessName || '');
 
         // Slug (separate field)
         setSlug(d.customSlug || '');
@@ -181,6 +183,7 @@ export default function BrandingPage() {
           showBrandingOnBookingPage,
           customSlug: slug || null,
           customDomain: isStudio ? (customDomain || null) : null,
+          businessName: businessName.trim() || null,
         }),
       });
       if (!brandRes.ok) throw new Error((await brandRes.json()).error || 'Failed to save branding');
@@ -214,8 +217,13 @@ export default function BrandingPage() {
   if (loading) return <div><p>Loading...</p></div>;
 
   const tier = instructor?.subscriptionTier;
+  const accountType = instructor?.accountType ?? 'INDIVIDUAL';
+  const features = {
+    customDomain: tier === 'STUDIO' || tier === 'BUSINESS',
+    isBusiness:   accountType === 'BUSINESS',
+  };
   const isBasic = tier === 'BASIC';
-  const isStudio = tier === 'STUDIO' || tier === 'BUSINESS';
+  const isStudio = features.customDomain;
 
   if (isBasic) {
     return (
@@ -236,12 +244,12 @@ export default function BrandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-1">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-4xl mx-auto w-full overflow-hidden">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
-            <Palette className="h-8 w-8 text-purple-600" />
-            Brand & Public Page
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 flex items-center gap-2 flex-wrap">
+            <Palette className="h-7 w-7 sm:h-8 sm:w-8 text-purple-600 shrink-0" />
+            <span>Brand &amp; Public Page</span>
           </h1>
           <p className="text-slate-400 mt-1">Manage your booking page, domain, and social links</p>
         </div>
@@ -249,8 +257,8 @@ export default function BrandingPage() {
         {message && <div className="mb-6 bg-green-900/20 border border-green-700/50 rounded-lg p-4"><p className="text-green-300">{message}</p></div>}
         {error && <div className="mb-6 bg-red-900/20 border border-red-700/50 rounded-lg p-4"><p className="text-red-300">{error}</p></div>}
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-6">
+        <div className="grid md:grid-cols-2 gap-6 w-full">
+          <div className="space-y-6 min-w-0 w-full">
 
             {/* ── Slug section (PRO+, always shown) ── */}
             <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6">
@@ -265,9 +273,9 @@ export default function BrandingPage() {
               {instructor?.id && !savedSlug && (
                 <div className="mb-4 bg-slate-950 border border-slate-700 rounded-lg p-3">
                   <p className="text-xs text-slate-400 mb-1">Your default booking URL (always active):</p>
-                  <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                     <a href={`https://${instructor.id}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
-                      className="text-slate-300 text-xs hover:underline truncate font-mono">
+                      className="text-slate-300 text-xs hover:underline truncate font-mono min-w-0 flex-1">
                       {instructor.id}.drivebook.com.au
                     </a>
                     <button type="button" onClick={() => copyUrl(`https://${instructor.id}.drivebook.com.au`, 'default')}
@@ -280,9 +288,9 @@ export default function BrandingPage() {
               )}
 
               {savedSlug && (
-                <div className="mb-4 bg-violet-900/20 border border-violet-700/50 rounded-lg p-3 flex items-center justify-between gap-2">
+                <div className="mb-4 bg-violet-900/20 border border-violet-700/50 rounded-lg p-3 flex items-center justify-between gap-2 min-w-0">
                   <a href={`https://${savedSlug}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
-                    className="text-violet-300 font-semibold text-sm hover:underline truncate">
+                    className="text-violet-300 font-semibold text-sm hover:underline truncate min-w-0 flex-1">
                     {savedSlug}.drivebook.com.au
                   </a>
                   <button type="button" onClick={() => copyUrl(`https://${savedSlug}.drivebook.com.au`, 'slug')}
@@ -297,10 +305,10 @@ export default function BrandingPage() {
                 <label className="block text-xs font-medium text-slate-300 mb-1">
                   Custom slug <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <input type="text" value={slug} onChange={(e) => handleSlugChange(e.target.value)}
                     placeholder="yourname"
-                    className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
+                    className="w-full sm:flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
                     maxLength={30} />
                   <span className="text-slate-400 text-sm whitespace-nowrap">.drivebook.com.au</span>
                 </div>
@@ -379,6 +387,68 @@ export default function BrandingPage() {
               </div>
             </div>
 
+            {/* Display / Business Name — all tiers, behaviour adapts */}
+            <div className={`bg-slate-900 rounded-3xl border p-6 ${
+              tier === 'BUSINESS' ? 'border-amber-500/40' : 'border-slate-800'
+            }`}>
+              <h2 className="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
+                <Sparkles className={`h-5 w-5 ${tier === 'BUSINESS' ? 'text-amber-400' : 'text-violet-400'}`} />
+                {tier === 'BUSINESS' ? 'School Name' : tier === 'STUDIO' ? 'Brand Name' : 'Display Name'}
+                {tier === 'BUSINESS'
+                  ? <span className="ml-auto text-xs font-semibold bg-amber-900/40 text-amber-300 px-2 py-0.5 rounded-full">Required</span>
+                  : <span className="ml-auto text-xs font-semibold bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">Optional</span>
+                }
+              </h2>
+              <p className="text-sm text-slate-400 mb-4">
+                {tier === 'BUSINESS'
+                  ? 'Your school name. This is what students see everywhere — booking page, AI receptionist, SMS, and email. Your personal name is kept for payouts and compliance only.'
+                  : tier === 'STUDIO'
+                  ? 'Your brand name shown on your booking page and custom domain. Leave blank to use your personal name.'
+                  : 'A nickname or trading name shown to students instead of your legal name. Great for building a recognisable brand — even as a sole instructor.'}
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  {tier === 'BUSINESS' ? (
+                    <>School name <span className="text-amber-400">*</span></>
+                  ) : (
+                    <>{tier === 'STUDIO' ? 'Brand name' : 'Display name'} <span className="text-slate-500 font-normal">(optional)</span></>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value.slice(0, 80))}
+                  placeholder={
+                    tier === 'BUSINESS' ? 'e.g. Perth Drive Academy'
+                    : tier === 'STUDIO'  ? 'e.g. Perth Drive Academy'
+                    : 'e.g. Dave\'s Driving or Perth Drive Pro'
+                  }
+                  required={tier === 'BUSINESS'}
+                  maxLength={80}
+                  className={`w-full px-3 py-2 border bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:border-transparent text-sm ${
+                    tier === 'BUSINESS' && !businessName.trim()
+                      ? 'border-amber-600/60 focus:ring-amber-500'
+                      : tier === 'BUSINESS'
+                      ? 'border-amber-700/40 focus:ring-amber-500'
+                      : 'border-slate-700 focus:ring-violet-500'
+                  }`}
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  {businessName.length}/80 characters
+                  {businessName.trim() ? (
+                    <span className={`ml-2 ${tier === 'BUSINESS' ? 'text-amber-400' : 'text-violet-400'}`}>
+                      Students will see &quot;{businessName.trim()}&quot;
+                    </span>
+                  ) : tier === 'BUSINESS' ? (
+                    <span className="ml-2 text-amber-500">School name is required — students need to know who they are booking with</span>
+                  ) : null}
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Your legal name is kept on file for payouts and compliance — this is display only.
+                </p>
+              </div>
+            </div>
+
             {/* Logo Upload */}
             <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6">
               <h2 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
@@ -444,34 +514,98 @@ export default function BrandingPage() {
           </div>
 
           {/* Preview Panel */}
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0 w-full">
+
+            {/* Live booking page link — replaces the fake mock card */}
             <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6">
-              <h2 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
                 <Eye className="h-5 w-5 text-purple-600" />
-                Preview
+                Your Booking Page
               </h2>
-              <div className="border-2 border-slate-700 rounded-lg p-5 space-y-4 bg-slate-950">
+              <p className="text-sm text-slate-400 mb-5">
+                This is what students see when they visit your link. Open it after saving to see your brand live.
+              </p>
+
+              {/* Primary CTA — open their actual subdomain */}
+              <a
+                href={`https://${savedSlug || instructor?.id}.drivebook.com.au`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-3 w-full bg-violet-600 hover:bg-violet-500 text-white px-5 py-3.5 rounded-xl font-semibold text-sm transition-colors mb-3"
+              >
+                <span className="flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4 shrink-0" />
+                  View live booking page
+                </span>
+                <span className="font-mono text-xs text-violet-200 truncate max-w-[160px]">
+                  {savedSlug || instructor?.id}.drivebook.com.au
+                </span>
+              </a>
+
+              {/* Custom domain shortcut if set and verified */}
+              {isStudio && savedCustomDomain && domainVerified && (
+                <a
+                  href={`https://${savedCustomDomain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-3 w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-5 py-3 rounded-xl text-sm transition-colors mb-3"
+                >
+                  <span className="flex items-center gap-2">
+                    <ExternalLink className="h-4 w-4 shrink-0 text-indigo-400" />
+                    View on custom domain
+                  </span>
+                  <span className="font-mono text-xs text-indigo-300 truncate max-w-[160px]">
+                    {savedCustomDomain}
+                  </span>
+                </a>
+              )}
+
+              <p className="text-xs text-slate-500">
+                Save your settings first — changes are reflected on the live page immediately.
+              </p>
+            </div>
+
+            {/* Colour preview — lightweight, clearly labelled */}
+            <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6">
+              <h2 className="text-lg font-bold text-slate-100 mb-1 flex items-center gap-2">
+                <Palette className="h-5 w-5 text-purple-600" />
+                Colour Preview
+              </h2>
+              <p className="text-xs text-slate-500 mb-4">How your brand colours look on buttons and accents</p>
+              <div className="space-y-3">
                 {logoPreview && (
-                  <div className="text-center">
-                    <Image src={logoPreview} alt="Logo" width={80} height={80} className="mx-auto object-contain" />
+                  <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
+                    <Image src={logoPreview} alt="Logo" width={48} height={48} className="object-contain rounded-lg shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-100 truncate">
+                        {businessName.trim() || instructor?.name || 'Your Name'}
+                      </p>
+                      <p className="text-xs text-slate-400">Driving Instructor</p>
+                    </div>
                   </div>
                 )}
-                <div className="border border-slate-700 rounded-lg p-4">
-                  <h3 className="font-semibold text-slate-100 mb-1">{instructor?.name || 'Your Name'}</h3>
-                  <p className="text-xs text-slate-400 mb-3">Professional driving instructor</p>
-                  <button style={{ backgroundColor: brandColorPrimary }}
-                    className="w-full py-2 px-4 rounded-lg text-white font-semibold text-sm mb-2">
-                    Book Now
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <span style={{ backgroundColor: brandColorSecondary }}
-                      className="px-2 py-0.5 rounded-full text-white text-xs">Available Today</span>
-                    <span style={{ color: brandColorSecondary }} className="text-sm font-semibold">
-                      ${instructor?.hourlyRate || '65'}/hr
-                    </span>
-                  </div>
+                <button
+                  style={{ backgroundColor: brandColorPrimary }}
+                  className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-sm"
+                  tabIndex={-1}
+                >
+                  Book a Lesson
+                </button>
+                <div className="flex items-center gap-3">
+                  <span
+                    style={{ backgroundColor: brandColorSecondary }}
+                    className="px-3 py-1 rounded-full text-white text-xs font-medium shrink-0"
+                  >
+                    Available Today
+                  </span>
+                  <span style={{ color: brandColorPrimary }} className="text-sm font-bold">
+                    ${instructor?.hourlyRate || '65'}/hr
+                  </span>
                 </div>
-                <p className="text-xs text-slate-500 text-center">Live preview of your booking page</p>
+                <div className="flex gap-2 pt-1">
+                  <div className="flex-1 h-2 rounded-full" style={{ backgroundColor: brandColorPrimary }} />
+                  <div className="flex-1 h-2 rounded-full" style={{ backgroundColor: brandColorSecondary }} />
+                </div>
               </div>
             </div>
 
@@ -482,16 +616,16 @@ export default function BrandingPage() {
                 Active URLs
               </h2>
               <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between gap-2 bg-slate-950 rounded-lg p-2">
-                  <div>
+                <div className="flex items-center justify-between gap-2 bg-slate-950 rounded-lg p-2 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs text-slate-500">Default</p>
                     <p className="font-mono text-xs text-slate-300 truncate">{instructor?.id}.drivebook.com.au</p>
                   </div>
                   <span className="text-xs bg-green-900/40 text-green-300 px-2 py-0.5 rounded-full shrink-0">Active</span>
                 </div>
                 {savedSlug && (
-                  <div className="flex items-center justify-between gap-2 bg-violet-900/20 rounded-lg p-2">
-                    <div>
+                  <div className="flex items-center justify-between gap-2 bg-violet-900/20 rounded-lg p-2 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-500">Slug</p>
                       <p className="font-mono text-xs text-violet-300 truncate">{savedSlug}.drivebook.com.au</p>
                     </div>
@@ -499,8 +633,8 @@ export default function BrandingPage() {
                   </div>
                 )}
                 {isStudio && savedCustomDomain && (
-                  <div className="flex items-center justify-between gap-2 bg-indigo-900/20 rounded-lg p-2">
-                    <div>
+                  <div className="flex items-center justify-between gap-2 bg-indigo-900/20 rounded-lg p-2 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-500">Custom Domain</p>
                       <p className="font-mono text-xs text-indigo-300 truncate">{savedCustomDomain}</p>
                     </div>

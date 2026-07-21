@@ -1,5 +1,0 @@
-﻿* drivebook-1-main    da80c97 [origin/drivebook-1-main] Add components and UI elements
-  feature/ui-redesign 861a9c8 fix: wire up chargebackAutomation, expand alert types, fix severity
-  main                861a9c8 fix: wire up chargebackAutomation, expand alert types, fix severity
-  production-clean    1818a69 Remove development scripts - not needed for production
-  ui-clean            b2ad6af feat: initial clean snapshot for UI redesign

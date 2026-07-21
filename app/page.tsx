@@ -15,6 +15,47 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
+      {/* Organization + WebSite JSON-LD — entity anchor for the whole site */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            {
+              '@context': 'https://schema.org',
+              '@type': 'Organization',
+              name: 'DriveBook',
+              url: 'https://www.drivebook.com.au',
+              logo: 'https://www.drivebook.com.au/logo.png',
+              description:
+                'DriveBook is an AI-powered driving school platform for Australia — online booking, AI receptionist, payments, student progress tracking, and custom branded subdomains for driving instructors.',
+              sameAs: [
+                'https://www.facebook.com/drivebook',
+                'https://www.instagram.com/drivebook',
+              ],
+              contactPoint: {
+                '@type': 'ContactPoint',
+                contactType: 'customer support',
+                areaServed: 'AU',
+                availableLanguage: 'English',
+              },
+            },
+            {
+              '@context': 'https://schema.org',
+              '@type': 'WebSite',
+              name: 'DriveBook',
+              url: 'https://www.drivebook.com.au',
+              potentialAction: {
+                '@type': 'SearchAction',
+                target: {
+                  '@type': 'EntryPoint',
+                  urlTemplate: 'https://www.drivebook.com.au/driving-lessons?q={search_term_string}',
+                },
+                'query-input': 'required name=search_term_string',
+              },
+            },
+          ]),
+        }}
+      />
       {/* Navigation */}
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-7xl mx-auto flex justify-between items-center px-4 py-4">
@@ -24,6 +65,9 @@ export default function HomePage() {
           
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-1">
+            <Link href="/driving-lessons" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
+              Find Instructors
+            </Link>
             <Link href="/about" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
               About Us
             </Link>
@@ -32,6 +76,9 @@ export default function HomePage() {
             </Link>
             <Link href="/blog" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
               Blog
+            </Link>
+            <Link href="/platform" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
+              Platform
             </Link>
             <Link href="/teach-with-drivebook" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
               For Instructors
@@ -60,6 +107,9 @@ export default function HomePage() {
         {/* Mobile Menu */}
         {menuOpen && (
           <div className="md:hidden bg-slate-950/95 border-t border-white/10 px-4 py-4 space-y-2">
+            <Link href="/driving-lessons" className="block text-white/70 hover:text-white no-underline font-medium py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors text-sm">
+              Find Instructors
+            </Link>
             <Link href="/about" className="block text-white/70 hover:text-white no-underline font-medium py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors text-sm">
               About Us
             </Link>
@@ -105,6 +155,12 @@ export default function HomePage() {
             <span className="bg-gradient-to-r from-yellow-300 via-pink-300 to-cyan-300 bg-clip-text text-transparent">with Confidence</span>
           </h1>
           <p className="text-lg md:text-xl mb-4 text-purple-100 max-w-2xl mx-auto">Book local instructors in seconds. Flexible lessons, transparent pricing, approved instructors.</p>
+          <p className="text-sm text-purple-300/80 mb-1">
+            Running a driving school?{' '}
+            <Link href="/teach-with-drivebook" className="text-cyan-300 hover:text-cyan-200 underline underline-offset-2 font-medium no-underline">
+              AI Receptionist, Bookings &amp; Business Platform for Driving Schools →
+            </Link>
+          </p>
           <ul className="list-none p-0 my-3 text-left inline-block max-w-2xl text-base md:text-lg space-y-2 text-purple-100">
             <li>🎯 Smart booking with real-time availability—no waiting, no phone tag</li>
             <li>📍 Location-based matching to find instructors who service your area</li>
@@ -125,31 +181,31 @@ export default function HomePage() {
         <section className="max-w-7xl mx-auto px-4 py-16 md:py-20">
           <div className="grid sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
             <Link href="/book" className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-cyan-400/40 hover:shadow-2xl hover:shadow-cyan-500/20 transition-all bg-gradient-to-br from-white/5 to-white/0 backdrop-blur-sm no-underline">
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 group-hover:from-cyan-500/20 transition-all duration-500" />
-              <div className="relative p-8 md:p-10">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center mb-5 shadow-lg shadow-cyan-500/30">
+              <span className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 group-hover:from-cyan-500/20 transition-all duration-500" />
+              <span className="relative p-8 md:p-10 flex flex-col">
+                <span className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center mb-5 shadow-lg shadow-cyan-500/30">
                   <span className="text-2xl">🎓</span>
-                </div>
+                </span>
                 <h2 className="text-xl font-bold mb-3 text-white">I want to learn to drive</h2>
                 <p className="text-purple-300 mb-6 text-sm leading-relaxed">Find a verified local instructor, book instantly, track your progress.</p>
-                <div className="inline-flex items-center gap-2 text-sm font-bold text-cyan-400 group-hover:gap-3 transition-all">
+                <span className="inline-flex items-center gap-2 text-sm font-bold text-cyan-400 group-hover:gap-3 transition-all">
                   Find an instructor →
-                </div>
-              </div>
+                </span>
+              </span>
             </Link>
 
             <Link href="/teach-with-drivebook" className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-pink-400/40 hover:shadow-2xl hover:shadow-pink-500/20 transition-all bg-gradient-to-br from-white/5 to-white/0 backdrop-blur-sm no-underline">
-              <div className="absolute inset-0 bg-gradient-to-br from-pink-500/10 to-violet-600/5 group-hover:from-pink-500/20 transition-all duration-500" />
-              <div className="relative p-8 md:p-10">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center mb-5 shadow-lg shadow-pink-500/30">
+              <span className="absolute inset-0 bg-gradient-to-br from-pink-500/10 to-violet-600/5 group-hover:from-pink-500/20 transition-all duration-500" />
+              <span className="relative p-8 md:p-10 flex flex-col">
+                <span className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center mb-5 shadow-lg shadow-pink-500/30">
                   <span className="text-2xl">🚗</span>
-                </div>
+                </span>
                 <h2 className="text-xl font-bold mb-3 text-white">I want to grow my driving school</h2>
                 <p className="text-purple-300 mb-6 text-sm leading-relaxed">Automate bookings, payments, and admin. AI receptionist included.</p>
-                <div className="inline-flex items-center gap-2 text-sm font-bold text-pink-400 group-hover:gap-3 transition-all">
+                <span className="inline-flex items-center gap-2 text-sm font-bold text-pink-400 group-hover:gap-3 transition-all">
                   Learn more →
-                </div>
-              </div>
+                </span>
+              </span>
             </Link>
           </div>
         </section>
@@ -361,6 +417,17 @@ export default function HomePage() {
               <li><Link href="/pda-guide" className="hover:text-white transition-colors no-underline">WA PDA Guide</Link></li>
               <li><Link href="/for-instructors" className="hover:text-white transition-colors no-underline">Instructor Hub</Link></li>
               <li><Link href="/blog" className="hover:text-white transition-colors no-underline">Blog</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3 text-white">Locations</h3>
+            <ul className="space-y-2 text-sm text-white/50">
+              <li><Link href="/driving-lessons" className="hover:text-white transition-colors no-underline">All Locations</Link></li>
+              <li><Link href="/driving-lessons/western-australia" className="hover:text-white transition-colors no-underline">Western Australia</Link></li>
+              <li><Link href="/driving-lessons/western-australia/perth" className="hover:text-white transition-colors no-underline">Perth</Link></li>
+              <li><Link href="/driving-lessons/western-australia/maylands" className="hover:text-white transition-colors no-underline">Maylands</Link></li>
+              <li><Link href="/driving-lessons/western-australia/joondalup" className="hover:text-white transition-colors no-underline">Joondalup</Link></li>
+              <li><Link href="/driving-lessons/western-australia/fremantle" className="hover:text-white transition-colors no-underline">Fremantle</Link></li>
             </ul>
           </div>
           <div>

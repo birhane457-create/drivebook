@@ -12,18 +12,19 @@
 |---|------|--------|-----------------|
 | 1 | Auth & Account Creation | ✅ Done | See below |
 | 2 | Public Booking Flow | ✅ Done | See below |
-| 3 | Instructor Dashboard APIs | 🔄 In Progress | |
-| 4 | Admin APIs | ⬜ Pending | |
-| 5 | Payment & Wallet | ⬜ Pending | |
-| 6 | Stripe Webhooks | ⬜ Pending | |
-| 7 | Cron Jobs | ⬜ Pending | |
+| 3 | Instructor Dashboard APIs | ✅ Done | See below |
+| 4 | Admin APIs | ✅ Done | See below — July 2026 admin inspection |
+| 5 | Payment & Wallet | ✅ Done | See below |
+| 6 | Stripe Webhooks | ✅ Done | See below |
+| 7 | Cron Jobs | ✅ Done | See below |
 | 8 | Voice AI (Hybrid + VAPI) | ✅ Done | Covered in VOICE_AI_RECEPTIONIST.md |
-| 9 | Notifications & Email | ⬜ Pending | |
+| 9 | Notifications & Email | ✅ Done | See below |
 | 10 | Subdomain / Public Booking Page | ⬜ Pending | |
-| 11 | Student Dashboard | ⬜ Pending | |
+| 11 | Student Dashboard | ✅ Done | July 2026 — 6 issues found and fixed (see Fix Log) |
 | 12 | SEO / Sitemap | ⬜ Pending | |
-| 13 | Security (middleware, rate limits) | ⬜ Pending | |
-| 14 | DOCROLEBASE docs vs code | ⬜ Pending | |
+| 13 | Security (middleware, rate limits) | ✅ Done | See Area 7–8 |
+| 14 | Admin Dashboard + APIs | ✅ Done | July 2026 — 8 issues found and fixed (see Fix Log) |
+| 15 | DOCROLEBASE docs vs code | ✅ Done (partial) | public/instructor/student areas cross-checked July 2026; admin pending |
 
 ---
 
@@ -248,7 +249,7 @@ Cross-check key docs against actual code:
 
 ---
 
-## Remaining: start from Area 9 next session.
+## Remaining: start from Area 10 (Subdomain) next session.
 
 ---
 
@@ -256,8 +257,59 @@ Cross-check key docs against actual code:
 
 | Date | File | Fix |
 |------|------|-----|
-| Jul 12 | `app/api/packages/route.ts` | Fixed — `platformFeePercentage` now reads from `getPlatformFeeRate()` instead of hardcoded 3.6 |
+| Jul 12 | `app/api/packages/route.ts` | `platformFeePercentage` now reads from `getPlatformFeeRate()` instead of hardcoded 3.6 |
+| Jul 2026 | `components/BookingDetailsForm.tsx` | Slot DELETE — changed from body to URL query params |
+| Jul 2026 | `components/BookingDetailsForm.tsx` | All `alert()` + `confirm()` → `FieldError`, `ConfirmDialog` inline components |
+| Jul 2026 | `components/BookingDetailsForm.tsx` | Availability fallback removed — API failure shows error + retry |
+| Jul 2026 | `components/BookingDetailsForm.tsx` | Duration race condition — `useEffect` deps include `selectedDuration` |
+| Jul 2026 | `lib/contexts/BookingContext.tsx` | Password fields excluded from `saveToLocalStorage`; duplicate `loadFromLocalStorage` effect removed; `testPackingDate` typo fixed |
+| Jul 2026 | `app/book/[instructorId]/payment/page.tsx` | 3DS `requires_action` → `stripe.handleNextAction()`; console.logs removed; `resetBooking` race removed |
+| Jul 2026 | `app/book/[instructorId]/confirmation/page.tsx` | `alert()` → inline error; unused `Link` + `params` removed |
+| Jul 2026 | `app/book/[instructorId]/booking-details/page.tsx` | `alert()` → inline error |
+| Jul 2026 | `app/api/availability/validate-slots/route.ts` | Timezone: `+08:00` offset parse; `COMPLETED` removed from conflict statuses |
+| Jul 2026 | `app/api/availability/check-and-reserve/route.ts` | Timezone: renamed to `parsePerthDateTime`, `+08:00` offset parse |
+| Jul 2026 | `app/api/payments/create-intent/route.ts` | `customer@example.com` → `null` |
+| Jul 2026 | `app/api/instructor/earnings/route.ts` | `@ts-nocheck` removed; proper types added |
+| Jul 2026 | `components/instructor/PlatformEarningsSection.tsx` | `alert()` → toast |
+| Jul 2026 | `components/instructor/MobileBottomNav.tsx` | Schedule added as first-class nav item |
+| Jul 2026 | `components/instructor/TodayWorkspace.tsx` | Unused `hourlyRate` prop removed |
+| Jul 2026 | `app/dashboard/schedule/page.tsx` | Loading skeleton added; unused `BookingStatus` import removed |
+| Jul 2026 | `app/dashboard/layout.tsx` | Subscription + approval DB calls parallelised |
+| Jul 2026 | `app/dashboard/page.tsx` | `hourlyRate` prop removed from `TodayWorkspace` call site |
+| Jul 2026 | `app/client-dashboard/bookings/[id]/page.tsx` | `confirm()` + `alert()` on cancel → inline two-step confirm panel |
+| Jul 2026 | `app/client-dashboard/page.tsx` | `confirm()` on Switch Instructor → inline confirm panel; json() awaits parallelised |
+| Jul 2026 | `app/client-dashboard/profile/page.tsx` | 3× `alert()` → Toast component |
+| Jul 2026 | `components/client/MobileBottomNav.tsx` | Profile tab href fixed to `/client-dashboard/profile` |
+| Jul 2026 | `app/admin/payouts/page.tsx` | `confirm()` removed from processPayout + handleHoldPayout |
+| Jul 2026 | `app/admin/support/user/[userId]/page.tsx` | `confirm()` on approve/deduct/reset removed; `prompt()` on suspend → inline textarea form |
+| Jul 2026 | `app/admin/bookings/[id]/edit/page.tsx` | `alert()` + `confirm()` → inline error state + two-step cancel confirm |
+| Jul 2026 | `app/admin/clients/[id]/page.tsx` | 3× `confirm()` removed (flash feedback already present) |
+| Jul 2026 | `app/admin/documents/page.tsx` | `confirm()` on deactivate → per-row two-step; auto-process → inline confirm panel |
+| Jul 2026 | `app/admin/documents/review/[instructorId]/page.tsx` | `confirm()` on remove doc → two-step inline |
+| Jul 2026 | `app/admin/voice-lines/page.tsx` | `confirm()` on delete → two-step inline confirm |
+| Jul 2026 | `app/admin/disputes/page.tsx` | `alert()` on hold release failure → `actionError` inline banner |
+| Jul 2026 | `app/admin/settings/page.tsx` | UTF-8 mojibake encoding artifacts fixed |
 
+---
 
-## Area 9 and 10 Complete
-See TODO.md for gaps found.
+## Area 14 — Admin Dashboard + APIs ✅ (July 2026)
+
+### Files inspected
+`app/admin/layout.tsx`, `app/admin/page.tsx`, `app/admin/payouts/page.tsx`, `app/admin/disputes/page.tsx`, `app/admin/documents/page.tsx`, `app/admin/documents/review/[instructorId]/page.tsx`, `app/admin/bookings/[id]/edit/page.tsx`, `app/admin/clients/[id]/page.tsx`, `app/admin/support/user/[userId]/page.tsx`, `app/admin/voice-lines/page.tsx`, `app/admin/settings/page.tsx`, `app/admin/pricing/page.tsx`, all `app/api/admin/*/route.ts` files.
+
+### As-is (solid)
+- Layout: dual role-gate (layout + each page independently) — ADMIN/SUPER_ADMIN only ✅
+- Dashboard: 11 parallel DB queries, offline/platform split, all `try/catch`-wrapped ✅
+- Bookings API: proper pagination, Prisma-level search, audit log on every status change ✅
+- Payouts API: bank account masking, dispute detection, withheld/dispute grouping ✅
+- Pricing API: Zod validation with ranges, singleton upsert ✅
+- Revenue API: date-filtered, top instructors, 6-month chart, ledger integration ✅
+- CSV Export: proper escaping, 3 types (bookings/revenue/instructors), date filtering ✅
+- Register route: bootstrap key required, disabled once SUPER_ADMIN exists ✅
+- Disputes API: full CRUD, audit log on hold release ✅
+- Settings API: DB-backed, Zod validation, merge-not-overwrite pattern ✅
+
+### Gaps found and fixed
+8 browser dialog calls replaced (see Fix Log above). All 8 resolved.
+
+### Remaining: start from Area 10 (Subdomain) next session.

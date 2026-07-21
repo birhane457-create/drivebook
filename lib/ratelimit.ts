@@ -201,6 +201,20 @@ export const apiRateLimit = createRateLimiter(100, '1 m');
 export const authRateLimit = createRateLimiter(5, '15 m');
 
 /**
+ * Review Rate Limit
+ * Prevents review spam
+ * 10 review submissions per hour per user
+ */
+export const reviewRateLimit = createRateLimiter(10, '1 h');
+
+/**
+ * Setup Token Verification Rate Limit
+ * Prevents enumeration of setup tokens
+ * 20 requests per 15 minutes per IP
+ */
+export const setupTokenRateLimit = createRateLimiter(20, '15 m');
+
+/**
  * Helper to check rate limit and return appropriate response
  * FAIL OPEN: Allow request if rate limiter fails (for non-critical endpoints)
  */

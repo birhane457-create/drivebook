@@ -5,12 +5,26 @@ info:
   contact:
     name: DriveBook Support
   description: |
+    ⚠️  DEPRECATED — This file (openapi.yaml) is the legacy monolithic spec and is NO LONGER
+    the authoritative source. Do NOT configure Stripe webhooks or any other integration from
+    this file. The active specs are:
+
+      openapi-voice-booking.yaml  — booking creation, availability, packages
+      openapi-voice-lookup.yaml   — booking lookup, cancellation policy
+      openapi-voice-manage.yaml   — OTP send/confirm, cancel, reschedule
+
+    The real Stripe webhook endpoint is /api/stripe/webhook (app/api/stripe/webhook/route.ts).
+    Configure that URL in the Stripe Dashboard → Developers → Webhooks → Add endpoint.
+    The legacy path /webhooks/stripe documented below is a backward-compat alias only.
+
+    ─────────────────────────────────────────────────────────────────────────────────
+    LEGACY CONTENT PRESERVED BELOW FOR HISTORICAL REFERENCE ONLY
+    ─────────────────────────────────────────────────────────────────────────────────
+
     Full API contract for the DriveBook voice service and AI agent.
-    This is the authoritative documentation spec — shared externally, used for Swagger UI.
-    
     Related: drivebook-hybrid/openapi.yaml is the internal voice service proxy spec
     (used by contract tests). Keep both in sync when adding endpoints.
-    
+
     API for AI voice agent to interact with DriveBook platform for booking driving lessons.
     
     🔒 SECURITY PRINCIPLES - CRITICAL:
@@ -96,8 +110,9 @@ info:
     WEBHOOK INTEGRATIONS:
     Stripe payment webhooks are documented in openapi-webhooks.yaml.
     Canonical path: /api/stripe/webhook
-    Legacy alias: /api/webhooks/stripe (backward compat)
-    Both accept the same Stripe events. Webhooks are called by Stripe, NOT by the AI agent.
+    Configure this URL in the Stripe Dashboard → Developers → Webhooks → Add endpoint.
+    Both /api/stripe/webhook (canonical) and /api/webhooks/stripe (legacy alias) are active.
+    Webhooks are called by Stripe, NOT by the AI agent.
     
     SECURITY DEFINITIONS:
     - BearerAuth: JWT session token for authenticated instructor/admin endpoints
@@ -2094,13 +2109,40 @@ paths:
                 type: integer
               expired:
                 type: boolean
+  /api/stripe/webhook:
+    post:
+      summary: "Stripe webhook — CANONICAL PATH (see /webhooks/stripe below for legacy)"
+      description: |
+        CANONICAL endpoint. The real implementation lives at app/api/stripe/webhook/route.ts.
+        Configure THIS path in the Stripe Dashboard.
+        This entry is a placeholder — the legacy /webhooks/stripe entry below has the full schema.
+      operationId: stripeWebhookCanonical
+      tags:
+        - Webhooks
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Webhook received
+
   /webhooks/stripe:
     post:
-      summary: Stripe payment confirmation webhook (CRITICAL)
+      summary: "Stripe webhook — LEGACY PATH (alias for /api/stripe/webhook)"
       description: |
+        ⚠️  LEGACY PATH — documented here for backward compatibility only.
+        The canonical implementation path is /api/stripe/webhook.
+        Configure /api/stripe/webhook in the Stripe Dashboard, not this path.
+
         CRITICAL ENDPOINT - Called by Stripe when payment events occur.
         Updates booking status and sends confirmations.
-        
+
+        CONFIGURE IN STRIPE DASHBOARD:
+        Set your webhook URL to: https://drivebook.com.au/api/stripe/webhook
+        (Settings → Webhooks → Add endpoint)
+
         IMPORTANT: This is how PENDING_PAYMENT bookings become CONFIRMED.
         The AI never handles payment - it creates the booking with PENDING_PAYMENT
         status, then this webhook confirms when payment succeeds.
@@ -2136,7 +2178,8 @@ paths:
         - Validates Stripe signature using webhook secret
         - Idempotent processing (prevents double-confirmation)
         - Requires no authentication (signature is auth)
-        - Rate limit: No limit (signature validation only)
+        - Rate limit: 100 requests/minute per IP (webhookRateLimit)
+        - Handler errors return 500 (Stripe retries automatically)
         
         IMPLEMENTATION:
         1. Verify Stripe signature in Stripe-Signature header
@@ -2144,12 +2187,11 @@ paths:
         3. Update booking status to CONFIRMED
         4. Clear expiresAt field
         5. Send confirmation SMS/email
-        6. Return 200 OK to Stripe
+        6. Return 200 OK to Stripe (500 on transient errors — Stripe will retry)
         
         TESTING:
-        - Use Stripe CLI: stripe listen --forward-to localhost:3000/api/webhooks/stripe
+        - Use Stripe CLI: stripe listen --forward-to localhost:3000/api/stripe/webhook
         - Test with Stripe test mode and test cards
-        - Use /webhooks/stripe/test endpoint for development (disable in production)
         
         NOTE: This endpoint is called by Stripe, NOT by the AI agent.
       operationId: stripeWebhook
@@ -2241,33 +2283,6 @@ paths:
                 example: "already_processed"
               bookingId:
                 type: string
-
-  /webhooks/stripe/test:
-    post:
-      summary: Test endpoint for Stripe webhooks (DEVELOPMENT ONLY)
-      description: |
-        Development-only endpoint to test webhook handling without real Stripe.
-        Simulates payment confirmation for testing the flow.
-        
-        WARNING: DISABLE IN PRODUCTION!
-        
-        This endpoint allows testing the complete payment flow:
-        1. Create booking with PENDING_PAYMENT status
-        2. Call this test endpoint with bookingId
-        3. Booking status updates to CONFIRMED
-        4. Confirmation SMS/email sent
-        
-        Use this to test the flow without needing Stripe test cards.
-      operationId: testStripeWebhook
-      tags:
-        - Webhooks
-        - Testing
-      parameters:
-        - name: X-Test-Secret
-          in: header
-          type: string
-          required: true
-          description: Test secret to prevent abuse (set in environment variable)
         - name: body
           in: body
           required: true

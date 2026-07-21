@@ -68,12 +68,14 @@ export function calculateCategoryScores(feedbackCodes: number[]): Record<PDACate
 }
 
 /**
- * Calculate overall score (average of all category scores)
+ * Calculate overall score (average of all category scores).
+ * Returns 0 if no feedback codes were provided — a score of 100 with no
+ * issues is misleading. Only show a score when issues have been assessed.
  */
-export function calculateOverallScore(categoryScores: Record<PDACategory, number>): number {
+export function calculateOverallScore(categoryScores: Record<PDACategory, number>, feedbackCodes?: number[]): number {
+  if (feedbackCodes !== undefined && feedbackCodes.length === 0) return 0
   const scores = Object.values(categoryScores)
-  const sum = scores.reduce((acc, score) => acc + score, 0)
-  return Math.round(sum / scores.length)
+  return Math.round(scores.reduce((a, s) => a + s, 0) / scores.length)
 }
 
 /**
@@ -106,7 +108,7 @@ export function generateFeedbackSummary(feedbackCodes: number[]): LessonFeedback
   })
 
   const categoryScores = calculateCategoryScores(feedbackCodes)
-  const overallScore = calculateOverallScore(categoryScores)
+  const overallScore = calculateOverallScore(categoryScores, feedbackCodes)
 
   return {
     totalIssues: feedbackCodes.length,

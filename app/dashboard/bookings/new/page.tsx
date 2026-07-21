@@ -1,9 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Calendar, MapPin, Banknote, AlertCircle } from 'lucide-react'
 import BookingFormNew from '@/components/BookingFormNew'
+import FindNextSlot from '@/components/instructor/FindNextSlot'
 
 interface Client {
   id: string
@@ -25,6 +26,11 @@ export default function NewBookingPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [showCalendar, setShowCalendar] = useState(false)
   const [instructorData, setInstructorData] = useState<any>(null)
+  // Pre-fill from Find Next Slot
+  const [prefillDate, setPrefillDate] = useState<string | undefined>()
+  const [prefillTime, setPrefillTime] = useState<string | undefined>()
+  // Key to remount BookingFormNew when prefill changes
+  const [formKey, setFormKey] = useState(0)
 
   // Offline form state
   const [offlineForm, setOfflineForm] = useState({
@@ -193,41 +199,41 @@ export default function NewBookingPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Client Name *</label>
-                  <input required value={offlineForm.clientName} onChange={e => setOfflineForm(p => ({ ...p, clientName: e.target.value }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="John Smith" />
+                  <input required value={offlineForm.clientName} onChange={e => setOfflineForm(p => ({ ...p, clientName: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="John Smith" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Phone</label>
-                  <input value={offlineForm.clientPhone} onChange={e => setOfflineForm(p => ({ ...p, clientPhone: e.target.value }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="0400 000 000" />
+                  <input value={offlineForm.clientPhone} onChange={e => setOfflineForm(p => ({ ...p, clientPhone: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="0400 000 000" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Email (optional — used for platform client check)</label>
-                <input type="email" value={offlineForm.clientEmail} onChange={e => setOfflineForm(p => ({ ...p, clientEmail: e.target.value }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="john@example.com" />
+                <input type="email" value={offlineForm.clientEmail} onChange={e => setOfflineForm(p => ({ ...p, clientEmail: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="john@example.com" />
               </div>
 
               <div className="grid sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Date *</label>
-                  <input required type="date" value={offlineForm.date} onChange={e => setOfflineForm(p => ({ ...p, date: e.target.value, time: '' }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent" />
+                  <input required type="date" value={offlineForm.date} onChange={e => setOfflineForm(p => ({ ...p, date: e.target.value, time: '' }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Duration *</label>
-                  <select value={offlineForm.durationMinutes} onChange={e => setOfflineForm(p => ({ ...p, durationMinutes: Number(e.target.value), time: '' }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent">
+                  <select value={offlineForm.durationMinutes} onChange={e => setOfflineForm(p => ({ ...p, durationMinutes: Number(e.target.value), time: '' }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent">
                     {[30, 60, 90, 120, 150, 165, 180, 240].map(m => <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60>0?` ${m%60}m`:''}`}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Time *</label>
                   {!offlineForm.date ? (
-                    <div className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-slate-400">Select a date first</div>
+                    <div className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-slate-400">Select a date first</div>
                   ) : loadingOfflineSlots ? (
-                    <div className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-slate-400 flex items-center gap-2">
+                    <div className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-slate-400 flex items-center gap-2">
                       <svg className="animate-spin h-3 w-3 text-sky-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
                       Checking availability...
                     </div>
                   ) : offlineSlots.length > 0 ? (
-                    <select required value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent">
+                    <select required value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent">
                       <option value="">Pick a slot</option>
                       {offlineSlots.filter(s => s.available).map(s => (
                         <option key={s.time} value={s.time}>{s.time}</option>
@@ -235,7 +241,7 @@ export default function NewBookingPage() {
                     </select>
                   ) : (
                     <div className="space-y-1">
-                      <input required type="time" value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-amber-500/40 bg-amber-500/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent" />
+                      <input required type="time" value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-amber-500/40 bg-amber-500/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" />
                       {offlineSlotsMessage && <p className="text-xs text-amber-300">⚠ {offlineSlotsMessage} — enter time manually</p>}
                     </div>
                   )}
@@ -245,7 +251,7 @@ export default function NewBookingPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Payment method</label>
-                  <select value={offlineForm.offlinePaymentMethod} onChange={e => setOfflineForm(p => ({ ...p, offlinePaymentMethod: e.target.value as any }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent">
+                  <select value={offlineForm.offlinePaymentMethod} onChange={e => setOfflineForm(p => ({ ...p, offlinePaymentMethod: e.target.value as any }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent">
                     <option value="cash">Cash</option>
                     <option value="bank_transfer">Bank transfer</option>
                     <option value="other">Other</option>
@@ -253,18 +259,18 @@ export default function NewBookingPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Amount paid ($)</label>
-                  <input type="number" min="0" step="0.01" value={offlineForm.offlineAmountPaid} onChange={e => setOfflineForm(p => ({ ...p, offlineAmountPaid: e.target.value }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="75.00" />
+                  <input type="number" min="0" step="0.01" value={offlineForm.offlineAmountPaid} onChange={e => setOfflineForm(p => ({ ...p, offlineAmountPaid: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="75.00" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Pickup address</label>
-                <input value={offlineForm.pickupAddress} onChange={e => setOfflineForm(p => ({ ...p, pickupAddress: e.target.value }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="123 Main St" />
+                <input value={offlineForm.pickupAddress} onChange={e => setOfflineForm(p => ({ ...p, pickupAddress: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" placeholder="123 Main St" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Notes</label>
-                <textarea rows={2} value={offlineForm.notes} onChange={e => setOfflineForm(p => ({ ...p, notes: e.target.value }))} className="w-full border border-white/10 bg-slate-950/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none" placeholder="Any notes..." />
+                <textarea rows={2} value={offlineForm.notes} onChange={e => setOfflineForm(p => ({ ...p, notes: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none" placeholder="Any notes..." />
               </div>
 
               {offlineError && (
@@ -287,7 +293,7 @@ export default function NewBookingPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Choose Client</label>
-                  <select value={selectedClient?.id || ''} onChange={(e) => handleClientSelect(e.target.value)} className="w-full px-3 py-2 border border-white/10 bg-slate-950/60 rounded-lg text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent">
+                  <select value={selectedClient?.id || ''} onChange={(e) => handleClientSelect(e.target.value)} className="w-full px-3 py-2 border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent">
                     <option value="" className="bg-slate-950">Select a client...</option>
                     {clients.map(client => <option key={client.id} value={client.id} className="bg-slate-950">{client.name} - {client.phone}</option>)}
                   </select>
@@ -310,7 +316,26 @@ export default function NewBookingPage() {
             {showCalendar && selectedClient && instructorData?.id && (
               <div className="rounded-3xl border border-white/10 bg-slate-900/80 shadow-lg p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Calendar className="h-5 w-5 text-sky-400" />Step 2: Select Date & Time</h2>
-                <BookingFormNew instructorId={instructorData.id} hourlyRate={instructorData.hourlyRate} preselectedClient={selectedClient} isInstructorBooking={true} />
+
+                {/* Find Next Slot — helps instructors quickly suggest a time */}
+                <FindNextSlot
+                  instructorId={instructorData.id}
+                  onSelect={(date, time, duration) => {
+                    setPrefillDate(date);
+                    setPrefillTime(time);
+                    setFormKey(k => k + 1); // remount form so initialDate/Time takes effect
+                  }}
+                />
+
+                <BookingFormNew
+                  key={formKey}
+                  instructorId={instructorData.id}
+                  hourlyRate={instructorData.hourlyRate}
+                  preselectedClient={selectedClient}
+                  isInstructorBooking={true}
+                  initialDate={prefillDate}
+                  initialTime={prefillTime}
+                />
               </div>
             )}
             {showCalendar && (!instructorData || !instructorData.id) && (

@@ -1,225 +1,143 @@
-# DOCROLEBASE TODO
+# TODO — Planned, Pending, and Deferred
 
-**Purpose:** Track what is genuinely left to do before or after launch.  
-**Last Updated:** July 11, 2026  
-**Note:** Completed items are recorded in `00-overview/CHANGES.md` and relevant DOCROLEBASE docs — not here.
+**Rule:** This file tracks only what is NOT yet done.  
+Completed work belongs in the permanent doc for that feature.  
+**Last Updated:** July 2026
+
+> Completed audit items have been moved to their permanent docs:
+> - Instructor dashboard fixes → `03-instructor/DASHBOARD.md` + `INSPECTION.md`
+> - Booking flow fixes → `01-public/BOOKING_FLOW_COMPLETE.md` + `06-payments/SECURITY_ISSUES_QUICK_REFERENCE.md`
+> - Student dashboard fixes → `02-student/DASHBOARD.md` + `INSPECTION.md`
+> - All resolved gaps → `00-overview/GAP_ANALYSIS.md` (Resolved section)
+> - Change log → `00-overview/CHANGES.md`
 
 ---
 
-## ⚠️ PRE-LAUNCH CONFIG (no code changes — all dashboard/env tasks)
+## ⚠️ PRE-LAUNCH CONFIG (no code changes needed)
 
 | # | What | Where |
 |---|------|--------|
 | 1 | Set live Stripe keys (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`) | Vercel env vars |
-| 2 | Set `STRIPE_WEBHOOK_SECRET` from real endpoint | Vercel env vars (Stripe Dashboard → Webhooks) |
-| 3 | Create live Stripe price IDs for all 8 tiers (BASIC/PRO/STUDIO/BUSINESS × monthly/annual) | Vercel env vars (after creating products in Stripe) |
-| 4 | Configure Stripe Billing Portal (plan switching + proration) | Stripe Dashboard → Settings → Billing |. 
-| 5 | Set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | ✅ DONE — set in `.env` from Upstash console |
+| 2 | Set `STRIPE_WEBHOOK_SECRET` — use path `/api/stripe/webhook` | Vercel env vars → Stripe Dashboard → Webhooks |
+| 3 | Create live Stripe price IDs for all 8 tiers (BASIC/PRO/STUDIO/BUSINESS × monthly/annual) | Vercel env vars |
+| 4 | Configure Stripe Billing Portal (plan switching + proration) | Stripe Dashboard → Settings → Billing |
+| 5 | Set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | ✅ Done |
 | 6 | Verify `GOOGLE_REDIRECT_URI=https://drivebook.com.au/api/calendar/callback` | Vercel env vars + Google Cloud Console |
-| 7 | Set `NEXT_PUBLIC_VOICE_PHONE_NUMBER` with real AU number | Vercel env vars — AIReceptionistShowcase shows "coming soon" without it |
-| 8 | Replace placeholder ABN on about page | One line in `app/about/page.tsx` |
-| 9 | Run `npx prisma migrate deploy` on production DB | ⚠️ PARTIAL — `add_instructor_video_specialties` migration applied manually via `prisma db execute`. Remaining migrations (DeviceToken, NotificationRetry) still need `migrate deploy` |
-| 9a | Regenerate Prisma client (`npx prisma generate`) | Required on the server — locked DLL prevented local generation. `videoUrl`/`specialties` types will be stale until this runs |
-| 10 | Set `connection_limit=20` in `DATABASE_URL` | Vercel env vars — Prisma default is 5, causes queueing under load |
-| 11 | Set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Vercel env vars — required for mobile push notifications |
-| 12 | Submit sitemap to Google Search Console | https://search.google.com/search-console → Sitemaps → `https://drivebook.com.au/sitemap.xml` |
+| 7 | Set `NEXT_PUBLIC_VOICE_PHONE_NUMBER` with real AU number | Vercel env vars |
+| 8 | Replace placeholder ABN on about page | `app/about/page.tsx` — one line |
+| 9 | `npx prisma migrate deploy` on production DB | ✅ Done July 2026 |
+| 10 | Set `connection_limit=20` in `DATABASE_URL` | Vercel env vars |
+| 11 | Set Firebase env vars (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) | Vercel env vars — required for mobile push |
+| 12 | Submit sitemap to Google Search Console | search.google.com/search-console → Sitemaps |
+| 13 | Set `VOICE_SERVICE_API_KEY` in Railway | Required for voice AI cancel flow without session auth |
 
 ---
 
-## ✅ COMPLETED — SEO & Content Architecture
+## 🔧 PENDING CODE FIXES
 
-| What | Notes |
-|------|-------|
-| 100+ blog posts | Students + instructors, all with frontmatter, tags, JSON-LD |
-| Tag archive pages (`/blog/tag/[tag]`) | Auto-generated from post tags |
-| RSS feed (`/rss.xml`) | Auto-generated from all posts |
-| Sitemap with all pages | Dynamic, regenerated hourly — includes pillar, feature, compare pages |
-| JSON-LD on all blog posts | BreadcrumbList + BlogPosting |
-| Related posts + prev/next navigation | On all blog post pages |
-| Pillar page: `/learn-to-drive` | Learner hub — 40+ article links, FAQ schema |
-| Pillar page: `/pda-guide` | WA PDA master guide — scoring, failures, prep |
-| Pillar page: `/for-instructors` | Instructor resource hub — 60+ article links by topic |
-| Pillar page: `/platform` | Platform documentation — all features explained with links |
-| Feature page: `/features/ai-receptionist` | BreadcrumbList + FAQPage + comparison table |
-| Feature page: `/features/online-booking` | BreadcrumbList + FAQPage + comparison table |
-| Feature page: `/features/custom-domain` | BreadcrumbList + FAQPage + comparison table |
-| Feature page: `/features/student-progress` | BreadcrumbList + FAQPage + skill tracking demo |
-| Feature page: `/features/multi-instructor` | BreadcrumbList + FAQPage + plan comparison table |
-| Feature page: `/features/payments` | BreadcrumbList + FAQPage + payment flow steps |
-| Comparison page: `/compare/google-calendar` | 14-row comparison table + narrative |
-| Comparison page: `/compare/paper-diary` | Risk callout + comparison table + hidden cost narrative |
-| Comparison page: `/compare/calendly` | 17-row comparison table + narrative |
-| Logo system | `public/logo.svg`, `public/logo-icon.svg`, `public/favicon.svg`, `components/Logo.tsx` |
-| Logo rolled out to all 15 public pages | `dark` prop for dark backgrounds, default for light |
-| Homepage footer — 4 columns | Resources column (pillar pages) + Features column (feature pages) |
-| `middleware.ts` updated | `/features/*` and `/compare/*` added to `publicPaths` |
-| `/for-instructors` capability strip | Icons are clickable links to feature pages |
-| `/teach-with-drivebook` | "Explore Every Feature" section + compare links added |
+### Instructor earnings — hardcoded commission fallback
+`app/api/instructor/earnings/route.ts` falls back to `price * 0.9` when `instructorPayout` is 0. Should use `booking.commissionRate` instead. Low priority — only affects old bookings.
 
----
+### Admin — `confirm()` and `alert()` in admin UI (July 2026)
+Several admin pages still use browser dialogs. These are lower priority than student/booking flows (admin is internal) but should be replaced before production.
 
-## 🔵 PENDING CODE WORK
+| # | Priority | Issue | File | Status |
+|---|----------|-------|------|--------|
+| A1 | 🟠 High | `confirm()` on process payout + hold payout (financial actions) | `app/admin/payouts/page.tsx` | ✅ Fixed July 2026 |
+| A2 | 🟠 High | `confirm()` on approve instructor, deduct wallet, reset password in support; `prompt()` on suspend | `app/admin/support/user/[userId]/page.tsx` | ✅ Fixed July 2026 |
+| A3 | 🟡 Medium | `alert()` + `confirm()` on cancel booking in edit page | `app/admin/bookings/[id]/edit/page.tsx` | ✅ Fixed July 2026 |
+| A4 | 🟡 Medium | `confirm()` on cancel/complete/delete booking in client detail | `app/admin/clients/[id]/page.tsx` | ✅ Fixed July 2026 |
+| A5 | 🟡 Medium | `confirm()` on deactivate instructor + auto-process in documents | `app/admin/documents/page.tsx`, `documents/review/[instructorId]/page.tsx` | ✅ Fixed July 2026 |
+| A6 | 🟡 Medium | `confirm()` on delete voice line number | `app/admin/voice-lines/page.tsx` | ✅ Fixed July 2026 |
+| A7 | 🟡 Medium | `alert()` on release hold failure in disputes page | `app/admin/disputes/page.tsx` | ✅ Fixed July 2026 |
+| A8 | 🟢 Low | Encoding artifacts (â€¢, â€") in admin/settings/page.tsx JSX strings | `app/admin/settings/page.tsx` | ✅ Fixed July 2026 |
 
-### Instructor earnings hardcoded commission fallback
-`app/api/instructor/earnings/route.ts` uses `price * 0.9` as a fallback payout calculation when `instructorPayout` is 0.
-This hardcodes a 10% commission rate. Should use `booking.commissionRate` (stored at booking creation) instead.
-Low priority — only affects old bookings where `instructorPayout` was not set.
+> All 8 admin UI issues resolved. Admin inspection complete.
 
-### Voice AI — Deploy to Vercel production
-8 commits on GitHub (`origin/main`) not yet on GitLab (`gitlab/main` → Vercel).
-Run: `git push gitlab main` then merge `main → production-hardening-june-2026` on GitLab.
-Pending features: `voice.voiceName`, `voicePackages`, email sanitiser, postcode normalisation backend.
+### Booking flow — max date hardcoded to 3 months
+`components/BookingDetailsForm.tsx` uses `maxDate.setMonth(maxDate.getMonth() + 3)`. Should use platform config `bookingSettings.maxAdvanceDays`. Deferred — not a release blocker, current business rule is 3 months.
 
-### Voice AI — Instructor address typo
-`DEBESAY WELDEGEBRIEL BIRHANE` has `baseAddress = "6/226 whatley Crescent Maylamds"` (typo: "Maylamds").
-Fix in admin dashboard → instructor will re-geocode on next search.
+### Student confirmation page — `force-dynamic` on client component
+`app/booking/[id]/confirmation/page.tsx` line 3: `export const dynamic = 'force-dynamic'` is a no-op on a `'use client'` component. Cosmetic only, no runtime impact.
 
-### Voice AI — Support phone placeholder
-`drivebook-hybrid/VAPI_SYSTEM_PROMPT.md` has `0488 000 000` as support SMS number.
-Replace with real number, then: `node update-prompt-only.js VAPI_API_KEY ASSISTANT_ID`
+### Voice AI — deploy to Vercel production
+8 commits on `origin/main` not yet on `gitlab/main` → Vercel. Run: `git push gitlab main`.
+
+### Voice AI — instructor address typo in DB
+`DEBESAY WELDEGEBRIEL BIRHANE` has `baseAddress = "6/226 whatley Crescent Maylamds"`. Fix via admin dashboard — will auto-resolve on next settings save.
+
+### Voice AI — replace support phone placeholder
+`drivebook-hybrid/VAPI_SYSTEM_PROMPT.md` has `0488 000 000`. Run `node scripts/build-vapi-prompt.js` after setting real `SUPPORT_PHONE` in env.
 
 ### Voice AI — TTS voice quality
-Adam (11Labs) mispronounces Eritrean names. Consider switching to Azure `en-AU-NatashaNeural`.
-Update `rebuild-vapi-assistant.js` voice config then run full rebuild.
+Adam (11Labs) mispronounces Eritrean names. Consider Azure `en-AU-NatashaNeural`. Low priority.
 
-### Voice AI — `/set-password` page needs testing
-New page at `app/set-password/page.tsx` allows email correction after voice booking.
-Test full flow: call → book later → receive SMS → click link → correct email → set password.
-
-### Instructor profile baseAddress re-geocoding
-`app/api/instructor/profile/route.ts` PUT does not re-geocode when `baseAddress` changes.
-If instructor updates their address, `baseLatitude`/`baseLongitude` stay stale → wrong search results.
-Fix: after updating `baseAddress`, call geocode and update `baseLatitude`/`baseLongitude` automatically.
-
-### VOICE_SERVICE_API_KEY env var
-`app/api/bookings/[id]/cancellation-policy/route.ts` uses `process.env.VOICE_SERVICE_API_KEY` to allow unauthenticated voice service calls.
-Verify this env var is set in Railway. If not set, voice AI cancel flow will always require session auth.
-
-### Fix #10 — Data export feature (deferred)
-`can-i-export-my-students-drivebook.mdx` is marked `draft: true` pending implementation of `Settings → Data → Export` UI. No code exists yet. Build when ready, then undraft the blog post.
-
-### Fix #11 — C drive disk space (pre-deploy blocker)
-C drive at low space. `npx prisma generate` fails on large files. Clear temp files, browser caches, large files on C before next Prisma client regeneration.
-
-### Fix #12 — Request indexing in Google Search Console
-After next deploy, manually request indexing for key pages.
-Add `?connection_limit=20` to `DATABASE_URL` in Vercel env vars.
-
-### Fix #6 — No tests (5–8 days)
-Zero `*.test.ts` / `*.spec.ts` files. Add Jest. Priority: Stripe webhook → wallet deduction → booking creation → refund flow.
+### Voice AI — test `/set-password` flow
+Test: call → book later → receive SMS → click link → correct email → set password.
 
 ---
 
-## 🔵 SEO PHASE 2 — Feature Landing Pages
+## 🔵 DEFERRED FEATURES
 
-| Page | Target query | Priority | Status |
-|------|-------------|----------|--------|
-| `/features/ai-receptionist` | "AI answering service driving school Australia" | HIGH | ✅ DONE |
-| `/features/online-booking` | "driving lesson booking software Australia" | HIGH | ✅ DONE |
-| `/features/custom-domain` | "driving instructor website Australia" | HIGH | ✅ DONE |
-| `/features/student-progress` | "driving lesson progress tracker" | MED | ✅ DONE |
-| `/features/multi-instructor` | "driving school management software" | MED | ✅ DONE |
-| `/features/payments` | "driving lesson payment system" | MED | ✅ DONE |
-| `/features/wallet` | "prepaid driving lesson wallet" | LOW | 🔵 Pending |
-| `/features/packages` | "driving lesson packages" | LOW | 🔵 Pending |
-| `/features/reviews` | "driving instructor reviews" | LOW | 🔵 Pending |
-| `/features/offline-booking` | "record offline driving lesson bookings" | LOW | 🔵 Pending |
+### Data export — instructor/student UI
+Admin CSV export is built (`GET /api/admin/export`). Instructor self-serve export (`Settings → Data → Export`) not built. Blog post `can-i-export-my-students-drivebook.mdx` stays `draft: true` until done.
 
----
+### Vehicle model (Sprint 5)
+Defer until Business dashboard. See `03-instructor/SCHEDULE.md` → "What Is NOT Built" for full scope.
 
-## 🔵 SEO PHASE 3 — Comparison Pages
+### Student progress tracking
+Needs product design and schema work. Marketing claims "skill tracking" — current implementation is lesson notes only.
 
-| Page | Title | Status |
-|------|-------|--------|
-| `/compare/google-calendar` | DriveBook vs Google Calendar | ✅ DONE |
-| `/compare/paper-diary` | DriveBook vs Paper Diary | ✅ DONE |
-| `/compare/calendly` | DriveBook vs Calendly | ✅ DONE |
-| `/compare/acuity` | DriveBook vs Acuity Scheduling | 🔵 Pending |
-| `/compare/manual-booking` | Online Booking vs Manual Booking | 🔵 Pending |
+### Mobile app publication
+Capacitor shell exists. Not published to App Store or Google Play.
+
+### Tests
+Zero `*.test.ts` files. Priority order: Stripe webhook → wallet deduction → booking creation → refund flow.
 
 ---
 
-## 🔵 SEO PHASE 4 — Location Pages (WA first, then national)
+## 🔵 SEO — PENDING
 
-Each location page should include:
-- Instructors available in that suburb/area (pulled from DB if approved)
-- Average lesson cost in that area
-- Nearby test centres
-- Local FAQs
-- CTA to book
+### Feature pages (LOW priority)
+`/features/wallet`, `/features/packages`, `/features/reviews`, `/features/offline-booking`
 
-### Perth Metro (Priority 1)
-`/perth`, `/joondalup`, `/fremantle`, `/midland`, `/morley`, `/cannington`, `/armadale`, `/baldivis`, `/rockingham`, `/mandurah`, `/subiaco`, `/victoria-park`, `/belmont`, `/canning-vale`
+### Comparison pages (LOW priority)
+`/compare/acuity`, `/compare/manual-booking`
 
-### Regional WA (Priority 2)
-`/bunbury`, `/albany`, `/geraldton`, `/kalgoorlie`, `/broome`
+### SEO Phase 5 — Documentation centre `/docs`
+Articles explaining platform internals (how payouts work, how AI booking works, etc.)
 
-### Other States (Priority 3 — after WA established)
-`/sydney`, `/melbourne`, `/brisbane`, `/adelaide`
+### SEO Phase 6 — Interactive tools
+Lesson cost calculator, PDA readiness quiz, package savings calculator. Client-side React, no DB.
 
-**Implementation note:** Location pages should be server-rendered pulling live instructor data from DB. Use `generateStaticParams` with ISR revalidation.
+### Other states — location pages
+NSW/VIC/QLD/SA pages exist and are in sitemap. They show "coming soon" until instructors register in those states. No action needed.
 
 ---
 
-## 🔵 SEO PHASE 5 — Documentation Centre (`/docs`)
+## 🔵 POST-LAUNCH PRODUCT WORK
 
-Like Stripe Docs but for DriveBook. Builds deep topical authority on platform-specific queries.
-
-Proposed articles:
-- How to connect Stripe
-- How AI phone booking works
-- How weekly payouts are calculated
-- How the student wallet works
-- How refunds are processed
-- How SMS notifications work
-- How to set up Google Calendar sync
-- How DNS works for custom domains
-- How reviews are verified
-- How the commission structure works
-
-These answer questions that users and Google ask. Most competitors have nothing like this.
+| # | What | Effort |
+|---|------|--------|
+| 1 | Chargeback auto-freeze of instructor payout | 3 days |
+| 2 | Payout recovery job (DB commit failure after Stripe success) | 2 days |
+| 3 | Guard: instructor deleted before payout | 1 day |
+| 4 | Dashboard revenue: subtract refunds from displayed totals | 1 day |
+| 5 | Denormalized summary table for analytics at scale | 3 days |
+| 6 | Notification deduplication (concurrent double-send) | 2 days |
+| 7 | Stripe balance ledger over time | 2 days |
+| 8 | SOC 2 compliance framework | 10+ days |
 
 ---
 
-## 🔵 SEO PHASE 6 — Interactive Tools
+## 🔵 SCHEDULING — NEXT SPRINT
 
-Tools attract backlinks far more readily than articles. Each of these has genuine utility.
-
-| Tool | Description | Effort |
-|------|-------------|--------|
-| Lesson cost calculator | Enter suburb + hours needed → estimated total cost | 2 days |
-| Learner hours tracker | Log supervised hours, track toward 50-hour goal | 3 days |
-| PDA readiness quiz | Answer questions → "ready / needs work / not ready" | 2 days |
-| Package savings calculator | Compare pay-per-lesson vs package cost | 1 day |
-| Instructor earnings calculator | Enter hourly rate + hours → weekly/monthly revenue | 1 day |
-| Driving school revenue calculator | Instructors × lessons × rate → school revenue | 1 day |
-
-**Implementation note:** Client-side React components. No DB required. Host at `/tools/[tool-name]`. Include schema markup.
+### Sprint 5 — Vehicle Model
+See `03-instructor/SCHEDULE.md` → "What Is NOT Built" for full scope. Defer until Business dashboard feature set is designed.
 
 ---
 
-## 🔵 DEFERRED — Post-Launch Product Work
+## 🔵 BLOG
 
-| # | What | Notes | Effort |
-|---|------|-------|--------|
-| 1 | Chargeback automation | `charge.dispute.created` handler exists but no auto-freeze of instructor payout | 3 days |
-| 2 | Payout recovery job | Stripe payout success + DB commit failure = PENDING with no recovery | 2 days |
-| 3 | Instructor deleted before payout | No guard — payout goes to null instructorId | 1 day |
-| 4 | Dashboard metrics — refunds not subtracted | `FinancialLedger` tracks refunds but dashboard SUM doesn't use it | 1 day |
-| 5 | Denormalized summary table | Large `SUM(Transaction)` queries slow at scale | 3 days |
-| 6 | Notification duplicate prevention | Two concurrent calls can fire two emails for same event | 2 days |
-| 7 | Stripe balance ledger tracking | No endpoint to track available Stripe balance over time | 2 days |
-| 8 | Rate limiting per-user vs per-IP | Currently IP only | 2 days |
-| 9 | SOC 2 compliance | Zero framework in place | 10+ days |
-
----
-
-## 🔵 BLOG — Ongoing (2–4 posts/month)
-
-At 100 posts, quantity is no longer the priority. Maintain 2–4 high-quality posts per month covering:
-- New platform features as they ship
-- Australian state expansions (NSW, VIC road rules)
-- Seasonal content (wet season driving, school holiday availability)
-- Topical news (DoT rule changes, road safety campaigns)
-
-Blog OG images, client-side search (Fuse.js), and pagination are deferred until 150+ posts.
+Maintain 2–4 posts/month. Topics: new features, state expansions, seasonal content, DoT rule changes.
+OG images, Fuse.js search, and pagination deferred until 150+ posts.

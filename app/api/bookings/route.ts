@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { availabilityService } from '@/lib/services/availability'
+import { availabilityService, invalidateAvailabilityCache } from '@/lib/services/availability'
 import { emailService } from '@/lib/services/email'
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
@@ -17,6 +17,7 @@ import { getCommissionRate, getPlatformFeeRate } from '@/lib/services/platform-p
 import { recordBookingPayment } from '@/lib/services/ledger-operations'
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry'
 import { z } from 'zod'
+import { getDisplayName } from '@/lib/utils/account'
 
 export const dynamic = 'force-dynamic'
 
@@ -496,6 +497,15 @@ export async function POST(req: NextRequest) {
       console.error('Audit log failed for booking creation:', auditErr)
     }
 
+    // Invalidate availability cache for this instructor+date so the next slot
+    // query reflects the newly created booking immediately.
+    if (booking.startTime) {
+      invalidateAvailabilityCache(
+        session.user.instructorId,
+        booking.startTime.toISOString().slice(0, 10)
+      );
+    }
+
     // FinancialLedger — record booking payment with deterministic idempotency keys
     // Written after the $transaction commits so the DB connection is clean.
     // Idempotent: safe to retry — duplicate idempotencyKey is silently ignored.
@@ -547,7 +557,7 @@ export async function POST(req: NextRequest) {
       await emailService.sendBookingConfirmation({
         clientName: booking.client!.name,
         clientEmail: booking.client!.email,
-        instructorName: booking.instructor.name,
+        instructorName: getDisplayName(booking.instructor),
         instructorEmail: booking.instructor.user!.email,
         startTime: booking.startTime!,
         endTime: booking.endTime!,
@@ -564,7 +574,7 @@ export async function POST(req: NextRequest) {
           await smsService.sendBookingConfirmation({
             clientPhone: client.phone,
             clientName: client.name,
-            instructorName: booking.instructor.name,
+            instructorName: getDisplayName(booking.instructor),
             startTime: booking.startTime!,
             price: booking.price,
           });
@@ -574,7 +584,7 @@ export async function POST(req: NextRequest) {
           await enqueueNotification({
             channel: 'SMS',
             recipient: client.phone,
-            body: `Booking confirmed with ${booking.instructor.name} on ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}. Cost: $${booking.price.toFixed(2)}`,
+            body: `Booking confirmed with ${getDisplayName(booking.instructor)} on ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}. Cost: $${booking.price.toFixed(2)}`,
             idempotencyKey: `booking-confirm-sms-${booking.id}`,
             bookingId: booking.id,
             userId: client.userId ?? undefined,
@@ -587,7 +597,7 @@ export async function POST(req: NextRequest) {
         channel: 'EMAIL',
         recipient: booking.client!.email,
         subject: `Booking Confirmed — ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
-        body: `<p>Hi ${booking.client!.name}, your lesson with ${booking.instructor.name} is confirmed. Log in to view details.</p>`,
+        body: `<p>Hi ${booking.client!.name}, your lesson with ${getDisplayName(booking.instructor)} is confirmed. Log in to view details.</p>`,
         idempotencyKey: `booking-confirm-email-${booking.id}`,
         bookingId: booking.id,
         userId: client.userId ?? undefined,
@@ -601,7 +611,8 @@ export async function POST(req: NextRequest) {
             client.userId,
             booking.instructor.name,
             booking.id,
-            booking.startTime!
+            booking.startTime!,
+            booking.instructor
           );
         } catch (notifErr) {
           console.error('In-app notification fallback also failed:', notifErr);
@@ -686,19 +697,54 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const sourceFilter = searchParams.get('source') // 'platform' | 'offline' | null (all)
+    const fromParam    = searchParams.get('from')   // ISO date string
+    const toParam      = searchParams.get('to')     // ISO date string
+    const statusParam  = searchParams.get('status') // comma-separated status values
+    const limitParam   = searchParams.get('limit')  // integer
+    const limit        = limitParam ? Math.min(500, parseInt(limitParam, 10)) : undefined
+
+    // Status filter — comma-separated or default set
+    const defaultStatuses = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']
+    const statuses = statusParam
+      ? statusParam.split(',').map(s => s.trim()).filter(Boolean)
+      : defaultStatuses
 
     const bookings = await prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
-        status: { in: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] },
+        status: { in: statuses },
         deletedAt: null,
+        ...(fromParam ? { startTime: { gte: new Date(fromParam) } } : {}),
+        ...(toParam   ? { startTime: { ...(fromParam ? { gte: new Date(fromParam) } : {}), lte: new Date(toParam) } } : {}),
         ...(sourceFilter ? { source: sourceFilter } as any : {}),
       } as any,
-      include: { client: true },
-      orderBy: { startTime: 'asc' }
+      select: {
+        id:            true,
+        startTime:     true,
+        endTime:       true,
+        duration:      true,
+        status:        true,
+        clientName:    true,
+        clientPhone:   true,
+        pickupAddress: true,
+        price:         true,
+        client: {
+          select: { name: true, phone: true },
+        },
+      },
+      orderBy: { startTime: 'asc' },
+      ...(limit ? { take: limit } : {}),
     })
 
-    return NextResponse.json(bookings)
+    // Normalise: merge clientPhone from booking or client relation
+    const normalised = bookings.map((b: any) => ({
+      ...b,
+      clientName:  b.clientName  ?? b.client?.name  ?? null,
+      clientPhone: b.clientPhone ?? b.client?.phone ?? null,
+      client:      undefined, // don't expose full client object
+    }))
+
+    return NextResponse.json(normalised)
   } catch (error) {
     console.error('Fetch bookings error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

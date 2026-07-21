@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getDisplayName, type DisplayIdentitySource } from '@/lib/branding/getDisplayIdentity'
 
 export type NotificationType =
   | 'BOOKING_REQUEST'
@@ -119,37 +120,57 @@ export async function notifyBookingRescheduled(instructorUserId: string, clientN
   });
 }
 
-export async function notifyClientBookingRescheduled(clientUserId: string, instructorName: string, bookingId: string, newStart: Date) {
+export async function notifyClientBookingRescheduled(
+  clientUserId: string,
+  instructorName: string,
+  bookingId: string,
+  newStart: Date,
+  provider?: DisplayIdentitySource
+) {
+  const displayName = provider ? getDisplayName(provider) : instructorName
   return createNotification({
     userId: clientUserId,
     type: 'BOOKING_CONFIRMED',
     title: 'Booking Rescheduled',
-    message: `Your lesson with ${instructorName} has been rescheduled to ${newStart.toLocaleDateString('en-AU', { timeZone: AU_TZ })} at ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })}`,
+    message: `Your lesson with ${displayName} has been rescheduled to ${newStart.toLocaleDateString('en-AU', { timeZone: AU_TZ })} at ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })}`,
     link: `/client-dashboard/bookings`,
-    metadata: { bookingId, instructorName },
+    metadata: { bookingId, instructorName: displayName },
   });
 }
 
 // Client-facing notifications
-export async function notifyClientBookingConfirmed(clientUserId: string, instructorName: string, bookingId: string, startTime: Date) {
+export async function notifyClientBookingConfirmed(
+  clientUserId: string,
+  instructorName: string,
+  bookingId: string,
+  startTime: Date,
+  provider?: DisplayIdentitySource
+) {
+  const displayName = provider ? getDisplayName(provider) : instructorName
   return createNotification({
     userId: clientUserId,
     type: 'BOOKING_CONFIRMED',
     title: 'Booking Confirmed',
-    message: `Your lesson with ${instructorName} on ${startTime.toLocaleDateString('en-AU', { timeZone: AU_TZ })} is confirmed`,
+    message: `Your lesson with ${displayName} on ${startTime.toLocaleDateString('en-AU', { timeZone: AU_TZ })} is confirmed`,
     link: `/client-dashboard/bookings`,
-    metadata: { bookingId, instructorName },
+    metadata: { bookingId, instructorName: displayName },
   });
 }
 
-export async function notifyClientBookingCancelled(clientUserId: string, instructorName: string, bookingId: string) {
+export async function notifyClientBookingCancelled(
+  clientUserId: string,
+  instructorName: string,
+  bookingId: string,
+  provider?: DisplayIdentitySource
+) {
+  const displayName = provider ? getDisplayName(provider) : instructorName
   return createNotification({
     userId: clientUserId,
     type: 'BOOKING_CANCELLED',
     title: 'Booking Cancelled',
-    message: `Your booking with ${instructorName} has been cancelled`,
+    message: `Your booking with ${displayName} has been cancelled`,
     link: `/client-dashboard/bookings`,
-    metadata: { bookingId, instructorName },
+    metadata: { bookingId, instructorName: displayName },
   });
 }
 
@@ -172,20 +193,21 @@ export async function notifyShortNoticeBookingRequest(
   });
 }
 
-// Client notification — booking pending instructor approval
 export async function notifyClientBookingPendingApproval(
   clientUserId: string,
   instructorName: string,
   bookingId: string,
-  startTime: Date
+  startTime: Date,
+  provider?: DisplayIdentitySource
 ) {
+  const displayName = provider ? getDisplayName(provider) : instructorName
   return createNotification({
     userId: clientUserId,
     type: 'BOOKING_REQUEST',
     title: 'Booking Awaiting Approval',
-    message: `Your last-minute lesson request with ${instructorName} at ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })} is awaiting approval.`,
+    message: `Your last-minute lesson request with ${displayName} at ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ })} is awaiting approval.`,
     link: `/client-dashboard/bookings`,
-    metadata: { bookingId, instructorName, isShortNotice: true },
+    metadata: { bookingId, instructorName: displayName, isShortNotice: true },
   });
 }
 
@@ -212,16 +234,18 @@ export async function notifyLessonReminderStudent(
   studentUserId: string,
   instructorName: string,
   bookingId: string,
-  startTime: Date
+  startTime: Date,
+  provider?: DisplayIdentitySource
 ) {
+  const displayName = provider ? getDisplayName(provider) : instructorName
   const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: AU_TZ });
   const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ });
   return createNotification({
     userId: studentUserId,
     type: 'LESSON_REMINDER',
     title: '📅 Lesson Tomorrow',
-    message: `Reminder: your lesson with ${instructorName} is tomorrow ${dateStr} at ${timeStr}.`,
+    message: `Reminder: your lesson with ${displayName} is tomorrow ${dateStr} at ${timeStr}.`,
     link: `/client-dashboard/bookings`,
-    metadata: { bookingId, instructorName, startTime: startTime.toISOString() },
+    metadata: { bookingId, instructorName: displayName, startTime: startTime.toISOString() },
   });
 }

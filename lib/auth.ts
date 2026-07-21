@@ -43,10 +43,6 @@ export const authOptions: NextAuthOptions = {
         }
 
         // FIX #1: Block unapproved instructors at the auth gate.
-        // Previously, PENDING instructors could log in and receive a valid JWT.
-        // They were blocked at individual booking routes, but any route that
-        // didn't check approvalStatus was accessible. Gate it here instead —
-        // one place, always enforced, no route can accidentally forget.
         if (user.role === 'INSTRUCTOR') {
           if (!user.instructor || user.instructor.approvalStatus !== 'APPROVED') {
             throw new Error('INSTRUCTOR_NOT_APPROVED')

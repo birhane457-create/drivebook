@@ -247,6 +247,8 @@ export function getPackageByHours(hours: number): PackageType {
 }
 
 // Commission calculation for bulk bookings - Dynamic version
+// newStudentBonus removed May 2026 — commission is a flat rate per tier.
+// isFirstBooking is recorded for analytics but no longer affects payout.
 export async function calculateBulkCommissionDynamic(
   instructorId: string,
   totalAmount: number,
@@ -254,106 +256,69 @@ export async function calculateBulkCommissionDynamic(
   subscriptionTier: 'BASIC' | 'PRO' | 'BUSINESS'
 ) {
   const settings = await getPricingSettings();
-  
-  // Commission rates by tier from database
+
   const commissionRates = {
     BASIC: settings.basicCommissionRate,
     PRO: settings.proCommissionRate,
-    BUSINESS: settings.businessCommissionRate
+    BUSINESS: settings.businessCommissionRate,
   };
-  
-  const bonusRates = {
-    BASIC: settings.basicNewStudentBonus,
-    PRO: settings.proNewStudentBonus,
-    BUSINESS: settings.businessNewStudentBonus
-  };
-  
+
   const commissionRate = commissionRates[subscriptionTier];
-  const bonusRate = bonusRates[subscriptionTier];
-  
-  // Platform fee from client
+
   const platformFee = (totalAmount * settings.platformFeePercentage) / 100;
-  
-  // Amount instructor receives before commission
   const instructorAmount = totalAmount;
-  
-  // Commission from instructor's amount
   const platformCommission = (instructorAmount * commissionRate) / 100;
-  
-  // New student bonus (extra commission)
-  const newStudentBonus = isFirstBooking ? (instructorAmount * bonusRate) / 100 : 0;
-  
-  // Total platform revenue
-  const totalPlatformRevenue = platformFee + platformCommission + newStudentBonus;
-  
-  // Instructor payout
-  const instructorPayout = instructorAmount - platformCommission - newStudentBonus;
-  
+  const totalPlatformRevenue = platformFee + platformCommission;
+  const instructorPayout = instructorAmount - platformCommission;
+
   return {
     platformFee,
     commissionRate,
     platformCommission,
-    newStudentBonus,
     totalPlatformRevenue,
-    instructorPayout
+    instructorPayout,
+    isFirstBooking, // retained for analytics/recording only
   };
 }
 
 // Commission calculation for bulk bookings - Static version for backward compatibility
-// Platform takes commission from instructor's payout, not from client
+// Uses PlatformSettings defaults — commission rates must match DB values.
+// Prefer calculateBulkCommissionDynamic for any new code.
 export function calculateBulkCommission(
   instructorId: string,
   totalAmount: number,
   isFirstBooking: boolean,
   subscriptionTier: 'BASIC' | 'PRO' | 'BUSINESS'
 ): {
-  platformFee: number; // What client pays (3.6%)
-  commissionRate: number; // What platform takes from instructor
-  platformCommission: number; // Commission amount
-  newStudentBonus: number; // Extra commission for new student
-  totalPlatformRevenue: number; // Total platform makes
-  instructorPayout: number; // What instructor receives
+  platformFee: number;
+  commissionRate: number;
+  platformCommission: number;
+  totalPlatformRevenue: number;
+  instructorPayout: number;
+  isFirstBooking: boolean;
 } {
-  // Commission rates by tier
+  // These must match PlatformSettings defaults in the DB.
+  // Do not hardcode here — use calculateBulkCommissionDynamic for live rates.
+  // Kept as a static fallback for offline/test contexts only.
   const commissionRates = {
-    BASIC: 15,
-    PRO: 12,
-    BUSINESS: 10
+    BASIC: DEFAULT_SETTINGS.basicCommissionRate,
+    PRO: DEFAULT_SETTINGS.proCommissionRate,
+    BUSINESS: DEFAULT_SETTINGS.businessCommissionRate,
   };
-  
-  const bonusRates = {
-    BASIC: 8,
-    PRO: 10,
-    BUSINESS: 12
-  };
-  
   const commissionRate = commissionRates[subscriptionTier];
-  const bonusRate = bonusRates[subscriptionTier];
-  
-  // Platform fee from client (3.6%)
-  const platformFee = (totalAmount * PLATFORM_FEE_PERCENTAGE) / 100;
-  
-  // Amount instructor receives before commission
-  const instructorAmount = totalAmount; // Client pays total, instructor gets amount minus commission
-  
-  // Commission from instructor's amount
+
+  const platformFee = (totalAmount * DEFAULT_SETTINGS.platformFeePercentage) / 100;
+  const instructorAmount = totalAmount;
   const platformCommission = (instructorAmount * commissionRate) / 100;
-  
-  // New student bonus (extra commission)
-  const newStudentBonus = isFirstBooking ? (instructorAmount * bonusRate) / 100 : 0;
-  
-  // Total platform revenue
-  const totalPlatformRevenue = platformFee + platformCommission + newStudentBonus;
-  
-  // Instructor payout
-  const instructorPayout = instructorAmount - platformCommission - newStudentBonus;
-  
+  const totalPlatformRevenue = platformFee + platformCommission;
+  const instructorPayout = instructorAmount - platformCommission;
+
   return {
     platformFee,
     commissionRate,
     platformCommission,
-    newStudentBonus,
     totalPlatformRevenue,
-    instructorPayout
+    instructorPayout,
+    isFirstBooking,
   };
 }

@@ -1,108 +1,54 @@
-# Documentation Index
+# DriveBook Hybrid — Documentation Index
 
-All documentation for drivebook-hybrid is organized here. Start with the links below.
-
-## 📖 Main Documentation
-
-**New to this project?** Start here:
-- **[../README.md](../README.md)** — Project overview, quick start, API reference, deployment
-
-## 📋 Detailed Guides
-
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** — System design, data flows, components, error handling
-- **[INTEGRATION.md](INTEGRATION.md)** — How drivebook-hybrid integrates with main DriveBook platform
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** — Production deployment to Heroku, AWS ECS, Railway, Render
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** — Quick lookup for workflows, APIs, troubleshooting
-
-## 🤖 AI System
-
-- **[AI_SYSTEM.md](AI_SYSTEM.md)** — Copilot agent integration, response formats, AI flow
-- **[HOMEPAGE.md](HOMEPAGE.md)** — Suggested public landing page / marketing copy
-
-## 📝 Status & Changelog
-
-- **[../STATUS.md](../STATUS.md)** — What's been done, known issues fixed, what's next
+**Last Updated:** July 2026  
+**Purpose:** Current reference docs for the voice AI service and platform operations. No history.
 
 ---
 
-## File Organization
+## AI Voice Receptionist
 
-```
-drivebook-hybrid/
-├── README.md              # ⭐ START HERE
-├── STATUS.md              # Build status, changelog, next steps
-├── package.json
-├── server.js
-├── routes/                # API endpoints
-├── services/              # Business logic
-├── utils/                 # Validators, logger, config
-├── tests/                 # Jest test files
-├── prisma/                # Database schema
-├── docs/                  # 📁 Documentation (this folder)
-│   ├── INDEX.md           # This file
-│   ├── ARCHITECTURE.md
-│   ├── INTEGRATION.md
-│   ├── DEPLOYMENT.md
-│   ├── QUICK_REFERENCE.md
-│   └── AI_SYSTEM.md
-├── Dockerfile             # Docker image definition
-├── docker-compose.yml     # Local dev environment
-└── .env                   # Environment variables (not in git)
-```
+| File | What it covers |
+|------|---------------|
+| `AI_SYSTEM.md` | VAPI assistant design, conversation flow, tool contracts |
+| `AI_VOICE_RECEPTIONIST_GUIDE.md` | Operator guide — provisioning lines, testing, troubleshooting |
+| `ARCHITECTURE.md` | Hybrid service architecture — how drivebook-hybrid talks to main app |
+| `INTEGRATION.md` | Integration guide — API contracts, environment variables |
+| `DEPLOYMENT.md` | Deployment to Railway, env var reference, health checks |
 
----
+## Operations
 
-## Quick Navigation by Topic
+| File | What it covers |
+|------|---------------|
+| `operations/ADMIN_QUICK_REFERENCE.md` | Daily admin tasks — payouts, approvals, disputes |
+| `operations/PLATFORM_OWNER_GUIDE.md` | Platform management — escalation paths, KPIs |
+| `STAFF_MANAGEMENT_SYSTEM.md` | Staff roles, task governance, SLA targets |
+| `WEEKLY_RECONCILIATION_TEMPLATE.md` | Weekly financial review agenda |
+| `incidents/INCIDENT_TEMPLATE.md` | Post-mortem template for production incidents |
 
-### 🚀 Getting Started
-1. Read [../README.md](../README.md) — Overview & quick start
-2. Run `npm install` then `npm run dev`
-3. Visit `http://localhost:3000/` for API docs
+## Financial System
 
-### 🛠️ Development
-- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) — Common commands and APIs
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Understand the system design
+| File | What it covers |
+|------|---------------|
+| `financial/FINANCIAL_LEDGER_DESIGN.md` | Double-entry ledger architecture, reconciliation |
+| `financial/LEDGER_QUICK_REFERENCE.md` | Developer quick reference for ledger operations |
+| `financial/MARKETPLACE_PLATFORM_ROADMAP.md` | Business rules — commissions, refunds, payouts |
+| `financial/PRODUCTION_GRADE_ARCHITECTURE.md` | Financial safety requirements, payout protection |
 
-### 🔌 Integration
-- [INTEGRATION.md](INTEGRATION.md) — Connect to main DriveBook platform
-- [AI_SYSTEM.md](AI_SYSTEM.md) — Copilot agent setup and usage
+## Systems
 
-### 📦 Deployment
-- [DEPLOYMENT.md](DEPLOYMENT.md) — Deploy to production (Heroku/AWS/Railway)
-- [../STATUS.md](../STATUS.md) — Deployment readiness checklist
+| File | What it covers |
+|------|---------------|
+| `systems/COMPLETE_BOOKING_FLOW_SPECIFICATION.md` | Booking flow — voice → DB → confirmation |
+| `systems/COMPLIANCE_SYSTEM.md` | Document compliance, instructor verification |
+| `systems/PAYMENT_SYSTEM_GUIDE.md` | Stripe, wallet, payout flow |
 
 ---
 
-## Command Reference
+## What is NOT here
 
-```bash
-# Development
-npm run dev           # Start with auto-reload
-npm test              # Run all tests
-npm test -- tests/smoke.test.js  # Integration tests
-npm run build         # Build (runs tests first)
+- Session summaries and fix reports → deleted (history is in git)
+- Audit reports from past issues → deleted
+- "Complete" status documents → deleted
+- Implementation history → deleted
 
-# Database
-npx prisma studio    # GUI database browser
-npx prisma migrate dev --name <name>  # Create migration
-
-# Server
-npm start             # Production mode
-curl http://localhost:3000/  # View API docs
-```
-
----
-
-## Support
-
-- **Issues?** Check [QUICK_REFERENCE.md](QUICK_REFERENCE.md) troubleshooting section
-- **Architecture questions?** See [ARCHITECTURE.md](ARCHITECTURE.md)
-- **Deployment help?** See [DEPLOYMENT.md](DEPLOYMENT.md)
-- **Copilot setup?** See [AI_SYSTEM.md](AI_SYSTEM.md)
-- **Status & progress?** See [../STATUS.md](../STATUS.md)
-
----
-
-**Version**: 1.0.0  
-**Last Updated**: Feb 28, 2026  
-**Status**: Production Ready
+The code reflects current state. These docs reflect what to follow.

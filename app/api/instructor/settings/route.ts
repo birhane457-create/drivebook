@@ -16,13 +16,13 @@ const settingsSchema = z.object({
     z.enum(['AUTO', 'MANUAL']).transform(v => [v]),
   ]).optional(),
   workingHours: z.object({
-    monday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
-    tuesday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
-    wednesday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
-    thursday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
-    friday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
-    saturday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
-    sunday: z.array(z.object({ start: z.string(), end: z.string() })).optional(),
+    monday:    z.array(z.object({ start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM'), end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM') })).optional(),
+    tuesday:   z.array(z.object({ start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM'), end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM') })).optional(),
+    wednesday: z.array(z.object({ start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM'), end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM') })).optional(),
+    thursday:  z.array(z.object({ start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM'), end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM') })).optional(),
+    friday:    z.array(z.object({ start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM'), end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM') })).optional(),
+    saturday:  z.array(z.object({ start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM'), end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM') })).optional(),
+    sunday:    z.array(z.object({ start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM'), end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM') })).optional(),
   }).optional(),
   licenseNumber: z.string().optional(),
   insuranceNumber: z.string().optional(),
@@ -74,7 +74,21 @@ export async function PUT(req: NextRequest) {
     const updateData: any = {}
     if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate
     if (data.serviceRadiusKm !== undefined) updateData.serviceRadiusKm = data.serviceRadiusKm
-    if (data.baseAddress !== undefined) updateData.baseAddress = data.baseAddress || null
+    if (data.baseAddress !== undefined) {
+      updateData.baseAddress = data.baseAddress || null
+      // Extract discrete location fields from the address string for SEO location pages
+      // and populate lat/lng from the postcode lookup (no external geocoding needed)
+      if (data.baseAddress) {
+        const { parseAuAddress } = await import('@/lib/data/au-locations')
+        const parsed = parseAuAddress(data.baseAddress)
+        if (parsed.state)    updateData.state    = parsed.state
+        if (parsed.suburb)   updateData.suburb   = parsed.suburb
+        if (parsed.postcode) updateData.postcode = parsed.postcode
+        // Populate lat/lng from postcode lookup — instant, no API call
+        if (parsed.lat !== null)  { updateData.baseLatitude  = parsed.lat; updateData.baseAddressLat = parsed.lat }
+        if (parsed.lng !== null)  { updateData.baseLongitude = parsed.lng; updateData.baseAddressLng = parsed.lng }
+      }
+    }
     if (data.vehicleTypes !== undefined) updateData.vehicleTypes = Array.isArray(data.vehicleTypes) ? data.vehicleTypes.join(',') : data.vehicleTypes
     if (data.workingHours !== undefined) updateData.workingHours = data.workingHours
     if (data.licenseNumber !== undefined) updateData.licenseNumber = data.licenseNumber

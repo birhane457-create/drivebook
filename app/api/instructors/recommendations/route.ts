@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { geocodeAddress, calculateDistance, getBoundingBox } from '@/lib/utils/distance';
+import { resolveLocationStatic } from '@/lib/services/resolve-location';
+import { getDisplayName } from '@/lib/utils/account';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +43,12 @@ export async function GET(req: NextRequest) {
       ? location.replace(/\s+/g, '')
       : location;
 
-    const coords = await geocodeAddress(normalisedLocation);
+    // Fast path: postcode/suburb lookup from static data — no external API call.
+    // Falls back to geocodeAddress (Nominatim) for free-text addresses.
+    const staticResolved = resolveLocationStatic(normalisedLocation);
+    const coords = staticResolved
+      ? { lat: staticResolved.lat, lng: staticResolved.lng, displayName: staticResolved.displayName }
+      : await geocodeAddress(normalisedLocation);
 
     if (!coords) {
       return NextResponse.json(
@@ -82,6 +89,8 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         name: true,
+        businessName: true,
+        subscriptionTier: true,
         hourlyRate: true,
         baseLatitude: true,
         baseLongitude: true,
@@ -152,6 +161,9 @@ export async function GET(req: NextRequest) {
         return {
           id: instructor.id,
           name: instructor.name,
+          // displayName: trading/display name for all tiers, personal name fallback.
+          // The VAPI AI must use displayName — not name — in all spoken output.
+          displayName: getDisplayName(instructor as any),
           hourlyRate: instructor.hourlyRate,
           distance: Math.round(distance * 10) / 10,
           rating: Math.round(averageRating * 10) / 10,
@@ -171,11 +183,15 @@ export async function GET(req: NextRequest) {
           ].filter(Boolean),
           voice: {
             // voiceName: phonetic spelling for TTS. AI must read this instead of the raw name.
+            // For BUSINESS tier with a businessName, the trading name is used directly (no phonetic mapping needed).
             // Each segment is separated by two spaces to encourage a brief pause between parts.
-            voiceName: instructor.name
-              .replace(/Debesay/gi,      'DEH-beh-say')
-              .replace(/Weldegebriel/gi, 'Wel-deh-geh-bree-EL')
-              .replace(/Birhane?/gi,     'Bir-han'),
+            voiceName: (() => {
+              const dn = getDisplayName(instructor as any);
+              return dn
+                .replace(/Debesay/gi,      'DEH-beh-say')
+                .replace(/Weldegebriel/gi, 'Wel-deh-geh-bree-EL')
+                .replace(/Birhane?/gi,     'Bir-han');
+            })(),
             summary: [
               reason,
               instructor.vehicleTypes

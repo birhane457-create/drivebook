@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AlertTriangle, Loader2, CheckCircle } from 'lucide-react';
 
 interface CancelDialogProps {
@@ -10,7 +10,7 @@ interface CancelDialogProps {
   instructorName: string;
   bookingDate: string;
   bookingPrice: number;
-  originalBookingDate?: string;  // Add this to show if rescheduled
+  originalBookingDate?: string;
   onSuccess?: () => void;
 }
 
@@ -29,41 +29,50 @@ export function CancelDialog({
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
 
-  // Calculate hours until booking - use original booking time if rescheduled
-  const getRefundInfo = () => {
-    const now = new Date();
-    const policyDate = originalBookingDate || bookingDate;
-    const bookingTime = new Date(policyDate);
-    const hoursUntil = (bookingTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+  // Refund info fetched from the API — never calculated client-side
+  // so it always reflects current PlatformSettings (lateCancellationWindowHours, etc.)
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [refundInfo, setRefundInfo] = useState<{
+    percentage: number;
+    amount: number;
+    notice: string;
+    policy: string;
+    isRescheduled: boolean;
+    reason: string;
+  }>({
+    percentage: 0,
+    amount: 0,
+    notice: '—',
+    policy: 'Loading…',
+    isRescheduled: !!originalBookingDate,
+    reason: '',
+  });
 
-    if (hoursUntil >= 48) {
-      return {
-        percentage: 100,
-        amount: bookingPrice,
-        notice: '48+ hours',
-        policy: 'Full refund',
-        isRescheduled: !!originalBookingDate
-      };
-    } else if (hoursUntil >= 24) {
-      return {
-        percentage: 50,
-        amount: bookingPrice * 0.5,
-        notice: '24-48 hours',
-        policy: '50% refund',
-        isRescheduled: !!originalBookingDate
-      };
-    } else {
-      return {
-        percentage: 0,
-        amount: 0,
-        notice: '<24 hours',
-        policy: 'No refund',
-        isRescheduled: !!originalBookingDate
-      };
-    }
-  };
-
-  const refundInfo = getRefundInfo();
+  // Fetch policy from API when dialog opens
+  useEffect(() => {
+    if (!isOpen || !bookingId) return;
+    setPolicyLoading(true);
+    fetch(`/api/bookings/${bookingId}/cancellation-policy`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return; // keep defaults
+        const hoursUntilLesson = data.hoursUntilLesson ?? 0;
+        setRefundInfo({
+          percentage: data.refundPercentage ?? 0,
+          amount: data.refundAmount ?? 0,
+          notice: hoursUntilLesson >= 48 ? '48+ hours'
+            : hoursUntilLesson >= 24 ? '24–48 hours'
+            : `${Math.max(0, Math.round(hoursUntilLesson))} hours`,
+          policy: data.refundPercentage === 100 ? 'Full refund'
+            : data.refundPercentage === 50 ? '50% refund'
+            : 'No refund',
+          isRescheduled: !!originalBookingDate,
+          reason: data.reason ?? '',
+        });
+      })
+      .catch(() => {/* keep defaults on network error */})
+      .finally(() => setPolicyLoading(false));
+  }, [isOpen, bookingId, originalBookingDate]);
 
   const handleCancel = async () => {
     try {
@@ -149,6 +158,7 @@ export function CancelDialog({
 
           {/* Refund Policy */}
           <div className={`mb-6 p-4 rounded-lg border ${
+            policyLoading ? 'bg-gray-50 border-gray-200' :
             refundInfo.percentage === 100 ? 'bg-green-50 border-green-200' :
             refundInfo.percentage === 50 ? 'bg-yellow-50 border-yellow-200' :
             'bg-red-50 border-red-200'

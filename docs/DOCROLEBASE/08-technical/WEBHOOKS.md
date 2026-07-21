@@ -3,6 +3,8 @@
 **Endpoint:** `POST /api/stripe/webhook`  
 **File:** `app/api/stripe/webhook/route.ts`
 
+**The canonical Stripe webhook path is `/api/stripe/webhook`.** Configure this URL in the Stripe Dashboard → Developers → Webhooks → Add endpoint. The legacy path `/webhooks/stripe` is a backward-compat alias only — do not configure new integrations from it.
+
 ---
 
 ## Setup
@@ -65,6 +67,8 @@ const event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHO
 If `STRIPE_WEBHOOK_SECRET` is wrong or missing, all webhooks return 400 and are not processed.
 
 ---
+
+**Error handling:** Handler-level errors (transient DB issues, unexpected state) return `500` so Stripe retries automatically with exponential backoff. The idempotency guard returns `200` for already-processed events (correct — Stripe should not retry those).
 
 ## Testing Webhooks Locally
 

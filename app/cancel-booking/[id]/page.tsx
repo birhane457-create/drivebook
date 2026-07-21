@@ -23,11 +23,18 @@ export default async function CancelBookingPage({ params }: { params: { id: stri
   const bookingTime = new Date(booking.startTime)
   const hoursUntilBooking = (bookingTime.getTime() - now.getTime()) / (1000 * 60 * 60)
 
-  // Calculate refund
+  // Fetch cancellation window from PlatformSettings
+  const settings = await prisma.platformSettings.findFirst({
+    select: { lateCancellationWindowHours: true },
+  })
+  const lateWindow = settings?.lateCancellationWindowHours ?? 24
+  const fullRefundWindow = lateWindow * 2 // 48h by default
+
+  // Calculate refund using DB-configured thresholds
   let refundPercentage = 0
-  if (hoursUntilBooking >= 48) {
+  if (hoursUntilBooking >= fullRefundWindow) {
     refundPercentage = 100
-  } else if (hoursUntilBooking >= 24) {
+  } else if (hoursUntilBooking >= lateWindow) {
     refundPercentage = 50
   }
 

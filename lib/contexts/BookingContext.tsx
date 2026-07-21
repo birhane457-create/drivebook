@@ -15,6 +15,8 @@ interface SlotReservation {
 interface Instructor {
   id: string;
   name: string;
+  /** Customer-facing display name: businessName if set, otherwise name. Use this everywhere students see the instructor name. */
+  displayName: string;
   profileImage: string | null;
   hourlyRate: number;
   averageRating: number | null;
@@ -72,7 +74,7 @@ interface BookingState {
   packageType: PackageType;
   hours: number;
   includeTestPackage: boolean;
-  testPackingDate: string | null; // When user schedules PDA test (e.g., "2026-06-15")
+  testPackageDate: string | null; // When user schedules PDA test (e.g., "2026-06-15")
   
   // Step 3: Book Now/Later
   bookingType: 'now' | 'later' | null;
@@ -159,7 +161,7 @@ const initialState: BookingState = {
   packageType: 'PACKAGE_10',
   hours: 10,
   includeTestPackage: false,
-  testPackingDate: null,
+  testPackageDate: null,
   bookingType: null,
   scheduledBookings: [],
   remainingHours: 0,
@@ -320,7 +322,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setBookingState(prev => ({
       ...prev,
       pdaTestBooking: booking,
-      testPackingDate: booking ? booking.testDate : null
+      testPackageDate: booking ? booking.testDate : null
     }));
   }, []);
 
@@ -373,8 +375,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const saveToLocalStorage = useCallback(() => {
     try {
       if (typeof window !== 'undefined') {
+        // Never persist password fields — they must not survive page refreshes or
+        // be recoverable from localStorage by other scripts in the same origin.
+        const { accountHolderPassword, accountHolderConfirmPassword, ...safeState } = bookingState;
         const dataToSave = {
-          ...bookingState,
+          ...safeState,
           savedAt: Date.now()
         };
         localStorage.setItem('bookingState', JSON.stringify(dataToSave));
@@ -470,12 +475,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Fetch platform pricing settings from DB on mount
-  useEffect(() => {
-    // First, try to recover booking state from localStorage
-    loadFromLocalStorage();
-  }, [loadFromLocalStorage]);
-
-  // Then fetch platform pricing settings
+  // Note: localStorage recovery runs in the inline useEffect above — no second call needed.
   useEffect(() => {
     fetch('/api/public/pricing')
       .then(res => res.json())

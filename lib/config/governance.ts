@@ -267,32 +267,41 @@ export function canApproveRefund(
 }
 
 /**
- * Calculate refund amount based on policy (SYSTEM-CALCULATED)
+ * Calculate refund amount based on policy (SYSTEM-CALCULATED).
+ *
+ * lateWindowHours comes from PlatformSettings.lateCancellationWindowHours (default 24).
+ * fullRefundWindow = lateWindowHours * 2 (default 48).
+ *
+ * Callers that don't have settings available can pass lateWindowHours = 24 (safe default).
+ * Prefer reading from PlatformSettings via getPlatformPricing() when available.
  */
 export function calculateRefundAmount(
   bookingAmount: number,
-  hoursUntilBooking: number
+  hoursUntilBooking: number,
+  lateWindowHours: number = 24
 ): { amount: number; percentage: number; reason: string } {
-  if (hoursUntilBooking >= 48) {
+  const fullRefundWindow = lateWindowHours * 2;
+
+  if (hoursUntilBooking >= fullRefundWindow) {
     return {
       amount: bookingAmount * REFUND_POLICY.CANCELLATION_48H_PLUS,
       percentage: 100,
-      reason: 'Cancelled 48+ hours before booking',
+      reason: `${fullRefundWindow}+ hours notice — full refund.`,
     };
   }
-  
-  if (hoursUntilBooking >= 24) {
+
+  if (hoursUntilBooking >= lateWindowHours) {
     return {
       amount: bookingAmount * REFUND_POLICY.CANCELLATION_24H_TO_48H,
       percentage: 50,
-      reason: 'Cancelled 24-48 hours before booking',
+      reason: `${lateWindowHours}–${fullRefundWindow} hours notice — 50% refund.`,
     };
   }
-  
+
   return {
     amount: bookingAmount * REFUND_POLICY.CANCELLATION_UNDER_24H,
     percentage: 0,
-    reason: 'Cancelled less than 24 hours before booking',
+    reason: `Less than ${lateWindowHours} hours notice — no refund.`,
   };
 }
 

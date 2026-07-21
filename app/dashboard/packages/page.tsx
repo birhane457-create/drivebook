@@ -11,7 +11,9 @@ interface PackageData {
   packageHoursRemaining: number;
   usagePercentage: number;
   packageStatus: string;
-  packageExpiryDate: string;
+  isPaid: boolean;
+  bookingStatus: string;
+  packageExpiryDate: string | null;
   daysUntilExpiry: number | null;
   isExpiringSoon: boolean;
   purchaseDate: string;
@@ -155,13 +157,20 @@ export default function PackagesPage() {
                       <div className="flex items-center gap-3 mb-2">
                         <User className="h-5 w-5 text-violet-400" />
                         <h3 className="text-lg font-bold text-slate-100">{pkg.client.name}</h3>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          pkg.packageStatus === 'active' ? 'bg-green-900 text-green-300' :
-                          pkg.packageStatus === 'completed' ? 'bg-sky-900 text-sky-300' :
-                          'bg-slate-800 text-slate-300'
-                        }`}>
-                          {pkg.packageStatus.toUpperCase()}
-                        </span>
+                        {/* Payment status badge — shown before packageStatus */}
+                        {!pkg.isPaid ? (
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-amber-900/60 text-amber-300 border border-amber-700/50">
+                            AWAITING PAYMENT
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            pkg.packageStatus === 'active'    ? 'bg-green-900 text-green-300' :
+                            pkg.packageStatus === 'completed' ? 'bg-sky-900 text-sky-300' :
+                                                                'bg-slate-800 text-slate-300'
+                          }`}>
+                            {pkg.packageStatus.toUpperCase()}
+                          </span>
+                        )}
                         {pkg.isExpiringSoon && (
                           <span className="px-2 py-1 rounded text-xs font-medium bg-orange-900 text-orange-300 flex items-center gap-1">
                             <AlertTriangle className="h-3 w-3" />
@@ -173,8 +182,10 @@ export default function PackagesPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-400">Potential Earnings</p>
-                      <p className="text-2xl font-bold text-green-500">${pkg.potentialNet.toFixed(0)}</p>
-                      <p className="text-xs text-slate-400">when taught</p>
+                      <p className={`text-2xl font-bold ${pkg.isPaid ? 'text-green-500' : 'text-slate-500'}`}>
+                        ${pkg.potentialNet.toFixed(0)}
+                      </p>
+                      <p className="text-xs text-slate-400">{pkg.isPaid ? 'when taught' : 'payment pending'}</p>
                     </div>
                   </div>
                 </div>
@@ -251,20 +262,29 @@ export default function PackagesPage() {
                       <div>
                         <p className="text-slate-400">Expires</p>
                         <p className={`font-medium ${pkg.isExpiringSoon ? 'text-orange-400' : 'text-slate-100'}`}>
-                          {new Date(pkg.packageExpiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {pkg.packageExpiryDate
+                            ? new Date(pkg.packageExpiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : <span className="text-slate-500">No expiry set</span>
+                          }
                         </p>
                       </div>
                     </div>
                   </div>
 
                   {/* Action Hint */}
-                  {pkg.packageHoursRemaining > 0 && pkg.upcomingBookingsCount === 0 && (
+                  {!pkg.isPaid ? (
+                    <div className="mt-4 p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+                      <p className="text-sm text-amber-300">
+                        ⏳ <span className="font-semibold">Payment pending:</span> {pkg.client.name.split(' ')[0]} has not yet completed payment for this package. Hours will be available to book once payment is confirmed.
+                      </p>
+                    </div>
+                  ) : pkg.packageHoursRemaining > 0 && pkg.upcomingBookingsCount === 0 ? (
                     <div className="mt-4 p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg">
                       <p className="text-sm text-amber-300">
                         💡 <span className="font-semibold">Tip:</span> Reach out to {pkg.client.name.split(' ')[0]} to schedule their remaining {pkg.packageHoursRemaining.toFixed(1)} hours!
                       </p>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             ))}

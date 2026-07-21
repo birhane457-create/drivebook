@@ -33,7 +33,10 @@ export async function GET(req: NextRequest) {
     const query = querySchema.parse({
       instructorId: searchParams.get('instructorId'),
       date: searchParams.get('date'),
-      lessonDurationMinutes: searchParams.get('lessonDurationMinutes')
+      // Accept both param names — BookingCalendar sends 'duration', voice API sends 'lessonDurationMinutes'
+      lessonDurationMinutes:
+        searchParams.get('lessonDurationMinutes') ??
+        searchParams.get('duration'),
     })
 
     // Verify instructor exists
@@ -79,8 +82,19 @@ export async function GET(req: NextRequest) {
       instructorId: query.instructorId,
       date: query.date,
       lessonDurationMinutes: query.lessonDurationMinutes,
-      // Timezone is fixed for all WA instructors — documented here so API consumers never guess.
       timezone: 'Australia/Perth',
+      // Legacy format — used by SlotPicker component (BookingCalendar, offline form, etc.)
+      // Each slot: { time: "HH:MM", available: true }
+      slots: availableSlots.map(slot => ({
+        time: slot.toLocaleTimeString('en-AU', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'Australia/Perth',
+        }),
+        available: true,
+      })),
+      // Extended format — used by voice AI and new booking flows
       availableSlots: availableSlots.map(slot => {
         const endTime = new Date(slot.getTime() + query.lessonDurationMinutes * 60 * 1000);
 

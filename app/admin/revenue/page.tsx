@@ -501,6 +501,47 @@ export default function AdminRevenuePage() {
                     <p className="text-xs text-slate-500 mt-1">Gross, commission, payout per instructor</p>
                   </button>
                 </div>
+
+                {/* Full database exports — server-side, complete history */}
+                <div className="mt-6 border-t border-slate-800 pt-5">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-1">Full Database Exports</h4>
+                  <p className="text-xs text-slate-500 mb-4">Complete records from the database — not limited to the current date range view. Append <code className="text-slate-400">?from=YYYY-MM-DD&to=YYYY-MM-DD</code> to filter.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <a
+                      href="/api/admin/export?type=bookings"
+                      download
+                      className="flex items-start gap-3 p-4 border border-slate-700 rounded-xl hover:border-sky-500/50 hover:bg-sky-950/20 transition-colors no-underline"
+                    >
+                      <Calendar className="h-6 w-6 text-sky-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-slate-100 text-sm">All Bookings</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Every platform booking — client, instructor, price, status, dates</p>
+                      </div>
+                    </a>
+                    <a
+                      href="/api/admin/export?type=revenue"
+                      download
+                      className="flex items-start gap-3 p-4 border border-slate-700 rounded-xl hover:border-emerald-500/50 hover:bg-emerald-950/20 transition-colors no-underline"
+                    >
+                      <DollarSign className="h-6 w-6 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-slate-100 text-sm">All Revenue</p>
+                        <p className="text-xs text-slate-500 mt-0.5">All settled transactions — gross, platform fee, instructor payout</p>
+                      </div>
+                    </a>
+                    <a
+                      href="/api/admin/export?type=instructors"
+                      download
+                      className="flex items-start gap-3 p-4 border border-slate-700 rounded-xl hover:border-violet-500/50 hover:bg-violet-950/20 transition-colors no-underline"
+                    >
+                      <Users className="h-6 w-6 text-violet-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-slate-100 text-sm">All Instructors</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Roster with subscription, rating, location, Stripe status</p>
+                      </div>
+                    </a>
+                  </div>
+                </div>
               </div>
             )}
 

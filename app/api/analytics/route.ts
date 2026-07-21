@@ -33,9 +33,13 @@ export async function GET(req: NextRequest) {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1)
     }
 
-    // Commission rate is stored per transaction, not per instructor
-    // Use a default of 15% for display purposes
-    const commissionRate = 15
+    // Fetch instructor's subscription tier for commission rate lookup
+    const instructorRecord = await prisma.instructor.findUnique({
+      where: { id: session.user.instructorId },
+      select: { subscriptionTier: true },
+    })
+    const { getCommissionRate } = await import('@/lib/services/platform-pricing')
+    const commissionRate = await getCommissionRate(instructorRecord?.subscriptionTier ?? 'BASIC')
 
     const [
       totalBookings,

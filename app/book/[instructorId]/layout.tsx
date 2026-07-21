@@ -7,6 +7,7 @@ import { BookingProvider, useBooking } from '@/lib/contexts/BookingContext';
 interface InstructorData {
   id: string;
   name: string;
+  displayName: string;
   profileImage: string | null;
   hourlyRate: number;
   averageRating: number | null;
@@ -46,6 +47,7 @@ function InstructorLoaderContent({ children }: { children: React.ReactNode }) {
         setInstructor({
           id: data.id,
           name: data.name,
+          displayName: data.displayName ?? data.name,
           profileImage: data.profileImage,
           hourlyRate: data.hourlyRate,
           averageRating: data.averageRating,

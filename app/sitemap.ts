@@ -199,5 +199,44 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // content dir unavailable at build time — skip blog entries
   }
 
-  return [...staticPages, ...blogPages, ...instructorPages]
+  // ── Location SEO pages — /driving-lessons/[state]/[suburb] ─────────────────
+  // One page per state + one per suburb in our locations data.
+  // These pages are statically generated at build time and revalidated hourly.
+  // They are the primary organic search surface for multi-state expansion.
+  let locationPages: MetadataRoute.Sitemap = []
+  try {
+    const { AU_STATES } = await import('@/lib/data/au-locations')
+
+    // Top-level index
+    locationPages.push({
+      url: `${BASE_URL}/driving-lessons`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.9,
+    })
+
+    for (const state of AU_STATES) {
+      // State index page
+      locationPages.push({
+        url: `${BASE_URL}/driving-lessons/${state.slug}`,
+        lastModified: now,
+        changeFrequency: 'weekly' as const,
+        priority: 0.85,
+      })
+
+      // Suburb pages
+      for (const suburb of state.suburbs) {
+        locationPages.push({
+          url: `${BASE_URL}/driving-lessons/${state.slug}/${suburb.slug}`,
+          lastModified: now,
+          changeFrequency: 'weekly' as const,
+          priority: 0.8,
+        })
+      }
+    }
+  } catch {
+    // location data unavailable — skip
+  }
+
+  return [...staticPages, ...blogPages, ...instructorPages, ...locationPages]
 }

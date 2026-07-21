@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { Camera, Car, Save, MapPin, Plus, X, ChevronDown, Video, Tag } from 'lucide-react'
@@ -256,7 +256,7 @@ export default function ProfilePage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
                   required
                 />
               </div>
@@ -266,7 +266,7 @@ export default function ProfilePage() {
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
                   required
                 />
               </div>
@@ -279,7 +279,7 @@ export default function ProfilePage() {
                 onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                 rows={3}
                 placeholder="Describe your experience, teaching style, and what makes you a great instructor..."
-                className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500 resize-none"
+                className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400 resize-none"
               />
               {/* Word count — 75 word minimum for SEO and profile quality */}
               {(() => {
@@ -308,7 +308,7 @@ export default function ProfilePage() {
                 onChange={(e) => setFormData({ ...formData, yearsExperience: e.target.value })}
                 placeholder="e.g. 5"
                 min="0" max="50"
-                className="w-32 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                className="w-32 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
               />
             </div>
 
@@ -382,7 +382,7 @@ export default function ProfilePage() {
                   value={formData.carMake}
                   onChange={(e) => setFormData({ ...formData, carMake: e.target.value })}
                   placeholder="Toyota"
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
                 />
               </div>
               <div>
@@ -392,7 +392,7 @@ export default function ProfilePage() {
                   value={formData.carModel}
                   onChange={(e) => setFormData({ ...formData, carModel: e.target.value })}
                   placeholder="Yaris"
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
                 />
               </div>
               <div>
@@ -403,7 +403,7 @@ export default function ProfilePage() {
                   onChange={(e) => setFormData({ ...formData, carYear: e.target.value })}
                   placeholder="2022"
                   maxLength={4}
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
                 />
               </div>
             </div>
@@ -441,7 +441,7 @@ export default function ProfilePage() {
                   value={formData.baseAddress}
                   onChange={(e) => setFormData({ ...formData, baseAddress: e.target.value })}
                   placeholder="e.g. Maylands WA 6051"
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">Only the suburb name is shown publicly</p>
               </div>
@@ -455,7 +455,7 @@ export default function ProfilePage() {
                     onChange={(e) => setNewPostcode(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addServiceArea() } }}
                     placeholder="Enter postcode (e.g. 6051)"
-                    className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                    className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
                   />
                   <button
                     type="button"
@@ -534,7 +534,7 @@ export default function ProfilePage() {
                   }
                 }}
                 placeholder="e.g. English, Arabic, Tigrinya"
-                className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                className="flex-1 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
               />
               <button
                 type="button"
@@ -578,7 +578,7 @@ export default function ProfilePage() {
                 value={formData.videoUrl}
                 onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
                 placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-500"
+                className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm placeholder-slate-400"
               />
               {formData.videoUrl && (() => {
                 // Live preview — extract video ID and show thumbnail

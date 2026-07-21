@@ -17,13 +17,14 @@
 
 ### 👨‍🏫 For Instructors
 - **Dashboard overview:** `03-instructor/DASHBOARD.md`
+- **Schedule workspace (Week/Agenda):** `03-instructor/SCHEDULE.md` ⭐ NEW
 - **Managing bookings:** `03-instructor/BOOKINGS.md`
 - **Setting availability:** `03-instructor/AVAILABILITY.md`
 - **Understanding payouts:** `06-payments/PAYOUTS.md`
 - **Approval process:** `03-instructor/ONBOARDING_APPROVAL.md`
 - **Subscription tiers:** `07-subscriptions/TIERS.md`
 - **Stripe Connect setup:** `07-subscriptions/STRIPE_CONNECT_SETUP.md`
-- **Branding & logo:** `01-public/BRANDING.md` ⭐ NEW
+- **Branding & logo:** `01-public/BRANDING.md`
 
 ### 👔 For Admin/Support
 - **Admin dashboard:** `05-admin/DASHBOARD.md`
@@ -42,24 +43,26 @@
 - **UI design system:** `08-technical/STYLING.md`
 - **SEO & sitemap:** `08-technical/SEO.md`
 - **Cron jobs:** `08-technical/CRON_JOBS.md`
+- **Cron health & alerting:** `08-technical/CRON_HEALTH_MONITORING.md`
+- **Rate limiting:** `08-technical/RATE_LIMITING.md`
+- **Webhooks:** `08-technical/WEBHOOKS.md`
+- **Location system (postcode/suburb lookup):** `08-technical/LOCATION_SYSTEM.md`
+- **Booking status colours:** `08-technical/BOOKING_STATUS.md`
 - **Blog system:** `01-public/BLOG.md`
-- **Logo & branding system:** `01-public/BRANDING.md` ⭐ NEW
+- **Logo & branding system:** `01-public/BRANDING.md`
 
 ---
 
-## What Changed Recently (July 2026)
+## What Changed Recently
 
-✅ **Blog scaled, pillar pages built, logo system implemented:**
-1. Blog scaled from 23 → 100 posts
-2. 4 SEO pillar hub pages: `/learn-to-drive`, `/pda-guide`, `/for-instructors`, `/platform`
-3. Sitemap updated with all pillar pages at priority 0.9
-4. DriveBook D-mark logo (SVG + React component) rolled out to all 14 public pages
-5. Homepage footer — Resources column with pillar page links
-6. DOCROLEBASE updated: BLOG.md, SEO.md, LANDING_PAGE.md, new BRANDING.md
+**See `00-overview/CHANGES.md` for the full index.** Key additions (July 2026):
 
-**See:** `00-overview/CHANGES.md` for full detail
-
-✅ **Previous: Security fixes, blog platform, SEO infrastructure complete (June–July 2026)**
+- National postcode/suburb lookup system → `08-technical/LOCATION_SYSTEM.md`
+- Booking status colour system → `08-technical/BOOKING_STATUS.md`
+- Instructor scheduling workspace (Today/Week/Agenda) → `03-instructor/SCHEDULE.md`
+- Location pages for all 19,396 Australian suburbs → `08-technical/SEO.md`
+- Admin cron dashboard + immediate failure alerting → `08-technical/CRON_HEALTH_MONITORING.md`
+- Availability slot cache + dual-format API → `03-instructor/AVAILABILITY.md`
 
 ---
 
@@ -88,6 +91,7 @@
 
 ### Instructor Features
 - `03-instructor/AVAILABILITY.md` — Calendar & time slot management
+- `03-instructor/SCHEDULE.md` — Schedule workspace (Today/Week/Agenda views) ⭐ NEW
 - `03-instructor/PDA_TESTS.md` — Practical driving assessment bookings
 - `03-instructor/PRICING.md` — Setting hourly rates & packages
 - `03-instructor/CLIENTS.md` — Managing student relationships

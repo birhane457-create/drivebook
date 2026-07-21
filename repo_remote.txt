@@ -1,2 +1,0 @@
-﻿origin	https://gitlab.com/debesay304/drivebook1.git (fetch)
-origin	https://gitlab.com/debesay304/drivebook1.git (push)

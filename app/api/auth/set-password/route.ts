@@ -8,13 +8,17 @@ export const dynamic = 'force-dynamic';
 const schema = z.object({
   token: z.string(),
   password: z.string().min(8),
-  email: z.string().email(),
+  // email is accepted for display/UX purposes only — it is NOT written to the DB here.
+  // Email changes must go through the authenticated account settings flow (requires current password).
+  // Allowing email changes via a reset token would let anyone with a leaked token permanently
+  // take over the account by changing the email before the real owner notices.
+  email: z.string().email().optional(),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { token, password, email } = schema.parse(body);
+    const { token, password } = schema.parse(body);
 
     const user = await prisma.user.findFirst({
       where: {
@@ -28,26 +32,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired link. Please contact support.' }, { status: 404 });
     }
 
-    // If email is being changed, check it is not already taken
-    if (email !== user.email) {
-      const emailTaken = await prisma.user.findFirst({
-        where: { email, NOT: { id: user.id } },
-        select: { id: true },
-      });
-      if (emailTaken) {
-        return NextResponse.json({ error: 'That email is already registered. Please use a different one.' }, { status: 409 });
-      }
-    }
-
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Only update the password and clear the token — never change email via this route.
     await prisma.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
-        email,
         resetToken: null,
         resetTokenExpiry: null,
+        // email intentionally omitted — use authenticated /api/account/change-email instead
       },
     });
 

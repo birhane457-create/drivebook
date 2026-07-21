@@ -2,13 +2,29 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { User, Mail, Phone, MapPin, Edit2, Save, X } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ProfileData {
   name: string;
   email: string;
   phone: string;
   address?: string;
+}
+
+type ToastState = { type: 'success' | 'error'; message: string } | null;
+
+function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
+  if (!toast) return null;
+  const isSuccess = toast.type === 'success';
+  return (
+    <div role="alert" className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white w-[calc(100%-2rem)] max-w-md ${
+      isSuccess ? 'bg-green-600' : 'bg-red-600'
+    }`}>
+      {isSuccess ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+      <span className="flex-1">{toast.message}</span>
+      <button onClick={onClose} className="opacity-70 hover:opacity-100 text-white">✕</button>
+    </div>
+  );
 }
 
 export default function ClientProfilePage() {
@@ -18,6 +34,12 @@ export default function ClientProfilePage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
+  const [toast, setToast] = useState<ToastState>(null);
+
+  function showToast(type: 'success' | 'error', message: string) {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     loadProfile();
@@ -55,13 +77,13 @@ export default function ClientProfilePage() {
       if (res.ok) {
         await loadProfile();
         setEditing(false);
-        alert('Profile updated successfully! This will update your information across all instructors.');
+        showToast('success', 'Profile updated. Your information has been updated across all instructors.');
       } else {
-        alert('Failed to update profile. Please try again.');
+        showToast('error', 'Failed to update profile. Please try again.');
       }
     } catch (error) {
       console.error('Error saving profile:', error);
-      alert('An error occurred while saving your profile.');
+      showToast('error', 'An error occurred while saving your profile.');
     } finally {
       setSaving(false);
     }
@@ -83,7 +105,7 @@ export default function ClientProfilePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <Toast toast={toast} onClose={() => setToast(null)} />      <div className="max-w-2xl mx-auto px-4 py-8">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

@@ -32,7 +32,6 @@ function parseDateTime(dateStr: string, timeStr: string) {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('=== CREATE BULK BOOKING API CALLED ===');
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -112,8 +111,6 @@ export async function POST(request: NextRequest) {
     const totalCredits = wallet.transactions.filter(t => t.type.toUpperCase() === 'CREDIT').reduce((s, t) => s + t.amount, 0);
     const totalDebits = wallet.transactions.filter(t => t.type.toUpperCase() === 'DEBIT').reduce((s, t) => s + Math.abs(t.amount), 0);
     const actualBalance = totalCredits - totalDebits;
-
-    console.log('[BOOKING] Balance check:', { actualBalance, totalCost, sufficient: actualBalance >= totalCost });
 
     if (actualBalance < totalCost) {
       return NextResponse.json({

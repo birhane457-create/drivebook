@@ -124,7 +124,6 @@ export default function AdminUserSupportPage() {
   };
 
   const sendPasswordReset = async () => {
-    if (!confirm(`Send password reset email to ${user?.email}?`)) return;
     setBusy('reset');
     try {
       const res = await fetch(`/api/admin/users/${userId}/reset-password`, { method: 'POST' });
@@ -158,7 +157,6 @@ export default function AdminUserSupportPage() {
     if (!deductAmount || !deductReason) return;
     const clientId = user?.clientId;
     if (!clientId) { showToast('No client wallet', 'error'); return; }
-    if (!confirm(`Deduct $${deductAmount} from ${user?.name || user?.email}'s wallet?`)) return;
     setBusy('deduct');
     try {
       const res = await fetch(`/api/admin/clients/${clientId}/wallet/deduct-credit`, {
@@ -188,7 +186,6 @@ export default function AdminUserSupportPage() {
 
   const approveInstructor = async () => {
     if (!user?.instructor) return;
-    if (!confirm(`Approve ${user.instructor.name}?`)) return;
     setBusy('approve');
     try {
       const res = await fetch(`/api/admin/instructors/${user.instructor.id}/approve`, { method: 'POST' });
@@ -199,18 +196,21 @@ export default function AdminUserSupportPage() {
     finally { setBusy(null); }
   };
 
+  const [suspendReason, setSuspendReason] = useState('');
+  const [showSuspendForm, setShowSuspendForm] = useState(false);
+
   const suspendInstructor = async () => {
     if (!user?.instructor) return;
-    const reason = prompt('Reason for suspension (required):');
-    if (!reason || reason.length < 5) { showToast('Reason too short', 'error'); return; }
+    if (!suspendReason || suspendReason.trim().length < 5) { showToast('Reason too short (min 5 chars)', 'error'); return; }
     setBusy('suspend');
+    setShowSuspendForm(false);
     try {
       const res = await fetch(`/api/admin/instructors/${user.instructor.id}/suspend`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reason: suspendReason.trim() }),
       });
       const d = await res.json();
-      if (res.ok) { showToast('Instructor suspended', 'success'); loadUser(); }
+      if (res.ok) { showToast('Instructor suspended', 'success'); setSuspendReason(''); loadUser(); }
       else showToast(d.error || 'Failed', 'error');
     } catch { showToast('Failed', 'error'); }
     finally { setBusy(null); }
@@ -380,11 +380,35 @@ export default function AdminUserSupportPage() {
                     </button>
                   )}
                   {approvalStatus === 'APPROVED' && (
-                    <button onClick={suspendInstructor} disabled={!!busy}
-                      className="w-full flex items-center gap-2 px-3 py-2 bg-red-900/20 text-red-700 text-sm rounded-lg border border-red-700/50 hover:bg-red-900/40 disabled:opacity-60">
-                      {busy === 'suspend' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
-                      Suspend Instructor
-                    </button>
+                    showSuspendForm ? (
+                      <div className="bg-red-900/10 border border-red-700/50 rounded-xl p-3 space-y-2">
+                        <p className="text-xs font-semibold text-red-300">Reason for suspension (required)</p>
+                        <textarea
+                          value={suspendReason}
+                          onChange={e => setSuspendReason(e.target.value)}
+                          rows={2}
+                          placeholder="Min 5 characters…"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={suspendInstructor} disabled={!!busy || suspendReason.trim().length < 5}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50">
+                            {busy === 'suspend' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                            Confirm Suspend
+                          </button>
+                          <button onClick={() => { setShowSuspendForm(false); setSuspendReason(''); }}
+                            className="px-3 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-lg">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => setShowSuspendForm(true)} disabled={!!busy}
+                        className="w-full flex items-center gap-2 px-3 py-2 bg-red-900/20 text-red-700 text-sm rounded-lg border border-red-700/50 hover:bg-red-900/40 disabled:opacity-60">
+                        <Ban className="w-4 h-4" />
+                        Suspend Instructor
+                      </button>
+                    )
                   )}
                   {(approvalStatus === 'SUSPENDED' || approvalStatus === 'REJECTED') && (
                     <button onClick={approveInstructor} disabled={!!busy}

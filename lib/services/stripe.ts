@@ -23,21 +23,26 @@ interface CreateConnectAccountParams {
 }
 
 export class StripeService {
-  private commissionRate: number;
-
-  constructor() {
-    this.commissionRate = parseFloat(process.env.PLATFORM_COMMISSION_RATE || '12');
-  }
+  // commissionRate instance property removed — rate is always passed per-call
+  // from getCommissionRate() (DB-backed PlatformSettings). No env var fallback needed.
 
   /**
-   * Create a payment intent for a booking or wallet purchase
-   * Uses automatic capture for immediate payment
+   * Create a payment intent for a booking or wallet purchase.
+   * commissionRate must be passed from getCommissionRate() — never rely on a default.
    */
   async createPaymentIntent(params: CreatePaymentIntentParams) {
     const { amount, instructorId, bookingId, transactionId, walletId, clientEmail, description, commissionRate } = params;
 
-    // Use passed rate (from DB) or fall back to env default
-    const rate = commissionRate ?? this.commissionRate;
+    // Rate must come from DB via getCommissionRate(). If somehow omitted, fetch it now.
+    let rate = commissionRate;
+    if (rate === undefined && instructorId) {
+      const { getCommissionRate } = await import('@/lib/services/platform-pricing');
+      const instructor = await import('@/lib/prisma').then(m =>
+        m.prisma.instructor.findUnique({ where: { id: instructorId }, select: { subscriptionTier: true } })
+      );
+      rate = await getCommissionRate(instructor?.subscriptionTier ?? 'BASIC');
+    }
+    rate = rate ?? 0;
 
     // Calculate platform fee (only for bookings with instructorId)
     const platformFee = instructorId ? (amount * rate) / 100 : 0;

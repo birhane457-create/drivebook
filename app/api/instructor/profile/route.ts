@@ -70,6 +70,10 @@ export async function GET(req: NextRequest) {
         isActive: true, isVerified: true,
         whatsapp: true, instagram: true, facebook: true, yearsExperience: true,
         videoUrl: true, specialties: true,
+        // Fields needed for account setup completeness checks
+        abn: true, abnVerified: true,
+        workingHours: true,
+        subscriptionStatus: true,
       } as any
     })
 
@@ -111,6 +115,18 @@ export async function PUT(req: NextRequest) {
         ...(data.facebook !== undefined && { facebook: data.facebook }),
         ...(data.yearsExperience !== undefined && { yearsExperience: data.yearsExperience }),
         ...(data.baseAddress !== undefined && { baseAddress: data.baseAddress }),
+        // When baseAddress changes, extract suburb/state/postcode/lat/lng from postcode lookup
+        ...(data.baseAddress ? await (async () => {
+          const { parseAuAddress } = await import('@/lib/data/au-locations');
+          const parsed = parseAuAddress(data.baseAddress!);
+          return {
+            ...(parsed.suburb   ? { suburb:           parsed.suburb }   : {}),
+            ...(parsed.state    ? { state:             parsed.state }    : {}),
+            ...(parsed.postcode ? { postcode:          parsed.postcode } : {}),
+            ...(parsed.lat !== null ? { baseLatitude: parsed.lat, baseAddressLat: parsed.lat } : {}),
+            ...(parsed.lng !== null ? { baseLongitude: parsed.lng, baseAddressLng: parsed.lng } : {}),
+          };
+        })() : {}),
         ...(data.licenseNumber !== undefined && { licenseNumber: data.licenseNumber }),
         ...(data.insuranceNumber !== undefined && { insuranceNumber: data.insuranceNumber }),
         ...(data.languages !== undefined && { languages: data.languages }),

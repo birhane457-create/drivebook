@@ -16,14 +16,11 @@ Format:
 ```json
 {
   "monday":    { "start": "08:00", "end": "18:00", "enabled": true },
-  "tuesday":   { "start": "08:00", "end": "18:00", "enabled": true },
-  "wednesday": { "start": "08:00", "end": "18:00", "enabled": true },
-  "thursday":  { "start": "08:00", "end": "18:00", "enabled": true },
-  "friday":    { "start": "08:00", "end": "18:00", "enabled": true },
-  "saturday":  { "start": "09:00", "end": "14:00", "enabled": true },
-  "sunday":    { "start": "00:00", "end": "00:00", "enabled": false }
+  ...
 }
 ```
+
+**Validation:** On save (`PUT /api/instructor/settings`), a Zod schema enforces `HH:MM` regex on all `start`/`end` fields — malformed data is rejected with a clear error before reaching the DB. On read (`getAvailableSlots`), `parseWorkingHours()` re-validates structure, types, `HH:MM` format, and `start < end` ordering — returns `null` with a logged error if malformed, and `getAvailableSlots` returns `[]` cleanly instead of crashing.
 
 ---
 
@@ -41,11 +38,15 @@ PDA tests automatically block 60 minutes before + 30 minutes after each test (ba
 
 `getAvailableSlots(instructorId, date, lessonDurationMinutes)` in `lib/services/availability.ts`:
 
-1. Fetches `workingHours`, `bookingBufferMinutes`, `enableTravelTime`, `travelTimeMinutes` for the instructor
-2. Fetches existing `PENDING`, `PENDING_PAYMENT`, and `CONFIRMED` bookings (excluding PDA tests)
-3. Fetches PDA test bookings (`bookingType = 'PDA_TEST'`) separately
-4. Fetches availability exceptions
-5. Generates slots every 30 minutes within working hours, skipping conflicts
+1. Checks a **30-second in-process TTL cache** (key: `instructorId:YYYY-MM-DD:durationMinutes`). Returns cached result immediately if fresh — eliminates repeated DB round-trips under concurrent load.
+2. Fetches `workingHours`, `bookingBufferMinutes`, `enableTravelTime`, `travelTimeMinutes` for the instructor
+3. Fetches existing `PENDING`, `PENDING_PAYMENT`, and `CONFIRMED` bookings (excluding PDA tests)
+4. Fetches PDA test bookings (`bookingType = 'PDA_TEST'`) separately
+5. Fetches availability exceptions
+6. Generates slots every 30 minutes within working hours, skipping conflicts
+7. Stores result in cache before returning
+
+**Cache invalidation:** `invalidateAvailabilityCache(instructorId, dateStr)` is called immediately after a booking is created in both `app/api/bookings/route.ts` and `app/api/public/bookings/bulk/route.ts`. Clears all duration variants for that instructor+date.
 
 **Effective gap** = `max(bookingBufferMinutes, travelTimeMinutes)` (if travel time is enabled)
 
@@ -90,6 +91,47 @@ The gap after the test is handled automatically by the regular booking buffer �
 ## Allowed Durations
 
 `Instructor.allowedDurations` (JSON array) — the lesson durations the instructor offers, e.g. `[60, 90, 120]` minutes.
+
+---
+
+## GET /api/availability/slots — Response Format
+
+The endpoint returns two formats simultaneously for backward compatibility.
+
+**Request params:**
+- `instructorId` — required
+- `date` — YYYY-MM-DD, required
+- `lessonDurationMinutes` OR `duration` — accepted interchangeably (60 default)
+- `bypassDurationCheck` — accepted but ignored (legacy param)
+
+**Response:**
+```json
+{
+  "slots": [
+    { "time": "09:00", "available": true },
+    { "time": "09:30", "available": true }
+  ],
+  "availableSlots": [
+    {
+      "startTime": "2026-07-21T01:00:00.000Z",
+      "endTime":   "2026-07-21T02:00:00.000Z",
+      "bookingTime": "09:00",
+      "lessonDuration": 60,
+      "voice": {
+        "speakTime":    "9:00 am",
+        "speakDate":    "Tuesday 21 July",
+        "confirmation": "Tuesday 21 July at 9:00 am"
+      }
+    }
+  ]
+}
+```
+
+**Consumers:**
+- `slots` → `SlotPicker`, `FindNextSlot`, offline form (legacy shape)
+- `availableSlots` → voice AI, future calendar integrations (rich shape)
+
+If availability logic changes, update both arrays in `app/api/availability/slots/route.ts`.
 
 ---
 

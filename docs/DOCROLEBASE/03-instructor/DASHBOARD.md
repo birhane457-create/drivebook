@@ -3,17 +3,97 @@
 **Route:** `/dashboard`  
 **Auth required:** INSTRUCTOR role + active subscription  
 **File:** `app/dashboard/page.tsx`  
-**Last updated:** June 2026 (Payout Schedule card added)
+**Last updated:** July 2026 — Sprint 1: Today Workspace
 
 ---
 
 ## What It Shows
 
-- Subscription status banner (trial warning, past-due alert, trial-expired block)
-- Today's upcoming bookings (next 5, CONFIRMED only)
-- Stats: Upcoming Lessons, Total Clients, This Month Revenue (MTD with daily avg + % vs last month), Hourly Rate
-- "Clients Needing Attention" — clients with unused package hours, sorted by inactivity
-- Quick Actions: New Booking, Add Client, Edit Profile, Settings
+In order from top to bottom:
+
+1. **Welcome header** — instructor name, "Instructor Portal" label
+2. **Subscription status banner** — trial warning, past-due alert, trial-expired block (see table below)
+3. **Profile completeness card** — weighted score nudge (hidden at 100%)
+4. **AI Receptionist voice line card** — PRO+ only (active / being set up / suspended states)
+5. **Stats row** — Upcoming Lessons, Total Clients, This Month Revenue (MTD), Earnings This Week
+6. **Today Workspace** — today's lessons as a time-ordered schedule (see below)
+7. **Upcoming Lessons** — next 5 CONFIRMED bookings after today (list view)
+8. **Clients Needing Attention** — clients with unused package hours, sorted by inactivity
+9. **Quick Actions** — New Booking, Add Client, Edit Profile, Settings
+
+---
+
+## Today Workspace
+
+**Component:** `components/instructor/TodayWorkspace.tsx`  
+**Sprint:** 1 (July 2026)
+
+Replaces the old upcoming-lessons list as the instructor's primary daily view. Shown between the stats row and the forward-looking Upcoming Lessons panel.
+
+### Summary Cards (top row)
+| Card | What it shows |
+|------|--------------|
+| Lessons Today | Total count for today + "N done · N remaining" |
+| Next Lesson | Time + student name of the next CONFIRMED booking after now |
+| Progress | "N / total completed" + progress bar |
+| Revenue Today | Sum of COMPLETED lesson prices for today |
+
+### Timeline
+- Chronological rows — time on the left, colour accent bar (status colour), content on the right
+- **In Progress**: lesson that has started but not ended — animated pulse dot + "In Progress" label, sky background
+- **Next**: first upcoming lesson after now — "Next" label, sky background
+- Each row shows: time, student name, pickup suburb (extracted from address), status badge, call button (tel: link)
+- Tapping a row navigates to `/dashboard/bookings/[id]`
+- Empty state: "No lessons scheduled for today" + link to create a booking
+
+**Empty state:** "Nothing scheduled today. Enjoy the day off — or create a booking to fill it." with a sky "New Booking" button.
+
+### Status colours
+All status colours come from `lib/config/booking-status.ts`. See Status Colour System section below.
+
+---
+
+## Status Colour System
+
+**File:** `lib/config/booking-status.ts` — single source of truth for all booking status colours.
+
+| Status | Colour | Label |
+|--------|--------|-------|
+| CONFIRMED | Emerald | Confirmed |
+| COMPLETED | Sky | Completed |
+| PENDING | Amber | Pending Approval |
+| PENDING_PAYMENT | Violet | Awaiting Payment |
+| CANCELLED | Rose | Cancelled |
+| NO_SHOW | Orange | No Show |
+| EXPIRED | Slate | Expired |
+
+Used in: `TodayWorkspace`, `app/dashboard/bookings/page.tsx`, `app/client-dashboard/bookings/page.tsx`, `app/admin/bookings/page.tsx`.
+
+Import: `import { getStatusConfig } from '@/lib/config/booking-status'`  
+Usage: `getStatusConfig(booking.status).badge` / `.dot` / `.label`
+
+---
+
+## Profile Completeness Card
+
+**Component:** `components/instructor/ProfileCompletenessCard.tsx`
+
+Shown on the instructor dashboard between the subscription banners and the voice line card. Hidden at 100%.
+
+Calculates a weighted score from 8 fields:
+
+| Field | Weight | Where to fix |
+|-------|--------|-------------|
+| Bio (≥30 chars) | 20% | `/dashboard/profile` |
+| Profile photo | 15% | `/dashboard/profile` |
+| Base address | 15% | `/dashboard/settings` |
+| Service areas | 15% | `/dashboard/settings` |
+| Working hours (at least 1 slot) | 15% | `/dashboard/availability` |
+| Vehicle types | 10% | `/dashboard/settings` |
+| Car make + model | 5% | `/dashboard/profile` |
+| Languages | 5% | `/dashboard/profile` |
+
+Each incomplete item is a clickable card with a tip explaining its search-ranking impact. Completed items shown as green pills. Progress bar shifts red → amber → green as score increases. Score is computed server-side from the instructor record — no extra DB query.
 
 ---
 
@@ -35,26 +115,26 @@ Shown at the top of the instructor dashboard when action is needed:
 Desktop: `components/DashboardNav.tsx` — grouped dropdown nav  
 Mobile: `components/instructor/MobileBottomNav.tsx` — 5-tab bottom bar
 
-**Desktop layout (May 2026 redesign):**
-- Core (always visible): Dashboard / Bookings / Clients / Earnings
-- Business dropdown: Business Records, Analytics, Payout Wallet, Tax & Payout
-- Operations dropdown: Availability, Packages, PDA Tests, Documents
-- Account dropdown: Branding, Subscription, Profile, Settings, Help
+**Core items (always visible):** Dashboard · Bookings · **Schedule** · Clients · Earnings  
+**Business dropdown:** Business Records, Analytics, Payout Wallet, Tax & Payout  
+**Operations dropdown:** Availability, Packages, PDA Tests, Documents  
+**Account dropdown:** Branding, Subscription, Profile, Settings, Help
 
-**Mobile tabs:** Home / Bookings / Clients / Earnings / PDA Tests
+Schedule was added as a first-class core nav item in Sprint 2 (July 2026) — previously not in the nav.
 
 ---
 
 ## Stats Cards
 
-All fetched server-side on page load:
+All fetched server-side on page load. Stats row now has **3 cards** (Upcoming Lessons KPI removed in Sprint 2 — count is shown inline in the panel title instead):
 
 | Card | Source |
 |------|--------|
-| Upcoming Lessons | `instructor.bookings` (CONFIRMED, future, next 5) |
 | Total Clients | `prisma.client.count` for this instructor |
-| This Month (MTD) | `booking.aggregate` sum of COMPLETED bookings this month |
-| Next Payout (NEW) | `GET /api/instructor/payouts` — next payout date, pending amount, recent payouts |
+| This Month (MTD) | `booking.aggregate` sum of COMPLETED bookings this month — daily avg + % vs last month |
+| Earnings This Week | `EarningsThisWeekCard` component — `GET /api/instructor/earnings/this-week` |
+
+Upcoming lesson count is shown as "Upcoming Lessons (N)" in the panel title below the Today Workspace.
 
 Revenue card shows: daily average this month, daily average last month, % change.
 
@@ -411,9 +491,18 @@ Static help content covering:
 ## Related
 
 - [BOOKINGS.md](./BOOKINGS.md) — Full booking management reference
+- [SCHEDULE.md](./SCHEDULE.md) — Schedule workspace (Week / Agenda / Today views at `/dashboard/schedule`)
 - [OFFLINE_BOOKINGS.md](./OFFLINE_BOOKINGS.md) — Offline booking system (PRO+)
 - [EARNINGS.md](./EARNINGS.md) — Earnings breakdown
 - [SUBSCRIPTION_TIERS.md](./SUBSCRIPTION_TIERS.md) — Tier features and gates
 - [PDA_TESTS.md](./PDA_TESTS.md) — PDA test scheduling and result tracking
 - [SETTINGS.md](./SETTINGS.md) — Settings and availability configuration
-- [INSTRUCTOR_DASH_GAP_ANALYSIS.md](./INSTRUCTOR_DASH_GAP_ANALYSIS.md) — Gap analysis and fix log
+
+### Key components on the dashboard
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `TodayWorkspace` | `components/instructor/TodayWorkspace.tsx` | Today's lessons as a timeline. Props: `bookings: TodayBooking[]`, `instructorName: string`, `hourlyRate: number` |
+| `ProfileCompletenessCard` | `components/instructor/ProfileCompletenessCard.tsx` | Weighted score nudge. Pass the instructor record — score computed server-side. Hidden at 100%. |
+| `EarningsThisWeekCard` | `components/instructor/EarningsThisWeekCard.tsx` | This-week earnings card. Fetches its own data from `/api/instructor/earnings/this-week`. |
+| `booking-status.ts` | `lib/config/booking-status.ts` | Single source of truth for status colours. Use `getStatusConfig(status)` everywhere. |

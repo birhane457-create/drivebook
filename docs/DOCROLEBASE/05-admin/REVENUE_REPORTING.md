@@ -34,8 +34,19 @@
 - Refund rate (% of total revenue)
 
 ### Export
-- CSV export of all transactions in the selected date range
+- CSV export of all transactions in the selected date range (client-side, from in-memory data)
 - Columns: date, bookingId, instructorName, clientName, amount, platformFee, instructorPayout, commissionRate, status
+
+**Full database exports (server-side)** via `GET /api/admin/export?type=`:
+
+| Type | Description | Optional params |
+|------|-------------|----------------|
+| `bookings` | Every platform booking — client, instructor, price, status, dates | `?from=&to=` |
+| `revenue` | All settled transactions with summary row — gross, platform fee, payout | `?from=&to=` |
+| `instructors` | Full instructor roster — subscription, Stripe status, location, rating, counts | — |
+
+Auth: ADMIN or SUPER_ADMIN. Returns `Content-Disposition: attachment` CSV.  
+Accessible from Admin → Revenue → Reports tab → "Full Database Exports" section.
 
 ---
 

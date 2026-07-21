@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -18,7 +18,7 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 
 function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) => void }) {
   const router = useRouter();
-  const { bookingState, resetBooking } = useBooking();
+  const { bookingState } = useBooking();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorData, setErrorData] = useState<any>(null);
@@ -153,8 +153,6 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
       }
 
       const { clientSecret } = await paymentResponse.json();
-      
-      console.log('Payment intent created, confirming with Stripe...');
 
       // Step 3: Confirm payment with Stripe
       const cardElement = elements.getElement(CardNumberElement);
@@ -174,47 +172,59 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
       });
 
       if (stripeError) {
-        console.error('Stripe payment error:', stripeError);
         throw new Error(stripeError.message || 'Payment failed');
       }
 
-      console.log('Payment intent result:', paymentIntent);
+      // Build the confirmation URL — used by both succeeded and processing paths
+      const buildConfirmationUrl = (paymentStatus: string) => {
+        const confirmationBase = `/booking/${primaryBookingId || bookingResult.bookingId}/confirmation`;
+        const confirmParams = new URLSearchParams({ payment: paymentStatus });
+        if (bookingState.instructor?.displayName || bookingState.instructor?.name) confirmParams.set('instructor', bookingState.instructor.displayName || bookingState.instructor.name);
+        if (bookingState.hours)           confirmParams.set('hours', String(bookingState.hours));
+        if (bookingState.pricing?.total)  confirmParams.set('total', bookingState.pricing.total.toFixed(2));
+        if (bookingState.scheduledBookings?.[0]?.date) confirmParams.set('date', bookingState.scheduledBookings[0].date);
+        if (bookingState.scheduledBookings?.[0]?.time) confirmParams.set('time', bookingState.scheduledBookings[0].time);
+        return bookingState.bookingType === 'later'
+          ? `/client-dashboard?payment=${paymentStatus}&bookingType=later`
+          : `${confirmationBase}?${confirmParams.toString()}`;
+      };
 
       // Handle different payment intent statuses
       if (paymentIntent.status === 'succeeded') {
-        console.log('Payment succeeded! Redirecting to confirmation...');
         setSuccess(true);
         setError(null);
         setIsRedirecting(true);
-
-        const confirmationUrl =
-          bookingState.bookingType === 'later'
-            ? '/client-dashboard?payment=success&bookingType=later'
-            : `/booking/${primaryBookingId || bookingResult.bookingId}/confirmation?payment=success`;
-
         setTimeout(() => {
-          router.push(confirmationUrl);
-          setTimeout(() => resetBooking(), 500);
+          // resetBooking is called on the confirmation page mount, not here,
+          // to avoid wiping context while router.push is still in-flight.
+          router.push(buildConfirmationUrl('success'));
         }, 1500);
       } else if (paymentIntent.status === 'requires_action') {
-        setError('Additional authentication required. Please complete the verification.');
+        // 3DS / SCA — must call handleNextAction to present the authentication challenge.
+        // Simply showing an error message is wrong and will fail all 3DS-enrolled cards.
+        const { error: actionError, paymentIntent: confirmedIntent } =
+          await stripe.handleNextAction({ clientSecret });
+        if (actionError) {
+          throw new Error(actionError.message || '3D Secure authentication failed. Please try again.');
+        }
+        if (confirmedIntent?.status === 'succeeded') {
+          setSuccess(true);
+          setError(null);
+          setIsRedirecting(true);
+          setTimeout(() => {
+            router.push(buildConfirmationUrl('success'));
+          }, 1500);
+        } else {
+          throw new Error('Payment was not completed after authentication. Please try again.');
+        }
       } else if (paymentIntent.status === 'processing') {
-        console.log('Payment processing, redirecting to confirmation...');
         setSuccess(true);
         setError(null);
         setIsRedirecting(true);
-
-        const confirmationUrl =
-          bookingState.bookingType === 'later'
-            ? '/client-dashboard?payment=processing&bookingType=later'
-            : `/booking/${primaryBookingId || bookingResult.bookingId}/confirmation?payment=processing`;
-
         setTimeout(() => {
-          router.push(confirmationUrl);
-          setTimeout(() => resetBooking(), 500);
+          router.push(buildConfirmationUrl('processing'));
         }, 1500);
       } else {
-        console.error('Payment intent status:', paymentIntent.status);
         throw new Error(`Unexpected payment status: ${paymentIntent.status}. Please try again or contact support.`);
       }
     } catch (err) {
@@ -394,7 +404,7 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
       </button>
 
       {/* Secure Payment Badge */}
-      <div className="flex items-center justify-center gap-2 text-sm text-white/60">
+      <div className="flex items-center justify-center gap-2 text-sm text-white/75">
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
         </svg>
@@ -423,7 +433,7 @@ export default function PaymentPage() {
   // Check if Stripe is configured
   if (!stripePublishableKey) {
     return (
-      <MultiStepBookingLayout currentStep={bookingState.bookingType === 'now' ? 7 : 6}>
+      <MultiStepBookingLayout currentStep={bookingState.bookingType === 'now' ? 6 : 5}>
         <div className="bg-red-900/10 border border-red-500/20 rounded-lg p-6 text-white">
           <h3 className="text-lg font-semibold text-red-100 mb-2">Payment System Not Configured</h3>
           <p className="text-red-100">
@@ -437,7 +447,7 @@ export default function PaymentPage() {
     );
   }
 
-  const stepNumber = bookingState.bookingType === 'now' ? 7 : 6;
+  const stepNumber = bookingState.bookingType === 'now' ? 6 : 5;
 
   return (
     <MultiStepBookingLayout currentStep={stepNumber}>
@@ -446,7 +456,7 @@ export default function PaymentPage() {
           <h2 className="text-2xl font-bold text-white/95 mb-2">
             Complete Payment
           </h2>
-          <p className="text-white/70">
+          <p className="text-white/85">
             Secure payment to confirm your booking
           </p>
         </div>

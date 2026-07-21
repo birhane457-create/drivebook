@@ -5,6 +5,10 @@
  * failCronHealth() on error. The health-check cron reads these records
  * and alerts if any job hasn't run within its expected window.
  *
+ * Gap 19 fix: failCronHealth() now fires sendAlert() immediately on failure
+ * so admins are notified at the point of failure rather than waiting up to
+ * 30 minutes for the health-check cron to detect it.
+ *
  * Usage in a cron route:
  *
  *   import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health'
@@ -19,6 +23,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { sendAlert } from '@/lib/services/alert-service';
 
 export async function pingCronHealth(jobName: string): Promise<void> {
   try {
@@ -65,6 +70,18 @@ export async function failCronHealth(jobName: string, error: unknown): Promise<v
   } catch (err) {
     console.error(`[CRON HEALTH] Failed to record failure for ${jobName}:`, err);
   }
+
+  // Gap 19: fire an immediate alert so admin doesn't have to wait up to 30 min
+  // for the health-check cron to detect this failure.
+  // sendAlert is throttled (1 per hour per job) so repeated failures don't spam.
+  // Never throws — alert failure must not re-raise from the cron catch block.
+  void sendAlert({
+    type: 'RECONCILIATION_ISSUES',
+    severity: 'CRITICAL',
+    message: `Cron job "${jobName}" failed: ${message}`,
+    entityId: `cron:${jobName}`,
+    metadata: { jobName, error: message, failedAt: new Date().toISOString() },
+  });
 }
 
 /**

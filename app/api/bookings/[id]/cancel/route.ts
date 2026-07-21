@@ -8,6 +8,7 @@ import { getNotifChannels } from '@/lib/config/platform-settings'
 import { createRefundTask } from '@/lib/services/taskManager'
 import { recordFullRefund, recordPartialRefund } from '@/lib/services/ledger-operations'
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry'
+import { getDisplayName } from '@/lib/utils/account'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,14 +61,21 @@ export async function POST(
     const isPastBooking = hoursUntilBooking < 0
     const isNonRefundable = (booking as any).isNonRefundable === true
 
+    // Read cancellation window from PlatformSettings — never hardcode
+    const pricingSettings = await prisma.platformSettings.findFirst({
+      select: { lateCancellationWindowHours: true },
+    }).catch(() => null)
+    const lateWindow = pricingSettings?.lateCancellationWindowHours ?? 24
+    const fullRefundWindow = lateWindow * 2
+
     let refundAmount = 0
     let refundPercentage = 0
 
     if (!isNonRefundable && !isPastBooking) {
-      if (hoursUntilBooking >= 48) {
+      if (hoursUntilBooking >= fullRefundWindow) {
         refundPercentage = 100
         refundAmount = booking.price
-      } else if (hoursUntilBooking >= 24) {
+      } else if (hoursUntilBooking >= lateWindow) {
         refundPercentage = 50
         refundAmount = parseFloat((booking.price * 0.5).toFixed(2))
       }
@@ -215,14 +223,14 @@ export async function POST(
       emailService.sendGenericEmail({
         to: booking.client.email,
         subject: `Booking Cancelled — ${bookingDateStr}`,
-        html: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client.name},</p><p>Your booking with <strong>${booking.instructor.name}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
+        html: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client.name},</p><p>Your booking with <strong>${getDisplayName(booking.instructor)}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
       }).catch(async (e) => {
         console.error('Cancel email to client failed:', e)
         await enqueueNotification({
           channel: 'EMAIL',
           recipient: booking.client!.email,
           subject: `Booking Cancelled — ${bookingDateStr}`,
-          body: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client!.name},</p><p>Your booking with <strong>${booking.instructor.name}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
+          body: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client!.name},</p><p>Your booking with <strong>${getDisplayName(booking.instructor)}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
           idempotencyKey: `cancel-client-email-${params.id}`,
           bookingId: params.id,
           userId: booking.client!.userId ?? undefined,
@@ -242,7 +250,7 @@ export async function POST(
           clientEmail: booking.client.email,
           receiptId: params.id,
           cancelledAt: now,
-          instructorName: booking.instructor.name,
+          instructorName: getDisplayName(booking.instructor),
           lessonDate: new Date(booking.startTime!),
           lessonPrice: booking.price,
           refundAmount,
@@ -282,6 +290,17 @@ export async function POST(
         })
       })
     }
+
+    // Waiting list — notify first person waiting for a slot with this instructor (non-fatal)
+    void import('@/lib/services/waiting-list-notify').then(({ notifyWaitingList }) =>
+      notifyWaitingList({
+        instructorId: booking.instructorId,
+        slotDate: booking.startTime?.toISOString() ?? null,
+        slotTime: booking.startTime
+          ? booking.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Perth' })
+          : null,
+      })
+    )
 
     return NextResponse.json({
       success: true,

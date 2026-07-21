@@ -1,8 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { DollarSign, Calendar, ChevronDown, ChevronRight, Clock, FileText, TrendingUp } from 'lucide-react';
+import { DollarSign, Calendar, ChevronDown, ChevronRight, Clock, FileText, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+
+// ── Inline toast ───────────────────────────────────────────────────────────────
+type ToastState = { type: 'success' | 'error'; message: string } | null;
+
+function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
+  if (!toast) return null;
+  return (
+    <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium animate-in fade-in slide-in-from-bottom-2"
+      style={{ backgroundColor: toast.type === 'success' ? '#16a34a' : '#dc2626' }}>
+      {toast.type === 'success'
+        ? <CheckCircle className="h-4 w-4 shrink-0" />
+        : <AlertCircle className="h-4 w-4 shrink-0" />}
+      {toast.message}
+      <button onClick={onClose} className="ml-2 opacity-70 hover:opacity-100 text-white">✕</button>
+    </div>
+  );
+}
 
 interface Transaction {
   id: string;
@@ -59,6 +76,12 @@ export default function PlatformEarningsSection({
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [weeksToShow, setWeeksToShow] = useState(2);
+  const [toast, setToast] = useState<ToastState>(null);
+
+  function showToast(type: 'success' | 'error', message: string) {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  }
 
   const toggleWeek = (label: string) => {
     const s = new Set(expandedWeeks);
@@ -80,6 +103,7 @@ export default function PlatformEarningsSection({
 
   return (
     <div className="space-y-6">
+      <Toast toast={toast} onClose={() => setToast(null)} />
       {/* Section Header */}
       <div>
         <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2 mb-3">
@@ -248,8 +272,8 @@ export default function PlatformEarningsSection({
                               a.href = url; a.download = `receipt-${weekStartISO}.txt`;
                               document.body.appendChild(a); a.click();
                               window.URL.revokeObjectURL(url); document.body.removeChild(a);
-                            } else { alert('Failed to generate receipt.'); }
-                          } catch { alert('Failed to download receipt.'); }
+                            } else { showToast('error', 'Failed to generate receipt. Please try again.'); }
+                          } catch { showToast('error', 'Failed to download receipt. Please try again.'); }
                         }}
                         className="w-full px-3 py-2 bg-slate-900 text-sky-400 text-sm rounded-lg hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 font-medium"
                       >

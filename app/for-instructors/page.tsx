@@ -27,6 +27,7 @@ function SiteHeader() {
           <Link href="/pda-guide" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">PDA Guide</Link>
           <Link href="/for-instructors" className="text-white px-3 py-2 rounded-lg bg-white/10 no-underline font-semibold">For Instructors</Link>
           <Link href="/blog" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Blog</Link>
+          <Link href="/driving-lessons" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Find Instructors</Link>
           <Link href="/teach-with-drivebook" className="ml-2 bg-gradient-to-r from-pink-600 to-violet-600 text-white px-5 py-2 rounded-xl font-bold text-sm no-underline hover:from-pink-500 hover:to-violet-500 transition-all">Join DriveBook</Link>
         </nav>
       </div>
@@ -128,9 +129,9 @@ export default function ForInstructorsPage() {
               { icon: Zap, label: 'Multi-Instructor', href: '/features/multi-instructor' },
             ].map(({ icon: Icon, label, href }) => (
               <Link key={label} href={href} className="flex flex-col items-center gap-2 text-center no-underline group">
-                <div className="w-10 h-10 rounded-xl bg-white/10 group-hover:bg-pink-500/20 group-hover:border-pink-500/30 border border-transparent flex items-center justify-center transition-all">
+                <span className="w-10 h-10 rounded-xl bg-white/10 group-hover:bg-pink-500/20 group-hover:border-pink-500/30 border border-transparent flex items-center justify-center transition-all">
                   <Icon className="h-4 w-4 text-pink-400" />
-                </div>
+                </span>
                 <span className="text-white/60 group-hover:text-white text-xs whitespace-nowrap transition-colors">{label}</span>
               </Link>
             ))}

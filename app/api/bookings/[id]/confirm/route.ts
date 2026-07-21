@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { smsService } from '@/lib/services/sms';
 import { notifyBookingConfirmed, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 import { getNotifChannels } from '@/lib/config/platform-settings';
+import { getDisplayName } from '@/lib/utils/account';
 
 export const dynamic = 'force-dynamic';
 
@@ -145,7 +146,7 @@ export async function POST(
         await smsService.sendBookingConfirmation({
           clientPhone: booking.client.phone,
           clientName: booking.client.name,
-          instructorName: booking.instructor.name,
+          instructorName: getDisplayName(booking.instructor),
           startTime: booking.startTime,
           price: booking.price,
           pickupAddress: booking.pickupAddress || 'TBD'
@@ -174,7 +175,7 @@ export async function POST(
       if (notifChannels.inApp && booking.client?.userId && booking.startTime) {
         await notifyClientBookingConfirmed(
           booking.client.userId,
-          booking.instructor.name,
+          getDisplayName(booking.instructor),
           bookingId,
           new Date(booking.startTime)
         );

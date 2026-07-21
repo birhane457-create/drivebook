@@ -2,7 +2,11 @@
 
 **Route:** `/client-dashboard/wallet`  
 **Auth required:** CLIENT role  
-**APIs:** `GET /api/client/wallet/summary`, `POST /api/client/wallet-topup-intent`
+**APIs:**
+- `GET /api/client/wallet` — balance + usage stats (used by wallet page and main dashboard)
+- `GET /api/client/wallet/summary` — extended summary with transaction history (used by mobile app)
+- `POST /api/client/wallet-topup-intent` — creates Stripe PaymentIntent for top-up
+- `POST /api/client/wallet-add` — confirms a top-up after Stripe payment (webhook-driven)
 
 ---
 

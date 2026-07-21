@@ -279,26 +279,26 @@ export default function ClientHelpPage() {
             <a href="mailto:support@drivebook.com.au"
               className="flex items-center gap-3 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 transition">
               <Mail className="w-5 h-5 text-blue-400 shrink-0" />
-              <div>
-                <p className="text-xs font-semibold text-slate-200">Email</p>
-                <p className="text-xs text-slate-500">support@drivebook.com.au</p>
-              </div>
+              <span className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-200">Email</span>
+                <span className="text-xs text-slate-500">support@drivebook.com.au</span>
+              </span>
             </a>
             <a href="tel:1800DRIVEBOOK"
               className="flex items-center gap-3 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 transition">
               <Phone className="w-5 h-5 text-blue-400 shrink-0" />
-              <div>
-                <p className="text-xs font-semibold text-slate-200">Phone</p>
-                <p className="text-xs text-slate-500">1800 DRIVEBOOK</p>
-              </div>
+              <span className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-200">Phone</span>
+                <span className="text-xs text-slate-500">1800 DRIVEBOOK</span>
+              </span>
             </a>
             <a href="#"
               className="flex items-center gap-3 p-4 bg-slate-900 rounded-xl border border-slate-700 hover:border-blue-500/60 transition">
               <MessageCircle className="w-5 h-5 text-blue-400 shrink-0" />
-              <div>
-                <p className="text-xs font-semibold text-slate-200">Live Chat</p>
-                <p className="text-xs text-slate-500">Available 9 AM – 6 PM</p>
-              </div>
+              <span className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-200">Live Chat</span>
+                <span className="text-xs text-slate-500">Available 9 AM – 6 PM</span>
+              </span>
             </a>
           </div>
         </div>

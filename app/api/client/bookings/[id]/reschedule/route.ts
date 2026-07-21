@@ -246,7 +246,8 @@ export async function PUT(
           user.id,
           booking.instructor.name,
           bookingId,
-          newStartTime
+          newStartTime,
+          booking.instructor
         );
       }
     } catch (e) { console.error('Reschedule notification failed:', e); }

@@ -20,6 +20,22 @@ import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { notifyReviewReceived } from '@/lib/services/notifications';
+import { reviewRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
+
+// ── Rate limit helper for POST /api/reviews ──────────────────────────────────
+// Applied per authenticated user ID (or IP fallback) to prevent review spam.
+// reviewRateLimit = 10 per hour (defined in lib/ratelimit.ts).
+async function applyReviewRateLimit(req: NextRequest, userId: string): Promise<NextResponse | null> {
+  const identifier = getRateLimitIdentifier(userId, req.headers.get('x-forwarded-for'), 'review');
+  const result = await checkRateLimit(reviewRateLimit, identifier);
+  if (!result.success) {
+    return NextResponse.json(
+      { error: result.error ?? 'Too many review submissions. Please try again later.' },
+      { status: 429, headers: result.headers }
+    );
+  }
+  return null;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +70,15 @@ export async function GET(req: NextRequest) {
         rating: b.clientRating,
         comment: b.clientReview,
         reviewedAt: b.reviewGivenAt,
-        clientName: b.clientName ?? 'Anonymous',
+        // Mask to first name + last initial for privacy — public endpoint, no auth required
+        clientName: b.clientName
+          ? (() => {
+              const parts = b.clientName.trim().split(/\s+/);
+              return parts.length > 1
+                ? `${parts[0]} ${parts[parts.length - 1][0]}.`
+                : parts[0];
+            })()
+          : 'Anonymous',
         lessonDate: b.startTime,
       }));
 
@@ -142,6 +166,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Rate limit: 10 reviews per hour per user (defined in lib/ratelimit.ts)
+    const user = await prisma.user.findUnique({ where: { email: userEmail }, select: { id: true } });
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    const rateLimitReject = await applyReviewRateLimit(req, user.id);
+    if (rateLimitReject) return rateLimitReject;
+
     const body = await req.json();
     const { bookingId, rating, comment } = body;
 
@@ -180,20 +212,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'You can only review completed bookings' }, { status: 400 });
     }
 
-    // Dedup — check reviewGivenAt instead of non-existent isReviewed field
-    if (booking.reviewGivenAt) {
-      return NextResponse.json({ error: 'This booking has already been reviewed' }, { status: 400 });
-    }
-
-    // Write review fields onto the Booking record (no separate Review model)
-    await prisma.booking.update({
-      where: { id: bookingId },
+    // Dedup + write — transactional upsert on reviewGivenAt prevents duplicate reviews
+    // from concurrent requests hitting the endpoint simultaneously.
+    // updateMany with reviewGivenAt: null as the where clause acts as an atomic guard:
+    // only the first request that matches (reviewGivenAt IS NULL) will succeed.
+    const updated = await prisma.booking.updateMany({
+      where: {
+        id: bookingId,
+        reviewGivenAt: null,   // atomic guard — only one request wins
+        clientRating: null,    // extra guard: ensure no rating written yet
+      },
       data: {
         clientRating: Math.round(rating),
         clientReview: comment ?? null,
         reviewGivenAt: now,
       } as any,
     });
+
+    // If count is 0, another concurrent request already wrote the review
+    if (updated.count === 0) {
+      return NextResponse.json({ error: 'This booking has already been reviewed' }, { status: 400 });
+    }
 
     // Update instructor aggregate rating
     const reviewedBookings = await prisma.booking.findMany({

@@ -121,6 +121,7 @@ export default function AdminNav() {
         { name: 'Bookings', href: '/admin/bookings', icon: '📅' },
         { name: 'Audit Log', href: '/admin/audit-log', icon: '🔍' },
         { name: 'Test Centres', href: '/admin/test-centres', icon: '🚗' },
+        { name: 'Policy & Rules', href: '/admin/policy', icon: '📚' },
       ]
     },
     {
@@ -154,9 +155,9 @@ export default function AdminNav() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/admin" className="flex items-center gap-2 no-underline">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-blue-600/40">
+              <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-blue-600/40">
                 A
-              </div>
+              </span>
               <span className="text-base font-bold text-slate-100">Admin</span>
               <span className="hidden xl:inline-block px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-xs font-semibold text-red-300 ml-1">
                 Internal

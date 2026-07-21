@@ -46,25 +46,28 @@ export default function MultiStepBookingLayout({ currentStep, children }: MultiS
   const steps = generateSteps();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
-      {/* Step Indicator */}
-      <div className="bg-gradient-to-r from-white/5 to-white/2 border-b border-white/6 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-950 text-white pb-32 lg:pb-12">
+      {/* 3D Structural Step Indicator Frame */}
+      <div className="relative z-30 mx-2 sm:mx-6 my-4 rounded-2xl border-2 border-slate-400 bg-slate-900 shadow-[0_6px_0_0_#475569,0_15px_25px_0_rgba(0,0,0,0.6)]">
+        {/* Luminous top rim specular line for high daylight focus */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 rounded-t-xl" />
+        
+        <div className="max-w-7xl mx-auto px-1 py-1.5 sm:py-2">
           <StepIndicator currentStep={currentStep} steps={steps} />
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-2 sm:mx-4 px-2 sm:px-4 py-4 sm:py-8">
+      {/* Main Content Area */}
+      <div className="max-w-7xl mx-2 sm:mx-4 px-2 sm:px-4 py-4 sm:py-4">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Left Column - Booking Summary Sidebar (Desktop Only) */}
           <div className="hidden lg:block">
             <BookingSummary />
           </div>
 
-          {/* Right Column - Main Content (lg:col-span-3) */}
+          {/* Right Column - Main Content Dashboard Cards */}
           <div className="lg:col-span-3">
-            <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-3 sm:p-6 border border-white/10 backdrop-blur-sm">
+            <div className="bg-slate-900 rounded-2xl shadow-2xl p-3 sm:p-6 border-2 border-slate-700 shadow-[0_8px_0_0_#1e293b,0_25px_35px_0_rgba(0,0,0,0.5)]">
               {children}
             </div>
           </div>

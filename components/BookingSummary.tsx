@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState } from 'react';
 import Image from 'next/image';
@@ -29,7 +29,7 @@ export default function BookingSummary({
 
   if (!instructor) {
     return (
-      <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl p-4 sm:p-6 sticky top-4 border border-white/10 backdrop-blur-sm text-white">
+      <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl p-4 sm:p-6 sticky top-4 border border-white/20 backdrop-blur-sm text-white">
         <h3 className="text-lg font-semibold mb-4 text-white/90">Booking Summary</h3>
         <p className="text-white/70 text-sm">Select an instructor to begin</p>
       </div>
@@ -42,7 +42,7 @@ export default function BookingSummary({
 
   return (
     <>
-      <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-4 sm:p-6 sticky top-4 border border-white/10 backdrop-blur-sm text-white">
+      <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-2xl shadow-2xl p-4 sm:p-6 sticky top-4 border border-white/20 backdrop-blur-sm text-white">
         <h3 className="text-lg font-semibold mb-4 text-white/90">Booking Summary</h3>
 
         {/* Instructor Info */}
@@ -94,7 +94,7 @@ export default function BookingSummary({
 
         {/* Optional PDA Add-on */}
         {instructor.offersTestPackage && !pdaTestBooking && (
-          <div className="bg-white/5 rounded-lg p-4 mb-6 border border-white/10">
+          <div className="bg-white/5 rounded-lg p-4 mb-6 border border-white/20">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-white">Add PDA test pack</p>

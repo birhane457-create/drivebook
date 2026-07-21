@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { DollarSign, Calendar, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
@@ -235,7 +235,7 @@ export default function EarningsPage() {
             <p className="text-sm text-slate-400 mt-0.5">Money from lessons you've taught</p>
           </div>
           <Link href="/dashboard/packages" className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors">
-            ?? Packages
+            📦 Packages
           </Link>
         </div>
 
@@ -295,7 +295,7 @@ export default function EarningsPage() {
                           </p>
                           <p className="text-xs text-slate-400">
                             {b.duration}h
-                            {b.isFromPackage && <span className="ml-1 text-purple-500">??</span>}
+                            {b.isFromPackage && <span className="ml-1 text-purple-400 font-semibold">pkg</span>}
                           </p>
                         </div>
                         <p className="text-sm font-semibold text-sky-400">${b.instructorPayout.toFixed(2)}</p>
@@ -309,7 +309,7 @@ export default function EarningsPage() {
         )}
 
         {/* Earnings History note */}
-        <p className="text-xs text-slate-400 mb-3 px-1">?? Earnings history — completed lessons only</p>
+        <p className="text-xs text-slate-400 mb-3 px-1">📊 Earnings history — completed lessons only</p>
 
         {/* Weekly groups */}
         <div className="space-y-3">
@@ -388,7 +388,7 @@ export default function EarningsPage() {
                                       ) : (
                                         <span className="text-sm text-slate-100">{t.description}</span>
                                       )}
-                                      {isFromPackage && <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">??</span>}
+                                      {isFromPackage && <span className="text-xs px-1.5 py-0.5 bg-purple-900/40 text-purple-300 border border-purple-700/40 rounded font-medium">pkg</span>}
                                     </div>
                                     {t.booking && (
                                       <p className="text-xs text-slate-400 mt-0.5">
@@ -458,7 +458,7 @@ export default function EarningsPage() {
 
         {/* Footer info */}
         <div className="mt-5 bg-slate-950 border border-slate-800 rounded-lg p-4">
-          <p className="text-xs font-semibold text-green-300 mb-1">?? About Earnings</p>
+          <p className="text-xs font-semibold text-green-300 mb-1">ℹ️ About Earnings</p>
           <ul className="text-xs text-green-300 space-y-1">
             <li>• Earnings recorded when lessons are completed</li>
             <li>• Payouts processed weekly on Fridays</li>

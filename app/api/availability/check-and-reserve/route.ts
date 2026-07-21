@@ -13,16 +13,19 @@ const reserveSlotSchema = z.object({
 });
 
 /**
- * Parse date and time into startTime and endTime DateTime objects
+ * Parse date (YYYY-MM-DD) and time (HH:MM) into UTC Date objects that correctly
+ * represent Perth wall-clock time (AWST = UTC+8, no DST).
+ *
+ * e.g. "2026-07-15" + "09:00" → 2026-07-15T01:00:00Z (UTC equivalent of 9am Perth)
+ *
+ * Using new Date(date + 'T' + time + '+08:00') is the correct approach — it parses
+ * the string as Perth local time and converts to UTC internally.
+ * Do NOT use new Date(date + 'T00:00:00').setHours(...) — that uses the server's
+ * local timezone (UTC on Vercel), shifting all Perth times by 8 hours.
  */
-function parseSlotDateTime(date: string, time: string, duration: number) {
-  const [hours, minutes] = time.split(':').map(Number);
-  const startDateTime = new Date(date + 'T00:00:00');
-  startDateTime.setHours(hours, minutes, 0, 0);
-  
-  const endDateTime = new Date(startDateTime);
-  endDateTime.setMinutes(endDateTime.getMinutes() + duration);
-
+function parsePerthDateTime(date: string, time: string, durationMinutes: number) {
+  const startDateTime = new Date(`${date}T${time}:00+08:00`);
+  const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60 * 1000);
   return { startDateTime, endDateTime };
 }
 
@@ -38,7 +41,7 @@ async function isSlotAvailable(
   duration: number,
   sessionId: string
 ): Promise<{ available: boolean; reason?: string }> {
-  const { startDateTime, endDateTime } = parseSlotDateTime(date, time, duration);
+  const { startDateTime, endDateTime } = parsePerthDateTime(date, time, duration);
 
   // Clean up any expired reservations for this time slot
   const now = new Date();
@@ -136,7 +139,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Reserve the slot in database (10 minutes)
-    const { startDateTime, endDateTime } = parseSlotDateTime(
+    const { startDateTime, endDateTime } = parsePerthDateTime(
       data.date,
       data.time,
       data.duration
@@ -188,7 +191,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
-    const { startDateTime, endDateTime } = parseSlotDateTime(
+    const { startDateTime, endDateTime } = parsePerthDateTime(
       date,
       time,
       parseInt(duration)

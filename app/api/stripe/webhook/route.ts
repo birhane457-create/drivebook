@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
 import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
 import { sendAlert } from '@/lib/services/alert-service';
 import Stripe from 'stripe';
+import { getDisplayName } from '@/lib/utils/account';
 
 
 export const dynamic = 'force-dynamic';
@@ -89,13 +90,17 @@ export async function POST(req: NextRequest) {
     try {
       await handleStripeEvent(event, idempotencyKey);
     } catch (handlerErr) {
-      // Log the error but return 200 so Stripe stops retrying for handler-level errors
-      // (signature is valid, we received the event — processing errors should not cause retries)
       logger.error(`🚨 Webhook handler error for ${event.type}`, {
         error: handlerErr instanceof Error ? handlerErr.message : String(handlerErr),
       });
-      // Return 200 to acknowledge receipt — admin must investigate via logs
-      return NextResponse.json({ received: true, handlerError: true });
+      // Return 500 so Stripe retries delivery for transient errors (DB blips, network issues).
+      // Stripe will retry with exponential backoff for up to 3 days.
+      // Non-retryable errors (e.g. amount mismatch, invalid state) are logged above and should
+      // be investigated via Stripe dashboard event logs.
+      return NextResponse.json(
+        { error: 'Webhook handler failed — will retry', handlerError: true },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ received: true });
@@ -587,10 +592,39 @@ async function handleBookingPaymentSuccess(
           },
         });
         logger.info(`✅ Auto-refund issued for expired booking ${bookingId}`);
+
+        // Alert ops — admin should know a payment hit an expired slot even when refund succeeded
+        void sendAlert({
+          type: 'RECONCILIATION_ISSUES',
+          severity: 'WARNING',
+          message: `Delayed payment on expired booking ${bookingId} — auto-refund issued successfully. Student was charged after slot expired. Admin review recommended.`,
+          entityId: bookingId,
+          metadata: {
+            bookingId,
+            stripePaymentIntentId: paymentIntent.id,
+            outcome: 'auto_refund_succeeded',
+          },
+        });
       } catch (refundErr) {
         // Refund failed — must flag for manual admin action
         logger.error(`🚨 CRITICAL: Auto-refund FAILED for expired booking ${bookingId}. Manual action required.`, {
           error: refundErr instanceof Error ? refundErr.message : String(refundErr),
+        });
+
+        // Alert ops — this requires immediate manual intervention via Stripe Dashboard
+        void sendAlert({
+          type: 'RECONCILIATION_ISSUES',
+          severity: 'CRITICAL',
+          message: `Auto-refund FAILED for expired booking ${bookingId}. Student was charged $${(paymentIntent.amount / 100).toFixed(2)} but refund could not be issued. MANUAL REFUND REQUIRED via Stripe Dashboard. PaymentIntent: ${paymentIntent.id}`,
+          entityId: bookingId,
+          metadata: {
+            bookingId,
+            stripePaymentIntentId: paymentIntent.id,
+            amountCharged: paymentIntent.amount / 100,
+            error: refundErr instanceof Error ? refundErr.message : String(refundErr),
+            outcome: 'auto_refund_failed',
+            action: 'Manual refund required via Stripe Dashboard',
+          },
         });
       }
 
@@ -861,7 +895,7 @@ async function handleBookingPaymentSuccess(
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        instructor: { select: { id: true, userId: true, name: true, hourlyRate: true } },
+        instructor: { select: { id: true, userId: true, name: true, businessName: true, accountType: true, hourlyRate: true } },
         client: true,
       },
     });
@@ -894,7 +928,7 @@ async function handleBookingPaymentSuccess(
           clientEmail: booking.client.email,
           receiptId: bookingId,
           paidAt: new Date(),
-          instructorName: instructor.name,
+          instructorName: getDisplayName(instructor),
           packageHours,
           hourlyRate: lockedHourlyRate,
           discountPercent: lockedDiscountPct,
@@ -918,7 +952,7 @@ async function handleBookingPaymentSuccess(
           clientEmail: booking.client.email,
           receiptId: bookingId,
           paidAt: new Date(),
-          instructorName: instructor.name,
+          instructorName: getDisplayName(instructor),
           lessonDate: booking.startTime!,
           durationHours,
           hourlyRate: instructor.hourlyRate,
@@ -941,7 +975,7 @@ async function handleBookingPaymentSuccess(
         await smsService.sendBookingConfirmation({
           clientPhone: booking.client.phone,
           clientName: booking.client.name || booking.clientName || 'Student',
-          instructorName: booking.instructor.name,
+          instructorName: getDisplayName(booking.instructor),
           startTime: booking.startTime,
           price: booking.price,
         });

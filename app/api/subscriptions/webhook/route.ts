@@ -97,8 +97,10 @@ async function handleSubscriptionUpdate(subscription: any) {
     data: {
       subscriptionTier: tier,
       subscriptionStatus: status.toUpperCase(),
-      commissionRate: plan.commissionRate,
-      newStudentBonus: plan.newStudentBonus,
+      // commissionRate and newStudentBonus removed — both were legacy fields no longer in schema.
+      // commissionRate: the platform fee is now resolved at booking time via getCommissionRate()
+      //   from platform-pricing service (DB-backed, not stored per-instructor).
+      // newStudentBonus: deprecated — will be replaced by a referral system later.
       trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
       stripeSubscriptionId: subscription.id,
       stripeCustomerId: subscription.customer,
@@ -175,8 +177,7 @@ async function handleSubscriptionUpdate(subscription: any) {
         <p><strong>Plan Details:</strong></p>
         <ul>
           <li>Tier: ${plan.name}</li>
-          <li>Commission: ${plan.commissionRate}%</li>
-          <li>New Student Bonus: ${plan.newStudentBonus}%</li>
+          <li>Platform commission: ${plan.commissionRate}% per booking</li>
         </ul>
         <p><a href="${process.env.NEXTAUTH_URL}/dashboard/subscription">Manage Subscription</a></p>
       `,

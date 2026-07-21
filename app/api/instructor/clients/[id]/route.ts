@@ -31,22 +31,29 @@ export async function GET(
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    // Wallet balance — sum of confirmed credit minus debit transactions
+    // Wallet balance — look up via ClientWallet → WalletTransaction
+    // WalletTransaction does NOT have userId directly — it has walletId → ClientWallet → userId
     let walletBalance: number | null = null;
     if (client.userId) {
-      const [credits, debits] = await Promise.all([
-        prisma.walletTransaction.aggregate({
-          where: { userId: client.userId, type: 'CREDIT', status: 'CONFIRMED' } as any,
-          _sum: { amount: true },
-        }),
-        prisma.walletTransaction.aggregate({
-          where: { userId: client.userId, type: 'DEBIT', status: 'CONFIRMED' } as any,
-          _sum: { amount: true },
-        }),
-      ]);
-      const creditTotal = credits._sum?.amount ?? 0;
-      const debitTotal = debits._sum?.amount ?? 0;
-      walletBalance = creditTotal - debitTotal;
+      const wallet = await prisma.clientWallet.findUnique({
+        where: { userId: client.userId },
+        select: { id: true },
+      });
+      if (wallet) {
+        const [credits, debits] = await Promise.all([
+          prisma.walletTransaction.aggregate({
+            where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED' },
+            _sum: { amount: true },
+          }),
+          prisma.walletTransaction.aggregate({
+            where: { walletId: wallet.id, type: 'DEBIT', status: 'CONFIRMED' },
+            _sum: { amount: true },
+          }),
+        ]);
+        walletBalance = (credits._sum?.amount ?? 0) - (debits._sum?.amount ?? 0);
+      } else {
+        walletBalance = 0;
+      }
     }
 
     // Last 20 bookings with this instructor

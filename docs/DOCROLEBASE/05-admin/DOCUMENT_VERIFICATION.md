@@ -168,14 +168,11 @@ The Document Verification system enables instructors to upload verification docu
 
 ## AS IT SHOULD BE - Recommended Enhancements
 
-### 1. Add "Reject Document" Button to Review UI (QUICK WIN - 30 MIN)
+### 1. ~~Add "Reject Document" Button to Review UI~~ ✅ DONE (July 2026)
 
-| Aspect | Recommendation | Rationale |
-|--------|-----------------|-----------|
-| **Current Gap** | Admin can reject via API but no UI button exists in individual review page | Incomplete workflow: approve button exists but not reject |
-| **Missing UI** | Add "Reject Document" button next to each document in the table | Modal/dialog to select reason |
-| **Implementation** | In `/admin/documents/review/{id}/page.tsx`, add button + modal with reason textarea. Call `POST /api/admin/documents/instructor/{id}/reject` with documentKey + reason. Refresh document list. | |
-| **Effort** | Low (~30 minutes: button + modal component + API call) | **PRIORITY: Do this first to reach 100%** |
+The reject UI is fully implemented. Each document in the review page has an X (reject) button that opens an inline `RejectModal` with a reason textarea. Calls `POST /api/admin/documents/instructor/{id}/reject` with `documentKey` + `reason`. Sends email to instructor. Refreshes the document list on success.
+
+**File:** `app/admin/documents/review/[instructorId]/page.tsx` — `rejectDoc()` + `RejectModal` component.
 
 ### 2. Audit Logging for Document Actions (COMPLIANCE - 1 HOUR)
 

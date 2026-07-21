@@ -14,6 +14,17 @@ import {
   User,
 } from 'lucide-react';
 
+// Client-side display status → consistent badge styles
+// These are the API-transformed display statuses (not raw DB statuses)
+const CLIENT_STATUS_STYLE: Record<string, { label: string; badge: string; dot: string }> = {
+  upcoming:               { label: 'Confirmed',             badge: 'bg-emerald-950/40 text-emerald-300 border border-emerald-700/50', dot: 'bg-emerald-400' },
+  completed:              { label: 'Completed',             badge: 'bg-sky-950/40 text-sky-300 border border-sky-700/50',             dot: 'bg-sky-400' },
+  awaiting_payment:       { label: 'Awaiting Payment',      badge: 'bg-violet-950/40 text-violet-300 border border-violet-700/50',    dot: 'bg-violet-400' },
+  awaiting_confirmation:  { label: 'Pending Approval',      badge: 'bg-amber-950/40 text-amber-300 border border-amber-700/50',       dot: 'bg-amber-400' },
+  cancelled:              { label: 'Cancelled',             badge: 'bg-rose-950/40 text-rose-300 border border-rose-700/50',          dot: 'bg-rose-400' },
+  expired:                { label: 'Expired',               badge: 'bg-slate-800/60 text-slate-400 border border-slate-700/50',       dot: 'bg-slate-500' },
+};
+
 interface Booking {
   id: string;
   date: string;
@@ -190,15 +201,7 @@ export default function ClientBookingsPage() {
         {filteredBookings.length > 0 ? (
           <div className="space-y-4">
             {filteredBookings.map((booking) => {
-              const statusMap: Record<string, { label: string; cls: string }> = {
-                upcoming:               { label: 'Upcoming',             cls: 'bg-green-900/40 text-green-300' },
-                completed:              { label: 'Completed',            cls: 'bg-slate-700 text-slate-300' },
-                awaiting_payment:       { label: 'Awaiting Payment',     cls: 'bg-yellow-900/40 text-yellow-300' },
-                awaiting_confirmation:  { label: 'Awaiting Confirmation',cls: 'bg-amber-900/40 text-amber-300' },
-                cancelled:              { label: 'Cancelled',            cls: 'bg-red-900/40 text-red-300' },
-                expired:                { label: 'Expired',              cls: 'bg-slate-700 text-slate-400' },
-              };
-              const s = statusMap[booking.status] ?? statusMap.upcoming;
+              const s = CLIENT_STATUS_STYLE[booking.status] ?? CLIENT_STATUS_STYLE.upcoming;
 
               return (
                 <Link
@@ -218,7 +221,8 @@ export default function ClientBookingsPage() {
                         <h3 className="text-base font-bold text-slate-50 truncate">
                           {booking.instructor.name}
                         </h3>
-                        <span className={`inline-block px-2 py-0.5 text-xs font-semibold rounded mt-0.5 ${s.cls}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-full mt-0.5 ${s.badge}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
                           {s.label}
                         </span>
                       </div>

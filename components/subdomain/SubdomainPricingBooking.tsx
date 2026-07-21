@@ -17,6 +17,7 @@ interface Package {
 interface InstructorProps {
   id: string;
   name: string;
+  displayName?: string;
   profileImage: string | null;
   hourlyRate: number;
   averageRating: number | null;

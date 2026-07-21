@@ -13,22 +13,47 @@ interface BookingWithClient {
   } | null;
 }
 
+const PERTH_TIME_ZONE = 'Australia/Perth';
+const PERTH_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function getPerthDateParts(date: Date) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PERTH_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? '0');
+
+  return {
+    year: value('year'),
+    month: value('month'),
+    day: value('day'),
+  };
+}
+
+function getPerthDayRange(date: Date) {
+  const { year, month, day } = getPerthDateParts(date);
+  const start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - PERTH_OFFSET_MS);
+  const end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - PERTH_OFFSET_MS);
+  return { start, end };
+}
+
 export async function generatePackageExpiryAlerts() {
   try {
     console.log('⏰ Starting package expiry alerts job...');
 
     const now = new Date();
 
-    // Function to get day range (start to end of day)
-    const getDayRange = (date: Date) => {
-      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-      const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-      return { start, end };
-    };
-
     // 1. Packages expiring in 7 days
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const range7d = getDayRange(in7Days);
+    const range7d = getPerthDayRange(in7Days);
 
     const expiringIn7Days = await prisma.booking.findMany({
       where: {
@@ -78,7 +103,7 @@ export async function generatePackageExpiryAlerts() {
 
     // 2. Packages expiring in 1 day
     const in1Day = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
-    const range1d = getDayRange(in1Day);
+    const range1d = getPerthDayRange(in1Day);
 
     const expiringIn1Day = await prisma.booking.findMany({
       where: {
@@ -127,7 +152,7 @@ export async function generatePackageExpiryAlerts() {
     }
 
     // 3. Packages expiring today
-    const rangeToday = getDayRange(now);
+    const rangeToday = getPerthDayRange(now);
 
     const expiringToday = await prisma.booking.findMany({
       where: {
@@ -177,7 +202,7 @@ export async function generatePackageExpiryAlerts() {
 
     // 4. Packages that expired yesterday (update them and notify)
     const yesterday = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
-    const rangeYesterday = getDayRange(yesterday);
+    const rangeYesterday = getPerthDayRange(yesterday);
 
     const expiredYesterday = await prisma.booking.findMany({
       where: {

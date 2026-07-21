@@ -10,6 +10,121 @@ interface WorkingHours {
   [key: string]: TimeSlot[]
 }
 
+// HH:MM format regex — Perth wall-clock time (AWST, no DST)
+const HH_MM_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+// ── Availability slot cache (Gap 20) ─────────────────────────────────────────
+// getAvailableSlots makes 4 DB round-trips per call. Under concurrent voice-AI
+// booking traffic (multiple callers hitting the same instructor's slots at once)
+// this becomes the first DB scaling bottleneck.
+//
+// Fix: 30-second in-process TTL cache keyed by instructorId + date + duration.
+// Cache is invalidated immediately when a booking is created or cancelled via
+// invalidateAvailabilityCache(instructorId, dateStr).
+//
+// Production with multiple Vercel instances: each instance has its own cache
+// (acceptable — 30s TTL means at worst a caller sees a 30s-stale list of slots,
+// and the createBooking endpoint still double-checks availability before confirming).
+// For Redis-backed cross-instance invalidation, replace the Map with ioredis/Upstash.
+
+interface CacheEntry {
+  slots: Date[];
+  expiresAt: number;
+}
+
+const CACHE_TTL_MS = 30_000; // 30 seconds
+const availabilityCache = new Map<string, CacheEntry>();
+
+function cacheKey(instructorId: string, dateStr: string, durationMinutes: number): string {
+  return `${instructorId}:${dateStr}:${durationMinutes}`;
+}
+
+function getCached(key: string): Date[] | null {
+  const entry = availabilityCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    availabilityCache.delete(key);
+    return null;
+  }
+  return entry.slots;
+}
+
+function setCached(key: string, slots: Date[]): void {
+  availabilityCache.set(key, { slots, expiresAt: Date.now() + CACHE_TTL_MS });
+  // Evict expired entries periodically (1% chance) to prevent unbounded memory growth
+  if (Math.random() < 0.01) {
+    const now = Date.now();
+    for (const [k, v] of availabilityCache.entries()) {
+      if (now > v.expiresAt) availabilityCache.delete(k);
+    }
+  }
+}
+
+/**
+ * Invalidate availability cache for an instructor on a specific date.
+ * Call this after creating, confirming, cancelling, or rescheduling a booking.
+ * Clears all duration variants for that instructor+date.
+ */
+export function invalidateAvailabilityCache(instructorId: string, dateStr: string): void {
+  const prefix = `${instructorId}:${dateStr}:`;
+  for (const key of availabilityCache.keys()) {
+    if (key.startsWith(prefix)) availabilityCache.delete(key);
+  }
+}
+
+/**
+ * Validate and parse working hours from the DB JSON blob.
+ * Returns the parsed WorkingHours if valid, or null if malformed.
+ * Logs a specific error so the instructor can diagnose the issue.
+ */
+function parseWorkingHours(raw: unknown, instructorId: string): WorkingHours | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    // This should not happen — settings route validates on write, but DB may have legacy data
+    console.error(`[Availability] Invalid workingHours structure for instructor ${instructorId}:`, typeof raw)
+    return null
+  }
+
+  const hours = raw as Record<string, unknown>
+  const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+  const validated: WorkingHours = {}
+
+  for (const day of DAYS) {
+    const slots = hours[day]
+    if (slots === undefined || slots === null) {
+      validated[day] = []
+      continue
+    }
+    if (!Array.isArray(slots)) {
+      console.error(`[Availability] workingHours.${day} is not an array for instructor ${instructorId}`)
+      return null
+    }
+    const parsedSlots: TimeSlot[] = []
+    for (const slot of slots) {
+      if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+        console.error(`[Availability] workingHours.${day} contains non-object slot for instructor ${instructorId}:`, slot)
+        return null
+      }
+      const s = slot as Record<string, unknown>
+      if (typeof s.start !== 'string' || typeof s.end !== 'string') {
+        console.error(`[Availability] workingHours.${day} slot missing start/end strings for instructor ${instructorId}:`, slot)
+        return null
+      }
+      if (!HH_MM_REGEX.test(s.start) || !HH_MM_REGEX.test(s.end)) {
+        console.error(`[Availability] workingHours.${day} slot has invalid HH:MM format for instructor ${instructorId}: start="${s.start}" end="${s.end}"`)
+        return null
+      }
+      if (s.start >= s.end) {
+        console.error(`[Availability] workingHours.${day} slot start >= end for instructor ${instructorId}: "${s.start}" >= "${s.end}"`)
+        return null
+      }
+      parsedSlots.push({ start: s.start, end: s.end })
+    }
+    validated[day] = parsedSlots
+  }
+
+  return validated
+}
+
 // Parse HH:mm string (Perth local time) into a UTC Date for the given YYYY-MM-DD.
 // Working hours in the DB are always Perth wall-clock time (AWST = UTC+8).
 // Constructing with +08:00 offset instead of Z ensures 09:00 Perth = 01:00 UTC,
@@ -28,6 +143,13 @@ export class AvailabilityService {
     date: Date,
     lessonDurationMinutes: number = 60
   ): Promise<Date[]> {
+    const dateStr = date.toISOString().slice(0, 10);
+    const key = cacheKey(instructorId, dateStr, lessonDurationMinutes);
+
+    // Return cached result if still fresh
+    const cached = getCached(key);
+    if (cached) return cached;
+
     // 1. Get instructor's working hours and buffer settings for this day
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
@@ -47,14 +169,21 @@ export class AvailabilityService {
     const effectiveGapMinutes = Math.max(bufferMinutes, travelMinutes);
 
     const dayName = format(date, 'EEEE').toLowerCase()
-    const workingHours = (instructor.workingHours as unknown) as WorkingHours
+
+    // Validate working hours JSON — returns null if malformed, with a logged error
+    const workingHours = parseWorkingHours(instructor.workingHours, instructorId)
+    if (!workingHours) {
+      // Malformed working hours — return empty rather than crashing.
+      // The error is already logged above so the instructor can diagnose it.
+      return []
+    }
     const daySlots = workingHours[dayName] || []
 
     if (daySlots.length === 0) return []
 
     // 2. Get existing bookings for this day (excluding PDA tests — handled separately)
     // Use UTC day boundaries derived from the date's ISO string to avoid server TZ shifting
-    const dateStr = date.toISOString().slice(0, 10)
+    // dateStr is already defined above (used for cache key)
     const startOfDay = new Date(`${dateStr}T00:00:00.000Z`)
     const endOfDay   = new Date(`${dateStr}T23:59:59.999Z`)
 
@@ -141,6 +270,8 @@ export class AvailabilityService {
       }
     }
 
+    // Store in cache before returning
+    setCached(key, availableSlots);
     return availableSlots
   }
 

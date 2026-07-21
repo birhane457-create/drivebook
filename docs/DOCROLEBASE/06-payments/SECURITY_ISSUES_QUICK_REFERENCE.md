@@ -1,13 +1,27 @@
 # Booking & Payment Security Issues - Quick Reference
 
 **Generated:** June 15, 2026
-**Updated:** June 19, 2026 (all HIGH priority issues resolved)
+**Updated:** July 2026 (production-readiness audit — additional issues found and resolved)
 **Full Audit:** `BOOKING_PAYMENT_SECURITY_AUDIT.md`
-**Total Issues:** 10 (0 CRITICAL, 10 MEDIUM)
 
 ---
 
-## ✅ RESOLVED — Issues Fixed June 19, 2026
+## ✅ RESOLVED — July 2026 Production-Readiness Audit
+
+| # | Issue | Fix Applied |
+|---|-------|-------------|
+| B5 | Password fields persisted in localStorage on every keystroke | `saveToLocalStorage` now excludes `accountHolderPassword` and `accountHolderConfirmPassword` |
+| B6 | 3DS `requires_action` showed error instead of calling `stripe.handleNextAction()` | Fixed — `handleNextAction({ clientSecret })` called; 3DS-enrolled cards now work |
+| B7 | Payment page had 4 `console.log` statements exposing payment intent data | All removed |
+| B9 | `customer@example.com` hardcoded fallback in payment intent creation | Replaced with `null` — Stripe omits the field gracefully |
+| B12 | Timezone bug in `validate-slots` — dates parsed as server UTC not Perth AWST | Fixed — ISO `+08:00` offset parse |
+| B13 | Same timezone bug in `check-and-reserve` POST and DELETE | Fixed — same `+08:00` parse, renamed to `parsePerthDateTime` |
+| B8 | `validate-slots` included `COMPLETED` (past) bookings in conflict check | Removed `COMPLETED` from the status filter |
+| B1 | Slot DELETE sent params in request body — server reads URL query params, slots never released | `BookingDetailsForm` now sends params as URL query string |
+
+---
+
+## ✅ RESOLVED — June 19, 2026
 
 | # | Issue | Status | Fix Applied |
 |---|-------|--------|-------------|

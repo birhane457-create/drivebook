@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { geocode, distanceKm } from '@/lib/services/geocode';
+import { resolveLocationStatic } from '@/lib/services/resolve-location';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,8 +110,12 @@ export async function GET(req: NextRequest) {
     }
 
     // --- Location / radius search ---
-    // 1. Geocode the searched location
-    const searchPoint = await geocode(location);
+    // 1. Resolve location — static postcode/suburb lookup first (no API call),
+    //    fall back to Nominatim geocoding for free-text addresses.
+    const staticResolved = resolveLocationStatic(location);
+    const searchPoint = staticResolved
+      ? { lat: staticResolved.lat, lng: staticResolved.lng, displayName: staticResolved.displayName }
+      : await geocode(location);
 
     if (!searchPoint) {
       // Nominatim couldn't resolve — fall back to text match on serviceAreas/baseAddress

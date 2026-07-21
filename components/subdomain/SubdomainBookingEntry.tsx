@@ -8,6 +8,7 @@ interface SubdomainBookingEntryProps {
   instructor: {
     id: string;
     name: string;
+    displayName?: string;
     profileImage: string | null;
     hourlyRate: number;
     averageRating: number | null;

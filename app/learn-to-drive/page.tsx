@@ -32,8 +32,9 @@ function SiteHeader() {
           <Link href="/pda-guide" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">PDA Guide</Link>
           <Link href="/for-instructors" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">For Instructors</Link>
           <Link href="/blog" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Blog</Link>
+          <Link href="/driving-lessons" className="text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors no-underline">Find Instructors</Link>
           <Link href="/book" className="ml-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-sm no-underline hover:from-violet-500 hover:to-indigo-500 transition-all">
-            Find Instructor
+            Book Now
           </Link>
         </nav>
       </div>
@@ -70,10 +71,10 @@ function StepCard({ num, title, desc, href }: { num: string; title: string; desc
 function ArticleLink({ href, title, tag }: { href: string; title: string; tag: string }) {
   return (
     <Link href={href} className="flex items-center justify-between p-4 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/20 transition-all no-underline group">
-      <div className="flex items-center gap-3 min-w-0">
+      <span className="flex items-center gap-3 min-w-0">
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${tag === 'Guide' ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'}`}>{tag}</span>
         <span className="text-sm font-medium text-white group-hover:text-violet-200 transition-colors truncate">{title}</span>
-      </div>
+      </span>
       <ChevronRight className="h-4 w-4 text-white/30 group-hover:text-violet-400 shrink-0 ml-3 transition-colors" />
     </Link>
   )

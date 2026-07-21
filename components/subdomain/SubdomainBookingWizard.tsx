@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
@@ -14,6 +14,7 @@ interface SubdomainBookingWizardProps {
   instructor: {
     id: string;
     name: string;
+    displayName?: string;
     profileImage: string | null;
     hourlyRate: number;
     averageRating: number | null;
@@ -58,6 +59,7 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
     setInstructor({
       id: instructor.id,
       name: instructor.name,
+      displayName: instructor.displayName ?? instructor.name,
       profileImage: instructor.profileImage,
       hourlyRate: instructor.hourlyRate,
       averageRating: instructor.averageRating,
@@ -232,14 +234,14 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
               style={
                 i <= currentIndex
                   ? { backgroundColor: primary, borderColor: primary, color: '#fff' }
-                  : { borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.4)', backgroundColor: 'rgba(255,255,255,0.05)' }
+                  : { borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.65)', backgroundColor: 'rgba(255,255,255,0.08)' }
               }
             >
               {i < currentIndex ? '✓' : i + 1}
             </div>
             <span
               className="text-xs mt-1 hidden sm:block"
-              style={{ color: i === currentIndex ? '#fff' : 'rgba(255,255,255,0.4)', fontWeight: i === currentIndex ? 600 : 400 }}
+              style={{ color: i === currentIndex ? '#fff' : 'rgba(255,255,255,0.65)', fontWeight: i === currentIndex ? 600 : 400 }}
             >
               {STEP_LABELS[s]}
             </span>
@@ -316,7 +318,7 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
         <button
           type="button"
           onClick={() => { setPaymentOpened(false); setPaymentUrl(null); setStep(initialPackage ? (instructor.offersTestPackage ? 'test-package' : 'book-type') : 'package'); }}
-          className="w-full text-sm text-white/40 underline hover:text-white/70"
+          className="w-full text-sm text-white/60 underline hover:text-white/90"
         >
           Start a new booking
         </button>
@@ -356,7 +358,7 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
         <div className="space-y-4">
           <div className="text-center space-y-1 mb-2">
             <h3 className="text-xl font-bold text-white">Add a PDA Test Pack?</h3>
-            <p className="text-sm text-white/50">Optional add-on configured by your instructor</p>
+            <p className="text-sm text-white/70">Optional add-on configured by your instructor</p>
           </div>
 
           {/* Card — highlights when selected */}
@@ -371,12 +373,12 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
               <div className="space-y-1 flex-1">
                 <p className="font-semibold text-white text-base">PDA Test Pack</p>
                 {instructor.testPackageDuration && (
-                  <p className="text-sm text-white/50">{instructor.testPackageDuration} min session</p>
+                  <p className="text-sm text-white/70">{instructor.testPackageDuration} min session</p>
                 )}
                 {instructor.testPackageIncludes && instructor.testPackageIncludes.length > 0 && (
                   <ul className="mt-2 space-y-0.5">
                     {instructor.testPackageIncludes.map((item, i) => (
-                      <li key={i} className="flex items-center gap-1.5 text-sm text-white/70">
+                      <li key={i} className="flex items-center gap-1.5 text-sm text-white/85">
                         <span className="text-green-400">✓</span> {item}
                       </li>
                     ))}
@@ -413,7 +415,7 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
           <button
             type="button"
             onClick={handleBack}
-            className="w-full text-sm text-white/30 hover:text-white/60 underline"
+            className="w-full text-sm text-white/60 hover:text-white/90 underline"
           >
             ← Back
           </button>
@@ -428,7 +430,7 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
             <button
               type="button"
               onClick={handleBack}
-              className="flex-1 py-3 rounded-xl border border-white/20 text-white/70 font-semibold hover:border-white/40 hover:text-white"
+              className="flex-1 py-3 rounded-xl border border-white/30 text-white/85 font-semibold hover:border-white/60 hover:text-white"
             >
               ← Back
             </button>
@@ -453,7 +455,7 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
             <button
               type="button"
               onClick={handleBack}
-              className="flex-1 py-3 rounded-xl border border-white/20 text-white/70 font-semibold hover:border-white/40 hover:text-white"
+              className="flex-1 py-3 rounded-xl border border-white/30 text-white/85 font-semibold hover:border-white/60 hover:text-white"
             >
               ← Back
             </button>
@@ -478,7 +480,7 @@ export default function SubdomainBookingWizard({ instructor, primary, initialPac
             <button
               type="button"
               onClick={handleBack}
-              className="flex-1 py-3 rounded-xl border border-white/20 text-white/70 font-semibold hover:border-white/40 hover:text-white"
+              className="flex-1 py-3 rounded-xl border border-white/30 text-white/85 font-semibold hover:border-white/60 hover:text-white"
             >
               ← Back
             </button>

@@ -6,8 +6,10 @@ import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { bulkBookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { notifyShortNoticeBookingRequest, notifyClientBookingPendingApproval, notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
+import { getDisplayName } from '@/lib/utils/account';
 import { calculatePackagePriceDynamic } from '@/lib/config/packages';
 import crypto from 'crypto';
+import { invalidateAvailabilityCache } from '@/lib/services/availability';
 
 // P0-2 FIX: Define constant here (was missing — caused key.length > undefined to always be false)
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
@@ -183,6 +185,9 @@ export async function POST(req: NextRequest) {
       select: {
         id: true,
         name: true,
+        businessName: true,
+        accountType: true,
+        paymentMode: true,
         hourlyRate: true,
         userId: true,
         approvalStatus: true,
@@ -230,6 +235,18 @@ export async function POST(req: NextRequest) {
         error: 'This instructor is not currently accepting new bookings.',
         code: 'INSTRUCTOR_PAUSED',
       }, { status: 403 });
+    }
+
+    // ── Payment mode guard (phase 2 safety net) ───────────────────────────────
+    // DIRECT payment mode (school pays directly to their own Stripe) is not yet implemented.
+    // This guard prevents any account accidentally set to DIRECT from breaking the payment flow.
+    // Remove this block in phase 2 when Direct Charges are implemented.
+    if ((instructor as any).paymentMode === 'DIRECT') {
+      console.error(`[bulk-booking] instructor ${instructor.id} has paymentMode=DIRECT which is not yet implemented`);
+      return NextResponse.json({
+        error: 'Direct payment mode is not yet available. Please contact support.',
+        code: 'PAYMENT_MODE_NOT_IMPLEMENTED',
+      }, { status: 503 });
     }
 
     // Create user account or link to existing
@@ -775,6 +792,15 @@ export async function POST(req: NextRequest) {
       shortNotice: isShortNotice,
     });
 
+    // Invalidate availability cache for this instructor+date so the next availability
+    // query reflects the newly created booking immediately.
+    if (booking.startTime) {
+      invalidateAvailabilityCache(
+        resolvedInstructorId,
+        (booking.startTime as Date).toISOString().slice(0, 10)
+      );
+    }
+
     // ── Create PDA Test Booking if included ───────────────────────────────────
     // If user selected "include PDA test package", create PDATestBooking linked to this booking
     if (data.includeTestPackage) {
@@ -933,7 +959,7 @@ export async function POST(req: NextRequest) {
           await notifyShortNoticeBookingRequest(instructorUser.id, clientName, booking.id, startTime ?? new Date());
         }
         if (userId) {
-          await notifyClientBookingPendingApproval(userId, instructor.name, booking.id, startTime ?? new Date());
+          await notifyClientBookingPendingApproval(userId, instructor.name, booking.id, startTime ?? new Date(), instructor);
         }
       } catch (notifErr) {
         logger.error('Short-notice notification failed', {
@@ -950,7 +976,7 @@ export async function POST(req: NextRequest) {
           await notifyBookingRequest(instructorUser.id, clientName, booking.id, startTime ?? new Date());
         }
         if (userId) {
-          await notifyClientBookingConfirmed(userId, instructor.name, booking.id, startTime ?? new Date());
+          await notifyClientBookingConfirmed(userId, instructor.name, booking.id, startTime ?? new Date(), instructor);
         }
       } catch (notifErr) {
         logger.error('Booking notification failed', {
@@ -1051,9 +1077,10 @@ export async function POST(req: NextRequest) {
         pickupVerified:   data.scheduledBookings?.[0]?.pickupValidated !== false,
         // Pre-assembled confirmation string the AI reads verbatim.
         // Avoids template construction in the prompt.
+        // Uses getDisplayName — for BUSINESS accounts the school name is read, not the owner's personal name.
         confirmation: isShortNotice
-          ? `${instructor.name} needs to approve this booking first. You will be notified within a few minutes.`
-          : `Your ${packageLabels[data.packageType] ?? data.packageType} with ${instructor.name} is reserved for 10 minutes. A payment link has been sent to your phone.`,
+          ? `${getDisplayName(instructor)} needs to approve this booking first. You will be notified within a few minutes.`
+          : `Your ${packageLabels[data.packageType] ?? data.packageType} with ${getDisplayName(instructor)} is reserved for 10 minutes. A payment link has been sent to your phone.`,
       },
     };
     // (Idempotency key was already persisted inside the $transaction above)

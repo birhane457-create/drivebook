@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
 import { getCommissionRate } from '@/lib/services/platform-pricing';
+import { getDisplayName } from '@/lib/utils/account';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,9 +108,18 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        instructor: { select: { name: true, subscriptionTier: true } }
+        instructor: { select: { id: true, name: true, businessName: true, accountType: true, paymentMode: true, subscriptionTier: true } }
       },
     }) as any;
+
+    // ── Payment mode guard (phase 2 safety net) ───────────────────────────────
+    if (booking?.instructor?.paymentMode === 'DIRECT') {
+      console.error(`[create-intent] instructor ${booking.instructor.id} has paymentMode=DIRECT which is not yet implemented`);
+      return NextResponse.json({
+        error: 'Direct payment mode is not yet available. Please contact support.',
+        code: 'PAYMENT_MODE_NOT_IMPLEMENTED',
+      }, { status: 503 });
+    }
 
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
@@ -245,8 +255,9 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
     }
     // dedupeResult.status === 'create_new' — fall through to create
 
-    // Get clientEmail — look up linked client's user email
-    let clientEmail = 'customer@example.com';
+    // Get clientEmail — look up linked client's user email.
+    // Use null if not found — never fall back to a placeholder that misdirects Stripe receipts.
+    let clientEmail: string | null = null;
     if (booking.clientId) {
       const client = await prisma.client.findUnique({
         where: { id: booking.clientId },
@@ -265,8 +276,8 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       instructorId: booking.instructorId,
       bookingId: booking.id,
       commissionRate,
-      clientEmail,
-      description: `Driving lesson with ${booking.instructor.name}`,
+      clientEmail: clientEmail ?? '',
+      description: `Driving lesson with ${getDisplayName(booking.instructor)}`,
     });
 
     // Update booking with payment intent ID

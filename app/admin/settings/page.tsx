@@ -80,7 +80,7 @@ export default async function AdminSettingsPage() {
         <div className="bg-slate-900 rounded-xl border border-slate-800">
           <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
             <h2 className="font-semibold text-slate-100">Subscription Tiers</h2>
-            <span className="text-xs text-slate-500">Prices from env Â· commissions editable on Pricing page</span>
+            <span className="text-xs text-slate-500">Prices from env · commissions editable on Pricing page</span>
           </div>
           <div className="p-6">
             <div className="grid sm:grid-cols-3 gap-4">
@@ -88,7 +88,7 @@ export default async function AdminSettingsPage() {
                 <div key={t.name} className={`border-2 ${t.border} rounded-xl p-4`}>
                   <p className={`font-bold text-sm mb-2 ${t.color}`}>{t.name}</p>
                   <p className="text-2xl font-bold text-slate-100">${t.monthly}<span className="text-sm font-normal text-slate-500">/mo</span></p>
-                  <p className="text-xs text-slate-500 mb-3">${t.annual}/yr Â· {t.trial}-day trial</p>
+                  <p className="text-xs text-slate-500 mb-3">${t.annual}/yr · {t.trial}-day trial</p>
                   <div className="space-y-1 text-xs text-slate-400">
                     <div className="flex justify-between"><span>Commission</span><span className="font-medium">{t.commission}%</span></div>
                   </div>

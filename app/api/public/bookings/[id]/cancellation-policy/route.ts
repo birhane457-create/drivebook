@@ -82,20 +82,27 @@ export async function GET(
     let refundAmount = 0
     let reason = ''
 
+    // Read cancellation window from PlatformSettings — never hardcode
+    const pricingSettings = await prisma.platformSettings.findFirst({
+      select: { lateCancellationWindowHours: true },
+    }).catch(() => null)
+    const lateWindow = pricingSettings?.lateCancellationWindowHours ?? 24
+    const fullRefundWindow = lateWindow * 2
+
     if (isPastBooking) {
       reason = 'Lesson has already passed — no refund applies'
     } else if (isNonRefundable) {
-      reason = 'Booking is marked non-refundable (instructor rescheduled within 24h window)'
-    } else if (hoursUntilLesson >= 48) {
+      reason = `Booking is marked non-refundable (instructor rescheduled within ${lateWindow}h window)`
+    } else if (hoursUntilLesson >= fullRefundWindow) {
       refundPercentage = 100
       refundAmount = booking.price
-      reason = 'More than 48 hours notice — full refund applies'
-    } else if (hoursUntilLesson >= 24) {
+      reason = `More than ${fullRefundWindow} hours notice — full refund applies`
+    } else if (hoursUntilLesson >= lateWindow) {
       refundPercentage = 50
       refundAmount = parseFloat((booking.price * 0.5).toFixed(2))
-      reason = 'Between 24 and 48 hours notice — 50% refund applies'
+      reason = `Between ${lateWindow} and ${fullRefundWindow} hours notice — 50% refund applies`
     } else {
-      reason = 'Less than 24 hours notice — no refund applies'
+      reason = `Less than ${lateWindow} hours notice — no refund applies`
     }
 
     return NextResponse.json({

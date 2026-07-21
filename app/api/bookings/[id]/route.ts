@@ -521,7 +521,8 @@ export async function DELETE(
         await notifyClientBookingCancelled(
           booking.client.userId,
           booking.instructor?.name || 'Your instructor',
-          params.id
+          params.id,
+          booking.instructor ?? undefined
         )
       }
     } catch (notifError) {

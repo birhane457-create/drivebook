@@ -18,7 +18,7 @@
 - Production: Fails open for non-critical endpoints, fails closed for financial operations
 - Development: Fails open (allows requests if limiter unavailable)
 
-### Rate Limiters Defined (9 total)
+### Rate Limiters Defined (11 total)
 
 | Limiter | Endpoint(s) | Limit | Window | Purpose |
 |---------|------------|-------|--------|---------|
@@ -32,6 +32,8 @@
 | `adminActionRateLimit` | Admin actions (approve, suspend, etc.) | 30 | 1 min | General admin operations per admin |
 | `apiRateLimit` | General API protection | 100 | 1 min | Default API protection per user |
 | `authRateLimit` | Login attempts | 5 | 15 min | Brute force prevention per IP |
+| `reviewRateLimit` | `POST /api/reviews` | 10 | 1 hr | Prevent review spam per user |
+| `setupTokenRateLimit` | `GET /api/auth/verify-setup-token` | 20 | 15 min | Prevent setup-token enumeration per IP |
 
 ### Upstash Configuration
 
@@ -109,6 +111,8 @@ const identifier = getRateLimitIdentifier(userId, ipAddress, 'booking');
 | `app/api/payments/create-intent/route.ts` | `apiRateLimit` | userId |
 | `app/api/stripe/webhook/route.ts` | `webhookRateLimit` | IP address |
 | `app/api/auth/mobile-login/route.ts` | `authRateLimit` | IP address |
+| `app/api/reviews/route.ts` | `reviewRateLimit` | userId |
+| `app/api/auth/verify-setup-token/route.ts` | `setupTokenRateLimit` | IP address |
 
 ---
 

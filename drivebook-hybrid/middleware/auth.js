@@ -2,15 +2,95 @@
 
 const config = require('../utils/config');
 
-// ── Per-IP rate limiting (in-process, no Redis dependency) ───────────────────
-// Limits how many requests any single IP can make per minute across all proxy
-// routes. This is a defense-in-depth measure — the main app has its own rate
-// limits per endpoint, but the proxy needs its own to prevent forwarding floods.
+// ── Per-IP rate limiting ──────────────────────────────────────────────────────
+// Gap 21 fix: limits are now applied via Redis when REDIS_URL is configured,
+// so they are enforced per-IP across ALL Railway instances rather than
+// per-container. Falls back to the in-process Map when Redis is unavailable
+// (same pattern used by voice-session-service.js).
 //
-// Uses a simple sliding-window map. Not cluster-safe (fine for single-instance
-// Railway/Render deployments). For multi-instance, replace with a Redis counter.
-const IP_RATE_LIMIT = 60;       // max requests per window
-const IP_RATE_WINDOW_MS = 60_000; // 1 minute
+// Algorithm: sliding-window counter using a Redis INCR + EXPIRE approach.
+// - On first hit within the window: SET key 1 EX windowSeconds (atomic via Lua)
+// - On subsequent hits: INCR the key (TTL already set by first hit)
+// - Key format: rl:ip:<ip>  — namespaced to avoid collisions with session keys
+
+const IP_RATE_LIMIT    = 60;       // max requests per window
+const IP_RATE_WINDOW_S = 60;       // 1 minute (seconds, for Redis EX)
+const IP_RATE_WINDOW_MS = IP_RATE_WINDOW_S * 1000;
+
+// ── Redis client (shared singleton, lazy-initialised) ────────────────────────
+// We deliberately do NOT import voice-session-service.js here to avoid a
+// circular dependency. Instead we create our own ioredis client using the
+// same REDIS_URL, but only if ioredis is available and the URL is configured.
+
+let redisClient     = null;
+let redisReady      = false;
+
+function initRateLimitRedis() {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return; // no Redis configured — use in-process Map
+
+  try {
+    const Redis = require('ioredis');
+    const client = new Redis(redisUrl, {
+      maxRetriesPerRequest: 2,
+      lazyConnect: false,
+      enableReadyCheck: true,
+      retryStrategy: (times) => (times > 5 ? null : Math.min(times * 300, 2000)),
+      keyPrefix: 'rl:', // namespace: rl:ip:<ip>
+    });
+
+    client.on('ready', () => {
+      redisClient = client;
+      redisReady  = true;
+    });
+
+    client.on('error', () => {
+      redisReady = false; // fall back to Map until reconnected
+    });
+
+    client.on('ready', () => { redisReady = true; }); // re-enable on reconnect
+
+    client.on('close', () => {
+      redisClient = null;
+      redisReady  = false;
+    });
+  } catch {
+    // ioredis not installed or Redis URL invalid — in-process Map is the fallback
+  }
+}
+
+initRateLimitRedis();
+
+// ── Redis sliding-window check (atomic Lua) ───────────────────────────────────
+// Returns true if the request is allowed, false if rate limit exceeded.
+// Uses INCR + EXPIRE: the first INCR within a window sets TTL; subsequent
+// INCRs just increment the counter. If count > limit, reject.
+
+const INCR_AND_EXPIRE_SCRIPT = `
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+`;
+
+async function checkRedisRateLimit(ip) {
+  try {
+    const key = `ip:${ip}`; // keyPrefix 'rl:' prepended by ioredis → 'rl:ip:<ip>'
+    const count = await redisClient.eval(
+      INCR_AND_EXPIRE_SCRIPT,
+      1,           // numkeys
+      key,         // KEYS[1]
+      IP_RATE_WINDOW_S  // ARGV[1] — TTL in seconds
+    );
+    return count <= IP_RATE_LIMIT;
+  } catch {
+    // Redis eval failed — fail open (allow request) to avoid blocking legitimate traffic
+    return true;
+  }
+}
+
+// ── In-process Map fallback (single-instance or Redis unavailable) ────────────
 const ipRequestMap = new Map(); // ip → [timestamp, ...]
 
 // Sweep stale entries every 5 minutes to prevent memory growth
@@ -27,7 +107,7 @@ const sweepTimer = setInterval(() => {
 }, 5 * 60_000);
 if (sweepTimer.unref) sweepTimer.unref();
 
-function checkIpRateLimit(ip) {
+function checkMapRateLimit(ip) {
   const now = Date.now();
   const cutoff = now - IP_RATE_WINDOW_MS;
   const timestamps = (ipRequestMap.get(ip) || []).filter(t => t > cutoff);
@@ -97,23 +177,38 @@ function verifyVapiSecret(req, res, next) {
  * ipRateLimit
  *
  * Rejects requests from IPs that exceed IP_RATE_LIMIT requests per minute.
+ * Uses Redis when configured (cross-instance, correct for multi-container
+ * Railway deployments). Falls back to in-process Map for single-instance
+ * or when Redis is temporarily unavailable.
+ *
  * Applied after verifyVapiSecret so auth failures don't consume rate limit budget.
  */
 function ipRateLimit(req, res, next) {
   if (config.NODE_ENV === 'test') return next();
 
-  // Use req.ip — Express resolves this correctly when app.set('trust proxy', 1) is set.
-  // This prevents spoofing via a crafted X-Forwarded-For header.
   const ip = req.ip || req.socket?.remoteAddress || 'unknown';
 
-  if (!checkIpRateLimit(ip)) {
-    return res.status(429).json({
-      error: 'Too Many Requests',
-      message: 'Rate limit exceeded. Please wait before retrying.',
-    });
+  if (redisReady && redisClient) {
+    // Async Redis path
+    checkRedisRateLimit(ip).then(allowed => {
+      if (!allowed) {
+        return res.status(429).json({
+          error: 'Too Many Requests',
+          message: 'Rate limit exceeded. Please wait before retrying.',
+        });
+      }
+      next();
+    }).catch(() => next()); // fail open on unexpected error
+  } else {
+    // Synchronous in-process Map path (single-instance or Redis unavailable)
+    if (!checkMapRateLimit(ip)) {
+      return res.status(429).json({
+        error: 'Too Many Requests',
+        message: 'Rate limit exceeded. Please wait before retrying.',
+      });
+    }
+    next();
   }
-
-  next();
 }
 
 /**

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
+import { getDisplayName } from '@/lib/utils/account';
 
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,9 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             name: true,
+            businessName: true,
+            accountType: true,
+            subscriptionTier: true,
             phone: true,
             profileImage: true,
             user: {
@@ -75,7 +79,7 @@ export async function GET(req: NextRequest) {
     const formattedBookings = bookings.map((booking) => ({
       id: booking.id,
       instructorId: booking.instructorId,
-      instructorName: booking.instructor.name,
+      instructorName: getDisplayName(booking.instructor),
       instructorPhone: booking.instructor.phone,
       instructorEmail: booking.instructor.user.email,
       instructorImage: booking.instructor.profileImage,

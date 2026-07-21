@@ -17,6 +17,12 @@
  * Bank transfer fallback instructors are NOT processed here — admin handles those
  * manually via the payouts admin page after confirming bank details.
  *
+ * Batching:
+ *   PAYOUT_BATCH_SIZE env var (default 20) limits instructors processed per invocation.
+ *   This prevents Vercel function timeouts on large datasets. Instructors beyond
+ *   the batch cap are left for the next weekly run — they are not lost, just deferred
+ *   by one week. Increase PAYOUT_BATCH_SIZE as instructor numbers grow.
+ *
  * Auth: Bearer CRON_SECRET
  * Schedule: "0 18 * * 1" (Monday 6pm UTC = Tuesday 2am AWST)
  */
@@ -30,9 +36,6 @@ import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 
 export const dynamic = 'force-dynamic';
 
-// 48-hour dispute buffer matches the platform payout policy
-const DISPUTE_BUFFER_HOURS = 48;
-
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -40,9 +43,22 @@ export async function GET(req: NextRequest) {
   }
 
   const runStarted = new Date();
+
+  // Dispute buffer: read from PlatformSettings (lateCancellationWindowHours * 2).
+  // Default: 48 hours — lessons must have ended at least this long ago before
+  // the instructor payout is eligible, giving time for dispute windows to close.
+  const settings = await prisma.platformSettings.findFirst({
+    select: { lateCancellationWindowHours: true },
+  }).catch(() => null);
+  const DISPUTE_BUFFER_HOURS = (settings?.lateCancellationWindowHours ?? 24) * 2;
+
   const bufferCutoff = new Date(Date.now() - DISPUTE_BUFFER_HOURS * 60 * 60 * 1000);
 
-  console.log(`[WEEKLY PAYOUTS] Run started at ${runStarted.toISOString()} — buffer cutoff: ${bufferCutoff.toISOString()}`);
+  // Batch size — default 20, configurable via env var.
+  // Keeps each Vercel function invocation well under the 60s timeout.
+  const BATCH_SIZE = Math.max(1, parseInt(process.env.PAYOUT_BATCH_SIZE || '20', 10));
+
+  console.log(`[WEEKLY PAYOUTS] Run started at ${runStarted.toISOString()} — buffer cutoff: ${bufferCutoff.toISOString()} — batchSize: ${BATCH_SIZE}`);
 
   try {
     // ── Find all instructors with eligible transactions ────────────────────
@@ -68,9 +84,19 @@ export async function GET(req: NextRequest) {
 
     const instructorIds = eligibleTxs.map((t) => t.instructorId);
 
-    // Load instructor state for all eligible in one query
+    // Apply batch cap — process at most BATCH_SIZE instructors per run.
+    // Instructors beyond the cap are deferred to the next weekly invocation.
+    const totalEligible = instructorIds.length;
+    const batchedInstructorIds = instructorIds.slice(0, BATCH_SIZE);
+    const deferredCount = totalEligible - batchedInstructorIds.length;
+
+    if (deferredCount > 0) {
+      console.log(`[WEEKLY PAYOUTS] Batch cap applied — processing ${batchedInstructorIds.length} of ${totalEligible} eligible instructors. ${deferredCount} deferred to next run.`);
+    }
+
+    // Load instructor state for batched set in one query
     const instructors = await prisma.instructor.findMany({
-      where: { id: { in: instructorIds } },
+      where: { id: { in: batchedInstructorIds } },
       select: {
         id: true,
         name: true,
@@ -98,7 +124,7 @@ export async function GET(req: NextRequest) {
 
     const notOnboardedInstructors: any[] = [];
 
-    for (const { instructorId } of eligibleTxs) {
+    for (const { instructorId } of eligibleTxs.filter(t => batchedInstructorIds.includes(t.instructorId))) {
       const inst = instructorMap.get(instructorId) as any;
 
       // ── Skip checks ───────────────────────────────────────────────────────
@@ -169,7 +195,8 @@ export async function GET(req: NextRequest) {
 
     console.log(
       `[WEEKLY PAYOUTS] Complete — paid: ${paid} ($${totalPaid.toFixed(2)}), ` +
-      `pending: ${pending}, failed: ${failed}, skipped: ${skipped}`
+      `pending: ${pending}, failed: ${failed}, skipped: ${skipped}, ` +
+      `deferred: ${deferredCount} (batch cap: ${BATCH_SIZE})`
     );
 
     // Alert on failures
@@ -184,7 +211,18 @@ export async function GET(req: NextRequest) {
         severity: 'CRITICAL',
         message: `Weekly payout run: ${failed} payout(s) failed\n${failedList}`,
         entityId: 'weekly-payout-cron',
-        metadata: { failed, paid, skipped, runStarted: runStarted.toISOString() },
+        metadata: { failed, paid, skipped, deferred: deferredCount, batchSize: BATCH_SIZE, runStarted: runStarted.toISOString() },
+      });
+    }
+
+    // Alert if batch cap was hit — admin should consider increasing PAYOUT_BATCH_SIZE
+    if (deferredCount > 0) {
+      void sendAlert({
+        type: 'RECONCILIATION_ISSUES',
+        severity: 'WARNING',
+        message: `Weekly payout batch cap reached — ${deferredCount} instructor(s) deferred to next run. Increase PAYOUT_BATCH_SIZE (currently ${BATCH_SIZE}) if this recurs.`,
+        entityId: 'weekly-payout-cron',
+        metadata: { totalEligible, batchSize: BATCH_SIZE, deferredCount, runStarted: runStarted.toISOString() },
       });
     }
 
@@ -248,7 +286,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       runStarted: runStarted.toISOString(),
-      processed: eligibleTxs.length,
+      batchSize: BATCH_SIZE,
+      totalEligible,
+      processed: batchedInstructorIds.length,
+      deferred: deferredCount,
       paid,
       totalPaidAmount: totalPaid,
       pending,

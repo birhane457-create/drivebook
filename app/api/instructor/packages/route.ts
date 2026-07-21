@@ -16,14 +16,22 @@ export async function GET() {
     const instructorId = session.user.instructorId;
     const now = new Date();
 
+    // Fetch instructor's actual hourly rate — used for all earnings calculations
+    const instructor = await prisma.instructor.findUnique({
+      where: { id: instructorId },
+      select: { hourlyRate: true },
+    });
+    const instructorHourlyRate = instructor?.hourlyRate ?? 0;
+
     // Get all active packages (parent bookings with remaining hours)
+    // Include PENDING_PAYMENT so instructors can see packages awaiting payment too
     const packages = await prisma.booking.findMany({
       where: {
         instructorId,
         isPackageBooking: true,
         parentBookingId: null,
         packageHoursRemaining: { gt: 0 },
-        status: { in: ['CONFIRMED', 'COMPLETED'] },
+        status: { in: ['CONFIRMED', 'COMPLETED', 'PENDING_PAYMENT'] },
         OR: [
           { packageStatus: 'active' },
           { packageStatus: null }
@@ -66,18 +74,35 @@ export async function GET() {
           }
         });
 
-        const hourlyRate = pkg.price / (pkg.packageHours || 1);
-        const potentialGross = (pkg.packageHoursRemaining || 0) * hourlyRate;
-        const potentialNet = potentialGross * ((pkg.instructorPayout || 0) / (pkg.price || 1));
+        // Use instructor's actual hourly rate — not derived from package price
+        // (pkg.price is the discounted package total, not hourlyRate × hours)
+        const potentialGross = (pkg.packageHoursRemaining || 0) * instructorHourlyRate;
 
-        const daysUntilExpiry = pkg.packageExpiryDate 
+        // Potential net = gross minus platform commission
+        // Derive commission rate from the booking's stored payout ratio if available,
+        // otherwise fall back to the instructor's current rate from PlatformSettings.
+        let commissionRatio = 0
+        if (pkg.price && pkg.price > 0 && pkg.instructorPayout && pkg.instructorPayout > 0) {
+          commissionRatio = 1 - (pkg.instructorPayout / pkg.price)
+        } else {
+          const { getCommissionRate } = await import('@/lib/services/platform-pricing')
+          const session2 = await prisma.instructor.findUnique({ where: { id: instructorId }, select: { subscriptionTier: true } })
+          const rate = await getCommissionRate(session2?.subscriptionTier ?? 'BASIC')
+          commissionRatio = rate / 100
+        }
+        const potentialNet = potentialGross * (1 - commissionRatio);
+
+        const daysUntilExpiry = pkg.packageExpiryDate
           ? Math.ceil((new Date(pkg.packageExpiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
           : null;
         const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry < 30;
 
-        const usagePercentage = pkg.packageHours 
+        const usagePercentage = pkg.packageHours
           ? ((pkg.packageHoursUsed || 0) / pkg.packageHours) * 100
           : 0;
+
+        // Expiry date: null means package has no expiry set — show as null, never epoch
+        const packageExpiryDate = pkg.packageExpiryDate ?? null;
 
         return {
           id: pkg.id,
@@ -87,13 +112,15 @@ export async function GET() {
           packageHoursRemaining: pkg.packageHoursRemaining || 0,
           usagePercentage: Math.round(usagePercentage),
           packageStatus: pkg.packageStatus || 'active',
-          packageExpiryDate: pkg.packageExpiryDate,
+          isPaid: pkg.isPaid ?? false,
+          bookingStatus: pkg.status,
+          packageExpiryDate,
           daysUntilExpiry,
           isExpiringSoon,
           purchaseDate: pkg.createdAt,
           totalPrice: pkg.price,
           instructorPayout: pkg.instructorPayout || 0,
-          hourlyRate,
+          hourlyRate: instructorHourlyRate,
           potentialGross,
           potentialNet,
           upcomingBookings: upcomingBookings.map(booking => ({

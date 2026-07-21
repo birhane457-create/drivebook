@@ -34,6 +34,14 @@ export default function BookingConfirmationPage() {
   const redirectStatus = searchParams.get('redirect_status');
   const pendingApproval = searchParams.get('status') === 'pending_approval';
 
+  // Wizard-flow params (passed when coming from the multi-step booking wizard, no token)
+  const wizardInstructor = searchParams.get('instructor') ?? '';
+  const wizardHours      = searchParams.get('hours') ?? '';
+  const wizardTotal      = searchParams.get('total') ?? '';
+  const wizardDate       = searchParams.get('date') ?? '';
+  const wizardTime       = searchParams.get('time') ?? '';
+  const isWizardFlow     = !token && !!(wizardTotal || wizardInstructor);
+
   const [summary, setSummary] = useState<BookingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [pollCount, setPollCount] = useState(0);
@@ -43,12 +51,17 @@ export default function BookingConfirmationPage() {
 
     const load = async () => {
       try {
-        // Use payment-summary (token-secured) to get booking details
-        const url = token
-          ? `/api/public/bookings/${bookingId}/payment-summary?token=${encodeURIComponent(token)}`
-          : `/api/public/bookings/${bookingId}/payment-summary`;
+        // payment-summary requires a token — only call it when coming from an SMS link.
+        // When arriving from the booking wizard (no token), skip the API call;
+        // the confirmation still shows without a summary card.
+        if (!token) {
+          setLoading(false);
+          return;
+        }
 
-        const res = await fetch(url);
+        const res = await fetch(
+          `/api/public/bookings/${bookingId}/payment-summary?token=${encodeURIComponent(token)}`
+        );
         if (res.ok) {
           const data = await res.json();
           setSummary(data);
@@ -128,7 +141,7 @@ export default function BookingConfirmationPage() {
           </p>
         </div>
 
-        {/* Booking summary card */}
+        {/* Booking summary card — SMS-link flow (has token + API data) */}
         {summary && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -207,6 +220,69 @@ export default function BookingConfirmationPage() {
               <div className="text-xs text-gray-400 flex items-center gap-1">
                 <span>Ref:</span>
                 <code className="font-mono text-gray-500">{bookingId.slice(0, 12)}...</code>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Booking summary card — wizard flow (no token, data from URL params) */}
+        {isWizardFlow && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Booking Summary</h2>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700">
+                ✓ Confirmed
+              </span>
+            </div>
+            <div className="px-5 py-4 space-y-3 text-sm">
+              {/* Instructor */}
+              {wizardInstructor && (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-blue-600 font-bold">{wizardInstructor.charAt(0)}</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">{wizardInstructor}</p>
+                    <p className="text-xs text-gray-400">Driving Instructor</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Lesson details grid */}
+              {(wizardDate || wizardTime || wizardHours) && (
+                <div className="bg-gray-50 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs">
+                  {wizardDate && (
+                    <div>
+                      <p className="text-gray-400 uppercase tracking-wide mb-0.5">First Lesson</p>
+                      <p className="font-medium text-gray-900">
+                        {new Date(wizardDate + 'T00:00:00').toLocaleDateString('en-AU', {
+                          weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+                        })}
+                        {wizardTime && <span className="text-gray-500"> at {wizardTime}</span>}
+                      </p>
+                    </div>
+                  )}
+                  {wizardHours && (
+                    <div>
+                      <p className="text-gray-400 uppercase tracking-wide mb-0.5">Package</p>
+                      <p className="font-medium text-gray-900">{wizardHours}-Hour Package</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Total */}
+              {wizardTotal && (
+                <div className="flex justify-between font-semibold text-gray-900 pt-1 border-t border-gray-100">
+                  <span>Total paid</span>
+                  <span>${wizardTotal} AUD</span>
+                </div>
+              )}
+
+              {/* Booking reference */}
+              <div className="text-xs text-gray-400 flex items-center gap-1">
+                <span>Booking ref:</span>
+                <code className="font-mono text-gray-500 select-all">{bookingId}</code>
               </div>
             </div>
           </div>

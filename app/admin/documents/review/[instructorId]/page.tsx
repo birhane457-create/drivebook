@@ -135,8 +135,10 @@ export default function DocumentReviewPage() {
     else showToast('Upload failed');
   };
 
+  const [removeConfirmField, setRemoveConfirmField] = useState<string | null>(null);
+
   const removeDoc = async (field: string) => {
-    if (!confirm('Remove this document?')) return;
+    setRemoveConfirmField(null);
     const res = await fetch(`/api/admin/documents/instructor/${instructorId}/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -281,10 +283,27 @@ export default function DocumentReviewPage() {
                           title="Reject and notify instructor">
                           <X className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => removeDoc(field.key as string)}
-                          className="text-slate-500 hover:text-slate-300 ml-1" title="Remove">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {removeConfirmField === field.key ? (
+                          <div className="flex items-center gap-1 ml-1">
+                            <button
+                              onClick={() => removeDoc(field.key as string)}
+                              className="text-xs bg-red-700 text-white px-1.5 py-0.5 rounded hover:bg-red-600"
+                            >
+                              Remove
+                            </button>
+                            <button
+                              onClick={() => setRemoveConfirmField(null)}
+                              className="text-xs text-slate-500 hover:text-white"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setRemoveConfirmField(field.key as string)}
+                            className="text-slate-500 hover:text-slate-300 ml-1" title="Remove">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </>
                     ) : (
                       <span className="text-xs text-slate-500">None</span>

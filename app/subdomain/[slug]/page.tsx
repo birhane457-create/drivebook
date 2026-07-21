@@ -122,6 +122,7 @@ export default async function SubdomainBookingPage({
       testPackageIncludes: true,
       subscriptionStatus: true,
       trialEndsAt: true,
+      businessName: true,
     },
   }) as any;
 
@@ -157,6 +158,11 @@ export default async function SubdomainBookingPage({
   // Colors apply regardless of tier — fall back to defaults if not set
   const primary = instructor.brandColorPrimary || '#3B82F6';
   const secondary = instructor.brandColorSecondary || '#10B981';
+
+  // All tiers: optional display/trading name shown in place of personal name on all student-facing surfaces
+  // Uses the centralised getDisplayName utility — never use instructor.name directly here.
+  const { getDisplayName } = await import('@/lib/utils/account');
+  const displayName: string = getDisplayName(instructor as any);
 
   // Recent reviews from completed bookings
   const recentReviews = await (prisma.booking as any).findMany({
@@ -493,7 +499,7 @@ export default async function SubdomainBookingPage({
               <Car className="h-7 w-7" style={{ color: primary }} />
             )}
             <span className="font-bold text-gray-900 text-lg">
-              {hasBranding ? instructor.name : 'DriveBook'}
+              {hasBranding ? displayName : 'DriveBook'}
             </span>
           </div>
           <SubdomainDesktopNav primary={primary} hasBio={!!instructor.bio?.trim()} />
@@ -538,7 +544,7 @@ export default async function SubdomainBookingPage({
               )}
             </div>
               <div className="text-white">
-              <h1 className="text-2xl sm:text-3xl font-bold">{instructor.name}</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold">{displayName}</h1>
               <div className="flex items-center gap-1 mt-1">
                 {instructor.totalReviews > 0 ? (
                   <>
@@ -759,6 +765,7 @@ export default async function SubdomainBookingPage({
                   instructor={{
                     id: instructor.id,
                     name: instructor.name,
+                    displayName,
                     profileImage: instructor.profileImage,
                     hourlyRate: instructor.hourlyRate,
                     averageRating: instructor.averageRating,
@@ -1050,6 +1057,7 @@ export default async function SubdomainBookingPage({
                   instructor={{
                     id: instructor.id,
                     name: instructor.name,
+                    displayName,
                     profileImage: instructor.profileImage,
                     hourlyRate: instructor.hourlyRate,
                     averageRating: instructor.averageRating,
