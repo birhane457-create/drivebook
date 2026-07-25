@@ -17,6 +17,7 @@ export default async function AdminDashboard() {
   let subMap: Record<string, number> = {}
   let platformRevenueThisMonth = 0
   let endedConfirmed = 0, expiringDocs = 0, unverifiedABNs = 0, openDisputes = 0
+  let dataUnavailable = false
 
   try {
     const now = new Date()
@@ -79,6 +80,7 @@ export default async function AdminDashboard() {
     }).catch(() => 0)
   } catch (err) {
     console.error('Admin dashboard query error:', err)
+    dataUnavailable = true
   }
 
   const approvedInstructors = totalInstructors - pendingInstructors - suspendedInstructors
@@ -107,6 +109,7 @@ export default async function AdminDashboard() {
           unverifiedABNs={unverifiedABNs}
           openDisputes={openDisputes}
           recentBookings={recentBookings}
+          dataUnavailable={dataUnavailable}
         />
       </div>
     </div>

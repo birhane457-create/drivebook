@@ -33,19 +33,31 @@ export async function GET(req: NextRequest) {
         insurancePolicyDoc: true,
         policeCheckDoc: true,
         wwcCheckDoc: true,
+        // Real DateTime columns — populated by the expiry route since 2026-07-21
+        licenseExpiry: true,
+        insuranceExpiry: true,
+        policeCheckExpiry: true,
+        wwcCheckExpiry: true,
+        // Legacy JSON blob kept for backward compat
         workingHours: true,
         user: { select: { email: true } },
       },
     });
 
     const compliance = instructors.map((i) => {
+      // Prefer dedicated DateTime columns; fall back to workingHours.expiry for old records
       const wh = (i.workingHours as any) || {};
-      const exp = wh.expiry || {};
+      const legacyExp = wh.expiry || {};
 
-      const license = docStatus(exp.licenseExpiry || null, i.licenseImageFront);
-      const insurance = docStatus(exp.insuranceExpiry || null, i.insurancePolicyDoc);
-      const police = docStatus(exp.policeCheckExpiry || null, i.policeCheckDoc);
-      const wwc = docStatus(exp.wwcCheckExpiry || null, i.wwcCheckDoc);
+      const licExpiry    = i.licenseExpiry    ? i.licenseExpiry.toISOString()    : legacyExp.licenseExpiry    || null;
+      const insExpiry    = i.insuranceExpiry   ? i.insuranceExpiry.toISOString()   : legacyExp.insuranceExpiry   || null;
+      const polExpiry    = i.policeCheckExpiry ? i.policeCheckExpiry.toISOString() : legacyExp.policeCheckExpiry || null;
+      const wwcExpiry    = i.wwcCheckExpiry    ? i.wwcCheckExpiry.toISOString()    : legacyExp.wwcCheckExpiry    || null;
+
+      const license   = docStatus(licExpiry, i.licenseImageFront);
+      const insurance = docStatus(insExpiry, i.insurancePolicyDoc);
+      const police    = docStatus(polExpiry, i.policeCheckDoc);
+      const wwc       = docStatus(wwcExpiry, i.wwcCheckDoc);
 
       const issues: string[] = [];
       if (license.issue) issues.push(`License: ${license.issue}`);
@@ -67,10 +79,10 @@ export async function GET(req: NextRequest) {
         issues,
         isActive: i.isActive,
         documentsVerified: i.documentsVerified,
-        licenseExpiry: exp.licenseExpiry || null,
-        insuranceExpiry: exp.insuranceExpiry || null,
-        policeCheckExpiry: exp.policeCheckExpiry || null,
-        wwcCheckExpiry: exp.wwcCheckExpiry || null,
+        licenseExpiry:    licExpiry,
+        insuranceExpiry:  insExpiry,
+        policeCheckExpiry: polExpiry,
+        wwcCheckExpiry:   wwcExpiry,
       };
     });
 

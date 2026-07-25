@@ -6,7 +6,6 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Calendar, Clock, MapPin, User, DollarSign, ClipboardList, CheckCircle, Send, Loader2 } from 'lucide-react';
 import LessonFeedbackForm from '@/components/instructor/LessonFeedbackForm';
-
 interface Booking {
   id: string;
   status: string;
@@ -40,6 +39,8 @@ export default function BookingDetailPage() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [sendingLink, setSendingLink] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
+  // C-04: inline error for payment link — persists near the button until dismissed
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
@@ -79,6 +80,7 @@ export default function BookingDetailPage() {
   const handleSendPaymentLink = async () => {
     if (!booking?.client) return;
     setSendingLink(true);
+    setLinkError(null);
     try {
       const res = await fetch('/api/bookings/send-payment-link', {
         method: 'POST',
@@ -92,13 +94,13 @@ export default function BookingDetailPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error || 'Failed to send payment link.');
+        setLinkError(d.error || 'Failed to send payment link. Please try again.');
         return;
       }
       setLinkSent(true);
       setTimeout(() => setLinkSent(false), 4000);
     } catch {
-      alert('Failed to send payment link.');
+      setLinkError('Failed to send payment link. Please try again.');
     } finally {
       setSendingLink(false);
     }
@@ -250,18 +252,27 @@ export default function BookingDetailPage() {
       {/* Actions */}
       <div className="flex gap-3 flex-wrap">
         {booking.status === 'PENDING_PAYMENT' && booking.client && (
-          <button
-            onClick={handleSendPaymentLink}
-            disabled={sendingLink || linkSent}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-60"
-          >
-            {linkSent
-              ? <><CheckCircle className="h-4 w-4" /> Link Sent</>
-              : sendingLink
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <><Send className="h-4 w-4" /> Send Payment Link</>
-            }
-          </button>
+          <div className="flex-1 space-y-2">
+            <button
+              onClick={handleSendPaymentLink}
+              disabled={sendingLink || linkSent}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-60"
+            >
+              {linkSent
+                ? <><CheckCircle className="h-4 w-4" /> Link Sent</>
+                : sendingLink
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <><Send className="h-4 w-4" /> Send Payment Link</>
+              }
+            </button>
+            {/* C-04: inline error stays visible near the button — important for payment actions */}
+            {linkError && (
+              <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                <span className="shrink-0">❌</span>
+                {linkError}
+              </p>
+            )}
+          </div>
         )}
         {booking.status === 'CONFIRMED' && !isPast && (
           <>

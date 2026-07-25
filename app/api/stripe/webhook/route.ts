@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     const idempotencyKey = `${event.type}_${event.id}_${event.created}`;
     
     try {
-      const existingEvent = await (prisma as any).webhookEvent.findUnique({
+      const existingEvent = await prisma.webhookEvent.findUnique({
         where: { idempotencyKey }
       });
       
@@ -345,17 +345,63 @@ async function handleCheckoutCompleted(
       customerId: customer
     });
 
-    // Update instructor with Stripe customer ID
+    const tier = metadata?.tier;
+    const billingCycle = metadata?.billingCycle ?? 'monthly';
+    const stripeSubId = checkoutSession.subscription as string | null;
+
+    // Update instructor with Stripe customer ID and — if tier is known — tier/status/stripeSubscriptionId atomically
     await tx.instructor.update({
       where: { id: instructorId },
-      data: { stripeCustomerId: customer as string }
+      data: {
+        stripeCustomerId: customer as string,
+        ...(tier && stripeSubId && {
+          subscriptionTier: tier as any,
+          subscriptionStatus: 'ACTIVE',
+          stripeSubscriptionId: stripeSubId,
+        }),
+      } as any
     });
 
-    // Update subscription with customer ID if exists
-    await tx.subscription.updateMany({
-      where: { instructorId },
-      data: { stripeCustomerId: customer as string }
-    });
+    // Update subscription row: link customer ID and — if tier is known — tier/status/stripeSubscriptionId atomically
+    if (tier && stripeSubId) {
+      // Find the trial row without a stripeSubscriptionId first (race condition safe)
+      const trialRow = await tx.subscription.findFirst({
+        where: {
+          instructorId,
+          stripeSubscriptionId: null,
+          status: { in: ['TRIAL', 'ACTIVE'] },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (trialRow) {
+        await tx.subscription.update({
+          where: { id: trialRow.id },
+          data: {
+            tier: tier as any,
+            status: 'ACTIVE',
+            stripeCustomerId: customer as string,
+            stripeSubscriptionId: stripeSubId,
+          },
+        });
+      } else {
+        await tx.subscription.updateMany({
+          where: { instructorId },
+          data: {
+            tier: tier as any,
+            status: 'ACTIVE',
+            stripeCustomerId: customer as string,
+            stripeSubscriptionId: stripeSubId,
+          },
+        });
+      }
+    } else {
+      // No tier in metadata yet — just update customer ID for now
+      await tx.subscription.updateMany({
+        where: { instructorId },
+        data: { stripeCustomerId: customer as string }
+      });
+    }
 
     // Audit log
     await logSubscriptionAction({
@@ -364,10 +410,30 @@ async function handleCheckoutCompleted(
       action: AuditAction.SUBSCRIPTION_UPDATED,
       metadata: {
         event: 'checkout_completed',
-        customerId: customer
+        customerId: customer,
+        tier: tier ?? 'unknown',
+        stripeSubscriptionId: checkoutSession.subscription ?? null,
       }
     });
   });
+
+  // ── Stamp metadata onto the Stripe subscription (non-fatal, best-effort) ─────
+  // Ensures future webhooks (renewal, upgrade, cancel) have instructorId + tier in metadata.
+  const tier = metadata?.tier;
+  const billingCycle = metadata?.billingCycle;
+  if (checkoutSession.subscription && instructorId && tier) {
+    try {
+      await stripe.subscriptions.update(checkoutSession.subscription as string, {
+        metadata: { instructorId, tier, billingCycle: billingCycle ?? 'monthly' },
+      });
+      logger.info(`✅ Stamped metadata on subscription ${checkoutSession.subscription}: instructorId=${instructorId} tier=${tier}`);
+    } catch (metadataErr) {
+      logger.error('Failed to stamp subscription metadata (non-fatal)', {
+        error: metadataErr instanceof Error ? metadataErr.message : String(metadataErr),
+        subscriptionId: checkoutSession.subscription,
+      });
+    }
+  }
 
   logger.info(`✅ Checkout completed: Synced customer ${customer} for instructor ${instructorId}`);
 }
@@ -801,7 +867,7 @@ async function handleBookingPaymentSuccess(
   // This closes the audit blind spot — Stripe payment events are now in AuditLog
   try {
     const { logFinancialAction, AuditAction, ActorRole } = await import('@/lib/services/auditLogger');
-    const txRecord = await (prisma as any).transaction.findFirst({
+    const txRecord = await prisma.transaction.findFirst({
       where: { stripePaymentIntentId: paymentIntent.id },
       select: { id: true, amount: true },
     });
@@ -1132,10 +1198,15 @@ async function handleSubscriptionUpdate(
         subscriptionStatus: normalizeStatus(status) as any,
         trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
         stripeCustomerId: subscription.customer as string,
+        stripeSubscriptionId: subscription.id,
       } as any
     });
 
     // Update or create subscription record
+    // Priority: find by stripeSubscriptionId first (renewal/update).
+    // If not found, find the most-recent non-stripe trial row for this instructor
+    // (race condition: customer.subscription.created fires before checkout.session.completed
+    // stamps the stripeSubscriptionId — so we link it rather than create a duplicate).
     const existingSubscription = await tx.subscription.findFirst({
       where: { stripeSubscriptionId: subscription.id }
     });
@@ -1149,23 +1220,52 @@ async function handleSubscriptionUpdate(
           monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
           billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
           currentPeriodEnd: new Date(current_period_end * 1000),
+          stripeSubscriptionId: subscription.id,
+          stripeCustomerId: subscription.customer as string,
         }
       });
     } else {
-      const current_period_start = (subscription as any).current_period_start;
-      await tx.subscription.create({
-        data: {
+      // Look for an existing trial subscription record without a stripeSubscriptionId
+      const trialRow = await tx.subscription.findFirst({
+        where: {
           instructorId,
-          tier: tier as any,
-          status: normalizeStatus(status) as any,
-          monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
-          billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
-          currentPeriodStart: new Date(current_period_start * 1000),
-          currentPeriodEnd: new Date(current_period_end * 1000),
-          stripeCustomerId: subscription.customer as string,
-          stripeSubscriptionId: subscription.id,
-        }
+          stripeSubscriptionId: null,
+          status: { in: ['TRIAL', 'ACTIVE'] },
+        },
+        orderBy: { createdAt: 'desc' },
       });
+
+      if (trialRow) {
+        // Link the Stripe subscription to the existing trial row — prevents duplicate rows
+        logger.info(`🔗 Linking Stripe subscription ${subscription.id} to existing trial row ${trialRow.id} for instructor ${instructorId}`);
+        await tx.subscription.update({
+          where: { id: trialRow.id },
+          data: {
+            tier: tier as any,
+            status: normalizeStatus(status) as any,
+            monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
+            billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+            currentPeriodEnd: new Date(current_period_end * 1000),
+            stripeSubscriptionId: subscription.id,
+            stripeCustomerId: subscription.customer as string,
+          }
+        });
+      } else {
+        const current_period_start = (subscription as any).current_period_start;
+        await tx.subscription.create({
+          data: {
+            instructorId,
+            tier: tier as any,
+            status: normalizeStatus(status) as any,
+            monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
+            billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+            currentPeriodStart: new Date(current_period_start * 1000),
+            currentPeriodEnd: new Date(current_period_end * 1000),
+            stripeCustomerId: subscription.customer as string,
+            stripeSubscriptionId: subscription.id,
+          }
+        });
+      }
     }
 
     // Audit log
@@ -1466,7 +1566,7 @@ async function handleDisputeOpened(
 
   // Persist StripeDispute record — gives admin a dedicated dispute queue
   try {
-    await (prisma as any).stripeDispute.upsert({
+    await prisma.stripeDispute.upsert({
       where: { stripeDisputeId: dispute.id },
       update: { status, payoutFrozen: !!instructorId },
       create: {
@@ -1506,12 +1606,11 @@ async function handleDisputeOpened(
   // Freeze payout eligibility for this instructor
   if (instructorId) {
     try {
-      await (prisma as any).instructor.update({
+      await prisma.instructor.update({
         where: { id: instructorId },
-        data: { payoutHold: true, payoutHoldReason: `Stripe dispute ${dispute.id} opened` },
+        data: { payoutHold: true, payoutHoldReason: `Stripe dispute ${dispute.id} opened` } as any,
       });
     } catch (holdErr) {
-      // payoutHold field may not exist in older schema versions — log and continue
       logger.error('[DISPUTE] Could not set payoutHold (field may not exist)', {
         error: holdErr instanceof Error ? holdErr.message : String(holdErr),
       });
@@ -1520,7 +1619,7 @@ async function handleDisputeOpened(
 
   // Audit log
   try {
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'DISPUTE_OPENED',
         actorId: 'STRIPE',
@@ -1617,9 +1716,9 @@ async function handleDisputeClosed(
     // Release the payout hold
     if (instructorId) {
       try {
-        await (prisma as any).instructor.update({
+        await prisma.instructor.update({
           where: { id: instructorId },
-          data: { payoutHold: false, payoutHoldReason: null },
+          data: { payoutHold: false, payoutHoldReason: null } as any,
         });
       } catch { /* field may not exist */ }
     }
@@ -1690,7 +1789,7 @@ async function handleDisputeClosed(
 
   // Always audit log the close
   try {
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'DISPUTE_CLOSED',
         actorId: 'STRIPE',
@@ -1709,7 +1808,7 @@ async function handleDisputeClosed(
 
   // Update the StripeDispute record with the outcome
   try {
-    await (prisma as any).stripeDispute.updateMany({
+    await prisma.stripeDispute.updateMany({
       where: { stripeDisputeId: dispute.id },
       data: {
         status,
@@ -1806,7 +1905,7 @@ async function handleChargeRefunded(
 
   // Check if this refund was already processed through the app's refund route
   // (which creates a REFUND_ISSUED ledger entry). If so, skip — avoid double ledger.
-  const existingLedger = await (prisma as any).ledgerEntry.findFirst({
+  const existingLedger = await prisma.ledgerEntry.findFirst({
     where: { type: 'REFUND_ISSUED', referenceId: bookingId },
   });
   if (existingLedger) {
@@ -1836,14 +1935,14 @@ async function handleChargeRefunded(
   }
 
   // Update transaction record
-  await (prisma as any).transaction.updateMany({
+  await prisma.transaction.updateMany({
     where: { bookingId, status: 'SETTLED' },
     data: { status: 'REFUNDED', processedAt: new Date() },
   });
 
   // Audit log
   try {
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'REFUND_SYNCED',
         actorId: 'STRIPE',
@@ -1943,7 +2042,7 @@ async function handleTransferFailed(
 
   // Audit log
   try {
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'TRANSFER_FAILED',
         actorId: 'STRIPE',
@@ -2019,7 +2118,7 @@ async function recordWebhookEvent(
   stripeEventId: string,
   metadata: any
 ): Promise<void> {
-  await (prisma as any).webhookEvent.create({
+  await prisma.webhookEvent.create({
     data: {
       idempotencyKey,
       eventType,

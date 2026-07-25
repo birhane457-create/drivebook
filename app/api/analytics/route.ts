@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
       }),
       // Revenue: platform transactions only — offline bookings have no Transaction record
       // and commissionRate: 0, so they are naturally excluded from Transaction queries.
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: {
           instructorId: session.user.instructorId,
           status: 'COMPLETED',

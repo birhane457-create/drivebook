@@ -27,7 +27,7 @@ import { sendAlert } from '@/lib/services/alert-service';
 
 export async function pingCronHealth(jobName: string): Promise<void> {
   try {
-    await (prisma as any).cronHealth.upsert({
+    await prisma.cronHealth.upsert({
       where: { jobName },
       update: {
         lastRunAt: new Date(),
@@ -51,7 +51,7 @@ export async function pingCronHealth(jobName: string): Promise<void> {
 export async function failCronHealth(jobName: string, error: unknown): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   try {
-    await (prisma as any).cronHealth.upsert({
+    await prisma.cronHealth.upsert({
       where: { jobName },
       update: {
         lastRunAt: new Date(),

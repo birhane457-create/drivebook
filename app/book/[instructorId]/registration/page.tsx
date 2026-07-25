@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import MultiStepBookingLayout from '@/components/MultiStepBookingLayout';
 import RegistrationForm from '@/components/RegistrationForm';
@@ -11,6 +11,7 @@ export default function RegistrationPage() {
   const params = useParams();
   const { bookingState } = useBooking();
   const { instructor } = bookingState;
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!instructor) {
@@ -23,10 +24,11 @@ export default function RegistrationPage() {
   }
 
   const validateForm = (): boolean => {
-    const { 
-      accountHolderName, 
-      accountHolderEmail, 
-      accountHolderPhone, 
+    setValidationError(null);
+    const {
+      accountHolderName,
+      accountHolderEmail,
+      accountHolderPhone,
       accountHolderPassword,
       accountHolderConfirmPassword,
       registrationType,
@@ -36,34 +38,34 @@ export default function RegistrationPage() {
 
     // Account holder validation
     if (!accountHolderName.trim()) {
-      alert('Please enter your name');
+      setValidationError('Please enter your name');
       return false;
     }
     if (!accountHolderEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountHolderEmail)) {
-      alert('Please enter a valid email');
+      setValidationError('Please enter a valid email address');
       return false;
     }
     if (!accountHolderPhone.trim()) {
-      alert('Please enter your phone number');
+      setValidationError('Please enter your phone number');
       return false;
     }
     if (!accountHolderPassword || accountHolderPassword.length < 6) {
-      alert('Password must be at least 6 characters');
+      setValidationError('Password must be at least 6 characters');
       return false;
     }
     if (accountHolderPassword !== accountHolderConfirmPassword) {
-      alert('Passwords do not match');
+      setValidationError('Passwords do not match');
       return false;
     }
 
-    // Learner validation (if someone else)
+    // Learner validation (if booking for someone else)
     if (registrationType === 'someone-else') {
       if (!learnerName.trim()) {
-        alert('Please enter the learner\'s name');
+        setValidationError("Please enter the learner's name");
         return false;
       }
       if (!learnerRelationship) {
-        alert('Please select your relationship to the learner');
+        setValidationError('Please select your relationship to the learner');
         return false;
       }
     }
@@ -91,6 +93,16 @@ export default function RegistrationPage() {
 
         {/* Registration Form */}
         <RegistrationForm />
+
+        {/* Inline validation error */}
+        {validationError && (
+          <div className="flex items-start gap-3 bg-red-900/20 border border-red-500/30 rounded-xl px-4 py-3">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm text-red-200">{validationError}</p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/15">

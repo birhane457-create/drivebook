@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Load all instructors with a verified ABN
-  const instructors = await (prisma as any).instructor.findMany({
+  const instructors = await prisma.instructor.findMany({
     where: { abn: { not: null }, abnVerified: true },
     select: { id: true, abn: true, abnStatus: true },
   });
@@ -57,13 +57,13 @@ export async function GET(req: NextRequest) {
 
       if (!isActive) {
         // ABN is no longer active — revoke verification, block payouts
-        await (prisma as any).instructor.update({
+        await prisma.instructor.update({
           where: { id: inst.id },
           data: {
             abnVerified: false,
             abnStatus: 'CANCELLED',
             withholdingTaxRate: 47,
-          },
+          } as any,
         });
 
         await prisma.auditLog.create({

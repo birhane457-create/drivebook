@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     }).catch(() => null) // non-fatal if notification table doesn't have this
 
     // Simpler rate limit: check audit log
-    const recentAudit = await (prisma as any).auditLog.findFirst({
+    const recentAudit = await prisma.auditLog.findFirst({
       where: {
         action: 'INSTRUCTOR_CLIENT_REMIND',
         actorId: session.user.instructorId,
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Audit log — creates a record so rate limit check works
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'INSTRUCTOR_CLIENT_REMIND',
         actorId: session.user.instructorId,

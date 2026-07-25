@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
 
     // Audit log — dispute evidence for "I never made that booking"
     try {
-      await (prisma as any).auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: 'BOOKING_CREATED',
           actorId: userId ?? 'GUEST',

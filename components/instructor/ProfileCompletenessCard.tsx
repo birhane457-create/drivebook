@@ -50,10 +50,11 @@ export function computeProfileCompleteness(inst: InstructorFields): {
     {
       key:    'bio',
       label:  'Add a bio',
-      done:   !!inst.bio && inst.bio.trim().length > 30,
+      // FIX BUG-6: match the 75-word minimum enforced on the Profile page (was > 30 chars)
+      done:   !!inst.bio && inst.bio.trim().split(/\s+/).filter(Boolean).length >= 75,
       href:   '/dashboard/profile',
       weight: 20,
-      tip:    'A bio appears in search results and builds trust with learners.',
+      tip:    'A bio of at least 75 words appears in search results and builds trust with learners.',
     },
     {
       key:    'photo',

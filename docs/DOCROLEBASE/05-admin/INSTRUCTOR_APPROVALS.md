@@ -65,20 +65,29 @@ After each action, the page reloads to reflect the new state. A flash toast conf
 **Route:** `/admin/instructors/[id]`  
 **File:** `app/admin/instructors/[id]/page.tsx`
 
-Three tabs: Overview / Bookings / Documents
+**Four tabs: Overview / Subscription / Bookings / Documents**
 
-**Overview tab shows:**
+### Overview tab
 - Booking stats (completed, upcoming, cancelled, pending)
-- Document status (license, insurance, police check, WWC) with expiry dates
-- Subscription tier, status, hourly rate, payout method
-- ABN number, verification status, withholding tax rate
-- Joined date (from `user.createdAt`)
-- Terms accepted date (`user.termsAcceptedAt`) — shows "Not recorded" in amber if missing (pre-terms instructors)
+- Document status (licence, insurance, police check, WWC) with expiry dates
+- Subscription & Tax card: tier, status, hourly rate, payout method, Stripe Connect status, ABN, withholding rate
+- Joined date (`user.createdAt`), Terms accepted date (`user.termsAcceptedAt`)
 - Link to manage ABN verification
 
-**Bookings tab:** All bookings for this instructor with status, client, date, price
+### Subscription tab ⭐ New (July 2026)
+Full subscription management panel. See [ADMIN_BUSINESS_RULES §7a](../00-overview/ADMIN_BUSINESS_RULES.md#7a-subscription-management-admin-ui) for complete reference.
+- DB state vs live Stripe state side-by-side
+- Automatic drift detection with one-click Force Sync
+- Actions: Force Sync, Cancel at Period End, Cancel Immediately, Link Stripe Sub, Override Tier/Status, Delete duplicate rows
+- All actions audit-logged
 
-**Documents tab:** Document images with view links, expiry dates, link to full document review page
+### Bookings tab
+All bookings for this instructor — status, client, date, price. Link to `/admin/bookings` for full booking detail.
+
+### Documents tab
+Document images with view links, expiry date summary, link to full document review page (`/admin/documents/review/[id]`).
+
+**Note:** To approve, reject, or set expiry dates, use the full Document Review page, not this tab — the tab is read-only summary only.
 
 ---
 
@@ -87,17 +96,31 @@ Three tabs: Overview / Bookings / Documents
 **Route:** `/admin/documents/review/[instructorId]`  
 **File:** `app/admin/documents/review/[instructorId]/page.tsx`
 
-Admins review uploaded documents before approving an instructor:
-- Driver's licence (front + back)
-- Insurance policy
-- Police check
-- WWC check
-- Photo ID
-- Vehicle registration
+Admins review uploaded documents before approving an instructor. Shows all 8 document types in a grid.
 
-Document expiry dates are shown. Expired documents trigger a warning.
+**Per-document actions:**
+- **View** — opens URL in new tab
+- **Reject** — opens modal (reason required) → nulls the field, sets `documentsVerified=false`, sends SMS to instructor with rejection reason, writes `DOCUMENT_REJECTED` audit log
+- **Remove** — nulls field without notification (admin-only cleanup)
+- **Upload/Replace** — admin uploads file on behalf via Cloudinary
 
-**API:** `GET /api/admin/documents/instructor/[instructorId]`, `POST /api/admin/documents/compliance`
+**Expiry dates** — admin sets license/insurance/police/WWC expiry via date inputs. Saved to real DateTime columns in DB (`licenseExpiry` etc.) AND `workingHours.expiry` JSON for compatibility.
+
+**Page-level actions:**
+- **Save Expiry Dates** → `POST /api/admin/documents/instructor/[id]/expiry`
+- **Approve All Documents** → `POST /api/admin/documents/instructor/[id]/approve` — sets `documentsVerified=true`, sends SMS, writes `DOCUMENTS_APPROVED` audit log
+
+**Admin Document API routes (complete):**
+
+| Route | Method | What it does |
+|---|---|---|
+| `/api/admin/documents/instructor/[id]` | GET | Returns all 8 doc fields + expiry dates |
+| `/api/admin/documents/instructor/[id]/approve` | POST | Approves all documents + SMS + audit log |
+| `/api/admin/documents/instructor/[id]/reject` | POST | Rejects one document (requires `documentKey` + `reason`) + SMS + audit log |
+| `/api/admin/documents/instructor/[id]/expiry` | POST | Sets 4 expiry dates (writes to real columns + JSON fallback) |
+| `/api/admin/documents/instructor/[id]/upload` | POST | Admin uploads/removes doc on behalf |
+| `/api/admin/documents/compliance` | GET | Compliance status for all instructors |
+| `/api/admin/documents/compliance` | POST | Batch actions: `deactivate`, `sendReminder`, `autoProcess` |
 
 ---
 

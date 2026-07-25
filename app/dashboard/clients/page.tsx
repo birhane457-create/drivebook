@@ -35,6 +35,8 @@ export default function ClientsPage() {
     hasMore: false,
   })
   const [search, setSearch] = useState('')
+  // BUG-7 FIX: debounced search term sent to server — finds clients on any page
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -51,13 +53,27 @@ export default function ClientsPage() {
   const [formSuccess, setFormSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Debounce search input — wait 300ms after last keystroke before fetching
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(id)
+  }, [search])
+
+  // Re-fetch when debounced search changes (reset to page 1)
+  useEffect(() => {
+    fetchClients(1, debouncedSearch)
+  }, [debouncedSearch])
+
   useEffect(() => {
     fetchClients(1)
   }, [])
 
-  const fetchClients = async (page: number = 1) => {
+  const fetchClients = async (page: number = 1, searchTerm: string = debouncedSearch) => {
+    setLoading(true)
     try {
-      const res = await fetch(`/api/clients?page=${page}&limit=25`)
+      const params = new URLSearchParams({ page: String(page), limit: '25' })
+      if (searchTerm) params.set('search', searchTerm)
+      const res = await fetch(`/api/clients?${params}`)
       const data = await res.json()
       
       // Check if data has pagination structure
@@ -155,11 +171,8 @@ export default function ClientsPage() {
     setExpandedId(expandedId === id ? null : id)
   }
 
-  const filteredClients = Array.isArray(clients) ? clients.filter(client =>
-    client.name.toLowerCase().includes(search.toLowerCase()) ||
-    client.email.toLowerCase().includes(search.toLowerCase()) ||
-    client.phone.includes(search)
-  ) : []
+  // BUG-7 FIX: no client-side filter — server returns correctly scoped results
+  const displayClients = Array.isArray(clients) ? clients : []
 
   return (
     <div className="max-w-7xl mx-auto py-1 sm:py-8">
@@ -283,16 +296,20 @@ export default function ClientsPage() {
 
         {loading ? (
           <div className="text-center py-12">Loading...</div>
-        ) : filteredClients.length === 0 ? (
+        ) : displayClients.length === 0 ? (
           <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-12 text-center">
             <User className="h-16 w-16 text-slate-500 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold mb-2 text-slate-100">No clients found</h3>
-            <p className="text-slate-400">Add your first client to get started</p>
+            <h3 className="text-xl font-semibold mb-2 text-slate-100">
+              {debouncedSearch ? 'No clients match your search' : 'No clients found'}
+            </h3>
+            <p className="text-slate-400">
+              {debouncedSearch ? 'Try a different name, phone, or email.' : 'Add your first client to get started'}
+            </p>
           </div>
         ) : (
           <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 overflow-hidden">
             <div className="divide-y divide-slate-800">
-              {filteredClients.map((client) => {
+              {displayClients.map((client) => {
                 const isExpanded = expandedId === client.id
                 const isEditing = editingId === client.id
                 const displayClient = isEditing && editData ? editData : client

@@ -1,23 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { Clock, FileText, CheckCircle } from 'lucide-react';
+import { Clock, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
 
 interface PendingApprovalBannerProps {
   approvalStatus: string; // 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'REJECTED'
 }
 
 /**
- * Shown at the top of the instructor dashboard when the account is PENDING approval.
- * Instructors can set up their profile and upload documents while waiting.
- * They cannot create bookings until APPROVED.
+ * Shown at the top of the instructor dashboard when the account is not APPROVED.
+ * Each status gets its own banner with the correct message and actions.
  */
 export default function PendingApprovalBanner({ approvalStatus }: PendingApprovalBannerProps) {
   if (approvalStatus === 'APPROVED') return null;
 
   if (approvalStatus === 'REJECTED') {
     return (
-      <div className="rounded-2xl border border-red-500/25 bg-slate-900/95 px-4 py-3 flex items-center gap-3 shadow-lg shadow-red-500/10 backdrop-blur-xl">
+      <div className="rounded-2xl border border-red-500/25 bg-slate-900/95 px-4 py-3 flex items-center gap-3 shadow-lg shadow-red-500/10 backdrop-blur-xl mb-4">
         <div className="flex-1">
           <p className="text-sm font-semibold text-red-200">Application not approved</p>
           <p className="text-xs text-red-300 mt-0.5">
@@ -34,9 +33,30 @@ export default function PendingApprovalBanner({ approvalStatus }: PendingApprova
     );
   }
 
-  // PENDING (default)
+  // FIX UX-4: SUSPENDED was falling through to the PENDING banner, showing wrong message
+  if (approvalStatus === 'SUSPENDED') {
+    return (
+      <div className="rounded-2xl border border-amber-500/25 bg-slate-900/95 px-4 py-3 flex items-center gap-3 shadow-lg shadow-amber-500/10 backdrop-blur-xl mb-4">
+        <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-amber-200">Account suspended</p>
+          <p className="text-xs text-amber-300 mt-0.5">
+            Your account has been temporarily suspended. Contact support for more information.
+          </p>
+        </div>
+        <a
+          href="mailto:support@drivebook.com.au"
+          className="shrink-0 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+        >
+          Contact Support
+        </a>
+      </div>
+    );
+  }
+
+  // PENDING (default for any other non-APPROVED status)
   return (
-    <div className="rounded-2xl border border-blue-500/25 bg-slate-900/95 px-4 py-3 shadow-lg shadow-blue-500/10 backdrop-blur-xl">
+    <div className="rounded-2xl border border-blue-500/25 bg-slate-900/95 px-4 py-3 shadow-lg shadow-blue-500/10 backdrop-blur-xl mb-4">
       <div className="flex items-start gap-3">
         <Clock className="h-5 w-5 text-blue-300 shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">

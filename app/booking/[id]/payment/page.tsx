@@ -164,6 +164,8 @@ export default function PaymentPage() {
   const [pageError, setPageError] = useState<'EXPIRED' | 'CANCELLED' | 'ALREADY_PAID' | 'ERROR' | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [slotExpiredLive, setSlotExpiredLive] = useState(false)
+  // C-09 fix: inline confirm replaces window.confirm() — blocked on mobile WebViews
+  const [cancelConfirming, setCancelConfirming] = useState(false)
 
   useEffect(() => {
     if (token === null) return // wait for token to be read from URL
@@ -210,7 +212,13 @@ export default function PaymentPage() {
   }, [bookingId, router, token])
 
   const handleCancel = useCallback(async () => {
-    if (!window.confirm("Cancel this booking?\n\nYour slot will be released and you'll need to book again.")) return
+    // C-09 fix: window.confirm() replaced with inline confirm state (setCancelConfirming)
+    // window.confirm() is blocked by mobile browsers in standalone/WebView mode.
+    setCancelConfirming(true)
+  }, [])
+
+  const executeCancel = useCallback(async () => {
+    setCancelConfirming(false)
     setCancelling(true)
     try {
       await fetch(`/api/public/bookings/${bookingId}/cancel`, {
@@ -456,17 +464,42 @@ export default function PaymentPage() {
 
         {/* Cancel escape hatch */}
         <div className="text-center pb-2">
-          <p className="text-xs text-gray-400 mb-1">Need to make changes?</p>
-          <button
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="text-xs text-gray-500 hover:text-red-600 underline transition-colors disabled:opacity-50"
-          >
-            {cancelling ? 'Cancelling...' : 'Cancel this booking'}
-          </button>
-          <p className="text-xs text-gray-400 mt-1">
-            Your slot will be released — you can book again any time.
-          </p>
+          {cancelConfirming ? (
+            // Inline confirm panel — replaces window.confirm() (C-09)
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-4 text-sm text-left">
+              <p className="font-semibold text-red-800 mb-1">Cancel this booking?</p>
+              <p className="text-red-700 text-xs mb-3">Your slot will be released and you'll need to book again.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCancelConfirming(false)}
+                  className="flex-1 py-2 rounded-lg border border-red-300 text-red-700 text-xs font-semibold hover:bg-red-100 transition-colors"
+                >
+                  Keep booking
+                </button>
+                <button
+                  onClick={executeCancel}
+                  disabled={cancelling}
+                  className="flex-1 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling...' : 'Yes, cancel'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400 mb-1">Need to make changes?</p>
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="text-xs text-gray-500 hover:text-red-600 underline transition-colors disabled:opacity-50"
+              >
+                {cancelling ? 'Cancelling...' : 'Cancel this booking'}
+              </button>
+              <p className="text-xs text-gray-400 mt-1">
+                Your slot will be released — you can book again any time.
+              </p>
+            </>
+          )}
         </div>
 
         {/* Trust footer */}

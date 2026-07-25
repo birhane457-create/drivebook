@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     const pendingBookings = bookings.filter(b => b.status === 'PENDING' || b.status === 'CONFIRMED').length;
 
     // FIXED: Use Transaction table like earnings API does
-    const completedTransactions = await (prisma as any).transaction.aggregate({
+    const completedTransactions = await prisma.transaction.aggregate({
       where: {
         instructorId: decoded.instructorId,
         status: 'COMPLETED',

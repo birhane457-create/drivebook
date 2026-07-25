@@ -59,21 +59,21 @@ export async function GET(req: NextRequest) {
       pendingRefundCount,
       platformLedger,
     ] = await Promise.all([
-      (prisma as any).transaction.aggregate({ where: commissionWhere, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
-      (prisma as any).transaction.aggregate({ where: commissionWhereAllTime, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
-      (prisma as any).transaction.aggregate({ where: commissionWhereThisMonth, _sum: { platformFee: true, amount: true } }),
-      (prisma as any).transaction.aggregate({ where: commissionWhereLastMonth, _sum: { platformFee: true, amount: true } }),
-      (prisma as any).transaction.aggregate({ where: { status: 'PENDING', type: 'BOOKING_PAYMENT' }, _sum: { instructorPayout: true } }),
-      (prisma as any).transaction.aggregate({ where: { status: 'COMPLETED', type: 'BOOKING_PAYMENT' }, _sum: { instructorPayout: true } }),
-      (prisma as any).transaction.aggregate({ where: { status: 'REFUNDED', createdAt: dateFilter }, _sum: { amount: true }, _count: { id: true } }),
-      (prisma as any).transaction.count({ where: commissionWhere }),
-      (prisma as any).transaction.count({ where: { status: 'PENDING', type: 'REFUND' } }),
+      prisma.transaction.aggregate({ where: commissionWhere, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
+      prisma.transaction.aggregate({ where: commissionWhereAllTime, _sum: { platformFee: true, amount: true, instructorPayout: true }, _count: { id: true } }),
+      prisma.transaction.aggregate({ where: commissionWhereThisMonth, _sum: { platformFee: true, amount: true } }),
+      prisma.transaction.aggregate({ where: commissionWhereLastMonth, _sum: { platformFee: true, amount: true } }),
+      prisma.transaction.aggregate({ where: { status: 'PENDING', type: 'BOOKING_PAYMENT' }, _sum: { instructorPayout: true } }),
+      prisma.transaction.aggregate({ where: { status: 'COMPLETED', type: 'BOOKING_PAYMENT' }, _sum: { instructorPayout: true } }),
+      prisma.transaction.aggregate({ where: { status: 'REFUNDED', createdAt: dateFilter }, _sum: { amount: true }, _count: { id: true } }),
+      prisma.transaction.count({ where: commissionWhere }),
+      prisma.transaction.count({ where: { status: 'PENDING', type: 'REFUND' } }),
       getPlatformLedger(),
     ]);
 
     // --- Top instructors by payout (within date range) ---
     // MongoDB doesn't support groupBy with nested relation filters, so fetch and aggregate in JS
-    const eligibleTxns = await (prisma as any).transaction.findMany({
+    const eligibleTxns = await prisma.transaction.findMany({
       where: commissionWhere,
       select: {
         instructorId: true,
@@ -114,23 +114,35 @@ export async function GET(req: NextRequest) {
       .slice(0, 10);
 
     // --- Revenue by month (last 6 months, always fixed range for chart) ---
-    const revenueByMonth = [];
-    for (let i = 5; i >= 0; i--) {
-      const mStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
-      const agg = await (prisma as any).transaction.aggregate({
-        where: { type: 'BOOKING_PAYMENT', status: 'COMPLETED', createdAt: { gte: mStart, lte: mEnd } },
-        _sum: { platformFee: true, amount: true, instructorPayout: true },
-        _count: { id: true },
-      });
-      revenueByMonth.push({
+    // R-03: parallelise all 6 month queries with Promise.all instead of sequential awaits.
+    // Old approach: 6 × ~50ms = ~300ms serial. New: ~50ms total (one round-trip per query, all concurrent).
+    const monthRanges = Array.from({ length: 6 }, (_, idx) => {
+      const i = 5 - idx; // i = 5,4,3,2,1,0 → oldest to most recent
+      return {
+        i,
+        mStart: new Date(now.getFullYear(), now.getMonth() - i, 1),
+        mEnd: new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59),
+      };
+    });
+    const monthAggs = await Promise.all(
+      monthRanges.map(({ mStart, mEnd }) =>
+        (prisma as any).transaction.aggregate({
+          where: { type: 'BOOKING_PAYMENT', status: 'COMPLETED', createdAt: { gte: mStart, lte: mEnd } },
+          _sum: { platformFee: true, amount: true, instructorPayout: true },
+          _count: { id: true },
+        })
+      )
+    );
+    const revenueByMonth = monthRanges.map(({ mStart }, idx) => {
+      const agg = monthAggs[idx];
+      return {
         month: mStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric', timeZone: 'Australia/Perth' }),
         commission: agg._sum.platformFee || 0,
         gross: agg._sum.amount || 0,
         instructorPayout: agg._sum.instructorPayout || 0,
         transactions: agg._count?.id || 0,
-      });
-    }
+      };
+    });
 
     // --- Recent transactions (filtered range, BOOKING_PAYMENT only) ---
     const recentTransactions = await (prisma as any).transaction.findMany({

@@ -251,15 +251,8 @@ export async function logDataAccess(
   ipAddress?: string | null
 ) {
   // This would go in a DataAccessLog table (add to schema if needed)
-  // For now, we'll use the audit log
   try {
-    // Check if auditLog model exists before trying to create
-    if (!prisma.auditLog) {
-      // Silently skip logging if model doesn't exist
-      return;
-    }
-    
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: `DATA_ACCESS_${action}`,
         actorId: accessorId,

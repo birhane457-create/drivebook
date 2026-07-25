@@ -14,6 +14,7 @@ const pricingSchema = z.object({
   package15Discount:          z.number().min(0).max(20),
   basicCommissionRate:        z.number().min(0).max(30),
   proCommissionRate:          z.number().min(0).max(30),
+  studioCommissionRate:       z.number().min(0).max(30).optional().default(11),
   businessCommissionRate:     z.number().min(0).max(30),
   discountPaidBy:             z.enum(['platform', 'shared', 'instructor']),
   cancellationFee:            z.number().min(0).max(500).optional().default(0),

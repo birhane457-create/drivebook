@@ -78,7 +78,7 @@ export class PaymentService {
     calculation: CommissionCalculation,
     paymentIntentId?: string
   ) {
-    return await (prisma as any).transaction.create({
+    return await prisma.transaction.create({
       data: {
         bookingId,
         instructorId,
@@ -127,7 +127,7 @@ export class PaymentService {
       },
     });
 
-    const subscription = await (prisma as any).subscription.findFirst({
+    const subscription = await prisma.subscription.findFirst({
       where: { instructorId, status: 'ACTIVE' },
     });
 

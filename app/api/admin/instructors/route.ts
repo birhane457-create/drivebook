@@ -9,11 +9,10 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-    select: { role: true },
-  });
-  if (user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
+  // R-02: use session.user.role from JWT — same pattern as every other admin route.
+  // The old code did an extra DB lookup (prisma.user.findUnique) on every request just to read role,
+  // when authOptions already embeds role in the JWT token.
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

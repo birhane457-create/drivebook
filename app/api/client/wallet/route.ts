@@ -35,73 +35,41 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get or create wallet (no stored balance fields – everything is derived from transactions)
+    // Get or create wallet
     let wallet = await prisma.clientWallet.findUnique({
       where: { userId: user.id },
-      include: {
-        // Fetch ALL confirmed transactions — no take limit, balance must be exact
-        transactions: {
-          where: { status: 'CONFIRMED' },
-          orderBy: { createdAt: 'desc' }
-        }
-      }
     });
 
     if (!wallet) {
       wallet = await prisma.clientWallet.create({
-        data: {
-          userId: user.id
-        },
-        include: {
-          transactions: {
-            where: { status: 'CONFIRMED' },
-            orderBy: { createdAt: 'desc' }
-          }
-        }
+        data: { userId: user.id },
       });
     }
 
-    // Calculate from wallet transactions (only CONFIRMED)
-    const transactions = wallet.transactions || [];
-    
-    // MEDIUM-4 FIX: Replace unsafe type comparisons with explicit type checks
-    // Type-safe transaction filtering without @ts-nocheck
-    const CREDIT_TYPE = 'CREDIT';
-    const DEBIT_TYPE = 'DEBIT';
-    
-    // Total Credits Added = all CONFIRMED credits (money paid by user)
-    const totalPaid = transactions
-      .filter(t => String(t.type).toUpperCase() === CREDIT_TYPE && t.status === 'CONFIRMED')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-    
-    // Total Spent = all CONFIRMED debits (booking charges)
-    const totalSpent = transactions
-      .filter(t => String(t.type).toUpperCase() === DEBIT_TYPE && t.status === 'CONFIRMED')
-      .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
-    
-    // Calculate actual remaining balance
+    // NF-05: Compute balance via aggregate — avoids loading every transaction ever created.
+    // getWalletBalance() from wallet-helpers would be ideal but requires a refetch;
+    // aggregate is cheaper and equivalent for a single endpoint.
+    const creditAgg = await prisma.walletTransaction.aggregate({
+      where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' },
+      _sum: { amount: true },
+    });
+    const debitAgg = await prisma.walletTransaction.aggregate({
+      where: { walletId: wallet.id, status: 'CONFIRMED', type: 'DEBIT' },
+      _sum: { amount: true },
+    });
+
+    const totalPaid = Number(creditAgg._sum.amount ?? 0);
+    const totalSpent = Number(debitAgg._sum.amount ?? 0);
     const creditsRemaining = totalPaid - totalSpent;
 
-    // Get all confirmed/completed bookings for this user to calculate hours
-    const clientRecords = await prisma.client.findMany({
-      where: { userId: user.id },
-      select: { id: true }
+    // Recent transactions for display — capped at 20, no need to load all
+    const recentTransactions = await prisma.walletTransaction.findMany({
+      where: { walletId: wallet.id, status: 'CONFIRMED' },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
     });
 
-    const clientIds = clientRecords.map(c => c.id);
-
-    const bookings = await prisma.booking.findMany({
-      where: {
-        clientId: { in: clientIds },
-        status: { in: ['COMPLETED', 'CONFIRMED', 'PENDING'] }
-      }
-    });
-
-    // Calculate total booked hours
-    const totalBookedHours = bookings.reduce((sum, b) => {
-      const hours = b.duration || (new Date(b.endTime ?? 0).getTime() - new Date(b.startTime ?? 0).getTime()) / (1000 * 60 * 60);
-      return sum + hours;
-    }, 0);
+    // NF-06: removed totalBookedHours — it was computed here but never rendered in the wallet UI
 
     return NextResponse.json({
       id: wallet.id,
@@ -109,9 +77,8 @@ export async function GET(req: NextRequest) {
       totalPaid: Number(totalPaid),
       totalSpent: Number(totalSpent),
       creditsRemaining: creditsRemaining,
-      totalBookedHours,
-      transactions: wallet.transactions.slice(0, 10), // last 10 for display only
-      bookingsCount: bookings.length
+      transactions: recentTransactions.slice(0, 10), // last 10 for display
+      bookingsCount: 0, // removed — was computing totalBookedHours which is unused
     },
     {
       headers: {

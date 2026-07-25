@@ -255,15 +255,20 @@ export default function SettingsPage() {
     }))
   }
 
+  const [pdaDeleteConfirmId, setPdaDeleteConfirmId] = useState<string | null>(null)
+
   const removePDAConfig = (id: string) => {
-    // Show confirmation dialog
-    if (window.confirm('Are you sure you want to delete this PDA configuration? This action cannot be undone.')) {
-      setFormData(prev => ({
-        ...prev,
-        pdaConfigs: prev.pdaConfigs.filter(config => config.id !== id)
-      }))
-      setExpandedPDAConfig(null)
-    }
+    // FIX BUG-4: replaced window.confirm() with inline confirmation state
+    setPdaDeleteConfirmId(id)
+  }
+
+  const confirmRemovePDAConfig = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      pdaConfigs: prev.pdaConfigs.filter(config => config.id !== id)
+    }))
+    setExpandedPDAConfig(null)
+    setPdaDeleteConfirmId(null)
   }
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -954,6 +959,27 @@ export default function SettingsPage() {
                                     <X className="h-5 w-5" />
                                   </button>
                                 </div>
+
+                                {/* FIX BUG-4: inline confirm replaces window.confirm() */}
+                                {pdaDeleteConfirmId === config.id && (
+                                  <div className="flex items-center gap-3 rounded-xl bg-red-950/40 border border-red-700/50 px-4 py-3 mt-2">
+                                    <p className="flex-1 text-sm text-red-200">Delete this PDA configuration? This cannot be undone.</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => confirmRemovePDAConfig(config.id)}
+                                      className="shrink-0 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                                    >
+                                      Delete
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPdaDeleteConfirmId(null)}
+                                      className="shrink-0 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                )}
                                 
                                 <div className="space-y-3">
                                   <div>

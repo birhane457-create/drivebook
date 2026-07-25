@@ -129,9 +129,24 @@ export async function POST(req: NextRequest) {
       const { getStripePriceId } = require('@/lib/config/subscriptions');
       const priceId = getStripePriceId(tier as any, billingCycle);
 
+      // Get or create Stripe customer — use existing customer ID to prevent duplicates on retry
+      let customerId = user.instructor.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          name: user.instructor.name || user.name || undefined,
+          metadata: { instructorId: user.instructor.id },
+        });
+        customerId = customer.id;
+        await prisma.instructor.update({
+          where: { id: user.instructor.id },
+          data: { stripeCustomerId: customerId },
+        });
+      }
+
       // Create checkout session to add payment method
       const checkoutSession = await stripe.checkout.sessions.create({
-        customer_email: user.email,
+        customer: customerId,          // ← use customer ID, NOT customer_email
         line_items: [{
           price: priceId,
           quantity: 1,
@@ -145,10 +160,10 @@ export async function POST(req: NextRequest) {
           billingCycle,
         },
         subscription_data: {
-          // Don't set trial_period_days - let it start billing immediately
           metadata: {
             instructorId: user.instructor.id,
             tier,
+            billingCycle,
           },
         },
       });

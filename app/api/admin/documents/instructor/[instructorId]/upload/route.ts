@@ -61,7 +61,7 @@ export async function POST(
       return NextResponse.json({ error: uploadValidation.error }, { status: uploadValidation.status });
     }
 
-    const url = await cloudinaryService.uploadInstructorDocument(
+    const result = await cloudinaryService.uploadInstructorDocument(
       params.instructorId,
       field,
       buffer
@@ -69,10 +69,10 @@ export async function POST(
 
     await prisma.instructor.update({
       where: { id: params.instructorId },
-      data: { [field]: url },
+      data: { [field]: result.url },
     });
 
-    return NextResponse.json({ success: true, url });
+    return NextResponse.json({ success: true, url: result.url, publicId: result.publicId });
   } catch (error) {
     console.error('Admin doc upload error:', error);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

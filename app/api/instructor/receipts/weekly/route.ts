@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Get all completed transactions for this week
-    const transactions = await (prisma as any).transaction.findMany({
+    const transactions = await prisma.transaction.findMany({
       where: {
         instructorId,
         status: 'COMPLETED',

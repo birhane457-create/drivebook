@@ -152,11 +152,7 @@ function CheckItem({ done, label, subtitle, href }: {
   done: boolean; label: string; subtitle: string; href?: string
 }) {
   const inner = (
-    <div className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all ${
-      done
-        ? 'bg-emerald-950/20 border-emerald-800/40'
-        : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600'
-    }`}>
+    <>
       <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
         done ? 'bg-emerald-500' : 'bg-slate-700 border-2 border-slate-500'
       }`}>
@@ -168,10 +164,22 @@ function CheckItem({ done, label, subtitle, href }: {
       </div>
       {!done && href && <ChevronRight className="h-4 w-4 text-slate-500 flex-shrink-0" />}
       {done && <span className="text-xs text-emerald-500 font-medium flex-shrink-0">Done</span>}
-    </div>
+    </>
   )
-  if (!done && href) return <Link href={href} className="no-underline block">{inner}</Link>
-  return inner
+  // Always use the same wrapper element to avoid hydration mismatch
+  const className = `flex items-center gap-3 p-3.5 rounded-xl border transition-all ${
+    done
+      ? 'bg-emerald-950/20 border-emerald-800/40'
+      : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600'
+  }`
+  if (!done && href) {
+    return (
+      <Link href={href} className={`no-underline ${className}`}>
+        {inner}
+      </Link>
+    )
+  }
+  return <div className={className}>{inner}</div>
 }
 
 // ── Document row ──────────────────────────────────────────────────────────────
@@ -230,14 +238,22 @@ function DocRow({ doc, docs, uploading, onUpload }: {
                   Expires {expiryDate}
                 </span>
               )}
-              <a
-                href={docs[doc.key] as string}
-                target="_blank"
-                rel="noopener noreferrer"
+              {/* Use signed URL endpoint — never expose raw Cloudinary URL */}
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/instructor/documents/${doc.key}`);
+                    if (res.ok) {
+                      const { url } = await res.json();
+                      window.open(url, '_blank', 'noopener,noreferrer');
+                    }
+                  } catch { /* silent — document still visible in portal */ }
+                }}
                 className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 transition"
               >
                 <ExternalLink className="h-3 w-3" /> View
-              </a>
+              </button>
             </div>
           )}
 

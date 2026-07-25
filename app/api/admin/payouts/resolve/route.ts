@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
+import { payoutRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Rate limit: 5 payout mutations per minute per admin — prevents runaway scripts
+    // and limits blast radius from a compromised admin account.
+    const rateLimitId = getRateLimitIdentifier(session.user.id, req.headers.get('x-forwarded-for'), 'payout-resolve');
+    const rateLimitResult = await checkRateLimitStrict(payoutRateLimit, rateLimitId);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: rateLimitResult.error },
+        { status: 429, headers: rateLimitResult.headers },
+      );
+    }
+
     const body = await req.json();
     const { transactionId, action: rawAction, reason } = body as {
       transactionId: string;
@@ -66,13 +78,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Unknown action: ${rawAction}` }, { status: 400 });
     }
 
-    // Load transaction
-    const txn = await (prisma as any).transaction.findUnique({
+    // Load transaction — wallet reached via booking → client → user → wallet
+    const txn = await prisma.transaction.findUnique({
       where: { id: transactionId },
       include: {
         booking: {
           include: {
-            client: { include: { wallet: true } },
+            client: {
+              include: {
+                user: { include: { wallet: true } },
+              },
+            },
           },
         },
       },
@@ -84,7 +100,6 @@ export async function POST(req: NextRequest) {
 
     // ── Idempotency guard — terminal states ──────────────────────────────────
     const TERMINAL = ['REFUNDED', 'CANCELLED', 'COMPLETED'];
-    // SETTLED is terminal for approve_for_payout (already approved)
     if (txn.status === 'SETTLED' && action === 'approve_for_payout') {
       return NextResponse.json(
         { error: 'Transaction already approved for payout', status: txn.status },
@@ -104,8 +119,8 @@ export async function POST(req: NextRequest) {
     // ── Execute action ───────────────────────────────────────────────────────
 
     if (action === 'refund_client') {
-      // Refund to client wallet
-      const wallet = txn.booking?.client?.wallet;
+      // Wallet lives on User, not Client — go through client.user.wallet
+      const wallet = (txn.booking?.client as any)?.user?.wallet;
       if (!wallet) {
         return NextResponse.json(
           { error: 'Client wallet not found — cannot refund' },
@@ -113,30 +128,28 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      await (prisma as any).$transaction([
-        // Mark transaction refunded
-        (prisma as any).transaction.update({
+      await prisma.$transaction([
+        prisma.transaction.update({
           where: { id: transactionId },
           data: { status: 'REFUNDED', updatedAt: now },
         }),
-        // Credit client wallet
-        (prisma as any).wallet.update({
+        // Credit client wallet balance (cache field)
+        prisma.clientWallet.update({
           where: { id: wallet.id },
           data: { balance: { increment: txn.amount } },
         }),
-        // Wallet transaction record
-        (prisma as any).walletTransaction.create({
+        // Authoritative ledger entry
+        prisma.walletTransaction.create({
           data: {
             walletId: wallet.id,
             amount: txn.amount,
             type: 'REFUND',
             status: 'CONFIRMED',
             description: `Dispute refund — booking ${txn.bookingId}`,
-            referenceId: transactionId,
+            bookingId: txn.bookingId ?? undefined,
           },
         }),
-        // Audit log
-        (prisma as any).auditLog.create({
+        prisma.auditLog.create({
           data: {
             action: 'DISPUTE_RESOLVED_REFUND_CLIENT',
             actorId: adminId,
@@ -149,7 +162,6 @@ export async function POST(req: NextRequest) {
         }),
       ]);
 
-      // Ledger — money out (refund)
       await Promise.all([
         appendLedgerEntry({
           type: 'REFUND_ISSUED',
@@ -171,14 +183,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'approve_for_payout') {
-      // Mark SETTLED — transaction becomes eligible for next payout run.
-      // No Stripe call here. Payout layer (process/route.ts) handles execution.
-      await (prisma as any).$transaction([
-        (prisma as any).transaction.update({
+      await prisma.$transaction([
+        prisma.transaction.update({
           where: { id: transactionId },
           data: { status: 'SETTLED', updatedAt: now },
         }),
-        (prisma as any).auditLog.create({
+        prisma.auditLog.create({
           data: {
             action: 'DISPUTE_RESOLVED_APPROVE_FOR_PAYOUT',
             actorId: adminId,
@@ -205,14 +215,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'charge_instructor') {
-      // Mark CANCELLED + create negative adjustment ledger entry.
-      // Deducted from instructor's next payout via ADJUSTMENT entries.
-      await (prisma as any).$transaction([
-        (prisma as any).transaction.update({
+      await prisma.$transaction([
+        prisma.transaction.update({
           where: { id: transactionId },
           data: { status: 'CANCELLED', updatedAt: now },
         }),
-        (prisma as any).auditLog.create({
+        prisma.auditLog.create({
           data: {
             action: 'DISPUTE_RESOLVED_CHARGE_INSTRUCTOR',
             actorId: adminId,
@@ -229,7 +237,6 @@ export async function POST(req: NextRequest) {
         }),
       ]);
 
-      // Ledger adjustment — recovered from next payout
       await appendLedgerEntry({
         type: 'ADJUSTMENT',
         amount: -txn.instructorPayout,
@@ -248,13 +255,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'void') {
-      // Write off — no money moves, transaction closed
-      await (prisma as any).$transaction([
-        (prisma as any).transaction.update({
+      await prisma.$transaction([
+        prisma.transaction.update({
           where: { id: transactionId },
           data: { status: 'CANCELLED', updatedAt: now },
         }),
-        (prisma as any).auditLog.create({
+        prisma.auditLog.create({
           data: {
             action: 'DISPUTE_RESOLVED_VOID',
             actorId: adminId,

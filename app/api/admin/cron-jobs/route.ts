@@ -24,8 +24,8 @@ export async function GET(req: NextRequest) {
   const now = Date.now();
 
   // Load all CronHealth records in one query
-  const records = await (prisma as any).cronHealth.findMany();
-  const recordMap = new Map(records.map((r: any) => [r.jobName, r]));
+  const records = await prisma.cronHealth.findMany();
+  const recordMap = new Map(records.map((r) => [r.jobName, r]));
 
   const jobs = Object.entries(CRON_JOB_CONFIG).map(([jobName, config]) => {
     const record = recordMap.get(jobName) as any;

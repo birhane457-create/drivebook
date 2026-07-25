@@ -1,10 +1,39 @@
+/**
+ * POST /api/upload
+ *
+ * General-purpose upload endpoint for public assets:
+ * profile photos, car photos, brand logos.
+ *
+ * These go to the drivebook/public/ folder in Cloudinary
+ * and return a permanent public URL (appropriate for avatars + logos).
+ *
+ * Previously this wrote to public/uploads/ on the local filesystem,
+ * which is read-only on Vercel and does not persist across deployments.
+ *
+ * Compliance documents (licence, insurance, etc.) use a separate route:
+ * POST /api/instructor/documents — those go to drivebook/private/
+ * and are served via signed URLs only.
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { existsSync } from 'fs'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import crypto from 'crypto'
+import { uploadToCloudinary } from '@/lib/services/cloudinary'
+
+export const dynamic = 'force-dynamic'
+
+// Map the `type` param to the correct Cloudinary subfolder and resource type
+const TYPE_MAP: Record<string, { folder: string; resourceType: 'image' | 'raw' | 'auto' }> = {
+  'profile':       { folder: 'public/avatars',   resourceType: 'image' },
+  'car':           { folder: 'public/avatars',   resourceType: 'image' },
+  'profile-photo': { folder: 'public/avatars',   resourceType: 'image' },
+  'car-photo':     { folder: 'public/avatars',   resourceType: 'image' },
+  'brand-logo':    { folder: 'public/logos',     resourceType: 'image' },
+  'marketing':     { folder: 'public/marketing', resourceType: 'image' },
+}
+
+const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,63 +42,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only allow staff/instructors/admin to upload server-hosted files.
-    // (Client uploads should use signed Cloudinary/S3 flows.)
     if (!['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN', 'STAFF'].includes((session.user as any).role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const formData = await req.formData()
-    // TypeScript workaround: formData is Web API FormData with get() method
-    const file = (formData as any).get('file') as File | null
-    const type = (formData as any).get('type') as string | null
+    const file = formData.get('file') as File | null
+    const type = (formData.get('type') as string | null) ?? 'profile'
 
     if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Basic size/type hardening
-    const MAX_BYTES = 5 * 1024 * 1024 // 5MB
-    if ((file as any).size && (file as any).size > MAX_BYTES) {
-      return NextResponse.json({ error: 'File too large (max 5MB)' }, { status: 413 })
+    // Size check
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json({ error: 'File too large (max 10 MB)' }, { status: 413 })
     }
 
-    const contentType = (file as any).type as string | undefined
-    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
-    if (contentType && !allowedTypes.has(contentType)) {
-      return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 })
+    // MIME type check
+    if (!ALLOWED_MIME.has(file.type)) {
+      return NextResponse.json({ error: 'Only JPEG, PNG, WebP or GIF images are accepted' }, { status: 400 })
     }
 
+    // Resolve folder from type
+    const mapping = TYPE_MAP[type] ?? TYPE_MAP['profile']
+
+    // Convert to buffer then base64 data URI for Cloudinary
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
+    const base64 = buffer.toString('base64')
+    const dataUri = `data:${file.type};base64,${base64}`
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), 'public', 'uploads')
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true })
-    }
+    const result = await uploadToCloudinary(dataUri, {
+      folder: mapping.folder,
+      resourceType: mapping.resourceType,
+      overwrite: false, // never silently overwrite — new uploads get new public IDs
+    })
 
-    // Generate safe unique filename (do not trust original name)
-    const timestamp = Date.now()
-    const ext =
-      contentType === 'image/jpeg' ? 'jpg' :
-      contentType === 'image/png' ? 'png' :
-      contentType === 'image/webp' ? 'webp' :
-      contentType === 'application/pdf' ? 'pdf' :
-      'bin'
-
-    const safeType = (type ?? 'file').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'file'
-    const nonce = crypto.randomBytes(8).toString('hex')
-    const filename = `${safeType}-${timestamp}-${nonce}.${ext}`
-    const filepath = join(uploadsDir, filename)
-
-    // Write file
-    await writeFile(filepath, buffer)
-
-    // Return public URL
-    const url = `/uploads/${filename}`
-
-    return NextResponse.json({ url, success: true })
+    return NextResponse.json({ url: result.url, publicId: result.publicId, success: true })
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })

@@ -38,14 +38,14 @@ export async function getDailySummary(): Promise<ToolResult> {
       prisma.booking.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart }, deletedAt: null } as any }).catch(() => 0),
       prisma.client.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart } } }).catch(() => 0),
       prisma.booking.count({ where: { status: 'PENDING_PAYMENT', createdAt: { lt: yesterdayStart }, deletedAt: null } as any }).catch(() => 0),
-      (prisma as any).stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }).catch(() => 0),
+      prisma.stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }).catch(() => 0),
       prisma.instructor.count({ where: { approvalStatus: 'PENDING' } }).catch(() => 0),
       prisma.instructor.count({
         where: { approvalStatus: 'APPROVED', OR: [{ licenseExpiry: { gte: now, lte: thirtyDaysFromNow } }, { insuranceExpiry: { gte: now, lte: thirtyDaysFromNow } }] },
       }).catch(() => 0),
     ])
 
-  const weekRevAgg = await (prisma as any).walletTransaction.aggregate({
+  const weekRevAgg = await prisma.walletTransaction.aggregate({
     where: { createdAt: { gte: last7 }, type: 'CREDIT' },
     _sum: { amount: true },
   }).catch(() => ({ _sum: { amount: 0 } }))
@@ -73,11 +73,11 @@ export async function getHealthScore(): Promise<ToolResult> {
       prisma.booking.count({ where: { status: 'PENDING_PAYMENT', createdAt: { gte: last30 }, deletedAt: null } as any }).catch(() => 0),
       prisma.instructor.count({ where: { approvalStatus: 'APPROVED' } }).catch(() => 0),
       prisma.instructor.count({ where: { approvalStatus: 'APPROVED', stripeAccountId: { not: null }, chargesEnabled: true } }).catch(() => 0),
-      (prisma as any).stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }).catch(() => 0),
-      (prisma as any).walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
-      (prisma as any).walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
-      (prisma as any).payout.count({ where: { status: 'FAILED', createdAt: { gte: last30 } } }).catch(() => 0),
-      (prisma as any).payout.count({ where: { createdAt: { gte: last30 } } }).catch(() => 0),
+      prisma.stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }).catch(() => 0),
+      prisma.walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
+      prisma.walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
+      prisma.payout.count({ where: { status: 'FAILED', createdAt: { gte: last30 } } }).catch(() => 0),
+      prisma.payout.count({ where: { createdAt: { gte: last30 } } }).catch(() => 0),
     ])
 
   const completionRate = finalized > 0 ? Math.round((completed / finalized) * 100) : 100
@@ -87,7 +87,6 @@ export async function getHealthScore(): Promise<ToolResult> {
   const revChange = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : 0
   const payoutFailRate = totalPayouts > 0 ? Math.round((failedPayouts / totalPayouts) * 100) : 0
 
-  // Approximate score
   const score = Math.min(100, Math.max(0,
     Math.round(completionRate * 0.25) +
     Math.round(Math.max(0, 20 - (failedPayments > 0 ? 20 : 0))) +
@@ -126,7 +125,7 @@ export async function getInstructorRisk(args: { limit?: number; minScore?: numbe
       where: { status: 'CANCELLED', updatedAt: { gte: last30 }, deletedAt: null } as any,
       _count: { id: true },
     }).catch(() => []),
-    (prisma as any).stripeDispute.groupBy({
+    prisma.stripeDispute.groupBy({
       by: ['instructorId'],
       where: { instructorId: { in: instructors.map(i => i.id) }, status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } },
       _count: { id: true },
@@ -190,8 +189,8 @@ export async function getWeeklyReport(): Promise<ToolResult> {
   const prev7 = new Date(now.getTime() - 14 * 86400000)
 
   const [twRev, lwRev, twBookings, lwBookings, completed, cancelled, newStudents] = await Promise.all([
-    (prisma as any).walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
-    (prisma as any).walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
+    prisma.walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
+    prisma.walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
     prisma.booking.count({ where: { createdAt: { gte: last7 }, deletedAt: null } as any }).catch(() => 0),
     prisma.booking.count({ where: { createdAt: { gte: prev7, lt: last7 }, deletedAt: null } as any }).catch(() => 0),
     prisma.booking.count({ where: { status: 'COMPLETED', updatedAt: { gte: last7 }, deletedAt: null } as any }).catch(() => 0),
@@ -221,7 +220,7 @@ export async function getRevenueBreakdown(args: { days?: number }): Promise<Tool
   const since = new Date(Date.now() - days * 86400000)
 
   const [totalRevAgg, cancelledBookings, topInstructors] = await Promise.all([
-    (prisma as any).walletTransaction.aggregate({
+    prisma.walletTransaction.aggregate({
       where: { createdAt: { gte: since }, type: 'CREDIT' },
       _sum: { amount: true },
     }).catch(() => ({ _sum: { amount: 0 } })),
@@ -242,7 +241,6 @@ export async function getRevenueBreakdown(args: { days?: number }): Promise<Tool
     }).catch(() => []),
   ])
 
-  // Resolve instructor names
   const ids = (topInstructors as any[]).map(r => r.instructorId).filter(Boolean)
   const names = ids.length > 0
     ? await prisma.instructor.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }).catch(() => [])
@@ -270,7 +268,6 @@ export async function getStudentRetention(): Promise<ToolResult> {
   const last30 = new Date(now.getTime() - 30 * 86400000)
   const last60 = new Date(now.getTime() - 60 * 86400000)
 
-  // Students who booked in last 30 days
   const [recentBookers, repeatBookers, totalStudents, activeStudents] = await Promise.all([
     prisma.booking.findMany({
       where: { createdAt: { gte: last30 }, deletedAt: null } as any,
@@ -319,13 +316,11 @@ export async function getSuburbDemand(args: { limit?: number }): Promise<ToolRes
     take: 500,
   }).catch(() => [])
 
-  // Extract suburb from address (last non-postcode, non-state segment)
   const suburbCount: Record<string, number> = {}
   for (const b of bookings) {
     const addr = (b as any).pickupAddress as string
     if (!addr) continue
     const parts = addr.split(',').map((p: string) => p.trim()).filter(Boolean)
-    // Take second-to-last part as suburb approximation
     const suburb = parts.length >= 2 ? parts[parts.length - 2] : parts[0]
     if (suburb && suburb.length > 2) {
       suburbCount[suburb] = (suburbCount[suburb] ?? 0) + 1
@@ -354,13 +349,13 @@ export async function getOperationsTimeline(args: { hours?: number }): Promise<T
       _count: { id: true },
     }).catch(() => []),
 
-    (prisma as any).payout.groupBy({
+    prisma.payout.groupBy({
       by: ['status'],
       where: { updatedAt: { gte: since } },
       _count: { id: true },
     }).catch(() => []),
 
-    (prisma as any).stripeDispute.count({
+    prisma.stripeDispute.count({
       where: { updatedAt: { gte: since } },
     }).catch(() => 0),
 
@@ -410,7 +405,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'getDailySummary',
-      description: 'Get yesterday\'s operational summary: completed bookings, cancellations, new students, open issues (stuck payments, disputes, pending approvals, expiring docs), and this week\'s revenue.',
+      description: "Get yesterday's operational summary: completed bookings, cancellations, new students, open issues (stuck payments, disputes, pending approvals, expiring docs), and this week's revenue.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -441,7 +436,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'getWeeklyReport',
-      description: 'Get this week\'s performance vs last week: revenue, bookings, completion rate, new students. Use for trend questions like "how are we doing this week" or "is revenue up or down".',
+      description: "Get this week's performance vs last week: revenue, bookings, completion rate, new students. Use for trend questions like 'how are we doing this week' or 'is revenue up or down'.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -485,7 +480,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'getOperationsTimeline',
-      description: 'Get a summary of recent platform activity: booking status counts, payout activity, dispute events, audit log volume. Use for "what happened today/recently" questions.',
+      description: "Get a summary of recent platform activity: booking status counts, payout activity, dispute events, audit log volume. Use for 'what happened today/recently' questions.",
       parameters: {
         type: 'object',
         properties: {

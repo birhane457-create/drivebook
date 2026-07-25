@@ -28,18 +28,18 @@
 
 ---
 
-### Step 2: Complete Profile (`/setup/complete-profile`)
+### Step 2: Upload Documents (`/dashboard/documents`)
 
-After registration, instructor redirected to profile completion form to upload documents:
-- Driver's license
-- Insurance certificate
-- Certifications (optional)
-- Working hours
-- Service areas
-- Car details
-- Languages
+After registration and login, the instructor is directed to complete their profile and upload required documents at `/dashboard/documents`. The page shows a 5-step setup checklist and collapsible upload rows for all 8 document types.
 
-**No gate** at this step — instructor can add documents while `PENDING`
+Required documents:
+- Driver's licence (front + back)
+- Insurance certificate (current, covers instruction)
+- Police check (within 12 months)
+- Working with Children check (state-dependent)
+- Photo ID
+- Vehicle registration
+- Certification (optional)
 
 ---
 

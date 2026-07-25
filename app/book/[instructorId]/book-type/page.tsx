@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import MultiStepBookingLayout from '@/components/MultiStepBookingLayout';
 import BookNowOrLater from '@/components/BookNowOrLater';
@@ -11,6 +11,7 @@ export default function BookTypePage() {
   const params = useParams();
   const { bookingState } = useBooking();
   const { instructor } = bookingState;
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     // Wait for instructor to load from localStorage before redirecting
@@ -39,9 +40,10 @@ export default function BookTypePage() {
 
   const handleContinue = () => {
     if (!bookingState.bookingType) {
-      alert('Please select when you would like to schedule your lessons');
+      setValidationError('Please select when you would like to schedule your lessons');
       return;
     }
+    setValidationError(null);
 
     if (bookingState.bookingType === 'now') {
       router.push(`/book/${params.instructorId}/booking-details`);
@@ -58,6 +60,12 @@ export default function BookTypePage() {
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/15">
+          {/* C-01 fix: inline validation error replaces alert() */}
+          {validationError && (
+            <p role="alert" className="w-full text-sm font-semibold text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
+              ⚠️ {validationError}
+            </p>
+          )}
           <button
             onClick={() => router.back()}
             type="button"

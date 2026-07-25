@@ -206,13 +206,31 @@ export default function SubscriptionPlans({
     const portalReturn = searchParams.get('portal_return');
 
     if (success === 'true' && paymentAdded === 'true') {
-      setSuccessMsg('Payment method added successfully. Your subscription is now active.');
-      // Clean up URL params
+      // Payment method added — sync subscription state from Stripe immediately
+      // (webhook may not have arrived yet by the time the page loads)
+      setSyncing(true);
       const url = new URL(window.location.href);
       url.searchParams.delete('success');
       url.searchParams.delete('payment_added');
       window.history.replaceState({}, '', url.toString());
-      setTimeout(() => window.location.reload(), 1500);
+
+      fetch('/api/instructor/subscription/sync', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.synced) {
+            setSuccessMsg(data.tierChanged
+              ? `Plan activated — now on ${data.tier}. Welcome!`
+              : 'Payment method added and subscription is active.');
+          } else {
+            setSuccessMsg('Payment method added successfully.');
+          }
+          setTimeout(() => window.location.reload(), 2000);
+        })
+        .catch(() => {
+          setSuccessMsg('Payment method added. Your subscription will activate shortly.');
+          setTimeout(() => window.location.reload(), 2000);
+        })
+        .finally(() => setSyncing(false));
     } else if (portalReturn === 'true') {
       // Returning from billing portal after a plan change — sync from Stripe
       setSyncing(true);
@@ -317,7 +335,10 @@ export default function SubscriptionPlans({
       const res = await fetch('/api/instructor/subscription/billing-portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ return_url: window.location.href }),
+        body: JSON.stringify({
+          return_url: window.location.href,
+          targetTier: dialog?.targetTier,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -374,7 +395,7 @@ export default function SubscriptionPlans({
     { tier: 'BASIC',    plan: SUBSCRIPTION_PLANS.BASIC,    badge: null,            badgeColor: '',              highlight: false, comingSoon: false },
     { tier: 'PRO',      plan: SUBSCRIPTION_PLANS.PRO,      badge: 'POPULAR',       badgeColor: 'bg-blue-600',   highlight: true,  comingSoon: false },
     { tier: 'STUDIO',   plan: SUBSCRIPTION_PLANS.STUDIO,   badge: 'CUSTOM DOMAIN', badgeColor: 'bg-indigo-600', highlight: false, comingSoon: false },
-    { tier: 'BUSINESS', plan: SUBSCRIPTION_PLANS.BUSINESS, badge: 'COMING SOON',   badgeColor: 'bg-gray-400',   highlight: false, comingSoon: true  },
+    { tier: 'BUSINESS', plan: SUBSCRIPTION_PLANS.BUSINESS, badge: 'SCHOOL PLAN', badgeColor: 'bg-purple-600', highlight: false, comingSoon: false },
   ];
 
   return (
@@ -472,7 +493,7 @@ export default function SubscriptionPlans({
                   {tier === 'BASIC' && 'Individual instructor'}
                   {tier === 'PRO' && 'Growing your business'}
                   {tier === 'STUDIO' && 'Your own branded domain'}
-                  {tier === 'BUSINESS' && 'Multi-instructor schools'}
+                  {tier === 'BUSINESS' && 'Driving school identity'}
                 </p>
 
                 {comingSoon ? (
@@ -490,14 +511,35 @@ export default function SubscriptionPlans({
                 )}
 
                 <ul className="mt-4 space-y-2">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                      <svg className="h-4 w-4 text-green-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      {feature}
-                    </li>
-                  ))}
+                  {plan.features.map((feature, i) => {
+                    // Divider line for "coming soon" section
+                    if (feature === '— Coming soon —') {
+                      return (
+                        <li key={i} className="flex items-center gap-2 pt-1">
+                          <div className="flex-1 h-px bg-gray-200" />
+                          <span className="text-xs text-gray-400 font-medium whitespace-nowrap">Coming soon</span>
+                          <div className="flex-1 h-px bg-gray-200" />
+                        </li>
+                      )
+                    }
+                    // Check if this feature is after the divider
+                    const dividerIndex = (plan.features as unknown as string[]).indexOf('— Coming soon —')
+                    const isComingSoon = dividerIndex !== -1 && i > dividerIndex
+                    return (
+                      <li key={i} className={`flex items-start gap-2 text-sm ${isComingSoon ? 'text-gray-400' : 'text-gray-700'}`}>
+                        {isComingSoon ? (
+                          <svg className="h-4 w-4 text-gray-300 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        ) : (
+                          <svg className="h-4 w-4 text-green-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        {feature}
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
 
@@ -533,10 +575,9 @@ export default function SubscriptionPlans({
         })}
       </div>
 
-      {/* Why upgrade */}
       <div className="mt-10 bg-blue-50 rounded-xl p-6">
         <h3 className="text-base font-semibold text-gray-900 mb-4">Why upgrade?</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div>
             <div className="text-2xl font-bold text-blue-600">15% → 11%</div>
             <p className="text-sm text-gray-600 mt-1">Lower commission as you grow</p>
@@ -546,8 +587,12 @@ export default function SubscriptionPlans({
             <p className="text-sm text-gray-600 mt-1">Studio: your own branded URL</p>
           </div>
           <div>
+            <div className="text-2xl font-bold text-blue-600">School identity</div>
+            <p className="text-sm text-gray-600 mt-1">Business: school name on all surfaces</p>
+          </div>
+          <div>
             <div className="text-2xl font-bold text-blue-600">Priority support</div>
-            <p className="text-sm text-gray-600 mt-1">Pro & Studio get faster responses</p>
+            <p className="text-sm text-gray-600 mt-1">Pro & above get faster responses</p>
           </div>
         </div>
       </div>

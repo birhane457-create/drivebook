@@ -59,7 +59,10 @@ export default function ConfirmationPage() {
   };
 
   return (
-    <MultiStepBookingLayout currentStep={3}>
+    <MultiStepBookingLayout currentStep={bookingState.bookingType === 'now'
+      ? (bookingState.instructor?.offersTestPackage ? 6 : 5)
+      : (bookingState.instructor?.offersTestPackage ? 5 : 4)
+    }>
       <div className="space-y-8 max-w-2xl">
         {/* Header */}
         <div className="text-center">

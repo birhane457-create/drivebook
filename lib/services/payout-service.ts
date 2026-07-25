@@ -32,7 +32,21 @@ import { sendAlert } from '@/lib/services/alert-service';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
 
-const PAYOUT_BUFFER_HOURS = 24;
+const PAYOUT_BUFFER_HOURS = 24; // Used for bank/manual payout eligibility check in buildPayout
+
+// Reads dispute buffer from PlatformSettings (defaults to 24h if not configured).
+// The cron uses lateCancellationWindowHours × 2 (typically 48h); this same
+// DB-backed value is now used here so manual and automated payouts stay consistent.
+async function getPayoutBufferHours(): Promise<number> {
+  try {
+    const settings = await prisma.platformSettings.findFirst({
+      select: { lateCancellationWindowHours: true },
+    });
+    return settings?.lateCancellationWindowHours ?? 24;
+  } catch {
+    return 24; // safe fallback
+  }
+}
 
 // Types
 
@@ -84,7 +98,9 @@ export async function buildPayout(
   adminUserId: string,
   transactionIds?: string[],
 ): Promise<{ payoutId: string; idempotencyKey: string; alreadyPaid: boolean }> {
-  const bufferCutoff = new Date(Date.now() - PAYOUT_BUFFER_HOURS * 60 * 60 * 1000);
+  // Read dispute buffer from PlatformSettings (same value cron uses: lateCancellationWindowHours × 2)
+  const bufferHours = await getPayoutBufferHours();
+  const bufferCutoff = new Date(Date.now() - bufferHours * 60 * 60 * 1000);
 
   // Exclude transactions already covered by an active/paid payout
   const coveredIds = await prisma.payoutTransaction.findMany({
@@ -114,7 +130,7 @@ export async function buildPayout(
   // P1-2 FIX: Prisma cannot filter on JSON metadata keys in aggregate().
   // Using findMany + JS filter to correctly exclude already-recovered adjustments
   // that were previously being double-deducted in subsequent payout runs.
-  const allAdjustments = await (prisma as any).ledgerEntry.findMany({
+  const allAdjustments = await prisma.ledgerEntry.findMany({
     where: { type: 'ADJUSTMENT', instructorId },
   });
   const unrecoveredAdjustments = allAdjustments.filter(
@@ -389,15 +405,15 @@ export async function executePayout(
       // so they are not double-deducted in future payouts.
       // Then send instructor notification email about deductions.
       try {
-        const unrecovered = await (prisma as any).ledgerEntry.findMany({
+        const unrecovered = await prisma.ledgerEntry.findMany({
           where: { type: 'ADJUSTMENT', instructorId: payout.instructorId },
         });
         const adjustmentDetails: Array<{ bookingId: string; amount: number }> = [];
-        
+
         for (const adj of unrecovered) {
           const meta = (adj.metadata as any) ?? {};
           if (!meta.recovered) {
-            await (prisma as any).ledgerEntry.update({
+            await prisma.ledgerEntry.update({
               where: { id: adj.id },
               data: { metadata: { ...meta, recovered: true, recoveredByPayoutId: payoutId } },
             });

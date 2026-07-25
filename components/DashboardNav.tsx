@@ -6,7 +6,7 @@ import { signOut } from 'next-auth/react';
 import {
   Home, Calendar, Users, DollarSign, Settings, LogOut,
   Menu, X, Bell, FileText, Palette, CreditCard, BarChart2,
-  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, Star, TrendingUp, Landmark, CalendarDays,
+  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, Star, TrendingUp, Landmark, CalendarDays, Megaphone,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '@/lib/hooks/useNotifications';
@@ -112,10 +112,11 @@ const navGroups = {
   business: {
     label: 'Business',
     items: [
-      { href: '/dashboard/expenses', label: 'Business Records', icon: TrendingUp },
-      { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart2 },
-      { href: '/dashboard/wallet', label: 'Payout Wallet', icon: Wallet },
+      { href: '/dashboard/expenses',    label: 'Business Records', icon: TrendingUp },
+      { href: '/dashboard/analytics',   label: 'Analytics',        icon: BarChart2 },
+      { href: '/dashboard/wallet',      label: 'Payout Wallet',    icon: Wallet },
       { href: '/dashboard/settings/payout', label: 'Tax & Payout', icon: Landmark },
+      { href: '/dashboard/marketing',   label: 'Marketing Flyer',  icon: Megaphone },
     ],
   },
   operations: {

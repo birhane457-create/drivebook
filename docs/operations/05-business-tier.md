@@ -20,9 +20,12 @@ BUSINESS             = organisation-led → businessName (school name) on all su
 - [ ] Stripe BUSINESS annual product created in Stripe dashboard
 - [ ] `STRIPE_BUSINESS_MONTHLY_PRICE_ID` set in `.env`
 - [ ] `STRIPE_BUSINESS_ANNUAL_PRICE_ID` set in `.env`
-- [ ] `comingSoon: true` removed from `components/SubscriptionPlans.tsx`
-- [ ] `businessName` column exists in production DB (migration applied)
-- [ ] `accountType` and `paymentMode` columns exist in production DB (migration applied)
+- [x] `comingSoon: true` removed from `components/SubscriptionPlans.tsx` ✅ Done 2026-07-19
+- [x] `businessName` column exists in production DB ✅ Done 2026-07-19
+- [x] `accountType` and `paymentMode` columns exist in production DB ✅ Done 2026-07-18
+- [x] `studioCommissionRate` column added to `PlatformSettings` ✅ Done 2026-07-21
+- [x] Only `/api/stripe/webhook` registered in Stripe — legacy `/api/subscriptions/webhook` retired ✅ Done 2026-07-21
+- [ ] Remove `/api/subscriptions/webhook` from Stripe dashboard if still listed
 
 ---
 

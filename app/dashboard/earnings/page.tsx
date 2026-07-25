@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { DollarSign, Calendar, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
 import Link from 'next/link';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/components/ui/Toast';
 
 interface EarningsData {
   totalEarnings: number;
@@ -80,6 +82,7 @@ export default function EarningsPage() {
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [weeksToShow, setWeeksToShow] = useState(2);
+  const { toast, showToast, clearToast } = useToast();
 
   useEffect(() => { fetchEarnings(); }, []);
 
@@ -226,6 +229,7 @@ export default function EarningsPage() {
 
   return (
     <div>
+      <Toast toast={toast} onClose={clearToast} />
       <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-sm px-1 py-1">
 
         {/* Header */}
@@ -423,8 +427,8 @@ export default function EarningsPage() {
                               a.href = url; a.download = `receipt-${weekStartISO}.txt`;
                               document.body.appendChild(a); a.click();
                               window.URL.revokeObjectURL(url); document.body.removeChild(a);
-                            } else { alert('Failed to generate receipt.'); }
-                          } catch { alert('Failed to download receipt.'); }
+                            } else { showToast('error', 'Failed to generate receipt.'); }
+                          } catch { showToast('error', 'Failed to download receipt.'); }
                         }}
                         className="w-full px-3 py-2 bg-slate-900 text-sky-400 text-sm rounded-lg hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 font-medium"
                       >
@@ -461,7 +465,7 @@ export default function EarningsPage() {
           <p className="text-xs font-semibold text-green-300 mb-1">ℹ️ About Earnings</p>
           <ul className="text-xs text-green-300 space-y-1">
             <li>• Earnings recorded when lessons are completed</li>
-            <li>• Payouts processed weekly on Fridays</li>
+            <li>• Payouts processed automatically every Tuesday morning (AWST)</li>
             <li>• Download weekly receipts for your records</li>
             <li>• For package hours not yet scheduled, see <Link href="/dashboard/packages" className="underline font-semibold">Packages</Link></li>
           </ul>

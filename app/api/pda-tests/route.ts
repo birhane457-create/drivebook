@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
 
     // Audit log — PDA tests are instructor-managed but must be traceable
     try {
-      await (prisma as any).auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: 'BOOKING_CREATED',
           actorId: session.user.id!,

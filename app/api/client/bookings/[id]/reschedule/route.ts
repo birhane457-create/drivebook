@@ -146,55 +146,25 @@ export async function PUT(
       updateData.pickupAddress = body.pickupLocation;
     }
 
-    // Handle price difference
+    // Pre-flight balance check (outside transaction — avoids holding lock during validation)
+    if (priceDifference > 0 && walletBalance.balance < priceDifference) {
+      return NextResponse.json(
+        {
+          error: 'Insufficient credits for duration increase',
+          required: priceDifference,
+          available: walletBalance.balance,
+        },
+        { status: 400 }
+      );
+    }
+
     if (priceDifference !== 0) {
-      if (priceDifference > 0) {
-        // Price increased - check if client has enough credits
-        if (walletBalance.balance < priceDifference) {
-          return NextResponse.json(
-            {
-              error: 'Insufficient credits for duration increase',
-              required: priceDifference,
-              available: walletBalance.balance,
-            },
-            { status: 400 }
-          );
-        }
-
-        // ✅ P0 FIX #2: Create debit transaction (no stored balance update)
-        await prisma.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            type: 'DEBIT',
-            amount: priceDifference,
-            status: 'CONFIRMED',
-            description: `Duration increase: +${(priceDifference / (booking.instructor.hourlyRate || 1)).toFixed(1)}h`,
-            bookingId,
-          } as any,
-        });
-      } else if (priceDifference < 0) {
-        // Price decreased - refund credits
-        const refundAmount = Math.abs(priceDifference);
-
-        // ✅ P0 FIX #2: Create credit transaction (no stored balance update)
-        await prisma.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            type: 'CREDIT',
-            amount: refundAmount,
-            status: 'CONFIRMED',
-            description: `Duration reduction: -${((refundAmount / (booking.instructor.hourlyRate || 1)).toFixed(1))}h`,
-            bookingId,
-          } as any,
-        });
-      }
-
       updateData.price = newPrice;
     }
 
     // Track original start time on first reschedule
     if (!booking.originalStartTime && booking.startTime) {
-      updateData.originalStartTime = booking.startTime
+      updateData.originalStartTime = booking.startTime;
     }
 
     // P0-6 FIX: Set isNonRefundable when rescheduling inside the 48h penalty window
@@ -209,26 +179,74 @@ export async function PUT(
       rescheduledAt: now.toISOString(),
       rescheduledBy: user.id,
       role: 'client',
+    };
+    const existingHistory = ((booking as any).rescheduledFrom as any[]) || [];
+    updateData.rescheduledFrom = [...existingHistory, historyEntry];
+    updateData.rescheduleCount = (booking.rescheduleCount || 0) + 1;
+
+    // ── Atomic transaction: wallet adjustment + booking update ────────────────
+    // Previously these were two separate writes. If booking.update failed after
+    // walletTransaction.create succeeded, the wallet was adjusted but the booking
+    // was not changed — leaving inconsistent state. Now both succeed or both roll back.
+    let updatedBooking: any;
+    try {
+      updatedBooking = await prisma.$transaction(async (tx) => {
+        // Wallet adjustment for price change (if any)
+        if (priceDifference > 0) {
+          // Re-check balance inside transaction to prevent TOCTOU race
+          const txns = await tx.walletTransaction.findMany({
+            where: { walletId: wallet.id, status: 'CONFIRMED' },
+          });
+          const txBalance = txns.reduce(
+            (sum: number, t: any) => (t.type === 'CREDIT' ? sum + t.amount : sum - t.amount),
+            0
+          );
+          if (txBalance < priceDifference) {
+            throw Object.assign(new Error('INSUFFICIENT_BALANCE'), { code: 'INSUFFICIENT_BALANCE' });
+          }
+
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'DEBIT',
+              amount: priceDifference,
+              status: 'CONFIRMED',
+              description: `Duration increase: +${(priceDifference / (booking.instructor.hourlyRate || 1)).toFixed(1)}h`,
+              bookingId,
+            } as any,
+          });
+        } else if (priceDifference < 0) {
+          const refundAmount = Math.abs(priceDifference);
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'CREDIT',
+              amount: refundAmount,
+              status: 'CONFIRMED',
+              description: `Duration reduction: -${(refundAmount / (booking.instructor.hourlyRate || 1)).toFixed(1)}h`,
+              bookingId,
+            } as any,
+          });
+        }
+
+        // Booking update — atomic with the wallet change
+        return tx.booking.update({
+          where: { id: bookingId },
+          data: updateData,
+        });
+      });
+    } catch (txErr: any) {
+      if (txErr?.code === 'INSUFFICIENT_BALANCE') {
+        return NextResponse.json(
+          { error: 'Insufficient credits for duration increase', required: priceDifference, available: walletBalance.balance },
+          { status: 400 }
+        );
+      }
+      throw txErr;
     }
-    const existingHistory = ((booking as any).rescheduledFrom as any[]) || []
-    updateData.rescheduledFrom = [...existingHistory, historyEntry]
-    updateData.rescheduleCount = (booking.rescheduleCount || 0) + 1
 
-    // Update the booking
-    const updatedBooking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: updateData,
-    });
-    
-    // Get updated balance
+    // Get updated balance (after transaction committed)
     const newBalance = await getWalletBalance(user.id);
-
-    console.log('Booking updated:', {
-      bookingId,
-      changes: updateData,
-      priceDifference,
-      newPrice,
-    });
 
     // Notifications
     try {
@@ -254,7 +272,7 @@ export async function PUT(
 
     // FIX #13: Audit log on client reschedule.
     try {
-      await (prisma as any).auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: 'BOOKING_RESCHEDULED',
           actorId: user.id,

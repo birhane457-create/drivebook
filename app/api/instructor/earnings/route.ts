@@ -3,10 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-// The Transaction model is accessed via (prisma as any).transaction because it may not
-// be present in older generated Prisma client types. Once types are regenerated after
-// the next migration, replace (prisma as any).transaction with prisma.transaction.
-
 /** Aggregate result shape returned by Prisma for transaction queries */
 interface TxAggregate {
   _sum: { instructorPayout: number | null; amount?: number | null; platformFee?: number | null };
@@ -101,7 +97,7 @@ export async function GET(req: NextRequest) {
       scheduledOfflineBookings,
       recentTransactions
     ] = (await Promise.all([      // Completed earnings (all)
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'COMPLETED'
@@ -110,7 +106,7 @@ export async function GET(req: NextRequest) {
         _count: true
       }),
       // Completed earnings (platform only)
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'COMPLETED',
@@ -132,7 +128,7 @@ export async function GET(req: NextRequest) {
         _count: true
       }),
       // Pending payouts
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'PENDING',
@@ -144,7 +140,7 @@ export async function GET(req: NextRequest) {
         _count: true
       }),
       // This month earnings (all)
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'COMPLETED',
@@ -154,7 +150,7 @@ export async function GET(req: NextRequest) {
         _count: true
       }),
       // This month earnings (platform only)
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'COMPLETED',
@@ -178,7 +174,7 @@ export async function GET(req: NextRequest) {
         _count: true
       }),
       // Last month earnings
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'COMPLETED',
@@ -206,6 +202,7 @@ export async function GET(req: NextRequest) {
           price: true,
           platformFee: true,
           instructorPayout: true,
+          commissionRate: true,
           client: {
             select: {
               name: true
@@ -242,7 +239,7 @@ export async function GET(req: NextRequest) {
         take: 20
       }),
       // Recent transactions (actual lessons only, not package purchases)
-      (prisma as any).transaction.findMany({
+      prisma.transaction.findMany({
         where: { 
           instructorId
         },
@@ -299,11 +296,15 @@ export async function GET(req: NextRequest) {
     const platformScheduledTotal = scheduledBookings.reduce((sum, b) => {
       let payout = b.instructorPayout;
       if (!payout || payout === 0) {
+        // Use the commission rate locked at booking creation time.
+        // commissionRate is stored as a decimal (e.g. 0.15 = 15%).
+        // Fall back to 15% (BASIC rate) if not set — only affects very old bookings.
+        const rate = (b as any).commissionRate ?? 0.15;
         if (b.price > 0) {
-          payout = b.price * 0.9;
+          payout = b.price * (1 - rate);
         } else if (b.startTime && b.endTime) {
           const hours = (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / 3600000;
-          payout = hours * hourlyRate * 0.9;
+          payout = hours * hourlyRate * (1 - rate);
         }
       }
       return sum + (payout || 0);
@@ -355,11 +356,12 @@ export async function GET(req: NextRequest) {
       scheduledBookings: scheduledBookings.map(booking => {
         let payout = booking.instructorPayout;
         if (!payout || payout === 0) {
+          const rate = (booking as any).commissionRate ?? 0.15;
           if (booking.price > 0) {
-            payout = booking.price * 0.9;
+            payout = booking.price * (1 - rate);
           } else if (booking.startTime && booking.endTime) {
             const hours = (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3600000;
-            payout = hours * hourlyRate * 0.9;
+            payout = hours * hourlyRate * (1 - rate);
           }
         }
         return {

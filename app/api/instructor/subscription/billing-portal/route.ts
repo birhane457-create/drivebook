@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { return_url } = await req.json().catch(() => ({}));
+    const { return_url, targetTier } = await req.json().catch(() => ({}));
     // Append portal_return=true so the subscription page knows to sync from Stripe
     const baseReturnUrl = return_url || `${process.env.NEXTAUTH_URL}/dashboard/subscription`;
     const returnUrl = baseReturnUrl.includes('?')
@@ -84,8 +84,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Case 2: On trial with no Stripe subscription — create Checkout to add payment
-    // This activates the subscription at the current tier
-    const tier = user.instructor.subscriptionTier || 'BASIC';
+    // Uses targetTier if provided (upgrade flow), otherwise current tier
+    const tier = (targetTier && ['BASIC','PRO','STUDIO','BUSINESS'].includes(targetTier))
+      ? targetTier
+      : (user.instructor.subscriptionTier || 'BASIC');
     const { getStripePriceId } = require('@/lib/config/subscriptions');
     const priceId = getStripePriceId(tier, 'monthly');
 

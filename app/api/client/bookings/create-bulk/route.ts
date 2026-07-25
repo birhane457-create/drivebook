@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
     // ── Post-transaction: transaction records + notifications + receipts ───────
     for (const c of result.created) {
       try {
-        await (prisma as any).transaction.create({
+        await prisma.transaction.create({
           data: {
             bookingId: c.booking.id,
             instructorId: c.booking.instructorId,

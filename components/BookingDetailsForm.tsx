@@ -126,15 +126,41 @@ export default function BookingDetailsForm() {
   // without listing scheduledBookings as a dep (which would fire cleanup prematurely).
   const bookingsRef = React.useRef(scheduledBookings);
   const instructorIdRef = React.useRef(instructor?.id);
+  // C-12 fix: store the session ID in a ref so the unmount cleanup uses the correct
+  // value (not the hardcoded 'bulk-api' that was here before).
+  const sessionIdRef = React.useRef(sessionId);
   React.useEffect(() => { bookingsRef.current = scheduledBookings; }, [scheduledBookings]);
   React.useEffect(() => { instructorIdRef.current = instructor?.id; }, [instructor?.id]);
+  React.useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
 
-  // Cleanup: Release all reserved slots ONLY when component unmounts
+  // Cleanup: Release all reserved slots when component unmounts.
+  // Calls both context (in-memory) AND server DELETE so SlotReservation rows are
+  // freed immediately instead of waiting up to 10 min for the cron cleanup.
   useEffect(() => {
     return () => {
-      bookingsRef.current.forEach((booking) => {
-        const slotKey = `${instructorIdRef.current}:${booking.date}:${booking.time}:${booking.duration}`;
+      const currentBookings  = bookingsRef.current;
+      const currentInstructorId = instructorIdRef.current;
+      if (!currentInstructorId) return;
+
+      currentBookings.forEach((booking) => {
+        // Release from context (synchronous)
+        const slotKey = `${currentInstructorId}:${booking.date}:${booking.time}:${booking.duration}`;
         releaseSlot(slotKey);
+
+        // Release from server (fire-and-forget — component is unmounting)
+        const params = new URLSearchParams({
+          instructorId: currentInstructorId,
+          date:         booking.date,
+          time:         booking.time,
+          duration:     String(booking.duration),
+          sessionId:    sessionIdRef.current, // C-12 fix: use actual session ID, not hardcoded 'bulk-api'
+        });
+        fetch(`/api/availability/check-and-reserve?${params.toString()}`, {
+          method: 'DELETE',
+          keepalive: true, // ensures the request completes even if the page is unloading
+        }).catch(() => {
+          // Non-critical — cron will clean up any lingering reservations within 10 min
+        });
       });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

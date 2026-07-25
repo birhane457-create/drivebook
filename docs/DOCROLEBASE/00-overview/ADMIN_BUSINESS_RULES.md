@@ -19,6 +19,7 @@
 | Suspend or unsuspend an instructor | [§5 Instructor Suspension](#5-instructor-suspension) |
 | Change commission rates or platform fees | [§6 Pricing Changes](#6-pricing-changes) |
 | Enable or configure the BUSINESS tier | [§7 Business Tier Activation](#7-business-tier-activation) |
+| Manage a subscription (sync, override, cancel) | [§7a Subscription Management](#7a-subscription-management-admin-ui) |
 | Assign or remove a voice line | [§8 Voice Line Management](#8-voice-line-management) |
 | Handle a dispute or chargeback | [§9 Disputes](#9-disputes) |
 | Modify wallet credits | [§10 Wallet Adjustments](#10-wallet-adjustments) |
@@ -36,17 +37,22 @@
 
 ### Before approving:
 
-- [ ] License number present and not expired
-- [ ] Insurance policy document uploaded and not expired
-- [ ] Police check uploaded and not expired (check expiry date)
-- [ ] WWC check uploaded (if required for state)
-- [ ] Profile photo uploaded
+- [ ] Licence document (`licenseImageFront`) uploaded — not expired
+- [ ] Licence back (`licenseImageBack`) uploaded
+- [ ] Insurance policy (`insurancePolicyDoc`) uploaded and not expired
+- [ ] Police check (`policeCheckDoc`) uploaded and not expired
+- [ ] WWC check (`wwcCheckDoc`) uploaded (state-dependent)
+- [ ] Photo ID (`photoIdDoc`) uploaded
+- [ ] Vehicle registration (`vehicleRegistrationDoc`) uploaded
+- [ ] Profile photo (`profileImage`) uploaded
 - [ ] ABN provided (if operating as a business) — ABN must be verified via `/admin/instructors/[id]` before their first payout
 - [ ] Phone number confirmed (used by AI receptionist and SMS)
 - [ ] Hourly rate set (cannot be $0)
 - [ ] Working hours configured (instructor cannot receive bookings without this)
 - [ ] Base address set (used for instructor search radius)
 - [ ] `approvalStatus` is currently `PENDING` — not already `APPROVED` or `SUSPENDED`
+
+> **Tip:** Use the Document Review page (`/admin/documents/review/[id]`) to check all docs and set expiry dates before approving. The compliance dashboard (`/admin/documents`) gives a traffic-light overview across all instructors.
 
 ### On approval:
 
@@ -238,34 +244,104 @@ The system automatically:
 
 ## 7. Business Tier Activation
 
-**Admin page:** `/admin/instructors/[id]` → subscription section
+**Admin page:** `/admin/subscriptions` → click instructor → Subscription tab
 
 ### Pre-launch checklist (one-time, platform-level):
 
 - [ ] Stripe BUSINESS monthly and annual products created in Stripe dashboard
 - [ ] `STRIPE_BUSINESS_MONTHLY_PRICE_ID` and `STRIPE_BUSINESS_ANNUAL_PRICE_ID` set in `.env`
-- [ ] `comingSoon: true` removed from `components/SubscriptionPlans.tsx`
-- [ ] Migration applied: `businessName` column exists in production DB
+- [ ] Only **one** Stripe webhook registered: `/api/stripe/webhook` — NOT `/api/subscriptions/webhook` (retired)
+- [ ] Migration applied: `businessName`, `studioCommissionRate` columns exist in production DB
 
 ### Before manually setting an instructor to BUSINESS tier:
 
-- [ ] Instructor has provided a school/business name (set in branding settings)
+- [ ] Instructor has set a school name in branding settings (`businessName`)
 - [ ] ABN is verified (BUSINESS accounts must have ABN for payouts)
-- [ ] Instructor understands BUSINESS = organisation-led identity (school name on all surfaces)
-- [ ] Multi-instructor features are Coming Soon — set expectation clearly
+- [ ] Instructor understands multi-instructor features are Coming Soon
+- [ ] SUPER_ADMIN approval required
 
-### On BUSINESS activation:
+### On BUSINESS activation (webhook handles automatically):
 
-The subscription webhook automatically:
 - Sets `subscriptionTier = BUSINESS`
 - Sets `subscriptionStatus = ACTIVE` or `TRIAL`
-- Auto-assigns a dedicated Twilio voice line (PRO+ pool)
+- Auto-assigns a dedicated Twilio voice line from PRO+ pool
 - Applies 10% commission rate going forward
+
+### Manual tier override (admin only):
+
+Use the Subscription tab on the instructor profile (`/admin/instructors/[id]` → Subscription tab):
+
+1. Select tier + status in the Override section
+2. Enter a reason (required, audit-logged)
+3. Click "Apply Override"
+
+**Important:** Override sets DB only — does not touch Stripe. Use for trial extensions, promotional access, or data correction. The tier will be correct until the next Stripe webhook fires; if they have a conflicting Stripe subscription, the webhook will override back. For permanent changes on paid subscriptions, use the Stripe Billing Portal via "Force Sync" or manage directly in Stripe dashboard.
 
 ### Do NOT:
 
-- Manually set `subscriptionTier = BUSINESS` without Stripe subscription — the webhook won't fire and the tier will revert on next subscription sync
+- Manually set `subscriptionTier = BUSINESS` via DB without using the admin UI — no audit trail
 - Promise multi-instructor features — they are Phase 2, not yet built
+- Register `/api/subscriptions/webhook` in Stripe — that route is retired and will log CRITICAL errors
+
+---
+
+## 7a. Subscription Management (Admin UI)
+
+**Admin page:** `/admin/subscriptions` (list) + `/admin/instructors/[id]` → Subscription tab (detail)
+
+### Subscriptions list page:
+
+Shows all instructors with tier, status, monthly amount, period end, and Stripe link status. Filter by tier or status. Click any instructor to go to their profile.
+
+### Subscription tab on instructor profile:
+
+| Section | What it does |
+|---|---|
+| DB State | Shows current tier, status, trial end, Stripe customer ID, Stripe subscription ID from DB |
+| Live Stripe State | Fetches live Stripe subscription in real time — shows Stripe's status, amount, period end, last invoice |
+| Drift Detection | Automatically flags when DB and Stripe disagree — shows which fields differ |
+| Force Sync | Pulls live Stripe state into DB. Fixes drift after billing portal changes. Requires `stripeSubscriptionId` to be set. |
+| Cancel at Period End | Sets `cancel_at_period_end: true` in Stripe — instructor keeps access until billing period ends |
+| Cancel Immediately | Cancels Stripe subscription now — instructor loses access immediately |
+| Link Stripe Sub | Manually links a Stripe `sub_xxx` ID to the instructor record. Used when `stripeSubscriptionId` is missing. |
+| Override Tier / Status | DB-only tier change. Requires reason. All overrides are audit-logged. |
+| Subscription Rows | Shows all `Subscription` DB rows. Trash button deletes duplicate rows (only visible when >1 exists). |
+
+### When to use each action:
+
+| Scenario | Action |
+|---|---|
+| Instructor paid but tier didn't change | Force Sync |
+| Stripe shows ACTIVE but DB shows TRIAL | Force Sync |
+| Missing `stripeSubscriptionId` after payment | Link Stripe Sub → then Force Sync |
+| Duplicate `Subscription` rows in DB | Delete the row(s) without a `stripeSubscriptionId` using trash button |
+| Trial extension for good-faith reason | Override Tier + Status = TRIAL, set custom `trialEndsAt` via DB if needed |
+| Admin-approved free access | Override Tier + Status = ACTIVE, reason required |
+| Instructor requests cancellation (can't self-serve) | Cancel at Period End |
+| Fraud / immediate termination | Cancel Immediately (SUPER_ADMIN required) |
+
+### Commission rates by tier:
+
+| Tier | Default commission | Configurable via |
+|---|---|---|
+| BASIC | 15% | `/admin/pricing` |
+| PRO | 12% | `/admin/pricing` |
+| STUDIO | 11% | `/admin/pricing` |
+| BUSINESS | 10% | `/admin/pricing` |
+
+All four rates are DB-backed (`PlatformSettings.studioCommissionRate` etc.) and editable from `/admin/pricing`. Changes apply to new bookings only — existing confirmed bookings keep their locked rate.
+
+### Stripe webhook — single source of truth:
+
+Only ONE webhook endpoint should be registered in the Stripe dashboard:
+
+```
+POST https://drivebook.com.au/api/stripe/webhook
+```
+
+**The legacy `/api/subscriptions/webhook` is retired.** If it appears in your Stripe webhook list, delete it immediately — it logs CRITICAL errors and does nothing.
+
+The main webhook handles all events: `checkout.session.completed`, `customer.subscription.created/updated/deleted`, `invoice.payment_succeeded/failed`, all payment events. Idempotency is enforced via the `WebhookEvent` table.
 
 ---
 
@@ -493,5 +569,5 @@ Do not delete audit log entries — this is a compliance requirement.
 
 ---
 
-*Last updated: 2026-07-19*
+*Last updated: 2026-07-21*
 *Governed by: `lib/config/governance.ts` — changes to thresholds require SUPER_ADMIN approval and must be reflected in this document.*

@@ -10,6 +10,7 @@ interface Settings {
   package15Discount: number;
   basicCommissionRate: number;
   proCommissionRate: number;
+  studioCommissionRate: number;
   businessCommissionRate: number;
   discountPaidBy: 'platform' | 'shared' | 'instructor';
   cancellationFee: number;
@@ -197,19 +198,19 @@ export default function PricingSettingsForm() {
         </Field>
       </Section>
 
-      {/* Commission by Tier */}
       <Section icon={<TrendingUp className="h-5 w-5" />} title="Commission Rates by Subscription Tier" color="text-purple-700">
-        <div className="grid sm:grid-cols-3 gap-5">
+        <div className="grid sm:grid-cols-4 gap-5">
           {([
-            { key: 'basic', label: 'Basic', border: 'border-slate-700', bg: '' },
-            { key: 'pro', label: 'Pro', border: 'border-blue-700/50', bg: 'bg-blue-900/20' },
-            { key: 'business', label: 'Business', border: 'border-purple-200', bg: 'bg-violet-900/20' },
+            { key: 'basic',    label: 'Basic',    border: 'border-slate-700',       bg: '' },
+            { key: 'pro',      label: 'Pro',      border: 'border-blue-700/50',     bg: 'bg-blue-900/20' },
+            { key: 'studio',   label: 'Studio',   border: 'border-indigo-700/50',   bg: 'bg-indigo-900/20' },
+            { key: 'business', label: 'Business', border: 'border-purple-700/50',   bg: 'bg-violet-900/20' },
           ] as const).map(({ key, label, border, bg }) => (
             <div key={key} className={`border-2 ${border} ${bg} rounded-xl p-4 space-y-3`}>
               <p className="font-semibold text-sm text-slate-200">{label}</p>
               <Field label="Commission (%)">
                 <NumInput
-                  value={s[`${key}CommissionRate`]}
+                  value={(s as any)[`${key}CommissionRate`] ?? 0}
                   onChange={v => set({ [`${key}CommissionRate`]: v } as any)}
                   step={0.5} min={0} max={50}
                 />

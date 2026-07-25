@@ -36,23 +36,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, count: 0, results: [], message: 'No eligible payouts' });
     }
 
-    // ABN gate: load verification state for all eligible instructors in one query
+    // ABN + payoutHold gate: load state for all eligible instructors in one query
     const instructorIds = eligible.map((e) => e.instructorId);
     const instructors = await prisma.instructor.findMany({
       where: { id: { in: instructorIds } },
-      select: { id: true, abn: true, abnVerified: true, abnStatus: true },
+      select: { id: true, abn: true, abnVerified: true, abnStatus: true, payoutHold: true, payoutHoldReason: true },
     });
     const instructorMap = new Map(instructors.map((i) => [i.id, i]));
 
     const results = await Promise.allSettled(
       eligible.map(async (e) => {
         const inst = instructorMap.get(e.instructorId);
+        // Block if instructor has an active dispute hold
+        if (inst?.payoutHold) {
+          return {
+            instructorId: e.instructorId,
+            status: 'SKIPPED',
+            reason: `payout_hold_open_dispute (${inst.payoutHoldReason ?? 'see admin'})`,
+          };
+        }
         // Block if ABN is on file but not yet verified
         if (inst?.abn && !inst.abnVerified) {
           return {
             instructorId: e.instructorId,
             status: 'SKIPPED',
-            reason: `ABN not verified (status: ${inst.abnStatus ?? 'PENDING'})`,
+            reason: `abn_not_verified (status: ${inst.abnStatus ?? 'PENDING'})`,
           };
         }
         return executeInstructorPayout(e.instructorId, session.user.id);

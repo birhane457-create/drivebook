@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
 
       // Audit log
       try {
-        await (prisma as any).auditLog.create({
+        await prisma.auditLog.create({
           data: {
             action: 'BOOKING_EXPIRED',
             actorId: 'SYSTEM',
@@ -122,12 +122,12 @@ export async function GET(req: NextRequest) {
 
     // Auto-complete CONFIRMED bookings whose end time has passed and check-in was recorded
     // (check-in already sets COMPLETED when endTime < now, this catches any that slipped through)
-    const autoCompleted = await (prisma as any).booking.updateMany({
+    const autoCompleted = await prisma.booking.updateMany({
       where: {
         status: 'CONFIRMED',
         endTime: { lt: twoHoursAgo },
         checkInTime: { not: null },
-      },
+      } as any,
       data: { status: 'COMPLETED' },
     });
 
@@ -135,12 +135,12 @@ export async function GET(req: NextRequest) {
     // P2-6 FIX: Use findMany + notify pattern instead of silent bulk updateMany,
     // so instructors/clients get an alert when a booking is auto-marked NO_SHOW.
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
-    const noShowBookings = await (prisma as any).booking.findMany({
+    const noShowBookings = await prisma.booking.findMany({
       where: {
         status: 'CONFIRMED',
         endTime: { lt: threeHoursAgo },
         checkInTime: null,
-      },
+      } as any,
       select: {
         id: true,
         instructor: { select: { userId: true, name: true } },
@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
 
     let autoNoShowCount = 0;
     for (const b of noShowBookings) {
-      await (prisma as any).booking.update({
+      await prisma.booking.update({
         where: { id: b.id },
         data: { status: 'NO_SHOW' },
       });

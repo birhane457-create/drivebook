@@ -56,12 +56,12 @@ export async function GET() {
         where: { createdAt: { gte: yesterdayStart, lt: yesterdayEnd }, deletedAt: null } as any,
       }).catch(() => 0),
 
-      (prisma as any).walletTransaction.aggregate({
+      prisma.walletTransaction.aggregate({
         where: { createdAt: { gte: yesterdayStart, lt: yesterdayEnd }, type: 'CREDIT' },
         _sum: { amount: true },
       }).catch(() => ({ _sum: { amount: 0 } })),
 
-      (prisma as any).transaction.aggregate({
+      prisma.transaction.aggregate({
         where: { createdAt: { gte: yesterdayStart, lt: yesterdayEnd }, status: 'SETTLED' },
         _sum: { platformFee: true },
       }).catch(() => ({ _sum: { platformFee: 0 } })),
@@ -81,7 +81,7 @@ export async function GET() {
         take: 20,
       }).catch(() => []),
 
-      (prisma as any).stripeDispute.findMany({
+      prisma.stripeDispute.findMany({
         where: { status: { in: ['warning_needs_response', 'needs_response', 'under_review'] } },
         select: { id: true, amount: true, status: true, createdAt: true, bookingId: true },
         take: 10,
@@ -112,7 +112,7 @@ export async function GET() {
         take: 10,
       }).catch(() => []),
 
-      (prisma as any).payout.findMany({
+      prisma.payout.findMany({
         where: { status: 'FAILED', createdAt: { gte: last30Days } },
         select: { id: true, amount: true, createdAt: true, instructor: { select: { name: true } } },
         take: 10,
@@ -126,7 +126,7 @@ export async function GET() {
         where: { createdAt: { gte: new Date(last7Days.getTime() - 7 * 86400000), lt: last7Days }, deletedAt: null } as any,
       }).catch(() => 0),
 
-      (prisma as any).walletTransaction.aggregate({
+      prisma.walletTransaction.aggregate({
         where: { createdAt: { gte: last7Days }, type: 'CREDIT' },
         _sum: { amount: true },
       }).catch(() => ({ _sum: { amount: 0 } })),
@@ -146,7 +146,7 @@ export async function GET() {
     let stripeBlockedAmount = 0
     if (stripeIncomplete.length > 0) {
       const incompleteIds = stripeIncomplete.map((i: any) => i.id)
-      const blockedAgg = await (prisma as any).transaction.aggregate({
+      const blockedAgg = await prisma.transaction.aggregate({
         where: {
           instructorId: { in: incompleteIds },
           createdAt: { gte: last30Days },

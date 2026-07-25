@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   const healthy: string[] = [];
 
   for (const [jobName, config] of Object.entries(CRON_JOB_CONFIG)) {
-    const record = await (prisma as any).cronHealth.findUnique({
+    const record = await prisma.cronHealth.findUnique({
       where: { jobName },
     }).catch(() => null);
 

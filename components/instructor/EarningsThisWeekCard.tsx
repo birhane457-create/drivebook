@@ -101,13 +101,15 @@ export function EarningsThisWeekCard() {
       {/* Breakdown */}
       {data.completedCount > 0 && (
         <div className="mt-4 pt-4 border-t border-white/10">
+          {/* FIX DATA-4: removed misleading "N × $rate = total" formula label */}
           <p className="text-xs text-slate-400 mb-2">
-            {data.completedCount} × ${data.hourlyRate} = ${data.totalEarned.toFixed(2)}
+            {data.completedCount} lesson{data.completedCount !== 1 ? 's' : ''} completed this week
           </p>
           <div className="text-xs text-slate-500 space-y-1">
             {data.bookings.slice(0, 3).map((booking) => (
               <div key={booking.id} className="flex justify-between">
                 <span>{booking.date}</span>
+                {/* FIX DATA-3: `booking.price` is now net payout from API (was gross) */}
                 <span className="text-emerald-300 font-medium">${booking.price.toFixed(2)}</span>
               </div>
             ))}

@@ -35,6 +35,8 @@ interface DashboardProps {
   openDisputes: number
   // Recent bookings
   recentBookings: any[]
+  // Set to true when the DB query block failed — distinguishes "real zeros" from "data unavailable"
+  dataUnavailable?: boolean
 }
 
 type Tab = 'overview' | 'operations' | 'intelligence' | 'risk'
@@ -61,6 +63,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
     platformRevenueThisMonth, subMap,
     endedConfirmed, expiringDocs, unverifiedABNs, openDisputes,
     recentBookings,
+    dataUnavailable = false,
   } = props
 
   const alertCount = (pendingInstructors > 0 ? 1 : 0) +
@@ -96,6 +99,14 @@ export default function AdminDashboardTabs(props: DashboardProps) {
       {/* Overview tab */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+
+          {/* Data unavailable banner — shown when DB query block threw an exception */}
+          {dataUnavailable && (
+            <div className="flex items-center gap-3 bg-red-900/20 border border-red-700/50 rounded-xl px-4 py-3 text-sm text-red-300">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>Dashboard data is temporarily unavailable — a database query failed. Figures below may be zero or stale. Refresh to retry.</span>
+            </div>
+          )}
 
           {/* Health Score */}
           <AdminHealthScore />

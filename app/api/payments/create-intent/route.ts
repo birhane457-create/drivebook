@@ -180,8 +180,11 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       );
     }
 
-    // Use provided amount or booking price
-    const paymentAmount = amount || booking.price;
+    // Use booking.price always — never accept amount from client for booking payments.
+    // The webhook validates amount_received (from Stripe) against booking.price (from DB),
+    // so a client-supplied amount can't actually confirm a booking, but removing it here
+    // makes the intent explicit and eliminates dead code.
+    const paymentAmount = booking.price;
 
     // FIX: PaymentIntent deduplication with DB-level advisory lock.
     //

@@ -57,7 +57,7 @@ const THROTTLE_MS = 60 * 60 * 1000; // 1 hour
 async function isThrottledDb(key: string): Promise<boolean> {
   try {
     const cutoff = new Date(Date.now() - THROTTLE_MS);
-    const recent = await (prisma as any).auditLog.findFirst({
+    const recent = await prisma.auditLog.findFirst({
       where: {
         action: 'ALERT_SENT',
         targetId: key,
@@ -76,9 +76,8 @@ async function isThrottledDb(key: string): Promise<boolean> {
 
 async function markSentDb(type: AlertType, entityId?: string): Promise<void> {
   const key = `${type}:${entityId ?? 'global'}`;
-  // Persist to DB
   try {
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'ALERT_SENT',
         actorId: 'SYSTEM',

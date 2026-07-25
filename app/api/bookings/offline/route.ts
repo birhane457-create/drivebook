@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 
     // Audit log — offline bookings must be traceable for dispute resolution
     try {
-      await (prisma as any).auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: 'BOOKING_CREATED',
           actorId: session.user.id!,

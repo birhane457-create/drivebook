@@ -704,7 +704,11 @@ export async function POST(req: NextRequest) {
           await tx.slotReservation.create({
             data: {
               instructorId: resolvedInstructorId,
-              sessionId: 'bulk-api',
+              // Use the request idempotency key as sessionId if available, else generate one.
+              // This lets the client release the server-side reservation using the same key
+              // if the user abandons before payment — without a real sessionId the only
+              // cleanup path was the 10-minute cron expiry.
+              sessionId: idempotencyKey ?? `bulk-${Date.now()}`,
               startTime,
               endTime,
               expiresAt: slotExpiresAt,
@@ -988,7 +992,7 @@ export async function POST(req: NextRequest) {
     // FIX #12: Audit log on public booking creation — previously missing.
     // Required for dispute resolution ("I never made that booking").
     try {
-      await (prisma as any).auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: 'BOOKING_CREATED',
           actorId: userId ?? 'GUEST',

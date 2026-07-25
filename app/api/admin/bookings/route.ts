@@ -71,16 +71,24 @@ export async function GET(req: NextRequest) {
     const filtered = bookings // search already applied in DB
 
     const now = new Date();
-    // Stats
+    // C-11 fix: stats use full-DB counts, not .filter() on the page slice.
+    // The old approach gave wrong counts on page 2+.
+    const [confirmedCount, pendingCount, completedCount, cancelledCount, noShowCount, endedConfirmedCount] = await Promise.all([
+      prisma.booking.count({ where: { ...where, status: 'CONFIRMED' } }),
+      prisma.booking.count({ where: { ...where, status: 'PENDING' } }),
+      prisma.booking.count({ where: { ...where, status: 'COMPLETED' } }),
+      prisma.booking.count({ where: { ...where, status: 'CANCELLED' } }),
+      prisma.booking.count({ where: { ...where, status: 'NO_SHOW' } }),
+      prisma.booking.count({ where: { ...where, status: 'CONFIRMED', endTime: { lte: now } } as any }),
+    ]);
     const stats = {
-      total: total,
-      confirmed: bookings.filter(b => b.status === 'CONFIRMED').length,
-      pending: bookings.filter(b => b.status === 'PENDING').length,
-      completed: bookings.filter(b => b.status === 'COMPLETED').length,
-      cancelled: bookings.filter(b => b.status === 'CANCELLED').length,
-      noShow: bookings.filter(b => b.status === 'NO_SHOW').length,
-      // Lessons that have ended but are still CONFIRMED (eligible for payout)
-      endedConfirmed: bookings.filter(b => b.status === 'CONFIRMED' && b.endTime != null && new Date(b.endTime) <= now).length,
+      total,
+      confirmed: confirmedCount,
+      pending: pendingCount,
+      completed: completedCount,
+      cancelled: cancelledCount,
+      noShow: noShowCount,
+      endedConfirmed: endedConfirmedCount,
     };
 
     return NextResponse.json({

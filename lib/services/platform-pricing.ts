@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 export interface PricingSettings {
   basicCommissionRate: number;
   proCommissionRate: number;
+  studioCommissionRate: number;
   businessCommissionRate: number;
   platformFeePercentage: number;
   package6Discount: number;
@@ -25,6 +26,7 @@ export interface PricingSettings {
 const DEFAULTS: PricingSettings = {
   basicCommissionRate: 15,
   proCommissionRate: 12,
+  studioCommissionRate: 11,
   businessCommissionRate: 10,
   platformFeePercentage: 3.6,
   package6Discount: 5,
@@ -56,6 +58,7 @@ export async function getPlatformPricing(): Promise<PricingSettings> {
     return {
       basicCommissionRate: record.basicCommissionRate,
       proCommissionRate: record.proCommissionRate,
+      studioCommissionRate: (record as any).studioCommissionRate ?? 11,
       businessCommissionRate: record.businessCommissionRate,
       platformFeePercentage: record.platformFeePercentage,
       package6Discount: record.package6Discount,
@@ -84,9 +87,10 @@ export async function getPlatformPricing(): Promise<PricingSettings> {
 export async function getCommissionRate(tier: string): Promise<number> {
   const pricing = await getPlatformPricing();
   switch (tier) {
-    case 'PRO': return pricing.proCommissionRate;
+    case 'PRO':      return pricing.proCommissionRate;
+    case 'STUDIO':   return pricing.studioCommissionRate;
     case 'BUSINESS': return pricing.businessCommissionRate;
-    default: return pricing.basicCommissionRate; // BASIC + fallback
+    default:         return pricing.basicCommissionRate; // BASIC + fallback
   }
 }
 

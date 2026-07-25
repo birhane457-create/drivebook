@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Audit log
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'ADMIN_CONTACT_SENT',
         actorId: session.user.id!,

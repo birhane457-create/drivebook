@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Calendar, Clock, ArrowLeft, History, AlertTriangle } from 'lucide-react'
+import { useToast } from '@/hooks/useToast'
+import Toast from '@/components/ui/Toast'
 
 interface Booking {
   id: string
@@ -24,6 +26,7 @@ interface TimeSlot {
 
 export default function ReschedulePage({ params }: { params: { id: string } }) {
   const router = useRouter()
+  const { toast, showToast, clearToast } = useToast()
   const [booking, setBooking] = useState<Booking | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -71,6 +74,10 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
       }
     } catch {
       setSlots([])
+          showToast(
+      'error',
+      'Unable to load available times. Please try again.'
+    )
     } finally {
       setLoadingSlots(false)
     }
@@ -111,10 +118,10 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
       if (res.ok && data.success) {
         router.push('/dashboard/bookings')
       } else {
-        alert(data.error || 'Reschedule failed')
+        showToast('error', data.error || 'Reschedule failed')
       }
     } catch {
-      alert('Reschedule failed')
+      showToast('error', 'Reschedule failed')
     } finally {
       setSaving(false)
     }
@@ -142,6 +149,7 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toast toast={toast} onClose={clearToast} />
       <div className="max-w-2xl mx-auto px-4 py-6">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4">
           <ArrowLeft className="h-5 w-5" />

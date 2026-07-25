@@ -4,12 +4,26 @@
 Completed work belongs in the permanent doc for that feature.  
 **Last Updated:** July 2026
 
-> Completed audit items have been moved to their permanent docs:
-> - Instructor dashboard fixes → `03-instructor/DASHBOARD.md` + `INSPECTION.md`
-> - Booking flow fixes → `01-public/BOOKING_FLOW_COMPLETE.md` + `06-payments/SECURITY_ISSUES_QUICK_REFERENCE.md`
-> - Student dashboard fixes → `02-student/DASHBOARD.md` + `INSPECTION.md`
-> - All resolved gaps → `00-overview/GAP_ANALYSIS.md` (Resolved section)
-> - Change log → `00-overview/CHANGES.md`
+---
+
+## 🔴 INSTRUCTOR DASHBOARD GAPS (2026-07-22 inspection)
+
+Full register: `docs/DOCROLEBASE/03-instructor/DASH_GAPS.md`
+
+**Batch 1 fixes — DONE** (BUG-1/2/3/4/5/6/7, DATA-1/2/3/4, UX-4 — see CHANGES.md)
+
+**Remaining (next sprint):**
+
+| # | Priority | Issue | File |
+|---|---|---|---|
+| MISSING-1 | 🟡 | `PayoutScheduleCard` component referenced in docs but not built | `components/instructor/` |
+| MISSING-2 | 🟡 | `lesson-feedback/summary` route — verify exists or create | `app/api/instructor/lesson-feedback/` |
+| UX-1 | 🟡 | Perth timezone hardcoded — add comment, plan multi-state support | Multiple files |
+| UX-2 | 🟡 | Availability page has no unsaved-changes warning | `app/dashboard/availability/page.tsx` |
+| TECH-2 | 🟡 | Whiteboard API route — verify exists | `app/api/instructor/whiteboard/` |
+| TECH-3 | 🟡 | `client-lesson-feedback` + `client-performance` routes — verify shape | `app/api/instructor/` |
+
+> **TECH-1 (`prisma as any` + stale client) — DONE.** `npx prisma generate` run. `(prisma as any).transaction` and 40+ other in-schema casts removed across the codebase. Remaining `(prisma as any)` casts are documented custom tables not in schema.prisma.
 
 ---
 
@@ -18,47 +32,59 @@ Completed work belongs in the permanent doc for that feature.
 | # | What | Where |
 |---|------|--------|
 | 1 | Set live Stripe keys (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`) | Vercel env vars |
-| 2 | Set `STRIPE_WEBHOOK_SECRET` — use path `/api/stripe/webhook` | Vercel env vars → Stripe Dashboard → Webhooks |
+| 2 | Set `STRIPE_WEBHOOK_SECRET` — use path `/api/stripe/webhook` ONLY. Remove `/api/subscriptions/webhook` from Stripe dashboard if listed — it is retired. | Vercel env vars → Stripe Dashboard → Webhooks |
 | 3 | Create live Stripe price IDs for all 8 tiers (BASIC/PRO/STUDIO/BUSINESS × monthly/annual) | Vercel env vars |
 | 4 | Configure Stripe Billing Portal (plan switching + proration) | Stripe Dashboard → Settings → Billing |
 | 5 | Set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | ✅ Done |
 | 6 | Verify `GOOGLE_REDIRECT_URI=https://drivebook.com.au/api/calendar/callback` | Vercel env vars + Google Cloud Console |
 | 7 | Set `NEXT_PUBLIC_VOICE_PHONE_NUMBER` with real AU number | Vercel env vars |
 | 8 | Replace placeholder ABN on about page | `app/about/page.tsx` — one line |
-| 9 | `npx prisma migrate deploy` on production DB | ✅ Done July 2026 |
+| 9 | `npx prisma migrate deploy` on production DB (includes new `studioCommissionRate` migration) | ✅ Pushed 2026-07-21 |
 | 10 | Set `connection_limit=20` in `DATABASE_URL` | Vercel env vars |
 | 11 | Set Firebase env vars (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) | Vercel env vars — required for mobile push |
 | 12 | Submit sitemap to Google Search Console | search.google.com/search-console → Sitemaps |
 | 13 | Set `VOICE_SERVICE_API_KEY` in Railway | Required for voice AI cancel flow without session auth |
+| 14 | Refund 2 duplicate $129 charges for birhane457@gmail.com | Stripe Dashboard → find duplicate `sub_1TvWkY` and `sub_1TvXkM` payments, refund 2 of the 3 |
+| 15 | Link correct `stripeSubscriptionId` for birhane457@gmail.com | `/admin/subscriptions` → find instructor → Subscription tab → Link Stripe Sub |
 
 ---
 
 ## 🔧 PENDING CODE FIXES
 
-### Instructor earnings — hardcoded commission fallback
-`app/api/instructor/earnings/route.ts` falls back to `price * 0.9` when `instructorPayout` is 0. Should use `booking.commissionRate` instead. Low priority — only affects old bookings.
+### Booking flow — remaining gaps
 
-### Admin — `confirm()` and `alert()` in admin UI (July 2026)
-Several admin pages still use browser dialogs. These are lower priority than student/booking flows (admin is internal) but should be replaced before production.
+**Bug 5 — By design (not a bug):** Only the first scheduled lesson creates a `Booking` DB row. Multiple slots in one package — remaining are stored as `packageHoursRemaining`. Students schedule remaining hours from their client dashboard post-payment. This is intentional.
 
-| # | Priority | Issue | File | Status |
-|---|----------|-------|------|--------|
-| A1 | 🟠 High | `confirm()` on process payout + hold payout (financial actions) | `app/admin/payouts/page.tsx` | ✅ Fixed July 2026 |
-| A2 | 🟠 High | `confirm()` on approve instructor, deduct wallet, reset password in support; `prompt()` on suspend | `app/admin/support/user/[userId]/page.tsx` | ✅ Fixed July 2026 |
-| A3 | 🟡 Medium | `alert()` + `confirm()` on cancel booking in edit page | `app/admin/bookings/[id]/edit/page.tsx` | ✅ Fixed July 2026 |
-| A4 | 🟡 Medium | `confirm()` on cancel/complete/delete booking in client detail | `app/admin/clients/[id]/page.tsx` | ✅ Fixed July 2026 |
-| A5 | 🟡 Medium | `confirm()` on deactivate instructor + auto-process in documents | `app/admin/documents/page.tsx`, `documents/review/[instructorId]/page.tsx` | ✅ Fixed July 2026 |
-| A6 | 🟡 Medium | `confirm()` on delete voice line number | `app/admin/voice-lines/page.tsx` | ✅ Fixed July 2026 |
-| A7 | 🟡 Medium | `alert()` on release hold failure in disputes page | `app/admin/disputes/page.tsx` | ✅ Fixed July 2026 |
-| A8 | 🟢 Low | Encoding artifacts (â€¢, â€") in admin/settings/page.tsx JSX strings | `app/admin/settings/page.tsx` | ✅ Fixed July 2026 |
+### Payout system — remaining gaps
 
-> All 8 admin UI issues resolved. Admin inspection complete.
+**Bank account masking — no reveal endpoint**
+The admin payout list masks bank accounts as `****XXX`. A comment in the code says "full details available via explicit reveal action" but no reveal endpoint exists. Admin must go to the DB directly to get the full BSB/account for a manual transfer. Low priority.
+
+**Failed payout — no UI retry action**
+`Payout.status = 'FAILED'` records appear in the summary stats but there's no tab or button to retry them from `/admin/payouts`. Admin must call `POST /api/admin/payouts/process` manually. Medium priority.
+
+**Governance payout thresholds — policy only, not enforced in code**
+`lib/config/governance.ts` defines `PAYOUT_APPROVAL_THRESHOLDS` ($200/$1000) but neither `process/route.ts` nor `process-all/route.ts` checks them. Any ADMIN can process any amount. SUPER_ADMIN approval for large payouts is a manual policy, not a code gate. Low priority.
+
+### Expiry columns backfill — existing records
+The expiry DateTime columns (`licenseExpiry`, `insuranceExpiry`, `policeCheckExpiry`, `wwcCheckExpiry`) were never written to before 2026-07-22. All expiry data is in `workingHours.expiry` JSON. New saves write to both. A one-time backfill SQL would sync old records into the real columns. **Not a release blocker.**
+
+```sql
+-- One-time backfill (run when convenient, not urgent)
+UPDATE "Instructor"
+SET
+  "licenseExpiry"    = (("workingHours"->>'expiry')::jsonb->>'licenseExpiry')::timestamptz,
+  "insuranceExpiry"  = (("workingHours"->>'expiry')::jsonb->>'insuranceExpiry')::timestamptz,
+  "policeCheckExpiry"= (("workingHours"->>'expiry')::jsonb->>'policeCheckExpiry')::timestamptz,
+  "wwcCheckExpiry"   = (("workingHours"->>'expiry')::jsonb->>'wwcCheckExpiry')::timestamptz
+WHERE
+  "workingHours" IS NOT NULL
+  AND ("workingHours"->>'expiry') IS NOT NULL
+  AND "licenseExpiry" IS NULL;
+```
 
 ### Booking flow — max date hardcoded to 3 months
-`components/BookingDetailsForm.tsx` uses `maxDate.setMonth(maxDate.getMonth() + 3)`. Should use platform config `bookingSettings.maxAdvanceDays`. Deferred — not a release blocker, current business rule is 3 months.
-
-### Student confirmation page — `force-dynamic` on client component
-`app/booking/[id]/confirmation/page.tsx` line 3: `export const dynamic = 'force-dynamic'` is a no-op on a `'use client'` component. Cosmetic only, no runtime impact.
+`components/BookingDetailsForm.tsx` uses `maxDate.setMonth(maxDate.getMonth() + 3)`. Should use platform config `bookingSettings.maxAdvanceDays`. Deferred — not a release blocker.
 
 ### Voice AI — deploy to Vercel production
 8 commits on `origin/main` not yet on `gitlab/main` → Vercel. Run: `git push gitlab main`.
@@ -67,7 +93,10 @@ Several admin pages still use browser dialogs. These are lower priority than stu
 `DEBESAY WELDEGEBRIEL BIRHANE` has `baseAddress = "6/226 whatley Crescent Maylamds"`. Fix via admin dashboard — will auto-resolve on next settings save.
 
 ### Voice AI — replace support phone placeholder
-`drivebook-hybrid/VAPI_SYSTEM_PROMPT.md` has `0488 000 000`. Run `node scripts/build-vapi-prompt.js` after setting real `SUPPORT_PHONE` in env.
+`drivebook-hybrid/VAPI_SYSTEM_PROMPT.md` has `0488 000 000` placeholder. Steps:
+1. Set `SUPPORT_PHONE` and `SUPPORT_EMAIL` in Railway env vars for the drivebook-hybrid service
+2. Run `node scripts/build-vapi-prompt.js` in `drivebook-hybrid/` to generate `VAPI_SYSTEM_PROMPT.built.md`
+3. Copy the built file content and upload to VAPI dashboard as the system prompt
 
 ### Voice AI — TTS voice quality
 Adam (11Labs) mispronounces Eritrean names. Consider Azure `en-AU-NatashaNeural`. Low priority.
@@ -75,12 +104,23 @@ Adam (11Labs) mispronounces Eritrean names. Consider Azure `en-AU-NatashaNeural`
 ### Voice AI — test `/set-password` flow
 Test: call → book later → receive SMS → click link → correct email → set password.
 
+### Post-audit deferred — architecture work
+These were identified in the July 2026 audit as real but require larger refactors:
+
+| # | What | Why deferred |
+|---|------|---|
+| D-1 | Unified booking lifecycle service — public/instructor/admin/student all share one state machine | Major refactor, all paths are individually idempotent for now |
+| D-2 | Profile/settings dual-request save — second request failure leaves partial state | UX resilience; both requests independently succeed most of the time |
+| D-3 | Student dashboard client-side degraded states | Acceptable for lightweight UI; not a data integrity risk |
+| D-4 | Second-confirmation step on high-impact admin actions | UX improvement; existing audit trail is adequate for launch |
+| D-5 | Rate limiting on subscription override mutations | Defense-in-depth; admin-only route, audit log exists |
+
 ---
 
 ## 🔵 DEFERRED FEATURES
 
 ### Data export — instructor/student UI
-Admin CSV export is built (`GET /api/admin/export`). Instructor self-serve export (`Settings → Data → Export`) not built. Blog post `can-i-export-my-students-drivebook.mdx` stays `draft: true` until done.
+Admin CSV export is built (`GET /api/admin/export`). Instructor self-serve export (`Settings → Data → Export`) not built.
 
 ### Vehicle model (Sprint 5)
 Defer until Business dashboard. See `03-instructor/SCHEDULE.md` → "What Is NOT Built" for full scope.
@@ -109,9 +149,6 @@ Articles explaining platform internals (how payouts work, how AI booking works, 
 
 ### SEO Phase 6 — Interactive tools
 Lesson cost calculator, PDA readiness quiz, package savings calculator. Client-side React, no DB.
-
-### Other states — location pages
-NSW/VIC/QLD/SA pages exist and are in sitemap. They show "coming soon" until instructors register in those states. No action needed.
 
 ---
 

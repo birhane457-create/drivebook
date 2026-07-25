@@ -515,6 +515,7 @@ model PlatformSettings {
   key                         String   @unique @default("default")
   basicCommissionRate         Float    @default(15)
   proCommissionRate           Float    @default(12)
+  studioCommissionRate        Float    @default(11)
   businessCommissionRate      Float    @default(10)
   basicNewStudentBonus        Float    @default(8)
   proNewStudentBonus          Float    @default(10)

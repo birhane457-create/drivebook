@@ -1,6 +1,7 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
+// Note: export const dynamic = 'force-dynamic' has no effect on 'use client' components
+// and has been removed. Client components are always dynamically rendered.
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';

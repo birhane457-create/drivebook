@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const avgBookingValue = completedCount > 0 ? totalRevenue / completedCount : 0;
 
     // Refunds from ledger entries this week
-    const refundEntries = await (prisma as any).ledgerEntry.aggregate({
+    const refundEntries = await prisma.ledgerEntry.aggregate({
       where: {
         type: { in: ['REFUND_ISSUED', 'REFUND_SYNCED'] },
         createdAt: { gte: weekStart },
@@ -60,12 +60,12 @@ export async function GET(request: NextRequest) {
     const refundRate = totalRevenue > 0 ? (totalRefunds / totalRevenue) * 100 : 0;
 
     // Open disputes
-    const openDisputes = await (prisma as any).stripeDispute.count({
+    const openDisputes = await prisma.stripeDispute.count({
       where: {
         status: { notIn: ['won', 'lost', 'charge_refunded', 'warning_closed'] },
       },
     });
-    const lostDisputes = await (prisma as any).stripeDispute.aggregate({
+    const lostDisputes = await prisma.stripeDispute.aggregate({
       where: { status: 'lost', createdAt: { gte: weekStart } },
       _sum: { amount: true },
       _count: true,
@@ -85,8 +85,8 @@ export async function GET(request: NextRequest) {
       where: { status: 'FAILED' },
     });
 
-    const frozenPayouts = await (prisma as any).instructor.count({
-      where: { payoutHold: true },
+    const frozenPayouts = await prisma.instructor.count({
+      where: { payoutHold: true } as any,
     });
 
     // ── Instructor health ─────────────────────────────────────────────────────

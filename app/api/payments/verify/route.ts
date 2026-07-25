@@ -31,12 +31,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    // Already confirmed — webhook already processed it
-    // BUT still check if wallet needs to be credited (webhook may have missed it)
-    if (booking.status === 'CONFIRMED' && booking.isPaid) {
-      // Fall through to wallet check below
-    } else {
-      // Verify with Stripe directly
+    // If not yet confirmed, verify with Stripe and update booking status
+    if (!(booking.status === 'CONFIRMED' && booking.isPaid)) {
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
       if (paymentIntent.status !== 'succeeded') {
@@ -61,7 +57,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Credit wallet for package bookings
+    // Credit wallet for package bookings (idempotent — skipped if already credited)
     if (booking.clientId) {
       const client = await prisma.client.findUnique({
         where: { id: booking.clientId },
@@ -69,14 +65,13 @@ export async function POST(req: NextRequest) {
       });
 
       if (client?.userId) {
-        let wallet = await prisma.clientWallet.upsert({
+        const wallet = await prisma.clientWallet.upsert({
           where: { userId: client.userId },
           update: {},
           create: { userId: client.userId },
         });
 
-        // Check idempotency — don't double-credit if webhook already ran
-        // Use a booking-specific marker in the description
+        // Check idempotency before entering the transaction
         const alreadyCredited = await prisma.walletTransaction.findFirst({
           where: {
             walletId: wallet.id,
@@ -92,54 +87,54 @@ export async function POST(req: NextRequest) {
           const packageTotalPaid = booking.packageTotalPaid as number | null;
           const isPackage = booking.isPackageBooking && booking.packageHours > 1;
 
-          if (isPackage && packageTotalPaid) {
-            // CREDIT: full package amount paid via Stripe
-            await prisma.walletTransaction.create({
-              data: {
-                walletId: wallet.id,
-                type: 'CREDIT',
-                amount: packageTotalPaid,
-                description: `Package purchase — ${booking.packageHours} hrs · booking #${bookingId}`,
-                status: 'CONFIRMED',
-              },
-            });
-            // DEBIT: first lesson already scheduled
-            await prisma.walletTransaction.create({
-              data: {
-                walletId: wallet.id,
-                type: 'DEBIT',
-                amount: booking.price,
-                description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
-                status: 'CONFIRMED',
-              },
-            });
-            console.log(`✅ Wallet credited: +${packageTotalPaid} / -${booking.price} for userId=${client.userId}`);
-          } else {
-            // Single lesson — just credit the lesson price
-            await prisma.walletTransaction.create({
-              data: {
-                walletId: wallet.id,
-                type: 'CREDIT',
-                amount: booking.price,
-                description: `Lesson payment · booking #${bookingId}`,
-                status: 'CONFIRMED',
-              },
-            });
-            await prisma.walletTransaction.create({
-              data: {
-                walletId: wallet.id,
-                type: 'DEBIT',
-                amount: booking.price,
-                description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
-                status: 'CONFIRMED',
-              },
-            });
-          }
+          // ── Atomic: all wallet transaction creates in one $transaction ────────
+          // Previously these were separate writes — if the second create failed,
+          // the wallet would have a dangling CREDIT with no matching DEBIT.
+          await prisma.$transaction(async (tx) => {
+            if (isPackage && packageTotalPaid) {
+              await tx.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'CREDIT',
+                  amount: packageTotalPaid,
+                  description: `Package purchase — ${booking.packageHours} hrs · booking #${bookingId}`,
+                  status: 'CONFIRMED',
+                },
+              });
+              await tx.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'DEBIT',
+                  amount: booking.price,
+                  description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+                  status: 'CONFIRMED',
+                },
+              });
+            } else {
+              await tx.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'CREDIT',
+                  amount: booking.price,
+                  description: `Lesson payment · booking #${bookingId}`,
+                  status: 'CONFIRMED',
+                },
+              });
+              await tx.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'DEBIT',
+                  amount: booking.price,
+                  description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+                  status: 'CONFIRMED',
+                },
+              });
+            }
+          });
         }
       }
     }
 
-    console.log(`✅ Payment verified and booking confirmed via /api/payments/verify: ${bookingId}`);
     return NextResponse.json({ status: 'confirmed' });
   } catch (error) {
     console.error('Payment verify error:', error);
@@ -202,43 +197,47 @@ export async function GET(req: NextRequest) {
   const isPackage = booking.isPackageBooking && booking.packageHours > 1;
 
   if (isPackage && packageTotalPaid) {
-    await prisma.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'CREDIT',
-        amount: packageTotalPaid,
-        description: `Package purchase — ${booking.packageHours} hrs · booking #${bookingId}`,
-        status: 'CONFIRMED',
-      },
-    });
-    await prisma.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'DEBIT',
-        amount: booking.price,
-        description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
-        status: 'CONFIRMED',
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'CREDIT',
+          amount: packageTotalPaid,
+          description: `Package purchase — ${booking.packageHours} hrs · booking #${bookingId}`,
+          status: 'CONFIRMED',
+        },
+      });
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'DEBIT',
+          amount: booking.price,
+          description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+          status: 'CONFIRMED',
+        },
+      });
     });
     return NextResponse.json({ status: 'credited', amount: packageTotalPaid, debit: booking.price });
   } else {
-    await prisma.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'CREDIT',
-        amount: booking.price,
-        description: `Lesson payment · booking #${bookingId}`,
-        status: 'CONFIRMED',
-      },
-    });
-    await prisma.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'DEBIT',
-        amount: booking.price,
-        description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
-        status: 'CONFIRMED',
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'CREDIT',
+          amount: booking.price,
+          description: `Lesson payment · booking #${bookingId}`,
+          status: 'CONFIRMED',
+        },
+      });
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'DEBIT',
+          amount: booking.price,
+          description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+          status: 'CONFIRMED',
+        },
+      });
     });
     return NextResponse.json({ status: 'credited', amount: booking.price });
   }

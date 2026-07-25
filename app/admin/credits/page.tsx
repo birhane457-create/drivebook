@@ -27,25 +27,26 @@ export default function AdminCreditsPage() {
   const fetchCreditsStats = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/admin/clients');
+      // C-10 fix: call stats=true endpoint which runs DB-level aggregates.
+      // The old approach fetched the first 25 clients and summed client-side —
+      // giving completely wrong totals for any platform with more than 25 clients.
+      const res = await fetch('/api/admin/clients?stats=true');
       if (res.ok) {
-        const clients = await res.json();
-
-        const totalPaid = clients.reduce((sum: number, c: any) => sum + c.totalPaid, 0);
-        const totalSpent = clients.reduce((sum: number, c: any) => sum + c.totalSpent, 0);
-        const creditsWithBalance = clients.filter((c: any) => c.totalPaid > 0).length;
-        const zeroBalance = clients.filter((c: any) => c.status === 'zero-balance').length;
-        const negativeBalance = clients.filter((c: any) => c.status === 'negative').length;
+        const data = await res.json();
+        const s = data.stats;
+        const totalCredits = s.totalWalletBalance ?? 0;
+        const totalSpent = s.totalDebitAmount ?? 0;
+        const totalClients = s.totalClients ?? 0;
 
         setStats({
-          totalCreditsInSystem: totalPaid,
-          totalSpent: totalSpent,
-          totalRemaining: totalPaid - totalSpent,
-          clientsWithCredits: creditsWithBalance,
-          clientsWithZeroBalance: zeroBalance,
-          clientsWithNegativeBalance: negativeBalance,
-          averageCreditPerClient: creditsWithBalance > 0 ? totalPaid / clients.length : 0,
-          averageSpentPerClient: clients.length > 0 ? totalSpent / clients.length : 0
+          totalCreditsInSystem: totalCredits,
+          totalSpent,
+          totalRemaining: totalCredits,
+          clientsWithCredits: s.clientsWithPositiveBalance ?? 0,
+          clientsWithZeroBalance: s.clientsWithZeroBalance ?? 0,
+          clientsWithNegativeBalance: s.clientsWithNegativeBalance ?? 0,
+          averageCreditPerClient: totalClients > 0 ? totalCredits / totalClients : 0,
+          averageSpentPerClient: totalClients > 0 ? totalSpent / totalClients : 0,
         });
       }
     } catch (error) {

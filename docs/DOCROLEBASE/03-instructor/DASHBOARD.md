@@ -449,6 +449,25 @@ Shows income (read-only, from analytics API) alongside self-entered expenses. Al
 
 ---
 
+## Documents / Account Setup Page
+
+**Route:** `/dashboard/documents`  
+**File:** `app/dashboard/documents/page.tsx`  
+**APIs:** `GET/POST /api/instructor/documents`, `GET /api/instructor/profile`
+
+The page is titled "Account Setup" and has two sections:
+
+1. **Setup Progress checklist** — 5 items: Profile, Working Hours, Tax/ABN, Documents uploaded, Admin verification. Each lights green when complete.
+2. **Verification Documents** — 8 document types (7 required, 1 optional), collapsible rows. Tap to expand, then upload. Shows expiry status for 4 docs. Accepted: JPG/PNG/PDF, max 10 MB.
+
+The overall status badge shows: `Verified` (green) → `Under review` (violet) → `N/7 uploaded` (amber).
+
+After all 7 required docs are uploaded, a "Awaiting admin review" banner appears. After admin approves, the banner shows "All documents verified."
+
+See [DOCUMENTS.md](./DOCUMENTS.md) for full reference.
+
+---
+
 ## Subscription Page
 
 **Route:** `/dashboard/subscription`  

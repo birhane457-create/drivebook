@@ -94,70 +94,92 @@ export async function POST(request: Request) {
       );
     }
 
-    // Update booking to mark it as a child booking using package hours
-    const updatedBooking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: 'CONFIRMED',
-        price: 0,
-        isPackageBooking: false, // child booking should NOT be flagged as the package parent
-        parentBookingId: packageBookingId,
-        paymentIntentId: `package-${packageBookingId}-${bookingId}`,
-        paidAt: new Date()
-      },
-      include: {
-        instructor: true,
-        user: true
-      }
-    });
-
-    // Increment packageHoursUsed on the parent package booking
-    await prisma.booking.update({
-      where: { id: packageBookingId },
-      data: {
-        packageHoursUsed: { increment: hoursToDeduct },
-        packageHoursRemaining: { set: Math.max(0, packageTotalHours - (packageUsedStored + otherUsedHours + hoursToDeduct)) },
-        packageStatus: (packageUsedStored + otherUsedHours + hoursToDeduct) >= packageTotalHours ? 'completed' : 'active'
-      }
-    });
-
-    // Create transaction record and update wallet totals (monetary representation)
-    const userWallet = await prisma.clientWallet.findFirst({
-      where: { user: { email: session.user.email } }
-    });
-
-    if (userWallet) {
-      // Use the locked rate from when the package was purchased — not the instructor's current rate
-      const lockedRate = (packageBooking as any).lockedHourlyRate ?? booking.instructor?.hourlyRate ?? 0;
-      const transactionAmount = hoursToDeduct * lockedRate;
-      await prisma.transaction.create({
+    // ── Atomic transaction: confirm child booking + update package hours + wallet ledger ──
+    // Previously: three separate writes (booking.update, booking.update, walletTransaction.create).
+    // Previously: also wrote to non-existent ClientWallet.totalSpent/creditsRemaining fields.
+    // Fix: single $transaction — all succeed or all roll back. Wallet uses WalletTransaction
+    // ledger (the authoritative source of truth) + balance cache decrement.
+    const updatedBooking = await prisma.$transaction(async (tx) => {
+      // 1. Confirm child booking
+      const confirmed = await tx.booking.update({
+        where: { id: bookingId },
         data: {
-          bookingId: bookingId,
-          instructorId: booking.instructorId,
-          amount: transactionAmount,
-          platformFee: 0,
-          instructorPayout: transactionAmount,
-          type: 'BOOKING_PAYMENT',
-          status: 'COMPLETED',
-          description: `Booking with ${booking.instructor?.name} - ${hoursToDeduct} hours from package`,
-          metadata: {
-            bookingId: bookingId,
-            packageBookingId: packageBookingId,
-            hoursDeducted: hoursToDeduct,
-            instructorName: booking.instructor?.name
-          }
-        }
-      } as any);
-
-      // Update wallet totals (monetary equivalent deducted)
-      await prisma.clientWallet.update({
-        where: { id: userWallet.id },
-        data: {
-          totalSpent: { increment: transactionAmount },
-          creditsRemaining: { decrement: transactionAmount }
-        }
+          status: 'CONFIRMED',
+          price: 0,
+          isPackageBooking: false,
+          parentBookingId: packageBookingId,
+          paymentIntentId: `package-${packageBookingId}-${bookingId}`,
+          paidAt: new Date(),
+        },
+        include: { instructor: true, user: true },
       });
-    }
+
+      // 2. Decrement remaining hours on parent package booking
+      await tx.booking.update({
+        where: { id: packageBookingId },
+        data: {
+          packageHoursUsed: { increment: hoursToDeduct },
+          packageHoursRemaining: {
+            set: Math.max(0, packageTotalHours - (packageUsedStored + otherUsedHours + hoursToDeduct)),
+          },
+          packageStatus:
+            packageUsedStored + otherUsedHours + hoursToDeduct >= packageTotalHours
+              ? 'completed'
+              : 'active',
+        },
+      });
+
+      // 3. Wallet: create WalletTransaction ledger record + decrement balance cache
+      const userWallet = await tx.clientWallet.findFirst({
+        where: { user: { email: session.user.email } },
+      });
+
+      if (userWallet) {
+        const lockedRate =
+          (packageBooking as any).lockedHourlyRate ?? booking.instructor?.hourlyRate ?? 0;
+        const transactionAmount = hoursToDeduct * lockedRate;
+
+        // Authoritative ledger entry — getWalletBalance() reads from here
+        await tx.walletTransaction.create({
+          data: {
+            walletId: userWallet.id,
+            type: 'DEBIT',
+            amount: transactionAmount,
+            status: 'CONFIRMED',
+            description: `Package hours used — ${hoursToDeduct}h with ${booking.instructor?.name ?? 'instructor'}`,
+            bookingId,
+          },
+        });
+
+        // Keep stored balance field in sync (performance cache only)
+        await tx.clientWallet.update({
+          where: { id: userWallet.id },
+          data: { balance: { decrement: transactionAmount } },
+        });
+
+        // 4. Platform transaction record for payouts/reporting
+        await (tx as any).transaction.create({
+          data: {
+            bookingId,
+            instructorId: booking.instructorId,
+            amount: transactionAmount,
+            platformFee: 0,
+            instructorPayout: transactionAmount,
+            type: 'BOOKING_PAYMENT',
+            status: 'COMPLETED',
+            description: `Package hours — ${hoursToDeduct}h from package ${packageBookingId}`,
+            metadata: {
+              bookingId,
+              packageBookingId,
+              hoursDeducted: hoursToDeduct,
+              instructorName: booking.instructor?.name,
+            },
+          },
+        });
+      }
+
+      return confirmed;
+    });
 
     return NextResponse.json({
       success: true,

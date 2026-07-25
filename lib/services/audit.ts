@@ -89,15 +89,16 @@ export async function logAuditActionStandalone(
 ): Promise<void> {
   const { action, adminId, targetType, targetId, metadata, req } = params;
 
-  await (prisma as any).auditLog.create({
+  await prisma.auditLog.create({
     data: {
       action,
-      adminId,
+      actorId: adminId,
+      actorRole: adminId === 'SYSTEM' ? 'SYSTEM' : 'ADMIN',
       targetType,
       targetId,
       metadata: metadata || {},
-      ipAddress: req?.headers.get('x-forwarded-for') || 
-                 req?.headers.get('x-real-ip') || 
+      ipAddress: req?.headers.get('x-forwarded-for') ||
+                 req?.headers.get('x-real-ip') ||
                  null,
       userAgent: req?.headers.get('user-agent') || null,
     },
@@ -118,18 +119,18 @@ export async function getAuditLogs(filters: {
 }) {
   const where: any = {};
 
-  if (filters.adminId) where.adminId = filters.adminId;
+  if (filters.adminId) where.actorId = filters.adminId;
   if (filters.action) where.action = filters.action;
   if (filters.targetType) where.targetType = filters.targetType;
   if (filters.targetId) where.targetId = filters.targetId;
-  
+
   if (filters.startDate || filters.endDate) {
     where.createdAt = {};
     if (filters.startDate) where.createdAt.gte = filters.startDate;
     if (filters.endDate) where.createdAt.lte = filters.endDate;
   }
 
-  return (prisma as any).auditLog.findMany({
+  return prisma.auditLog.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     take: filters.limit || 100,
@@ -143,11 +144,8 @@ export async function getEntityAuditTrail(
   targetType: AuditTargetType,
   targetId: string
 ) {
-  return (prisma as any).auditLog.findMany({
-    where: {
-      targetType,
-      targetId,
-    },
+  return prisma.auditLog.findMany({
+    where: { targetType, targetId },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -156,7 +154,7 @@ export async function getEntityAuditTrail(
  * Get recent admin activity
  */
 export async function getRecentAdminActivity(adminId: string, limit = 50) {
-  return (prisma as any).auditLog.findMany({
+  return prisma.auditLog.findMany({
     where: { actorId: adminId },
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -167,22 +165,18 @@ export async function getRecentAdminActivity(adminId: string, limit = 50) {
  * Get system-wide audit statistics
  */
 export async function getAuditStatistics(startDate: Date, endDate: Date) {
-  const logs = await (prisma as any).auditLog.findMany({
+  const logs = await prisma.auditLog.findMany({
     where: {
-      createdAt: {
-        gte: startDate,
-        lte: endDate,
-      },
+      createdAt: { gte: startDate, lte: endDate },
     },
   });
 
-  // Group by action
   const actionCounts: Record<string, number> = {};
   const adminCounts: Record<string, number> = {};
 
-  logs.forEach((log: any) => {
+  logs.forEach((log) => {
     actionCounts[log.action] = (actionCounts[log.action] || 0) + 1;
-    adminCounts[log.adminId] = (adminCounts[log.adminId] || 0) + 1;
+    adminCounts[log.actorId] = (adminCounts[log.actorId] || 0) + 1;
   });
 
   return {

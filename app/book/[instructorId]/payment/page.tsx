@@ -16,14 +16,13 @@ if (!stripePublishableKey) {
 
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
-function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) => void }) {
+function PaymentForm({ setIsRedirecting, slotSecondsLeft }: { setIsRedirecting: (value: boolean) => void; slotSecondsLeft: number | null }) {
   const router = useRouter();
   const { bookingState } = useBooking();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorData, setErrorData] = useState<any>(null);
   const [success, setSuccess] = useState(false);
-  
+
   const stripe = useStripe();
   const elements = useElements();
 
@@ -91,28 +90,29 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
       if (!bookingResponse.ok) {
         const errorData = await bookingResponse.json();
         
-        // Store error data for display
-        setErrorData(errorData);
-        
-        // Handle email already exists error
-        if (errorData.code === 'EMAIL_EXISTS') {
-          setError(errorData.message);
-        } else {
-          setError(errorData.error || 'Failed to create booking');
-        }
-        
+        setError(errorData.error || 'Failed to create booking');
         return; // Stop processing
       }
 
       const bookingResult = await bookingResponse.json();
 
+      // ── Book Later: the bulk API creates a Stripe Checkout Session ──────────
+      // Book Later never creates a Booking row immediately. It creates a hosted
+      // Stripe Checkout page. Redirect directly — no PaymentIntent needed.
+      if (bookingState.bookingType === 'later') {
+        if (bookingResult.checkoutUrl) {
+          setIsRedirecting(true);
+          window.location.href = bookingResult.checkoutUrl;
+          return;
+        }
+        // Fallback: if no checkoutUrl, the bulk API may have returned an error
+        throw new Error(bookingResult.error || 'Could not create payment session for Book Later. Please try again.');
+      }
+
+      // ── Book Now: create a PaymentIntent for the primary booking ─────────────
       // Step 2: Create payment intent
-      // The backend returns different shapes for "book now" vs "book later":
-      // - bookingType === 'later'  → { transactionId, total, ... }
-      // - bookingType === 'now'    → { bookingIds: string[], total, ... }
       const paymentPayload: {
         bookingId?: string;
-        transactionId?: string;
         amount: number;
       } = {
         amount: bookingState.pricing.total
@@ -120,27 +120,20 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
 
       let primaryBookingId: string | null = null;
 
-      if (bookingState.bookingType === 'later') {
-        if (!bookingResult.transactionId) {
-          throw new Error('Missing transactionId from booking response');
-        }
-        paymentPayload.transactionId = bookingResult.transactionId;
-      } else {
-        // For "book now" we get an array of booking IDs – use the first as the
-        // canonical one for payment metadata and confirmation routing.
-        if (Array.isArray(bookingResult.bookingIds) && bookingResult.bookingIds.length > 0) {
-          primaryBookingId = bookingResult.bookingIds[0];
-        } else if (bookingResult.bookingId) {
-          // Fallback for any legacy responses that still return bookingId
-          primaryBookingId = bookingResult.bookingId;
-        }
-
-        if (!primaryBookingId) {
-          throw new Error('Missing bookingId from booking response');
-        }
-
-        paymentPayload.bookingId = primaryBookingId;
+      // For "book now" we get an array of booking IDs – use the first as the
+      // canonical one for payment metadata and confirmation routing.
+      if (Array.isArray(bookingResult.bookingIds) && bookingResult.bookingIds.length > 0) {
+        primaryBookingId = bookingResult.bookingIds[0];
+      } else if (bookingResult.bookingId) {
+        // Fallback for any legacy responses that still return bookingId
+        primaryBookingId = bookingResult.bookingId;
       }
+
+      if (!primaryBookingId) {
+        throw new Error('Missing bookingId from booking response');
+      }
+
+      paymentPayload.bookingId = primaryBookingId;
 
       const paymentResponse = await fetch('/api/payments/create-intent', {
         method: 'POST',
@@ -342,41 +335,21 @@ function PaymentForm({ setIsRedirecting }: { setIsRedirecting: (value: boolean) 
             </svg>
             <div className="flex-1">
               <p className="text-sm text-red-100 font-medium">{error}</p>
-              
-              {/* Show helpful actions for EMAIL_EXISTS error */}
-              {errorData?.code === 'EMAIL_EXISTS' && (
-                <div className="mt-3 space-y-2">
-                  {errorData.help && (
-                    <p className="text-sm text-red-200">{errorData.help}</p>
-                  )}
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {errorData.actions?.map((action: any, index: number) => (
-                      action.url ? (
-                        <a
-                          key={index}
-                          href={action.url}
-                          className={`inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                            action.primary
-                              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500'
-                              : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
-                          }`}
-                        >
-                          {action.label}
-                        </a>
-                      ) : (
-                        <button
-                          key={index}
-                          onClick={() => {
-                            setError(null);
-                            setErrorData(null);
-                          }}
-                          className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-colors"
-                        >
-                          {action.label}
-                        </button>
-                      )
-                    ))}
-                  </div>
+              {/* Link to login for account-related errors */}
+              {(error.toLowerCase().includes('account') || error.toLowerCase().includes('email') || error.toLowerCase().includes('log in')) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a
+                    href="/login"
+                    className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500"
+                  >
+                    Log In
+                  </a>
+                  <a
+                    href="/auth/forgot-password"
+                    className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-white/5 text-white border border-white/10 hover:bg-white/10"
+                  >
+                    Reset Password
+                  </a>
                 </div>
               )}
             </div>
@@ -418,6 +391,18 @@ export default function PaymentPage() {
   const router = useRouter();
   const { bookingState } = useBooking();
   const [isRedirecting, setIsRedirecting] = useState(false);
+
+  // Slot countdown: 10 minutes from page mount.
+  // Slots are held by the server for 10 min — this warns students before expiry.
+  const [slotSecondsLeft, setSlotSecondsLeft] = useState<number | null>(
+    bookingState.scheduledBookings.length > 0 ? 10 * 60 : null
+  );
+
+  useEffect(() => {
+    if (slotSecondsLeft === null || slotSecondsLeft <= 0) return;
+    const t = setTimeout(() => setSlotSecondsLeft(s => (s !== null ? s - 1 : null)), 1000);
+    return () => clearTimeout(t);
+  }, [slotSecondsLeft]);
 
   // Redirect if no instructor selected (but not if we're in the middle of payment success redirect)
   useEffect(() => {
@@ -478,9 +463,22 @@ export default function PaymentPage() {
         {/* Scheduled Bookings (if any) */}
         {bookingState.scheduledBookings.length > 0 && (
           <div className="bg-green-900/10 border border-green-500/20 rounded-lg p-4 text-white">
-            <h4 className="font-semibold text-green-200 text-sm mb-2">
-              Scheduled Lessons ({bookingState.scheduledBookings.length})
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold text-green-200 text-sm">
+                Scheduled Lessons ({bookingState.scheduledBookings.length})
+              </h4>
+              {slotSecondsLeft !== null && (
+                <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${
+                  slotSecondsLeft <= 60
+                    ? 'bg-red-900/40 text-red-300 border border-red-700/50'
+                    : slotSecondsLeft <= 180
+                      ? 'bg-amber-900/40 text-amber-300 border border-amber-700/50'
+                      : 'bg-green-900/40 text-green-300 border border-green-700/50'
+                }`}>
+                  ⏱ {Math.floor(slotSecondsLeft / 60)}:{String(slotSecondsLeft % 60).padStart(2, '0')} left
+                </span>
+              )}
+            </div>
             <div className="space-y-2">
               {bookingState.scheduledBookings.slice(0, 3).map((booking, index) => (
                 <p key={index} className="text-sm text-green-200">
@@ -518,7 +516,7 @@ export default function PaymentPage() {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-white/95">Payment Information</h3>
           <Elements stripe={stripePromise}>
-            <PaymentForm setIsRedirecting={setIsRedirecting} />
+            <PaymentForm setIsRedirecting={setIsRedirecting} slotSecondsLeft={slotSecondsLeft} />
           </Elements>
         </div>
 

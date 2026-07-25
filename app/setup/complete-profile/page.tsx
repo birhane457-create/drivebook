@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, User, Car, FileText, CheckCircle2 } from 'lucide-react'
 import Image from 'next/image'
+import { useToast } from '@/hooks/useToast'
+import Toast from '@/components/ui/Toast'
 
 interface ProfileData {
   name: string
@@ -20,6 +22,7 @@ interface ProfileData {
 
 export default function CompleteProfilePage() {
   const router = useRouter()
+  const { toast, showToast, clearToast } = useToast()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [uploadingProfile, setUploadingProfile] = useState(false)
@@ -88,10 +91,10 @@ export default function CompleteProfilePage() {
           [type === 'profile' ? 'profileImage' : 'carImage']: data.url
         }))
       } else {
-        alert('Failed to upload image')
+        showToast('error', 'Failed to upload image. Please try again.')
       }
-    } catch (error) {
-      alert('Error uploading image')
+    } catch {
+      showToast('error', 'Error uploading image. Please try again.')
     } finally {
       setUploading(false)
     }
@@ -107,7 +110,6 @@ export default function CompleteProfilePage() {
       })
 
       if (res.ok) {
-        // Update settings with license info
         await fetch('/api/instructor/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -116,13 +118,12 @@ export default function CompleteProfilePage() {
             insuranceNumber: formData.insuranceNumber
           })
         })
-
         router.push('/dashboard')
       } else {
-        alert('Failed to update profile')
+        showToast('error', 'Failed to update profile. Please try again.')
       }
-    } catch (error) {
-      alert('Error updating profile')
+    } catch {
+      showToast('error', 'Error updating profile. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -132,6 +133,7 @@ export default function CompleteProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+      <Toast toast={toast} onClose={clearToast} />
       <div className="max-w-3xl mx-auto">
         {/* Progress Circle */}
         <div className="text-center mb-8">

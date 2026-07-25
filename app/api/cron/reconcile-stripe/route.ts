@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
         const bookingId = pi.metadata?.bookingId;
         if (!bookingId) continue; // wallet top-ups etc — skip
 
-        const ledgerEntry = await (prisma as any).ledgerEntry.findFirst({
+        const ledgerEntry = await prisma.ledgerEntry.findFirst({
           where: {
             type: 'PAYMENT_COLLECTED',
             referenceId: bookingId,
@@ -144,7 +144,7 @@ export async function GET(req: NextRequest) {
                 totalReserved: booking.instructorPayout ?? 0,
               });
               // Audit log
-              await (prisma as any).auditLog.create({
+              await prisma.auditLog.create({
                 data: {
                   action: 'BOOKING_AUTO_RECONCILED',
                   actorId: 'SYSTEM_CRON',
@@ -186,7 +186,7 @@ export async function GET(req: NextRequest) {
 
     // ── Check 2: Missing transfers ────────────────────────────────────────
     // For every PAID payout with a stripeTransferId, verify the transfer exists in Stripe
-    const paidPayouts = await (prisma as any).payout.findMany({
+    const paidPayouts = await prisma.payout.findMany({
       where: {
         status: 'PAID',
         stripeTransferId: { not: null },
@@ -215,7 +215,7 @@ export async function GET(req: NextRequest) {
 
     // ── Check 3: Stuck payouts ────────────────────────────────────────────
     const stuckCutoff = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000);
-    const stuckPayouts = await (prisma as any).payout.findMany({
+    const stuckPayouts = await prisma.payout.findMany({
       where: {
         status: 'PROCESSING',
         updatedAt: { lte: stuckCutoff },

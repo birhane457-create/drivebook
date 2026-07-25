@@ -219,44 +219,45 @@ The reject UI is fully implemented. Each document in the review page has an X (r
 | **Implementation** | `app/api/cron/document-expiry-alerts/route.ts` - daily check for docs expiring in 30/7 days, send email/SMS | |
 | **Effort** | Medium (~2-3 hours: cron job, query, notification logic) | Phase 2 |
 
-### 7. Instructor Dashboard - Document Status Page (NICE-TO-HAVE - 2 HOURS)
+### 7. Instructor Dashboard - Document Status Page ✅ DONE (July 2026)
 
-| Aspect | Recommendation | Rationale |
-|--------|-----------------|-----------|
-| **Current Gap** | Instructor uploads documents but doesn't see verification status or admin feedback | No feedback loop for instructor |
-| **Enhancement** | Create `/dashboard/documents` page showing upload status + approval status + admin comments | Transparency and UX |
-| **Implementation** | Display all 10 documents, their status (pending/approved/rejected), expiry dates, upload form | |
-| **Effort** | Low-Medium (~2-3 hours: UI page, API calls) | Phase 2 |
+`app/dashboard/documents/page.tsx` is fully built. Shows all 8 documents, upload interface, 5-step setup checklist, expiry status, and next-step banners. See `docs/DOCROLEBASE/03-instructor/DOCUMENTS.md`.
 
-### 8. Document Expiration Enforcement on Booking (COMPLIANCE - 2 HOURS)
+### 8. Document Expiration Enforcement on Booking (COMPLIANCE - Phase 1)
 
-| Aspect | Recommendation | Rationale |
-|--------|-----------------|-----------|
-| **Current Gap** | Documents can be expired but instructor can still accept bookings | Risk: instructors working without valid credentials |
-| **Enhancement** | Check if all required docs are valid/not expired before allowing booking creation | Compliance gate |
-| **Implementation** | In booking creation endpoint, check: all 4 docs have URLs + not expired. If not, return 403 "Credentials expired" | ||
-| **Effort** | Low (~2 hours: validation logic in booking endpoint) | Phase 1 |
+| Aspect | Status |
+|---|---|
+| **Gap** | Documents can be expired but instructor can still accept bookings |
+| **Enhancement** | Check all 4 compliance docs valid before allowing booking creation |
+| **File** | Booking creation endpoint — check `licenseExpiry`, `insuranceExpiry`, `policeCheckExpiry`, `wwcCheckExpiry` not in the past |
+
+### 9. Audit Logging ✅ DONE (July 2026)
+
+Both approve and reject routes already call `prisma.auditLog.create()`. Actions: `DOCUMENTS_APPROVED`, `DOCUMENT_REJECTED`. Full metadata captured.
 
 ---
 
-## Priority Implementation Path to 100%
+## Priority Implementation Path
 
-### IMMEDIATE (30 min - 1 hour)
-- ✅ Add "Reject Document" button to review UI (get to 100%)
-- ✅ Add audit logging (compliance requirement)
+### DONE ✅
+- ~~Add "Reject Document" button to review UI~~ — Done. Modal with reason, SMS, audit log.
+- ~~Add audit logging~~ — Done. `DOCUMENTS_APPROVED` + `DOCUMENT_REJECTED` in AuditLog.
+- ~~Instructor dashboard status page~~ — Done. `/dashboard/documents` (Account Setup page).
+- ~~Fix expiry storage split~~ — Done 2026-07-21. Now writes to real DateTime columns + JSON.
 
-### PHASE 1 (2-3 hours)
+### PHASE 1 (2–3 hours)
 - Document expiration enforcement on booking creation
-- Instructor dashboard status page
 
-### PHASE 2 (Optional, 6-8 hours)
-- Auto-expiry notifications cron
+### PHASE 2 (optional)
+- Auto-expiry notifications cron (manual reminder via compliance dashboard exists as interim)
 - Bulk reject in compliance dashboard
 - Document versioning & history
 
-### PHASE 3 (Optional, 6+ hours)
+### PHASE 3 (optional)
 - OCR document validation
 - Third-party credential verification
+
+*Last verified: 2026-07-21 — full code audit*
 
 ---
 
@@ -301,8 +302,7 @@ The reject UI is fully implemented. Each document in the review page has an X (r
 
 ```prisma
 model Instructor {
-  // ... existing fields
-
+  // Document URL fields — all live production columns
   licenseImageFront      String?
   licenseImageBack       String?
   insurancePolicyDoc     String?
@@ -314,15 +314,31 @@ model Instructor {
   profileImage           String?
   carImage               String?
 
-  documentsVerified      Boolean?      @default(false)
-  documentsVerifiedAt    DateTime?
+  // Verification status — live production columns
+  documentsVerified    Boolean   @default(false)
+  documentsVerifiedAt  DateTime?
 
-  // Future: Document expiration
-  // licenseExpiry        DateTime?
-  // policeCheckExpiry    DateTime?
-  // wwcCheckExpiry       DateTime?
+  // ✅ Live production columns (added before June 2026)
+  licenseExpiry     DateTime?
+  insuranceExpiry   DateTime?
+  policeCheckExpiry DateTime?
+  wwcCheckExpiry    DateTime?
 }
 ```
+
+> **Architecture note:** The expiry route (`POST /api/admin/documents/instructor/[id]/expiry`) now writes to BOTH the dedicated DateTime columns AND `workingHours.expiry` JSON for backward compatibility. The compliance API and admin GET route read the dedicated columns first, falling back to the JSON for records saved before 2026-07-21. Old behaviour (JSON-only) was a latent bug fixed in the 2026-07-21 session.
+
+**Admin API routes (complete inventory):**
+
+| Route | Method | What it does |
+|---|---|---|
+| `/api/admin/documents/instructor/[id]` | GET | Returns all doc fields + expiry (real columns + JSON fallback) |
+| `/api/admin/documents/instructor/[id]/approve` | POST | Sets `documentsVerified=true`, SMS instructor, audit log |
+| `/api/admin/documents/instructor/[id]/reject` | POST | Nulls specific doc field, `documentsVerified=false`, SMS instructor with reason, audit log |
+| `/api/admin/documents/instructor/[id]/expiry` | POST | Writes expiry dates to dedicated DateTime columns + JSON fallback |
+| `/api/admin/documents/instructor/[id]/upload` | POST | Upload or remove a doc on behalf of instructor (Cloudinary) |
+| `/api/admin/documents/compliance` | GET | Compliance status for all instructors (reads real DateTime columns) |
+| `/api/admin/documents/compliance` | POST | Actions: `deactivate`, `sendReminder`, `autoProcess` |
 
 ---
 

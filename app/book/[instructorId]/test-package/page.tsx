@@ -16,7 +16,9 @@ export default function TestPackagePage() {
       if (!instructor) {
         router.push('/book');
       } else {
-        router.push(`/book/${params.instructorId}/schedule`);
+        // C-13 fix: /schedule was a redirect stub that routed to /booking-details.
+        // Point directly to the destination — removes the unnecessary redirect hop.
+        router.push(`/book/${params.instructorId}/booking-details`);
       }
     }, 500);
 

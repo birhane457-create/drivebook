@@ -7,11 +7,14 @@
 **Admin page:** `/admin/instructors/[id]`
 
 ### Pre-approval checklist:
-- [ ] License number present and not expired
-- [ ] Insurance policy document uploaded and not expired
-- [ ] Police check uploaded and not expired
-- [ ] WWC check uploaded (state-dependent)
-- [ ] Profile photo uploaded
+- [ ] Licence document (`licenseImageFront`) uploaded and not expired
+- [ ] Licence back (`licenseImageBack`) uploaded
+- [ ] Insurance policy document (`insurancePolicyDoc`) uploaded and not expired
+- [ ] Police check (`policeCheckDoc`) uploaded and not expired
+- [ ] WWC check (`wwcCheckDoc`) uploaded (state-dependent)
+- [ ] Photo ID (`photoIdDoc`) uploaded
+- [ ] Vehicle registration (`vehicleRegistrationDoc`) uploaded
+- [ ] Profile photo (`profileImage`) uploaded
 - [ ] ABN provided (if business) — must be verified before first payout
 - [ ] Phone number confirmed (used by AI receptionist and SMS)
 - [ ] Hourly rate set (cannot be $0)
@@ -60,23 +63,39 @@
 
 ## Document Lifecycle
 
-| Stage | Description |
+The platform does **not** have per-document state stages. The model is simpler:
+
+| State | What it means |
 |---|---|
-| `UPLOADED` | File uploaded, not yet reviewed |
-| `PENDING_VERIFICATION` | Admin review in progress |
-| `VERIFIED` | Document accepted, expiry recorded |
-| `EXPIRED` | Past expiry date — instructor cannot receive new payouts |
-| `REJECTED` | Document rejected — reason required |
-| `ARCHIVED` | Superseded by newer document |
+| URL = null | Document not uploaded (or was rejected and nulled) |
+| URL present | Document uploaded — awaiting admin review |
+| `documentsVerified = true` | Admin has reviewed and approved all documents |
+| `documentsVerified = false` + URL = null for a field | That specific document was rejected — instructor must re-upload |
+
+When admin rejects a document:
+- The specific field is set to `null` (document removed)
+- `documentsVerified` is set to `false`
+- Instructor receives SMS with the rejection reason
+- An `AuditLog` entry (`DOCUMENT_REJECTED`) is written
+
+When admin approves all documents:
+- `documentsVerified = true`, `documentsVerifiedAt = now()`
+- Instructor receives SMS confirmation
+- An `AuditLog` entry (`DOCUMENTS_APPROVED`) is written
+
+### Expiry tracking:
+
+Four documents track expiry dates via dedicated DB columns (`licenseExpiry`, `insuranceExpiry`, `policeCheckExpiry`, `wwcCheckExpiry`) set by admin during review. The compliance dashboard reads these columns (with fallback to `workingHours.expiry` for records not yet re-saved since July 2026).
 
 ### Expiry alerts (automated):
-- System sends in-app alert 30 days before expiry
-- Weekly cron (`document-expiry-check`) runs every Monday 2am UTC
+- System sends in-app alert and email 30 days before expiry
+- Compliance dashboard shows traffic-light status to admin at all times
+- `autoProcess` action on compliance dashboard deactivates instructors where ALL 4 compliance docs are expired
 
 ### On expiry:
 - Instructor still accepts bookings (existing students not disrupted)
-- Payouts are blocked until renewed document is verified
-- Admin must manually verify the renewed document and update expiry date
+- Admin can deactivate from compliance dashboard
+- Admin must verify renewed document and update expiry date before payout hold is cleared
 
 ---
 

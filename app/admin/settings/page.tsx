@@ -134,7 +134,13 @@ export default async function AdminSettingsPage() {
             <ConfigRow label="SMTP host" value={process.env.SMTP_HOST} />
             <ConfigRow label="SMTP port" value={process.env.SMTP_PORT} />
             <ConfigRow label="From address" value={process.env.EMAIL_FROM} />
-            <ConfigRow label="SMTP password" masked />
+            {/* R-04: only show masked dots when the env var is actually set.
+                The old code used `masked` unconditionally, so admins saw ••••••••
+                even when SMTP_PASS was blank — giving false confidence. */}
+            <ConfigRow
+              label="SMTP password"
+              value={process.env.SMTP_PASS ? '••••••••' : undefined}
+            />
           </div>
         </div>
 
@@ -144,7 +150,7 @@ export default async function AdminSettingsPage() {
           <div className="px-6 py-2">
             <ConfigRow label="Account SID" value={process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.slice(0, 8) + 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : undefined} />
             <ConfigRow label="Phone number" value={process.env.TWILIO_PHONE_NUMBER} />
-            <ConfigRow label="Auth token" masked />
+            <ConfigRow label="Auth token" value={process.env.TWILIO_AUTH_TOKEN ? '••••••••' : undefined} />
           </div>
         </div>
 

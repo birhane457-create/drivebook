@@ -14,8 +14,36 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // Pagination params
     const { searchParams } = new URL(req.url)
+
+    // C-10 fix: stats=true returns DB-level aggregates instead of page-slice calculations.
+    // The credits page was calling GET /api/admin/clients (25 rows) and summing totals
+    // client-side — giving wrong numbers for platforms with more than 25 clients.
+    if (searchParams.get('stats') === 'true') {
+      const [walletAgg, debitAgg, positiveCount, zeroCount, negativeCount, totalClients] = await Promise.all([
+        prisma.clientWallet.aggregate({ _sum: { balance: true } }),
+        prisma.walletTransaction.aggregate({
+          where: { type: 'DEBIT', status: 'CONFIRMED' },
+          _sum: { amount: true },
+        }),
+        prisma.clientWallet.count({ where: { balance: { gt: 0 } } }),
+        prisma.clientWallet.count({ where: { balance: 0 } }),
+        prisma.clientWallet.count({ where: { balance: { lt: 0 } } }),
+        prisma.client.count(),
+      ]);
+      return NextResponse.json({
+        stats: {
+          totalWalletBalance: Number(walletAgg._sum.balance ?? 0),
+          totalDebitAmount: Number(debitAgg._sum.amount ?? 0),
+          clientsWithPositiveBalance: positiveCount,
+          clientsWithZeroBalance: zeroCount,
+          clientsWithNegativeBalance: negativeCount,
+          totalClients,
+        },
+      });
+    }
+
+    // Pagination params
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '25')))
     const skip = (page - 1) * limit

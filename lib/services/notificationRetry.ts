@@ -85,6 +85,8 @@ export type EnqueueParams = EnqueueEmailParams | EnqueueSMSParams
  */
 export async function enqueueNotification(params: EnqueueParams): Promise<void> {
   try {
+    // notificationRetry is a custom table added via raw migration (not in schema.prisma)
+    // so (prisma as any) cast is required until it is added to the Prisma schema.
     await (prisma as any).notificationRetry.upsert({
       where: { idempotencyKey: params.idempotencyKey },
       create: {
@@ -156,6 +158,7 @@ export async function processRetryQueue(): Promise<ProcessResult> {
   const now = new Date()
 
   // Fetch PENDING rows due for retry — limit 50 per run to bound execution time
+  // notificationRetry is a custom table (not in schema.prisma) — cast required.
   const rows = await (prisma as any).notificationRetry.findMany({
     where: {
       status: 'PENDING',

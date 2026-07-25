@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X, RefreshCw, Banknote } from 'lucide-react'
+import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X, RefreshCw, Banknote, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { getStatusConfig } from '@/lib/config/booking-status'
 
@@ -10,7 +10,7 @@ interface Booking {
   startTime: string
   endTime: string
   status: string
-  bookingType: string
+  bookingType?: string | null
   pickupAddress?: string
   dropoffAddress?: string
   price: number
@@ -28,6 +28,15 @@ interface Booking {
   clientName?: string // offline bookings may not have a client record
 }
 
+// NF-01: replaces all window.confirm() calls — one state handles all action types
+type PendingAction = {
+  id: string
+  type: 'delete' | 'cancel' | 'checkIn' | 'checkOut' | 'confirm' | 'saveEdit'
+  message: string
+  confirmLabel: string
+  confirmClass: string
+}
+
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming')
@@ -39,6 +48,8 @@ export default function BookingsPage() {
   const [editForm, setEditForm] = useState<Partial<Booking>>({})
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  // NF-01: single inline confirm state — replaces all window.confirm() calls
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
 
   useEffect(() => {
     fetchBookings()
@@ -47,6 +58,37 @@ export default function BookingsPage() {
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message })
     setTimeout(() => setToast(null), 4000)
+  }
+
+  // Request confirmation — sets the pending action, renders inline panel
+  const requestConfirm = (action: PendingAction) => {
+    setPendingAction(action)
+  }
+
+  // Execute confirmed action
+  const executeConfirmed = async () => {
+    if (!pendingAction) return
+    const { id, type } = pendingAction
+    setPendingAction(null)
+    switch (type) {
+      case 'delete':    return _doDelete(id)
+      case 'cancel':    return _doCancel(id)
+      case 'checkIn':   return _doCheckIn(id)
+      case 'checkOut':  return _doCheckOut(id)
+      case 'confirm':   return _doConfirm(id)
+      case 'saveEdit':  return _doSaveEdit(id)
+    }
+  }
+
+  const formatPrice = (value: number | string | null | undefined) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `$${value.toFixed(2)}`
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return `$${parsed.toFixed(2)}`
+    }
+    return '$0.00'
   }
 
   const fetchBookings = async () => {
@@ -62,14 +104,53 @@ export default function BookingsPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Remove this booking from your list? The record will be retained for audit purposes.')) return
-    
-    try {
-      const res = await fetch(`/api/bookings/${id}`, {
-        method: 'DELETE',
-      })
+  // NF-01: action handlers no longer guard with window.confirm() — confirmation is via inline panel
+  const handleDelete = (id: string) => requestConfirm({
+    id, type: 'delete',
+    message: 'Remove this booking from your list? The record will be retained for audit purposes.',
+    confirmLabel: 'Remove',
+    confirmClass: 'bg-red-600 hover:bg-red-700',
+  })
 
+  const handleCancel = (id: string) => requestConfirm({
+    id, type: 'cancel',
+    message: 'Cancel this booking? The client will be notified and any applicable refund will be processed.',
+    confirmLabel: 'Cancel Booking',
+    confirmClass: 'bg-red-600 hover:bg-red-700',
+  })
+
+  const handleCheckIn = (id: string) => requestConfirm({
+    id, type: 'checkIn',
+    message: 'Start this lesson now? This will record the check-in time.',
+    confirmLabel: 'Yes, Check In',
+    confirmClass: 'bg-green-600 hover:bg-green-700',
+  })
+
+  const handleCheckOut = (id: string) => requestConfirm({
+    id, type: 'checkOut',
+    message: 'End this lesson now? This will record the check-out time and mark the lesson complete.',
+    confirmLabel: 'Yes, Check Out',
+    confirmClass: 'bg-blue-600 hover:bg-blue-700',
+  })
+
+  const handleConfirm = (id: string) => requestConfirm({
+    id, type: 'confirm',
+    message: 'Confirm this PENDING booking? The client will be notified.',
+    confirmLabel: 'Confirm Booking',
+    confirmClass: 'bg-yellow-600 hover:bg-yellow-700',
+  })
+
+  const saveEdit = (id: string) => requestConfirm({
+    id, type: 'saveEdit',
+    message: 'Save changes to this booking?',
+    confirmLabel: 'Save Changes',
+    confirmClass: 'bg-green-600 hover:bg-green-700',
+  })
+
+  // Private execution functions (called after confirmation)
+  const _doDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' })
       if (res.ok) {
         showToast('success', 'Booking removed.')
         fetchBookings()
@@ -77,22 +158,18 @@ export default function BookingsPage() {
         const error = await res.json()
         showToast('error', error.error || 'Failed to remove booking.')
       }
-    } catch (error) {
-      console.error('Failed to delete booking:', error)
+    } catch {
       showToast('error', 'Failed to remove booking. Please try again.')
     }
   }
 
-  const handleCancel = async (id: string) => {
-    if (!confirm('Cancel this booking? The client will be notified and any applicable refund will be processed.')) return
-    
+  const _doCancel = async (id: string) => {
     try {
       const res = await fetch(`/api/bookings/${id}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Cancelled by instructor' })
+        body: JSON.stringify({ reason: 'Cancelled by instructor' }),
       })
-
       if (res.ok) {
         showToast('success', 'Booking cancelled successfully.')
         fetchBookings()
@@ -100,22 +177,18 @@ export default function BookingsPage() {
         const error = await res.json()
         showToast('error', error.error || 'Failed to cancel booking.')
       }
-    } catch (error) {
-      console.error('Failed to cancel booking:', error)
+    } catch {
       showToast('error', 'Failed to cancel booking. Please try again.')
     }
   }
 
-  const handleCheckIn = async (id: string) => {
-    if (!confirm('Start this lesson now?')) return
-    
+  const _doCheckIn = async (id: string) => {
     try {
       const res = await fetch(`/api/bookings/${id}/check-in`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location: 'Web check-in' })
+        body: JSON.stringify({ location: 'Web check-in' }),
       })
-
       if (res.ok) {
         showToast('success', 'Checked in successfully.')
         fetchBookings()
@@ -123,22 +196,18 @@ export default function BookingsPage() {
         const error = await res.json()
         showToast('error', error.error || 'Check-in failed.')
       }
-    } catch (error) {
-      console.error('Failed to check in:', error)
+    } catch {
       showToast('error', 'Check-in failed. Please try again.')
     }
   }
 
-  const handleCheckOut = async (id: string) => {
-    if (!confirm('End this lesson now?')) return
-    
+  const _doCheckOut = async (id: string) => {
     try {
       const res = await fetch(`/api/bookings/${id}/check-out`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location: 'Web check-out' })
+        body: JSON.stringify({ location: 'Web check-out' }),
       })
-
       if (res.ok) {
         showToast('success', 'Checked out successfully.')
         fetchBookings()
@@ -146,20 +215,14 @@ export default function BookingsPage() {
         const error = await res.json()
         showToast('error', error.error || 'Check-out failed.')
       }
-    } catch (error) {
-      console.error('Failed to check out:', error)
+    } catch {
       showToast('error', 'Check-out failed. Please try again.')
     }
   }
 
-  const handleConfirm = async (id: string) => {
-    if (!confirm('Confirm this PENDING booking? This will notify the client.')) return
-    
+  const _doConfirm = async (id: string) => {
     try {
-      const res = await fetch(`/api/bookings/${id}/confirm`, {
-        method: 'POST'
-      })
-
+      const res = await fetch(`/api/bookings/${id}/confirm`, { method: 'POST' })
       if (res.ok) {
         showToast('success', 'Booking confirmed successfully! Client has been notified.')
         fetchBookings()
@@ -167,9 +230,36 @@ export default function BookingsPage() {
         const error = await res.json()
         showToast('error', error.error || 'Failed to confirm booking.')
       }
-    } catch (error) {
-      console.error('Failed to confirm booking:', error)
+    } catch {
       showToast('error', 'Failed to confirm booking. Please try again.')
+    }
+  }
+
+  const _doSaveEdit = async (id: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pickupAddress: editForm.pickupAddress,
+          dropoffAddress: editForm.dropoffAddress,
+          notes: editForm.notes,
+        }),
+      })
+      if (res.ok) {
+        showToast('success', 'Booking updated successfully.')
+        setEditingId(null)
+        setEditForm({})
+        fetchBookings()
+      } else {
+        const error = await res.json()
+        showToast('error', error.error || 'Update failed.')
+      }
+    } catch {
+      showToast('error', 'Update failed. Please try again.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -187,38 +277,6 @@ export default function BookingsPage() {
   const cancelEdit = () => {
     setEditingId(null)
     setEditForm({})
-  }
-
-  const saveEdit = async (id: string) => {
-    if (!confirm('Save changes to this booking?')) return
-    
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/bookings/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pickupAddress: editForm.pickupAddress,
-          dropoffAddress: editForm.dropoffAddress,
-          notes: editForm.notes,
-        })
-      })
-
-      if (res.ok) {
-        showToast('success', 'Booking updated successfully.')
-        setEditingId(null)
-        setEditForm({})
-        fetchBookings()
-      } else {
-        const error = await res.json()
-        showToast('error', error.error || 'Update failed.')
-      }
-    } catch (error) {
-      console.error('Failed to update booking:', error)
-      showToast('error', 'Update failed. Please try again.')
-    } finally {
-      setSaving(false)
-    }
   }
 
   const filteredBookings = bookings.filter(booking => {
@@ -317,8 +375,8 @@ export default function BookingsPage() {
               {filteredBookings.map((booking) => {
                 const isExpanded = expandedId === booking.id
                 const bookingDate = new Date(booking.startTime)
-                const startTime = bookingDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-                const endTime = new Date(booking.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                const startTime = bookingDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+                const endTime = new Date(booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
                 const canCheckIn = booking.status === 'CONFIRMED' && !booking.checkInTime
                 const canCheckOut = booking.checkInTime && !booking.checkOutTime
                 const canConfirm = booking.status === 'PENDING'
@@ -357,14 +415,14 @@ export default function BookingsPage() {
                           <div className="flex items-center gap-4 text-sm text-slate-400">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {bookingDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {bookingDate.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })}
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
                               {startTime} - {endTime}
                             </span>
                             <span className="hidden sm:inline font-semibold text-slate-100">
-                              ${booking.price}
+                              {formatPrice(booking.price)}
                             </span>
                           </div>
                         </div>
@@ -372,7 +430,7 @@ export default function BookingsPage() {
                       
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="sm:hidden font-semibold text-slate-100">
-                          ${booking.price}
+                          {formatPrice(booking.price)}
                         </span>
                         {isExpanded ? 
                           <ChevronUp className="h-5 w-5 text-slate-500" /> : 
@@ -446,7 +504,7 @@ export default function BookingsPage() {
                             <h4 className="font-medium text-slate-100 mb-2">Booking Details</h4>
                             <div className="space-y-2 text-slate-400">
                               <div>
-                                <span className="font-medium">Date:</span> {bookingDate.toLocaleDateString('en-US', {
+                                <span className="font-medium">Date:</span> {bookingDate.toLocaleDateString('en-AU', {
                                   weekday: 'long',
                                   year: 'numeric',
                                   month: 'long',
@@ -457,10 +515,10 @@ export default function BookingsPage() {
                                 <span className="font-medium">Time:</span> {startTime} - {endTime}
                               </div>
                               <div>
-                                <span className="font-medium">Type:</span> {booking.bookingType.replace('_', ' ')}
+                                <span className="font-medium">Type:</span> {booking.bookingType ? booking.bookingType.replace(/_/g, ' ') : 'Standard Lesson'}
                               </div>
                               <div>
-                                <span className="font-medium">Price:</span> ${booking.price}
+                                <span className="font-medium">Price:</span> {formatPrice(booking.price)}
                               </div>
                             </div>
                           </div>
@@ -665,6 +723,33 @@ export default function BookingsPage() {
           </div>
         )}
      
+
+      {/* NF-01: Inline confirm panel — replaces all window.confirm() calls */}
+      {pendingAction && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-sm text-slate-200">{pendingAction.message}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPendingAction(null)}
+                className="flex-1 py-2 border border-slate-700 text-slate-300 text-sm rounded-lg hover:bg-slate-800 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeConfirmed}
+                disabled={saving}
+                className={`flex-1 py-2 text-white text-sm rounded-lg font-semibold transition disabled:opacity-50 ${pendingAction.confirmClass}`}
+              >
+                {saving ? 'Working...' : pendingAction.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast notifications */}
       {toast && (

@@ -55,12 +55,12 @@ async function buildReport(): Promise<WeeklyReport> {
     openDisputes, failedPayouts, stuckPayments, stripeIncomplete, expiringDocs,
     topInstructorRows,
   ] = await Promise.all([
-    (prisma as any).walletTransaction.aggregate({
+    prisma.walletTransaction.aggregate({
       where: { createdAt: { gte: weekStart }, type: 'CREDIT' },
       _sum: { amount: true },
     }).catch(() => ({ _sum: { amount: 0 } })),
 
-    (prisma as any).walletTransaction.aggregate({
+    prisma.walletTransaction.aggregate({
       where: { createdAt: { gte: prevWeekStart, lt: weekStart }, type: 'CREDIT' },
       _sum: { amount: true },
     }).catch(() => ({ _sum: { amount: 0 } })),
@@ -88,11 +88,11 @@ async function buildReport(): Promise<WeeklyReport> {
     prisma.instructor.count({ where: { approvalStatus: 'APPROVED', isActive: true } }).catch(() => 0),
     prisma.instructor.count({ where: { approvalStatus: 'PENDING' } }).catch(() => 0),
 
-    (prisma as any).stripeDispute.count({
+    prisma.stripeDispute.count({
       where: { status: { in: ['warning_needs_response', 'needs_response', 'under_review'] } },
     }).catch(() => 0),
 
-    (prisma as any).payout.count({
+    prisma.payout.count({
       where: { status: 'FAILED', createdAt: { gte: last30 } },
     }).catch(() => 0),
 

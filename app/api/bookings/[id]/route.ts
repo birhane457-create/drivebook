@@ -227,7 +227,7 @@ export async function PATCH(
           } else {
             // Wallet missing — log but don't fail the update
             console.warn(`[PATCH booking] Could not refund $${refundAmount}: no wallet for userId=${booking.client.userId}`)
-            await (tx as any).auditLog.create({
+            await tx.auditLog.create({
               data: {
                 action: 'WALLET_REFUND_SKIPPED',
                 actorId: session.user.id!,
@@ -241,7 +241,7 @@ export async function PATCH(
           }
         }
 
-        const existingTransaction = await (tx as any).transaction.findFirst({
+        const existingTransaction = await tx.transaction.findFirst({
           where: { bookingId: params.id }
         })
 
@@ -249,7 +249,7 @@ export async function PATCH(
           const platformFee = data.price * (booking.commissionRate || 0.15)
           const instructorPayout = data.price - platformFee
 
-          await (tx as any).transaction.update({
+          await tx.transaction.update({
             where: { id: existingTransaction.id },
             data: { amount: data.price, platformFee, instructorPayout }
           })
@@ -442,7 +442,7 @@ export async function DELETE(
 
     // Write immutable audit log entry with full booking snapshot
     try {
-      await (prisma as any).auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: 'BOOKING_DELETED',
           actorId: session.user.id!,

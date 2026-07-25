@@ -233,69 +233,69 @@ export default async function DashboardPage() {
     perthNow.getUTCFullYear(), perthNow.getUTCMonth(), perthNow.getUTCDate(), 23, 59, 59, 999
   ) - perthOffsetMs)
 
-  const [instructor, monthlyBookings, totalRevenue, lastMonthRevenue, clientsWithPackages, inactiveClients, totalClientCount, todayBookings] = await Promise.all([
-    prisma.instructor.findUnique({
-      where: { id: session.user.instructorId },
-      include: {
-        bookings: {
-          where: {
-            status: 'CONFIRMED', // ✅ Only show CONFIRMED (paid) bookings
-            startTime: {
-              gte: now
-            }
-          },
-          take: 5,
-          orderBy: {
-            startTime: 'asc'
-          },
-          include: {
-            client: true
-          }
+  // ── Core query: instructor profile is required to render any of this page ──
+  // Runs separately so a failure here redirects cleanly rather than crashing
+  // the entire Promise.all and losing the supplementary data we'd still want.
+  const instructor = await prisma.instructor.findUnique({
+    where: { id: session.user.instructorId },
+    include: {
+      bookings: {
+        where: {
+          status: 'CONFIRMED',
+          // FIX BUG-5 + DATA-2: start from tomorrow so today's lessons don't appear
+          // in both "Upcoming Lessons" panel AND the TodayWorkspace timeline.
+          startTime: { gt: endOfToday },
         },
-        clients: {
-          take: 5,
-          orderBy: {
-            createdAt: 'desc'
-          }
-        }
-      }
-    }),
+        take: 5,
+        orderBy: { startTime: 'asc' },
+        include: { client: true },
+      },
+      clients: {
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  }).catch(() => null)
+
+  if (!instructor) {
+    redirect('/login')
+  }
+
+  // ── Supplementary queries — all individually guarded with .catch() ─────────
+  // Each query can fail independently without degrading the others.
+  // instructor data above is already loaded; these add stats and widget data.
+  const [
+    monthlyBookings,
+    totalRevenue,
+    lastMonthRevenue,
+    clientsWithPackages,
+    inactiveClients,
+    totalClientCount,
+    todayBookings,
+  ] = await Promise.all([
     prisma.booking.count({
       where: {
         instructorId: session.user.instructorId,
         status: { in: ['CONFIRMED', 'COMPLETED'] },
-        startTime: {
-          gte: startOfMonth,
-          lte: endOfMonth
-        }
-      }
-    }),
+        startTime: { gte: startOfMonth, lte: endOfMonth },
+      },
+    }).catch(() => 0),
     prisma.booking.aggregate({
       where: {
         instructorId: session.user.instructorId,
         status: 'COMPLETED',
-        startTime: {
-          gte: startOfMonth,
-          lte: endOfMonth
-        }
+        startTime: { gte: startOfMonth, lte: endOfMonth },
       },
-      _sum: {
-        price: true
-      }
-    }),
+      _sum: { price: true },
+    }).catch(() => ({ _sum: { price: 0 } })),
     prisma.booking.aggregate({
       where: {
         instructorId: session.user.instructorId,
         status: 'COMPLETED',
-        startTime: {
-          gte: startOfLastMonth,
-          lte: endOfLastMonth
-        }
+        startTime: { gte: startOfLastMonth, lte: endOfLastMonth },
       },
-      _sum: {
-        price: true
-      }
-    }),
+      _sum: { price: true },
+    }).catch(() => ({ _sum: { price: 0 } })),
     // Clients with unused paid package hours — paid only, sorted by oldest activity first
     prisma.booking.findMany({
       where: {
@@ -313,7 +313,7 @@ export default async function DashboardPage() {
       },
       orderBy: { updatedAt: 'asc' },
       take: 5,
-    }),
+    }).catch(() => []),
     // Inactive clients who had lessons but no booking in 21+ days
     prisma.client.findMany({
       where: {
@@ -339,10 +339,10 @@ export default async function DashboardPage() {
       },
       orderBy: { createdAt: 'asc' },
       take: 5,
-    }),
+    }).catch(() => []),
     prisma.client.count({
-      where: { instructorId: session.user.instructorId }
-    }),
+      where: { instructorId: session.user.instructorId },
+    }).catch(() => 0),
     // Today's bookings for the Today Workspace — all statuses so progress is accurate
     prisma.booking.findMany({
       where: {
@@ -363,12 +363,8 @@ export default async function DashboardPage() {
         client: { select: { phone: true } },
       },
       orderBy: { startTime: 'asc' },
-    }),
+    }).catch(() => []),
   ])
-
-  if (!instructor) {
-    redirect('/login')
-  }
 
   // Normalise today bookings — phone may be on clientPhone or client relation
   const todayWorkspaceBookings = todayBookings.map((b: any) => ({

@@ -466,6 +466,13 @@ export default function AdminBookingsPage() {
 
   useEffect(() => { fetchBookings(1); }, []);
 
+  // C-14 fix: debounced search re-fetches from API instead of filtering client-side.
+  // The old approach filtered the 50-row page slice, missing bookings on other pages.
+  useEffect(() => {
+    const t = setTimeout(() => { fetchBookings(1); }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4000);
@@ -474,7 +481,9 @@ export default function AdminBookingsPage() {
   const fetchBookings = async (page: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings?page=${page}&limit=50`);
+      const params = new URLSearchParams({ page: String(page), limit: '50' });
+      if (search) params.set('search', search);
+      const res = await fetch(`/api/admin/bookings?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setBookings(data.bookings || data);
@@ -487,18 +496,12 @@ export default function AdminBookingsPage() {
     finally { setLoading(false); }
   };
 
+  // Search is now server-side (C-14 fix) — bookings from API are already filtered.
+  // statusFilter still applied client-side since it filters the current page view only;
+  // for exact status counts, the stats object (from DB) is used in the stats bar.
   const now = new Date();
   const filtered = bookings.filter(b => {
     if (statusFilter !== 'all' && b.status !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        (b.clientName || b.client?.name || '').toLowerCase().includes(q) ||
-        (b.client?.email || '').toLowerCase().includes(q) ||
-        (b.instructor?.name || '').toLowerCase().includes(q) ||
-        b.id.toLowerCase().includes(q)
-      );
-    }
     return true;
   });
 

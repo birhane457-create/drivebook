@@ -5,6 +5,8 @@ import {
   Car, Calendar, MapPin, Plus, CheckCircle, XCircle, Clock,
   ChevronDown, ChevronUp, Edit2, Save, X, Loader2, User, Phone, Mail, DollarSign,
 } from 'lucide-react'
+import { useToast } from '@/hooks/useToast'
+import Toast from '@/components/ui/Toast'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,10 @@ export default function PDATestsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingId, setEditingId]   = useState<string | null>(null)
   const [editResult, setEditResult] = useState('')
+  // C-03: validation error for slot selection (inline, near the form)
+  const [slotError, setSlotError] = useState<string | null>(null)
+
+  const { toast, showToast, clearToast } = useToast()
 
   // Form — step-by-step
   const [form, setForm] = useState({
@@ -178,7 +184,11 @@ export default function PDATestsPage() {
 
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.selectedSlot) { alert('Please select a time slot.'); return }
+    if (!form.selectedSlot) {
+      setSlotError('Please select a time slot.')
+      return
+    }
+    setSlotError(null)
     setSaving(true)
     try {
       const config = configs.find(c => c.id === form.configId)
@@ -200,10 +210,10 @@ export default function PDATestsPage() {
         fetchAll()
       } else {
         const d = await res.json()
-        alert(d.error || 'Failed to schedule test.')
+        showToast('error', d.error || 'Failed to schedule test.')
       }
     } catch {
-      alert('Failed to schedule test.')
+      showToast('error', 'Failed to schedule test.')
     } finally {
       setSaving(false)
     }
@@ -217,8 +227,8 @@ export default function PDATestsPage() {
         body: JSON.stringify({ result: editResult }),
       })
       if (res.ok) { setEditingId(null); setEditResult(''); fetchAll() }
-      else alert('Failed to update result.')
-    } catch { alert('Failed to update result.') }
+      else showToast('error', 'Failed to update result.')
+    } catch { showToast('error', 'Failed to update result.') }
   }
 
   const toggleExpand = (id: string) => {
@@ -236,6 +246,7 @@ export default function PDATestsPage() {
 
   return (
           <div className="max-w-4xl mx-auto px-1 py-2 sm:py-8">
+        <Toast toast={toast} onClose={clearToast} />
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -426,19 +437,27 @@ export default function PDATestsPage() {
               )}
 
               {/* Actions */}
-              <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => { setShowForm(false); setSlots([]) }}
-                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-800 transition">
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving || !form.selectedSlot}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Car className="h-4 w-4" />}
-                  Schedule Test
-                </button>
+              <div className="flex gap-3 pt-1 flex-col">
+                {/* C-03: inline slot validation error — stays visible near the button */}
+                {slotError && (
+                  <p role="alert" className="text-sm text-amber-300 bg-amber-950/40 border border-amber-700/50 rounded-lg px-3 py-2">
+                    ⚠️ {slotError}
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => { setShowForm(false); setSlots([]) }}
+                    className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-800 transition">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving || !form.selectedSlot}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Car className="h-4 w-4" />}
+                    Schedule Test
+                  </button>
+                </div>
               </div>
             </form>
           </div>

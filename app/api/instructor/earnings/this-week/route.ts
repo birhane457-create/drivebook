@@ -63,29 +63,49 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         price: true,
+        instructorPayout: true,   // FIX BUG-1: use net payout, not gross price
+        commissionRate: true,      // FIX BUG-1: fallback for old bookings without payout field
         duration: true,
         startTime: true,
         endTime: true
       }
     })
 
-    // Calculate totals
+    // FIX BUG-1: sum instructorPayout (net after commission), not booking.price (gross)
+    // Falls back to price × (1 - commissionRate) for bookings missing instructorPayout,
+    // and ultimately to price × 0.85 (BASIC rate) for very old bookings.
     const completedCount = weeklyBookings.length
-    const totalEarned = weeklyBookings.reduce((sum, booking) => sum + booking.price, 0)
+    const totalEarned = weeklyBookings.reduce((sum, b) => {
+      if (b.instructorPayout && b.instructorPayout > 0) return sum + b.instructorPayout
+      if (b.commissionRate != null) return sum + b.price * (1 - b.commissionRate)
+      return sum + b.price * 0.85 // BASIC fallback
+    }, 0)
+
+    // FIX BUG-2: AU date format DD/MM, not US format MM/DD
+    const mondayDisplay = mondayStr.slice(8) + '/' + mondayStr.slice(5, 7)
+    const sundayDisplay = sundayStr.slice(8)  + '/' + sundayStr.slice(5, 7)
 
     return NextResponse.json({
       weekStart: mondayStart.toISOString(),
       weekEnd: sundayEnd.toISOString(),
-      weekStartDisplay: mondayStr.slice(5).replace('-', '/'),  // MM/DD → use ISO slice, locale-free
-      weekEndDisplay: sundayStr.slice(5).replace('-', '/'),
+      weekStartDisplay: mondayDisplay,
+      weekEndDisplay:   sundayDisplay,
       completedCount,
       totalEarned: parseFloat(totalEarned.toFixed(2)),
       hourlyRate: instructor.hourlyRate,
-      bookings: weeklyBookings.map(b => ({
-        id: b.id,
-        date: b.startTime ? new Date(b.startTime).toISOString().slice(0, 10) : null,
-        price: b.price
-      }))
+      // FIX DATA-3: return instructorPayout per booking, not gross price
+      bookings: weeklyBookings.map(b => {
+        const net = b.instructorPayout && b.instructorPayout > 0
+          ? b.instructorPayout
+          : b.commissionRate != null
+            ? b.price * (1 - b.commissionRate)
+            : b.price * 0.85
+        return {
+          id: b.id,
+          date: b.startTime ? new Date(b.startTime).toISOString().slice(0, 10) : null,
+          price: parseFloat(net.toFixed(2))
+        }
+      })
     })
   } catch (error) {
     console.error('Error fetching weekly earnings:', error)

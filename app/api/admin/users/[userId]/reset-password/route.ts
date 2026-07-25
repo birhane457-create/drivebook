@@ -65,7 +65,7 @@ export async function POST(
     });
 
     // Audit log
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         action: 'ADMIN_PASSWORD_RESET_SENT',
         actorId: session.user.id!,

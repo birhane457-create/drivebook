@@ -103,6 +103,7 @@ export default function AdminNav() {
       name: 'Users', icon: '👥', items: [
         { name: 'Instructors', href: '/admin/instructors', icon: '🧑‍🏫' },
         { name: 'Clients', href: '/admin/clients', icon: '👤' },
+        { name: 'Subscriptions', href: '/admin/subscriptions', icon: '💳' },
         { name: 'Staff Tasks', href: '/staff/dashboard', icon: '📋' },
       ]
     },
@@ -122,6 +123,7 @@ export default function AdminNav() {
         { name: 'Audit Log', href: '/admin/audit-log', icon: '🔍' },
         { name: 'Test Centres', href: '/admin/test-centres', icon: '🚗' },
         { name: 'Policy & Rules', href: '/admin/policy', icon: '📚' },
+        { name: 'Cron Jobs', href: '/admin/cron-jobs', icon: '⏱️' },
       ]
     },
     {

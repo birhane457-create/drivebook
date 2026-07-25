@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
   ])
 
   // Open disputes per instructor
-  const openDisputes = await (prisma as any).stripeDispute.groupBy({
+  const openDisputes = await prisma.stripeDispute.groupBy({
     by: ['instructorId'],
     where: {
       instructorId: { in: ids },

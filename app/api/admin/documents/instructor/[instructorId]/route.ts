@@ -33,6 +33,12 @@ export async function GET(
         vehicleRegistrationDoc: true,
         documentsVerified: true,
         documentsVerifiedAt: true,
+        // Real DateTime columns (written since 2026-07-21)
+        licenseExpiry: true,
+        insuranceExpiry: true,
+        policeCheckExpiry: true,
+        wwcCheckExpiry: true,
+        // Legacy JSON blob for fallback
         workingHours: true,
         user: { select: { email: true } },
       },
@@ -42,17 +48,17 @@ export async function GET(
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Expiry dates stored inside workingHours JSON under "expiry" key
+    // Prefer dedicated DateTime columns; fall back to workingHours.expiry for old records
     const wh = (instructor.workingHours as any) || {};
-    const expiry = wh.expiry || {};
+    const legacyExp = wh.expiry || {};
 
     return NextResponse.json({
       ...instructor,
       email: instructor.user?.email || 'N/A',
-      licenseExpiry: expiry.licenseExpiry || null,
-      insuranceExpiry: expiry.insuranceExpiry || null,
-      policeCheckExpiry: expiry.policeCheckExpiry || null,
-      wwcCheckExpiry: expiry.wwcCheckExpiry || null,
+      licenseExpiry:     instructor.licenseExpiry?.toISOString()    ?? legacyExp.licenseExpiry    ?? null,
+      insuranceExpiry:   instructor.insuranceExpiry?.toISOString()   ?? legacyExp.insuranceExpiry   ?? null,
+      policeCheckExpiry: instructor.policeCheckExpiry?.toISOString() ?? legacyExp.policeCheckExpiry ?? null,
+      wwcCheckExpiry:    instructor.wwcCheckExpiry?.toISOString()    ?? legacyExp.wwcCheckExpiry    ?? null,
     });
   } catch (error) {
     console.error('Get instructor documents error:', error);

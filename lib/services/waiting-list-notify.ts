@@ -28,6 +28,7 @@ interface SlotOpenedEvent {
 export async function notifyWaitingList(event: SlotOpenedEvent): Promise<void> {
   try {
     // Find the first active entry for this instructor (FIFO — oldest first)
+    // waitingList is a custom table (not in schema.prisma) — cast required.
     const entry = await (prisma as any).waitingList.findFirst({
       where: { instructorId: event.instructorId, isActive: true },
       orderBy: { createdAt: 'asc' },
@@ -79,13 +80,14 @@ export async function notifyWaitingList(event: SlotOpenedEvent): Promise<void> {
     }
 
     // Mark entry as notified so we don't spam them
+    // waitingList is a custom table (not in schema.prisma) — cast required.
     await (prisma as any).waitingList.update({
       where: { id: entry.id },
       data: { isActive: false },
-    })
+    });
 
-    // Audit log
-    await (prisma as any).auditLog.create({
+    // Audit log — auditLog IS in schema, no cast needed
+    await prisma.auditLog.create({
       data: {
         action: 'WAITING_LIST_NOTIFIED',
         actorId: 'SYSTEM',
@@ -100,7 +102,7 @@ export async function notifyWaitingList(event: SlotOpenedEvent): Promise<void> {
           slotTime: event.slotTime ?? null,
         },
       },
-    }).catch(() => {/* non-fatal */})
+    }).catch(() => {/* non-fatal */});
 
   } catch (err) {
     // Never let waiting list notification failure affect the cancellation

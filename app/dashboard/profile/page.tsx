@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect } from 'react'
-import { Camera, Car, Save, MapPin, Plus, X, ChevronDown, Video, Tag } from 'lucide-react'
+import { Camera, Car, Save, MapPin, Plus, X, ChevronDown, Video, Tag, CheckCircle, AlertCircle } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
@@ -13,6 +13,11 @@ interface ServiceArea {
   state: string
 }
 
+// ── Toast helper ─────────────────────────────────────────────────────────────
+
+type ToastType = 'success' | 'error'
+interface Toast { type: ToastType; message: string }
+
 export default function ProfilePage() {
   const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
@@ -21,6 +26,8 @@ export default function ProfilePage() {
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([])
   const [newPostcode, setNewPostcode] = useState('')
   const [saved, setSaved] = useState(false)
+  // FIX BUG-3: toast replaces all alert() calls
+  const [toast, setToast] = useState<Toast | null>(null)
   // Collapsible sections (default open on desktop, collapsed on small screens)
   const [vehicleOpen, setVehicleOpen] = useState(true)
   const [locationOpen, setLocationOpen] = useState(true)
@@ -42,6 +49,11 @@ export default function ProfilePage() {
     specialties: [] as string[],
   })
   const [newLanguage, setNewLanguage] = useState('')
+
+  const showToast = (type: ToastType, message: string) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), 4000)
+  }
 
   useEffect(() => {
     fetchProfile()
@@ -115,9 +127,11 @@ export default function ProfilePage() {
       if (res.ok) {
         const data = await res.json()
         type === 'profile' ? setProfileImage(data.url) : setCarImage(data.url)
+      } else {
+        showToast('error', 'Failed to upload image. Please try again.')
       }
     } catch {
-      alert('Failed to upload image')
+      showToast('error', 'Failed to upload image. Check your connection and try again.')
     }
   }
 
@@ -151,10 +165,10 @@ export default function ProfilePage() {
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
       } else {
-        alert('Failed to update profile')
+        showToast('error', 'Failed to save profile. Please try again.')
       }
     } catch {
-      alert('Failed to update profile')
+      showToast('error', 'Failed to save profile. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -173,10 +187,10 @@ export default function ProfilePage() {
         setServiceAreas([...serviceAreas, data])
         setNewPostcode('')
       } else {
-        alert('Failed to add service area')
+        showToast('error', 'Failed to add service area. Please try again.')
       }
     } catch {
-      alert('Failed to add service area')
+      showToast('error', 'Failed to add service area. Check your connection and try again.')
     }
   }
 
@@ -191,6 +205,17 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
+      {/* FIX BUG-3: toast notification replaces all alert() calls */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium
+          ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+          {toast.type === 'success'
+            ? <CheckCircle className="h-4 w-4 shrink-0" />
+            : <AlertCircle className="h-4 w-4 shrink-0" />}
+          {toast.message}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-100">Profile</h1>
         {saved && (

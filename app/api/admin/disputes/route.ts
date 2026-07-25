@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     }
     // 'all' or unset — no filter
 
-    const disputes = await (prisma as any).stripeDispute.findMany({
+    const disputes = await prisma.stripeDispute.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
@@ -98,7 +98,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'stripeDisputeId and action required' }, { status: 400 });
     }
 
-    const dispute = await (prisma as any).stripeDispute.findUnique({
+    const dispute = await prisma.stripeDispute.findUnique({
       where: { stripeDisputeId },
     });
 
@@ -109,19 +109,19 @@ export async function PATCH(req: NextRequest) {
     if (action === 'release-hold') {
       // Release the instructor's payout hold
       if (dispute.instructorId) {
-        await (prisma as any).instructor.update({
+        await prisma.instructor.update({
           where: { id: dispute.instructorId },
-          data: { payoutHold: false, payoutHoldReason: null },
+          data: { payoutHold: false, payoutHoldReason: null } as any,
         });
       }
 
-      await (prisma as any).stripeDispute.update({
+      await prisma.stripeDispute.update({
         where: { stripeDisputeId },
         data: { payoutFrozen: false },
       });
 
       // Audit log
-      await (prisma as any).auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: 'DISPUTE_HOLD_RELEASED',
           actorId: session.user.id,

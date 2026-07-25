@@ -59,22 +59,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Upload to Cloudinary
-    const url = await cloudinaryService.uploadInstructorDocument(
+    const result = await cloudinaryService.uploadInstructorDocument(
       session.user.instructorId,
       documentType,
       buffer
     );
 
-    // Update instructor record with dynamic field
+    // Store the URL in the existing field (backward-compatible).
+    // Also store the publicId if the schema has a companion field (e.g. licenseImageFrontPublicId).
+    // For now we store the URL for display and the publicId is derivable from it.
+    // Phase 2 migration will switch the field to store publicId only.
     const updateData: any = {};
-    updateData[documentType] = url;
-    
+    updateData[documentType] = result.url;
+
     await prisma.instructor.update({
       where: { id: session.user.instructorId },
       data: updateData,
     });
 
-    return NextResponse.json({ success: true, url });
+    return NextResponse.json({ success: true, url: result.url, publicId: result.publicId });
   } catch (error) {
     console.error('Document upload error:', error);
     return NextResponse.json(

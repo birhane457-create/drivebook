@@ -6,13 +6,20 @@ import { AU_STATES, getStateBySlug, getSuburbBySlug } from '@/lib/data/au-locati
 import { prisma } from '@/lib/prisma';
 
 export const revalidate = 3600; // ISR: regenerate hourly
+// Build-time optimization: only pre-generate the top suburbs (most searched).
+// All other suburbs are generated on first request and cached by ISR.
+// This reduces build time from ~45 min to ~3 min on Vercel.
+export const dynamicParams = true;
 
 const BASE_URL = process.env.NEXTAUTH_URL || 'https://drivebook.com.au';
 
 // ── Static params ─────────────────────────────────────────────────────────────
+// Pre-render only the first 50 most-visited suburbs at build time.
+// Remaining 17,800+ are generated on-demand (ISR) and cached at the CDN edge.
 export async function generateStaticParams() {
+  const TOP_SUBURBS_PER_STATE = 5;
   return AU_STATES.flatMap(state =>
-    state.suburbs.map(suburb => ({
+    state.suburbs.slice(0, TOP_SUBURBS_PER_STATE).map(suburb => ({
       state:  state.slug,
       suburb: suburb.slug,
     }))

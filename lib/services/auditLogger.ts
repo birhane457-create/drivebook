@@ -104,8 +104,8 @@ export async function logAuditEvent(params: AuditLogParams): Promise<void> {
     console.log('🔍 AUDIT:', JSON.stringify(auditEntry, null, 2));
 
     // Store in database
-    await (prisma as any).auditLog.create({
-      data: auditEntry
+    await prisma.auditLog.create({
+      data: auditEntry,
     });
 
   } catch (error) {
@@ -224,15 +224,13 @@ export async function getAuditTrail(
   limit: number = 100
 ): Promise<any[]> {
   try {
-    return await (prisma as any).auditLog.findMany({
+    return await prisma.auditLog.findMany({
       where: {
         targetType: resourceType,
-        targetId: resourceId
+        targetId: resourceId,
       },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: limit
+      orderBy: { createdAt: 'desc' },
+      take: limit,
     });
   } catch (error) {
     console.error('Failed to fetch audit trail:', error);

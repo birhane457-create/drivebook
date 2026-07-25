@@ -11,8 +11,14 @@ export async function GET(
   try {
     const { id } = params
 
-    const instructor = await prisma.instructor.findUnique({
-      where: { id },
+    // Resolve by ID first, then by customSlug — supports /book/[id] and /book/[slug]
+    const instructor = await prisma.instructor.findFirst({
+      where: {
+        OR: [
+          { id },
+          { customSlug: id },
+        ],
+      },
       select: {
         id: true,
         name: true,

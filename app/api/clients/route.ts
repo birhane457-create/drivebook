@@ -63,50 +63,68 @@ export async function POST(req: NextRequest) {
       where: { email: data.email.toLowerCase() },
     })
 
+    let client: any
+
     if (existingUser) {
-      // Student already has an account (registered themselves or added before)
+      // Student already has an account — wrap client creation in a transaction
+      // in case it fails (e.g. unique constraint race). Wallet already exists.
       userId = existingUser.id
+
+      client = await (prisma as any).$transaction(async (tx: any) => {
+        return tx.client.create({
+          data: {
+            instructorId: session.user.instructorId,
+            userId,
+            name: data.name,
+            phone: data.phone,
+            email: data.email.toLowerCase(),
+            defaultPickupAddress: pickupAddress,
+            defaultPickupLat: data.defaultPickupLat,
+            defaultPickupLng: data.defaultPickupLng,
+            notes: data.notes,
+          },
+        })
+      })
     } else {
       // Create a dormant account with a random password + set-password token.
-      // The student can't log in until they set their password via the link
-      // that gets sent when the instructor books a lesson for them.
+      // All three writes (user, wallet, client) are wrapped in a single transaction
+      // so a partial failure cannot leave orphaned user/wallet records.
       const tempPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10)
       const setPasswordToken = crypto.randomBytes(32).toString('hex')
       const setPasswordExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
-      const newUser = await prisma.user.create({
-        data: {
-          email: data.email.toLowerCase(),
-          name: data.name,
-          password: tempPassword,
-          role: 'CLIENT',
-          resetToken: setPasswordToken,
-          resetTokenExpiry: setPasswordExpiry,
-        } as any,
-      })
+      client = await (prisma as any).$transaction(async (tx: any) => {
+        const newUser = await tx.user.create({
+          data: {
+            email: data.email.toLowerCase(),
+            name: data.name,
+            password: tempPassword,
+            role: 'CLIENT',
+            resetToken: setPasswordToken,
+            resetTokenExpiry: setPasswordExpiry,
+          } as any,
+        })
 
-      // Create wallet so balance checks work immediately
-      await prisma.clientWallet.create({
-        data: { userId: newUser.id, balance: 0 },
-      })
+        // Wallet created inside the same transaction — rolls back if client.create fails
+        await tx.clientWallet.create({
+          data: { userId: newUser.id, balance: 0 },
+        })
 
-      userId = newUser.id
+        return tx.client.create({
+          data: {
+            instructorId: session.user.instructorId,
+            userId: newUser.id,
+            name: data.name,
+            phone: data.phone,
+            email: data.email.toLowerCase(),
+            defaultPickupAddress: pickupAddress,
+            defaultPickupLat: data.defaultPickupLat,
+            defaultPickupLng: data.defaultPickupLng,
+            notes: data.notes,
+          },
+        })
+      })
     }
-
-    // ── Create Client record ──────────────────────────────────────────────────
-    const client = await prisma.client.create({
-      data: {
-        instructorId: session.user.instructorId,
-        userId,
-        name: data.name,
-        phone: data.phone,
-        email: data.email.toLowerCase(),
-        defaultPickupAddress: pickupAddress,
-        defaultPickupLat: data.defaultPickupLat,
-        defaultPickupLng: data.defaultPickupLng,
-        notes: data.notes,
-      },
-    })
 
     return NextResponse.json(client, { status: 201 })
   } catch (error) {
@@ -131,14 +149,27 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '25')))
     const skip = (page - 1) * limit
+    // BUG-7 FIX: accept search param for server-side filtering across all pages
+    const search = searchParams.get('search')?.trim() ?? ''
+
+    const whereClause = {
+      instructorId: session.user.instructorId,
+      ...(search
+        ? {
+            OR: [
+              { name:  { contains: search, mode: 'insensitive' as const } },
+              { email: { contains: search, mode: 'insensitive' as const } },
+              { phone: { contains: search } },
+            ],
+          }
+        : {}),
+    }
 
     // Get total count
-    const total = await prisma.client.count({
-      where: { instructorId: session.user.instructorId },
-    })
+    const total = await prisma.client.count({ where: whereClause })
 
     const clients = await prisma.client.findMany({
-      where: { instructorId: session.user.instructorId },
+      where: whereClause,
       select: safeClientSelect,
       orderBy: { createdAt: 'desc' },
       take: limit,

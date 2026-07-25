@@ -36,6 +36,7 @@
 | Suspend an instructor | [04 — Instructor Management](./04-instructors.md#suspension) |
 | Change pricing/commission | [02 — Finance](./02-finance.md#pricing-changes) |
 | Enable BUSINESS tier | [05 — Business Tier](./05-business-tier.md) |
+| Manage a subscription (sync/override/cancel) | [ADMIN_BUSINESS_RULES §7a](../DOCROLEBASE/00-overview/ADMIN_BUSINESS_RULES.md#7a-subscription-management-admin-ui) |
 | Assign a voice line | [04 — Instructor Management](./04-instructors.md#voice-lines) |
 | Freeze a fraud account | [07 — Security & Fraud](./07-security-fraud.md#fraud-response) |
 | Handle P0 incident | [09 — Emergency Runbooks](./09-emergency-runbooks.md#p0) |

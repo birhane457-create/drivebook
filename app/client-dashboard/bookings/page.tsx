@@ -178,9 +178,8 @@ export default function ClientBookingsPage() {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              Upcoming ({profile?.bookings.filter(b =>
-                b.status === 'upcoming' || b.status === 'awaiting_payment' || b.status === 'awaiting_confirmation'
-              ).length})
+              {/* NF-04: use upcomingCount/pastCount from API — not a slice of the current page */}
+              Upcoming ({profile?.upcomingCount ?? 0})
             </button>
             <button
               onClick={() => setFilter('past')}
@@ -190,9 +189,7 @@ export default function ClientBookingsPage() {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              Past ({profile?.bookings.filter(b =>
-                b.status === 'completed' || b.status === 'cancelled' || b.status === 'expired'
-              ).length})
+              Past ({profile?.pastCount ?? 0})
             </button>
           </div>
         </div>

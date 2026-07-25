@@ -5,15 +5,18 @@ const nextConfig = {
     // Run `npx next lint` locally to see all warnings.
     ignoreDuringBuilds: false,
   },
+  // Enable the instrumentation hook (instrumentation.ts) for startup env validation.
+  // https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
+  experimental: {
+    instrumentationHook: true,
+    missingSuspenseWithCSRBailout: false,
+  },
   images: {
     remotePatterns: [
       { protocol: 'http',  hostname: 'localhost' },
       { protocol: 'https', hostname: 'localhost' },
       { protocol: 'https', hostname: 'res.cloudinary.com' },
     ],
-  },
-  experimental: {
-    missingSuspenseWithCSRBailout: false,
   },
   allowedDevOrigins: ['*.localhost', 'localhost', '*.localhost:3000'],
   async headers() {

@@ -693,7 +693,7 @@ export default function AdminPayoutsPage() {
                         <Link href={`/admin/instructors/${p.instructorId}`} className="text-sm font-semibold text-slate-100 hover:text-blue-600">{p.instructorName}</Link>
                         <p className="text-xs text-slate-500 mt-0.5">{p.transactionCount} lesson{p.transactionCount !== 1 ? 's' : ''} · {p.instructorPhone || 'no phone'}</p>
                         <div className="mt-2 text-xs text-slate-500 space-y-0.5">
-                          <p>BSB: <span className="font-mono font-medium text-slate-300">{p.bankBsb || 'N/A'}</span> · Account: <span className="font-mono font-medium text-slate-300">{p.bankAccount || 'N/A'}</span></p>
+                          <p>BSB: <span className="font-mono font-medium text-slate-300">{p.bankBsb ? `•••-${p.bankBsb.slice(-3)}` : 'N/A'}</span> · Account: <span className="font-mono font-medium text-slate-300">{p.bankAccount || 'N/A'}</span></p>
                           <p>Account name: <span className="font-medium text-slate-300">{p.bankAccountName || 'N/A'}</span></p>
                         </div>
                       </div>

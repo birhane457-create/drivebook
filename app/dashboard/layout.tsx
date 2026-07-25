@@ -51,7 +51,9 @@ export default async function DashboardLayout({
   ])
 
   const isReadOnly = access.valid && (access as any).readOnly === true
-  const approvalStatus = approvalStatusResult?.approvalStatus ?? 'PENDING'
+  // Distinguish between "genuinely PENDING" and "DB lookup failed".
+  // Fallback is null — renders no banner rather than a misleading PENDING banner.
+  const approvalStatus = approvalStatusResult?.approvalStatus ?? null
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -63,7 +65,7 @@ export default async function DashboardLayout({
       <div className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),transparent_20%),radial-gradient(circle_at_top_right,_rgba(124,58,237,0.16),transparent_16%)]" />
         <div className="relative z-10 max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-4 pb-24 sm:py-6 lg:pb-10">
-          {approvalStatus !== 'APPROVED' && (
+          {approvalStatus !== null && approvalStatus !== 'APPROVED' && (
             <PendingApprovalBanner approvalStatus={approvalStatus} />
           )}
           {approvalStatus === 'APPROVED' && isReadOnly && (

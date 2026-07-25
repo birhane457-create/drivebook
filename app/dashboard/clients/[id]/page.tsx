@@ -51,6 +51,8 @@ export default function InstructorClientDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [sendingLink, setSendingLink] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
+  // C-04: inline error for payment link — persists near the button
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/instructor/clients/${clientId}`)
@@ -67,24 +69,25 @@ export default function InstructorClientDetailPage() {
   const handleSendPaymentLink = async () => {
     if (!client) return;
     setSendingLink(true);
+    setLinkError(null);
     try {
       const res = await fetch('/api/bookings/send-payment-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clientId: client.id,
-          topUpAmount: 50, // default suggestion — instructor can adjust from booking page
+          topUpAmount: 50,
         }),
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error || 'Failed to send payment link.');
+        setLinkError(d.error || 'Failed to send payment link. Please try again.');
         return;
       }
       setLinkSent(true);
       setTimeout(() => setLinkSent(false), 4000);
     } catch {
-      alert('Failed to send payment link.');
+      setLinkError('Failed to send payment link. Please try again.');
     } finally {
       setSendingLink(false);
     }
@@ -197,26 +200,35 @@ export default function InstructorClientDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3">
-          <Link
-            href={`/dashboard/bookings/new?clientId=${client.id}`}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition text-sm"
-          >
-            <CalendarPlus className="w-4 h-4" /> Book Now
-          </Link>
-          {client.hasAccount && (
-            <button
-              onClick={handleSendPaymentLink}
-              disabled={sendingLink || linkSent}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition text-sm disabled:opacity-60"
+        <div className="flex gap-3 flex-col">
+          <div className="flex gap-3">
+            <Link
+              href={`/dashboard/bookings/new?clientId=${client.id}`}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition text-sm"
             >
-              {linkSent
-                ? <><CheckCircle className="w-4 h-4 text-green-600" /> Sent</>
-                : sendingLink
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <><Send className="w-4 h-4" /> Payment Link</>
-              }
-            </button>
+              <CalendarPlus className="w-4 h-4" /> Book Now
+            </Link>
+            {client.hasAccount && (
+              <button
+                onClick={handleSendPaymentLink}
+                disabled={sendingLink || linkSent}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition text-sm disabled:opacity-60"
+              >
+                {linkSent
+                  ? <><CheckCircle className="w-4 h-4 text-green-600" /> Sent</>
+                  : sendingLink
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <><Send className="w-4 h-4" /> Payment Link</>
+                }
+              </button>
+            )}
+          </div>
+          {/* C-04: inline error stays visible near the button — payment actions need persistent feedback */}
+          {linkError && (
+            <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex items-center gap-2">
+              <span className="shrink-0">❌</span>
+              {linkError}
+            </p>
           )}
         </div>
 

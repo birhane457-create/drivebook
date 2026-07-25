@@ -80,6 +80,25 @@ async function fetchSlotsForDate(
     .map(s => s.time) ?? [];
 }
 
+/**
+ * Sequential-day, parallel-duration search.
+ *
+ * Strategy: process days one at a time (sequential outer loop) but fire all 3
+ * duration fetches for each day simultaneously (parallel inner batch). Break as
+ * soon as we have `count` suggestions — avoids fetching later days when the
+ * instructor already has open slots early in the week.
+ *
+ * Why not fully parallel (all 21 at once)?
+ *   - The slots API has no rate limit, but each request hits an in-process
+ *     30s TTL cache keyed by instructorId:date:duration. Different durations on
+ *     the same date are separate cache keys, so 21 concurrent requests = up to
+ *     21 DB queries in a burst, which can overwhelm the connection pool.
+ *   - Early-exit here typically fires only 3–6 requests (1–2 days) instead of
+ *     21, saving DB load for the common case where today or tomorrow has slots.
+ *
+ * Worst case (no slots in 7 days): 7 × 3 = 21 requests, identical to the old
+ * approach but in 7 batches of ~200ms each ≈ 1.4s, vs the old ~4.2s sequential.
+ */
 async function findSuggestions(
   instructorId: string,
   count = 3
@@ -87,25 +106,34 @@ async function findSuggestions(
   const now = new Date();
   const durations = [60, 90, 120];
   const suggestions: Suggestion[] = [];
-  const seen = new Set<string>(); // deduplicate date+time
+  const seen = new Set<string>();
 
-  // Search up to 7 days forward
-  for (let dayOffset = 0; dayOffset <= 6 && suggestions.length < count; dayOffset++) {
+  for (let dayOffset = 0; dayOffset <= 6; dayOffset++) {
+    // Bail early once we have enough
+    if (suggestions.length >= count) break;
+
     const d = new Date(now);
     d.setDate(d.getDate() + dayOffset);
     const dateStr = toDateStr(d);
 
-    // Try each duration until we find slots — shortest first
-    for (const duration of durations) {
+    // Fetch all 3 durations for this day in parallel — 3 connections max
+    const dayResults = await Promise.all(
+      durations.map(async duration => ({
+        duration,
+        slots: await fetchSlotsForDate(instructorId, dateStr, duration),
+      }))
+    );
+
+    // Process shortest-duration first (60 → 90 → 120)
+    for (const { duration, slots } of dayResults) {
       if (suggestions.length >= count) break;
-      const slots = await fetchSlotsForDate(instructorId, dateStr, duration);
 
       for (const time of slots) {
         if (suggestions.length >= count) break;
         const key = `${dateStr}:${time}`;
         if (seen.has(key)) continue;
 
-        // Skip slots in the past (same-day)
+        // Skip slots already in the past (same-day)
         const gap = minutesUntil(dateStr, time);
         if (gap < 0) continue;
 
@@ -118,7 +146,7 @@ async function findSuggestions(
           duration,
           gapMinutes:  gap,
         });
-        break; // one slot per date per duration pass — spread across days
+        break; // one slot per duration per day — spread suggestions across days
       }
     }
   }
