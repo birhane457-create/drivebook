@@ -42,7 +42,8 @@ type AgendaRange = 'today' | 'week' | 'month' | 'past';
 const PERTH_TZ = 'Australia/Perth';
 
 function toPerth(dt: Date | string): Date {
-  // Perth is AWST = UTC+8, no DST. Add 8h to get Perth wall-clock time.
+  // UX-1: Perth is AWST = UTC+8, no DST. Add 8h to get Perth wall-clock time.
+  // If expanding to NSW/VIC/QLD, store instructor.timezone in DB and use Intl.DateTimeFormat.
   // Avoids toLocaleString()+new Date() which parses unreliably on Windows.
   const d = typeof dt === 'string' ? new Date(dt) : dt;
   return new Date(d.getTime() + 8 * 60 * 60 * 1000);

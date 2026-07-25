@@ -39,6 +39,8 @@ export async function createNotification(params: CreateNotificationParams) {
 }
 
 // Convenience helpers for common events
+// UX-1: Hardcoded to Perth (AWST). To support multi-state, store instructor.timezone
+// in DB and pass it through to each notification helper.
 const AU_TZ = 'Australia/Perth';
 
 export async function notifyBookingRequest(instructorUserId: string, clientName: string, bookingId: string, startTime: Date) {

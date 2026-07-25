@@ -72,6 +72,8 @@ export default function TaskDetailPage() {
     clientId: '',
   });
   const [creating, setCreating] = useState(false);
+  // C-07: inline error replaces alert() — staff-internal page
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     // If creating new task, skip fetch
@@ -182,11 +184,12 @@ export default function TaskDetailPage() {
           const task = await res.json();
           router.push(`/staff/tasks/${task.id}`);
         } else {
-          alert('Failed to create task');
+          const d = await res.json().catch(() => ({}));
+          setCreateError(d.error || 'Failed to create task. Please try again.');
         }
       } catch (error) {
         console.error('Failed to create task:', error);
-        alert('Failed to create task');
+        setCreateError('Failed to create task. Please try again.');
       } finally {
         setCreating(false);
       }
@@ -410,6 +413,12 @@ export default function TaskDetailPage() {
                 {creating ? 'Creating...' : 'Create Task'}
               </button>
             </div>
+            {/* C-07: inline error replaces alert() */}
+            {createError && (
+              <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                ❌ {createError}
+              </p>
+            )}
           </form>
         </div>
       </div>

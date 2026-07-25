@@ -2,6 +2,51 @@
 
 ---
 
+## Session: 2026-07-25 — Session 3 Audit Fixes (Student Dashboard + Instructor Bookings)
+
+### Summary
+Third audit pass covering student/client dashboard, instructor bookings page, admin payouts BSB masking, and wallet API. 6 confirmed issues fixed; C-01 confirmed already done.
+
+### Fixes
+
+**NF-01 — 6 `window.confirm()` on instructor bookings page**
+`app/dashboard/bookings/page.tsx`
+- Check-in, check-out, cancel, delete, confirm, save edit all used `window.confirm()` — blocked on mobile WebView
+- Fix: `PendingAction` type + `requestConfirm()` pattern; single inline modal overlay handles all 6 actions
+
+**NF-02 — `en-US` locale on instructor bookings page**
+`app/dashboard/bookings/page.tsx`
+- 3 date/time formats used `en-US` — `Jul 25` instead of `25 Jul`, 12-hour AM/PM instead of 24-hour
+- Fix: changed to `en-AU` throughout
+
+**NF-03 — Full BSB visible in admin payouts list table (resolves P-02)**
+`app/admin/payouts/page.tsx`
+- BSB shown unmasked in list table alongside masked account number
+- Fix: list table now shows `•••-XXX` (last 3 digits); `MarkSentModal` retains full BSB since admin needs it for the transfer
+
+**NF-04 — Student bookings tab counts from page slice**
+`app/client-dashboard/bookings/page.tsx`
+- Tab badge "Upcoming (3)" was computed from current page only, not full dataset
+- Fix: uses `profile.upcomingCount` and `profile.pastCount` from API
+
+**NF-05 + NF-06 — Wallet API: unbounded query + dead `totalBookedHours`**
+`app/api/client/wallet/route.ts`
+- Loading ALL confirmed transactions on every wallet page visit (no `take` limit)
+- `totalBookedHours` computed via a separate booking query but never rendered in the wallet UI
+- Fix: balance via two `aggregate()` calls; recent transactions with `take: 20`; removed dead booking query
+
+**C-01 — Confirmed already fixed (not a change this session)**
+`app/book/[instructorId]/book-type/page.tsx`
+- Inline `validationError` state with `role="alert"` was already in place; audit doc updated
+
+### Files changed
+- `app/dashboard/bookings/page.tsx`
+- `app/admin/payouts/page.tsx`
+- `app/client-dashboard/bookings/page.tsx`
+- `app/api/client/wallet/route.ts`
+
+---
+
 ## Session: 2026-07-25 — Full Audit Fixes (Reliability, Data Integrity, Type Safety)
 
 ### Summary

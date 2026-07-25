@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
     for (const payout of paidPayouts) {
       transfersChecked++;
       try {
-        await stripe.transfers.retrieve(payout.stripeTransferId);
+        await stripe.transfers.retrieve(payout.stripeTransferId!);
         // If no error thrown, transfer exists — OK
       } catch (err: unknown) {
         const stripeErr = err as { code?: string };
@@ -206,7 +206,7 @@ export async function GET(req: NextRequest) {
           flaggedMissingTransfers.push({
             payoutId: payout.id,
             payoutRef: payout.payoutRef,
-            stripeTransferId: payout.stripeTransferId,
+            stripeTransferId: payout.stripeTransferId!,
           });
         }
         // Other errors (network etc) — don't flag, just skip

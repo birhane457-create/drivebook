@@ -19,7 +19,7 @@ export async function GET(
     const transactionId = params.transactionId;
 
     // Get transaction with related data
-    const transaction = await prisma.transaction.findUnique({
+    const transaction = await (prisma.transaction.findUnique as any)({
       where: { id: transactionId },
       include: {
         instructor: {

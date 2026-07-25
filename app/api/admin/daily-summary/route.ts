@@ -114,7 +114,7 @@ export async function GET() {
 
       prisma.payout.findMany({
         where: { status: 'FAILED', createdAt: { gte: last30Days } },
-        select: { id: true, amount: true, createdAt: true, instructor: { select: { name: true } } },
+        select: { id: true, netAmount: true, createdAt: true, instructorId: true },
         take: 10,
       }).catch(() => []),
 
@@ -211,7 +211,7 @@ export async function GET() {
     }
 
     if (failedPayouts.length > 0) {
-      const totalFailed = failedPayouts.reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
+      const totalFailed = failedPayouts.reduce((sum: number, p: any) => sum + (p.netAmount || 0), 0)
       attentionItems.push({
         type: 'failed_payouts',
         severity: 'high',

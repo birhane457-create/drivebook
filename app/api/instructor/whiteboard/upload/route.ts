@@ -1,57 +1,56 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { v2 as cloudinary } from 'cloudinary'
-import { validateBase64DataUrl } from '@/lib/uploads/validateUpload'
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-})
-
-export const dynamic = 'force-dynamic'
-
 /**
  * POST /api/instructor/whiteboard/upload
  *
- * Accepts a base64 PNG data URL from the whiteboard canvas and uploads it
- * to Cloudinary under the instructor's folder.
+ * Accepts a base64 PNG data URL from WhiteboardCanvas, uploads it to Cloudinary,
+ * and returns the public URL to be stored on the booking via LessonFeedbackForm.
  *
- * Body: { dataUrl: "data:image/png;base64,..." }
- * Returns: { url: "https://res.cloudinary.com/..." }
+ * Auth: instructor session required.
+ * The sketch is stored in the public/whiteboards folder — it is not a compliance
+ * document and does not need signing. It is linked from the client-facing booking
+ * detail page so students can see the diagram their instructor drew.
  */
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { uploadToCloudinary } from '@/lib/services/cloudinary';
+
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession(authOptions);
     if (!session?.user?.instructorId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json()
-    const { dataUrl } = body
+    const body = await req.json();
+    const { dataUrl, bookingId } = body as { dataUrl?: string; bookingId?: string };
 
-    if (!dataUrl || !dataUrl.startsWith('data:image/png;base64,')) {
-      return NextResponse.json({ error: 'Invalid image data' }, { status: 400 })
+    if (!dataUrl) {
+      return NextResponse.json({ error: 'dataUrl is required' }, { status: 400 });
     }
 
-    // Validate data URL — checks format, size, and magic bytes
-    const validation = validateBase64DataUrl(dataUrl)
-    if (!validation.valid) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
+    // Validate it looks like a PNG data URI
+    if (!dataUrl.startsWith('data:image/')) {
+      return NextResponse.json({ error: 'dataUrl must be an image data URI' }, { status: 400 });
     }
 
-    const result = await cloudinary.uploader.upload(dataUrl, {
-      folder: `drivebook/instructors/${session.user.instructorId}/whiteboard`,
-      resource_type: 'image',
-      format: 'png',
-      // Auto-quality for smaller file size while keeping readability
-      quality: 'auto:good',
-    })
+    const result = await uploadToCloudinary(dataUrl, {
+      folder: `public/whiteboards`,
+      // Stable public ID so re-saving a sketch overwrites the previous version
+      publicId: bookingId
+        ? `booking-${bookingId}-sketch`
+        : `instructor-${session.user.instructorId}-sketch-${Date.now()}`,
+      resourceType: 'image',
+      overwrite: true,
+    });
 
-    return NextResponse.json({ url: result.secure_url, success: true })
+    return NextResponse.json({ url: result.url });
   } catch (error) {
-    console.error('Whiteboard upload error:', error)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    console.error('Whiteboard upload error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Upload failed' },
+      { status: 500 }
+    );
   }
 }

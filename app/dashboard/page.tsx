@@ -223,7 +223,9 @@ export default async function DashboardPage() {
   const daysElapsedThisMonth = now.getDate()
   const daysInLastMonth = endOfLastMonth.getDate()
 
-  // Today boundaries (Perth AWST = UTC+8)
+  // Today boundaries (Perth AWST = UTC+8, no DST)
+  // UX-1: Hardcoded for WA instructors. If expanding to NSW/VIC/QLD, store
+  // instructor.timezone in DB and derive this offset dynamically.
   const perthOffsetMs = 8 * 60 * 60 * 1000
   const perthNow = new Date(now.getTime() + perthOffsetMs)
   const startOfToday = new Date(Date.UTC(

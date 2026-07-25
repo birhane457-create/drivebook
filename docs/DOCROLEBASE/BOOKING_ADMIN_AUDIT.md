@@ -387,7 +387,7 @@ Not bugs. Improvements worth making.
 
 | ID | Class | Severity | File | Issue | Status |
 |---|---|---|---|---|---|
-| **C-01** | Confirmed | 🟠 | `book/[id]/book-type/page.tsx` | `alert()` for missing booking type selection | Open |
+| **C-01** | Confirmed | 🟠 | `book/[id]/book-type/page.tsx` | `alert()` for missing booking type selection | ✅ Already fixed |
 | **C-02** | Confirmed | 🟡 | `dashboard/earnings/page.tsx` | `alert()` on receipt download failure (2 calls) | ✅ Fixed |
 | **C-03** | Confirmed | 🟡 | `dashboard/pda-tests/page.tsx` | `alert()` on schedule/update failures (4 calls) | Open |
 | **C-04** | Confirmed | 🟡 | `dashboard/bookings/[id]/page.tsx`, `clients/[id]/page.tsx` | `alert()` on payment link send failure (4 calls) | Open |
@@ -429,8 +429,8 @@ Not bugs. Improvements worth making.
 6. **NF-06** — Remove dead `totalBookedHours` query
 
 ### Legacy alerts still to fix
-7. **C-01** — `alert()` in book-type page with inline validation error
-8. **NF-07 / C-07** — `alert()` in staff tasks page (2 calls, internal only)
+7. ~~**C-01**~~ ✅ Already fixed — inline `validationError` state in `book/[id]/book-type/page.tsx`
+8. **NF-07 / C-07** — `alert()` in staff tasks page (2 calls, internal only, low priority)
 
 ### Recommendations (do when touching relevant file)
 9. **R-02** — Use JWT role in `admin/instructors/route.ts`
