@@ -300,9 +300,27 @@ export default function DocumentsPage() {
         fetch('/api/instructor/documents'),
         fetch('/api/instructor/profile'),
       ])
-      const docsData = docsRes.ok ? await docsRes.json() : {}
-      const profileData = profileRes.ok ? await profileRes.json() : {}
-      setDocs({ ...docsData, ...profileData })
+
+      // ── IMPORTANT: never spread the full profile response into docs ──
+      // Profile returns fields like workingHours (object → truthy) and profileImage
+      // which could accidentally make document presence checks return the wrong result.
+      // Extract ONLY the specific profile fields we need for the completeness checklist.
+      const docsData    = docsRes.ok    ? await docsRes.json()    : {}
+      const profileRaw  = profileRes.ok ? await profileRes.json() : {}
+
+      const profileFields = {
+        name:               profileRaw.name               ?? null,
+        phone:              profileRaw.phone              ?? null,
+        bio:                profileRaw.bio                ?? null,
+        hourlyRate:         profileRaw.hourlyRate         ?? null,
+        baseAddress:        profileRaw.baseAddress        ?? null,
+        workingHours:       profileRaw.workingHours       ?? null,
+        abn:                profileRaw.abn                ?? null,
+        abnVerified:        profileRaw.abnVerified        ?? false,
+        subscriptionStatus: profileRaw.subscriptionStatus ?? null,
+      }
+
+      setDocs({ ...docsData, ...profileFields })
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }

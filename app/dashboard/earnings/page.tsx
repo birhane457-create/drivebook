@@ -1,30 +1,59 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
-import { DollarSign, Calendar, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
+import {
+  DollarSign, Calendar, ChevronDown, ChevronRight,
+  Clock, FileText, Receipt, Banknote, Info,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/ui/Toast';
 
-interface EarningsData {
+// -- API response shapes -------------------------------------------------------
+
+interface PlatformStats {
   totalEarnings: number;
-  pendingPayouts: number;
-  thisWeekEarnings: number;
-  lastWeekEarnings: number;
+  totalGross: number;
+  totalFees: number;
+  completedCount: number;
   thisMonthEarnings: number;
-  transactions: Transaction[];
-  scheduledBookings: ScheduledBooking[];
+  thisMonthGross: number;
+  thisMonthFees: number;
+  thisMonthCount: number;
+  pendingPayouts: number;
+  pendingCount: number;
   scheduledTotal: number;
   scheduledCount: number;
 }
 
-interface ScheduledBooking {
+interface OfflineStats {
+  totalLogged: number;
+  completedCount: number;
+  thisMonthLogged: number;
+  thisMonthCount: number;
+  scheduledTotal: number;
+  scheduledCount: number;
+}
+
+interface ScheduledPlatformBooking {
   id: string;
   startTime: string;
-  duration: number;
+  endTime: string | null;
+  duration: number | null;
   clientName: string;
   instructorPayout: number;
+  price: number;
   isFromPackage: boolean;
+}
+
+interface ScheduledOfflineBooking {
+  id: string;
+  startTime: string;
+  endTime: string | null;
+  duration: number | null;
+  clientName: string;
+  offlineAmountPaid: number;
+  offlinePaymentMethod: string;
 }
 
 interface Transaction {
@@ -34,16 +63,32 @@ interface Transaction {
   instructorPayout: number;
   status: string;
   createdAt: string;
+  description: string;
   booking?: {
     id: string;
     isPackageBooking?: boolean;
     parentBookingId?: string;
-    client: { name: string };
+    source?: string;
+    client: { name: string } | null;
     startTime: string;
     endTime: string;
   };
-  description: string;
 }
+
+interface EarningsData {
+  platform: PlatformStats;
+  offline: OfflineStats;
+  totalEarnings: number;
+  thisMonthEarnings: number;
+  lastMonthEarnings: number;
+  transactions: Transaction[];
+  scheduledBookings: ScheduledPlatformBooking[];
+  scheduledTotal: number;
+  scheduledCount: number;
+  scheduledOffline: ScheduledOfflineBooking[];
+}
+
+// -- Grouping helpers ----------------------------------------------------------
 
 interface WeeklyEarnings {
   weekStart: Date;
@@ -67,12 +112,14 @@ interface DayGroup {
   totalHours: number;
 }
 
-interface ScheduledDayGroup {
+interface ScheduledDayGroup<T> {
   label: string;
   dateKey: string;
-  bookings: ScheduledBooking[];
-  totalPayout: number;
+  items: T[];
 }
+
+
+// -- Component -----------------------------------------------------------------
 
 export default function EarningsPage() {
   const [earnings, setEarnings] = useState<EarningsData | null>(null);
@@ -80,6 +127,7 @@ export default function EarningsPage() {
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [scheduledOpen, setScheduledOpen] = useState(false);
+  const [offlineOpen, setOfflineOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [weeksToShow, setWeeksToShow] = useState(2);
   const { toast, showToast, clearToast } = useToast();
@@ -117,26 +165,24 @@ export default function EarningsPage() {
     return d;
   };
 
-  const groupScheduledByDay = (bookings: ScheduledBooking[]): ScheduledDayGroup[] => {
-    const map = new Map<string, ScheduledBooking[]>();
-    bookings.forEach(b => {
-      const d = new Date(b.startTime);
-      const key = d.toISOString().split('T')[0];
+  function groupByDay<T>(items: T[], getDate: (item: T) => string): ScheduledDayGroup<T>[] {
+    const map = new Map<string, T[]>();
+    items.forEach(item => {
+      const key = new Date(getDate(item)).toISOString().split('T')[0];
       if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(b);
+      map.get(key)!.push(item);
     });
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, bks]) => {
-        const d = new Date(bks[0].startTime);
+      .map(([key, its]) => {
+        const d = new Date(key + 'T00:00:00');
         return {
           label: d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }),
           dateKey: key,
-          bookings: bks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
-          totalPayout: bks.reduce((s, b) => s + b.instructorPayout, 0),
+          items: its,
         };
       });
-  };
+  }
 
   const groupTransactionsByWeek = (transactions: Transaction[]): WeeklyEarnings[] => {
     const weekMap = new Map<string, Transaction[]>();
@@ -173,7 +219,6 @@ export default function EarningsPage() {
         return s;
       }, 0);
 
-      // Group by day
       const dayMap = new Map<string, Transaction[]>();
       txns.forEach(t => {
         const dk = new Date(t.booking?.startTime || t.createdAt).toISOString().split('T')[0];
@@ -204,7 +249,7 @@ export default function EarningsPage() {
 
       weeks.push({
         weekStart, weekEnd,
-        weekLabel: `${weekStart.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })}`,
+        weekLabel: `${weekStart.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })} � ${weekEnd.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })}`,
         isCurrentWeek: weekKey === cwk,
         isLastWeek: weekKey === lwk,
         totalNet, totalGross, totalWorkingHours,
@@ -217,54 +262,145 @@ export default function EarningsPage() {
     return weeks.sort((a, b) => b.weekStart.getTime() - a.weekStart.getTime());
   };
 
-  if (loading) return <div className="flex items-center justify-center py-12 text-slate-400">Loading earnings...</div>;
+  if (loading) return <div className="flex items-center justify-center py-12 text-slate-400">Loading earnings�</div>;
   if (!earnings) return <div className="flex items-center justify-center py-12 text-red-400">Failed to load earnings data</div>;
 
+  const p = earnings.platform;
+  const o = earnings.offline;
   const weeklyEarnings = groupTransactionsByWeek(earnings.transactions);
   const visibleWeeks = weeklyEarnings.slice(0, showAllHistory ? weeksToShow : 2);
   const hasMoreWeeks = weeklyEarnings.length > visibleWeeks.length;
   const thisWeek = weeklyEarnings.find(w => w.isCurrentWeek);
   const lastWeek = weeklyEarnings.find(w => w.isLastWeek);
-  const scheduledDays = groupScheduledByDay(earnings.scheduledBookings || []);
+
+  const scheduledPlatformDays = groupByDay(earnings.scheduledBookings || [], b => b.startTime);
+  const scheduledOfflineDays  = groupByDay(earnings.scheduledOffline || [], b => b.startTime);
+
+  const hasAnyScheduled = (earnings.scheduledBookings?.length || 0) + (earnings.scheduledOffline?.length || 0) > 0;
+  const hasOffline = o.completedCount > 0 || o.thisMonthCount > 0 || (earnings.scheduledOffline?.length || 0) > 0;
+
+  const paymentMethodLabel: Record<string, string> = {
+    cash: 'Cash',
+    bank_transfer: 'Bank transfer',
+    other: 'Other',
+  };
 
   return (
     <div>
       <Toast toast={toast} onClose={clearToast} />
       <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-sm px-1 py-1">
 
-        {/* Header */}
+        {/* -- Header -- */}
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-100">Earnings</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Money from lessons you've taught</p>
+            <p className="text-sm text-slate-300 mt-0.5">Platform income + offline business records</p>
           </div>
           <Link href="/dashboard/packages" className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors">
-            📦 Packages
+            ?? Packages
           </Link>
         </div>
 
-        {/* Stats Cards */}
+        {/* -- Platform stats (DriveBook-processed) -- */}
+        <div className="mb-2 px-1">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            Platform income <span className="normal-case font-normal text-slate-400">� paid via DriveBook, after commission</span>
+          </p>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           {[
-            { label: 'This Week', value: thisWeek?.totalNet || 0, sub: `${thisWeek?.totalBookings || 0} lessons`, icon: <DollarSign className="h-4 w-4 text-green-600" /> },
-            { label: 'Last Week', value: lastWeek?.totalNet || 0, sub: `${lastWeek?.totalBookings || 0} lessons`, icon: <Calendar className="h-4 w-4 text-sky-400" /> },
-            { label: 'This Month', value: earnings.thisMonthEarnings, sub: 'Month to date', icon: <Calendar className="h-4 w-4 text-purple-600" /> },
-            { label: 'Scheduled', value: earnings.scheduledTotal, sub: `${earnings.scheduledCount} confirmed`, icon: <Clock className="h-4 w-4 text-sky-400" />, blue: true },
-          ].map(({ label, value, sub, icon, blue }) => (
-            <div key={label} className="bg-slate-950 rounded-3xl shadow-sm p-4 border border-slate-800">
+            {
+              label: 'This Week',
+              value: thisWeek?.totalNet || 0,
+              sub: `${thisWeek?.totalBookings || 0} lessons`,
+              icon: <DollarSign className="h-4 w-4 text-green-500" />,
+              color: 'text-green-400',
+            },
+            {
+              label: 'Last Week',
+              value: lastWeek?.totalNet || 0,
+              sub: `${lastWeek?.totalBookings || 0} lessons`,
+              icon: <Calendar className="h-4 w-4 text-slate-400" />,
+              color: 'text-slate-100',
+            },
+            {
+              label: 'This Month',
+              value: p.thisMonthEarnings,
+              sub: `${p.thisMonthCount} lessons`,
+              icon: <Calendar className="h-4 w-4 text-purple-400" />,
+              color: 'text-slate-100',
+            },
+            {
+              label: 'Pending payout',
+              value: p.pendingPayouts,
+              sub: `${p.pendingCount} transactions`,
+              icon: <Clock className="h-4 w-4 text-amber-400" />,
+              color: 'text-amber-400',
+            },
+          ].map(({ label, value, sub, icon, color }) => (
+            <div key={label} className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-slate-400">{label}</p>
+                <p className="text-xs text-slate-300">{label}</p>
                 {icon}
               </div>
-              <p className={`text-xl font-bold ${blue ? 'text-sky-400' : 'text-slate-100'}`}>${value.toFixed(2)}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
+              <p className={`text-xl font-bold ${color}`}>${value.toFixed(2)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
             </div>
           ))}
         </div>
 
-        {/* Scheduled Lessons — collapsible */}
-        {earnings.scheduledBookings && earnings.scheduledBookings.length > 0 && (
-          <div className="mb-4 bg-slate-950 rounded-3xl shadow-sm border border-slate-800 overflow-hidden">
+        {/* -- Offline stats (cash / side income) -- */}
+        {hasOffline && (
+          <>
+            <div className="mb-2 px-1 flex items-center gap-2">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                Offline income <span className="normal-case font-normal text-slate-400">� cash / bank transfer, no platform fee</span>
+              </p>
+              <span className="flex items-center gap-1 text-xs text-slate-400">
+                <Info className="h-3 w-3" />
+                not mixed with platform income
+              </span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+              {[
+                {
+                  label: 'This Month',
+                  value: o.thisMonthLogged,
+                  sub: `${o.thisMonthCount} offline lessons`,
+                  icon: <Banknote className="h-4 w-4 text-emerald-500" />,
+                  color: 'text-emerald-400',
+                },
+                {
+                  label: 'Total Logged',
+                  value: o.totalLogged,
+                  sub: `${o.completedCount} completed`,
+                  icon: <Banknote className="h-4 w-4 text-slate-400" />,
+                  color: 'text-slate-100',
+                },
+                {
+                  label: 'Scheduled',
+                  value: o.scheduledTotal,
+                  sub: `${o.scheduledCount} upcoming`,
+                  icon: <Clock className="h-4 w-4 text-emerald-400" />,
+                  color: 'text-emerald-400',
+                },
+              ].map(({ label, value, sub, icon, color }) => (
+                <div key={label} className="bg-emerald-950/20 rounded-2xl p-4 border border-emerald-900/40">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-slate-300">{label}</p>
+                    {icon}
+                  </div>
+                  <p className={`text-xl font-bold ${color}`}>${value.toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* -- Scheduled upcoming lessons (platform + offline combined) -- */}
+        {hasAnyScheduled && (
+          <div className="mb-4 bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden">
             <button
               onClick={() => setScheduledOpen(o => !o)}
               className="w-full flex items-center justify-between px-4 py-3 bg-slate-900 hover:bg-slate-800 transition-colors"
@@ -272,71 +408,161 @@ export default function EarningsPage() {
               <div className="flex items-center gap-2">
                 {scheduledOpen ? <ChevronDown className="h-4 w-4 text-sky-400" /> : <ChevronRight className="h-4 w-4 text-sky-400" />}
                 <Calendar className="h-4 w-4 text-sky-400" />
-                <span className="font-semibold text-slate-100 text-sm">Scheduled Lessons</span>
-                <span className="text-xs text-slate-400">(will earn when taught)</span>
+                <span className="font-semibold text-slate-100 text-sm">Upcoming Scheduled Lessons</span>
+                <span className="text-xs text-slate-400">(platform + offline)</span>
               </div>
               <div className="text-right">
-                <span className="font-bold text-sky-400 text-sm">${earnings.scheduledTotal.toFixed(2)}</span>
-                <span className="text-xs text-slate-400 ml-2">{earnings.scheduledCount} confirmed</span>
+                <span className="font-bold text-sky-400 text-sm">
+                  ${((earnings.scheduledTotal || 0) + (o.scheduledTotal || 0)).toFixed(2)}
+                </span>
+                <span className="text-xs text-slate-500 ml-2">
+                  {(earnings.scheduledCount || 0) + (o.scheduledCount || 0)} lessons
+                </span>
               </div>
             </button>
 
             {scheduledOpen && (
               <div className="divide-y divide-slate-800">
-                {scheduledDays.map(day => (
-                  <div key={day.dateKey}>
-                    {/* Day sub-header */}
-                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{day.label}</span>
-                      <span className="text-xs text-slate-400">Total <span className="font-semibold text-sky-400">${day.totalPayout.toFixed(2)}</span></span>
+
+                {/* Platform scheduled */}
+                {scheduledPlatformDays.length > 0 && (
+                  <>
+                    <div className="px-4 py-1.5 bg-slate-900/50">
+                      <p className="text-xs font-bold uppercase tracking-widest text-sky-600">Platform bookings</p>
                     </div>
-                    {day.bookings.map(b => (
-                      <div key={b.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-900">
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">
-                            {new Date(b.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
-                            {' · '}{b.clientName}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {b.duration}h
-                            {b.isFromPackage && <span className="ml-1 text-purple-400 font-semibold">pkg</span>}
-                          </p>
+                    {scheduledPlatformDays.map(day => (
+                      <div key={day.dateKey}>
+                        <div className="flex items-center justify-between px-4 py-2 bg-slate-900">
+                          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide">{day.label}</span>
+                          <span className="text-xs text-slate-500">
+                            ${day.items.reduce((s, b) => s + b.instructorPayout, 0).toFixed(2)} net
+                          </span>
                         </div>
-                        <p className="text-sm font-semibold text-sky-400">${b.instructorPayout.toFixed(2)}</p>
+                        {day.items.map(b => (
+                          <div key={b.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-900">
+                            <div>
+                              <p className="text-sm font-medium text-slate-100">
+                                {new Date(b.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                                {' � '}{b.clientName}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {b.duration ? `${b.duration / 60}h` : ''}
+                                {b.isFromPackage && <span className="ml-1 text-purple-400 font-semibold">pkg</span>}
+                              </p>
+                            </div>
+                            <p className="text-sm font-semibold text-sky-400">${b.instructorPayout.toFixed(2)}</p>
+                          </div>
+                        ))}
                       </div>
                     ))}
-                  </div>
-                ))}
+                  </>
+                )}
+
+                {/* Offline scheduled */}
+                {scheduledOfflineDays.length > 0 && (
+                  <>
+                    <div className="px-4 py-1.5 bg-emerald-900/10">
+                      <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Offline / cash bookings</p>
+                    </div>
+                    {scheduledOfflineDays.map(day => (
+                      <div key={day.dateKey}>
+                        <div className="flex items-center justify-between px-4 py-2 bg-slate-900">
+                          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide">{day.label}</span>
+                          <span className="text-xs text-slate-500">
+                            ${day.items.reduce((s, b) => s + b.offlineAmountPaid, 0).toFixed(2)}
+                          </span>
+                        </div>
+                        {day.items.map(b => (
+                          <div key={b.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-900">
+                            <div>
+                              <p className="text-sm font-medium text-slate-100">
+                                {new Date(b.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                                {' � '}{b.clientName}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {b.duration ? `${b.duration / 60}h � ` : ''}
+                                <span className="text-emerald-500 font-medium">
+                                  {paymentMethodLabel[b.offlinePaymentMethod] || b.offlinePaymentMethod}
+                                </span>
+                                {' � no commission'}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-emerald-400">${b.offlineAmountPaid.toFixed(2)}</p>
+                              <p className="text-xs text-emerald-500/70">offline</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* Earnings History note */}
-        <p className="text-xs text-slate-400 mb-3 px-1">📊 Earnings history — completed lessons only</p>
 
-        {/* Weekly groups */}
+        {/* -- Offline completed history -- */}
+        {o.completedCount > 0 && (
+          <div className="mb-4 bg-emerald-950/10 rounded-2xl border border-emerald-900/30 overflow-hidden">
+            <button
+              onClick={() => setOfflineOpen(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-900/10 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                {offlineOpen ? <ChevronDown className="h-4 w-4 text-emerald-400" /> : <ChevronRight className="h-4 w-4 text-emerald-400" />}
+                <Banknote className="h-4 w-4 text-emerald-400" />
+                <span className="font-semibold text-slate-100 text-sm">Offline Income Log</span>
+                <span className="text-xs text-slate-300">cash � bank transfer</span>
+              </div>
+              <div className="text-right">
+                <span className="font-bold text-emerald-400 text-sm">${o.totalLogged.toFixed(2)}</span>
+                <span className="text-xs text-slate-400 ml-2">{o.completedCount} completed</span>
+              </div>
+            </button>
+            {offlineOpen && (
+              <div className="px-4 py-3 border-t border-emerald-900/30">
+                <p className="text-xs text-slate-300 text-center">
+                  Offline lesson history is recorded in your bookings.{' '}
+                  <Link href="/dashboard/bookings" className="text-emerald-400 hover:underline">
+                    View in Bookings ?
+                  </Link>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* -- Platform earnings history -- */}
+        <p className="text-xs text-slate-400 mb-3 px-1">
+          ?? Platform earnings history � DriveBook-processed lessons only
+        </p>
+
         <div className="space-y-3">
           {visibleWeeks.map(week => {
             const isExpanded = expandedWeeks.has(week.weekLabel);
             const title = week.isCurrentWeek ? 'This Week' : week.isLastWeek ? 'Last Week' : week.weekLabel;
 
             return (
-              <div key={week.weekLabel} className="bg-slate-950 rounded-lg shadow-sm overflow-hidden">
+              <div key={week.weekLabel} className="bg-slate-950 rounded-xl overflow-hidden border border-slate-800">
+
                 {/* Week header */}
                 <button
                   onClick={() => toggleWeek(week.weekLabel)}
                   className="w-full flex items-center justify-between px-4 py-3 bg-slate-950 hover:bg-slate-900 transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    {isExpanded ? <ChevronDown className="h-4 w-4 text-green-600" /> : <ChevronRight className="h-4 w-4 text-green-600" />}
+                    {isExpanded ? <ChevronDown className="h-4 w-4 text-green-500" /> : <ChevronRight className="h-4 w-4 text-green-500" />}
                     <div className="text-left">
                       <p className="font-semibold text-slate-100 text-sm">{title}</p>
-                      <p className="text-xs text-slate-400">{week.weekLabel} · {week.totalBookings} lessons · {week.totalWorkingHours.toFixed(1)}h</p>
+                      <p className="text-xs text-slate-400">
+                        {week.weekLabel} � {week.totalBookings} lesson{week.totalBookings !== 1 ? 's' : ''} � {week.totalWorkingHours.toFixed(1)}h
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-green-600 text-base">${week.totalNet.toFixed(2)}</p>
+                    <p className="font-bold text-green-400 text-base">${week.totalNet.toFixed(2)}</p>
                     <p className="text-xs text-slate-400">net earned</p>
                   </div>
                 </button>
@@ -344,16 +570,16 @@ export default function EarningsPage() {
                 {isExpanded && (
                   <div>
                     {/* Week summary strip */}
-                    <div className="grid grid-cols-4 divide-x divide-slate-800 border-b border-slate-800 bg-slate-900">
+                    <div className="grid grid-cols-4 divide-x divide-slate-800 border-y border-slate-800 bg-slate-900">
                       {[
-                        { label: 'Hours', val: `${week.totalWorkingHours.toFixed(1)}h` },
-                        { label: 'Lessons', val: week.totalBookings },
-                        { label: 'Gross', val: `$${week.totalGross.toFixed(2)}` },
+                        { label: 'Hours',      val: `${week.totalWorkingHours.toFixed(1)}h` },
+                        { label: 'Lessons',    val: week.totalBookings },
+                        { label: 'Gross',      val: `$${week.totalGross.toFixed(2)}` },
                         { label: 'Commission', val: `-$${(week.totalGross - week.totalNet).toFixed(2)}`, red: true },
                       ].map(({ label, val, red }) => (
                         <div key={label} className="px-3 py-2 text-center">
                           <p className="text-xs text-slate-400">{label}</p>
-                          <p className={`text-sm font-semibold ${red ? 'text-red-500' : 'text-slate-100'}`}>{val}</p>
+                          <p className={`text-sm font-semibold ${red ? 'text-red-400' : 'text-slate-100'}`}>{val}</p>
                         </div>
                       ))}
                     </div>
@@ -365,44 +591,60 @@ export default function EarningsPage() {
                         const dayExpanded = expandedDays.has(dayKey);
                         return (
                           <div key={day.dateKey}>
-                            {/* Day row — clickable */}
                             <button
                               onClick={() => toggleDay(dayKey)}
                               className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-900 transition-colors"
                             >
                               <div className="flex items-center gap-2">
-                                {dayExpanded ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+                                {dayExpanded ? <ChevronDown className="h-3.5 w-3.5 text-slate-500" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-500" />}
                                 <span className="text-sm font-medium text-slate-100">{day.label}</span>
-                                <span className="text-xs text-slate-400">{day.transactions.length} lesson{day.transactions.length !== 1 ? 's' : ''} · {day.totalHours.toFixed(1)}h</span>
+                                <span className="text-xs text-slate-400">
+                                  {day.transactions.length} lesson{day.transactions.length !== 1 ? 's' : ''} � {day.totalHours.toFixed(1)}h
+                                </span>
                               </div>
-                              <span className="text-sm font-semibold text-green-600">${day.totalNet.toFixed(2)}</span>
+                              <span className="text-sm font-semibold text-green-400">${day.totalNet.toFixed(2)}</span>
                             </button>
 
-                            {/* Individual lessons */}
                             {dayExpanded && day.transactions.map(t => {
                               const isFromPackage = t.booking?.isPackageBooking && t.booking?.parentBookingId;
                               return (
                                 <div key={t.id} className="flex items-start justify-between px-6 py-2 bg-slate-950 border-t border-slate-800">
                                   <div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
                                       {t.booking?.id ? (
-                                        <Link href={`/dashboard/bookings?highlight=${t.booking.id}`} className="text-sm text-sky-400 hover:underline">
+                                        <Link
+                                          href={`/dashboard/bookings?highlight=${t.booking.id}`}
+                                          className="text-sm text-sky-400 hover:underline"
+                                        >
                                           {t.description}
                                         </Link>
                                       ) : (
                                         <span className="text-sm text-slate-100">{t.description}</span>
                                       )}
-                                      {isFromPackage && <span className="text-xs px-1.5 py-0.5 bg-purple-900/40 text-purple-300 border border-purple-700/40 rounded font-medium">pkg</span>}
+                                      {isFromPackage && (
+                                        <span className="text-xs px-1.5 py-0.5 bg-purple-900/40 text-purple-300 border border-purple-700/40 rounded font-medium">
+                                          pkg
+                                        </span>
+                                      )}
                                     </div>
                                     {t.booking && (
                                       <p className="text-xs text-slate-400 mt-0.5">
-                                        {t.booking.client?.name ?? (t.booking as any).clientName ?? 'Guest'} · {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                                        {t.booking.client?.name ?? 'Guest'} � {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                                       </p>
                                     )}
-                                    <p className="text-xs text-slate-400">Gross ${t.amount.toFixed(2)} · Commission -${t.platformFee.toFixed(2)}</p>
+                                    <p className="text-xs text-slate-500">
+                                      Gross ${t.amount.toFixed(2)} � Commission -${t.platformFee.toFixed(2)}
+                                    </p>
+                                    <Link
+                                      href={`/dashboard/invoice/${t.id}`}
+                                      className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-sky-400 mt-0.5 transition-colors"
+                                    >
+                                      <Receipt className="h-3 w-3" />
+                                      View invoice
+                                    </Link>
                                   </div>
                                   <div className="text-right ml-4 shrink-0">
-                                    <p className="text-sm font-semibold text-green-600">${t.instructorPayout.toFixed(2)}</p>
+                                    <p className="text-sm font-semibold text-green-400">${t.instructorPayout.toFixed(2)}</p>
                                     <p className="text-xs text-slate-400">net</p>
                                   </div>
                                 </div>
@@ -413,7 +655,7 @@ export default function EarningsPage() {
                       })}
                     </div>
 
-                    {/* Receipt */}
+                    {/* Download receipt */}
                     <div className="px-4 py-3 border-t border-slate-800">
                       <button
                         onClick={async () => {
@@ -424,11 +666,16 @@ export default function EarningsPage() {
                               const blob = await res.blob();
                               const url = window.URL.createObjectURL(blob);
                               const a = document.createElement('a');
-                              a.href = url; a.download = `receipt-${weekStartISO}.txt`;
+                              a.href = url;
+                              a.download = `receipt-${weekStartISO}.txt`;
                               document.body.appendChild(a); a.click();
                               window.URL.revokeObjectURL(url); document.body.removeChild(a);
-                            } else { showToast('error', 'Failed to generate receipt.'); }
-                          } catch { showToast('error', 'Failed to download receipt.'); }
+                            } else {
+                              showToast('error', 'Failed to generate receipt.');
+                            }
+                          } catch {
+                            showToast('error', 'Failed to download receipt.');
+                          }
                         }}
                         className="w-full px-3 py-2 bg-slate-900 text-sky-400 text-sm rounded-lg hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 font-medium"
                       >
@@ -445,8 +692,8 @@ export default function EarningsPage() {
           {hasMoreWeeks && (
             <div className="text-center">
               <button
-                onClick={() => { setShowAllHistory(true); setWeeksToShow(p => p + 4); }}
-                className="px-5 py-2 bg-slate-950 text-slate-100 text-sm rounded-lg shadow-sm hover:bg-slate-900 transition-colors font-medium"
+                onClick={() => { setShowAllHistory(true); setWeeksToShow(prev => prev + 4); }}
+                className="px-5 py-2 bg-slate-950 text-slate-300 text-sm rounded-xl border border-slate-800 hover:bg-slate-900 transition-colors"
               >
                 Load more weeks
               </button>
@@ -454,22 +701,34 @@ export default function EarningsPage() {
           )}
 
           {weeklyEarnings.length === 0 && (
-            <div className="bg-slate-950 rounded-lg shadow-sm p-10 text-center">
-              <p className="text-slate-400 text-sm">No earnings yet. Complete lessons to see them here.</p>
+            <div className="bg-slate-950 rounded-xl border border-slate-800 p-10 text-center">
+              <p className="text-slate-500 text-sm">No platform earnings yet. Completed lessons will appear here.</p>
             </div>
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="mt-5 bg-slate-950 border border-slate-800 rounded-lg p-4">
-          <p className="text-xs font-semibold text-green-300 mb-1">ℹ️ About Earnings</p>
-          <ul className="text-xs text-green-300 space-y-1">
-            <li>• Earnings recorded when lessons are completed</li>
-            <li>• Payouts processed automatically every Tuesday morning (AWST)</li>
-            <li>• Download weekly receipts for your records</li>
-            <li>• For package hours not yet scheduled, see <Link href="/dashboard/packages" className="underline font-semibold">Packages</Link></li>
-          </ul>
+        {/* -- Footer info -- */}
+        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-sky-400 mb-1">Platform income</p>
+            <ul className="text-xs text-slate-400 space-y-0.5">
+              <li>� Recorded when lessons are completed and checked out</li>
+              <li>� Payouts processed automatically every Tuesday (AWST)</li>
+              <li>� Commission deducted before payout � varies by subscription tier</li>
+              <li>� For package hours not yet scheduled, see <Link href="/dashboard/packages" className="text-sky-400 hover:underline">Packages</Link></li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-emerald-400 mb-1">Offline income</p>
+            <ul className="text-xs text-slate-400 space-y-0.5">
+              <li>� Self-reported cash / bank transfer lessons (PRO+)</li>
+              <li>� No platform commission � full amount is yours</li>
+              <li>� Kept separate from platform income � not included in payout calculations</li>
+              <li>� Log offline bookings from <Link href="/dashboard/bookings" className="text-emerald-400 hover:underline">Bookings ? New Offline</Link></li>
+            </ul>
+          </div>
         </div>
+
       </div>
     </div>
   );

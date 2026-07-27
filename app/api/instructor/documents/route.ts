@@ -95,33 +95,53 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get instructor documents - use any to avoid Prisma type issues with new fields
     const instructor: any = await (prisma.instructor.findUnique as any)({
       where: { id: session.user.instructorId },
       select: {
-        licenseImageFront: true,
-        licenseImageBack: true,
-        insurancePolicyDoc: true,
-        policeCheckDoc: true,
-        wwcCheckDoc: true,
-        photoIdDoc: true,
-        certificationDoc: true,
-        vehicleRegistrationDoc: true,
-        profileImage: true,
-        carImage: true,
-        documentsVerified: true,
-        documentsVerifiedAt: true,
+        licenseImageFront:     true,
+        licenseImageBack:      true,
+        insurancePolicyDoc:    true,
+        policeCheckDoc:        true,
+        wwcCheckDoc:           true,
+        photoIdDoc:            true,
+        certificationDoc:      true,
+        vehicleRegistrationDoc:true,
+        profileImage:          true,
+        carImage:              true,
+        documentsVerified:     true,
+        documentsVerifiedAt:   true,
+        // Expiry dates — needed for the expiry badges on the documents page
+        licenseExpiry:         true,
+        insuranceExpiry:       true,
+        policeCheckExpiry:     true,
+        wwcCheckExpiry:        true,
       },
     });
 
     if (!instructor) {
-      return NextResponse.json(
-        { error: 'Instructor not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    return NextResponse.json(instructor);
+    // Return an explicit shape — no extra fields that could pollute client-side
+    // document presence checks (e.g. workingHours is a truthy object for active instructors).
+    return NextResponse.json({
+      licenseImageFront:      instructor.licenseImageFront      ?? null,
+      licenseImageBack:       instructor.licenseImageBack       ?? null,
+      insurancePolicyDoc:     instructor.insurancePolicyDoc     ?? null,
+      policeCheckDoc:         instructor.policeCheckDoc         ?? null,
+      wwcCheckDoc:            instructor.wwcCheckDoc            ?? null,
+      photoIdDoc:             instructor.photoIdDoc             ?? null,
+      certificationDoc:       instructor.certificationDoc       ?? null,
+      vehicleRegistrationDoc: instructor.vehicleRegistrationDoc ?? null,
+      profileImage:           instructor.profileImage           ?? null,
+      carImage:               instructor.carImage               ?? null,
+      documentsVerified:      instructor.documentsVerified      ?? false,
+      documentsVerifiedAt:    instructor.documentsVerifiedAt?.toISOString() ?? null,
+      licenseExpiry:          instructor.licenseExpiry?.toISOString()       ?? null,
+      insuranceExpiry:        instructor.insuranceExpiry?.toISOString()     ?? null,
+      policeCheckExpiry:      instructor.policeCheckExpiry?.toISOString()   ?? null,
+      wwcCheckExpiry:         instructor.wwcCheckExpiry?.toISOString()      ?? null,
+    });
   } catch (error) {
     console.error('Get documents error:', error);
     return NextResponse.json(

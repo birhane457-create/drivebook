@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect } from 'react'
-import { Camera, Car, Save, MapPin, Plus, X, ChevronDown, Video, Tag, CheckCircle, AlertCircle } from 'lucide-react'
+import { Camera, Car, Save, MapPin, Plus, X, ChevronDown, Video, Tag, CheckCircle, AlertCircle, Sparkles, Loader2 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
@@ -49,10 +49,29 @@ export default function ProfilePage() {
     specialties: [] as string[],
   })
   const [newLanguage, setNewLanguage] = useState('')
+  const [generatingBio, setGeneratingBio] = useState(false)
 
   const showToast = (type: ToastType, message: string) => {
     setToast({ type, message })
     setTimeout(() => setToast(null), 4000)
+  }
+
+  const generateBio = async () => {
+    setGeneratingBio(true)
+    try {
+      const res = await fetch('/api/instructor/bio-generate', { method: 'POST' })
+      if (res.ok) {
+        const { bio } = await res.json()
+        setFormData(f => ({ ...f, bio }))
+        showToast('success', 'Draft bio generated — review and edit before saving.')
+      } else {
+        showToast('error', 'Could not generate bio. Please write it manually.')
+      }
+    } catch {
+      showToast('error', 'Could not generate bio. Please check your connection.')
+    } finally {
+      setGeneratingBio(false)
+    }
   }
 
   useEffect(() => {
@@ -298,7 +317,20 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Bio</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-medium text-slate-300">Bio</label>
+                <button
+                  type="button"
+                  onClick={generateBio}
+                  disabled={generatingBio}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-violet-900/40 text-violet-300 border border-violet-700/40 hover:bg-violet-900/70 hover:text-violet-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generatingBio
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</>
+                    : <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                  }
+                </button>
+              </div>
               <textarea
                 value={formData.bio}
                 onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
@@ -323,6 +355,11 @@ export default function ProfilePage() {
                   </div>
                 );
               })()}
+              {generatingBio && (
+                <p className="text-[11px] text-violet-400 mt-1">
+                  AI is drafting your bio… this takes a few seconds.
+                </p>
+              )}
             </div>
 
             <div>

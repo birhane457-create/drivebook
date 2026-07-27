@@ -6,6 +6,16 @@ import { verifyOAuthState } from '@/lib/oauth-state'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Use NEXTAUTH_URL as the redirect base.
+ * req.url can be http://0.0.0.0:3000/... in dev (Next.js internal bind address)
+ * which browsers cannot resolve. NEXTAUTH_URL is always the correct public origin.
+ */
+function appUrl(path: string): string {
+  const base = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '')
+  return `${base}${path}`
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -14,29 +24,21 @@ export async function GET(req: NextRequest) {
     const error = searchParams.get('error')
 
     if (error) {
-      return NextResponse.redirect(
-        new URL(`/dashboard/settings?error=${error}`, req.url)
-      )
+      return NextResponse.redirect(appUrl(`/dashboard/settings?error=${error}`))
     }
 
     if (!code || !state) {
-      return NextResponse.redirect(
-        new URL('/dashboard/settings?error=missing_params', req.url)
-      )
+      return NextResponse.redirect(appUrl('/dashboard/settings?error=missing_params'))
     }
 
     const verified = verifyOAuthState(state)
     if (!verified) {
-      return NextResponse.redirect(
-        new URL('/dashboard/settings?error=invalid_state', req.url)
-      )
+      return NextResponse.redirect(appUrl('/dashboard/settings?error=invalid_state'))
     }
 
     const session = await getServerSession(authOptions)
     if (session?.user?.instructorId && session.user.instructorId !== verified.instructorId) {
-      return NextResponse.redirect(
-        new URL('/dashboard/settings?error=session_mismatch', req.url)
-      )
+      return NextResponse.redirect(appUrl('/dashboard/settings?error=session_mismatch'))
     }
 
     const instructorId = verified.instructorId
@@ -44,13 +46,9 @@ export async function GET(req: NextRequest) {
     await googleCalendarService.saveTokens(instructorId, tokens)
     await googleCalendarService.syncCalendarEvents(instructorId)
 
-    return NextResponse.redirect(
-      new URL('/dashboard/settings?success=calendar_connected', req.url)
-    )
+    return NextResponse.redirect(appUrl('/dashboard/settings?success=calendar_connected'))
   } catch (error) {
     console.error('Google OAuth callback error:', error)
-    return NextResponse.redirect(
-      new URL('/dashboard/settings?error=auth_failed', req.url)
-    )
+    return NextResponse.redirect(appUrl('/dashboard/settings?error=auth_failed'))
   }
 }
