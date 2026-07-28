@@ -70,11 +70,25 @@ function maskPhone(value) {
  * @returns {unknown}
  */
 function maskMeta(obj, depth = 0, visited = new WeakSet()) {
-  if (depth > 4 || obj === null || typeof obj !== 'object') return obj;
+  if (depth > 4 || obj === null || obj === undefined) return obj;
+
+  // Primitives pass through unchanged
+  if (typeof obj !== 'object') return obj;
 
   // Circular reference detected — replace with a safe sentinel rather than looping
   if (visited.has(obj)) return '[Circular]';
   visited.add(obj);
+
+  // Date → ISO string (avoids [object Object] in logs)
+  if (obj instanceof Date) return obj.toISOString();
+
+  // RegExp → string representation
+  if (obj instanceof RegExp) return obj.toString();
+
+  // Error → preserve message and stack
+  if (obj instanceof Error) {
+    return { message: obj.message, ...(obj.stack ? { stack: obj.stack } : {}) };
+  }
 
   if (Array.isArray(obj)) return obj.map((item) => maskMeta(item, depth + 1, visited));
 

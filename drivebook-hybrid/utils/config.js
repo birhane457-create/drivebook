@@ -116,9 +116,14 @@ module.exports = {
   //  Security 
   // INTERNAL_API_KEY gates access to /docs and the root API endpoint.
   INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || '',
-  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['http://localhost:3000', 'http://localhost:3001'],
+  ALLOWED_ORIGINS: (() => {
+    const raw = process.env.ALLOWED_ORIGINS;
+    if (!raw || !raw.trim()) {
+      return ['http://localhost:3000', 'http://localhost:3001'];
+    }
+    const parsed = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    return parsed.length > 0 ? parsed : ['http://localhost:3000', 'http://localhost:3001'];
+  })(),
 
   //  Proxy & timeouts 
   REQUEST_TIMEOUT:   parseInt(process.env.REQUEST_TIMEOUT    || '30000', 10),

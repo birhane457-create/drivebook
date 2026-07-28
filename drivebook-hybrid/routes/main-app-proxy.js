@@ -11,22 +11,14 @@
 
 const express = require('express');
 const axios = require('axios');
-const http = require('http');
-const https = require('https');
 const { randomUUID } = require('crypto');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
 const voiceSession = require('../services/voice-session-service');
 const smsService = require('../services/sms-service');
+const { httpAgent, httpsAgent } = require('../utils/agents'); // shared keep-alive agents
 
 const router = express.Router();
-
-// Keep-alive agents: reuse TCP connections to Railway/Vercel targets.
-// Without these, Railway closes idle sockets between VAPI tool calls,
-// causing ECONNRESET on the first request of each call session.
-// With keep-alive, the connection stays warm for the entire call duration.
-const httpAgent  = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 20 });
-const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 20 });
 
 // Note: express.json() is NOT added here  it is already registered globally in server.js.
 // Adding a second json() parser at router level causes the body to be consumed twice,
@@ -173,7 +165,10 @@ function classifyAxiosError(error) {
   return { status: 502, message: 'Failed to proxy request to main app' };
 }
 
-//  Improvement #9: Retry policy for idempotent GET requests 
+// Retry policy for idempotent GET requests.
+// These paths are safe to retry because they are read-only and have no side effects.
+// The list is defined here rather than in config because retryability is a code-level
+// contract, not an operational setting.
 const RETRYABLE_GET_PATHS = [
   '/availability/slots',
   '/packages',
@@ -189,28 +184,61 @@ function isRetryableGet(req, targetPath) {
   return RETRYABLE_GET_PATHS.some((p) => targetPath.includes(p));
 }
 
+/**
+ * Execute an axios request with retry logic for both network errors AND
+ * upstream 5xx responses (502/503/504).
+ *
+ * Two retry triggers:
+ *   1. Network-level error (ECONNABORTED, ETIMEDOUT, ECONNRESET) — upstream unreachable
+ *   2. Upstream 5xx response — upstream reached but returned a transient error
+ *
+ * Only retries up to `retries` times. Non-idempotent paths (POST) pass retries=0
+ * so they are never retried (prevents duplicate bookings/OTPs).
+ *
+ * Backoff: 500ms, 1000ms (exponential, base 500ms).
+ * Chosen to give Vercel/Railway cold-start time to recover between attempts.
+ */
 async function axiosWithRetry(axiosConfig, retries) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    let response;
     try {
-      return await axios(axiosConfig);
+      response = await axios(axiosConfig);
     } catch (err) {
       lastError = err;
-      const isTransient =
+      const isNetworkTransient =
         err.code === 'ECONNABORTED' ||
         err.code === 'ETIMEDOUT' ||
         err.code === 'ECONNRESET';
-      if (!isTransient || attempt === retries) throw err;
-      const delay = 200 * Math.pow(2, attempt); // 200ms, 400ms
-      await new Promise((r) => setTimeout(r, delay));
-      logger.logWarning('Retrying upstream request', {
+      if (!isNetworkTransient || attempt === retries) throw err;
+      const delay = 500 * Math.pow(2, attempt); // 500ms, 1000ms
+      logger.logWarning('Retrying upstream request (network error)', {
         attempt: attempt + 1,
         url: axiosConfig.url,
-        error: err.code,
+        errorCode: err.code,
+        delayMs: delay,
       });
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
     }
+
+    // Check for upstream 5xx — only retry if we haven't exhausted attempts
+    const status = response?.status;
+    if (status && status >= 500 && attempt < retries) {
+      const delay = 500 * Math.pow(2, attempt); // 500ms, 1000ms
+      logger.logWarning('Retrying upstream request (5xx response)', {
+        attempt: attempt + 1,
+        url: axiosConfig.url,
+        status,
+        delayMs: delay,
+      });
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
+    return response;
   }
-  throw lastError;
+  if (lastError) throw lastError;
 }
 
 //  Core proxy function 
