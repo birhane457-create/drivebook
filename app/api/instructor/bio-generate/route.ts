@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/instructor/bio-generate
  *
  * Generates a draft bio for the instructor using their existing profile data.
@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { bioGenerateRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,16 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.instructorId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit: 5 bio generations per hour per instructor
+    const rateLimitId = getRateLimitIdentifier(session.user.id, null, 'bio-generate');
+    const rl = await checkRateLimit(bioGenerateRateLimit, rateLimitId);
+    if (!rl.success) {
+      return NextResponse.json(
+        { error: rl.error ?? 'Too many requests. Please wait before generating again.' },
+        { status: 429, headers: rl.headers }
+      );
     }
 
     const instructor = await prisma.instructor.findUnique({

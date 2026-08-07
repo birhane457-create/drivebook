@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,8 @@ export async function GET(
           select: {
             name: true,
             phone: true,
+            timezone: true,
+            state: true,
             user: {
               select: {
                 email: true
@@ -59,7 +62,10 @@ export async function GET(
     }
 
     // Generate simple text invoice
-    const invoice = generateTextInvoice(transaction);
+    const invoiceTz = transaction.instructor?.timezone
+      ? resolveTimezone(transaction.instructor.timezone)
+      : timezoneFromState(transaction.instructor?.state);
+    const invoice = generateTextInvoice(transaction, invoiceTz);
 
     // Return as plain text
     return new NextResponse(invoice, {
@@ -77,10 +83,10 @@ export async function GET(
   }
 }
 
-function generateTextInvoice(transaction: any): string {
-  const date = new Date(transaction.createdAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' });
+function generateTextInvoice(transaction: any, tz: string = DEFAULT_TIMEZONE): string {
+  const date = new Date(transaction.createdAt).toLocaleDateString('en-AU', { timeZone: tz });
   const processedDate = transaction.processedAt 
-    ? new Date(transaction.processedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })
+    ? new Date(transaction.processedAt).toLocaleDateString('en-AU', { timeZone: tz })
     : 'Pending';
 
   let invoice = `
@@ -115,8 +121,8 @@ Description:       ${transaction.description || 'Booking payment'}
 Booking ID:        ${transaction.booking.id}
 Client:            ${transaction.booking.client.name}
 Booking Type:      ${transaction.booking.bookingType}
-Date:              ${new Date(transaction.booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}
-Time:              ${new Date(transaction.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })} - ${new Date(transaction.booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}
+Date:              ${new Date(transaction.booking.startTime).toLocaleDateString('en-AU', { timeZone: tz })}
+Time:              ${new Date(transaction.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz })} - ${new Date(transaction.booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz })}
 
 `;
   }
@@ -154,7 +160,7 @@ ${transaction.stripeTransferId ? `Stripe Transfer ID: ${transaction.stripeTransf
                     Thank you for using DriveBook!
 ================================================================================
 
-Generated: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Perth' })}
+Generated: ${new Date().toLocaleString('en-AU', { timeZone: tz })}
 `;
 
   return invoice;

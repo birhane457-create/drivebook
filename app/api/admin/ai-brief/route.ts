@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
   const src = summary ?? {}
   const userPrompt = `Here is yesterday's DriveBook platform summary:
 
-Yesterday (${new Date((src.period as any)?.from ?? Date.now()).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' })}):
+Yesterday (${new Date((src.period as any)?.from ?? Date.now()).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: DEFAULT_TIMEZONE })}):
 - Bookings completed: ${(src.yesterday as any)?.bookingsCompleted ?? 0}
 - Bookings cancelled: ${(src.yesterday as any)?.bookingsCancelled ?? 0}
 - New bookings created: ${(src.yesterday as any)?.bookingsNew ?? 0}

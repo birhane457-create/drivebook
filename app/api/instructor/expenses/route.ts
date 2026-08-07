@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { resolveTimezone, timezoneFromState, localDateTimeToUTC } from '@/lib/utils/timezone';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -34,22 +35,32 @@ export async function GET(req: NextRequest) {
     const year = searchParams.get('year');
     const month = searchParams.get('month'); // 1-12
 
+    // Resolve instructor timezone for correct local-day filtering
+    const instr = await prisma.instructor.findUnique({ where: { id: session.user.instructorId }, select: { timezone: true, state: true } });
+    const tz = resolveTimezone(instr?.timezone ?? timezoneFromState(instr?.state));
+
     let dateFilter: any = {};
     if (year && month) {
-      const y = parseInt(year);
-      const m = parseInt(month) - 1; // JS months are 0-indexed
+      const y = parseInt(year, 10);
+      const m = parseInt(month, 10);
+      const startLocal = `${y}-${String(m).padStart(2, '0')}-01`;
+      const nextM = m === 12 ? 1 : m + 1;
+      const nextY = m === 12 ? y + 1 : y;
+      const startNextLocal = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
       dateFilter = {
         date: {
-          gte: new Date(y, m, 1),
-          lt: new Date(y, m + 1, 1),
+          gte: localDateTimeToUTC(startLocal, '00:00', tz),
+          lt: localDateTimeToUTC(startNextLocal, '00:00', tz),
         },
       };
     } else if (year) {
-      const y = parseInt(year);
+      const y = parseInt(year, 10);
+      const startLocal = `${y}-01-01`;
+      const startNextLocal = `${y + 1}-01-01`;
       dateFilter = {
         date: {
-          gte: new Date(y, 0, 1),
-          lt: new Date(y + 1, 0, 1),
+          gte: localDateTimeToUTC(startLocal, '00:00', tz),
+          lt: localDateTimeToUTC(startNextLocal, '00:00', tz),
         },
       };
     }
@@ -80,10 +91,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = createSchema.parse(body);
 
+    // Resolve instructor timezone and convert local date to UTC midnight
+    const instr2 = await prisma.instructor.findUnique({ where: { id: session.user.instructorId }, select: { timezone: true, state: true } });
+    const tz2 = resolveTimezone(instr2?.timezone ?? timezoneFromState(instr2?.state));
+    const utcDate = localDateTimeToUTC(data.date, '00:00', tz2);
+
     const expense = await (prisma as any).instructorExpense.create({
       data: {
         instructorId: session.user.instructorId,
-        date: new Date(data.date + 'T00:00:00'),
+        date: utcDate,
         category: data.category,
         description: data.description.trim(),
         amount: data.amount,

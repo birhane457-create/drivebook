@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
@@ -18,10 +18,11 @@ const registerSchema = z.object({
   phone: z.string()
     .transform(s => s.replace(/\s+/g, ''))
     .refine(p => /^\+?\d{9,15}$/.test(p), 'Invalid phone number'),
-  baseAddress: z.string(),
-  hourlyRate: z.number(),
-  vehicleTypes: z.array(z.enum(['AUTO', 'MANUAL'])),
-  serviceRadiusKm: z.number(),
+  // Signup-time fields are now optional — instructors complete these in the dashboard
+  baseAddress: z.string().optional().default(''),
+  hourlyRate: z.number().optional().default(65),
+  vehicleTypes: z.array(z.enum(['AUTO', 'MANUAL'])).optional().default(['AUTO']),
+  serviceRadiusKm: z.number().optional().default(20),
   licenseNumber: z.string().optional(),
   insuranceNumber: z.string().optional(),
   termsAccepted: z.boolean().optional(),
@@ -85,10 +86,10 @@ export async function POST(req: NextRequest) {
           create: {
             name: data.name,
             phone: data.phone,
-            baseAddress: data.baseAddress,
-            hourlyRate: data.hourlyRate,
-            vehicleTypes: data.vehicleTypes.join(','),
-            serviceRadiusKm: data.serviceRadiusKm,
+            baseAddress: data.baseAddress ?? '',
+            hourlyRate: data.hourlyRate ?? 65,
+            vehicleTypes: (data.vehicleTypes ?? ['AUTO']).join(','),
+            serviceRadiusKm: data.serviceRadiusKm ?? 20,
             languages: 'English',
             ...(data.licenseNumber && { licenseNumber: data.licenseNumber }),
             ...(data.insuranceNumber && { insuranceNumber: data.insuranceNumber }),
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
         const verifyUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${verificationToken}`
 
         await emailService.sendGenericEmail({
+          from: 'DriveBook Account Verification <verification@drivebook.com.au>',
           to: user.email,
           subject: `Welcome to ${process.env.PLATFORM_NAME || 'DriveBook'}! Please verify your email`,
           html: `
@@ -231,6 +233,7 @@ export async function POST(req: NextRequest) {
       const instructorData = user.instructor;
       if (instructorData) {
         await emailService.sendGenericEmail({
+          from: 'DriveBook Support <support@drivebook.com.au>',
           to: process.env.ADMIN_EMAIL || 'admin@drivebook.com',
           subject: '🆕 New Instructor Registration',
           html: `

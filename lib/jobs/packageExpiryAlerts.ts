@@ -3,6 +3,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/services/notificationService';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 interface BookingWithClient {
   id: string;
@@ -13,12 +14,11 @@ interface BookingWithClient {
   } | null;
 }
 
-const PERTH_TIME_ZONE = 'Australia/Perth';
-const PERTH_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DEFAULT_TZ = DEFAULT_TIMEZONE;
 
-function getPerthDateParts(date: Date) {
+function getLocalDateParts(date: Date, tz: string = DEFAULT_TZ) {
   const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: PERTH_TIME_ZONE,
+    timeZone: tz,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -38,11 +38,32 @@ function getPerthDateParts(date: Date) {
   };
 }
 
-function getPerthDayRange(date: Date) {
-  const { year, month, day } = getPerthDateParts(date);
-  const start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - PERTH_OFFSET_MS);
-  const end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - PERTH_OFFSET_MS);
+function getLocalDayRange(date: Date, tz: string = DEFAULT_TZ) {
+  const { year, month, day } = getLocalDateParts(date, tz);
+  // Build UTC boundary by offsetting from the IANA tz offset at midnight
+  // We use Date.UTC with the local date values as a proxy; the tz offset
+  // correction is handled by the Intl formatter above.
+  const offsetMs = getUtcOffsetMs(date, tz);
+  const start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - offsetMs);
+  const end   = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - offsetMs);
   return { start, end };
+}
+
+/** Returns the UTC offset in milliseconds for a given Date in the given IANA timezone */
+function getUtcOffsetMs(date: Date, tz: string): number {
+  const utcStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'UTC',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).format(date);
+  const tzStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).format(date);
+  return new Date(utcStr + 'Z').getTime() - new Date(tzStr + 'Z').getTime();
 }
 
 export async function generatePackageExpiryAlerts() {
@@ -53,7 +74,7 @@ export async function generatePackageExpiryAlerts() {
 
     // 1. Packages expiring in 7 days
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const range7d = getPerthDayRange(in7Days);
+    const range7d = getLocalDayRange(in7Days);
 
     const expiringIn7Days = await prisma.booking.findMany({
       where: {
@@ -103,7 +124,7 @@ export async function generatePackageExpiryAlerts() {
 
     // 2. Packages expiring in 1 day
     const in1Day = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
-    const range1d = getPerthDayRange(in1Day);
+    const range1d = getLocalDayRange(in1Day);
 
     const expiringIn1Day = await prisma.booking.findMany({
       where: {
@@ -152,7 +173,7 @@ export async function generatePackageExpiryAlerts() {
     }
 
     // 3. Packages expiring today
-    const rangeToday = getPerthDayRange(now);
+    const rangeToday = getLocalDayRange(now);
 
     const expiringToday = await prisma.booking.findMany({
       where: {
@@ -202,7 +223,7 @@ export async function generatePackageExpiryAlerts() {
 
     // 4. Packages that expired yesterday (update them and notify)
     const yesterday = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
-    const rangeYesterday = getPerthDayRange(yesterday);
+    const rangeYesterday = getLocalDayRange(yesterday);
 
     const expiredYesterday = await prisma.booking.findMany({
       where: {

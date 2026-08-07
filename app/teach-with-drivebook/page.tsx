@@ -22,32 +22,34 @@ export default function TeachWithDriveBookPage() {
   return (
     <div className="min-h-screen bg-slate-950">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 py-4 px-5">
+      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 py-4 px-4 sm:px-5">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <Link href="/" className="no-underline"><Logo size={34} dark /></Link>
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
+          <Link href="/" className="no-underline shrink-0"><Logo size={34} dark /></Link>
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Hide text links on mobile — they're not the conversion action */}
+            <Link href="/" className="hidden sm:inline-flex text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm">
               For Learners
             </Link>
-            <Link href="/login" className="text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">
+            <Link href="/login" className="hidden sm:inline-flex text-white/70 hover:text-white no-underline font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm">
               Login
             </Link>
-            <Link href="/register" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-5 py-2 rounded-xl no-underline font-medium shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:from-emerald-400 hover:to-teal-400 transition-all">
-              Start Free Trial
+            <Link href="/register" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-4 sm:px-5 py-2 rounded-xl no-underline font-medium text-sm shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:from-emerald-400 hover:to-teal-400 transition-all whitespace-nowrap">
+              <span className="sm:hidden">Free Trial</span>
+              <span className="hidden sm:inline">Start Free Trial</span>
             </Link>
           </div>
         </div>
       </nav>
 
       {/* Hero Section - Instructor Focused */}
-      <header className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 text-white py-20 px-5 text-center relative overflow-hidden">
+      <header className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 text-white py-14 sm:py-20 px-4 sm:px-5 text-center relative overflow-hidden">
         <div className="absolute inset-0 blur-3xl opacity-20">
           <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500 rounded-full"></div>
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-teal-500 rounded-full"></div>
         </div>
         <div className="relative z-10">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 bg-clip-text text-transparent">Grow Your Driving School Without the Admin Headaches</h1>
-          <p className="text-2xl mb-6 text-emerald-100">Your free AI receptionist answers calls 24/7 while you teach. Never miss a booking again.</p>
+          <h1 className="text-3xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 bg-clip-text text-transparent leading-tight">Grow Your Driving School Without the Admin Headaches</h1>
+          <p className="text-lg sm:text-2xl mb-6 text-emerald-100">Your free AI receptionist answers calls 24/7 while you teach. Never miss a booking again.</p>
           <ul className="list-none p-0 my-6 text-left inline-block max-w-2xl text-lg text-white/80">
             <li className="my-2">💰 Zero setup fees - Start with a free trial</li>
             <li className="my-2">📞 AI receptionist handles calls while you&apos;re teaching</li>
@@ -63,7 +65,7 @@ export default function TeachWithDriveBookPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-5">
+      <main className="max-w-6xl mx-auto px-3 sm:px-5">
         {/* Founder story — leads the instructor page */}
         <section className="my-16 -mt-6">
           <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 rounded-2xl shadow-xl border border-emerald-500/30 p-8 md:p-10 max-w-3xl mx-auto backdrop-blur-sm hover:border-emerald-400/50 transition-all">
@@ -84,13 +86,13 @@ export default function TeachWithDriveBookPage() {
 
         {/* AI Receptionist - Instructor Angle */}
         <section className="my-16 -mt-10">
-          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 rounded-2xl shadow-xl p-8 md:p-12 border border-emerald-500/30 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 rounded-2xl shadow-xl p-4 sm:p-8 md:p-12 border border-emerald-500/30 backdrop-blur-sm">
             <div className="text-center mb-8">
-              <h2 className="text-4xl font-bold text-white mb-3">📞 Your Free 24/7 Virtual Receptionist</h2>
+          <h2 className="text-2xl sm:text-4xl font-bold mb-3">📞 Your Free 24/7 Virtual Receptionist</h2>
               <p className="text-xl text-emerald-100">Never Miss Another Booking While You Teach</p>
             </div>
 
-            <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/30 rounded-xl p-8 mb-8 backdrop-blur-sm">
+            <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/30 rounded-xl p-2 sm:p-8 mb-8 backdrop-blur-sm">
               <h3 className="text-2xl font-semibold text-white mb-4">Picture this scenario:</h3>
               <p className="text-lg text-white/80 mb-4">
                 You&apos;re helping a nervous student parallel park. Your phone rings - it&apos;s a parent ready to book a $1,000 package.
@@ -131,7 +133,7 @@ export default function TeachWithDriveBookPage() {
               </div>
 
               {VOICE_NUMBER ? (
-                <div className="bg-gradient-to-br from-emerald-500/20 to-teal-500/10 rounded-xl p-8 text-center border border-emerald-500/50 backdrop-blur-sm hover:border-emerald-400/70 transition-all">
+                <div className="bg-gradient-to-br from-emerald-500/20 to-teal-500/10 rounded-xl p-4 sm:p-8 text-center border border-emerald-500/50 backdrop-blur-sm hover:border-emerald-400/70 transition-all">
                   <p className="text-sm uppercase tracking-wide text-emerald-300 font-semibold mb-3">
                     Try it now - Call to experience it
                   </p>
@@ -151,7 +153,7 @@ export default function TeachWithDriveBookPage() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white/5 rounded-xl p-8 text-center border border-white/10 backdrop-blur-sm">
+                <div className="bg-white/5 rounded-xl p-4 sm:p-8 text-center border border-white/10 backdrop-blur-sm">
                   <p className="text-white/70">AI receptionist phone number will be displayed here once configured.</p>
                 </div>
               )}
@@ -169,7 +171,7 @@ export default function TeachWithDriveBookPage() {
         {/* Platform Features — deep dive links */}
         <section className="my-16">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-white mb-3">Explore Every Feature</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Explore Every Feature</h2>
             <p className="text-white/50 text-sm">Deep-dive guides on what each part of DriveBook actually does.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -205,7 +207,7 @@ export default function TeachWithDriveBookPage() {
 
         {/* Why Instructors Choose Us */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-10 text-white">Why Instructors Choose DriveBook</h2>
+          <h2 className="text-2xl sm:text-4xl text-center mb-10 text-white">Why Instructors Choose DriveBook</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/30 p-6 rounded-xl backdrop-blur-sm hover:border-emerald-400/50 transition-all">
               <div className="text-4xl mb-4">💰</div>
@@ -246,8 +248,8 @@ export default function TeachWithDriveBookPage() {
         </section>
 
         {/* How It Works */}
-        <section className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 p-8 rounded-xl border border-emerald-500/30 my-16 backdrop-blur-sm">
-          <h2 className="text-3xl mb-6 text-white">How It Works - Get Started in 3 Steps</h2>
+        <section className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 p-4 sm:p-8 rounded-xl border border-emerald-500/30 my-16 backdrop-blur-sm">
+          <h2 className="text-2xl sm:text-3xl mb-6 text-white">How It Works - Get Started in 3 Steps</h2>
           <div className="space-y-6">
             <div className="flex gap-4">
               <div className="bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full w-10 h-10 flex items-center justify-center flex-shrink-0 font-bold shadow-lg shadow-emerald-500/30">1</div>
@@ -277,9 +279,9 @@ export default function TeachWithDriveBookPage() {
 
         {/* Testimonials */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-4 text-white">What Instructors Say</h2>
+          <h2 className="text-2xl sm:text-4xl text-center mb-4 text-white">What Instructors Say</h2>
           <p className="text-center text-white/50 mb-10 text-sm">Be among the first instructors on DriveBook — early members shape the platform.</p>
-          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/30 rounded-2xl p-10 text-center max-w-2xl mx-auto backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/30 rounded-2xl p-6 sm:p-10 text-center max-w-2xl mx-auto backdrop-blur-sm">
             <div className="text-5xl mb-4">🎯</div>
             <h3 className="text-xl font-bold text-white mb-3">Early Access — Limited Spots</h3>
             <p className="text-white/70 mb-6">
@@ -293,10 +295,10 @@ export default function TeachWithDriveBookPage() {
 
         {/* Pricing */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-10 text-white">Simple, Transparent Pricing</h2>
-          <div className="max-w-2xl mx-auto bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/30 rounded-2xl p-8 shadow-xl backdrop-blur-sm">
+          <h2 className="text-2xl sm:text-4xl text-center mb-10 text-white">Simple, Transparent Pricing</h2>
+          <div className="max-w-2xl mx-auto bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/30 rounded-2xl p-4 sm:p-8 shadow-xl backdrop-blur-sm">
             <div className="text-center mb-6">
-              <h3 className="text-3xl font-bold text-white mb-2">Pay Per Completed Lesson</h3>
+              <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2">Pay Per Completed Lesson</h3>
               <p className="text-xl text-emerald-100">No monthly fees. No hidden costs.</p>
             </div>
             
@@ -333,7 +335,7 @@ export default function TeachWithDriveBookPage() {
 
         {/* FAQ */}
         <section className="my-16">
-          <h2 className="text-4xl text-center mb-10 text-white">Frequently Asked Questions</h2>
+          <h2 className="text-2xl sm:text-4xl text-center mb-10 text-white">Frequently Asked Questions</h2>
           
           <div className="max-w-3xl mx-auto space-y-4">
             <div className="bg-white/5 border border-white/10 p-6 rounded-lg hover:border-white/20 hover:bg-white/10 transition-all backdrop-blur-sm">
@@ -369,9 +371,9 @@ export default function TeachWithDriveBookPage() {
         </section>
 
         {/* Final CTA */}
-        <section className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white p-12 rounded-2xl text-center my-16 shadow-2xl shadow-emerald-900/50">
-          <h2 className="text-4xl font-bold mb-4 mt-0">Ready to Grow Your Driving School?</h2>
-          <p className="text-xl mb-8 text-emerald-100">Join DriveBook today and start receiving bookings with zero setup fees. Your AI receptionist is waiting.</p>
+        <section className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white p-6 sm:p-12 rounded-2xl text-center my-16 shadow-2xl shadow-emerald-900/50">
+          <h2 className="text-2xl sm:text-4xl font-bold mb-4 mt-0">Ready to Grow Your Driving School?</h2>
+          <p className="text-lg sm:text-xl mb-8 text-emerald-100">Join DriveBook today and start receiving bookings with zero setup fees. Your AI receptionist is waiting.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link href="/register" className="inline-block bg-white text-emerald-900 px-10 py-5 rounded-xl no-underline font-bold text-lg shadow-xl shadow-emerald-900/50 hover:shadow-emerald-500/50 hover:scale-105 transition-all">
               Start Your Free Trial →

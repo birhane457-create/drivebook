@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
 import { SUBSCRIPTION_PLANS, SubscriptionTier } from '@/lib/config/subscriptions';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,11 +106,12 @@ export async function GET(req: NextRequest) {
         ? SUBSCRIPTION_PLANS[sub.tier as SubscriptionTier].name
         : sub.tier || 'your plan';
       const expiryDateStr = new Date(sub.trialEndsAt).toLocaleDateString('en-AU', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: DEFAULT_TIMEZONE,
       });
 
       try {
         await emailService.sendGenericEmail({
+          from: 'DriveBook Payments <payments@drivebook.com.au>',
           to: sub.instructor.user.email,
           subject: `Your ${tierName} trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`,
           html: `
@@ -176,11 +178,12 @@ export async function GET(req: NextRequest) {
         ? SUBSCRIPTION_PLANS[sub.tier as SubscriptionTier].name
         : sub.tier || 'your plan';
       const expiryDateStr = new Date(sub.trialEndsAt).toLocaleDateString('en-AU', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: DEFAULT_TIMEZONE,
       });
 
       try {
         await emailService.sendGenericEmail({
+          from: 'DriveBook Payments <payments@drivebook.com.au>',
           to: sub.instructor.user.email,
           subject: `â° ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left on your DriveBook trial`,
           html: `
@@ -242,11 +245,12 @@ export async function GET(req: NextRequest) {
       if (existing) continue;
 
       const expiryDateStr = new Date(sub.trialEndsAt).toLocaleDateString('en-AU', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: DEFAULT_TIMEZONE,
       });
 
       try {
         await emailService.sendGenericEmail({
+          from: 'DriveBook Payments <payments@drivebook.com.au>',
           to: sub.instructor.user.email,
           subject: `Your DriveBook trial ended â€” action required to restore access`,
           html: `

@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { Package, Clock, Calendar, AlertTriangle, TrendingUp, User } from 'lucide-react';
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 interface PackageData {
   id: string;
@@ -48,15 +49,21 @@ interface PackagesResponse {
 export default function PackagesPage() {
   const [data, setData] = useState<PackagesResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [instructorTz, setInstructorTz] = useState(DEFAULT_TIMEZONE);
 
-  useEffect(() => { fetchPackages(); }, []);
+  useEffect(() => {
+    fetchPackages();
+    fetch('/api/instructor/settings').then(r => r.ok ? r.json() : null).then(s => { if (s?.timezone) setInstructorTz(resolveTimezone(s.timezone)); }).catch(() => {});
+  }, []);
 
   const fetchPackages = async () => {
     try {
       const res = await fetch('/api/instructor/packages');
-      if (res.ok) setData(await res.json());
-    } catch (error) {
-      console.error('Failed to fetch packages:', error);
+      if (!res.ok) { setError(`Failed to load packages (${res.status})`); return; }
+      setData(await res.json());
+    } catch {
+      setError('Failed to load packages. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -73,7 +80,7 @@ export default function PackagesPage() {
   if (!data) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4">
-        <p>Failed to load packages data</p>
+        <p className="text-red-400">{error ?? 'Failed to load packages data'}</p>
       </div>
     );
   }
@@ -228,10 +235,7 @@ export default function PackagesPage() {
                           <div key={booking.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-800">
                             <div>
                               <p className="font-medium text-slate-100">
-                                {new Date(booking.startTime).toLocaleDateString('en-US', {
-                                  weekday: 'short', month: 'short', day: 'numeric',
-                                  hour: '2-digit', minute: '2-digit'
-                                })}
+                                {new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric', timeZone: instructorTz }) + ' ' + new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: instructorTz })}
                               </p>
                               <p className="text-sm text-slate-400">{booking.duration}h lesson</p>
                             </div>
@@ -256,14 +260,14 @@ export default function PackagesPage() {
                       <div>
                         <p className="text-slate-400">Purchased</p>
                         <p className="font-medium text-slate-100">
-                          {new Date(pkg.purchaseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {new Date(pkg.purchaseDate).toLocaleDateString('en-AU', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </p>
                       </div>
                       <div>
                         <p className="text-slate-400">Expires</p>
                         <p className={`font-medium ${pkg.isExpiringSoon ? 'text-orange-400' : 'text-slate-100'}`}>
                           {pkg.packageExpiryDate
-                            ? new Date(pkg.packageExpiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            ? new Date(pkg.packageExpiryDate).toLocaleDateString('en-AU', { month: 'short', day: 'numeric', year: 'numeric' })
                             : <span className="text-slate-500">No expiry set</span>
                           }
                         </p>

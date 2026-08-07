@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { TrendingUp, Target, Award, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -58,7 +58,7 @@ export default function ProgressTrackingShowcase() {
   const currentSlide = slides[currentIndex]
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-0">
+    <div className="w-full max-w-7xl mx-auto px-0" inert={true} aria-hidden="true">
       <div className="bg-white rounded-xl md:rounded-2xl shadow-lg md:shadow-2xl overflow-hidden border border-gray-200" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         <div className="bg-gradient-to-r from-indigo-600 to-purple-800 text-white p-4 md:p-6">
           <h3 className="text-xl md:text-3xl font-bold mb-1 md:mb-2">{currentSlide.title}</h3>
@@ -300,3 +300,4 @@ function ProgressStep() {
     </div>
   )
 }
+

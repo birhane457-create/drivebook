@@ -17,7 +17,7 @@
 | [04](./04-instructors.md) | Instructor Management | Approval, suspension, documents, voice lines |
 | [05](./05-business-tier.md) | Business Tier | BUSINESS account activation, school identity, roadmap |
 | [06](./06-ai-operations.md) | AI Operations | Copilot policy, AI receptionist, what AI may/may not do |
-| [07](./07-security-fraud.md) | Security & Fraud | Fraud signals, account freezing, data privacy, Australian Privacy Act |
+| [07](./07-security-fraud.md) | Security & Fraud | Fraud signals, account freezing, data privacy, device tracking, Australian Privacy Act |
 | [08](./08-data-documents.md) | Data & Documents | Document lifecycle, data export, deletion, retention |
 | [09](./09-emergency-runbooks.md) | Emergency Runbooks | Stripe outage, Twilio outage, DB maintenance, P0–P4 severity matrix |
 | [10](./10-audit-compliance.md) | Audit & Compliance | Audit requirements, KPI dashboard, feature flags |
@@ -39,6 +39,7 @@
 | Manage a subscription (sync/override/cancel) | [ADMIN_BUSINESS_RULES §7a](../DOCROLEBASE/00-overview/ADMIN_BUSINESS_RULES.md#7a-subscription-management-admin-ui) |
 | Assign a voice line | [04 — Instructor Management](./04-instructors.md#voice-lines) |
 | Freeze a fraud account | [07 — Security & Fraud](./07-security-fraud.md#fraud-response) |
+| Review device login activity | [07 — Security & Fraud](./07-security-fraud.md#device-recognition) |
 | Handle P0 incident | [09 — Emergency Runbooks](./09-emergency-runbooks.md#p0) |
 | Deploy a release | [11 — Release Management](./11-release-management.md) |
 | Understand AI boundaries | [06 — AI Operations](./06-ai-operations.md#ai-boundaries) |

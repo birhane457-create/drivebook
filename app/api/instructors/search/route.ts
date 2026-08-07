@@ -1,4 +1,17 @@
 // @ts-nocheck
+/**
+ * GET /api/instructors/search
+ *
+ * Instructor search with suburb-first matching.
+ *
+ * Search priority:
+ *   1. If instructor has a serviceAreas suburb list → exact suburb/postcode match
+ *   2. If no suburb list → Haversine radius fallback (same as before)
+ *
+ * This eliminates the air-distance inaccuracy for instructors who have configured
+ * their served suburbs. Radius remains the fallback for instructors who haven't.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { geocode, distanceKm } from '@/lib/services/geocode';
@@ -6,44 +19,44 @@ import { resolveLocationStatic } from '@/lib/services/resolve-location';
 
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_RADIUS_KM = 20; // fallback if instructor hasn't set their radius
+const DEFAULT_RADIUS_KM = 20;
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const location = searchParams.get('location') || '';
-    const nameQuery = searchParams.get('name') || '';
-    const languageFilter = searchParams.get('language') || '';
+    const location        = searchParams.get('location') || '';
+    const nameQuery       = searchParams.get('name')     || '';
+    const languageFilter  = searchParams.get('language') || '';
     const vehicleTypeFilter = searchParams.get('vehicleType') || '';
-    // Normalise UI-friendly names ("Automatic", "Manual") to DB values ("AUTO", "MANUAL")
+
+    // Normalise UI-friendly names to DB values
     const normaliseVehicleType = (v: string) => {
       const u = v.toUpperCase();
       if (u === 'AUTOMATIC') return 'AUTO';
       if (u === 'MANUAL')    return 'MANUAL';
-      return u; // already normalised or unknown
+      return u;
     };
     const normalisedVehicleType = vehicleTypeFilter ? normaliseVehicleType(vehicleTypeFilter) : '';
-    // ?admin=true — skip approved-only filter, return extra fields
-    // SECURITY: Only allow admin bypass if the request comes from an authenticated admin
-    // This is a server-side API route — we check the session here
+
+    // Admin bypass — check session
     const adminParam = searchParams.get('admin') === 'true';
     let isAdmin = false;
     if (adminParam) {
       const { getServerSession } = await import('next-auth');
-      const { authOptions } = await import('@/lib/auth');
+      const { authOptions }      = await import('@/lib/auth');
       const session = await getServerSession(authOptions);
       isAdmin = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN';
     }
+
     // Pagination
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const page  = Math.max(1, parseInt(searchParams.get('page')  || '1',  10));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
 
     if (!location && !nameQuery) {
       return NextResponse.json({ error: 'Provide location or name' }, { status: 400 });
     }
 
-    // Fetch all approved, active instructors with active subscriptions
-    // Expired/cancelled/past-due instructors are hidden from public search
+    // Fetch approved, active instructors with active/trial subscriptions
     const now = new Date();
     const instructors = await prisma.instructor.findMany({
       where: isAdmin ? {} : {
@@ -51,11 +64,7 @@ export async function GET(req: NextRequest) {
         isActive: true,
         OR: [
           { subscriptionStatus: 'ACTIVE' },
-          // TRIAL: only include if trial hasn't expired
-          {
-            subscriptionStatus: 'TRIAL',
-            trialEndsAt: { gt: now },
-          },
+          { subscriptionStatus: 'TRIAL', trialEndsAt: { gt: now } },
         ],
       },
       select: {
@@ -85,20 +94,18 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // --- Name-only search (no geocoding needed) ---
+    // ── Name-only search ────────────────────────────────────────────────────────
     if (nameQuery && !location) {
       const nl = nameQuery.toLowerCase();
       let matched = instructors.filter(i => i.name.toLowerCase().includes(nl));
-      // Apply optional language/vehicleType filters
       if (languageFilter) {
         const lf = languageFilter.toLowerCase();
         matched = matched.filter(i => i.languages?.toLowerCase().includes(lf));
       }
-      if (vehicleTypeFilter) {
-        const vf = normalisedVehicleType;
-        matched = matched.filter(i => i.vehicleTypes?.toUpperCase().includes(vf));
+      if (normalisedVehicleType) {
+        matched = matched.filter(i => i.vehicleTypes?.toUpperCase().includes(normalisedVehicleType));
       }
-      const total = matched.length;
+      const total     = matched.length;
       const paginated = matched.slice((page - 1) * limit, page * limit);
       return NextResponse.json({
         instructors: format(paginated, null),
@@ -109,30 +116,23 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // --- Location / radius search ---
-    // 1. Resolve location — static postcode/suburb lookup first (no API call),
-    //    fall back to Nominatim geocoding for free-text addresses.
+    // ── Location search ─────────────────────────────────────────────────────────
+    // 1. Resolve location — static postcode/suburb lookup first, Nominatim fallback
     const staticResolved = resolveLocationStatic(location);
-    const searchPoint = staticResolved
+    const searchPoint    = staticResolved
       ? { lat: staticResolved.lat, lng: staticResolved.lng, displayName: staticResolved.displayName }
       : await geocode(location);
 
     if (!searchPoint) {
-      // Nominatim couldn't resolve — fall back to text match on serviceAreas/baseAddress
+      // Geocode failed — text match on serviceAreas/baseAddress as last resort
       const tokens = location.toLowerCase().split(/[\s,]+/).filter(t => t.length >= 3);
       let fallback = instructors.filter(i => {
         const hay = `${i.serviceAreas || ''} ${i.baseAddress || ''}`.toLowerCase();
         return tokens.some(t => hay.includes(t));
       });
-      if (languageFilter) {
-        const lf = languageFilter.toLowerCase();
-        fallback = fallback.filter(i => i.languages?.toLowerCase().includes(lf));
-      }
-      if (vehicleTypeFilter) {
-        const vf = normalisedVehicleType;
-        fallback = fallback.filter(i => i.vehicleTypes?.toUpperCase().includes(vf));
-      }
-      const total = fallback.length;
+      if (languageFilter)         fallback = fallback.filter(i => i.languages?.toLowerCase().includes(languageFilter.toLowerCase()));
+      if (normalisedVehicleType)  fallback = fallback.filter(i => i.vehicleTypes?.toUpperCase().includes(normalisedVehicleType));
+      const total     = fallback.length;
       const paginated = fallback.slice((page - 1) * limit, page * limit);
       return NextResponse.json({
         instructors: format(paginated, null),
@@ -145,46 +145,67 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 2. For each instructor use stored lat/lng (fast) or geocode baseAddress (fallback)
+    // 2. Extract normalised suburb + postcode from the resolved location
+    //    staticResolved will have suburb/postcode if resolved from static data
+    const searchedSuburb   = staticResolved?.suburb?.toLowerCase()  ?? '';
+    const searchedPostcode = staticResolved?.postcode               ?? '';
+
+    // 3. For each instructor: suburb-list match first, radius fallback
     const results: { instructor: typeof instructors[0]; distKm: number }[] = [];
 
     await Promise.all(
       instructors.map(async (i) => {
-        // Apply optional language/vehicleType filters before distance check (cheap check first)
-        if (languageFilter) {
-          const lf = languageFilter.toLowerCase();
-          if (!i.languages?.toLowerCase().includes(lf)) return;
-        }
-        if (vehicleTypeFilter) {
-          const vf = normalisedVehicleType;
-          if (!i.vehicleTypes?.toUpperCase().includes(vf)) return;
+        // Cheap filters first
+        if (languageFilter        && !i.languages?.toLowerCase().includes(languageFilter.toLowerCase())) return;
+        if (normalisedVehicleType && !i.vehicleTypes?.toUpperCase().includes(normalisedVehicleType))     return;
+
+        // ── Suburb-list match (primary — no maths, exact token match) ──────────
+        if (i.serviceAreas) {
+          try {
+            const tokens: string[] = JSON.parse(i.serviceAreas);
+            if (Array.isArray(tokens) && tokens.length > 0) {
+              const matched = tokens.some(token => {
+                const parts = token.split('|');
+                if (parts.length !== 3) return false;
+                const [tSuburb, , tPostcode] = parts;
+                if (searchedPostcode && tPostcode === searchedPostcode)           return true;
+                if (searchedSuburb   && tSuburb.toLowerCase() === searchedSuburb) return true;
+                return false;
+              });
+              if (!matched) return;
+              // Still compute display distance if coords are available
+              let distKm = 0;
+              if (i.baseLatitude != null && i.baseLongitude != null &&
+                  isFinite(i.baseLatitude) && isFinite(i.baseLongitude)) {
+                distKm = Math.round(distanceKm(searchPoint, { lat: i.baseLatitude, lng: i.baseLongitude }) * 10) / 10;
+              }
+              results.push({ instructor: i, distKm });
+              return;
+            }
+          } catch { /* fall through to radius */ }
         }
 
+        // ── Radius fallback (for instructors without a suburb list) ────────────
         let base: { lat: number; lng: number } | null = null;
-
-        // Use stored coordinates if available (fast, no API call)
         if (i.baseLatitude != null && i.baseLongitude != null &&
             isFinite(i.baseLatitude) && isFinite(i.baseLongitude)) {
           base = { lat: i.baseLatitude, lng: i.baseLongitude };
         } else if (i.baseAddress) {
-          // Fall back to geocoding the address
           base = await geocode(i.baseAddress);
         }
-
         if (!base) return;
 
         const radius = i.serviceRadiusKm ?? DEFAULT_RADIUS_KM;
-        const dist = distanceKm(searchPoint, base);
+        const dist   = distanceKm(searchPoint, base);
         if (dist <= radius) {
           results.push({ instructor: i, distKm: Math.round(dist * 10) / 10 });
         }
       })
     );
 
-    // Sort closest first
     results.sort((a, b) => a.distKm - b.distKm);
 
-    const total = results.length;
+    const total     = results.length;
     const paginated = results.slice((page - 1) * limit, page * limit);
 
     return NextResponse.json({
@@ -192,10 +213,10 @@ export async function GET(req: NextRequest) {
         ...format([i], searchPoint)[0],
         distance: distKm,
       })),
-      count: paginated.length,
+      count:       paginated.length,
       total,
       page,
-      totalPages: Math.ceil(total / limit),
+      totalPages:  Math.ceil(total / limit),
       searchQuery: location,
       searchPoint,
     });
@@ -205,19 +226,10 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// ── Format helper ─────────────────────────────────────────────────────────────
+
 function format(
-  instructors: {
-    id: string; name: string; profileImage: string | null; carImage: string | null;
-    carMake: string | null; carModel: string | null; carYear: string | number | null;
-    hourlyRate: number; vehicleTypes: string | null; languages: string | null;
-    averageRating: number | null; totalReviews: number; bio: string | null;
-    serviceAreas: string | null; baseAddress: string | null;
-    baseLatitude: number | null; baseLongitude: number | null;
-    serviceRadiusKm: number | null;
-    offersTestPackage: boolean; testPackagePrice: number | null;
-    testPackageDuration: number | null; testPackageIncludes: unknown;
-    _count: { bookings: number };
-  }[],
+  instructors: any[],
   _searchPoint: unknown
 ) {
   return instructors.map(i => {
@@ -225,29 +237,42 @@ function format(
       ? (i.testPackageIncludes as string[])
       : [];
 
+    // Parse suburb list for display on cards ("Maylands, Bayswater +2 more")
+    let suburbList: string[] = [];
+    if (i.serviceAreas) {
+      try {
+        const tokens: string[] = JSON.parse(i.serviceAreas);
+        suburbList = tokens
+          .map((t: string) => t.split('|')[0])
+          .filter(Boolean)
+          .slice(0, 5);
+      } catch { /* ignore */ }
+    }
+
     return {
-      id: i.id,
-      name: i.name,
-      profileImage: i.profileImage,
-      carImage: i.carImage,
-      carMake: i.carMake,
-      carModel: i.carModel,
-      carYear: i.carYear,
-      hourlyRate: i.hourlyRate,
-      serviceAreas: i.serviceAreas,
-      baseAddress: i.baseAddress,
+      id:             i.id,
+      name:           i.name,
+      profileImage:   i.profileImage,
+      carImage:       i.carImage,
+      carMake:        i.carMake,
+      carModel:       i.carModel,
+      carYear:        i.carYear,
+      hourlyRate:     i.hourlyRate,
+      serviceAreas:   i.serviceAreas,
+      suburbList,
+      baseAddress:    i.baseAddress,
       serviceRadiusKm: i.serviceRadiusKm ?? DEFAULT_RADIUS_KM,
-      vehicleTypes: i.vehicleTypes ? i.vehicleTypes.split(',').map((v: string) => v.trim()) : ['Manual', 'Automatic'],
-      languages: i.languages ? i.languages.split(',').map((l: string) => l.trim()) : ['English'],
-      averageRating: i.averageRating ?? null,
-      totalReviews: i.totalReviews ?? 0,
-      totalBookings: i._count.bookings,
-      bio: i.bio || 'Experienced driving instructor',
-      distance: null as number | null,
-      offersTestPackage: i.offersTestPackage ?? false,
-      testPackagePrice: i.testPackagePrice,
+      vehicleTypes:   i.vehicleTypes ? i.vehicleTypes.split(',').map((v: string) => v.trim()) : ['Manual', 'Automatic'],
+      languages:      i.languages    ? i.languages.split(',').map((l: string) => l.trim())    : ['English'],
+      averageRating:  i.averageRating ?? null,
+      totalReviews:   i.totalReviews  ?? 0,
+      totalBookings:  i._count.bookings,
+      bio:            i.bio || 'Experienced driving instructor',
+      distance:       null as number | null,
+      offersTestPackage:  i.offersTestPackage  ?? false,
+      testPackagePrice:   i.testPackagePrice,
       testPackageDuration: i.testPackageDuration,
       testPackageIncludes: testIncludes,
-    }
+    };
   });
 }

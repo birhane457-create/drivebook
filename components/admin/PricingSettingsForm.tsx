@@ -196,6 +196,19 @@ export default function PricingSettingsForm() {
             <option value="instructor">Instructor — full discount from their payout</option>
           </select>
         </Field>
+        {/* Explain to admin how discount attribution works from the instructor and student perspective */}
+        <div className="mt-3 bg-sky-900/20 border border-sky-700/40 rounded-lg px-4 py-3 text-xs text-sky-300 space-y-1">
+          <p className="font-semibold text-sky-200">How this appears to instructors and students</p>
+          <p>
+            <span className="font-semibold">Students</span> see: &quot;Package discount applied by DriveBook&quot; — they know it&apos;s a platform incentive, not a price cut by the instructor.
+          </p>
+          <p>
+            <span className="font-semibold">Instructors</span> see: their hourly rate and earnings display unchanged when <em>Platform</em> is selected. If you change to <em>Shared</em> or <em>Instructor</em>, their effective payout per hour drops — communicate this change to instructors before activating.
+          </p>
+          <p className="text-sky-400/70 italic">
+            Recommended: keep &quot;Platform&quot; selected. This lets you offer real discounts to students without impacting instructor trust or earnings.
+          </p>
+        </div>
       </Section>
 
       <Section icon={<TrendingUp className="h-5 w-5" />} title="Commission Rates by Subscription Tier" color="text-purple-700">

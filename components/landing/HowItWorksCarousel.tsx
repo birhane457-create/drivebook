@@ -29,3 +29,4 @@ export default function HowItWorksCarousel() {
 
   return <ImageCarousel slides={slides} autoPlayInterval={7000} />
 }
+

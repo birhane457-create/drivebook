@@ -131,8 +131,8 @@ const envVars: EnvConfig[] = [
   {
     name: 'TWILIO_PHONE_NUMBER',
     required: false,
-    description: 'Twilio phone number',
-    example: '+1234567890'
+    description: 'Twilio phone number (AU format: +61XXXXXXXXX)',
+    example: '+61400000000'
   },
   
   // Google Calendar (Optional)

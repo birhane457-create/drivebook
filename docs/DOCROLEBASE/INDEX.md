@@ -1,6 +1,6 @@
 # DriveBook Documentation Index
 
-**Last Updated:** July 2026  
+**Last Updated:** August 2026  
 **Purpose:** Quick reference to find documentation by topic
 
 ---
@@ -17,14 +17,15 @@
 
 ### 👨‍🏫 For Instructors
 - **Dashboard overview:** `03-instructor/DASHBOARD.md`
-- **Schedule workspace (Week/Agenda):** `03-instructor/SCHEDULE.md` ⭐ NEW
+- **Schedule workspace (Week/Agenda):** `03-instructor/SCHEDULE.md`
 - **Managing bookings:** `03-instructor/BOOKINGS.md`
 - **Setting availability:** `03-instructor/AVAILABILITY.md`
 - **Understanding payouts:** `06-payments/PAYOUTS.md`
 - **Approval process:** `03-instructor/ONBOARDING_APPROVAL.md`
 - **Subscription tiers:** `07-subscriptions/TIERS.md`
 - **Stripe Connect setup:** `07-subscriptions/STRIPE_CONNECT_SETUP.md`
-- **Branding & logo:** `01-public/BRANDING.md`
+- **Branding & logo:** `03-instructor/BRANDING.md`
+- **Marketing flyer & business cards:** `03-instructor/MARKETING.md` ⭐ NEW
 
 ### 👔 For Admin/Support
 - **Admin dashboard:** `05-admin/DASHBOARD.md`
@@ -55,14 +56,20 @@
 
 ## What Changed Recently
 
-**See `00-overview/CHANGES.md` for the full index.** Key additions (July 2026):
+**See `00-overview/CHANGES.md` for the full session log.** Key additions (August 2026):
 
+- New-device OTP verification for instructor logins → `08-technical/SECURITY_ASSESSMENT.md`
+- Suburb-based instructor search (ServiceAreaPicker) → `08-technical/CODEBASE_MAP.md` BOOKING
+- Shared SlotPicker component → `08-technical/CODEBASE_MAP.md` BOOKING
+- Registration simplified to 4 fields → `app/register/page.tsx`
+- Buffer visualisation on schedule week view → `03-instructor/SCHEDULE.md`
+- Signed Cloudinary URLs for all document views → `08-technical/SECURITY_ASSESSMENT.md`
+
+Earlier additions (July 2026):
 - National postcode/suburb lookup system → `08-technical/LOCATION_SYSTEM.md`
-- Booking status colour system → `08-technical/BOOKING_STATUS.md`
 - Instructor scheduling workspace (Today/Week/Agenda) → `03-instructor/SCHEDULE.md`
-- Location pages for all 19,396 Australian suburbs → `08-technical/SEO.md`
-- Admin cron dashboard + immediate failure alerting → `08-technical/CRON_HEALTH_MONITORING.md`
-- Availability slot cache + dual-format API → `03-instructor/AVAILABILITY.md`
+- Session idle timeout (30 min) + new device login notifications → `08-technical/SECURITY_ASSESSMENT.md`
+- Instructor business card builder → `03-instructor/MARKETING.md`
 
 ---
 
@@ -91,10 +98,11 @@
 
 ### Instructor Features
 - `03-instructor/AVAILABILITY.md` — Calendar & time slot management
-- `03-instructor/SCHEDULE.md` — Schedule workspace (Today/Week/Agenda views) ⭐ NEW
+- `03-instructor/SCHEDULE.md` — Schedule workspace (Today/Week/Agenda views)
 - `03-instructor/PDA_TESTS.md` — Practical driving assessment bookings
 - `03-instructor/PRICING.md` — Setting hourly rates & packages
 - `03-instructor/CLIENTS.md` — Managing student relationships
+- `03-instructor/MARKETING.md` — Marketing flyer + business card builder ⭐ NEW
 
 ### Student Features
 - `02-student/BOOKINGS.md` — View & manage bookings
@@ -124,9 +132,11 @@
 - `07-subscriptions/BILLING.md` — Subscription fees
 
 ### Security & Verification
-- `08-technical/SECURITY_ASSESSMENT.md` — Security considerations
+- `08-technical/SECURITY_ASSESSMENT.md` — Security scorecard, controls, roadmap
+- `08-technical/RATE_LIMITING.md` — Rate limiting configuration
 - `03-instructor/ONBOARDING_APPROVAL.md` — Approval gates & verification
 - `05-admin/DOCUMENTS.md` — Document verification process
+- `operations/07-security-fraud.md` — Fraud signals, response procedures, device tracking
 
 ### Troubleshooting
 - `06-payments/REFUNDS.md` — Handling refunds & cancellations
@@ -185,12 +195,13 @@ docs/DOCROLEBASE/
 
 | Category | What Changed | When | Where |
 |----------|--------------|------|-------|
-| Dashboard | Students can see awaiting-payment bookings | June 13 | 02-student/AWAITING_PAYMENT.md ⭐ |
-| Email | All booking methods now send notifications | June 13 | 01-public/BOOKING_FLOW_COMPLETE.md |
-| Slots | Database persistence + auto-cleanup | June 13 | 01-public/SLOT_PERSISTENCE_FIX.md |
-| Race Conditions | Atomic transactions | June 13 | 01-public/RACE_CONDITION_FIX.md |
-| PDA Tests | Linked to parent booking | June 13 | 00-overview/CHANGES.md |
-| Overview | Summary of all 6 fixes | June 13 | 00-overview/CHANGES.md |
+| Security | New-device OTP verification for instructors | August 2026 | `app/login/page.tsx` + `08-technical/SECURITY_ASSESSMENT.md` |
+| Search | Suburb-based instructor search + ServiceAreaPicker | August 2026 | `app/api/instructors/search/route.ts` + `CODEBASE_MAP.md` |
+| Booking UX | Shared SlotPicker — pill grid replaces dropdown | August 2026 | `components/SlotPicker.tsx` |
+| Security | Session idle timeout (30 min) | July 2026 | `lib/auth.ts` + `08-technical/SECURITY_ASSESSMENT.md` |
+| Security | New device login notification (browser UUID) | July 2026 | `lib/services/deviceTracking.ts` + `operations/07-security-fraud.md` |
+| Instructor | Business card builder (PDF, print request) | July 2026 | `03-instructor/MARKETING.md` |
+| Documents | Signed Cloudinary URLs — raw URLs no longer returned to clients | August 2026 | `08-technical/SECURITY_ASSESSMENT.md` |
 
 ---
 
@@ -222,22 +233,25 @@ docs/DOCROLEBASE/
 - **Platform fee:** 3.6% of booking total
 - **Instructor payout:** 96.4% of lesson price (before Stripe fees)
 - **Slot hold duration:** 10 minutes
-- **Subscription trial:** 7 days free
+- **Subscription trial:** 14 days free (configurable via `BASIC_TRIAL_DAYS` env var)
 - **Payout frequency:** Every Tuesday (48-hour settlement)
 
 ---
 
 ## Status
 
-✅ All documentation up-to-date with code (July 2026)  
-✅ Blog platform complete (23 posts, tags, RSS)  
-✅ SEO infrastructure complete  
-✅ Security fixes applied  
-✅ TypeScript verification: 0 errors  
-✅ Production-ready
+✅ All documentation up-to-date with code (August 2026)
+✅ Blog platform complete (23 posts, tags, RSS)
+✅ SEO infrastructure complete
+✅ Security hardening: idle timeout + device tracking + new-device OTP
+✅ Instructor business card builder
+✅ Suburb-based instructor search
+✅ Shared SlotPicker component
+✅ TypeScript verification: 0 errors
+⏳ Pending: `add_login_device_and_card_orders` migration to activate LoginDevice + CardOrder tables
 
 ---
 
-**Last verified:** June 13, 2026  
-**Next review:** When new features added  
+**Last verified:** August 3, 2026
+**Next review:** When new features added
 **Maintained by:** Development Team

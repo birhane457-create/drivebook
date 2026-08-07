@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { TrendingUp, DollarSign, Calendar, Users, Award, XCircle } from 'lucide-react'
@@ -22,6 +22,7 @@ export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [period, setPeriod] = useState<'week' | 'month' | 'year' | 'all'>('month')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchAnalytics()
@@ -29,24 +30,38 @@ export default function AnalyticsPage() {
 
   const fetchAnalytics = async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch(`/api/analytics?period=${period}`)
       if (res.ok) {
         const data = await res.json()
         setAnalytics(data)
+      } else {
+        setError('Failed to load analytics')
       }
-    } catch (error) {
-      console.error('Failed to fetch analytics:', error)
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err)
+      setError('Failed to load analytics')
     } finally {
       setLoading(false)
     }
   }
 
-  if (loading || !analytics) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-12"><div className="text-center text-slate-400">Loading analytics...</div></div>
     )
   }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-12"><div className="text-center text-red-400">{error}</div></div>
+    )
+  }
+
+  if (!analytics) return null
+
+  const hasNoData = analytics.totalBookings === 0 && analytics.newClients === 0 && analytics.netEarnings === 0
 
   return (
     <div className="max-w-7xl mx-auto py-4 sm:py-8">
@@ -87,6 +102,13 @@ export default function AnalyticsPage() {
             </button>
           </div>
         </div>
+
+        {hasNoData && (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center mb-6">
+            <p className="text-slate-400 font-medium mb-2">No data yet</p>
+            <p className="text-sm text-slate-500">Analytics will appear here once you have completed bookings and clients.</p>
+          </div>
+        )}
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-sm">
@@ -133,10 +155,10 @@ export default function AnalyticsPage() {
               </div>
             </div>
             <p className="text-slate-400 text-sm">Average Rating</p>
-            <p className="text-3xl font-bold text-slate-100">{analytics.averageRating.toFixed(1)}</p>
+            <p className="text-3xl font-bold text-slate-100">{analytics.averageRating != null ? analytics.averageRating.toFixed(1) : ''}</p>
             <div className="flex gap-1 mt-2">
               {[...Array(5)].map((_, i) => (
-                <span key={i} className={i < Math.round(analytics.averageRating) ? 'text-amber-400' : 'text-slate-600'}>★</span>
+                <span key={i} className={i < Math.round(analytics.averageRating ?? 0) ? 'text-amber-400' : 'text-slate-600'}>★</span>
               ))}
             </div>
           </div>
@@ -205,6 +227,15 @@ export default function AnalyticsPage() {
                   {analytics.newClients > 0 
                     ? (analytics.totalBookings / analytics.newClients).toFixed(1) 
                     : '0'}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm text-slate-400">Commission Rate</span>
+                <span className="text-sm font-semibold text-slate-300">
+                  {analytics.commissionRate}% <span className="text-slate-500 font-normal">platform fee per booking</span>
                 </span>
               </div>
             </div>

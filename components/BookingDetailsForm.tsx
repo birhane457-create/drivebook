@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
 import { AU_STATES } from '@/lib/data/au-locations';
+import SlotPicker from '@/components/SlotPicker';
 
 interface AvailableSlot {
   time: string;
@@ -743,53 +744,20 @@ export default function BookingDetailsForm() {
 
                 {/* Time Selection */}
                 <div>
-                  <label htmlFor="time" className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
+                  <label className="block text-xs font-black text-slate-300 mb-1.5 uppercase tracking-wider">
                     Time *
                   </label>
-                  {!selectedDate ? (
-                    <p className="text-sm font-bold text-amber-400 bg-amber-950/40 border border-amber-900 rounded-xl px-4 py-3 shadow-[0_4px_0_0_#451a03]">
-                      ⚠️ Please select a date first
-                    </p>
-                  ) : isLoadingSlots ? (
-                    <p className="text-sm font-bold text-sky-400 bg-sky-950/40 border border-sky-900 rounded-xl px-4 py-3 animate-pulse shadow-[0_4px_0_0_#0c4a6e]">
-                      🔄 Loading available times...
-                    </p>
-                  ) : slotsError ? (
-                    <div className="bg-red-950/40 border-2 border-red-900 rounded-xl px-4 py-3 shadow-[0_4px_0_0_#450a0a]">
-                      <p className="text-sm font-bold text-red-400 mb-2">⚠️ {slotsError}</p>
-                      <button
-                        type="button"
-                        onClick={fetchAvailableSlots}
-                        className="text-xs font-black text-sky-400 hover:text-white uppercase tracking-wider transition-colors"
-                      >
-                        ↻ Try again
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative shadow-[0_4px_0_0_#1e293b] rounded-xl bg-slate-950">
-                      <select
-                        id="time"
-                        value={selectedTime}
-                        onChange={(e) => setSelectedTime(e.target.value)}
-                        aria-label="Select lesson time"
-                        aria-required="true"
-                        aria-invalid={!selectedTime}
-                        className="w-full px-4 py-3 bg-slate-950 border-2 border-slate-400 rounded-xl text-white font-black transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)]"
-                      >
-                        <option value="" className="bg-slate-950 font-bold text-slate-400">Select a time</option>
-                        {availableSlots.map(slot => (
-                          <option 
-                            key={slot.time} 
-                            value={slot.time}
-                            disabled={!slot.available}
-                            className="bg-slate-950 font-bold text-white disabled:text-slate-600"
-                          >
-                            {slot.time} {!slot.available ? '(Unavailable)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  <SlotPicker
+                    instructorId={instructor?.id ?? ''}
+                    date={selectedDate}
+                    duration={selectedDuration}
+                    value={selectedTime}
+                    onChange={setSelectedTime}
+                    variant="dark"
+                    scheduledTimes={scheduledBookings
+                      .filter(b => b.date === selectedDate)
+                      .map(b => b.time)}
+                  />
                 </div>
 
                 {/* Pickup Location */}

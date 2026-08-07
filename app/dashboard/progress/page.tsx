@@ -1,8 +1,9 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { TrendingUp, Star, Users, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 interface FeedbackSummary {
   totalLessonsWithFeedback: number;
@@ -26,8 +27,14 @@ export default function InstructorProgressPage() {
   const [data, setData] = useState<FeedbackSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [instructorTz, setInstructorTz] = useState(DEFAULT_TIMEZONE);
 
   useEffect(() => {
+    fetch('/api/instructor/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(s => { if (s?.timezone) setInstructorTz(resolveTimezone(s.timezone)); })
+      .catch(() => {});
+
     fetch('/api/instructor/lesson-feedback/summary')
       .then(r => r.ok ? r.json() : null)
       .then(d => setData(d))
@@ -147,7 +154,7 @@ export default function InstructorProgressPage() {
                       <div>
                         <p className="font-medium text-slate-100">{fb.clientName}</p>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          {new Date(fb.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {new Date(fb.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: instructorTz })}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">

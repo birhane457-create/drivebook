@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { sendSingleLessonReceipt, sendPackagePurchaseReceipt, sendWalletTopUpReceipt } from '@/lib/services/receipt-email';
@@ -13,6 +13,7 @@ import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-servic
 import { sendAlert } from '@/lib/services/alert-service';
 import Stripe from 'stripe';
 import { getDisplayName } from '@/lib/utils/account';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 
 export const dynamic = 'force-dynamic';
@@ -840,7 +841,7 @@ async function handleBookingPaymentSuccess(
             walletId: wallet.id,
             type: 'DEBIT',
             amount: booking.price,
-            description: `First lesson — ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} (booking #${bookingId})`,
+            description: `First lesson — ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE })} (booking #${bookingId})`,
             status: 'CONFIRMED',
           }
         });
@@ -1291,6 +1292,7 @@ async function handleSubscriptionUpdate(
 
     if (instructor?.user) {
       await emailService.sendGenericEmail({
+        from: 'DriveBook Payments <payments@drivebook.com.au>',
         to: instructor.user.email,
         subject: `${plan.name} subscription activated — DriveBook`,
         html: `
@@ -1376,11 +1378,12 @@ async function handleTrialEnding(
     const daysLeft = Math.ceil((new Date(trial_end * 1000).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     
     await emailService.sendGenericEmail({
+      from: 'DriveBook Payments <payments@drivebook.com.au>',
       to: instructor.user.email,
       subject: `Your trial ends in ${daysLeft} days`,
       html: `
         <h2>Your free trial is ending soon</h2>
-        <p>Your trial will end on ${new Date(trial_end * 1000).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}.</p>
+        <p>Your trial will end on ${new Date(trial_end * 1000).toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE })}.</p>
         <p>To continue using DriveBook, your payment method will be charged automatically.</p>
       `
     });
@@ -1487,6 +1490,7 @@ async function handleInvoicePaymentFailed(
 
   if (subscriptionRecord?.instructor?.user) {
     await emailService.sendGenericEmail({
+      from: 'DriveBook Payments <payments@drivebook.com.au>',
       to: subscriptionRecord.instructor.user.email,
       subject: 'Payment Failed',
       html: `

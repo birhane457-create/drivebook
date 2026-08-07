@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation';
+import { localDateTimeToUTC, timezoneFromState, resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     // PRO+ gate
     const instructor = await prisma.instructor.findUnique({
       where: { id: session.user.instructorId },
-      select: { subscriptionTier: true, hourlyRate: true, approvalStatus: true },
+      select: { subscriptionTier: true, hourlyRate: true, approvalStatus: true, timezone: true, state: true },
     });
     if (!instructor) return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
 
@@ -82,8 +83,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Build datetimes as UTC — avoids local TZ shifting on the Vercel UTC server
-    const startTime = new Date(`${data.date}T${data.time}:00.000Z`)
+    // Resolve the instructor's timezone — use stored value, fall back to state-derived, then Perth default
+    const instructorTimezone = resolveTimezone(instructor.timezone) !== DEFAULT_TIMEZONE
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor.state);
+
+    // Convert local date+time to UTC using instructor's actual timezone
+    const startTime = localDateTimeToUTC(data.date, data.time, instructorTimezone);
     if (isNaN(startTime.getTime())) {
       return NextResponse.json({ error: 'Invalid date or time format' }, { status: 400 })
     }

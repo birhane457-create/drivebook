@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { localDateTimeToUTC, resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 import { z } from 'zod';
 
 
@@ -22,10 +23,20 @@ export async function POST(req: NextRequest) {
     const invalidSlots = [];
     const now = new Date();
 
-    for (const slot of data.slots) {
-      // Parse date (YYYY-MM-DD) + time (HH:MM) as Perth wall-clock time (AWST = UTC+8).
-      // Using ISO 8601 with explicit offset avoids server-timezone ambiguity (Vercel = UTC).
-      const startDateTime = new Date(`${slot.date}T${slot.time}:00+08:00`);
+    const instructor = await prisma.instructor.findUnique({
+    where: { id: data.instructorId },
+    select: { timezone: true, state: true },
+  });
+  const instructorTimezone = instructor
+    ? resolveTimezone(instructor.timezone) !== DEFAULT_TIMEZONE
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor.state)
+    : DEFAULT_TIMEZONE;
+
+  for (const slot of data.slots) {
+      // Parse date (YYYY-MM-DD) + time (HH:MM) in instructor local time.
+      // Using localDateTimeToUTC avoids server-timezone ambiguity and supports national expansion.
+      const startDateTime = localDateTimeToUTC(slot.date, slot.time, instructorTimezone);
       const endDateTime = new Date(startDateTime.getTime() + slot.duration * 60 * 1000);
 
       // Clean up expired reservations for this instructor

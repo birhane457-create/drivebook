@@ -31,6 +31,7 @@ model User {
   instructor              Instructor?
   staffMember             StaffMember?
   deviceTokens            DeviceToken[]
+  loginDevices            LoginDevice[]
 }
 
 model Client {
@@ -174,6 +175,7 @@ model Instructor {
   pdaConfigs                PDATestConfig[]
   slotReservations          SlotReservation[]
   subscriptions             Subscription[]
+  cardOrders                CardOrder[]
   voiceLineRecord           TwilioPhoneNumber?  @relation("AssignedToInstructor")
 
   @@index([state, suburb])
@@ -834,4 +836,38 @@ model DeviceToken {
 
   @@index([userId])
   @@index([active])
+}
+
+model LoginDevice {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String   // hash of user-agent + IP
+  lastUsedAt  DateTime @default(now())
+  firstSeenAt DateTime @default(now())
+  ipAddress   String
+  userAgent   String
+  location    String?  // "Perth, WA" from IP geolocation (future)
+  trusted     Boolean  @default(false)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, fingerprint])
+  @@index([userId])
+  @@index([lastUsedAt])
+}
+
+model CardOrder {
+  id           String   @id @default(cuid())
+  instructorId String
+  quantity     Int
+  suburbs      String?
+  notes        String?
+  status       String   @default("PENDING") // PENDING | APPROVED | PRINTING | READY | DELIVERED | CANCELLED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  instructor Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@index([instructorId])
+  @@index([status])
 }

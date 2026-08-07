@@ -23,6 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +70,8 @@ export async function GET(
             profileImage: true,
             averageRating: true,
             totalReviews: true,
+            timezone: true,
+            state: true,
           },
         },
       },
@@ -128,7 +131,9 @@ export async function GET(
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
-            timeZone: 'Australia/Perth',
+            timeZone: booking.instructor?.timezone
+              ? resolveTimezone(booking.instructor.timezone)
+              : timezoneFromState(booking.instructor?.state),
           })
         : null,
       startTime: booking.startTime?.toISOString() ?? null,

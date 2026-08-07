@@ -84,7 +84,7 @@ Calculates a weighted score from 8 fields:
 
 | Field | Weight | Where to fix |
 |-------|--------|-------------|
-| Bio (≥30 chars) | 20% | `/dashboard/profile` |
+| Bio (≥75 words) | 20% | `/dashboard/profile` |
 | Profile photo | 15% | `/dashboard/profile` |
 | Base address | 15% | `/dashboard/settings` |
 | Service areas | 15% | `/dashboard/settings` |
@@ -138,7 +138,7 @@ Upcoming lesson count is shown as "Upcoming Lessons (N)" in the panel title belo
 
 Revenue card shows: daily average this month, daily average last month, % change.
 
-Payout card shows: next payout date (e.g., "Fri, 13 Jun"), days until payout ("in 2 days"), pending transfer amount, recent 3 payouts with dates and status.
+Payout card shows: next payout date (e.g., "Tue, 16 Jun"), days until payout ("in 2 days"), pending transfer amount, recent 3 payouts with dates and status.
 
 ---
 
@@ -180,7 +180,7 @@ sdfdsfdsd           Wed, 17 June, 09:00 am - 10:30 am · 90 min
 Displays next payout date, pending amount, and recent payout history on the main dashboard.
 
 **What it shows:**
-- Next payout date (e.g., "Fri, 13 Jun")
+- Next payout date (e.g., "Tue, 16 Jun")
 - Days until next payout ("in 2 days")
 - Pending transfer amount (if any processing)
 - Count of payouts being processed
@@ -195,9 +195,9 @@ Displays next payout date, pending amount, and recent payout history on the main
 - Payout method (stripe_connect, bank, manual)
 
 **Next payout estimate logic:**
-- If Stripe: Add 7 days to last payout, adjust to next Friday
+- If Stripe: Add 7 days to last payout, adjust to next Tuesday
 - If Bank/Manual: Add 7 days to last payout
-- If no history: Next Friday from today
+- If no history: Next Tuesday from today
 
 **Error handling:**
 - Shows friendly error card if API fails
@@ -386,8 +386,8 @@ Changes to working hours are saved via `PUT /api/instructor/settings` (same endp
 **API:** `GET/PUT /api/instructor/settings`
 
 Sections (collapsible):
-- **Pricing** — hourly rate
-- **Service Area** — radius in km
+- **Pricing** — hourly rate; info box explaining DriveBook funds package discounts (payout unaffected)
+- **Service Area** — suburb picker (primary, exact match), base address, fallback radius km
 - **Booking Preferences** — allowed durations, buffer between bookings (10/15/20 min), optional travel time
 - **Working Hours** — same data as Availability page, editable here too
 - **Custom Lesson Packages** — PDA test packages, special lessons with custom duration and price
@@ -516,6 +516,7 @@ Static help content covering:
 - [SUBSCRIPTION_TIERS.md](./SUBSCRIPTION_TIERS.md) — Tier features and gates
 - [PDA_TESTS.md](./PDA_TESTS.md) — PDA test scheduling and result tracking
 - [SETTINGS.md](./SETTINGS.md) — Settings and availability configuration
+- [MARKETING.md](./MARKETING.md) — Marketing flyer + business card builder
 
 ### Key components on the dashboard
 

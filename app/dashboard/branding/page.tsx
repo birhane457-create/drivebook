@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -8,6 +8,18 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 
+// ── Instructor profile shape returned by /api/instructor/profile ─────────────
+interface InstructorProfile {
+  id: string
+  name: string
+  phone: string
+  subscriptionTier: string | null
+  accountType: 'INDIVIDUAL' | 'BUSINESS' | null
+  customSlug: string | null
+  customDomain: string | null
+  showBrandingOnBookingPage: boolean
+  hourlyRate: number | null
+}
 export default function BrandingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -16,7 +28,7 @@ export default function BrandingPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
-  const [instructor, setInstructor] = useState<any>(null);
+  const [instructor, setInstructor] = useState<InstructorProfile | null>(null);
   const [brandLogo, setBrandLogo] = useState('');
   const [brandColorPrimary, setBrandColorPrimary] = useState('#3B82F6');
   const [brandColorSecondary, setBrandColorSecondary] = useState('#10B981');
@@ -70,7 +82,7 @@ export default function BrandingPage() {
         setLogoPreview(d.brandLogo || '');
         setDomainVerified(d.domainVerified || false);
         setDomainVerifiedAt(d.domainVerifiedAt || null);
-        setInstructor((prev: any) => ({ ...prev, subscriptionTier: d.subscriptionTier, accountType: d.accountType ?? 'INDIVIDUAL' }));
+        setInstructor(prev => prev ? { ...prev, subscriptionTier: d.subscriptionTier, accountType: d.accountType ?? 'INDIVIDUAL' } : null);
         setBusinessName(d.businessName || '');
 
         // Slug (separate field)
@@ -173,34 +185,38 @@ export default function BrandingPage() {
       const tier = instructor?.subscriptionTier;
       const isStudio = tier === 'STUDIO' || tier === 'BUSINESS';
 
-      const brandRes = await fetch('/api/instructor/branding', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brandLogo: logoUrl,
-          brandColorPrimary,
-          brandColorSecondary,
-          showBrandingOnBookingPage,
-          customSlug: slug || null,
-          customDomain: isStudio ? (customDomain || null) : null,
-          businessName: businessName.trim() || null,
+      const [brandRes, profileRes] = await Promise.all([
+        fetch('/api/instructor/branding', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            brandLogo: logoUrl,
+            brandColorPrimary,
+            brandColorSecondary,
+            showBrandingOnBookingPage,
+            customSlug: slug || null,
+            customDomain: isStudio ? (customDomain || null) : null,
+            businessName: businessName.trim() || null,
+          }),
         }),
-      });
-      if (!brandRes.ok) throw new Error((await brandRes.json()).error || 'Failed to save branding');
+        fetch('/api/instructor/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: instructor?.name || '',
+            phone: instructor?.phone || '',
+            whatsapp: whatsapp || null,
+            instagram: instagram || null,
+            facebook: facebook || null,
+            yearsExperience: yearsExperience ? parseInt(yearsExperience) : null,
+          }),
+        }),
+      ]);
 
-      const profileRes = await fetch('/api/instructor/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: instructor?.name || '',
-          phone: instructor?.phone || '',
-          whatsapp: whatsapp || null,
-          instagram: instagram || null,
-          facebook: facebook || null,
-          yearsExperience: yearsExperience ? parseInt(yearsExperience) : null,
-        }),
-      });
-      if (!profileRes.ok) throw new Error('Failed to save social links');
+      const errors: string[] = [];
+      if (!brandRes.ok) errors.push((await brandRes.json()).error || 'Failed to save branding');
+      if (!profileRes.ok) errors.push('Failed to save social links');
+      if (errors.length > 0) throw new Error(errors.join(' · '));
 
       setMessage('All settings saved!');
       setBrandLogo(logoUrl);

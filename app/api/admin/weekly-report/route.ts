@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -183,7 +184,7 @@ async function buildReport(): Promise<WeeklyReport> {
     period: {
       from: weekStart.toISOString(),
       to: now.toISOString(),
-      label: `Week of ${weekStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Perth' })}`,
+      label: `Week of ${weekStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: DEFAULT_TIMEZONE })}`,
     },
     revenue: { thisWeek: tw, lastWeek: lw, changePercent: revenueChange },
     bookings: {
@@ -269,7 +270,7 @@ export async function POST(req: NextRequest) {
     <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:24px;margin-bottom:16px;">
       <p style="margin:0 0 4px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">DriveBook</p>
       <h1 style="margin:0 0 4px;font-size:22px;font-weight:700;color:#f1f5f9;">Weekly Executive Report</h1>
-      <p style="margin:0;font-size:13px;color:#64748b;">${report.period.label} · Generated ${new Date(report.generatedAt).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })}</p>
+      <p style="margin:0;font-size:13px;color:#64748b;">${report.period.label} · Generated ${new Date(report.generatedAt).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: DEFAULT_TIMEZONE })}</p>
     </div>
 
     <!-- Health Score -->
@@ -351,7 +352,7 @@ export async function POST(req: NextRequest) {
 
     <!-- Footer -->
     <p style="text-align:center;font-size:11px;color:#334155;margin-top:24px;">
-      DriveBook Admin · Auto-generated report · ${new Date(report.generatedAt).toLocaleString('en-AU', { timeZone: 'Australia/Perth' })}
+      DriveBook Admin · Auto-generated report · ${new Date(report.generatedAt).toLocaleString('en-AU', { timeZone: DEFAULT_TIMEZONE })}
     </p>
   </div>
 </body>

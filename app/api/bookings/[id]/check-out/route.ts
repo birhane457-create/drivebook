@@ -67,9 +67,14 @@ export async function POST(
       );
     }
 
-    // Get booking details
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
+    // Get booking details — scope instructor fetch to their own bookings to prevent IDOR.
+    // For clients, fetch without scope then verify client.userId below.
+    const bookingWhere = (userRole === 'INSTRUCTOR' && instructorId)
+      ? { id: bookingId, instructorId }
+      : { id: bookingId };
+
+    const booking = await prisma.booking.findFirst({
+      where: bookingWhere,
       include: {
         instructor: { select: { name: true, phone: true } },
         client: { select: { name: true, phone: true, userId: true } },
@@ -80,21 +85,17 @@ export async function POST(
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    // 🔴 CRITICAL FIX #1: Authorization check
-    // Verify user owns this booking (as client OR instructor)
+    // Authorization — for client callers verify ownership (instructor scope handled by WHERE above)
     const isInstructor = userRole === 'INSTRUCTOR';
     const isClient = userRole === 'CLIENT';
 
-    if (isInstructor && booking.instructorId !== instructorId) {
-      return NextResponse.json({ 
-        error: 'Forbidden - This booking belongs to another instructor' 
-      }, { status: 403 });
+    // Only instructors and clients can check out — admins must not bypass ownership
+    if (!isInstructor && !isClient) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (isClient && booking.client.userId !== userId) {
-      return NextResponse.json({ 
-        error: 'Forbidden - This booking belongs to another client' 
-      }, { status: 403 });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Check if checked in
@@ -102,12 +103,37 @@ export async function POST(
       return NextResponse.json({ error: 'Must check in first' }, { status: 400 });
     }
 
-    // Calculate actual duration
+    // Checkout time validation — fraud prevention
     const checkOutTime = new Date();
-    const actualDuration = Math.round(
-      (checkOutTime.getTime() - new Date(booking.checkInTime).getTime()) / (1000 * 60)
-    );
+    const minutesSinceCheckIn = (checkOutTime.getTime() - new Date(booking.checkInTime).getTime()) / (1000 * 60);
+    const hoursSinceCheckIn = minutesSinceCheckIn / 60;
 
+    // Block checkout less than 5 minutes after check-in (prevents instant fake completions)
+    if (minutesSinceCheckIn < 5) {
+      return NextResponse.json({
+        error: `Cannot check out yet — only ${Math.round(minutesSinceCheckIn)} minute(s) since check-in. Minimum lesson duration is 5 minutes.`,
+        minutesSinceCheckIn: Math.round(minutesSinceCheckIn),
+      }, { status: 400 });
+    }
+
+    // Block checkout more than 24 hours after check-in (stale/forgotten check-in)
+    if (hoursSinceCheckIn > 24) {
+      return NextResponse.json({
+        error: `Check-in was ${Math.round(hoursSinceCheckIn)} hours ago. Please contact support to resolve this booking.`,
+        requiresSupport: true,
+        hoursSinceCheckIn: Math.round(hoursSinceCheckIn),
+      }, { status: 400 });
+    }
+
+    // Log early checkout if instructor checks out in less than 50% of scheduled duration
+    const scheduledDurationMinutes = booking.endTime && booking.startTime
+      ? (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60)
+      : null;
+    if (scheduledDurationMinutes && minutesSinceCheckIn < scheduledDurationMinutes * 0.5) {
+      console.warn(`[check-out] Early checkout: booking ${booking.id}, scheduled ${scheduledDurationMinutes}min, actual ${Math.round(minutesSinceCheckIn)}min (${Math.round(minutesSinceCheckIn / scheduledDurationMinutes * 100)}%)`);
+    }
+
+    const actualDuration = Math.round(minutesSinceCheckIn);
     const checkOutBy = isInstructor ? 'instructor' : 'client';
 
     // 🔴 CRITICAL FIX #2 & #3: Atomic checkout with idempotency
@@ -154,18 +180,12 @@ export async function POST(
       });
 
       if (existingTransaction) {
-        // Update existing transaction to COMPLETED
         await (tx as any).transaction.update({
           where: { id: existingTransaction.id },
-          data: {
-            status: 'COMPLETED',
-            processedAt: new Date()
-          }
+          data: { status: 'COMPLETED', processedAt: new Date() }
         });
-        console.log(`✅ Transaction updated to COMPLETED for booking ${bookingId}`);
       } else {
-        // Fallback: Create transaction if it doesn't exist (shouldn't happen)
-        console.warn(`⚠️ Transaction missing for booking ${bookingId}, creating now`);
+        console.warn(`[check-out] Transaction missing for booking ${bookingId}, creating now`);
         
         const { PaymentService } = await import('@/lib/services/payment');
         const paymentService = new PaymentService();
@@ -198,20 +218,18 @@ export async function POST(
       return updated;
     });
 
-    console.log(`✅ Check-out completed for booking ${bookingId}`);
-
-    // 🔴 FIX #5: SMS sending non-blocking
-    // Don't await SMS - send asynchronously
+    // Send SMS non-blocking — only if phone is available
     const otherPartyPhone = isInstructor ? booking.client.phone : booking.instructor.phone;
     const checkedOutName = isInstructor ? booking.instructor.name : booking.client.name;
 
-    smsService.sendSMS({
-      to: otherPartyPhone,
-      message: `${checkedOutName} has checked out. Lesson completed. Duration: ${actualDuration} minutes. Please leave a review!`,
-    }).catch(error => {
-      console.error('Failed to send checkout SMS:', error);
-      // Don't fail the checkout if SMS fails
-    });
+    if (otherPartyPhone) {
+      smsService.sendSMS({
+        to: otherPartyPhone,
+        message: `${checkedOutName} has checked out. Lesson completed. Duration: ${actualDuration} minutes. Please leave a review!`,
+      }).catch(error => {
+        console.error('Failed to send checkout SMS:', error);
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -81,8 +81,8 @@ function formatAge(minutes: number | null): string {
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
+  // Display in browser's local timezone — admin may be anywhere in Australia
   return new Date(iso).toLocaleString('en-AU', {
-    timeZone: 'Australia/Perth',
     day: '2-digit', month: 'short',
     hour: '2-digit', minute: '2-digit',
   });
@@ -130,7 +130,7 @@ export default function CronJobsPage() {
             <h1 className="text-2xl font-bold text-slate-100">Cron Jobs</h1>
             <p className="text-sm text-slate-500 mt-1">
               Automated background jobs — last refresh{' '}
-              {lastRefreshed ? lastRefreshed.toLocaleTimeString('en-AU', { timeZone: 'Australia/Perth' }) : '…'}
+              {lastRefreshed ? lastRefreshed.toLocaleTimeString('en-AU') : '…'}
             </p>
           </div>
           <button

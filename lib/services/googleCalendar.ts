@@ -1,5 +1,6 @@
 import { google } from 'googleapis'
 import { prisma } from '../prisma'
+import { resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 import { addMinutes, parseISO } from 'date-fns'
 import { signOAuthState } from '../oauth-state'
 
@@ -224,16 +225,19 @@ export class GoogleCalendarService {
         select: { googleCalendarId: true }
       })
 
+      const instr = await prisma.instructor.findUnique({ where: { id: instructorId }, select: { timezone: true, state: true } })
+      const tz = resolveTimezone(instr?.timezone ?? timezoneFromState(instr?.state))
+
       const event = {
         summary: `Driving Lesson - ${booking.clientName}`,
         description: `Client: ${booking.clientName}\nPhone: ${booking.clientPhone}\nPickup: ${booking.pickupAddress || 'N/A'}\nNotes: ${booking.notes || 'N/A'}\n\nBooking ID: ${booking.id}`,
         start: {
           dateTime: booking.startTime.toISOString(),
-          timeZone: 'Australia/Perth'
+          timeZone: tz
         },
         end: {
           dateTime: booking.endTime.toISOString(),
-          timeZone: 'Australia/Perth'
+          timeZone: tz
         },
         location: booking.pickupAddress,
         colorId: '9' // Blue color for lessons
@@ -268,16 +272,19 @@ export class GoogleCalendarService {
         select: { googleCalendarId: true }
       })
 
+      const instr2 = await prisma.instructor.findUnique({ where: { id: instructorId }, select: { timezone: true, state: true } })
+      const tz2 = resolveTimezone(instr2?.timezone ?? timezoneFromState(instr2?.state))
+
       const event = {
         summary: `Driving Lesson - ${booking.clientName}`,
         description: `Client: ${booking.clientName}\nPhone: ${booking.clientPhone}\nPickup: ${booking.pickupAddress || 'N/A'}\nNotes: ${booking.notes || 'N/A'}`,
         start: {
           dateTime: booking.startTime.toISOString(),
-          timeZone: 'Australia/Perth'
+          timeZone: tz2
         },
         end: {
           dateTime: booking.endTime.toISOString(),
-          timeZone: 'Australia/Perth'
+          timeZone: tz2
         },
         location: booking.pickupAddress
       }

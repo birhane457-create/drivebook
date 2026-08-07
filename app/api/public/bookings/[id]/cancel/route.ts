@@ -279,13 +279,20 @@ export async function POST(
       }
     }
 
+    // Resolve instructor timezone for waiting-list notification
+    const cancelTz = booking.instructor
+      ? booking.instructor.timezone
+        ? (await import('@/lib/utils/timezone')).resolveTimezone(booking.instructor.timezone)
+        : (await import('@/lib/utils/timezone')).timezoneFromState(booking.instructor.state)
+      : (await import('@/lib/utils/timezone')).DEFAULT_TIMEZONE;
+
     // Waiting list — notify first person waiting (non-fatal, fire-and-forget)
     void import('@/lib/services/waiting-list-notify').then(({ notifyWaitingList }) =>
       notifyWaitingList({
         instructorId: booking.instructorId,
         slotDate: booking.startTime?.toISOString() ?? null,
         slotTime: booking.startTime
-          ? booking.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Perth' })
+          ? booking.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: cancelTz })
           : null,
       })
     )

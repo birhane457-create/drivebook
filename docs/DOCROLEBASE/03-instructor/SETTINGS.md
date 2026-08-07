@@ -200,6 +200,25 @@ Link to `/dashboard/subscription` — manage tier, billing, and payment method.
 
 ---
 
+## Security — Recognised Devices
+
+**Route:** `/dashboard/settings/security`
+
+Shows all browsers that have previously signed in to the account. Instructors can remove individual devices or remove all other devices in one action.
+
+**What "recognised" means:** A device record is created the first time a new browser signs in. It records the browser/OS, last-seen timestamp, and a hashed identifier. It does not represent a live session — a browser may have a recognised-device record but no active session, or an active session with no recognised-device record (if the migration is pending).
+
+**Remove a device:** Deletes the `LoginDevice` record. The next time that browser signs in, it is treated as new and triggers a security notification email. This does not immediately end any existing session on that browser — JWT sessions remain valid until they expire.
+
+**Remove all other devices:** Same effect as above, applied to all browsers except the current one.
+
+**API:**
+- `GET /api/instructor/devices` — list devices (sends `X-Device-Token` header to mark current)
+- `DELETE /api/instructor/devices/[id]` — remove one device (ownership-checked with `userId`)
+- `DELETE /api/instructor/devices` — remove all except current (current determined server-side from `X-Device-Token`)
+
+---
+
 ## Related
 
 - [BRANDING.md](./BRANDING.md) — Logo, colors, subdomain

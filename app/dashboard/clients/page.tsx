@@ -60,13 +60,10 @@ export default function ClientsPage() {
   }, [search])
 
   // Re-fetch when debounced search changes (reset to page 1)
+  // This also handles the initial mount fetch (debouncedSearch starts as '')
   useEffect(() => {
     fetchClients(1, debouncedSearch)
   }, [debouncedSearch])
-
-  useEffect(() => {
-    fetchClients(1)
-  }, [])
 
   const fetchClients = async (page: number = 1, searchTerm: string = debouncedSearch) => {
     setLoading(true)
@@ -74,6 +71,13 @@ export default function ClientsPage() {
       const params = new URLSearchParams({ page: String(page), limit: '25' })
       if (searchTerm) params.set('search', searchTerm)
       const res = await fetch(`/api/clients?${params}`)
+
+      if (!res.ok) {
+        console.error('API error:', res.status)
+        setClients([])
+        return
+      }
+
       const data = await res.json()
       
       // Check if data has pagination structure
@@ -83,9 +87,6 @@ export default function ClientsPage() {
       } else if (Array.isArray(data)) {
         // Fallback for old format
         setClients(data)
-      } else if (data.error) {
-        console.error('API error:', data.error)
-        setClients([])
       } else {
         console.error('Unexpected response format:', data)
         setClients([])

@@ -8,18 +8,19 @@
  */
 
 import { emailService } from './email';
+import { formatLocalDate, formatLocalTime, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 const BASE_URL = process.env.NEXTAUTH_URL || 'https://drivebook.com.au';
 const SUPPORT_EMAIL = process.env.ADMIN_EMAIL || 'support@drivebook.com.au';
 
-// All user-visible dates/times are displayed in Australian Western Standard Time
-const AU_TZ = 'Australia/Perth';
+// Default timezone for receipts (use platform default until per-instructor TZ is implemented)
+const AU_TZ = DEFAULT_TIMEZONE;
 
 function fmtDate(d: Date, opts: Intl.DateTimeFormatOptions = {}): string {
-  return d.toLocaleDateString('en-AU', { timeZone: AU_TZ, ...opts });
+  return formatLocalDate(d, AU_TZ, opts);
 }
 function fmtTime(d: Date, opts: Intl.DateTimeFormatOptions = {}): string {
-  return d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: AU_TZ, ...opts });
+  return formatLocalTime(d, AU_TZ, opts as any);
 }
 
 function receiptNumber(id: string): string {
@@ -178,6 +179,7 @@ export async function sendPackagePurchaseReceipt(data: {
       ${footer(rn, data.bookingId)}`;
 
   await emailService.sendGenericEmail({
+    from: 'DriveBook Payments <payments@drivebook.com.au>',
     to: data.clientEmail,
     subject: `Receipt ${rn} &mdash; ${data.packageHours}-Hour Package &middot; ${fmt(data.total)}`,
     html,
@@ -246,6 +248,7 @@ export async function sendWalletLessonReceipt(data: {
       ${footer(rn, data.bookingId)}`;
 
   await emailService.sendGenericEmail({
+    from: 'DriveBook Payments <payments@drivebook.com.au>',
     to: data.clientEmail,
     subject: `Receipt ${rn} &mdash; Lesson Booked &middot; ${fmtDate(data.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}`,
     html,
@@ -316,6 +319,7 @@ export async function sendSingleLessonReceipt(data: {
       ${footer(rn, data.bookingId)}`;
 
   await emailService.sendGenericEmail({
+    from: 'DriveBook Payments <payments@drivebook.com.au>',
     to: data.clientEmail,
     subject: `Receipt ${rn} &mdash; Driving Lesson &middot; ${fmt(data.total)}`,
     html,
@@ -374,6 +378,7 @@ export async function sendWalletTopUpReceipt(data: {
       ${footer(rn)}`;
 
   await emailService.sendGenericEmail({
+    from: 'DriveBook Payments <payments@drivebook.com.au>',
     to: data.clientEmail,
     subject: `Receipt ${rn} &mdash; Wallet Top-Up &middot; +${fmt(data.amountAdded)}`,
     html,
@@ -447,6 +452,7 @@ export async function sendCancellationReceipt(data: {
       ${footer(rn)}`;
 
   await emailService.sendGenericEmail({
+    from: 'DriveBook Payments <payments@drivebook.com.au>',
     to: data.clientEmail,
     subject: `Booking Cancelled &mdash; ${fmtDate(data.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}${hasRefund ? ` &middot; ${fmt(data.refundAmount)} refunded` : ''}`,
     html,
@@ -502,6 +508,7 @@ export async function sendAdminCreditReceipt(data: {
       ${footer(rn)}`;
 
   await emailService.sendGenericEmail({
+    from: 'DriveBook Payments <payments@drivebook.com.au>',
     to: data.clientEmail,
     subject: `Wallet Credit &mdash; +${fmt(data.amountAdded)} added to your account`,
     html,
@@ -561,6 +568,7 @@ export async function sendAdminDeductionReceipt(data: {
       ${footer(rn)}`;
 
   await emailService.sendGenericEmail({
+    from: 'DriveBook Payments <payments@drivebook.com.au>',
     to: data.clientEmail,
     subject: `Wallet Adjustment &mdash; -${fmt(data.amountDeducted)} deducted from your account`,
     html,

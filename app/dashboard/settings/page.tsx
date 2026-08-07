@@ -5,6 +5,8 @@ import { Save, DollarSign, Clock, MapPin, Plus, X, ChevronDown, ChevronUp, Check
 import GoogleCalendarSettings from '@/components/GoogleCalendarSettings'
 import VoiceLineDisplay from '@/components/instructor/VoiceLineDisplay'
 import SuburbAutocomplete from '@/components/instructor/SuburbAutocomplete'
+import ServiceAreaPicker, { parseServiceAreas, serialiseServiceAreas, type ServiceSuburb } from '@/components/instructor/ServiceAreaPicker'
+import { AU_TIMEZONES, DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 
 interface TimeSlot {
   start: string
@@ -73,6 +75,8 @@ export default function SettingsPage() {
     travelTimeMinutes: number
     pdaConfigs: PDAConfig[]
     acceptingBookings: boolean
+    serviceAreas: ServiceSuburb[]
+    timezone: string
   }>({
     hourlyRate: 60,
     serviceRadiusKm: 20,
@@ -95,6 +99,8 @@ export default function SettingsPage() {
     travelTimeMinutes: 10,
     pdaConfigs: [],
     acceptingBookings: true,
+    serviceAreas: [],
+    timezone: DEFAULT_TIMEZONE,
   })
 
   // Load test centres on mount
@@ -206,6 +212,8 @@ export default function SettingsPage() {
             travelTimeMinutes: data.travelTimeMinutes || 10,
             pdaConfigs: pdaConfigs,
             acceptingBookings: data.acceptingBookings !== false,
+            serviceAreas: parseServiceAreas(data.serviceAreas),
+            timezone: resolveTimezone(data.timezone) || timezoneFromState(data.state ?? ''),
           })
         }
       } catch (error) {
@@ -298,6 +306,8 @@ export default function SettingsPage() {
       enableTravelTime: formData.enableTravelTime,
       travelTimeMinutes: formData.travelTimeMinutes,
       acceptingBookings: formData.acceptingBookings,
+      serviceAreas: serialiseServiceAreas(formData.serviceAreas),
+      timezone: formData.timezone,
     }
     
     
@@ -483,36 +493,97 @@ export default function SettingsPage() {
                   className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* Package discount attribution note */}
+              <div className="mt-4 bg-sky-900/20 border border-sky-700/40 rounded-xl px-4 py-3 text-sm text-sky-300 space-y-1">
+                <p className="font-semibold text-sky-200">💡 How package discounts work</p>
+                <p>
+                  DriveBook offers bulk-lesson discounts (e.g. 6, 10, or 15 hours) to students as a platform incentive.
+                  These discounts are <strong>funded by DriveBook</strong> — not by you.
+                </p>
+                <p>
+                  Your payout is always calculated on your <strong>full hourly rate</strong>, regardless of any package discount the student received.
+                  You earn the same whether a student books 1 hour or 15.
+                </p>
+              </div>
             </div>
 
             {/* Service Area Section */}
             <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-100">
+              <h2 className="text-xl font-bold mb-1 flex items-center gap-2 text-slate-100">
                 <MapPin className="h-5 w-5" />
                 Service Area
               </h2>
-              
-              <div className="space-y-4">
+              <p className="text-sm text-slate-400 mb-4">
+                Add the suburbs you serve. Students searching those suburbs will find you first.
+                If no suburbs are listed, you&apos;ll appear based on your km radius.
+              </p>
+
+              <div className="space-y-5">
+                {/* Base address */}
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-slate-200">Service Radius (km)</label>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">Base Suburb (your home base)</label>
+                  <SuburbAutocomplete
+                    value={formData.baseAddress}
+                    onChange={(address) => setFormData(prev => ({ ...prev, baseAddress: address }))}
+                    placeholder="Search suburb or postcode… e.g. Maylands or 6051"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Suburb name shown publicly. Precise address kept private.</p>
+                </div>
+
+                {/* Served suburbs */}
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">
+                    Suburbs You Serve
+                    {formData.serviceAreas.length > 0 && (
+                      <span className="ml-2 text-xs font-normal text-sky-400">{formData.serviceAreas.length} suburb{formData.serviceAreas.length !== 1 ? 's' : ''}</span>
+                    )}
+                  </label>
+                  <ServiceAreaPicker
+                    value={formData.serviceAreas}
+                    onChange={(suburbs) => setFormData(prev => ({ ...prev, serviceAreas: suburbs }))}
+                  />
+                </div>
+
+                {/* Radius — secondary reference */}
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">
+                    Fallback Radius (km)
+                    <span className="ml-2 text-xs font-normal text-slate-500">— used only if no suburbs are listed above</span>
+                  </label>
                   <input
                     type="number"
                     value={formData.serviceRadiusKm}
                     onChange={(e) => setFormData(prev => ({ ...prev, serviceRadiusKm: parseInt(e.target.value) }))}
                     min="1"
-                    className="w-full px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    max="100"
+                    className="w-32 px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-slate-400 mt-1">Maximum distance you're willing to travel for pickups</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Air-distance estimate only — road distance may differ. Suburbs list is more accurate.
+                  </p>
                 </div>
 
+                {/* Timezone */}
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-slate-200">Base Address</label>
-                  <SuburbAutocomplete
-                    value={formData.baseAddress}
-                    onChange={(address) => setFormData(prev => ({ ...prev, baseAddress: address }))}
-                    placeholder="Search suburb or postcode... e.g. Maylands or 6051"
-                  />
-                  <p className="text-xs text-slate-400 mt-1">Your home base  suburb name shown publicly, precise address kept private</p>
+                  <label className="block text-sm font-medium mb-2 text-slate-200">
+                    Your Timezone
+                    <span className="ml-2 text-xs font-normal text-slate-500">— used for scheduling, availability, and notifications</span>
+                  </label>
+                  <select
+                    value={formData.timezone}
+                    onChange={(e) => setFormData(prev => ({ ...prev, timezone: e.target.value }))}
+                    className="w-full max-w-xs px-3 py-2 border border-slate-700 bg-slate-950 text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    {AU_TIMEZONES.map(tz => (
+                      <option key={tz.value} value={tz.value}>
+                        {tz.label} — {tz.state}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Important for instructors outside Western Australia.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1215,16 +1286,16 @@ export default function SettingsPage() {
             {/* Cancellation Policy */}
             <div className="bg-slate-900 rounded-3xl shadow-sm border border-slate-800 p-6">
               <h2 className="text-xl font-bold mb-1 flex items-center gap-2 text-slate-100">
-                <span className="text-base">??</span>
+                <span className="text-base">📋</span>
                 Platform Cancellation Policy
               </h2>
-              <p className="text-xs text-slate-500 mb-4">DriveBook standard policy  applied on all bookings.</p>
+              <p className="text-xs text-slate-500 mb-4">DriveBook standard policy applied on all bookings.</p>
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between py-2 border-b border-slate-800"><span className="text-sm text-slate-300"> 48+ hours notice</span><span className="text-sm font-medium text-slate-200">Full refund (100%)</span></div>
-                <div className="flex items-center justify-between py-2 border-b border-slate-800"><span className="text-sm text-slate-300"> 2448 hours notice</span><span className="text-sm font-medium text-slate-200">50% refund</span></div>
-                <div className="flex items-center justify-between py-2"><span className="text-sm text-slate-300">? Under 24 hours</span><span className="text-sm font-medium text-slate-200">No refund</span></div>
+                <div className="flex items-center justify-between py-2 border-b border-slate-800"><span className="text-sm text-slate-300">✅ 48+ hours notice</span><span className="text-sm font-medium text-slate-200">Full refund (100%)</span></div>
+                <div className="flex items-center justify-between py-2 border-b border-slate-800"><span className="text-sm text-slate-300">⚠️ 24–48 hours notice</span><span className="text-sm font-medium text-slate-200">50% refund</span></div>
+                <div className="flex items-center justify-between py-2"><span className="text-sm text-slate-300">❌ Under 24 hours</span><span className="text-sm font-medium text-slate-200">No refund</span></div>
               </div>
-              <p className="text-xs text-slate-500 mt-4">Students see this under Before You Book on your booking page.</p>
+              <p className="text-xs text-slate-500 mt-4">Students see this under &quot;Before You Book&quot; on your booking page.</p>
             </div>
 
             {/* Save Button */}

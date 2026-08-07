@@ -36,7 +36,7 @@ railway init
 railway variables set DATABASE_URL="your_database_url"
 railway variables set TWILIO_ACCOUNT_SID="your_sid"
 railway variables set TWILIO_AUTH_TOKEN="your_token"
-railway variables set TWILIO_PHONE_NUMBER="+1234567890"
+railway variables set TWILIO_PHONE_NUMBER="+61400000000"
 railway variables set COPILOT_BASE_URL="https://drivebook.vercel.app"
 railway variables set ALLOWED_ORIGINS="https://drivebook.vercel.app"
 railway variables set NODE_ENV="production"
@@ -79,7 +79,7 @@ In Render dashboard, add:
 DATABASE_URL=your_database_url
 TWILIO_ACCOUNT_SID=your_sid
 TWILIO_AUTH_TOKEN=your_token
-TWILIO_PHONE_NUMBER=+1234567890
+TWILIO_PHONE_NUMBER=+61400000000
 COPILOT_BASE_URL=https://drivebook.vercel.app
 ALLOWED_ORIGINS=https://drivebook.vercel.app
 NODE_ENV=production
@@ -108,7 +108,7 @@ docker run -d \
   -e DATABASE_URL="your_database_url" \
   -e TWILIO_ACCOUNT_SID="your_sid" \
   -e TWILIO_AUTH_TOKEN="your_token" \
-  -e TWILIO_PHONE_NUMBER="+1234567890" \
+  -e TWILIO_PHONE_NUMBER="+61400000000" \
   -e COPILOT_BASE_URL="https://drivebook.vercel.app" \
   -e ALLOWED_ORIGINS="https://drivebook.vercel.app" \
   -e NODE_ENV="production" \

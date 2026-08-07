@@ -29,7 +29,7 @@
 | C2 | Lesson reminders cron | Students miss reminders | ✅ Done — `notifyLessonReminderInstructor` + `notifyLessonReminderStudent` fully wired |
 | C3 | Client review UI missing | No feedback collection | ✅ Done — `ReviewModal`, `GET /api/client/pending-reviews`, "Leave Review" button on bookings page |
 | C4 | Fake testimonials on `/teach-with-drivebook` | Damages credibility | ✅ Done — replaced with honest "Early Access" section |
-| C5 | `ABN: [Your ABN]` placeholder in footer | Legal non-compliance | ⏳ Owner to fix — add real ABN to `app/about/page.tsx` footer |
+| C5 | `ABN: [Your ABN]` placeholder in footer | Legal non-compliance | ✅ Done — ABN 23 806 069 420 set in terms, instructor-terms, invoice components |
 
 **Only C1 and C5 remain open. C1 is a 5-minute env var change.**
 

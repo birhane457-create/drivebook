@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+﻿import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -19,7 +19,6 @@ export default async function SubscriptionPage() {
       subscriptions: {
         where: { status: { in: ['TRIAL', 'ACTIVE', 'EXPIRED'] } },
         orderBy: { createdAt: 'desc' },
-        take: 1,
       },
     },
   });
@@ -33,8 +32,6 @@ export default async function SubscriptionPage() {
   const daysLeftInTrial = instructor.trialEndsAt
     ? Math.max(0, Math.ceil((new Date(instructor.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
-
-  const plan = SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier];
 
   // Get live commission rate from DB (not hardcoded from config)
   const commissionRate = await getCommissionRate(instructor.subscriptionTier || 'BASIC');
@@ -154,12 +151,12 @@ export default async function SubscriptionPage() {
               </div>
               <div className="ml-3 flex-1">
                 <h3 className="text-sm font-medium text-green-800">
-                  Active Subscription - {SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier].name} Plan
+                  Active Subscription - {(SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier]?.name ?? instructor.subscriptionTier)} Plan
                 </h3>
                 <div className="mt-2 text-sm text-green-700">
                   <p>
                     ${currentSubscription.monthlyAmount}/month • 
-                    Renews on {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()} •
+                    Renews on {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} ••
                     {commissionRate}% commission per booking
                   </p>
                 </div>
@@ -258,32 +255,35 @@ export default async function SubscriptionPage() {
         )}
 
         {/* Billing History */}
-        {currentSubscription && (
+        {instructor.subscriptions.length > 0 && (
           <div className="mt-8 bg-slate-900 rounded-3xl shadow-sm border border-slate-800">
             <div className="px-6 py-4 border-b border-slate-800">
               <h2 className="text-lg font-semibold text-slate-100">Billing History</h2>
             </div>
             <div className="p-6">
               <div className="space-y-4">
-                <div className="flex justify-between items-center py-3 border-b border-slate-800">
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">
-                      {SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier].name} Plan
-                    </p>
-                    <p className="text-sm text-slate-400">
-                      {new Date(currentSubscription.currentPeriodStart).toLocaleDateString()} - 
-                      {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()}
-                    </p>
+                {instructor.subscriptions.map((sub) => (
+                  <div key={sub.id} className="flex justify-between items-center py-3 border-b border-slate-800 last:border-0">
+                    <div>
+                      <p className="text-sm font-medium text-slate-100">
+                        {(SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier]?.name ?? instructor.subscriptionTier)} Plan
+                      </p>
+                      <p className="text-sm text-slate-400">
+                        {new Date(sub.currentPeriodStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {' — '}
+                        {new Date(sub.currentPeriodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-slate-100">
+                        ${sub.monthlyAmount}
+                      </p>
+                      <p className="text-sm text-slate-400">
+                        {sub.status}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-slate-100">
-                      ${currentSubscription.monthlyAmount}
-                    </p>
-                    <p className="text-sm text-slate-400">
-                      {currentSubscription.status}
-                    </p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>

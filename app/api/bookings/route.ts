@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -18,6 +18,7 @@ import { recordBookingPayment } from '@/lib/services/ledger-operations'
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry'
 import { z } from 'zod'
 import { getDisplayName } from '@/lib/utils/account'
+import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,7 +140,19 @@ export async function POST(req: NextRequest) {
     // Get instructor for pricing + calendar check
     const instructor = await prisma.instructor.findUnique({
       where: { id: session.user.instructorId },
-      include: { user: true }
+      select: {
+        id: true,
+        name: true,
+        approvalStatus: true,
+        isActive: true,
+        subscriptionStatus: true,
+        subscriptionTier: true,
+        syncGoogleCalendar: true,
+        hourlyRate: true,
+        timezone: true,
+        state: true,
+        user: { select: { email: true } },
+      },
     })
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
@@ -149,6 +162,9 @@ export async function POST(req: NextRequest) {
     const durationHours = (newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60)
     
     const lessonPrice = parseFloat((instructor.hourlyRate * durationHours).toFixed(2))
+    const instructorTimezone = instructor.timezone
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor.state)
     
     // MEDIUM-10 FIX: Get platform fee rate from DB instead of hardcoding
     const platformFeeRate = await getPlatformFeeRate()
@@ -257,8 +273,8 @@ export async function POST(req: NextRequest) {
         })
         const shortfall = parseFloat((lessonPrice - balance).toFixed(2))
         const topUpAmount = parseFloat((shortfall / (1 - platformFeeRate / 100)).toFixed(2))
-        const dateStr = newStart.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' })
-        const timeStr = newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
+        const dateStr = newStart.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: instructorTimezone })
+        const timeStr = newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: instructorTimezone })
 
         // Always generate a fresh setup/reset token so the email link works
         // regardless of whether account was just created or was added days ago.
@@ -275,6 +291,7 @@ export async function POST(req: NextRequest) {
         const actionLabel = 'Set up your account & Top Up →'
 
         await emailService.sendGenericEmail({
+          from: 'DriveBook Bookings <bookings@drivebook.com.au>',
           to: client.email,
           subject: `📅 ${instructor.name} booked a lesson for you — top up to confirm`,
           html: `
@@ -384,13 +401,19 @@ export async function POST(req: NextRequest) {
         const pickupLng = data.pickupLongitude ?? client.defaultPickupLng
 
         // Re-check wallet balance inside transaction to prevent race conditions
+        // Use aggregate (not findMany) — avoids loading all transactions into memory
         const wallet = await tx.clientWallet.findUnique({ where: { userId: client.userId! } })
         if (!wallet) throw new Error('Wallet not found')
 
-        const txns = await tx.walletTransaction.findMany({
-          where: { walletId: wallet.id, status: 'CONFIRMED' }
+        const balanceAgg = await tx.walletTransaction.aggregate({
+          where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' },
+          _sum: { amount: true },
         })
-        const txBalance = txns.reduce((sum, t) => t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
+        const debitAgg = await tx.walletTransaction.aggregate({
+          where: { walletId: wallet.id, status: 'CONFIRMED', type: 'DEBIT' },
+          _sum: { amount: true },
+        })
+        const txBalance = (balanceAgg._sum.amount ?? 0) - (debitAgg._sum.amount ?? 0)
         if (txBalance < lessonPrice) throw new Error('INSUFFICIENT_BALANCE')
 
         // ── Definitive slot conflict check inside transaction (prevents TOCTOU race) ──
@@ -418,7 +441,7 @@ export async function POST(req: NextRequest) {
             walletId: wallet.id,
             type: 'DEBIT',
             amount: lessonPrice,
-            description: `Lesson booking — ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}`,
+            description: `Lesson booking — ${newStart.toLocaleDateString('en-AU', { timeZone: instructorTimezone })} ${newStart.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: instructorTimezone })}`,
             status: 'CONFIRMED',
           }
         })
@@ -477,9 +500,16 @@ export async function POST(req: NextRequest) {
         return newBooking
       }, { maxWait: 5000, timeout: 10000 })
     } catch (error) {
-      // Handle transaction errors from the second booking (with sufficient balance)
-      if (error instanceof Error && error.message === 'SLOT_TAKEN') {
-        throw new Error('SLOT_ALREADY_BOOKED')
+      if (error instanceof Error && (error.message === 'SLOT_TAKEN' || error.message === 'SLOT_ALREADY_BOOKED')) {
+        return NextResponse.json({
+          error: 'Time slot already booked. Please select a different time.',
+        }, { status: 409 })
+      }
+      if (error instanceof Error && error.message === 'INSUFFICIENT_BALANCE') {
+        return NextResponse.json({
+          error: 'Insufficient wallet balance.',
+          insufficientBalance: true,
+        }, { status: 422 })
       }
       throw error
     }
@@ -584,7 +614,7 @@ export async function POST(req: NextRequest) {
           await enqueueNotification({
             channel: 'SMS',
             recipient: client.phone,
-            body: `Booking confirmed with ${getDisplayName(booking.instructor)} on ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}. Cost: $${booking.price.toFixed(2)}`,
+            body: `Booking confirmed with ${getDisplayName(booking.instructor)} on ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: instructorTimezone })}. Cost: $${booking.price.toFixed(2)}`,
             idempotencyKey: `booking-confirm-sms-${booking.id}`,
             bookingId: booking.id,
             userId: client.userId ?? undefined,
@@ -596,7 +626,7 @@ export async function POST(req: NextRequest) {
       await enqueueNotification({
         channel: 'EMAIL',
         recipient: booking.client!.email,
-        subject: `Booking Confirmed — ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
+        subject: `Booking Confirmed — ${booking.startTime!.toLocaleDateString('en-AU', { timeZone: instructorTimezone })}`,
         body: `<p>Hi ${booking.client!.name}, your lesson with ${getDisplayName(booking.instructor)} is confirmed. Log in to view details.</p>`,
         idempotencyKey: `booking-confirm-email-${booking.id}`,
         bookingId: booking.id,
@@ -644,7 +674,7 @@ export async function POST(req: NextRequest) {
       await enqueueNotification({
         channel: 'EMAIL',
         recipient: booking.client!.email,
-        subject: `Receipt — Lesson on ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
+        subject: `Receipt — Lesson on ${newStart.toLocaleDateString('en-AU', { timeZone: instructorTimezone })}`,
         body: `<p>Hi ${booking.client!.name}, your wallet was charged $${lessonPrice.toFixed(2)} for your lesson with ${booking.instructor.name}. Log in to view your receipt.</p>`,
         idempotencyKey: `booking-receipt-email-${booking.id}`,
         bookingId: booking.id,
@@ -656,7 +686,7 @@ export async function POST(req: NextRequest) {
     try {
       const reqChannels = getNotifChannels('BOOKING_REQUEST')
       if (reqChannels.inApp && session.user.id) {
-        await notifyBookingRequest(session.user.id, client.name, booking.id, newStart)
+        await notifyBookingRequest(session.user.id, client.name, booking.id, newStart, instructorTimezone)
       }
     } catch (e) {
       console.error('Notification failed:', e)
@@ -701,7 +731,8 @@ export async function GET(req: NextRequest) {
     const toParam      = searchParams.get('to')     // ISO date string
     const statusParam  = searchParams.get('status') // comma-separated status values
     const limitParam   = searchParams.get('limit')  // integer
-    const limit        = limitParam ? Math.min(500, parseInt(limitParam, 10)) : undefined
+    // Hard cap at 500; default to 200 so callers without ?limit get a safe result
+    const limit = Math.min(500, parseInt(limitParam ?? '200', 10))
 
     // Status filter — comma-separated or default set
     const defaultStatuses = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']
@@ -733,7 +764,7 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: { startTime: 'asc' },
-      ...(limit ? { take: limit } : {}),
+      take: limit,
     })
 
     // Normalise: merge clientPhone from booking or client relation

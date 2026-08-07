@@ -8,6 +8,7 @@
 
 import ReceiptShell from './ReceiptShell';
 import ReceiptMeta from './ReceiptMeta';
+import { PLATFORM_IDENTITY } from '@/lib/config/platform-identity';
 import LineItems from './LineItems';
 
 interface Props { isDemo?: boolean }
@@ -97,7 +98,7 @@ export default function ReceiptI_InstructorInvoice({ isDemo }: Props) {
       </div>
 
       <p className="text-xs text-slate-600 text-center leading-relaxed">
-        Tax invoice issued by DriveBook (ABN 12 345 678 901) on behalf of Nguyen Drive Training.<br />
+        Tax invoice issued by DriveBook (ABN {PLATFORM_IDENTITY.abn}) on behalf of Nguyen Drive Training.<br />
         Questions: support@drivebook.com.au · drivebook.com.au
       </p>
     </ReceiptShell>

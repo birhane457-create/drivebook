@@ -64,8 +64,8 @@ export default function InstructorCard({ instructor, searchLocation }: Instructo
         {/* Price and Distance */}
         <div className="flex items-center justify-between mb-3 pb-3 border-b">
           <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-green-600" />
-            <span className="text-xl font-bold text-green-600">${instructor.hourlyRate}</span>
+            <DollarSign className="h-4 w-4 text-green-700" />
+            <span className="text-xl font-bold text-green-700">${instructor.hourlyRate}</span>
             <span className="text-sm text-gray-500">/hour</span>
           </div>
           <div className="flex flex-col items-end gap-1">
@@ -159,8 +159,8 @@ export default function InstructorCard({ instructor, searchLocation }: Instructo
                     </div>
                   )}
                   <div className="flex items-center gap-2 text-lg">
-                    <DollarSign className="h-5 w-5 text-green-600" />
-                    <span className="font-bold text-green-600">${instructor.hourlyRate}/hour</span>
+                    <DollarSign className="h-5 w-5 text-green-700" />
+                    <span className="font-bold text-green-700">${instructor.hourlyRate}/hour</span>
                   </div>
                   {instructor.distance !== undefined && (
                     <div className="flex items-center gap-1 text-sm text-blue-600 mt-1">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { availabilityService } from '@/lib/services/availability'
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -78,11 +79,15 @@ export async function GET(req: NextRequest) {
       query.lessonDurationMinutes
     )
 
+    const instructorTimezone = resolveTimezone(instructor.timezone) !== DEFAULT_TIMEZONE
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor.state)
+
     return NextResponse.json({
       instructorId: query.instructorId,
       date: query.date,
       lessonDurationMinutes: query.lessonDurationMinutes,
-      timezone: 'Australia/Perth',
+      timezone: instructorTimezone,
       // Legacy format — used by SlotPicker component (BookingCalendar, offline form, etc.)
       // Each slot: { time: "HH:MM", available: true }
       slots: availableSlots.map(slot => ({
@@ -90,7 +95,7 @@ export async function GET(req: NextRequest) {
           hour: '2-digit',
           minute: '2-digit',
           hour12: false,
-          timeZone: 'Australia/Perth',
+          timeZone: instructorTimezone,
         }),
         available: true,
       })),
@@ -102,13 +107,13 @@ export async function GET(req: NextRequest) {
           hour: 'numeric',
           minute: '2-digit',
           hour12: true,
-          timeZone: 'Australia/Perth',
+          timeZone: instructorTimezone,
         });
         const speakDate = slot.toLocaleDateString('en-AU', {
           weekday: 'long',
           day: 'numeric',
           month: 'long',
-          timeZone: 'Australia/Perth',
+          timeZone: instructorTimezone,
         });
 
         return {
@@ -120,7 +125,7 @@ export async function GET(req: NextRequest) {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false,
-            timeZone: 'Australia/Perth',
+            timeZone: instructorTimezone,
           }),
           lessonDuration: query.lessonDurationMinutes,
           // voice — all fields the AI needs to read aloud, grouped for clarity.

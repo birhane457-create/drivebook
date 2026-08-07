@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { notifyLessonReminderInstructor, notifyLessonReminderStudent } from '@/lib/services/notifications';
 import { emailService } from '@/lib/services/email';
 import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
         startTime: { gte: windowStart, lte: windowEnd },
       },
       include: {
-        instructor: { select: { userId: true, name: true, businessName: true, accountType: true, phone: true } },
+        instructor: { select: { userId: true, name: true, businessName: true, accountType: true, phone: true, timezone: true } },
         client: { include: { user: { select: { id: true, email: true } } } },
       },
     });
@@ -121,9 +122,11 @@ export async function GET(req: NextRequest) {
           // clientEmail is stored on the booking for offline bookings
           const offlineEmail = (booking as any).clientEmail;
           if (offlineEmail) {
-            const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' });
-            const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' });
+            const tz = resolveTimezone(booking.instructor?.timezone ?? DEFAULT_TIMEZONE);
+            const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
+            const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
             await emailService.sendGenericEmail({
+              from: 'DriveBook Bookings <bookings@drivebook.com.au>',
               to: offlineEmail,
               subject: `Reminder: Driving lesson tomorrow with ${instructorName}`,
               html: `

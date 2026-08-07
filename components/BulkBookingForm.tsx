@@ -649,13 +649,14 @@ export default function BulkBookingForm({
 
           <SlotPicker
             instructorId={instructorId}
+            date={selectedSlot?.date ?? ''}
             duration={selectedDuration}
-            selected={selectedSlot}
-            onSelect={(date, time, shortNotice) => {
-              setSelectedSlot(time ? { date, time } : { date, time: '' });
-              setIsShortNoticeSlot(!!shortNotice);
+            value={selectedSlot?.time ?? ''}
+            onChange={(time) => {
+              if (selectedSlot?.date) {
+                setSelectedSlot({ date: selectedSlot.date, time });
+              }
             }}
-            primaryColor={primary}
           />
 
           {selectedSlot?.time && (

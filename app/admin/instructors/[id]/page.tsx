@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import AdminNav from '@/components/admin/AdminNav';
 import Link from 'next/link';
@@ -435,6 +435,86 @@ function SubscriptionTab({ instructorId }: { instructorId: string }) {
   );
 }
 
+// ── Admin Documents Tab ───────────────────────────────────────────────────────
+// All document views go through the signed URL API — raw Cloudinary URLs are never
+// rendered in the browser. Each "View" button fetches a 5-min signed URL on demand.
+type DocStatus = { status: string; label: string; color: string; icon: string };
+
+function AdminDocViewButton({ instructorId, docType, label }: { instructorId: string; docType: string; label: string }) {
+  const [loading, setLoading] = React.useState(false);
+  const openDoc = async () => {
+    setLoading(true);
+    try {
+      // Use the existing signed URL route: /api/admin/instructors/[id]/documents/[type]
+      const res = await fetch(`/api/admin/instructors/${instructorId}/documents/${docType}`);
+      if (res.ok) {
+        const { url } = await res.json();
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } finally { setLoading(false); }
+  };
+  return (
+    <button onClick={openDoc} disabled={loading}
+      className="text-sm text-blue-400 hover:text-blue-300 hover:underline block disabled:opacity-50 text-left">
+      {loading ? 'Loading…' : label}
+    </button>
+  );
+}
+
+function AdminDocumentsTab({ instructorId, instructor, licenseStatus, insuranceStatus, policeStatus, wwcStatus }: {
+  instructorId: string;
+  instructor: InstructorData;
+  licenseStatus: DocStatus;
+  insuranceStatus: DocStatus;
+  policeStatus: DocStatus;
+  wwcStatus: DocStatus;
+}) {
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <Link href={`/admin/documents/review/${instructorId}`}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Review &amp; Manage Documents
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="border border-slate-700 rounded-lg p-4">
+          <h4 className="font-semibold text-slate-100 mb-3">License</h4>
+          <p className={`font-bold mb-2 ${licenseStatus.color}`}>{licenseStatus.icon} {licenseStatus.label}</p>
+          <p className="text-sm text-slate-400">Number: {instructor.licenseNumber || 'Not provided'}</p>
+          {instructor.licenseExpiry && <p className="text-sm text-slate-400">Expires: {new Date(instructor.licenseExpiry).toLocaleDateString('en-AU')}</p>}
+          <div className="mt-2 space-y-1">
+            {instructor.licenseImageFront && <AdminDocViewButton instructorId={instructorId} docType="licenseImageFront" label="View Front Image →" />}
+            {instructor.licenseImageBack  && <AdminDocViewButton instructorId={instructorId} docType="licenseImageBack"  label="View Back Image →" />}
+          </div>
+        </div>
+
+        <div className="border border-slate-700 rounded-lg p-4">
+          <h4 className="font-semibold text-slate-100 mb-3">Insurance</h4>
+          <p className={`font-bold mb-2 ${insuranceStatus.color}`}>{insuranceStatus.icon} {insuranceStatus.label}</p>
+          <p className="text-sm text-slate-400">Number: {instructor.insuranceNumber || 'Not provided'}</p>
+          {instructor.insuranceExpiry && <p className="text-sm text-slate-400">Expires: {new Date(instructor.insuranceExpiry).toLocaleDateString('en-AU')}</p>}
+          {instructor.insurancePolicyDoc && <div className="mt-2"><AdminDocViewButton instructorId={instructorId} docType="insurancePolicyDoc" label="View Document →" /></div>}
+        </div>
+
+        <div className="border border-slate-700 rounded-lg p-4">
+          <h4 className="font-semibold text-slate-100 mb-3">Police Check</h4>
+          <p className={`font-bold mb-2 ${policeStatus.color}`}>{policeStatus.icon} {policeStatus.label}</p>
+          {instructor.policeCheckExpiry && <p className="text-sm text-slate-400">Expires: {new Date(instructor.policeCheckExpiry).toLocaleDateString('en-AU')}</p>}
+          {instructor.policeCheckDoc && <div className="mt-2"><AdminDocViewButton instructorId={instructorId} docType="policeCheckDoc" label="View Document →" /></div>}
+        </div>
+
+        <div className="border border-slate-700 rounded-lg p-4">
+          <h4 className="font-semibold text-slate-100 mb-3">WWC Check</h4>
+          <p className={`font-bold mb-2 ${wwcStatus.color}`}>{wwcStatus.icon} {wwcStatus.label}</p>
+          {instructor.wwcCheckExpiry && <p className="text-sm text-slate-400">Expires: {new Date(instructor.wwcCheckExpiry).toLocaleDateString('en-AU')}</p>}
+          {instructor.wwcCheckDoc && <div className="mt-2"><AdminDocViewButton instructorId={instructorId} docType="wwcCheckDoc" label="View Document →" /></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminInstructorProfilePage() {
   const router = useRouter();
   const params = useParams();
@@ -443,6 +523,8 @@ export default function AdminInstructorProfilePage() {
   const [instructor, setInstructor] = useState<InstructorData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'subscription' | 'bookings' | 'documents'>('overview');
+  const [nudgeLoading, setNudgeLoading] = useState(false);
+  const [nudgeResult, setNudgeResult] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     fetchInstructor();
@@ -780,6 +862,62 @@ export default function AdminInstructorProfilePage() {
                     </Link>
                   </div>
                 </div>
+
+                {/* ── Admin actions ──────────────────────────────────────────── */}
+                <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-slate-300 mb-3">Admin Actions</h3>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Setup nudge */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          setNudgeLoading(true)
+                          setNudgeResult(null)
+                          try {
+                            const r = await fetch(`/api/admin/instructors/${instructorId}/send-setup-nudge`, {
+                              method: 'POST',
+                            })
+                            const d = await r.json()
+                            if (r.ok) {
+                              setNudgeResult({ type: 'ok', text: `✓ ${d.message} (${d.completedCount}/${d.totalSteps} steps done)` })
+                            } else {
+                              setNudgeResult({ type: 'err', text: d.error || 'Failed to send nudge' })
+                            }
+                          } catch {
+                            setNudgeResult({ type: 'err', text: 'Network error' })
+                          } finally {
+                            setNudgeLoading(false)
+                          }
+                        }}
+                        disabled={nudgeLoading}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded-lg border border-slate-600 disabled:opacity-50 transition-colors"
+                      >
+                        {nudgeLoading ? (
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                          </svg>
+                        ) : (
+                          <span>📧</span>
+                        )}
+                        Send Setup Nudge
+                      </button>
+                      {nudgeResult && (
+                        <span className={`text-xs px-2 py-1 rounded-lg ${
+                          nudgeResult.type === 'ok'
+                            ? 'bg-green-900/30 text-green-400 border border-green-800/50'
+                            : 'bg-red-900/30 text-red-400 border border-red-800/50'
+                        }`}>
+                          {nudgeResult.text}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Sends the profile setup checklist email to the instructor with their current completion state.
+                    Action is recorded in the audit log.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -854,86 +992,7 @@ export default function AdminInstructorProfilePage() {
 
             {/* Documents Tab */}
             {activeTab === 'documents' && (
-              <div>
-                <div className="flex justify-end mb-4">
-                  <Link
-                    href={`/admin/documents/review/${instructor.id}`}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Review & Manage Documents
-                  </Link>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-slate-100 mb-3">License</h4>
-                    <p className={`font-bold mb-2 ${licenseStatus.color}`}>
-                      {licenseStatus.icon} {licenseStatus.label}
-                    </p>
-                    <p className="text-sm text-slate-400">Number: {instructor.licenseNumber || 'Not provided'}</p>
-                    {instructor.licenseExpiry && (
-                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.licenseExpiry).toLocaleDateString()}</p>
-                    )}
-                    <div className="mt-2 space-y-1">
-                      {instructor.licenseImageFront && (
-                        <a href={instructor.licenseImageFront} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block">
-                          View Front Image →
-                        </a>
-                      )}
-                      {instructor.licenseImageBack && (
-                        <a href={instructor.licenseImageBack} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block">
-                          View Back Image →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-slate-100 mb-3">Insurance</h4>
-                    <p className={`font-bold mb-2 ${insuranceStatus.color}`}>
-                      {insuranceStatus.icon} {insuranceStatus.label}
-                    </p>
-                    <p className="text-sm text-slate-400">Number: {instructor.insuranceNumber || 'Not provided'}</p>
-                    {instructor.insuranceExpiry && (
-                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.insuranceExpiry).toLocaleDateString()}</p>
-                    )}
-                    {instructor.insurancePolicyDoc && (
-                      <a href={instructor.insurancePolicyDoc} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block mt-2">
-                        View Document →
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-slate-100 mb-3">Police Check</h4>
-                    <p className={`font-bold mb-2 ${policeStatus.color}`}>
-                      {policeStatus.icon} {policeStatus.label}
-                    </p>
-                    {instructor.policeCheckExpiry && (
-                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.policeCheckExpiry).toLocaleDateString()}</p>
-                    )}
-                    {instructor.policeCheckDoc && (
-                      <a href={instructor.policeCheckDoc} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block mt-2">
-                        View Document →
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="border rounded-lg p-4">
-                    <h4 className="font-semibold text-slate-100 mb-3">WWC Check</h4>
-                    <p className={`font-bold mb-2 ${wwcStatus.color}`}>
-                      {wwcStatus.icon} {wwcStatus.label}
-                    </p>
-                    {instructor.wwcCheckExpiry && (
-                      <p className="text-sm text-slate-400">Expires: {new Date(instructor.wwcCheckExpiry).toLocaleDateString()}</p>
-                    )}
-                    {instructor.wwcCheckDoc && (
-                      <a href={instructor.wwcCheckDoc} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block mt-2">
-                        View Document →
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <AdminDocumentsTab instructorId={instructor.id} instructor={instructor} licenseStatus={licenseStatus} insuranceStatus={insuranceStatus} policeStatus={policeStatus} wwcStatus={wwcStatus} />
             )}
           </div>
         </div>

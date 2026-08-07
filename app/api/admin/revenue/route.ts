@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getPlatformLedger } from '@/lib/services/ledger-service';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
     const revenueByMonth = monthRanges.map(({ mStart }, idx) => {
       const agg = monthAggs[idx];
       return {
-        month: mStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric', timeZone: 'Australia/Perth' }),
+        month: mStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric', timeZone: DEFAULT_TIMEZONE }),
         commission: agg._sum.platformFee || 0,
         gross: agg._sum.amount || 0,
         instructorPayout: agg._sum.instructorPayout || 0,

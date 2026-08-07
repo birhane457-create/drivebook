@@ -1,8 +1,8 @@
-import { getServerSession } from 'next-auth'
+﻿import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
-import { Calendar, Users, TrendingUp, Car, Settings, AlertTriangle, Phone, Clock, Wallet, DollarSign, Star, Package, CreditCard } from 'lucide-react'
+import { Calendar, Users, TrendingUp, Car, Settings, AlertTriangle, Phone, Clock, Wallet, Star, Package, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import { EarningsThisWeekCard } from '@/components/instructor/EarningsThisWeekCard'
 import ProfileCompletenessCard from '@/components/instructor/ProfileCompletenessCard'
@@ -188,7 +188,7 @@ export default async function DashboardPage() {
               <p className="font-semibold text-sm">My Packages</p>
             </Link>
             <Link 
-              href="/dashboard/credits/add-funds"
+              href="/client-dashboard/wallet"
               className="bg-slate-800/60 hover:bg-slate-700/60 border border-white/10 p-4 rounded-xl transition"
             >
               <CreditCard className="h-6 w-6 mb-2" />
@@ -211,50 +211,20 @@ export default async function DashboardPage() {
   }
 
   const now = new Date()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  
-  // Calculate last month for comparison
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-  
-  // Calculate days in each month for daily average
-  const daysInCurrentMonth = endOfMonth.getDate()
-  const daysElapsedThisMonth = now.getDate()
-  const daysInLastMonth = endOfLastMonth.getDate()
-
-  // Today boundaries (Perth AWST = UTC+8, no DST)
-  // UX-1: Hardcoded for WA instructors. If expanding to NSW/VIC/QLD, store
-  // instructor.timezone in DB and derive this offset dynamically.
-  const perthOffsetMs = 8 * 60 * 60 * 1000
-  const perthNow = new Date(now.getTime() + perthOffsetMs)
-  const startOfToday = new Date(Date.UTC(
-    perthNow.getUTCFullYear(), perthNow.getUTCMonth(), perthNow.getUTCDate(), 0, 0, 0
-  ) - perthOffsetMs)
-  const endOfToday = new Date(Date.UTC(
-    perthNow.getUTCFullYear(), perthNow.getUTCMonth(), perthNow.getUTCDate(), 23, 59, 59, 999
-  ) - perthOffsetMs)
 
   // ── Core query: instructor profile is required to render any of this page ──
-  // Runs separately so a failure here redirects cleanly rather than crashing
-  // the entire Promise.all and losing the supplementary data we'd still want.
   const instructor = await prisma.instructor.findUnique({
     where: { id: session.user.instructorId },
     include: {
       bookings: {
         where: {
           status: 'CONFIRMED',
-          // FIX BUG-5 + DATA-2: start from tomorrow so today's lessons don't appear
-          // in both "Upcoming Lessons" panel AND the TodayWorkspace timeline.
-          startTime: { gt: endOfToday },
+          // Placeholder — will be replaced with instructor-TZ-aware boundary below.
+          startTime: { gt: new Date() },
         },
         take: 5,
         orderBy: { startTime: 'asc' },
         include: { client: true },
-      },
-      clients: {
-        take: 5,
-        orderBy: { createdAt: 'desc' },
       },
     },
   }).catch(() => null)
@@ -263,11 +233,52 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
+  // Today boundaries — use instructor's stored timezone, fall back to Perth
+  const { localDateTimeToUTC, resolveTimezone, timezoneFromState, getLocalDateKey } = await import('@/lib/utils/timezone')
+  const instructorTz = resolveTimezone((instructor as any).timezone) || timezoneFromState((instructor as any).state ?? '')
+
+  const todayKey = getLocalDateKey(now, instructorTz)                            // "YYYY-MM-DD"
+  const startOfToday = localDateTimeToUTC(todayKey, '00:00', instructorTz)
+  const endOfToday   = new Date(localDateTimeToUTC(todayKey, '23:59', instructorTz).getTime() + 59_999)
+
+  // Month boundaries in instructor's local timezone — prevents AEST/AWST boundary drift
+  const [tyStr, tmStr] = todayKey.split('-')
+  const ty = parseInt(tyStr, 10)
+  const tm = parseInt(tmStr, 10)
+  const startOfMonth = localDateTimeToUTC(`${ty}-${String(tm).padStart(2, '0')}-01`, '00:00', instructorTz)
+  const nextMonthY = tm === 12 ? ty + 1 : ty
+  const nextMonthM = tm === 12 ? 1 : tm + 1
+  const startOfNextMonth = localDateTimeToUTC(`${nextMonthY}-${String(nextMonthM).padStart(2, '0')}-01`, '00:00', instructorTz)
+  const endOfMonth = new Date(startOfNextMonth.getTime() - 1)
+
+  const prevMonthY = tm === 1 ? ty - 1 : ty
+  const prevMonthM = tm === 1 ? 12 : tm - 1
+  const startOfLastMonth = localDateTimeToUTC(`${prevMonthY}-${String(prevMonthM).padStart(2, '0')}-01`, '00:00', instructorTz)
+  const endOfLastMonth = new Date(startOfMonth.getTime() - 1)
+
+  // Days elapsed for daily average calculation
+  const daysElapsedThisMonth = now.getDate()
+  const daysInLastMonth = endOfLastMonth.getDate()
+
+  // Re-query upcoming bookings using the correct today boundary
+  const upcomingBookings = await prisma.booking.findMany({
+    where: {
+      instructorId: session.user.instructorId,
+      status: 'CONFIRMED',
+      startTime: { gt: endOfToday },
+    },
+    take: 5,
+    orderBy: { startTime: 'asc' },
+    include: { client: true },
+  }).catch(() => [])
+
+  // Merge: replace the placeholder upcoming bookings with the tz-correct set
+  ;(instructor as any).bookings = upcomingBookings
+
   // ── Supplementary queries — all individually guarded with .catch() ─────────
   // Each query can fail independently without degrading the others.
   // instructor data above is already loaded; these add stats and widget data.
   const [
-    monthlyBookings,
     totalRevenue,
     lastMonthRevenue,
     clientsWithPackages,
@@ -275,13 +286,6 @@ export default async function DashboardPage() {
     totalClientCount,
     todayBookings,
   ] = await Promise.all([
-    prisma.booking.count({
-      where: {
-        instructorId: session.user.instructorId,
-        status: { in: ['CONFIRMED', 'COMPLETED'] },
-        startTime: { gte: startOfMonth, lte: endOfMonth },
-      },
-    }).catch(() => 0),
     prisma.booking.aggregate({
       where: {
         instructorId: session.user.instructorId,
@@ -529,6 +533,7 @@ export default async function DashboardPage() {
               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">This Month (MTD)</p>
               <p className="text-3xl font-semibold text-white">${thisMonthRevenue.toFixed(0)}</p>
               <div className="mt-2 space-y-1">
+                <p className="text-xs text-slate-500">Gross lesson revenue</p>
                 <p className="text-xs text-slate-400">
                   ${dailyAverageThisMonth.toFixed(0)}/day avg ({daysElapsedThisMonth} days)
                 </p>
@@ -553,6 +558,7 @@ export default async function DashboardPage() {
       <TodayWorkspace
         bookings={todayWorkspaceBookings}
         instructorName={instructor.name}
+        timezone={instructorTz}
       />
 
       <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
@@ -601,7 +607,7 @@ export default async function DashboardPage() {
                             day:     'numeric',
                             hour:    '2-digit',
                             minute:  '2-digit',
-                            timeZone: 'Australia/Perth',
+                            timeZone: instructorTz,
                           })
                         : 'TBD'}
                     </span>

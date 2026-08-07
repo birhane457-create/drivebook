@@ -57,24 +57,20 @@ export async function POST(req: NextRequest) {
     // Every client gets a userId from day one so the instructor can book for
     // them immediately. No email is sent here — the first email fires when the
     // instructor actually creates a booking (wallet top-up prompt).
-    let userId: string
+    let client: any
 
     const existingUser = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
     })
 
-    let client: any
-
     if (existingUser) {
       // Student already has an account — wrap client creation in a transaction
       // in case it fails (e.g. unique constraint race). Wallet already exists.
-      userId = existingUser.id
-
       client = await (prisma as any).$transaction(async (tx: any) => {
         return tx.client.create({
           data: {
             instructorId: session.user.instructorId,
-            userId,
+            userId: existingUser.id,
             name: data.name,
             phone: data.phone,
             email: data.email.toLowerCase(),

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { UserPlus, Loader2 } from 'lucide-react'
+import { UserPlus, Loader2, CheckCircle } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -14,15 +14,14 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setLoading(true)
     setError('')
 
     if (!instructorTermsAccepted || !privacyAccepted) {
-      setError('You must accept the Instructor Terms and Privacy Policy to register.')
-      setLoading(false)
+      setError('Please accept both the Instructor Terms and Privacy Policy to continue.')
       return
     }
 
+    setLoading(true)
     const formData = new FormData(e.currentTarget)
 
     try {
@@ -30,141 +29,158 @@ export default function RegisterPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: formData.get('email'),
-          password: formData.get('password'),
-          name: formData.get('name'),
-          phone: formData.get('phone'),
-          baseAddress: formData.get('baseAddress'),
-          baseLatitude: -33.8688,
-          baseLongitude: 151.2093,
-          hourlyRate: Number(formData.get('hourlyRate')),
-          vehicleTypes: [formData.get('vehicleType')],
-          serviceRadiusKm: Number(formData.get('serviceRadius')),
+          name:          formData.get('name'),
+          email:         formData.get('email'),
+          password:      formData.get('password'),
+          phone:         formData.get('phone'),
           termsAccepted: true,
-          termsVersion: '1.0',
-        })
+          termsVersion:  '1.0',
+        }),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        router.push(data.redirectTo ?? '/login')
+        router.push('/login?registered=1')
       } else {
         const data = await response.json()
-        setError(data.error || 'Registration failed')
+        setError(data.error || 'Registration failed — please try again.')
       }
-    } catch (err) {
-      setError('Something went wrong')
+    } catch {
+      setError('Something went wrong — please check your connection and try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  const inputCls =
-    'w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 focus:bg-white/15 transition-all backdrop-blur-sm'
+  const inputCls = [
+    'w-full px-4 py-3 rounded-xl text-sm',
+    'bg-slate-800/60 border border-white/10 text-white placeholder-white/30',
+    'focus:outline-none focus:border-violet-500/70 focus:ring-2 focus:ring-violet-500/20',
+    'transition-all',
+  ].join(' ')
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center py-8 sm:py-12 px-4">
-      <div className="max-w-md w-full">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center py-10 px-4">
+      <div className="w-full max-w-md">
 
-        {/* Icon + title — matches login pattern */}
+        {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-purple-600/30 border border-purple-500/40 mb-4">
-            <UserPlus className="w-7 h-7 text-purple-300" aria-hidden="true" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-600/20 border border-violet-500/30 mb-4">
+            <UserPlus className="w-7 h-7 text-violet-300" aria-hidden="true" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-violet-300 via-pink-300 to-purple-300 bg-clip-text text-transparent">
-            Register as Instructor
+            Join as an Instructor
           </h1>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-2 text-sm text-white/50">
             Already have an account?{' '}
-            <Link href="/login" className="text-purple-400 hover:text-purple-300 font-semibold transition-colors">
-              Login
+            <Link href="/login" className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">
+              Log in
             </Link>
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-gradient-to-br from-white/10 to-white/5 rounded-2xl shadow-2xl shadow-purple-900/50 border border-white/20 p-6 sm:p-8 backdrop-blur-xl">
+        <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-violet-900/20 p-6 sm:p-8">
+
+          {/* What happens next */}
+          <div className="mb-6 bg-violet-950/40 border border-violet-700/30 rounded-xl px-4 py-3 space-y-1.5">
+            <p className="text-xs font-semibold text-violet-300 uppercase tracking-wide">After you sign up</p>
+            <ul className="space-y-1">
+              {[
+                'Set your suburb, rate & availability in your dashboard',
+                'Upload your licence, insurance & certifications',
+                'Go live once admin approves your documents',
+              ].map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-white/60">
+                  <CheckCircle className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
+                  {step}
+                </li>
+              ))}
+            </ul>
+          </div>
+
           {error && (
-            <div className="bg-red-500/20 text-red-300 p-3 rounded-lg mb-4 text-sm border border-red-500/50 backdrop-blur-sm">
+            <div className="mb-4 bg-red-500/15 border border-red-500/40 text-red-300 text-sm px-4 py-3 rounded-xl">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-4">
+
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Full Name</label>
-              <input type="text" name="name" required placeholder="Jane Smith" className={inputCls} />
+              <label htmlFor="name" className="block text-sm font-medium text-white/80 mb-1.5">Full Name</label>
+              <input
+                id="name" type="text" name="name" required
+                autoComplete="name" placeholder="Jane Smith"
+                className={inputCls}
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Email</label>
-              <input type="email" name="email" required placeholder="you@example.com" className={inputCls} />
+              <label htmlFor="email" className="block text-sm font-medium text-white/80 mb-1.5">Email</label>
+              <input
+                id="email" type="email" name="email" required
+                autoComplete="email" placeholder="you@example.com"
+                className={inputCls}
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Password</label>
-              <input type="password" name="password" required minLength={8} placeholder="At least 8 characters" className={inputCls} />
+              <label htmlFor="password" className="block text-sm font-medium text-white/80 mb-1.5">Password</label>
+              <input
+                id="password" type="password" name="password" required
+                minLength={8} autoComplete="new-password"
+                placeholder="At least 8 characters"
+                className={inputCls}
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Phone</label>
-              <input type="tel" name="phone" required placeholder="04XX XXX XXX" className={inputCls} />
+              <label htmlFor="phone" className="block text-sm font-medium text-white/80 mb-1.5">Mobile Number</label>
+              <input
+                id="phone" type="tel" name="phone" required
+                autoComplete="tel" placeholder="04XX XXX XXX"
+                className={inputCls}
+              />
+              <p className="mt-1 text-xs text-white/30">Used for booking notifications and student contact</p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Base Address</label>
-              <input type="text" name="baseAddress" required placeholder="e.g. Maylands WA 6051" className={inputCls} />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Hourly Rate ($)</label>
-              <input type="number" name="hourlyRate" required min="0" step="0.01" placeholder="65" className={inputCls} />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Vehicle Type</label>
-              <select name="vehicleType" required className={inputCls}>
-                <option value="AUTO" className="bg-slate-900 text-white">Automatic</option>
-                <option value="MANUAL" className="bg-slate-900 text-white">Manual</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-white/90">Service Radius (km)</label>
-              <input type="number" name="serviceRadius" required min="5" max="100" defaultValue="20" className={inputCls} />
-            </div>
-
-            {/* Terms */}
-            <div className="space-y-3 pt-3 border-t border-white/10">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={instructorTermsAccepted}
-                  onChange={(e) => setInstructorTermsAccepted(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded accent-purple-500"
-                />
-                <span className="text-sm text-white/70">
+            {/* Legal checkboxes */}
+            <div className="space-y-3 pt-2 border-t border-white/8">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="mt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={instructorTermsAccepted}
+                    onChange={e => setInstructorTermsAccepted(e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-slate-800 accent-violet-500 cursor-pointer"
+                  />
+                </div>
+                <span className="text-sm text-white/60 group-hover:text-white/80 transition-colors leading-relaxed">
                   I agree to the{' '}
-                  <Link href="/instructor-terms" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 font-medium transition-colors">
-                    Instructor Terms and Conditions
-                  </Link>
-                  . I confirm I am an independent contractor, not an employee of DriveBook.
+                  <Link href="/instructor-terms" target="_blank" rel="noopener noreferrer"
+                    className="text-violet-400 hover:text-violet-300 font-medium underline underline-offset-2">
+                    Instructor Terms &amp; Conditions
+                  </Link>{' '}
+                  and confirm I am an independent contractor, not an employee of DriveBook.
                 </span>
               </label>
 
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={privacyAccepted}
-                  onChange={(e) => setPrivacyAccepted(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded accent-purple-500"
-                />
-                <span className="text-sm text-white/70">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="mt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={privacyAccepted}
+                    onChange={e => setPrivacyAccepted(e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-slate-800 accent-violet-500 cursor-pointer"
+                  />
+                </div>
+                <span className="text-sm text-white/60 group-hover:text-white/80 transition-colors leading-relaxed">
                   I agree to the{' '}
-                  <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 font-medium transition-colors">
+                  <Link href="/privacy" target="_blank" rel="noopener noreferrer"
+                    className="text-violet-400 hover:text-violet-300 font-medium underline underline-offset-2">
                     Privacy Policy
-                  </Link>
-                  . I consent to DriveBook collecting and using my information as described.
+                  </Link>{' '}
+                  and consent to DriveBook collecting and using my information as described.
                 </span>
               </label>
             </div>
@@ -172,23 +188,35 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading || !instructorTermsAccepted || !privacyAccepted}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold shadow-lg shadow-purple-900/50 hover:from-purple-500 hover:to-pink-500 hover:shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              className={[
+                'w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2',
+                'bg-gradient-to-r from-violet-600 to-purple-600 text-white',
+                'hover:from-violet-500 hover:to-purple-500 shadow-lg shadow-violet-900/40',
+                'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none',
+              ].join(' ')}
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating account...
+                  Creating your account…
                 </>
               ) : (
                 'Create instructor account'
               )}
             </button>
 
-            <p className="text-xs text-white/50 text-center">
-              By registering, you confirm you hold a valid WA driving instructor accreditation and current insurance.
+            <p className="text-xs text-white/25 text-center pt-1">
+              By registering, you confirm you hold a valid driving instructor accreditation and current insurance.
             </p>
           </form>
         </div>
+
+        <p className="text-center text-xs text-white/25 mt-6">
+          Looking to book lessons instead?{' '}
+          <Link href="/driving-lessons" className="text-violet-400/70 hover:text-violet-300 transition-colors">
+            Find an instructor →
+          </Link>
+        </p>
       </div>
     </div>
   )

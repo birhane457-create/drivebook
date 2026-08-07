@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Clock, CalendarOff, AlertCircle, Save, CheckCircle } from 'lucide-react'
@@ -336,7 +336,7 @@ export default function AvailabilityPage() {
               <input
                 type="date"
                 value={newEx.exceptionDate}
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date(new Date().getTime() + 12 * 3600000).toISOString().split('T')[0]}
                 onChange={e => setNewEx(p => ({ ...p, exceptionDate: e.target.value }))}
                 className="w-full border border-slate-700 rounded-lg px-3 py-2 text-sm bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
               />

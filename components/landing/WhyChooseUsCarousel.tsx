@@ -36,3 +36,4 @@ export default function WhyChooseUsCarousel() {
 
   return <ImageCarousel slides={slides} autoPlayInterval={7000} />
 }
+

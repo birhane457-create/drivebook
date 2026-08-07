@@ -19,6 +19,7 @@
 
 import { emailService } from '@/lib/services/email';
 import { prisma } from '@/lib/prisma';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export type AlertType =
   | 'NEGATIVE_BALANCE'
@@ -121,7 +122,7 @@ async function sendWebhook(payload: AlertPayload): Promise<void> {
 
 function formatTimestamp(): string {
   return new Date().toLocaleString('en-AU', {
-    timeZone: 'Australia/Perth',
+    timeZone: DEFAULT_TIMEZONE,
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   }) + ' AWST';

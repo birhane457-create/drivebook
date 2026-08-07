@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     const platformFeeAmt = parseFloat((topUpAmount - shortfallAmt).toFixed(2))
 
     await emailService.sendGenericEmail({
+      from: 'DriveBook Payments <payments@drivebook.com.au>',
       to: client.email,
       subject: `Action Required: Top up your DriveBook wallet to confirm your lesson`,
       html: `

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 
@@ -172,7 +172,7 @@ export default function PackagePricingShowcase() {
   }
 
   return (
-    <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-8 shadow-lg">
+    <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-8 shadow-lg" inert={true} aria-hidden="true">
       {/* Header */}
       <div className="text-center mb-6">
         <h3 className="text-2xl font-bold text-gray-900 mb-2">{slides[currentSlide].title}</h3>
@@ -225,3 +225,4 @@ export default function PackagePricingShowcase() {
     </div>
   )
 }
+

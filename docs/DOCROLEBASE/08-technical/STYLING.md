@@ -31,12 +31,22 @@ DriveBook uses a **dark theme** design system based on Tailwind CSS. All new pag
 
 ### Text Colors
 
-| Hierarchy | Tailwind | Hex | Usage |
-|-----------|----------|-----|-------|
-| Primary | `text-white` | #ffffff | Main headings, strong text, selected items |
-| Secondary | `text-slate-300` | #cbd5e1 | Form labels, secondary headings |
-| Tertiary | `text-slate-400` | #94a3b8 | Hints, support text, icon colors |
-| Muted | `text-slate-500` | #64748b | Placeholder text, disabled text |
+| Hierarchy | Tailwind | Hex | Usage | Contrast on slate-900 |
+|-----------|----------|-----|-------|----------------------|
+| Primary | `text-white` | #ffffff | Main headings, strong text, selected items | 16.7:1 ✅ |
+| Secondary | `text-slate-200` | #e2e8f0 | Form labels, secondary headings | 13.4:1 ✅ |
+| Tertiary | `text-slate-300` | #cbd5e1 | Hints, support text, icon labels | 9.0:1 ✅ |
+| Muted | `text-slate-400` | #94a3b8 | Placeholder text, timestamps, very low-priority notes | 5.0:1 ✅ |
+
+> **Retired:** `text-slate-500` (#64748b) on dark backgrounds. Contrast ratio ~3.2:1 on `slate-900` — fails WCAG AA (requires 4.5:1 for normal text). Use `text-slate-400` minimum for readable text. `text-slate-500` is only acceptable for non-essential decorative elements.
+
+> **Note:** A global CSS rule in `globals.css` automatically lifts `text-slate-400` → `slate-300` and `text-slate-500` → `slate-400` inside `.bg-slate-900/950/800` containers as a safety net for existing components. New code should use the correct classes above directly.
+
+**Rule of thumb for new components on dark backgrounds:**
+- Labels and body text → `text-slate-200` or `text-slate-300`
+- Supporting/contextual text → `text-slate-300`
+- Timestamps, "last seen", de-emphasised metadata → `text-slate-400`
+- Never use `text-slate-500` or lower for text that conveys meaning
 
 ### Borders
 
@@ -224,9 +234,11 @@ className="transition-all duration-200"
 ## Accessibility
 
 ### Contrast
-- All text meets WCAG AA minimum contrast ratios
-- Focus indicators are clearly visible
+- Primary and secondary text meets WCAG AA (4.5:1 minimum) on all dark backgrounds
+- `text-slate-400` is the minimum for meaningful text — meets WCAG AA on `slate-900`/`slate-950`
+- A global CSS rule in `globals.css` boosts `slate-400`→`slate-300` and `slate-500`→`slate-400` inside dark containers as a safety net
 - Status conveyed by color + icon (not color alone)
+- Test on actual devices in outdoor conditions — browser devtools contrast checkers test at ideal angles only
 
 ### Semantic HTML
 - Use proper heading hierarchy (`<h1>`, `<h2>`, etc.)
@@ -253,11 +265,11 @@ className="transition-all duration-200"
 
 ### Common Mistakes to Avoid
 
-❌ Don't use light backgrounds (use dark theme only)  
-❌ Don't mix blue with sky-blue (be consistent)  
-❌ Don't use gray text on dark backgrounds (use slate colors)  
-❌ Don't forget focus rings on inputs  
-❌ Don't skip transitions on hover states  
+❌ Don't use light backgrounds (use dark theme only)
+❌ Don't mix blue with sky-blue (be consistent)
+❌ Don't use `text-slate-500` or lower on dark backgrounds — contrast fails outdoors
+❌ Don't forget focus rings on inputs
+❌ Don't skip transitions on hover states
 
 ### Files Using This System
 

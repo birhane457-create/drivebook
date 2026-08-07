@@ -9,6 +9,7 @@ import { createRefundTask } from '@/lib/services/taskManager'
 import { recordFullRefund, recordPartialRefund } from '@/lib/services/ledger-operations'
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry'
 import { getDisplayName } from '@/lib/utils/account'
+import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,12 @@ export async function POST(
     })
 
     if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+
+    const bookingTimezone = booking.instructor
+      ? booking.instructor.timezone
+        ? resolveTimezone(booking.instructor.timezone)
+        : timezoneFromState(booking.instructor.state)
+      : DEFAULT_TIMEZONE
 
     // Authorization
     const isInstructor = user.role === 'INSTRUCTOR' && booking.instructorId === session.user.instructorId
@@ -210,7 +217,7 @@ export async function POST(
     // Email notifications (non-critical)
     const cancelChannels = getNotifChannels('BOOKING_CANCELLED')
     const bookingDateStr = booking.startTime
-      ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })
+      ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: bookingTimezone })
       : 'N/A'
 
     if (cancelChannels.email && booking.client?.email) {
@@ -221,6 +228,7 @@ export async function POST(
         : 'No refund applies — less than 24 hours notice.'
 
       emailService.sendGenericEmail({
+        from: 'DriveBook Bookings <bookings@drivebook.com.au>',
         to: booking.client.email,
         subject: `Booking Cancelled — ${bookingDateStr}`,
         html: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.client.name},</p><p>Your booking with <strong>${getDisplayName(booking.instructor)}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
@@ -275,6 +283,7 @@ export async function POST(
 
     if (cancelChannels.email && booking.instructor?.user?.email) {
       emailService.sendGenericEmail({
+        from: 'DriveBook Bookings <bookings@drivebook.com.au>',
         to: booking.instructor.user.email,
         subject: `Booking Cancelled — ${booking.client?.name || booking.clientName || 'Client'}`,
         html: `<h2>Booking Cancelled</h2><p>Hi ${booking.instructor.name},</p><p>A booking with <strong>${booking.client?.name || booking.clientName || 'Client'}</strong> on ${bookingDateStr} has been cancelled.</p>`,
@@ -297,7 +306,7 @@ export async function POST(
         instructorId: booking.instructorId,
         slotDate: booking.startTime?.toISOString() ?? null,
         slotTime: booking.startTime
-          ? booking.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Perth' })
+          ? booking.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: bookingTimezone })
           : null,
       })
     )

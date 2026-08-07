@@ -8,7 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { PLATFORM_INVOICE_BLOCK } from '@/lib/config/platform-identity';
 import { prisma } from '@/lib/prisma';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +32,8 @@ export async function GET(
             name: true,
             businessName: true,
             phone: true,
+            timezone: true,
+            state: true,
             brandLogo: true,
             brandColorPrimary: true,
             user: { select: { email: true } },
@@ -63,18 +67,23 @@ export async function GET(
     const ins = transaction.instructor;
     const bk = transaction.booking;
 
+    // Resolve timezone from instructor record
+    const invoiceTz = ins?.timezone
+      ? resolveTimezone(ins.timezone)
+      : timezoneFromState(ins?.state);
+
     // Build invoice number from transaction id (last 8 chars, uppercase)
     const invoiceNumber = `INV-${transaction.id.slice(-8).toUpperCase()}`;
 
     const issueDate = new Date(transaction.createdAt).toLocaleDateString('en-AU', {
-      day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Perth',
+      day: 'numeric', month: 'short', year: 'numeric', timeZone: invoiceTz,
     });
 
     const paidAt = transaction.processedAt
       ? new Date(transaction.processedAt).toLocaleString('en-AU', {
           day: 'numeric', month: 'short', year: 'numeric',
           hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-          timeZone: 'Australia/Perth',
+          timeZone: invoiceTz,
         })
       : null;
 
@@ -85,19 +94,19 @@ export async function GET(
     const lessonDate = bk
       ? new Date(bk.startTime).toLocaleDateString('en-AU', {
           weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-          timeZone: 'Australia/Perth',
+          timeZone: invoiceTz,
         })
       : null;
 
     const lessonStart = bk
       ? new Date(bk.startTime).toLocaleTimeString('en-AU', {
-          hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth',
+          hour: '2-digit', minute: '2-digit', timeZone: invoiceTz,
         })
       : null;
 
     const lessonEnd = bk
       ? new Date(bk.endTime).toLocaleTimeString('en-AU', {
-          hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth',
+          hour: '2-digit', minute: '2-digit', timeZone: invoiceTz,
         })
       : null;
 
@@ -117,12 +126,7 @@ export async function GET(
         logoUrl: ins.brandLogo ?? null,
       },
 
-      platform: {
-        name: 'DriveBook',
-        email: 'support@drivebook.com.au',
-        website: 'drivebook.com.au',
-        abn: '12 345 678 901', // TODO: replace with real ABN
-      },
+      platform: PLATFORM_INVOICE_BLOCK,
 
       client: bk?.client
         ? {

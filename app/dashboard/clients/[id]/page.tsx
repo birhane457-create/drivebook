@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 import Link from 'next/link';
 import {
   ArrowLeft, User, Phone, Mail, MapPin, FileText, Wallet,
@@ -43,7 +44,6 @@ const STATUS_BADGE: Record<string, string> = {
 
 export default function InstructorClientDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const clientId = params.id as string;
 
   const [client, setClient] = useState<ClientDetail | null>(null);
@@ -53,6 +53,7 @@ export default function InstructorClientDetailPage() {
   const [linkSent, setLinkSent] = useState(false);
   // C-04: inline error for payment link — persists near the button
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [instructorTz, setInstructorTz] = useState(DEFAULT_TIMEZONE);
 
   useEffect(() => {
     fetch(`/api/instructor/clients/${clientId}`)
@@ -95,19 +96,19 @@ export default function InstructorClientDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-sky-500" />
       </div>
     );
   }
 
   if (error || !client) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-          <p className="text-gray-700 mb-4">{error || 'Client not found.'}</p>
-          <Link href="/dashboard/clients" className="text-blue-600 hover:underline text-sm">
+          <p className="text-slate-300 mb-4">{error || 'Client not found.'}</p>
+          <Link href="/dashboard/clients" className="text-sky-400 hover:underline text-sm">
             ← Back to clients
           </Link>
         </div>
@@ -119,14 +120,14 @@ export default function InstructorClientDetailPage() {
   const totalSpend = completedBookings.reduce((sum, b) => sum + b.price, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-slate-950 pb-24 text-slate-100">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-slate-950/95 border-b border-slate-800 sticky top-0 z-10 backdrop-blur-xl">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          <Link href="/dashboard/clients" className="p-2 hover:bg-gray-100 rounded-lg transition">
+          <Link href="/dashboard/clients" className="p-2 hover:bg-slate-800 rounded-lg transition">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
-          <h1 className="text-lg font-bold text-gray-900 truncate">{client.name}</h1>
+          <h1 className="text-lg font-bold text-slate-100 truncate">{client.name}</h1>
         </div>
       </header>
 
@@ -143,35 +144,35 @@ export default function InstructorClientDetailPage() {
         )}
 
         {/* Client info */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-5 space-y-3">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-              <User className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 bg-sky-900/40 rounded-full flex items-center justify-center shrink-0">
+              <User className="w-6 h-6 text-sky-400" />
             </div>
             <div>
-              <p className="font-bold text-gray-900">{client.name}</p>
-              <p className="text-xs text-gray-400">
+              <p className="font-bold text-slate-100">{client.name}</p>
+              <p className="text-xs text-slate-500">
                 Added {new Date(client.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
             </div>
           </div>
 
           <div className="space-y-2 pt-1">
-            <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-blue-600 transition">
-              <Phone className="w-4 h-4 text-gray-400" /> {client.phone}
+            <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-slate-300 hover:text-sky-400 transition">
+              <Phone className="w-4 h-4 text-slate-500" /> {client.phone}
             </a>
-            <a href={`mailto:${client.email}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-blue-600 transition">
-              <Mail className="w-4 h-4 text-gray-400" /> {client.email}
+            <a href={`mailto:${client.email}`} className="flex items-center gap-2 text-sm text-slate-300 hover:text-sky-400 transition">
+              <Mail className="w-4 h-4 text-slate-500" /> {client.email}
             </a>
             {client.addressText && (
-              <div className="flex items-start gap-2 text-sm text-gray-700">
-                <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+              <div className="flex items-start gap-2 text-sm text-slate-300">
+                <MapPin className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
                 <span>{client.addressText}</span>
               </div>
             )}
             {client.notes && (
-              <div className="flex items-start gap-2 text-sm text-gray-600 italic">
-                <FileText className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+              <div className="flex items-start gap-2 text-sm text-slate-400 italic">
+                <FileText className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
                 <span>{client.notes}</span>
               </div>
             )}
@@ -180,22 +181,22 @@ export default function InstructorClientDetailPage() {
 
         {/* Wallet & stats */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4 text-center">
             <Wallet className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-gray-900">
+            <p className="text-lg font-bold text-slate-100">
               {client.walletBalance !== null ? `$${client.walletBalance.toFixed(2)}` : '—'}
             </p>
-            <p className="text-xs text-gray-500">Wallet</p>
+            <p className="text-xs text-slate-400">Wallet</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4 text-center">
             <Calendar className="w-5 h-5 text-green-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-gray-900">{client.bookings.length}</p>
-            <p className="text-xs text-gray-500">Bookings</p>
+            <p className="text-lg font-bold text-slate-100">{client.bookings.length}</p>
+            <p className="text-xs text-slate-400">Bookings</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4 text-center">
             <DollarSign className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-gray-900">${totalSpend.toFixed(0)}</p>
-            <p className="text-xs text-gray-500">Total Spend</p>
+            <p className="text-lg font-bold text-slate-100">${totalSpend.toFixed(0)}</p>
+            <p className="text-xs text-slate-400">Total Spend</p>
           </div>
         </div>
 
@@ -212,7 +213,7 @@ export default function InstructorClientDetailPage() {
               <button
                 onClick={handleSendPaymentLink}
                 disabled={sendingLink || linkSent}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition text-sm disabled:opacity-60"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-slate-600 text-slate-300 font-semibold rounded-xl hover:bg-slate-800 transition text-sm disabled:opacity-60"
               >
                 {linkSent
                   ? <><CheckCircle className="w-4 h-4 text-green-600" /> Sent</>
@@ -233,22 +234,22 @@ export default function InstructorClientDetailPage() {
         </div>
 
         {/* Booking history */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Booking History</h2>
+        <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-800">
+            <h2 className="font-semibold text-slate-100">Booking History</h2>
           </div>
           {client.bookings.length === 0 ? (
-            <div className="px-5 py-10 text-center text-gray-400">
+            <div className="px-5 py-10 text-center text-slate-500">
               <Calendar className="w-10 h-10 mx-auto mb-2 opacity-30" />
               <p className="text-sm">No bookings yet</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-slate-800">
               {client.bookings.map(b => (
                 <Link
                   key={b.id}
                   href={`/dashboard/bookings/${b.id}`}
-                  className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition"
+                  className="flex items-center justify-between px-5 py-3 hover:bg-slate-800/50 transition"
                 >
                   <div>
                     <div className="flex items-center gap-2">
@@ -262,12 +263,12 @@ export default function InstructorClientDetailPage() {
                     {b.startTime && (
                       <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {new Date(b.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {new Date(b.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: instructorTz })}
                         {b.duration ? ` · ${b.duration >= 60 ? `${b.duration / 60}h` : `${b.duration}min`}` : ''}
                       </p>
                     )}
                   </div>
-                  <p className="text-sm font-semibold text-gray-900">${b.price.toFixed(2)}</p>
+                  <p className="text-sm font-semibold text-slate-100">${b.price.toFixed(2)}</p>
                 </Link>
               ))}
             </div>

@@ -1,14 +1,11 @@
 # TODO — Planned, Pending, and Deferred
 
-**Rule:** This file tracks only what is NOT yet done.  
-Completed work belongs in the permanent doc for that feature.  
-**Last Updated:** July 2026
+**Rule:** This file tracks only what is NOT yet done. When an item is completed, remove it from here and record it in CHANGES.md or the permanent feature doc.  
+**Last Updated:** August 2026
 
 ---
 
 ## 🔴 PRE-LAUNCH BLOCKERS — must be done before going live
-
-### ⚠️ Pre-launch config (no code changes needed)
 
 | # | What | Where |
 |---|------|--------|
@@ -16,11 +13,7 @@ Completed work belongs in the permanent doc for that feature.
 | 2 | Set `STRIPE_WEBHOOK_SECRET` — use path `/api/stripe/webhook` ONLY. Remove `/api/subscriptions/webhook` from Stripe dashboard — it is retired. | Vercel env vars → Stripe Dashboard → Webhooks |
 | 3 | Create live Stripe price IDs for all 8 tiers (BASIC/PRO/STUDIO/BUSINESS × monthly/annual) | Vercel env vars |
 | 4 | Configure Stripe Billing Portal (plan switching + proration) | Stripe Dashboard → Settings → Billing |
-| 5 | Set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | ✅ Done |
 | 6 | Verify `GOOGLE_REDIRECT_URI=https://drivebook.com.au/api/calendar/callback` | Vercel env vars + Google Cloud Console |
-| 7 | Set `NEXT_PUBLIC_VOICE_PHONE_NUMBER` with real AU number | Vercel env vars |
-| 8 | Replace placeholder ABN on about page | `app/about/page.tsx` — one line |
-| 9 | `npx prisma migrate deploy` on production DB | ✅ Pushed 2026-07-21 |
 | 10 | Set `connection_limit=20` in `DATABASE_URL` | Vercel env vars |
 | 11 | Set Firebase env vars (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) | Vercel env vars — required for mobile push |
 | 12 | Submit sitemap to Google Search Console | search.google.com/search-console → Sitemaps |
@@ -32,59 +25,44 @@ Completed work belongs in the permanent doc for that feature.
 
 ## 🔧 PENDING CODE FIXES
 
-### Instructor dashboard — remaining gaps
+### Document security
+
+| # | Priority | Feature | Notes |
+|---|---|---|---|
+| DOC-1 | ✅ Done | **Signed URLs for private documents** | All document views (instructor + admin) now go through API endpoints that generate 5-min signed Cloudinary URLs. Raw URLs no longer returned to client. |
+| DOC-2 | 🟡 MED | **LLM document scanning on upload** | After upload, send image to GPT-4o vision (server-side only). Extract `name`, `dob`, `licenceNumber`, `issueDate`, `expiryDate`. Store in `DocumentVerification` table. Admin sees extracted card — approve or flag. Cross-check extracted name/DOB against instructor profile. Schema needed: `DocumentVerification` model with `extractedName`, `extractedDob`, `extractedExpiry`, `extractedIssueDate`, `extractedLicenceNo`, `matchStatus` (`MATCH`/`MISMATCH`/`UNREADABLE`/`PENDING`), `flagReason`, `reviewedByAdminId`, `reviewedAt`. Never send extracted PII to client. Admin-only review UI. |
+
+### Instructor search
+
+| # | Priority | Feature | Notes |
+|---|---|---|---|
+| SEARCH-1 | ✅ Done | **Suburb-based search** | Instructors pick served suburbs from static AU data. Search matches by suburb/postcode — no maths. km radius kept as fallback for instructors without a suburb list. |
+| SEARCH-2 | 🟢 LOW | **Road-distance filter** | Current radius uses air distance (Haversine). Consider Google Maps Distance Matrix API for route-accurate filtering. Cost ~$0.005/call — only viable at scale. Alternative: apply a 1.3× road factor multiplier to the radius threshold as a cheap approximation. |
+
+### Timezone — national expansion readiness
+
+| # | Priority | What | File | Notes |
+|---|---|---|---|---|
+| TZ-1 | ✅ Done | **Instructor timezone selector in Settings UI** | `app/dashboard/settings/page.tsx` | Dropdown added using `AU_TIMEZONES`. Saves to `Instructor.timezone` in DB. |
+| TZ-2 | ✅ Done | **Availability service timezone** | `lib/services/availability.ts` | `parseTimeUTC()` now uses `localDateTimeToUTC` with instructor's stored timezone. Falls back to state-derived TZ, then Perth. |
+| TZ-3 | ✅ Done | **Schedule page week view timezone** | `app/dashboard/schedule/page.tsx` | `toPerth()` replaced with `toLocal(dt, tz)`. All date helpers accept `tz` param. `bufferSettings.timezone` flows through WeekView, AgendaView, BookingCard. |
+| TZ-4 | ✅ Done | **Booking confirmation email/SMS times** | `lib/services/email.ts`, `sms.ts`, `notifications.ts` | All functions accept optional `timezone` param defaulting to Perth. Existing call sites unaffected; new call sites can pass instructor's timezone. |
+
+**Already timezone-aware (August 2026):**
+- `app/api/bookings/offline/route.ts` — uses `localDateTimeToUTC` with instructor's stored timezone
+- `components/instructor/OfflineEarningsSection.tsx` — accepts `timezone` prop, uses utility functions
+- `app/dashboard/expenses/page.tsx` — fetches instructor timezone from settings API
+
+
 
 | # | Priority | Issue | File | Notes |
 |---|---|---|---|---|
 | UX-2 | 🟢 | Availability page has no unsaved-changes warning | `app/dashboard/availability/page.tsx` | Deferred |
 
-> All other DASH_GAPS items confirmed resolved:
-> - **UX-1** (Perth TZ comments) ✅ — multi-state expansion notes added to `dashboard/page.tsx`, `dashboard/schedule/page.tsx`, `lib/services/notifications.ts`
-> - **C-07** (staff tasks `alert()`) ✅ — replaced with `createError` inline state + `role="alert"`
-> - **MISSING-1** (`EarningsThisWeekCard`) ✅ — that IS the week earnings card already on the dashboard  
-> - **MISSING-2** (`lesson-feedback/summary`) ✅ — route exists and is fully implemented  
-> - **TECH-2** (whiteboard route) ✅ — `app/api/instructor/whiteboard/upload/route.ts` exists, uploads to Cloudinary  
-> - **TECH-3** (`client-lesson-feedback` + `client-performance`) ✅ — both routes exist and return correct shape
+### Payout system
 
-### Booking flow — remaining gaps
-
-**Bug 5 — By design (not a bug):** Package bookings — remaining hours stored as `packageHoursRemaining`. Students schedule remaining hours from dashboard. Intentional.
-
-### Payout system — remaining gaps
-
-**Bank account masking — no reveal endpoint**
-`bankBsb` is masked in list table display (`•••-XXX`). Full BSB is only visible in MarkSentModal confirm flow. No server-side reveal endpoint exists — admin must use DB directly for full account details. Low priority.
-
-**Failed payout — no UI retry action**
+**Failed payout — no UI retry action**  
 `Payout.status = 'FAILED'` records have no retry button in `/admin/payouts`. Admin must call `POST /api/admin/payouts/process` manually. Medium priority.
-
-**Governance payout thresholds — policy only, not enforced in code**
-`lib/config/governance.ts` defines `PAYOUT_APPROVAL_THRESHOLDS` but payout routes don't check them. Manual policy only. Low priority.
-
-### Remaining `alert()` calls (not release blockers — internal/low-traffic pages)
-
-| File | Calls | Priority |
-|---|---|---|
-| `app/staff/tasks/[id]/page.tsx` | 2 × `alert()` on task creation failure | 🟢 Low — staff internal |
-
-### Booking flow — max date hardcoded to 3 months
-`components/BookingDetailsForm.tsx` — `maxDate.setMonth(maxDate.getMonth() + 3)`. Should read from `bookingSettings.maxAdvanceDays`. Deferred — current business rule is 3 months.
-
-### Expiry columns backfill — existing records
-Expiry data for pre-July-2026 instructor records is in `workingHours.expiry` JSON, not the real columns. New saves write to both. Not a release blocker.
-
-```sql
--- One-time backfill (run when convenient)
-UPDATE "Instructor"
-SET
-  "licenseExpiry"    = (("workingHours"->>'expiry')::jsonb->>'licenseExpiry')::timestamptz,
-  "insuranceExpiry"  = (("workingHours"->>'expiry')::jsonb->>'insuranceExpiry')::timestamptz,
-  "policeCheckExpiry"= (("workingHours"->>'expiry')::jsonb->>'policeCheckExpiry')::timestamptz,
-  "wwcCheckExpiry"   = (("workingHours"->>'expiry')::jsonb->>'wwcCheckExpiry')::timestamptz
-WHERE "workingHours" IS NOT NULL
-  AND ("workingHours"->>'expiry') IS NOT NULL
-  AND "licenseExpiry" IS NULL;
-```
 
 ### Recommendations (do when touching relevant file)
 
@@ -98,7 +76,7 @@ WHERE "workingHours" IS NOT NULL
 
 ### Voice AI — production readiness (complete when declaring Voice AI live)
 
-> The core platform can go live without these. These are required only when activating the AI receptionist for production use.
+> The core platform can go live without these. Required only when activating the AI receptionist for production use.
 
 | Item |
 |---|
@@ -110,9 +88,22 @@ WHERE "workingHours" IS NOT NULL
 
 ---
 
+## 🔒 SECURITY — Phase 2
+
+| # | Priority | Feature | Notes |
+|---|---|---|---|
+| SEC-1 | ✅ Done | **New device verification code** | 6-digit email OTP required when instructor logs in from a new browser. OtpModal blocks navigation until confirmed. Known devices skip OTP. Non-instructor roles get notification email only (no gate). OTP rate-limited, HMAC-hashed, 5-min TTL. |
+| SEC-2 | ✅ Done | **Recognised devices page** — `/dashboard/settings/security` | Built: list devices, remove individual, remove all others. |
+| SEC-3 | 🟡 MED | **Force logout all devices** — revoke all sessions | Requires switching to database sessions (`strategy: 'database'`). Currently JWT-based — sessions expire at 7d max / 30min idle. |
+| SEC-4 | 🟢 LOW | **Geo-location on device notification email** | Integrate `ip-api.com` free tier. `LoginDevice.location` field already in schema. |
+| SEC-5 | 🟢 LOW | **Admin audit monitoring cron** — daily AuditLog review for suspicious patterns | Check >20 failed logins, unusual wallet credits, bank detail changes. Email admin summary. |
+| SEC-6 | 🟢 LOW | **Cleanup old devices cron** | `cleanupOldDevices()` already written. Just needs a cron endpoint. |
+
+---
+
 ## 🔵 DEFERRED FEATURES
 
-### Data export — instructor/student UI
+### Data export — instructor self-serve UI
 Admin CSV export is built. Instructor self-serve export not built.
 
 ### Vehicle model (Sprint 5)
@@ -157,5 +148,5 @@ Zero `*.test.ts` files. Priority order: Stripe webhook → wallet deduction → 
 
 ## 🔵 BLOG
 
-Maintain 2–4 posts/month. Topics: new features, state expansions, seasonal content, DoT rule changes.
+Maintain 2–4 posts/month. Topics: new features, state expansions, seasonal content, DoT rule changes.  
 OG images, Fuse.js search, and pagination deferred until 150+ posts.

@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { DollarSign, Clock, CheckCircle, ArrowRight, RefreshCw, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 interface EarningsData {
   totalEarnings: number;
   pendingPayouts: number;
   thisMonthEarnings: number;
-  thisWeekEarnings: number;
+  platform: {
+    pendingPayouts: number;
+  };
   transactions: {
     id: string;
     amount: number;
@@ -24,6 +27,7 @@ export default function InstructorWalletPage() {
   const [data, setData] = useState<EarningsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [instructorTz, setInstructorTz] = useState(DEFAULT_TIMEZONE);
 
   const load = async () => {
     try {
@@ -39,7 +43,10 @@ export default function InstructorWalletPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch('/api/instructor/settings').then(r => r.ok ? r.json() : null).then(s => { if (s?.timezone) setInstructorTz(resolveTimezone(s.timezone)); }).catch(() => {});
+  }, []);
 
   if (loading) return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
@@ -51,6 +58,17 @@ export default function InstructorWalletPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center text-red-400">{error}</div>
   );
 
+  // Derive this-week earnings from completed transactions where booking.startTime falls in Mon–Sun
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysFromMonday);
+  weekStart.setHours(0, 0, 0, 0);
+  const thisWeekEarnings = (data?.transactions ?? [])
+    .filter(tx => tx.status === 'COMPLETED' && tx.booking?.startTime && new Date(tx.booking.startTime) >= weekStart)
+    .reduce((sum, tx) => sum + (tx.instructorPayout ?? tx.amount), 0);
+
+  const pendingPayouts = data?.platform?.pendingPayouts ?? 0;
   const recent = data?.transactions?.slice(0, 10) ?? [];
 
   return (
@@ -76,14 +94,14 @@ export default function InstructorWalletPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-800">
             <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Pending Payout</p>
-            <p className="text-2xl font-bold text-amber-400">${(data?.pendingPayouts ?? 0).toFixed(2)}</p>
+            <p className="text-2xl font-bold text-amber-400">${pendingPayouts.toFixed(2)}</p>
             <div className="flex items-center gap-1 mt-2 text-xs text-amber-300">
               <Clock className="w-3 h-3" /> Awaiting processing
             </div>
           </div>
           <div className="bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-800">
             <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">This Week</p>
-            <p className="text-2xl font-bold text-green-400">${(data?.thisWeekEarnings ?? 0).toFixed(2)}</p>
+            <p className="text-2xl font-bold text-green-400">${thisWeekEarnings.toFixed(2)}</p>
             <div className="flex items-center gap-1 mt-2 text-xs text-green-300">
               <TrendingUp className="w-3 h-3" /> Net earnings
             </div>
@@ -118,7 +136,7 @@ export default function InstructorWalletPage() {
               <p className="text-sm mt-1">Completed lessons will appear here</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-slate-800">
               {recent.map(tx => (
                 <div key={tx.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-800 transition">
                   <div>
@@ -127,8 +145,8 @@ export default function InstructorWalletPage() {
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       {tx.booking?.startTime
-                        ? new Date(tx.booking.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-                        : new Date(tx.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        ? new Date(tx.booking.startTime).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: instructorTz })
+                        : new Date(tx.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: instructorTz })}
                     </p>
                   </div>
                   <div className="text-right">

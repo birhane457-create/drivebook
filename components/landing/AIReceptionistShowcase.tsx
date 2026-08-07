@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { Phone, MessageSquare, Calendar, CheckCircle, Clock } from 'lucide-react'
@@ -47,7 +47,7 @@ export default function AIReceptionistShowcase() {
   const currentSlide = slides[currentIndex]
 
   return (
-    <div className="w-full max-w-7xl mx-auto">
+    <div className="w-full max-w-7xl mx-auto" inert={true} aria-hidden="true">
       <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200">
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-6">
           <h3 className="text-3xl font-bold mb-2">{currentSlide.title}</h3>
@@ -242,3 +242,4 @@ function ConfirmationStep() {
     </div>
   )
 }
+

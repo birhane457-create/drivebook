@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCommissionRate } from '@/lib/services/platform-pricing';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -187,7 +188,7 @@ export async function POST(req: NextRequest) {
 
     const [client, instructor] = await Promise.all([
       prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true, phone: true, userId: true, email: true } }),
-      prisma.instructor.findUnique({ where: { id: instructorId }, select: { id: true, name: true, hourlyRate: true, subscriptionTier: true } }),
+      prisma.instructor.findUnique({ where: { id: instructorId }, select: { id: true, name: true, hourlyRate: true, subscriptionTier: true, timezone: true, state: true } }),
     ]);
 
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
@@ -229,12 +230,16 @@ export async function POST(req: NextRequest) {
         data: { balance: { decrement: lessonPrice } },
       });
 
+      const adminBookingTz = instructor?.timezone
+        ? resolveTimezone(instructor.timezone)
+        : timezoneFromState(instructor?.state);
+
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: 'DEBIT',
           amount: lessonPrice,
-          description: `Lesson booking (admin) — ${newStart.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })}`,
+          description: `Lesson booking (admin) — ${newStart.toLocaleDateString('en-AU', { timeZone: adminBookingTz })}`,
           status: 'CONFIRMED',
         },
       });

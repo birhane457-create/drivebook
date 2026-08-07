@@ -32,6 +32,8 @@ export default function InstructorTermsPage() {
               ['#eligibility', 'Eligibility'],
               ['#approval', 'Approval Process'],
               ['#services', 'Platform Services'],
+              ['#business-accounts', 'Business Accounts'],
+              ['#ai-receptionist', 'AI-Assisted Services'],
               ['#obligations', 'Instructor Obligations'],
               ['#subscription', 'Subscription'],
               ['#commission', 'Commission'],
@@ -42,6 +44,7 @@ export default function InstructorTermsPage() {
               ['#cancellation', 'Cancellation by Instructor'],
               ['#data-access', 'Data Access'],
               ['#account-closure', 'Account Closure'],
+              ['#force-majeure', 'Force Majeure'],
               ['#ip', 'Intellectual Property'],
               ['#confidentiality', 'Confidentiality'],
               ['#liability', 'Liability'],
@@ -64,7 +67,7 @@ export default function InstructorTermsPage() {
               For Driving Instructors Only
             </div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Instructor Terms and Conditions</h1>
-            <p className="text-gray-500 text-sm">Last updated: May 2026 · Version 1.0</p>
+            <p className="text-gray-500 text-sm">Version 2.0 · Effective: 6 August 2026 · Last Updated: 6 August 2026</p>
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
               These terms apply to <strong>Driving Instructors</strong> who register and operate on the DriveBook platform. If you are a learner booking driving lessons, please read our <Link href="/terms" className="underline font-medium">Learner Terms and Conditions</Link> instead.
             </div>
@@ -76,7 +79,7 @@ export default function InstructorTermsPage() {
               <h2 className="text-lg font-bold text-gray-900 mb-3">Parties</h2>
               <p>This Agreement is between:</p>
               <ul className="list-disc pl-6 mt-2 space-y-1">
-                <li><strong>DriveBook</strong> (operated by DriveBook Pty Ltd, ABN: [Your ABN], "DriveBook", "we", "us"); and</li>
+                <li><strong>DriveBook</strong> (operated by DriveBook, "DriveBook", "we", "us"); and</li>
                 <li>the <strong>Instructor</strong> who has registered on the DriveBook platform and accepted this Agreement.</li>
               </ul>
             </section>
@@ -114,8 +117,8 @@ export default function InstructorTermsPage() {
               <ul className="list-none pl-6 space-y-2 mb-4">
                 <li>6.1. DriveBook will endeavour to process applications within 2–5 business days of receiving all required documents.</li>
                 <li>6.2. DriveBook may request additional documents, references, or information at any time during the approval process or after approval.</li>
-                <li>6.3. Approval may be revoked at any time if DriveBook determines that the Instructor no longer meets the eligibility requirements or has breached this Agreement.</li>
-                <li>6.4. During the approval period, the Instructor may access the dashboard to complete their profile and upload documents, but may not create bookings or accept students.</li>
+                <li>6.3. Approval may be revoked at any time if DriveBook determines that the Instructor no longer meets the eligibility requirements or has breached this Agreement. Approval decisions are made at DriveBook's sole discretion and are final.</li>
+                <li>6.4. During the approval period, the Instructor may access the dashboard, complete their profile, and upload documents, but may not create bookings, accept students, appear in public search results, or use the AI receptionist until approval is granted.</li>
               </ul>
 
               <h3 id="services" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Platform Services</h3>
@@ -127,11 +130,29 @@ export default function InstructorTermsPage() {
                 <li>7.4. client management tools including client records, lesson history, and feedback;</li>
                 <li>7.5. earnings tracking, payout management, and weekly receipts;</li>
                 <li>7.6. analytics and performance reporting; and</li>
-                <li>7.7. document management and compliance tracking.</li>
+                <li>7.7. document management and compliance tracking; and</li>
+                <li>7.8. for PRO, STUDIO, and BUSINESS tier subscribers, an AI-assisted telephone receptionist service for handling incoming booking enquiries on the Instructor's behalf.</li>
               </ul>
-              <p className="mb-4">8. DriveBook may add, modify, or remove platform features at any time. Material changes will be communicated with reasonable notice.</p>
+              <p className="mb-4">8. DriveBook may add, modify, or remove platform features at any time. Material changes will be communicated with reasonable notice. DriveBook may also introduce additional features, integrations, and subscription benefits from time to time.</p>
 
-              <h3 id="obligations" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Instructor Obligations</h3>
+              <h3 id="business-accounts" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Business Accounts</h3>
+              <p className="mb-2">8B. Instructors may register as either an individual instructor or under a Business Account using a registered business or trading name.</p>
+              <ul className="list-none pl-6 space-y-2 mb-4">
+                <li>8B.1. At the Effective Date of this Agreement, a Business Account supports a single instructor operating under that business identity.</li>
+                <li>8B.2. DriveBook may introduce additional business management features in future releases, including multiple instructors, administrator roles, team management, and separate payment functionality. Where those features are introduced, additional or updated terms may apply. The Instructor will be notified of any material changes before they take effect.</li>
+                <li>8B.3. The Instructor is responsible for ensuring that any business name used on the platform is lawfully registered and does not infringe the rights of any third party.</li>
+              </ul>
+
+              <h3 id="ai-receptionist" className="font-semibold text-gray-900 mb-2 scroll-mt-8">AI-Assisted Services</h3>
+              <p className="mb-2">8A. DriveBook may provide AI-assisted features including but not limited to telephone reception, profile generation, scheduling assistance, customer support, and administrative tools. PRO, STUDIO, and BUSINESS tier subscribers may be assigned a dedicated AI-assisted telephone receptionist line. By activating and using any AI-assisted feature, the Instructor acknowledges and agrees that:</p>
+              <ul className="list-none pl-6 space-y-2 mb-4">
+                <li>8A.1. Calls received through the AI receptionist line are recorded and transcribed. Transcripts are used to process booking requests, improve service quality, and resolve disputes.</li>
+                <li>8A.2. AI systems answer enquiries on the Instructor's behalf using information from the Instructor's DriveBook profile, including their instructor name, business name (where applicable), service areas, availability, and pricing. The Instructor is responsible for ensuring this information is accurate and up to date. The Instructor remains responsible for all booking information, pricing, availability, and representations made through their DriveBook profile, regardless of whether enquiries are handled by AI or by the Instructor directly.</li>
+                <li>8A.3. AI systems are automated. DriveBook does not guarantee that every interaction will be handled correctly. The Instructor should monitor their bookings and follow up on any missed or incomplete interactions.</li>
+                <li>8A.4. DriveBook is not liable for errors, omissions, or misrepresentations made by AI systems where those errors arise from inaccurate or incomplete information in the Instructor's profile.</li>
+                <li>8A.5. AI-assisted features may be modified, temporarily suspended, or discontinued at any time with reasonable notice.</li>
+                <li>8A.6. The Instructor must not configure their profile or AI settings to make representations that are false, misleading, or contrary to this Agreement.</li>
+              </ul>
               <p className="mb-2">9. The Instructor agrees to:</p>
               <ul className="list-none pl-6 space-y-2 mb-4">
                 <li>9.1. maintain all eligibility requirements throughout the term of this Agreement;</li>
@@ -143,11 +164,12 @@ export default function InstructorTermsPage() {
                 <li>9.7. notify DriveBook immediately if their instructor accreditation, insurance, WWCC, or police check is suspended, cancelled, or expires;</li>
                 <li>9.8. notify DriveBook immediately if they are charged with or convicted of any criminal offence;</li>
                 <li>9.9. not use the platform for any unlawful purpose or in a manner that could harm DriveBook's reputation; and</li>
-                <li>9.10. comply with all applicable laws, including road traffic laws, privacy laws, and anti-discrimination laws.</li>
+                <li>9.10. comply with all applicable laws, including road traffic laws, privacy laws, and anti-discrimination laws; and</li>
+                <li>9.11. comply with DriveBook's <Link href="/privacy" className="text-purple-600 hover:underline">Privacy Policy</Link> when handling learner personal information received through the platform.</li>
               </ul>
 
               <h3 id="subscription" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Subscription</h3>
-              <p className="mb-2">10. Access to the DriveBook platform requires an active paid subscription. The following tiers are available:</p>
+              <p className="mb-2">10. Continued access to DriveBook platform features requires an active subscription. The following tiers are available:</p>
               <div className="overflow-x-auto mb-4">
                 <table className="w-full border border-gray-200 rounded-lg text-sm">
                   <thead className="bg-gray-50">
@@ -166,13 +188,15 @@ export default function InstructorTermsPage() {
                   </tbody>
                 </table>
               </div>
+              <p className="text-xs text-gray-500 mb-3 italic">Pricing shown is current as at the Effective Date of this Agreement. See clause 11.3 for rate change provisions.</p>
               <ul className="list-none pl-6 space-y-2 mb-4">
                 <li>10.1. All new accounts receive a 14-day free trial (30 days for BUSINESS tier) with full access to the selected tier's features. No payment method is required to start a trial.</li>
                 <li>10.2. Subscriptions auto-renew at the end of each billing period. The Instructor may cancel auto-renewal at any time through the Stripe Billing Portal.</li>
                 <li>10.3. If a payment fails, the Instructor's account enters read-only mode — they retain access to view all historical data (bookings, clients, earnings) but cannot create new bookings until payment is resolved.</li>
                 <li>10.4. Subscription fees are non-refundable. No refund is issued for unused portions of a billing period upon cancellation.</li>
                 <li>10.5. DriveBook may change subscription pricing with 30 days written notice. Continued use after the notice period constitutes acceptance of the new pricing.</li>
-                <li>10.6. All subscription payments are processed by Stripe. By subscribing, the Instructor also agrees to <a href="https://stripe.com/au/legal" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">Stripe's Terms of Service</a>.</li>
+                <li>10.6. Applicable taxes or government charges may be added to subscription fees where required by law.</li>
+                <li>10.7. All subscription payments are processed by Stripe. By subscribing, the Instructor also agrees to <a href="https://stripe.com/au/legal" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">Stripe's Terms of Service</a>.</li>
               </ul>
 
               <h3 id="commission" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Commission</h3>
@@ -248,19 +272,24 @@ export default function InstructorTermsPage() {
               <h3 id="account-closure" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Account Closure</h3>
               <p className="mb-2">18. The Instructor may close their account at any time by contacting DriveBook support.</p>
               <ul className="list-none pl-6 space-y-2 mb-4">
-                <li>18.1. Upon account closure, personal data will be deleted or anonymised within 30 days, except where retention is required by law.</li>
+                <li>18.1. Upon account closure, personal data will be deleted or de-identified within a reasonable period, in most cases within 90 days, subject to legal, security, fraud prevention, dispute resolution, and backup retention requirements.</li>
                 <li>18.2. Booking and transaction records are retained for 7 years for tax and financial compliance purposes.</li>
                 <li>18.3. Any outstanding payouts will be processed before account closure. Payouts cannot be processed after account closure.</li>
                 <li>18.4. Subscription fees are not refunded upon account closure.</li>
                 <li>18.5. DriveBook may close an Instructor's account for any reason set out in the Events of Termination (clause 22).</li>
+                <li>18.6. DriveBook may retain anonymised and aggregated statistical information indefinitely for analytics, reporting, and platform improvement purposes, regardless of account closure.</li>
               </ul>
 
+              <h3 id="force-majeure" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Force Majeure</h3>
+              <p className="mb-4">18A. Neither party is liable for delays or failures in performance caused by events beyond their reasonable control, including natural disasters, pandemics, government actions, telecommunications outages, cyber incidents, third-party service provider failures, or infrastructure disruptions. In such events, the affected party will take reasonable steps to resume performance as soon as practicable.</p>
+
               <h3 id="ip" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Intellectual Property</h3>
-              <p className="mb-2">19. All intellectual property in the DriveBook platform, including software, design, trademarks, and content created by DriveBook, is owned exclusively by DriveBook Pty Ltd.</p>
+              <p className="mb-2">19. All intellectual property in the DriveBook platform, including software, design, trademarks, and content created by DriveBook, is owned exclusively by DriveBook.</p>
               <ul className="list-none pl-6 space-y-2 mb-4">
                 <li>19.1. The Instructor retains ownership of content they create and upload to the platform (profile text, photos, etc.).</li>
                 <li>19.2. By uploading content, the Instructor grants DriveBook a non-exclusive, royalty-free, worldwide licence to display, reproduce, and use that content for the purpose of operating and promoting the platform.</li>
-                <li>19.3. This licence survives account closure for the purpose of displaying historical reviews and anonymised data.</li>
+                <li>19.3. The Instructor warrants that any content uploaded to the platform does not infringe the intellectual property rights, privacy rights, or other rights of any third party.</li>
+                <li>19.4. This licence survives account closure for the purpose of displaying historical reviews and anonymised data.</li>
               </ul>
 
               <h3 id="confidentiality" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Confidentiality</h3>
@@ -330,13 +359,16 @@ export default function InstructorTermsPage() {
               <dl className="space-y-3 text-sm">
                 <div><dt className="font-semibold inline">ABN</dt><dd className="inline"> — Australian Business Number issued by the Australian Business Register.</dd></div>
                 <div><dt className="font-semibold inline">Agreement</dt><dd className="inline"> — this document as amended from time to time, together with any documents referred to herein.</dd></div>
+                <div><dt className="font-semibold inline">AI-Assisted Services</dt><dd className="inline"> — automated and artificial intelligence-powered features provided by DriveBook, including but not limited to telephone reception, profile generation, scheduling assistance, customer support, and administrative tools, as described in clause 8A.</dd></div>
+                <div><dt className="font-semibold inline">Business Account</dt><dd className="inline"> — an Instructor account registered under a business or trading name, as described in clause 8B.</dd></div>
                 <div><dt className="font-semibold inline">Commission</dt><dd className="inline"> — the percentage of each lesson payment deducted by DriveBook as set out in clause 11.</dd></div>
-                <div><dt className="font-semibold inline">DriveBook</dt><dd className="inline"> — DriveBook Pty Ltd (ABN: [Your ABN]).</dd></div>
+                <div><dt className="font-semibold inline">DriveBook</dt><dd className="inline"> — DriveBook ("DriveBook", "we", "us"), operator of the DriveBook platform at drivebook.com.au.</dd></div>
                 <div><dt className="font-semibold inline">Event of Termination</dt><dd className="inline"> — those events set out in clause 22.</dd></div>
                 <div><dt className="font-semibold inline">Instructor</dt><dd className="inline"> — a person who has registered on the DriveBook platform to provide driving instruction services as an independent contractor.</dd></div>
                 <div><dt className="font-semibold inline">Platform</dt><dd className="inline"> — the DriveBook software platform, website, and associated services at drivebook.com.au.</dd></div>
                 <div><dt className="font-semibold inline">Platform-Acquired Client</dt><dd className="inline"> — a learner who first contacted the Instructor through DriveBook or has a DriveBook account linked to the Instructor.</dd></div>
-                <div><dt className="font-semibold inline">Subscription</dt><dd className="inline"> — the recurring fee paid by the Instructor for access to the DriveBook platform, as described in clause 10.</dd></div>
+                <div><dt className="font-semibold inline">Subscription</dt><dd className="inline"> — the recurring fee paid by the Instructor for continued access to DriveBook platform features, as described in clause 10.</dd></div>
+                <div><dt className="font-semibold inline">Trial Period</dt><dd className="inline"> — the free trial period available to new Instructor accounts, as described in clause 10.1, during which full access to the selected subscription tier's features is available without charge.</dd></div>
                 <div><dt className="font-semibold inline">Written Notice</dt><dd className="inline"> — notification given by email, SMS, or via the DriveBook platform.</dd></div>
                 <div><dt className="font-semibold inline">WWCC</dt><dd className="inline"> — Working With Children Check or equivalent issued by the relevant state or territory authority.</dd></div>
               </dl>
@@ -357,7 +389,7 @@ export default function InstructorTermsPage() {
       </div>
 
       <footer className="bg-gray-800 text-white py-8 px-4 mt-8 text-center text-sm text-gray-400">
-        © {new Date().getFullYear()} DriveBook Pty Ltd. All rights reserved.
+        © {new Date().getFullYear()} DriveBook. All rights reserved.
       </footer>
     </div>
   )

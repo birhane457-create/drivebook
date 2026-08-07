@@ -10,6 +10,7 @@ import { getDisplayName } from '@/lib/utils/account';
 import { calculatePackagePriceDynamic } from '@/lib/config/packages';
 import crypto from 'crypto';
 import { invalidateAvailabilityCache } from '@/lib/services/availability';
+import { resolveTimezone, timezoneFromState } from '@/lib/utils/timezone';
 
 // P0-2 FIX: Define constant here (was missing — caused key.length > undefined to always be false)
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
@@ -197,6 +198,8 @@ export async function POST(req: NextRequest) {
         trialEndsAt: true,
         acceptingBookings: true,
         testPackagePrice: true,
+        timezone: true,
+        state: true,
       },
     }) as any;
 
@@ -315,6 +318,7 @@ export async function POST(req: NextRequest) {
             try {
               const { emailService } = await import('@/lib/services/email');
               await emailService.sendGenericEmail({
+                from: 'DriveBook Team <hello@drivebook.com.au>',
                 to: data.accountHolderEmail,
                 subject: '🔐 Set up your DriveBook account',
                 html: `
@@ -419,6 +423,7 @@ export async function POST(req: NextRequest) {
                 // Send fallback email with reset link
                 const { emailService } = await import('@/lib/services/email');
                 await emailService.sendGenericEmail({
+                  from: 'DriveBook Account Verification <verification@drivebook.com.au>',
                   to: data.accountHolderEmail,
                   subject: '🔐 DriveBook Password Reset (Fallback Link)',
                   html: `
@@ -896,6 +901,7 @@ export async function POST(req: NextRequest) {
         const actionLabel = isNewAccount ? 'Set Password & Top Up →' : 'Log In & Top Up →';
 
         await emailService.sendGenericEmail({
+          from: 'DriveBook Bookings <bookings@drivebook.com.au>',
           to: data.accountHolderEmail,
           subject: `📅 ${(instructor as any).name} booked a lesson for you — top up to confirm`,
           html: `
@@ -1030,17 +1036,20 @@ export async function POST(req: NextRequest) {
     //   scheduledHours:   hours consumed by lessons booked in this call
     //   scheduledLessons: number of lessons actually scheduled (for multi-lesson voice flow)
     //   remainingHours:   hours still available after this booking
-    //   firstLesson:      pre-formatted Perth local time e.g. "Monday 10:00 AM"
+    //   firstLesson:      pre-formatted instructor-local time e.g. "Monday 10:00 AM"
     //   paymentRequired:  false for short-notice (instructor approves first)
     //   slotHeldMinutes:  how long the SlotReservation holds before expiry
     //   pickupVerified:   false when address was spoken but geocoding failed
+    const lessonDisplayTz = instructor?.timezone
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor?.state);
     const firstLessonDisplay = startTime
       ? startTime.toLocaleString('en-AU', {
           weekday: 'long',
           hour: 'numeric',
           minute: '2-digit',
           hour12: true,
-          timeZone: 'Australia/Perth',
+          timeZone: lessonDisplayTz,
         })
       : null;
 

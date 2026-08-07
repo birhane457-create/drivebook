@@ -31,6 +31,8 @@ interface BookingFormProps {
   initialDate?: string
   /** Pre-fill the time picker (HH:MM 24h) — used by Find Next Slot */
   initialTime?: string
+  /** Pre-fill the duration (minutes) — used by Find Next Slot */
+  initialDuration?: number
 }
 
 export default function BookingForm({ 
@@ -42,6 +44,7 @@ export default function BookingForm({
   redirectAfterUpdate,
   initialDate,
   initialTime,
+  initialDuration,
 }: BookingFormProps) {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -94,7 +97,7 @@ export default function BookingForm({
       sameAsPickup: true,
       date: initialDate || '',
       time: initialTime || '',
-      duration: 60,
+      duration: initialDuration || 60,
       notes: '',
       joinWaitingList: false,
       ageDeclaration: false,
@@ -559,9 +562,10 @@ export default function BookingForm({
         </label>
         <SlotPicker
           instructorId={instructorData?.id || instructorId || ''}
+          date={formData.date}
           duration={formData.duration}
-          selected={formData.date && formData.time ? { date: formData.date, time: formData.time } : null}
-          onSelect={(date, time) => setFormData({ ...formData, date, time })}
+          value={formData.time}
+          onChange={(time) => setFormData({ ...formData, time })}
         />
       </div>
 

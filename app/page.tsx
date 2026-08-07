@@ -4,9 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import Logo from '@/components/Logo'
-import BookingFlowShowcase from '@/components/landing/BookingFlowShowcase'
 import AIReceptionistShowcase from '@/components/landing/AIReceptionistShowcase'
-import ProgressTrackingShowcase from '@/components/landing/ProgressTrackingShowcase'
 
 const VOICE_NUMBER = process.env.NEXT_PUBLIC_VOICE_PHONE_NUMBER
 
@@ -281,7 +279,7 @@ export default function HomePage() {
 
         {/* AI Voice Receptionist Showcase — already shown above */}
 
-        {/* Progress Tracking Showcase */}
+        {/* Progress Tracking — static visual, no JS weight */}
         <section className="py-12 md:py-20">
           <div className="text-center mb-12">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-3">Track Your Progress</h2>
@@ -289,16 +287,63 @@ export default function HomePage() {
             <p className="text-white/50 text-sm mb-6">After every lesson, your instructor logs your performance directly into DriveBook — giving you personalised feedback on exactly what to work on next.</p>
             <p className="text-xs text-white/40">Scores are based on your instructor&apos;s observations and are a learning guide only. Always follow your instructor&apos;s advice on test readiness — DriveBook does not certify when you are ready to sit your test.</p>
           </div>
-          <ProgressTrackingShowcase />
+          {/* Static progress visual — no JS carousel needed */}
+          <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-6">
+            {[
+              { label: 'Signalling', score: 90, color: 'bg-emerald-500' },
+              { label: 'Look Behind', score: 85, color: 'bg-emerald-500' },
+              { label: 'Movement', score: 80, color: 'bg-emerald-500' },
+              { label: 'Path Control', score: 88, color: 'bg-emerald-500' },
+              { label: 'Vehicle Mgmt', score: 72, color: 'bg-amber-500' },
+              { label: 'Responsiveness', score: 92, color: 'bg-emerald-500' },
+            ].map(({ label, score, color }) => (
+              <div key={label} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-white">{label}</span>
+                  <span className="text-lg font-bold text-white">{score}</span>
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-2">
+                  <div className={`${color} h-2 rounded-full`} style={{ width: `${score}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-8">
+            <Link href="/book" className="inline-block bg-gradient-to-r from-violet-600 to-purple-600 text-white px-8 py-3 rounded-xl no-underline font-semibold hover:from-violet-500 hover:to-purple-500 transition-all">
+              Find an Instructor →
+            </Link>
+          </div>
         </section>
 
-        {/* How it works */}
+        {/* How it works — static 4-step, replaces BookingFlowShowcase */}
         <section className="py-12 md:py-20">
           <div className="text-center mb-12">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-3">How It Works</h2>
             <p className="text-lg text-white/70">From search to test-ready in 4 simple steps</p>
           </div>
-          <BookingFlowShowcase />
+          <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-6">
+            {[
+              { step: '1', title: 'Search Your Area', desc: 'Enter your suburb or postcode to find approved instructors near you. Filter by transmission type, availability, and price.', color: 'from-blue-500 to-blue-600' },
+              { step: '2', title: 'Choose & Book', desc: 'View instructor profiles, ratings, and hourly rates. Select your package and pick a time — no phone calls needed.', color: 'from-violet-500 to-purple-600' },
+              { step: '3', title: 'Pay Securely', desc: 'Pay by card or use your wallet balance. Get instant SMS confirmation for you and your instructor.', color: 'from-emerald-500 to-teal-500' },
+              { step: '4', title: 'Track Progress', desc: 'After each lesson your instructor logs personalised feedback. Watch your skills improve lesson by lesson.', color: 'from-amber-500 to-orange-500' },
+            ].map(({ step, title, desc, color }) => (
+              <div key={step} className="flex gap-5 p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-all">
+                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white font-extrabold text-lg shrink-0`}>
+                  {step}
+                </div>
+                <div>
+                  <h3 className="font-bold text-white mb-1">{title}</h3>
+                  <p className="text-white/60 text-sm leading-relaxed">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-10">
+            <Link href="/book" className="inline-block bg-gradient-to-r from-blue-600 to-violet-600 text-white px-10 py-4 rounded-xl no-underline font-bold text-lg hover:from-blue-500 hover:to-violet-500 transition-all shadow-lg shadow-blue-500/20">
+              Find an Instructor Near You →
+            </Link>
+          </div>
         </section>
 
         {/* Simple Steps Summary */}

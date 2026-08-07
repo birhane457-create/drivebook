@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { DollarSign, Calendar, ChevronDown, ChevronRight, Clock, FileText, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 // ── Inline toast ───────────────────────────────────────────────────────────────
 type ToastState = { type: 'success' | 'error'; message: string } | null;
@@ -28,13 +29,16 @@ interface Transaction {
   instructorPayout: number;
   status: string;
   createdAt: string;
+  description: string;
   booking?: {
     id: string;
-    client: { name: string };
+    isPackageBooking?: boolean;
+    parentBookingId?: string;
+    source?: string;
+    client: { name: string } | null;
     startTime: string;
     endTime: string;
   };
-  description: string;
 }
 
 interface WeeklyEarnings {
@@ -68,10 +72,14 @@ interface PlatformEarningsData {
 }
 
 export default function PlatformEarningsSection({ 
-  data 
+  data,
+  timezone,
 }: { 
-  data: PlatformEarningsData 
+  data: PlatformEarningsData;
+  timezone?: string;
 }) {
+  const tz = resolveTimezone(timezone) || DEFAULT_TIMEZONE;
+  const tzOpts = { timeZone: tz };
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showAllHistory, setShowAllHistory] = useState(false);
@@ -242,7 +250,7 @@ export default function PlatformEarningsSection({
                                   </div>
                                   {t.booking && (
                                     <p className="text-xs text-slate-400 mt-0.5">
-                                      {t.booking.client?.name ?? 'Guest'} · {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                                      {t.booking.client?.name ?? 'Guest'} · {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', ...tzOpts })}
                                     </p>
                                   )}
                                   <p className="text-xs text-slate-400">Gross ${t.amount.toFixed(2)} · Commission -${t.platformFee.toFixed(2)}</p>

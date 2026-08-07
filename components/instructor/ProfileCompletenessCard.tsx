@@ -133,6 +133,20 @@ interface Props {
 export default function ProfileCompletenessCard({ instructor }: Props) {
   const { score, items } = computeProfileCompleteness(instructor);
 
+  // ── Collapse state (must be before any early returns per Rules of Hooks) ────
+  const STORAGE_KEY = 'profile-completeness-collapsed';
+  const defaultCollapsed = score >= 60;
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored !== null) setCollapsed(stored === 'true');
+    } catch { /* localStorage may be unavailable */ }
+  }, []);
+
   // Hide once fully complete — no point showing 100%
   if (score === 100) return null;
 
@@ -153,22 +167,6 @@ export default function ProfileCompletenessCard({ instructor }: Props) {
     score >= 80 ? 'border-emerald-500/20' :
     score >= 50 ? 'border-amber-500/20'   :
                   'border-rose-500/20';
-
-  // ── Collapse state ──────────────────────────────────────────────────────────
-  // Default: expanded when score < 60 (new instructor), collapsed otherwise.
-  // Persisted in localStorage so it survives page navigation.
-  const STORAGE_KEY = 'profile-completeness-collapsed';
-  const defaultCollapsed = score >= 60;
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored !== null) setCollapsed(stored === 'true');
-    } catch { /* localStorage may be unavailable */ }
-  }, []);
 
   const toggle = () => {
     setCollapsed(prev => {

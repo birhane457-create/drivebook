@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { decodeFeedback } from '@/lib/config/feedback-codes';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 
 export const dynamic = 'force-dynamic';
@@ -160,7 +161,7 @@ export async function GET(req: NextRequest) {
       .reverse()
     const progressChart = scoredAssessments.map((booking: any, index: number) => ({
       lesson: index + 1,
-      date: booking.startTime.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }),
+      date: booking.startTime.toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE }),
       score: booking.performanceScore,
       assessmentType: booking.assessmentType,
       passed: booking.passed ?? null,

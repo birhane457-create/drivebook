@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getDisplayName } from '@/lib/utils/account';
+import { formatLocalDate, formatLocalTime, resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export interface CreateNotificationInput {
   userId: string;
@@ -65,7 +66,7 @@ export async function notifyFeedbackReceived(bookingId: string) {
       where: { id: bookingId },
       include: {
         client: { select: { userId: true } },
-        instructor: { select: { name: true, businessName: true, accountType: true } },
+        instructor: { select: { name: true, businessName: true, accountType: true, timezone: true, state: true } },
       },
     });
 
@@ -116,7 +117,7 @@ export async function notifyBookingConfirmed(bookingId: string) {
       where: { id: bookingId },
       include: {
         client: { select: { userId: true } },
-        instructor: { select: { name: true, businessName: true, accountType: true } },
+        instructor: { select: { name: true, businessName: true, accountType: true, timezone: true, state: true } },
       },
     });
 
@@ -125,7 +126,8 @@ export async function notifyBookingConfirmed(bookingId: string) {
       return;
     }
 
-    const bookingDate = booking.startTime?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) || 'N/A';
+    const tz = booking.instructor ? resolveTimezone(booking.instructor.timezone) ?? timezoneFromState(booking.instructor.state) : DEFAULT_TIMEZONE;
+    const bookingDate = booking.startTime ? formatLocalDate(booking.startTime, tz) : 'N/A';
 
     return createNotification({
       userId: booking.client.userId,
@@ -152,7 +154,7 @@ export async function notifyBookingCancelled(bookingId: string, cancellationReas
       where: { id: bookingId },
       include: {
         client: { select: { userId: true } },
-        instructor: { select: { name: true, businessName: true, accountType: true } },
+        instructor: { select: { name: true, businessName: true, accountType: true, timezone: true, state: true } },
       },
     });
 
@@ -161,7 +163,8 @@ export async function notifyBookingCancelled(bookingId: string, cancellationReas
       return;
     }
 
-    const bookingDate = booking.startTime?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) || 'N/A';
+    const tz = booking.instructor ? resolveTimezone(booking.instructor.timezone) ?? timezoneFromState(booking.instructor.state) : DEFAULT_TIMEZONE;
+    const bookingDate = booking.startTime ? formatLocalDate(booking.startTime, tz) : 'N/A';
 
     return createNotification({
       userId: booking.client.userId,
@@ -188,7 +191,7 @@ export async function notifyBookingRescheduled(bookingId: string, newDate: Date)
       where: { id: bookingId },
       include: {
         client: { select: { userId: true } },
-        instructor: { select: { name: true, businessName: true, accountType: true } },
+        instructor: { select: { name: true, businessName: true, accountType: true, timezone: true, state: true } },
       },
     });
 
@@ -197,8 +200,9 @@ export async function notifyBookingRescheduled(bookingId: string, newDate: Date)
       return;
     }
 
-    const newDateStr = newDate.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' });
-    const newTimeStr = newDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' });
+    const tz = booking.instructor ? resolveTimezone(booking.instructor.timezone) ?? timezoneFromState(booking.instructor.state) : DEFAULT_TIMEZONE;
+    const newDateStr = formatLocalDate(newDate, tz);
+    const newTimeStr = formatLocalTime(newDate, tz, { hour: '2-digit', minute: '2-digit' });
 
     return createNotification({
       userId: booking.client.userId,
@@ -233,7 +237,9 @@ export async function notifyPackagePurchased(packageBookingId: string) {
       return;
     }
 
-    const expiryDate = pkg.packageExpiryDate?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) || 'N/A';
+    // Try to use instructor timezone if package belongs to an instructor; fallback to default
+    const instrTz = DEFAULT_TIMEZONE;
+    const expiryDate = pkg.packageExpiryDate ? formatLocalDate(pkg.packageExpiryDate, instrTz) : 'N/A';
     const hours = pkg.packageHours || 0;
     const price = pkg.packageTotalPaid || 0;
 

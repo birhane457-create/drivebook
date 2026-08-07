@@ -12,6 +12,7 @@
  */
 
 import InvoiceLayout from '@/components/invoice/InvoiceLayout';
+import { PLATFORM_INVOICE_BLOCK } from '@/lib/config/platform-identity';
 
 const DEMO_DATA = {
   invoiceNumber: 'INV-2026-00042',
@@ -29,12 +30,7 @@ const DEMO_DATA = {
     logoUrl: null,
   },
 
-  platform: {
-    name: 'DriveBook',
-    email: 'support@drivebook.com.au',
-    website: 'drivebook.com.au',
-    abn: '12 345 678 901',
-  },
+  platform: PLATFORM_INVOICE_BLOCK,
 
   client: {
     name: 'Sophie Anderson',

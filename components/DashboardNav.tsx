@@ -6,7 +6,7 @@ import { signOut } from 'next-auth/react';
 import {
   Home, Calendar, Users, DollarSign, Settings, LogOut,
   Menu, X, Bell, FileText, Palette, CreditCard, BarChart2,
-  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, Star, TrendingUp, Landmark, CalendarDays, Megaphone,
+  Package, Wallet, ClipboardList, User, HelpCircle, ChevronDown, TrendingUp, Landmark, CalendarDays, Megaphone, ShieldCheck,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '@/lib/hooks/useNotifications';
@@ -61,7 +61,7 @@ function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-slate-900/95 rounded-2xl border border-white/10 shadow-2xl z-50">
+        <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] bg-slate-900/95 rounded-2xl border border-white/10 shadow-2xl z-50">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <span className="font-semibold text-white">Notifications</span>
             {unreadCount > 0 && (
@@ -115,17 +115,20 @@ const navGroups = {
       { href: '/dashboard/expenses',    label: 'Business Records', icon: TrendingUp },
       { href: '/dashboard/analytics',   label: 'Analytics',        icon: BarChart2 },
       { href: '/dashboard/wallet',      label: 'Payout Wallet',    icon: Wallet },
-      { href: '/dashboard/settings/payout', label: 'Tax & Payout', icon: Landmark },
-      { href: '/dashboard/marketing',   label: 'Marketing Flyer',  icon: Megaphone },
+      { href: '/dashboard/settings/payout', label: 'Tax & Payout',    icon: Landmark },
+      { href: '/dashboard/settings/security', label: 'Security',       icon: ShieldCheck },
+      { href: '/dashboard/marketing',        label: 'Marketing Flyer',  icon: Megaphone },
+      { href: '/dashboard/marketing/cards',  label: 'Business Cards',   icon: CreditCard },
     ],
   },
   operations: {
     label: 'Operations',
     items: [
-      { href: '/dashboard/availability', label: 'Availability', icon: Calendar },
-      { href: '/dashboard/packages', label: 'Packages', icon: Package },
-      { href: '/dashboard/pda-tests', label: 'PDA Tests', icon: ClipboardList },
-      { href: '/dashboard/documents', label: 'Documents', icon: FileText },
+      { href: '/dashboard/availability', label: 'Availability',      icon: Calendar },
+      { href: '/dashboard/packages',     label: 'Packages',          icon: Package },
+      { href: '/dashboard/pda-tests',    label: 'PDA Tests',         icon: ClipboardList },
+      { href: '/dashboard/documents',    label: 'Documents',         icon: FileText },
+      { href: '/dashboard/progress',     label: 'Student Progress',  icon: TrendingUp },
     ],
   },
   account: {
@@ -335,7 +338,7 @@ export default function DashboardNav() {
               <div key={key}>
                 {group.label && (
                   <div className="px-4 pt-3 pb-1">
-                    <p className="text-xs font-semibold text-white/30 uppercase tracking-widest">{group.label}</p>
+                    <p className="text-xs font-semibold text-white/50 uppercase tracking-widest">{group.label}</p>
                   </div>
                 )}
                 <div className="px-2 pb-1">

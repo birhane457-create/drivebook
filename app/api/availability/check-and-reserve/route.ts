@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { localDateTimeToUTC, resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -23,8 +24,19 @@ const reserveSlotSchema = z.object({
  * Do NOT use new Date(date + 'T00:00:00').setHours(...) — that uses the server's
  * local timezone (UTC on Vercel), shifting all Perth times by 8 hours.
  */
-function parsePerthDateTime(date: string, time: string, durationMinutes: number) {
-  const startDateTime = new Date(`${date}T${time}:00+08:00`);
+async function parseInstructorDateTime(instructorId: string, date: string, time: string, durationMinutes: number) {
+  const instructor = await prisma.instructor.findUnique({
+    where: { id: instructorId },
+    select: { timezone: true, state: true },
+  });
+
+  const instructorTimezone = instructor
+    ? resolveTimezone(instructor.timezone) !== DEFAULT_TIMEZONE
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor.state)
+    : DEFAULT_TIMEZONE;
+
+  const startDateTime = localDateTimeToUTC(date, time, instructorTimezone);
   const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60 * 1000);
   return { startDateTime, endDateTime };
 }
@@ -41,7 +53,7 @@ async function isSlotAvailable(
   duration: number,
   sessionId: string
 ): Promise<{ available: boolean; reason?: string }> {
-  const { startDateTime, endDateTime } = parsePerthDateTime(date, time, duration);
+  const { startDateTime, endDateTime } = await parseInstructorDateTime(instructorId, date, time, duration);
 
   // Clean up any expired reservations for this time slot
   const now = new Date();
@@ -139,7 +151,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Reserve the slot in database (10 minutes)
-    const { startDateTime, endDateTime } = parsePerthDateTime(
+    const { startDateTime, endDateTime } = await parseInstructorDateTime(
+      data.instructorId,
       data.date,
       data.time,
       data.duration
@@ -191,7 +204,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
-    const { startDateTime, endDateTime } = parsePerthDateTime(
+    // Reserve the slot in database (10 minutes) — DELETE handler
+    const { startDateTime: delStart, endDateTime: delEnd } = await parseInstructorDateTime(
+      instructorId,
       date,
       time,
       parseInt(duration)
@@ -201,9 +216,9 @@ export async function DELETE(req: NextRequest) {
     const result = await prisma.slotReservation.deleteMany({
       where: {
         instructorId,
-        startTime: startDateTime,
-        endTime: endDateTime,
-        sessionId // Only delete if same session owns it
+        startTime: delStart,
+        endTime: delEnd,
+        sessionId
       }
     });
 

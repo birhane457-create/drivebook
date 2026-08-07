@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -20,9 +20,13 @@ export async function GET(req: NextRequest) {
     let startDate: Date | null = null
 
     switch (period) {
-      case 'week':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      case 'week': {
+        // Mon–Sun week matching the earnings page convention
+        const dayOfWeek = now.getDay() // 0=Sun, 1=Mon...
+        const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysFromMonday)
         break
+      }
       case 'year':
         startDate = new Date(now.getFullYear(), 0, 1)
         break
@@ -81,13 +85,15 @@ export async function GET(req: NextRequest) {
           ...(startDate && { startTime: { gte: startDate } })
         }
       }),
-      // Revenue: platform transactions only — offline bookings have no Transaction record
-      // and commissionRate: 0, so they are naturally excluded from Transaction queries.
+      // Revenue: platform transactions only — filter by the booking's startTime
+      // so "this month" means lessons that occurred this month, not when payment was processed
       prisma.transaction.aggregate({
         where: {
           instructorId: session.user.instructorId,
           status: 'COMPLETED',
-          ...(startDate && { createdAt: { gte: startDate } })
+          ...(startDate && {
+            booking: { startTime: { gte: startDate } }
+          })
         },
         _sum: { 
           amount: true,
@@ -102,14 +108,27 @@ export async function GET(req: NextRequest) {
           ...(startDate && { createdAt: { gte: startDate } })
         }
       }),
-      // Mock rating for now - would need a ratings table
-      Promise.resolve(4.8)
+      // Average rating from performanceScore on completed bookings
+      prisma.booking.aggregate({
+        where: {
+          instructorId: session.user.instructorId,
+          status: 'COMPLETED',
+          performanceScore: { not: null },
+          ...(startDate && { startTime: { gte: startDate } }),
+        },
+        _avg: { performanceScore: true },
+      }).catch(() => null)
     ])
 
     // Use transaction data (same as earnings API)
     const grossRevenue = completedTransactions._sum.amount || 0
     const commission = completedTransactions._sum.platformFee || 0
     const netEarnings = completedTransactions._sum.instructorPayout || 0
+
+    // Average rating: null if no feedback yet
+    const avgRatingValue = avgRating?._avg?.performanceScore != null
+      ? Math.round(avgRating._avg.performanceScore / 20 * 10) / 10 // convert 0–100 score to 0–5 stars
+      : null
 
     // Calculate completion rate
     const completionRate = totalBookings > 0 
@@ -127,7 +146,7 @@ export async function GET(req: NextRequest) {
       netEarnings,
       commissionRate,
       newClients: clientCount,
-      averageRating: avgRating,
+      averageRating: avgRatingValue,
       completionRate
     })
   } catch (error) {

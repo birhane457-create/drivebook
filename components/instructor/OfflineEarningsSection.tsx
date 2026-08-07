@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Banknote, Calendar, ChevronDown, ChevronRight, Info, AlertCircle } from 'lucide-react';
+import { getLocalDateKey, formatLocalTime, formatLocalDate, resolveTimezone } from '@/lib/utils/timezone';
 
 interface OfflineBooking {
   id: string;
@@ -27,10 +28,13 @@ interface GroupedDay {
 }
 
 export default function OfflineEarningsSection({ 
-  data 
+  data,
+  timezone,
 }: { 
-  data: OfflineEarningsData 
+  data: OfflineEarningsData;
+  timezone?: string;
 }) {
+  const tz = resolveTimezone(timezone);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [showScheduled, setShowScheduled] = useState(false);
 
@@ -40,13 +44,12 @@ export default function OfflineEarningsSection({
     setExpandedDays(s);
   };
 
-  // Group bookings by day
+  // Group bookings by local day using instructor's timezone
   const groupedByDay: GroupedDay[] = [];
   const dayMap = new Map<string, OfflineBooking[]>();
-  
+
   (data.allBookings || []).forEach(booking => {
-    const d = new Date(booking.startTime);
-    const key = d.toISOString().split('T')[0];
+    const key = getLocalDateKey(booking.startTime, tz);
     if (!dayMap.has(key)) dayMap.set(key, []);
     dayMap.get(key)!.push(booking);
   });
@@ -54,11 +57,10 @@ export default function OfflineEarningsSection({
   Array.from(dayMap.entries())
     .sort(([a], [b]) => b.localeCompare(a))
     .forEach(([key, bookings]) => {
-      const d = new Date(key + 'T00:00:00');
       groupedByDay.push({
-        label: d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }),
+        label: formatLocalDate(key + 'T12:00:00Z', tz, { weekday: 'short', day: 'numeric', month: 'short' }),
         dateKey: key,
-        bookings: bookings.sort((a, b) => 
+        bookings: bookings.sort((a, b) =>
           new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
         ),
         totalAmount: bookings.reduce((sum, b) => sum + (b.offlineAmountPaid || 0), 0),
@@ -149,34 +151,12 @@ export default function OfflineEarningsSection({
 
           {showScheduled && (
             <div className="divide-y divide-slate-800">
-              {completedBookings.length === 0 ? (
-                <div className="px-4 py-6 text-center text-slate-400 text-sm">
-                  No offline lessons logged yet
-                </div>
-              ) : (
-                completedBookings.map(day => (
-                  <div key={day.dateKey}>
-                    <div className="flex items-center justify-between px-4 py-2 bg-slate-800/50">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{day.label}</span>
-                      <span className="text-xs text-slate-400">Total <span className="font-semibold text-amber-300">${day.totalAmount.toFixed(2)}</span></span>
-                    </div>
-                    {day.bookings.map(b => (
-                      <div key={b.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/50">
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">
-                            {new Date(b.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
-                            {' · '}{b.clientName}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {b.duration}h · {b.offlinePaymentMethod === 'cash' ? '💵 Cash' : b.offlinePaymentMethod === 'bank_transfer' ? '🏦 Bank Transfer' : '💳 Other'}
-                          </p>
-                        </div>
-                        <p className="text-sm font-semibold text-amber-300">${b.offlineAmountPaid.toFixed(2)}</p>
-                      </div>
-                    ))}
-                  </div>
-                ))
-              )}
+              {/* data.scheduled only provides totals — individual scheduled booking list not yet implemented */}
+              <div className="px-4 py-6 text-center text-slate-400 text-sm">
+                <p>View scheduled offline lessons in your{' '}
+                  <a href="/dashboard/bookings" className="text-amber-400 hover:underline">bookings page</a>
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -207,11 +187,11 @@ export default function OfflineEarningsSection({
                     <div key={b.id} className="flex items-start justify-between px-6 py-2.5 bg-slate-950 hover:bg-slate-900/50">
                       <div>
                         <p className="text-sm font-medium text-slate-100">
-                          {new Date(b.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                          {formatLocalTime(b.startTime, tz)}
                           {' · '}{b.clientName}
                         </p>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          {b.duration}h
+                          {b.duration < 60 ? `${b.duration}min` : `${b.duration / 60}h`}
                           {' · '}
                           {b.offlinePaymentMethod === 'cash' ? '💵 Cash' : b.offlinePaymentMethod === 'bank_transfer' ? '🏦 Bank Transfer' : '💳 Other'}
                         </p>

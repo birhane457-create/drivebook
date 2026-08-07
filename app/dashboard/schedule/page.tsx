@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { getStatusConfig } from '@/lib/config/booking-status';
 import TodayWorkspace, { type TodayBooking } from '@/components/instructor/TodayWorkspace';
+import { formatLocalDate, formatLocalTime, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -37,32 +38,52 @@ interface ScheduleBooking {
 type ViewMode    = 'today' | 'week' | 'agenda';
 type AgendaRange = 'today' | 'week' | 'month' | 'past';
 
+// Buffer settings fetched from /api/instructor/settings
+interface BufferSettings {
+  bookingBufferMinutes: number;
+  enableTravelTime: boolean;
+  travelTimeMinutes: number;
+  timezone: string;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const PERTH_TZ = 'Australia/Perth';
-
-function toPerth(dt: Date | string): Date {
-  // UX-1: Perth is AWST = UTC+8, no DST. Add 8h to get Perth wall-clock time.
-  // If expanding to NSW/VIC/QLD, store instructor.timezone in DB and use Intl.DateTimeFormat.
-  // Avoids toLocaleString()+new Date() which parses unreliably on Windows.
+// Convert a UTC date to the instructor's local wall-clock time as a Date object.
+// The returned Date has UTC fields equal to local wall-clock values
+// (e.g. for Sydney UTC+10, a 1am UTC input returns a Date whose .getUTCHours() === 11).
+// This approach avoids toLocaleString() parsing which is unreliable on Windows.
+function toLocal(dt: Date | string, tz: string): Date {
   const d = typeof dt === 'string' ? new Date(dt) : dt;
-  return new Date(d.getTime() + 8 * 60 * 60 * 1000);
-}
-
-function formatTime(dt: Date | string): string {
-  return new Date(dt).toLocaleTimeString('en-AU', {
-    hour: '2-digit', minute: '2-digit', hour12: true, timeZone: PERTH_TZ,
+  // Get the local time components for the given timezone
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
   });
+  const parts = Object.fromEntries(
+    formatter.formatToParts(d)
+      .filter(p => p.type !== 'literal')
+      .map(p => [p.type, p.value])
+  );
+  // Build a UTC date whose UTC getters return the local time values
+  return new Date(Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    parts.hour === '24' ? 0 : Number(parts.hour),
+    Number(parts.minute), Number(parts.second)
+  ));
 }
 
-function formatDay(dt: Date): string {
-  return dt.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', timeZone: PERTH_TZ });
+function formatTime(dt: Date | string, tz: string): string {
+  return formatLocalTime(dt as any, tz, { hour: '2-digit', minute: '2-digit', hour12: true } as any);
 }
 
-function formatDateLabel(dt: Date): string {
-  return dt.toLocaleDateString('en-AU', {
-    weekday: 'long', day: 'numeric', month: 'long', timeZone: PERTH_TZ,
-  });
+function formatDay(dt: Date, tz: string): string {
+  return formatLocalDate(dt as any, tz, { weekday: 'short', day: 'numeric', month: 'short' } as any);
+}
+
+function formatDateLabel(dt: Date, tz: string): string {
+  return formatLocalDate(dt as any, tz, { weekday: 'long', day: 'numeric', month: 'long' } as any);
 }
 
 function addDays(d: Date, n: number): Date {
@@ -70,9 +91,8 @@ function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * 24 * 60 * 60 * 1000);
 }
 
-function isSamePerthDay(a: Date | string, b: Date): boolean {
-  const pa = toPerth(a), pb = toPerth(b);
-  // After UTC+8 shift, use UTC getters to read Perth wall-clock date
+function isSameLocalDay(a: Date | string, b: Date, tz: string): boolean {
+  const pa = toLocal(a, tz), pb = toLocal(b, tz);
   return pa.getUTCFullYear() === pb.getUTCFullYear()
     && pa.getUTCMonth()     === pb.getUTCMonth()
     && pa.getUTCDate()      === pb.getUTCDate();
@@ -100,7 +120,7 @@ function matchesSearch(b: ScheduleBooking, q: string): boolean {
 
 // ── Booking card ───────────────────────────────────────────────────────────────
 
-function BookingCard({ booking, compact = false }: { booking: ScheduleBooking; compact?: boolean }) {
+function BookingCard({ booking, compact = false, tz = DEFAULT_TIMEZONE }: { booking: ScheduleBooking; compact?: boolean; tz?: string }) {
   const cfg    = getStatusConfig(booking.status);
   const suburb = extractSuburb(booking.pickupAddress);
   return (
@@ -115,8 +135,8 @@ function BookingCard({ booking, compact = false }: { booking: ScheduleBooking; c
               {booking.clientName ?? 'Student'}
             </p>
             <p className={`text-slate-400 ${compact ? 'text-[10px]' : 'text-xs'} mt-0.5`}>
-              {formatTime(booking.startTime)}
-              {booking.endTime ? ` – ${formatTime(booking.endTime)}` : ''}
+              {formatTime(booking.startTime, tz)}
+              {booking.endTime ? ` – ${formatTime(booking.endTime, tz)}` : ''}
               {suburb ? ` · ${suburb}` : ''}
             </p>
           </div>
@@ -137,20 +157,26 @@ const DAY_START_HOUR = 6;
 const DAY_END_HOUR   = 21;
 const VISIBLE_HOURS  = DAY_END_HOUR - DAY_START_HOUR;
 
-function WeekView({ bookings, weekStart, search, statusFilter }: {
+function WeekView({ bookings, weekStart, search, statusFilter, bufferSettings }: {
   bookings: ScheduleBooking[];
   weekStart: Date;
   search: string;
   statusFilter: string;
+  bufferSettings: BufferSettings;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [nowPct, setNowPct] = useState<number | null>(null);
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
+  // Effective buffer gap in minutes
+  const effectiveBufferMins = bufferSettings.enableTravelTime
+    ? Math.max(bufferSettings.bookingBufferMinutes, bufferSettings.travelTimeMinutes)
+    : bufferSettings.bookingBufferMinutes;
+  const tz = bufferSettings.timezone ?? DEFAULT_TIMEZONE;
+
   useEffect(() => {
     function update() {
-      const p = toPerth(new Date());
-      // Use UTC getters on the +8h shifted date to read Perth wall-clock time
+      const p = toLocal(new Date(), tz);
       const h = p.getUTCHours() + p.getUTCMinutes() / 60;
       setNowPct(h >= DAY_START_HOUR && h <= DAY_END_HOUR
         ? ((h - DAY_START_HOUR) / VISIBLE_HOURS) * 100
@@ -159,11 +185,11 @@ function WeekView({ bookings, weekStart, search, statusFilter }: {
     update();
     const t = setInterval(update, 60_000);
     return () => clearInterval(t);
-  }, []);
+  }, [tz]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
-    const p = toPerth(new Date());
+    const p = toLocal(new Date(), tz);
     const h = p.getUTCHours() + p.getUTCMinutes() / 60;
     scrollRef.current.scrollTop = Math.max(
       0, ((h - DAY_START_HOUR) / VISIBLE_HOURS) * (VISIBLE_HOURS * HOUR_HEIGHT) - 80
@@ -171,13 +197,26 @@ function WeekView({ bookings, weekStart, search, statusFilter }: {
   }, []);
 
   function bookingStyle(b: ScheduleBooking) {
-    const p = toPerth(b.startTime);
-    // Use UTC methods on the +8h shifted date — gives Perth wall-clock time
+    const p = toLocal(b.startTime, tz);
     const startH = p.getUTCHours() + p.getUTCMinutes() / 60;
     const dur    = b.duration ? b.duration / 60 : 1;
     return {
       top:    `${((startH - DAY_START_HOUR) / VISIBLE_HOURS) * 100}%`,
       height: `${Math.max((dur / VISIBLE_HOURS) * 100, 3)}%`,
+    };
+  }
+
+  // Buffer stripe rendered immediately after a lesson ends
+  function bufferStyle(b: ScheduleBooking) {
+    if (effectiveBufferMins <= 0) return null;
+    const end = b.endTime
+      ? toLocal(b.endTime, tz)
+      : toLocal(new Date(new Date(b.startTime).getTime() + (b.duration ?? 60) * 60 * 1000), tz);
+    const endH = end.getUTCHours() + end.getUTCMinutes() / 60;
+    if (endH >= DAY_END_HOUR) return null;
+    return {
+      top:    `${((endH - DAY_START_HOUR) / VISIBLE_HOURS) * 100}%`,
+      height: `${((effectiveBufferMins / 60) / VISIBLE_HOURS) * 100}%`,
     };
   }
 
@@ -192,12 +231,12 @@ function WeekView({ bookings, weekStart, search, statusFilter }: {
       <div className="flex border-b border-white/10">
         <div className="w-12 shrink-0" />
         {weekDays.map((day, i) => {
-          const isToday = isSamePerthDay(today, day);
+          const isToday = isSameLocalDay(today, day, tz);
           return (
             <div key={i} className={`flex-1 px-1 py-2 text-center text-xs font-medium border-l border-white/5 ${
               isToday ? 'bg-sky-950/30 text-sky-300' : 'text-slate-400'
             }`}>
-              {formatDay(day)}
+              {formatDay(day, tz)}
             </div>
           );
         })}
@@ -216,8 +255,8 @@ function WeekView({ bookings, weekStart, search, statusFilter }: {
             })}
           </div>
           {weekDays.map((day, di) => {
-            const isToday = isSamePerthDay(today, day);
-            const dayBookings = filtered.filter(b => isSamePerthDay(b.startTime, day));
+            const isToday = isSameLocalDay(today, day, tz);
+            const dayBookings = filtered.filter(b => isSameLocalDay(b.startTime, day, tz));
             return (
               <div key={di} className={`relative flex-1 border-l border-white/5 ${isToday ? 'bg-sky-950/10' : ''}`}>
                 {Array.from({ length: VISIBLE_HOURS }, (_, i) => (
@@ -233,9 +272,25 @@ function WeekView({ bookings, weekStart, search, statusFilter }: {
                   </div>
                 )}
                 {dayBookings.map(b => (
-                  <div key={b.id} className="absolute left-0.5 right-0.5 z-20" style={bookingStyle(b)}>
-                    <BookingCard booking={b} compact />
-                  </div>
+                  <>
+                    {/* Lesson block */}
+                    <div key={b.id} className="absolute left-0.5 right-0.5 z-20" style={bookingStyle(b)}>
+                      <BookingCard booking={b} compact tz={tz} />
+                    </div>
+                    {/* Buffer stripe — shows the blocked gap after the lesson */}
+                    {bufferStyle(b) && (
+                      <div
+                        key={`buf-${b.id}`}
+                        className="absolute left-0.5 right-0.5 z-10 rounded-b border border-dashed border-amber-500/30 bg-amber-500/8 pointer-events-none"
+                        style={bufferStyle(b)!}
+                        title={`${effectiveBufferMins}min buffer`}
+                      >
+                        <span className="text-[9px] text-amber-400/60 px-1 leading-none select-none">
+                          {effectiveBufferMins}m buffer
+                        </span>
+                      </div>
+                    )}
+                  </>
                 ))}
               </div>
             );
@@ -248,11 +303,12 @@ function WeekView({ bookings, weekStart, search, statusFilter }: {
 
 // ── Agenda view ────────────────────────────────────────────────────────────────
 
-function AgendaView({ bookings, range, search, statusFilter }: {
+function AgendaView({ bookings, range, search, statusFilter, tz = DEFAULT_TIMEZONE }: {
   bookings: ScheduleBooking[];
   range: AgendaRange;
   search: string;
   statusFilter: string;
+  tz?: string;
 }) {
   const today = new Date();
   const days: Date[] = [];
@@ -264,6 +320,7 @@ function AgendaView({ bookings, range, search, statusFilter }: {
   } else if (range === 'week') {
     for (let i = 0; i < 7; i++) days.push(addDays(today, i));
   } else {
+    // 'month' — next 30 days
     for (let i = 0; i < 30; i++) days.push(addDays(today, i));
   }
 
@@ -274,7 +331,7 @@ function AgendaView({ bookings, range, search, statusFilter }: {
   const groups = days.map(day => ({
     day,
     bookings: filtered
-      .filter(b => isSamePerthDay(b.startTime, day))
+      .filter(b => isSameLocalDay(b.startTime, day, tz))
       .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
   })).filter(g => g.bookings.length > 0);
 
@@ -330,7 +387,7 @@ function AgendaView({ bookings, range, search, statusFilter }: {
       </p>
       <div className="space-y-6">
         {groups.map(({ day, bookings: dayBookings }) => {
-          const isToday = isSamePerthDay(today, day);
+          const isToday = isSameLocalDay(today, day, tz);
           return (
             <div key={day.toISOString()}>
               <div className="flex items-center gap-3 mb-2">
@@ -338,7 +395,7 @@ function AgendaView({ bookings, range, search, statusFilter }: {
                 <span className={`text-xs font-semibold uppercase tracking-widest ${
                   isToday ? 'text-sky-400' : 'text-slate-500'
                 }`}>
-                  {isToday ? 'Today' : formatDateLabel(day)}
+                  {isToday ? 'Today' : formatDateLabel(day, tz)}
                 </span>
                 <span className="text-xs text-slate-600">
                   {dayBookings.length} lesson{dayBookings.length !== 1 ? 's' : ''}
@@ -346,7 +403,7 @@ function AgendaView({ bookings, range, search, statusFilter }: {
                 <div className={`h-px flex-1 ${isToday ? 'bg-sky-500/30' : 'bg-white/10'}`} />
               </div>
               <div className="space-y-2">
-                {dayBookings.map(b => <BookingCard key={b.id} booking={b} />)}
+                {dayBookings.map(b => <BookingCard key={b.id} booking={b} tz={tz} />)}
               </div>
             </div>
           );
@@ -363,34 +420,44 @@ export default function SchedulePage() {
   const [view, setView]                 = useState<ViewMode>('today');
   const [agendaRange, setAgendaRange]   = useState<AgendaRange>('week');
   const [weekStart, setWeekStart]       = useState<Date>(() => {
-    // Anchor to Perth Monday midnight (UTC+8).
-    // toPerth(now) gives a Date shifted by +8h; its UTC values = Perth local values.
-    const p = toPerth(new Date());
-    const dayOfWeek = p.getUTCDay(); // 0=Sun
+    // Default to the Monday of the current week (UTC-safe — timezone not yet loaded)
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay();
     const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    // Go back to Monday, then strip the time component (set UTC H/M/S to 0)
-    const monday = new Date(p.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000);
-    monday.setUTCHours(0, 0, 0, 0);
-    // Convert back from Perth-shifted to UTC (subtract 8h)
-    return new Date(monday.getTime() - 8 * 60 * 60 * 1000);
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday));
+    return monday;
   });
   const [bookings, setBookings]         = useState<ScheduleBooking[]>([]);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState<string | null>(null);
   const [search, setSearch]             = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [bufferSettings, setBufferSettings] = useState<BufferSettings>({
+    bookingBufferMinutes: 10,
+    timezone: DEFAULT_TIMEZONE,
+    enableTravelTime: false,
+    travelTimeMinutes: 0,
+  });
 
   const fetchBookings = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const from = addDays(new Date(), -60);
-      const to   = addDays(new Date(),  60);
-      const res  = await fetch(
-        `/api/bookings?from=${from.toISOString()}&to=${to.toISOString()}&status=CONFIRMED,COMPLETED,PENDING,PENDING_PAYMENT,NO_SHOW,CANCELLED&limit=400`
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const [bookingsRes, settingsRes] = await Promise.all([
+        fetch(`/api/bookings?from=${addDays(new Date(), -60).toISOString()}&to=${addDays(new Date(), 60).toISOString()}&status=CONFIRMED,COMPLETED,PENDING,PENDING_PAYMENT,NO_SHOW,CANCELLED&limit=400`),
+        fetch('/api/instructor/settings'),
+      ]);
+      if (!bookingsRes.ok) throw new Error(`HTTP ${bookingsRes.status}`);
+      const data = await bookingsRes.json();
       setBookings(Array.isArray(data) ? data : (data.bookings ?? []));
+      if (settingsRes.ok) {
+        const s = await settingsRes.json();
+        setBufferSettings({
+          bookingBufferMinutes: s.bookingBufferMinutes ?? 10,
+          enableTravelTime:     s.enableTravelTime     ?? false,
+          travelTimeMinutes:    s.travelTimeMinutes     ?? 0,
+          timezone:             s.timezone              ?? DEFAULT_TIMEZONE,
+        });
+      }
     } catch (e: any) {
       setError(e.message ?? 'Failed to load bookings');
     } finally {
@@ -403,21 +470,23 @@ export default function SchedulePage() {
   const prevWeek = () => setWeekStart(d => addDays(d, -7));
   const nextWeek = () => setWeekStart(d => addDays(d, 7));
   const goToday  = () => {
-    const p = toPerth(new Date());
+    const tz = bufferSettings.timezone;
+    const p = toLocal(new Date(), tz);
     const dayOfWeek = p.getUTCDay();
     const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const monday = new Date(p.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000);
     monday.setUTCHours(0, 0, 0, 0);
-    setWeekStart(new Date(monday.getTime() - 8 * 60 * 60 * 1000));
+    // Convert from tz-shifted back to UTC: subtract the local offset
+    const offsetMs = toLocal(new Date(0), tz).getTime(); // offset from epoch
+    setWeekStart(new Date(monday.getTime() - offsetMs));
   };
 
+  const tz = bufferSettings.timezone;
   const weekEnd   = addDays(weekStart, 6);
-  const weekLabel = weekStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: PERTH_TZ })
-    + ' – '
-    + weekEnd.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: PERTH_TZ });
+  const weekLabel = `${formatLocalDate(weekStart, tz, { day: 'numeric', month: 'short' } as any)} – ${formatLocalDate(weekEnd, tz, { day: 'numeric', month: 'short' } as any)}`;
 
   const todayForWorkspace: TodayBooking[] = bookings
-    .filter(b => isSamePerthDay(b.startTime, new Date()))
+    .filter(b => isSameLocalDay(b.startTime, new Date(), tz))
     .map(b => ({ ...b, endTime: b.endTime ?? null }));
 
   const instructorName = (session?.user as any)?.name ?? '';
@@ -586,10 +655,10 @@ export default function SchedulePage() {
             />
           )}
           {view === 'week' && (
-            <WeekView bookings={bookings} weekStart={weekStart} search={search} statusFilter={statusFilter} />
+            <WeekView bookings={bookings} weekStart={weekStart} search={search} statusFilter={statusFilter} bufferSettings={bufferSettings} />
           )}
           {view === 'agenda' && (
-            <AgendaView bookings={bookings} range={agendaRange} search={search} statusFilter={statusFilter} />
+            <AgendaView bookings={bookings} range={agendaRange} search={search} statusFilter={statusFilter} tz={tz} />
           )}
         </>
       )}

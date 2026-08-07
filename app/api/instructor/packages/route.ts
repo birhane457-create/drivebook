@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-
+import { getCommissionRate } from '@/lib/services/platform-pricing';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
@@ -16,15 +16,18 @@ export async function GET() {
     const instructorId = session.user.instructorId;
     const now = new Date();
 
-    // Fetch instructor's actual hourly rate — used for all earnings calculations
+    // Fetch instructor's hourly rate and subscription tier in a single query
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
-      select: { hourlyRate: true },
+      select: { hourlyRate: true, subscriptionTier: true },
     });
     const instructorHourlyRate = instructor?.hourlyRate ?? 0;
 
+    // Resolve commission rate once — not per package
+    const currentCommissionRate = await getCommissionRate(instructor?.subscriptionTier ?? 'BASIC');
+    const fallbackCommissionRatio = currentCommissionRate / 100;
+
     // Get all active packages (parent bookings with remaining hours)
-    // Include PENDING_PAYMENT so instructors can see packages awaiting payment too
     const packages = await prisma.booking.findMany({
       where: {
         instructorId,
@@ -39,103 +42,94 @@ export async function GET() {
       },
       include: {
         client: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true
-          }
+          select: { id: true, name: true, email: true, phone: true }
         }
       },
-      orderBy: {
-        packageExpiryDate: 'asc'
-      }
+      orderBy: { packageExpiryDate: 'asc' }
     });
 
-    // For each package, get upcoming bookings
-    const packagesWithBookings = await Promise.all(
-      packages.map(async (pkg) => {
-        const upcomingBookings = await prisma.booking.findMany({
+    // Batch-fetch all upcoming child bookings in one query — eliminates N+1
+    const packageIds = packages.map(p => p.id);
+    const allUpcomingBookings = packageIds.length > 0
+      ? await prisma.booking.findMany({
           where: {
-            parentBookingId: pkg.id,
+            parentBookingId: { in: packageIds },
             status: 'CONFIRMED',
-            startTime: { gte: now }
+            startTime: { gte: now },
           },
           select: {
             id: true,
+            parentBookingId: true,
             startTime: true,
             endTime: true,
             duration: true,
             price: true,
-            instructorPayout: true
+            instructorPayout: true,
           },
-          orderBy: {
-            startTime: 'asc'
-          }
-        });
+          orderBy: { startTime: 'asc' },
+        })
+      : [];
 
-        // Use instructor's actual hourly rate — not derived from package price
-        // (pkg.price is the discounted package total, not hourlyRate × hours)
-        const potentialGross = (pkg.packageHoursRemaining || 0) * instructorHourlyRate;
+    // Group child bookings by parent package id
+    const bookingsByPackage = new Map<string, typeof allUpcomingBookings>();
+    for (const b of allUpcomingBookings) {
+      const key = b.parentBookingId!;
+      if (!bookingsByPackage.has(key)) bookingsByPackage.set(key, []);
+      bookingsByPackage.get(key)!.push(b);
+    }
 
-        // Potential net = gross minus platform commission
-        // Derive commission rate from the booking's stored payout ratio if available,
-        // otherwise fall back to the instructor's current rate from PlatformSettings.
-        let commissionRatio = 0
-        if (pkg.price && pkg.price > 0 && pkg.instructorPayout && pkg.instructorPayout > 0) {
-          commissionRatio = 1 - (pkg.instructorPayout / pkg.price)
-        } else {
-          const { getCommissionRate } = await import('@/lib/services/platform-pricing')
-          const session2 = await prisma.instructor.findUnique({ where: { id: instructorId }, select: { subscriptionTier: true } })
-          const rate = await getCommissionRate(session2?.subscriptionTier ?? 'BASIC')
-          commissionRatio = rate / 100
-        }
-        const potentialNet = potentialGross * (1 - commissionRatio);
+    const packagesWithBookings = packages.map((pkg) => {
+      const upcomingBookings = bookingsByPackage.get(pkg.id) ?? [];
 
-        const daysUntilExpiry = pkg.packageExpiryDate
-          ? Math.ceil((new Date(pkg.packageExpiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-          : null;
-        const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry < 30;
+      const potentialGross = (pkg.packageHoursRemaining || 0) * instructorHourlyRate;
 
-        const usagePercentage = pkg.packageHours
-          ? ((pkg.packageHoursUsed || 0) / pkg.packageHours) * 100
-          : 0;
+      // Use stored payout ratio if available, otherwise use pre-resolved fallback
+      let commissionRatio = fallbackCommissionRatio;
+      if (pkg.price && pkg.price > 0 && pkg.instructorPayout && pkg.instructorPayout > 0) {
+        commissionRatio = 1 - (pkg.instructorPayout / pkg.price);
+      }
+      const potentialNet = potentialGross * (1 - commissionRatio);
 
-        // Expiry date: null means package has no expiry set — show as null, never epoch
-        const packageExpiryDate = pkg.packageExpiryDate ?? null;
+      const daysUntilExpiry = pkg.packageExpiryDate
+        ? Math.ceil((new Date(pkg.packageExpiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+      const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry < 30;
 
-        return {
-          id: pkg.id,
-          client: pkg.client,
-          packageHours: pkg.packageHours || 0,
-          packageHoursUsed: pkg.packageHoursUsed || 0,
-          packageHoursRemaining: pkg.packageHoursRemaining || 0,
-          usagePercentage: Math.round(usagePercentage),
-          packageStatus: pkg.packageStatus || 'active',
-          isPaid: pkg.isPaid ?? false,
-          bookingStatus: pkg.status,
-          packageExpiryDate,
-          daysUntilExpiry,
-          isExpiringSoon,
-          purchaseDate: pkg.createdAt,
-          totalPrice: pkg.price,
-          instructorPayout: pkg.instructorPayout || 0,
-          hourlyRate: instructorHourlyRate,
-          potentialGross,
-          potentialNet,
-          upcomingBookings: upcomingBookings.map(booking => ({
-            id: booking.id,
-            startTime: booking.startTime,
-            endTime: booking.endTime,
-            duration: booking.duration,
-            price: booking.price,
-            instructorPayout: booking.instructorPayout
-          })),
-          upcomingBookingsCount: upcomingBookings.length,
-          upcomingBookingsValue: upcomingBookings.reduce((sum, b) => sum + (b.instructorPayout || 0), 0)
-        };
-      })
-    );
+      const usagePercentage = pkg.packageHours
+        ? ((pkg.packageHoursUsed || 0) / pkg.packageHours) * 100
+        : 0;
+
+      return {
+        id: pkg.id,
+        client: pkg.client,
+        packageHours: pkg.packageHours || 0,
+        packageHoursUsed: pkg.packageHoursUsed || 0,
+        packageHoursRemaining: pkg.packageHoursRemaining || 0,
+        usagePercentage: Math.round(usagePercentage),
+        packageStatus: pkg.packageStatus || 'active',
+        isPaid: pkg.isPaid ?? false,
+        bookingStatus: pkg.status,
+        packageExpiryDate: pkg.packageExpiryDate ?? null,
+        daysUntilExpiry,
+        isExpiringSoon,
+        purchaseDate: pkg.createdAt,
+        totalPrice: pkg.price,
+        instructorPayout: pkg.instructorPayout || 0,
+        hourlyRate: instructorHourlyRate,
+        potentialGross,
+        potentialNet,
+        upcomingBookings: upcomingBookings.map(b => ({
+          id: b.id,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          duration: b.duration,
+          price: b.price,
+          instructorPayout: b.instructorPayout,
+        })),
+        upcomingBookingsCount: upcomingBookings.length,
+        upcomingBookingsValue: upcomingBookings.reduce((sum, b) => sum + (b.instructorPayout || 0), 0),
+      };
+    });
 
     const totalPackages = packagesWithBookings.length;
     const totalHoursRemaining = packagesWithBookings.reduce((sum, p) => sum + p.packageHoursRemaining, 0);

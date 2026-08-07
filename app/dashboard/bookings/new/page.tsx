@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Calendar, MapPin, Banknote, AlertCircle } from 'lucide-react'
 import BookingFormNew from '@/components/BookingFormNew'
 import FindNextSlot from '@/components/instructor/FindNextSlot'
+import SlotPicker from '@/components/SlotPicker'
+import PermissionGate from '@/components/instructor/PermissionGate'
 
 interface Client {
   id: string
@@ -29,6 +31,7 @@ export default function NewBookingPage() {
   // Pre-fill from Find Next Slot
   const [prefillDate, setPrefillDate] = useState<string | undefined>()
   const [prefillTime, setPrefillTime] = useState<string | undefined>()
+  const [prefillDuration, setPrefillDuration] = useState<number | undefined>()
   // Key to remount BookingFormNew when prefill changes
   const [formKey, setFormKey] = useState(0)
 
@@ -44,11 +47,6 @@ export default function NewBookingPage() {
   const [offlineError, setOfflineError] = useState<string | null>(null)
   const [offlineSuccess, setOfflineSuccess] = useState(false)
 
-  // Availability slots for offline booking date picker
-  const [offlineSlots, setOfflineSlots] = useState<{ time: string; available: boolean }[]>([])
-  const [loadingOfflineSlots, setLoadingOfflineSlots] = useState(false)
-  const [offlineSlotsMessage, setOfflineSlotsMessage] = useState<string | null>(null)
-
   useEffect(() => {
     if (!isOfflineMode) {
       fetchClients()
@@ -59,27 +57,6 @@ export default function NewBookingPage() {
     }
   }, [isOfflineMode])
 
-  // Fetch available slots when date or duration changes in offline mode
-  useEffect(() => {
-    if (!isOfflineMode || !offlineForm.date || !instructorData?.id) return
-    setLoadingOfflineSlots(true)
-    setOfflineSlots([])
-    setOfflineSlotsMessage(null)
-    setOfflineForm(p => ({ ...p, time: '' }))
-    fetch(`/api/availability/slots?instructorId=${instructorData.id}&date=${offlineForm.date}&duration=${offlineForm.durationMinutes}&bypassDurationCheck=true`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.slots && data.slots.length > 0) {
-          setOfflineSlots(data.slots)
-        } else {
-          setOfflineSlots([])
-          setOfflineSlotsMessage(data.message || 'No available slots on this day')
-        }
-      })
-      .catch(() => setOfflineSlotsMessage('Could not load availability'))
-      .finally(() => setLoadingOfflineSlots(false))
-  }, [isOfflineMode, offlineForm.date, offlineForm.durationMinutes, instructorData?.id])
-
   useEffect(() => {
     if (preselectedClientId && clients.length > 0) {
       const client = clients.find(c => c.id === preselectedClientId)
@@ -89,9 +66,9 @@ export default function NewBookingPage() {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch('/api/clients')
+      const res = await fetch('/api/clients?limit=200')
+      if (!res.ok) { console.error('Failed to fetch clients:', res.status); return; }
       const data = await res.json()
-      // API returns { clients: [...], pagination: {...} }
       setClients(Array.isArray(data) ? data : (data.clients ?? []))
     } catch { console.error('Failed to fetch clients') }
   }
@@ -225,26 +202,15 @@ export default function NewBookingPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Time *</label>
-                  {!offlineForm.date ? (
-                    <div className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-slate-400">Select a date first</div>
-                  ) : loadingOfflineSlots ? (
-                    <div className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-slate-400 flex items-center gap-2">
-                      <svg className="animate-spin h-3 w-3 text-sky-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-                      Checking availability...
-                    </div>
-                  ) : offlineSlots.length > 0 ? (
-                    <select required value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-white/30 bg-slate-800/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent">
-                      <option value="">Pick a slot</option>
-                      {offlineSlots.filter(s => s.available).map(s => (
-                        <option key={s.time} value={s.time}>{s.time}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="space-y-1">
-                      <input required type="time" value={offlineForm.time} onChange={e => setOfflineForm(p => ({ ...p, time: e.target.value }))} className="w-full border border-amber-500/40 bg-amber-500/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-sky-500 focus:border-transparent" />
-                      {offlineSlotsMessage && <p className="text-xs text-amber-300">⚠ {offlineSlotsMessage} — enter time manually</p>}
-                    </div>
-                  )}
+                  <SlotPicker
+                    instructorId={instructorData?.id ?? ''}
+                    date={offlineForm.date}
+                    duration={offlineForm.durationMinutes}
+                    value={offlineForm.time}
+                    onChange={time => setOfflineForm(p => ({ ...p, time }))}
+                    variant="dark"
+                    allowFallback={true}
+                  />
                 </div>
               </div>
 
@@ -280,9 +246,11 @@ export default function NewBookingPage() {
                 </div>
               )}
 
-              <button type="submit" disabled={offlineSubmitting} className="w-full py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors">
-                {offlineSubmitting ? 'Logging...' : 'Log Offline Booking'}
-              </button>
+              <PermissionGate capability="canCreateOfflineBooking" showLockCard>
+                <button type="submit" disabled={offlineSubmitting} className="w-full py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors">
+                  {offlineSubmitting ? 'Logging...' : 'Log Offline Booking'}
+                </button>
+              </PermissionGate>
             </form>
           </div>
         ) : (
@@ -316,26 +284,29 @@ export default function NewBookingPage() {
             {showCalendar && selectedClient && instructorData?.id && (
               <div className="rounded-3xl border border-white/10 bg-slate-900/80 shadow-lg p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Calendar className="h-5 w-5 text-sky-400" />Step 2: Select Date & Time</h2>
-
-                {/* Find Next Slot — helps instructors quickly suggest a time */}
-                <FindNextSlot
-                  instructorId={instructorData.id}
-                  onSelect={(date, time, duration) => {
-                    setPrefillDate(date);
-                    setPrefillTime(time);
-                    setFormKey(k => k + 1); // remount form so initialDate/Time takes effect
-                  }}
-                />
-
-                <BookingFormNew
-                  key={formKey}
-                  instructorId={instructorData.id}
-                  hourlyRate={instructorData.hourlyRate}
-                  preselectedClient={selectedClient}
-                  isInstructorBooking={true}
-                  initialDate={prefillDate}
-                  initialTime={prefillTime}
-                />
+                <PermissionGate capability="canCreateBooking" showLockCard>
+                  <div>
+                    <FindNextSlot
+                      instructorId={instructorData.id}
+                      onSelect={(date, time, duration) => {
+                        setPrefillDate(date);
+                        setPrefillTime(time);
+                        setPrefillDuration(duration);
+                        setFormKey(k => k + 1);
+                      }}
+                    />
+                    <BookingFormNew
+                      key={formKey}
+                      instructorId={instructorData.id}
+                      hourlyRate={instructorData.hourlyRate}
+                      preselectedClient={selectedClient}
+                      isInstructorBooking={true}
+                      initialDate={prefillDate}
+                      initialTime={prefillTime}
+                      initialDuration={prefillDuration}
+                    />
+                  </div>
+                </PermissionGate>
               </div>
             )}
             {showCalendar && (!instructorData || !instructorData.id) && (

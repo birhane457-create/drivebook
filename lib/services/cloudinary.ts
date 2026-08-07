@@ -102,6 +102,33 @@ export async function generateSignedUrl(
 }
 
 /**
+ * Extract a Cloudinary publicId from a stored secure_url.
+ *
+ * Stored URLs look like:
+ *   https://res.cloudinary.com/<cloud>/image/upload/v1234567890/drivebook/private/instructors/abc/driver-licence/xyz.jpg
+ *
+ * The publicId is everything after `/upload/v{version}/` (or `/upload/` if no version):
+ *   drivebook/private/instructors/abc/driver-licence/xyz.jpg   (without file extension for images)
+ *   drivebook/private/instructors/abc/insurance/xyz            (Cloudinary strips extension from publicId)
+ *
+ * For raw files (PDFs), the extension is part of the publicId — Cloudinary includes it.
+ * We preserve it here and let Cloudinary handle the resolution via resource_type: 'auto'.
+ */
+export function publicIdFromUrl(url: string): string {
+  // Match everything after /upload/ optionally followed by /v{digits}/
+  const match = url.match(/\/upload\/(?:v\d+\/)?(.+)$/);
+  if (!match) {
+    throw new Error(`Cannot extract publicId from Cloudinary URL: ${url}`);
+  }
+  // Strip file extension for image types (Cloudinary publicIds don't include it for images)
+  // For PDFs uploaded as 'raw' resource type, the .pdf extension IS part of the publicId
+  const path = match[1];
+  // Keep extension for PDFs; strip for images
+  if (path.endsWith('.pdf')) return path;
+  return path.replace(/\.[^/.]+$/, '');
+}
+
+/**
  * Delete a file from Cloudinary by publicId.
  */
 export async function deleteFromCloudinary(
@@ -187,4 +214,5 @@ export const cloudinaryService = {
   uploadBookingPhoto,
   deleteFromCloudinary,
   generateSignedUrl,
+  publicIdFromUrl,
 };

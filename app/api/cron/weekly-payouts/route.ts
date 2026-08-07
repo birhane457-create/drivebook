@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Cron: Automatic Weekly Payout Run
  *
  * Runs every Tuesday at 2:00 AM AWST (6:00 PM Monday UTC).
@@ -232,6 +232,7 @@ export async function GET(req: NextRequest) {
       if (!inst?.user?.email) continue;
       try {
         await emailService.sendGenericEmail({
+          from: 'DriveBook Payments <payments@drivebook.com.au>',
           to: inst.user.email,
           subject: 'Action required: Connect your bank account to receive your DriveBook earnings',
           html: `

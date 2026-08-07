@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 import { prisma } from '@/lib/prisma';
 import { TaskType } from '@prisma/client';
 
@@ -225,7 +226,7 @@ export async function createDocumentExpiryTask(params: {
     category: 'SUPPORT',
     priority: daysUntilExpiry <= 7 ? 'URGENT' : daysUntilExpiry <= 30 ? 'HIGH' : 'NORMAL',
     title: `Document Expiring - ${params.instructorName}`,
-    description: `${params.documentType} expires in ${daysUntilExpiry} days (${params.expiryDate.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })})`,
+    description: `${params.documentType} expires in ${daysUntilExpiry} days (${params.expiryDate.toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE })})`,
     instructorId: params.instructorId,
     contactName: params.instructorName,
     contactEmail: params.instructorEmail,

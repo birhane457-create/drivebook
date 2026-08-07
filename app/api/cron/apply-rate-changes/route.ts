@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Cron: Apply scheduled commission rate changes
  * Schedule: Daily at 00:05 UTC (10:05 AWST)
  * 
@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -139,7 +140,7 @@ async function notifyInstructors(
   });
 
   const effectiveDateStr = new Date(change.effectiveDate).toLocaleDateString('en-AU', {
-    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: DEFAULT_TIMEZONE,
   });
 
   const direction = change.newRate > change.currentRate ? 'increased' : 'decreased';
@@ -163,6 +164,7 @@ async function notifyInstructors(
       // Email notification
       if (instructor.user?.email) {
         await emailService.sendGenericEmail({
+          from: 'DriveBook Payments <payments@drivebook.com.au>',
           to: instructor.user.email,
           subject: `Important: Commission rate change effective ${effectiveDateStr}`,
           html: `

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { emailService } from '@/lib/services/email'
 import { normalizeEmail } from '@/lib/auth-email'
@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     const verifyUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`
 
     await emailService.sendGenericEmail({
+      from: 'DriveBook Account Verification <verification@drivebook.com.au>',
       to: email,
       subject: 'Verify your DriveBook account',
       html: `

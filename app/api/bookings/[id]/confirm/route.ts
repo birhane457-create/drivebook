@@ -156,6 +156,12 @@ export async function POST(
       console.error('Failed to send SMS notification:', smsError);
     }
 
+    // Resolve instructor timezone for notification display
+    const { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } = await import('@/lib/utils/timezone')
+    const bookingTz = booking.instructor?.timezone
+      ? resolveTimezone(booking.instructor.timezone)
+      : timezoneFromState((booking.instructor as any)?.state ?? '')
+
     // Send in-app notification to instructor
     try {
       if (notifChannels.inApp && booking.instructor?.userId && booking.startTime) {
@@ -163,7 +169,8 @@ export async function POST(
           booking.instructor.userId,
           booking.client?.name || booking.clientName || 'Client',
           bookingId,
-          new Date(booking.startTime)
+          new Date(booking.startTime),
+          bookingTz,
         );
       }
     } catch (notifError) {
@@ -177,7 +184,9 @@ export async function POST(
           booking.client.userId,
           getDisplayName(booking.instructor),
           bookingId,
-          new Date(booking.startTime)
+          new Date(booking.startTime),
+          booking.instructor ?? undefined,
+          bookingTz,
         );
       }
     } catch (notifError) {

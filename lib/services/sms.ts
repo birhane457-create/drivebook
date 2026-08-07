@@ -3,6 +3,7 @@
 // All student-facing messages use getDisplayName() — never raw instructor.name.
 
 import { getDisplayName, type DisplayIdentitySource } from '@/lib/branding/getDisplayIdentity'
+import { resolveTimezone, timezoneFromState, formatLocalDate, formatLocalTime, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 
 interface SendSMSParams {
   to: string;
@@ -51,7 +52,7 @@ class SMSService {
         return false;
       }
 
-      console.log('SMS sent successfully to:', to);
+      console.log('SMS sent to:', to.slice(-4).padStart(to.length, '*')); // last 4 only
       return true;
     } catch (error) {
       console.error('Error sending SMS:', error);
@@ -60,19 +61,19 @@ class SMSService {
   }
 
   // Booking confirmation — student only
-  // Instructor gets in-app notification + email; SMS would be too noisy for them
   async sendBookingConfirmation(data: {
     clientPhone: string;
     clientName: string;
     instructorName: string;
-    provider?: DisplayIdentitySource  // preferred — use displayName if provided
+    provider?: DisplayIdentitySource;
     startTime: Date;
     price: number;
+    timezone?: string;
   }) {
-    const tz = 'Australia/Perth'
-    const providerName = data.provider ? getDisplayName(data.provider) : data.instructorName
-    const dateStr = data.startTime.toLocaleDateString('en-AU', { timeZone: tz })
-    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz })
+    const tz = resolveTimezone(data.timezone ?? DEFAULT_TIMEZONE)
+    const providerName = data.provider ? getDisplayName(data.provider) : data.instructorName;
+    const dateStr = formatLocalDate(data.startTime, tz);
+    const timeStr = formatLocalTime(data.startTime, tz, { hour: '2-digit', minute: '2-digit' });
     const clientMessage = `Booking confirmed! Your lesson with ${providerName} is on ${dateStr} at ${timeStr}. Price: $${data.price}`;
     return this.sendSMS({ to: data.clientPhone, message: clientMessage });
   }
@@ -82,14 +83,15 @@ class SMSService {
     clientPhone: string;
     clientName: string;
     instructorName: string;
-    provider?: DisplayIdentitySource  // preferred — use displayName if provided
+    provider?: DisplayIdentitySource;
     startTime: Date;
     pickupAddress?: string;
+    timezone?: string;
   }) {
-    const tz = 'Australia/Perth'
-    const providerName = data.provider ? getDisplayName(data.provider) : data.instructorName
-    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
-    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz });
+    const tz = resolveTimezone(data.timezone ?? DEFAULT_TIMEZONE)
+    const providerName = data.provider ? getDisplayName(data.provider) : data.instructorName;
+    const timeStr = formatLocalTime(data.startTime, tz, { hour: '2-digit', minute: '2-digit' });
+    const dateStr = formatLocalDate(data.startTime, tz, { weekday: 'short', day: 'numeric', month: 'short' } as any);
     const pickup = data.pickupAddress ? ` Pickup: ${data.pickupAddress}.` : '';
     const message = `Hi ${data.clientName}! Reminder: your driving lesson with ${providerName} is tomorrow ${dateStr} at ${timeStr}.${pickup}`;
     return this.sendSMS({ to: data.clientPhone, message });
@@ -102,10 +104,11 @@ class SMSService {
     clientName: string;
     startTime: Date;
     pickupAddress?: string;
+    timezone?: string;
   }) {
-    const tz = 'Australia/Perth'
-    const timeStr = data.startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
-    const dateStr = data.startTime.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz });
+    const tz = resolveTimezone(data.timezone ?? DEFAULT_TIMEZONE)
+    const timeStr = formatLocalTime(data.startTime, tz, { hour: '2-digit', minute: '2-digit' });
+    const dateStr = formatLocalDate(data.startTime, tz, { weekday: 'short', day: 'numeric', month: 'short' } as any);
     const pickup = data.pickupAddress ? ` Pickup: ${data.pickupAddress}.` : '';
     const message = `Hi ${data.instructorName}! Reminder: lesson with ${data.clientName} tomorrow ${dateStr} at ${timeStr}.${pickup}`;
     return this.sendSMS({ to: data.instructorPhone, message });

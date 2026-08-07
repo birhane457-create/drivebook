@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
@@ -63,7 +63,7 @@ export default function ImageCarousel({
   const currentSlide = slides[currentIndex]
 
   return (
-    <div className="relative w-full max-w-6xl mx-auto">
+    <div className="relative w-full max-w-6xl mx-auto" inert={true} aria-hidden="true">
       {/* Main Slide Container */}
       <div className="relative aspect-[3/2] bg-gray-100 rounded-2xl overflow-hidden shadow-2xl">
         {/* Slide Image */}
@@ -152,3 +152,4 @@ export default function ImageCarousel({
     </div>
   )
 }
+

@@ -29,8 +29,9 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 | Send payment link | `app/api/bookings/send-payment-link/route.ts` |
 | Create payment intent | `app/api/payments/create-intent/route.ts` |
 | Instructor search hook | `lib/hooks/useInstructorSearch.ts` |
-| Instructor search API | `app/api/instructors/search/route.ts` |
-| Slot picker component | `components/SlotPicker.tsx` |
+| Instructor search API | `app/api/instructors/search/route.ts` — suburb-first match, radius fallback |
+| **Service area picker** | `components/instructor/ServiceAreaPicker.tsx` — multi-suburb selector from static AU postcode data; stores as JSON `"Suburb\|STATE\|postcode"` tokens in `Instructor.serviceAreas` |
+| **Slot picker component** | `components/SlotPicker.tsx` — shared pill-grid slot picker (dark/light variants, fallback for offline) |
 | Booking form component | `components/BookingFormNew.tsx` |
 | Bulk booking form | `components/BulkBookingForm.tsx` |
 | Location search | `components/LocationSearchBooking.tsx` |
@@ -167,7 +168,7 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 
 ## AUTHENTICATION
 
-**What it does:** Login, register, email verification, password reset, session management.
+**What it does:** Login, register, email verification, password reset, session management, idle timeout, device recognition.
 
 | Layer | File |
 |-------|------|
@@ -177,9 +178,21 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 | Check email | `app/api/auth/check-email/route.ts` |
 | Forgot password | `app/api/auth/forgot-password/route.ts` |
 | Verify email | `app/api/auth/verify-email/route.ts` |
+| **Device check (post-login)** | `app/api/auth/device-check/route.ts` |
+| **Recognised devices list / remove all** | `app/api/instructor/devices/route.ts` |
+| **Remove specific device** | `app/api/instructor/devices/[id]/route.ts` |
+| **Security settings page** | `app/dashboard/settings/security/page.tsx` |
 | NextAuth config | `lib/auth.ts` |
+| **Device tracking service** | `lib/services/deviceTracking.ts` |
 | Middleware (route protection) | `middleware.ts` |
 | DB model | `User` in schema |
+| **DB model** | `LoginDevice` in schema (pending migration) |
+
+**Session security:**
+- Absolute max age: 7 days
+- Idle timeout: 30 minutes — implemented in the NextAuth `jwt()` callback via `lastActivity` timestamp. Returning `null` from the callback invalidates the session.
+- **New-device OTP (August 2026):** Instructor logins from a new browser show `OtpModal` — 6-digit email code required before navigating to dashboard. Known browsers skip entirely. Non-instructor roles get email notification only. OTP: HMAC-SHA256 hashed, 5-min TTL, rate-limited, 3-attempt lockout.
+- Device recognition: browser UUID (`localStorage["drivebook_device_id"]`) fingerprints the browser. SHA-256 hash stored in `LoginDevice`. New browser → email notification sent. IP and User-Agent are context only — never used for device identity. Immune to network/IP changes.
 
 ---
 
@@ -269,6 +282,33 @@ Everything is grouped by feature domain. Each entry shows: page → API route �
 | Message log model | `Message` in schema |
 | Landing showcase | `components/landing/AIReceptionistShowcase.tsx` |
 | Doc | `docs/DOCROLEBASE/01-public/LANDING_PAGE.md` (AI section) |
+
+---
+
+## INSTRUCTOR MARKETING TOOLS
+
+**What it does:** Instructors generate marketing materials — A5 flyers with QR codes and print-ready business cards (A4, 10-up, front+back). PDF generated client-side. Physical print requests stored as orders for manual admin fulfilment.
+
+| Layer | File |
+|-------|------|
+| Marketing flyer page | `app/dashboard/marketing/page.tsx` |
+| Business card builder page | `app/dashboard/marketing/cards/page.tsx` |
+| Card data types | `components/marketing/cards/types.ts` |
+| Card preview component | `components/marketing/cards/BusinessCardPreview.tsx` |
+| Card form component | `components/marketing/cards/BusinessCardForm.tsx` |
+| PDF generator (client-side) | `components/marketing/cards/BusinessCardPDF.ts` |
+| QR code wrapper | `components/marketing/cards/CardQRCode.tsx` |
+| Card order API (POST/GET) | `app/api/instructor/card-order/route.ts` |
+| DB model | `CardOrder` in schema (pending migration `add_login_device_and_card_orders`) |
+| Doc | `docs/DOCROLEBASE/03-instructor/MARKETING.md` |
+
+**Key design decisions:**
+- Card dimensions: 85×55mm (Australian standard) — 10 per A4 in 2×5 grid
+- PDF uses `jsPDF` (dynamic import — keeps ~250KB out of initial bundle)
+- Page 1 = card fronts; Page 2 = backs with columns mirrored for duplex long-edge printing
+- Footer shows instructor's booking domain (custom if verified, else subdomain)
+- No emoji in PDF — jsPDF Helvetica is Latin-only; text labels used instead
+- The card engine (`CardData` type) is UI-agnostic — same components serve dashboard and future public lead page
 
 ---
 

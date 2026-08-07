@@ -24,29 +24,37 @@ export async function GET(req: NextRequest) {
 
     const instructorId = session.user.instructorId
 
-    // Calculate current week boundaries (Mon–Sun) in UTC
-    const now = new Date()
-    const dayOfWeek = now.getUTCDay() // 0 = Sunday
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-    const mondayDate = new Date(now)
-    mondayDate.setUTCDate(mondayDate.getUTCDate() - daysFromMonday)
-    const mondayStr = mondayDate.toISOString().slice(0, 10)
-    const mondayStart = new Date(`${mondayStr}T00:00:00.000Z`)
-
-    const sundayDate = new Date(mondayStart)
-    sundayDate.setUTCDate(sundayDate.getUTCDate() + 6)
-    const sundayStr = sundayDate.toISOString().slice(0, 10)
-    const sundayEnd = new Date(`${sundayStr}T23:59:59.999Z`)
-
-    // Get instructor's hourly rate
+    // Get instructor's hourly rate and timezone
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
-      select: { hourlyRate: true }
+      select: { hourlyRate: true, timezone: true, state: true }
     })
 
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
+
+    // Resolve the instructor's timezone to compute correct week boundaries
+    const { resolveTimezone, timezoneFromState, localDateTimeToUTC, getLocalDateKey } = await import('@/lib/utils/timezone')
+    const instructorTz = resolveTimezone(instructor.timezone) || timezoneFromState(instructor.state ?? '')
+
+    // Calculate current week boundaries (Mon–Sun) in the instructor's local timezone
+    const now = new Date()
+    const todayKey = getLocalDateKey(now, instructorTz) // YYYY-MM-DD in instructor's TZ
+
+    // Find Monday of the current local week
+    const todayDate = new Date(todayKey + 'T12:00:00Z') // noon UTC to get stable day
+    const dayOfWeek = todayDate.getUTCDay() // 0 = Sunday
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+    const mondayKey = getLocalDateKey(new Date(now.getTime() - daysFromMonday * 86400000), instructorTz)
+    const sundayKey = getLocalDateKey(new Date(now.getTime() + (6 - daysFromMonday) * 86400000), instructorTz)
+
+    // Convert local Mon 00:00 and Sun 23:59:59.999 to UTC for the DB query
+    const mondayStart = localDateTimeToUTC(mondayKey, '00:00', instructorTz)
+    const sundayEnd   = new Date(localDateTimeToUTC(sundayKey, '23:59', instructorTz).getTime() + 59_999)
+
+    const mondayStr = mondayKey
+    const sundayStr = sundayKey
 
     // Get completed bookings for this week (platform only)
     const weeklyBookings = await prisma.booking.findMany({

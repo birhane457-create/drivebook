@@ -58,25 +58,8 @@ export async function POST(req: NextRequest) {
 
     // Rate limit: check last reminder sent to this client by this instructor in past 24h
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    const recentReminder = await prisma.notification.findFirst({
-      where: {
-        type: 'LESSON_REMINDER',
-        metadata: {
-          path: ['reminderType'],
-          equals: 'package_followup',
-        },
-        createdAt: { gte: oneDayAgo },
-        // Link via clientId in metadata
-        ...(client.id ? {
-          metadata: {
-            path: ['clientId'],
-            equals: client.id,
-          },
-        } : {}),
-      },
-    }).catch(() => null) // non-fatal if notification table doesn't have this
 
-    // Simpler rate limit: check audit log
+    // Rate limit: check audit log for a reminder sent to this client by this instructor in the past 24h
     const recentAudit = await prisma.auditLog.findFirst({
       where: {
         action: 'INSTRUCTOR_CLIENT_REMIND',

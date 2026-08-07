@@ -125,16 +125,14 @@ function parseWorkingHours(raw: unknown, instructorId: string): WorkingHours | n
   return validated
 }
 
-// Parse HH:mm string (Perth local time) into a UTC Date for the given YYYY-MM-DD.
-// Working hours in the DB are always Perth wall-clock time (AWST = UTC+8).
-// Constructing with +08:00 offset instead of Z ensures 09:00 Perth = 01:00 UTC,
-// fixing the previous 8-hour shift that showed 9 AM hours as 5 PM slots.
-// Perth does not observe daylight saving -- AWST (+08:00) is constant year-round.
-function parseTimeUTC(hhMm: string, dateStr: string): Date {
-  const [h, m] = hhMm.split(':').map(Number)
-  const hh = String(h).padStart(2, '0')
-  const mm = String(m).padStart(2, '0')
-  return new Date(`${dateStr}T${hh}:${mm}:00.000+08:00`)
+// Parse HH:mm string (instructor's local time) into a UTC Date for the given YYYY-MM-DD.
+// Working hours are stored in the instructor's wall-clock timezone.
+// Uses localDateTimeToUTC from the timezone utility so any AU timezone works correctly.
+// Falls back to Perth (AWST = UTC+8) for instructors who haven't set their timezone.
+import { localDateTimeToUTC, resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
+
+function parseTimeUTC(hhMm: string, dateStr: string, timezone = DEFAULT_TIMEZONE): Date {
+  return localDateTimeToUTC(dateStr, hhMm, resolveTimezone(timezone))
 }
 
 export class AvailabilityService {
@@ -158,15 +156,21 @@ export class AvailabilityService {
         bookingBufferMinutes: true,
         enableTravelTime: true,
         travelTimeMinutes: true,
+        timezone: true,
+        state: true,
       }
     })
 
     if (!instructor) throw new Error('Instructor not found')
 
-    const bufferMinutes = instructor.bookingBufferMinutes ?? 10; // platform minimum is 10
+    const bufferMinutes = instructor.bookingBufferMinutes ?? 10;
     const travelMinutes = instructor.enableTravelTime ? (instructor.travelTimeMinutes ?? 0) : 0;
-    // Effective gap after any booking before the next slot can start
     const effectiveGapMinutes = Math.max(bufferMinutes, travelMinutes);
+
+    // Resolve timezone: use stored value, fall back to state-derived, then Perth
+    const instructorTz = resolveTimezone(instructor.timezone) !== DEFAULT_TIMEZONE
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState((instructor as any).state ?? '')
 
     const dayName = format(date, 'EEEE').toLowerCase()
 
@@ -229,8 +233,8 @@ export class AvailabilityService {
     const availableSlots: Date[] = []
 
     for (const slot of daySlots) {
-      const slotStart = parseTimeUTC(slot.start, dateStr)
-      const slotEnd   = parseTimeUTC(slot.end,   dateStr)
+      const slotStart = parseTimeUTC(slot.start, dateStr, instructorTz)
+      const slotEnd   = parseTimeUTC(slot.end,   dateStr, instructorTz)
 
       let currentTime = slotStart
 
@@ -257,8 +261,8 @@ export class AvailabilityService {
 
         // Check if this slot conflicts with exceptions
         const hasExceptionConflict = exceptions.some(exception => {
-          const exceptionStart = parseTimeUTC(exception.startTime, dateStr)
-          const exceptionEnd   = parseTimeUTC(exception.endTime,   dateStr)
+          const exceptionStart = parseTimeUTC(exception.startTime, dateStr, instructorTz)
+          const exceptionEnd   = parseTimeUTC(exception.endTime,   dateStr, instructorTz)
           return this.hasTimeConflict(currentTime, slotEndTime, exceptionStart, exceptionEnd)
         })
 

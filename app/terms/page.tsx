@@ -29,7 +29,7 @@ export default function TermsPage() {
               For Learners / Students Only
             </div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Learner Terms and Conditions</h1>
-            <p className="text-gray-500 text-sm">Last updated: May 2026 · Version 1.1</p>
+            <p className="text-gray-500 text-sm">Version 1.2 · Effective: 6 August 2026 · Last Updated: 6 August 2026</p>
             <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-800">
               These terms apply to <strong>Learners</strong> booking driving lessons through DriveBook. If you are a driving instructor, please read our <Link href="/instructor-terms" className="underline font-medium">Instructor Terms and Conditions</Link> instead.
             </div>
@@ -41,7 +41,7 @@ export default function TermsPage() {
               <h2 className="text-lg font-bold text-gray-900 mb-3">Parties</h2>
               <p>This Agreement is between:</p>
               <ul className="list-disc pl-6 mt-2 space-y-1">
-                <li><strong>DriveBook</strong> (operated by DriveBook Pty Ltd, ABN: [Your ABN]); and</li>
+                <li><strong>DriveBook</strong> (operated by DriveBook, "DriveBook", "we", "us"); and</li>
                 <li>the <strong>Learner</strong> who has signed up to the DriveBook platform in accordance with these Terms and Conditions.</li>
               </ul>
             </section>
@@ -63,7 +63,7 @@ export default function TermsPage() {
                 <li>4.2. DriveBook is the conduit between Driving Instructors and Learners;</li>
                 <li>4.3. any agreement to undertake driving lessons is between the Learner and the independent Driving Instructor, to which DriveBook is not a party;</li>
                 <li>4.4. the Driving Instructor is independent of DriveBook and is not an agent, employee, contractor or subcontractor of DriveBook; and</li>
-                <li>4.5. DriveBook is not responsible or liable for any physical, mental or emotional loss, claim, harm or damage suffered as a result of, or in connection with, booking or attending a lesson with a Driving Instructor.</li>
+                <li>4.5. to the maximum extent permitted by law, DriveBook is not responsible or liable for any physical, mental or emotional loss, claim, harm or damage suffered as a result of, or in connection with, booking or attending a lesson with a Driving Instructor.</li>
               </ul>
 
               <h3 id="services" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Description of Services</h3>
@@ -74,9 +74,20 @@ export default function TermsPage() {
               </ul>
               <p className="mb-4">6. DriveBook may add, change, or remove products and services from the platform at any time.</p>
 
-              <h3 id="agreement-by-learner" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Agreement by Learner</h3>
+              <h3 id="business-accounts" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Business and School Accounts</h3>
+              <p className="mb-4">6A. Some Driving Instructors operate under a registered business name or driving school. In these cases, authorised business owners, administrators, or staff may manage bookings, instructors, and learner records as reasonably necessary to provide services. The same privacy protections apply regardless of whether the Instructor operates individually or under a business account.</p>
+
+              <h3 id="ai-services" className="font-semibold text-gray-900 mb-2 scroll-mt-8">AI-Assisted Services</h3>
+              <p className="mb-2">6B. DriveBook uses artificial intelligence (AI) and automated systems to assist with booking enquiries, customer service, and platform operations. By using the platform, the Learner acknowledges that:</p>
+              <ul className="list-none pl-6 space-y-2 mb-4">
+                <li>6B.1. DriveBook may operate an AI-assisted telephone receptionist service. Calls to this service are recorded and transcribed to process booking requests, improve service quality, and resolve disputes.</li>
+                <li>6B.2. AI systems may respond to booking enquiries, answer questions about lesson availability, and assist with scheduling on behalf of the Instructor. The Learner should confirm important details (such as lesson time and pickup address) directly with the Instructor.</li>
+                <li>6B.3. AI-generated responses may occasionally be inaccurate or incomplete. They should not be relied upon as professional, legal, or driving advice.</li>
+                <li>6B.4. AI does not make final decisions about bookings, refunds, or account actions. Where a Learner has a concern, they may contact DriveBook support at <a href="mailto:support@drivebook.com.au" className="text-purple-600 hover:underline">support@drivebook.com.au</a>.</li>
+                <li>6B.5. Personal information shared during AI interactions is handled in accordance with DriveBook's <Link href="/privacy" className="text-purple-600 hover:underline">Privacy Policy</Link>.</li>
+              </ul>
               <p className="mb-2">7. The Learner warrants that they have read, understood, and consent to be bound by this Agreement.</p>
-              <p className="mb-2">8. If you are the parent or guardian of a Learner aged 17 years or younger, you are the financial guarantor of the Learner and this Agreement binds you and the Learner jointly and severally.</p>
+              <p className="mb-2">8. If you are the parent or guardian of a Learner aged 17 years or younger, you are the financial guarantor of the Learner and this Agreement binds you and the Learner jointly and severally. DriveBook may share booking information with you as parent or guardian where reasonably necessary to manage lessons and payments on the Learner's behalf.</p>
               <p className="mb-4">9. You must be at least 16 years old to create an account.</p>
 
               <h3 id="platform-use" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Learner's Use of the Platform</h3>
@@ -100,8 +111,10 @@ export default function TermsPage() {
                 <li>11.4. provide a mobile phone number contactable via SMS and calls;</li>
                 <li>11.5. abide by all driving laws, rules, and regulations in their jurisdiction;</li>
                 <li>11.6. be respectful to Driving Instructors;</li>
-                <li>11.7. not use a mobile phone or electronic device while undertaking lessons; and</li>
-                <li>11.8. not arrange or accept an offer to undertake lessons with a Driving Instructor outside of, or separate from, the DriveBook platform. Any attempt to circumvent the platform may result in immediate account termination.</li>
+                <li>11.7. not use a mobile phone or electronic device while undertaking lessons;</li>
+                <li>11.8. not attend a lesson while impaired by alcohol, drugs, medication, or any other substance that affects their ability to drive safely;</li>
+                <li>11.9. disclose to the Driving Instructor any medical condition that may affect their ability to drive safely, where reasonably required to do so by law or by the terms of their learner's permit or licence; and</li>
+                <li>11.10. not arrange or accept an offer to undertake lessons with a Driving Instructor outside of, or separate from, the DriveBook platform. Any attempt to circumvent the platform may result in immediate account termination.</li>
               </ul>
 
               <h3 id="payment" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Payment Terms</h3>
@@ -111,7 +124,7 @@ export default function TermsPage() {
               <p className="mb-2">15. When a Learner pays for a booking, a credit is issued to that Learner's DriveBook Wallet for the value of the booking. These credits:</p>
               <ul className="list-none pl-6 space-y-1 mb-4">
                 <li>15.1. are non-transferable and may not be used by any other person;</li>
-                <li>15.2. expire after 12 months of account inactivity, after which they are forfeited to DriveBook; and</li>
+                <li>15.2. expire after 12 months of account inactivity. For the purposes of this clause, "inactivity" means no booking has been made and no wallet transaction has occurred within the preceding 12 months; and</li>
                 <li>15.3. may be refunded to the original payment method upon request, subject to the Refund Policy below.</li>
               </ul>
 
@@ -144,6 +157,7 @@ export default function TermsPage() {
               <p className="mb-2">17. Refunds are credited to the Learner's DriveBook Wallet immediately. Withdrawal to the original payment method is available on request (minimum $10.00, processing time 5–7 business days).</p>
               <p className="mb-2">18. No-shows are treated as same-day cancellations. The Instructor receives full payment.</p>
               <p className="mb-4">19. If a Driving Instructor cancels a lesson, the Learner receives a 100% refund to their wallet regardless of notice period.</p>
+              <p className="mb-4">19B. Where a lesson cannot safely proceed due to severe weather, natural disasters, government-declared emergencies, road closures, or other circumstances beyond the reasonable control of either party, the Instructor or DriveBook may reschedule the lesson without penalty. In such cases, the Learner's booking credit is retained in full. See also clause 31 (Force Majeure).</p>
 
               <h3 id="rescheduling" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Rescheduling Policy</h3>
               <p className="mb-2">19A. A Learner may request to reschedule a confirmed booking subject to the following conditions:</p>
@@ -184,7 +198,7 @@ export default function TermsPage() {
               <p className="mb-4">29. The Learner agrees that DriveBook may collect and use their information for the provision of services and, where consent is given, for marketing purposes.</p>
 
               <h3 id="ip" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Intellectual Property</h3>
-              <p className="mb-4">30. All intellectual property and copyright in connection with DriveBook products and resources is owned exclusively by DriveBook Pty Ltd.</p>
+              <p className="mb-4">30. All intellectual property and copyright in connection with DriveBook products and resources is owned exclusively by DriveBook.</p>
 
               <h3 id="force-majeure" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Force Majeure</h3>
               <p className="mb-4">31. Neither party is liable to the other for failure to perform obligations caused by events beyond their reasonable control (including natural disasters, government actions, or infrastructure failures). In such events, reasonable measures will be taken to accommodate an equivalent booking for a future date.</p>
@@ -193,8 +207,9 @@ export default function TermsPage() {
               <p className="mb-2">32. If a dispute arises between a Learner and DriveBook:</p>
               <ul className="list-none pl-6 space-y-1 mb-4">
                 <li>32.1. the parties will first attempt to resolve the dispute directly within 14 days;</li>
-                <li>32.2. if unresolved, the parties agree to refer the matter to a mediator, with costs shared equally; and</li>
-                <li>32.3. if mediation fails, the matter may be referred to arbitration under the Rules of the Resolution Institute, with the arbitrator's decision binding on both parties.</li>
+                <li>32.2. if unresolved, the parties agree to refer the matter to a mediator, with costs shared equally;</li>
+                <li>32.3. if mediation fails, the matter may be referred to arbitration under the Rules of the Resolution Institute, with the arbitrator's decision binding on both parties; and</li>
+                <li>32.4. nothing in this clause prevents either party from seeking urgent injunctive or other equitable relief from a court of competent jurisdiction where necessary to protect their rights.</li>
               </ul>
 
               <h3 id="modification" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Modification of Agreement</h3>
@@ -210,8 +225,15 @@ export default function TermsPage() {
               <p className="mb-2">36. To the maximum extent permitted by law, DriveBook's total aggregate liability to the Learner arising out of or in connection with this Agreement (whether in contract, tort, statute, or otherwise) is limited to the total amount paid by the Learner to DriveBook in the three (3) months immediately preceding the event giving rise to the claim.</p>
               <p className="mb-4">36.1. This limitation applies regardless of the form of action and whether DriveBook has been advised of the possibility of such damages.</p>
 
-              <h3 id="content" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Content</h3>
-              <p className="mb-4">37. DriveBook reserves the right to remove, edit, or refuse any content submitted by a Learner (including reviews, messages, or profile information) at its sole discretion, without notice and without liability.</p>
+              <h3 id="content" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Content and Reviews</h3>
+              <p className="mb-2">37. DriveBook reserves the right to remove, edit, or refuse any content submitted by a Learner (including reviews, messages, or profile information) at its sole discretion, without notice and without liability.</p>
+              <p className="mb-4">37A. The Learner agrees that any review or feedback submitted through the platform must:</p>
+              <ul className="list-none pl-6 space-y-1 mb-4">
+                <li>37A.1. be genuine and based on an actual lesson taken by the Learner;</li>
+                <li>37A.2. not be defamatory, false, or misleading;</li>
+                <li>37A.3. not contain personal information about the Instructor (such as home address or personal contact details); and</li>
+                <li>37A.4. comply with applicable laws.</li>
+              </ul>
 
               <h3 id="no-agency" className="font-semibold text-gray-900 mb-2 scroll-mt-8">No Agency</h3>
               <p className="mb-4">38. Nothing in this Agreement creates a partnership, employment relationship, joint venture, or agency between the Learner and DriveBook. The Learner has no authority to bind DriveBook in any way.</p>
@@ -227,7 +249,7 @@ export default function TermsPage() {
               <p className="mb-4">41.1. The Learner may not assign, transfer, or novate any of their rights or obligations under this Agreement without DriveBook's prior written consent.</p>
 
               <h3 id="data-retention" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Data Retention</h3>
-              <p className="mb-4">42. Upon account closure, DriveBook will retain the Learner's personal data for 30 days, after which it will be deleted or anonymised, unless retention is required by applicable law or regulation (including for tax, fraud prevention, or dispute resolution purposes).</p>
+              <p className="mb-4">42. Upon account closure, DriveBook will take reasonable steps to delete or de-identify the Learner's personal data within a reasonable period, in most cases within 90 days, subject to legal, security, fraud prevention, dispute resolution, and backup retention requirements. Booking and transaction records are retained for 7 years for financial and legal compliance.</p>
 
               <h3 id="sms" className="font-semibold text-gray-900 mb-2 scroll-mt-8">SMS Communications</h3>
               <p className="mb-2">43. By providing a mobile phone number and creating an account, the Learner consents to receive SMS messages from DriveBook relating to bookings, account activity, and platform updates.</p>
@@ -243,7 +265,7 @@ export default function TermsPage() {
               <h2 className="text-lg font-bold text-gray-900 mb-4">Definitions</h2>
               <dl className="space-y-3 text-sm">
                 <div><dt className="font-semibold inline">Agreement</dt><dd className="inline"> — this document as amended from time to time, together with any documents referred to herein.</dd></div>
-                <div><dt className="font-semibold inline">DriveBook</dt><dd className="inline"> — DriveBook Pty Ltd (ABN: [Your ABN]).</dd></div>
+                <div><dt className="font-semibold inline">DriveBook</dt><dd className="inline"> — DriveBook, operator of the DriveBook platform at drivebook.com.au.</dd></div>
                 <div><dt className="font-semibold inline">Driving Instructor</dt><dd className="inline"> — an independent contractor who has registered on the DriveBook platform to provide driving instruction services.</dd></div>
                 <div><dt className="font-semibold inline">Event of Termination</dt><dd className="inline"> — those events set out in clause 25.</dd></div>
                 <div><dt className="font-semibold inline">Learner</dt><dd className="inline"> — a person who has created an account and made or attempted to make a booking through DriveBook.</dd></div>
@@ -268,7 +290,7 @@ export default function TermsPage() {
       </div>
 
       <footer className="bg-gray-800 text-white py-8 px-4 mt-8 text-center text-sm text-gray-400">
-        © {new Date().getFullYear()} DriveBook Pty Ltd. All rights reserved.
+        © {new Date().getFullYear()} DriveBook. All rights reserved.
       </footer>
     </div>
   )

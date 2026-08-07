@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { smsService } from '@/lib/services/sms';
 import { bookingActionRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
+import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone';
 import jwt from 'jsonwebtoken';
 
 
@@ -67,11 +68,16 @@ export async function POST(
       );
     }
 
-    // Get booking details
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
+    // Get booking details — scope instructor fetch to their own bookings to prevent IDOR.
+    // For clients, fetch without scope then verify client.userId below.
+    const bookingWhere = (userRole === 'INSTRUCTOR' && instructorId)
+      ? { id: bookingId, instructorId }
+      : { id: bookingId };
+
+    const booking = await prisma.booking.findFirst({
+      where: bookingWhere,
       include: {
-        instructor: { select: { name: true, phone: true } },
+        instructor: { select: { name: true, phone: true, timezone: true, state: true } },
         client: { select: { name: true, phone: true, userId: true } },
       },
     }) as any;
@@ -80,21 +86,23 @@ export async function POST(
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    // 🔴 CRITICAL FIX: Authorization check
-    // Verify user owns this booking (as client OR instructor)
+    const instructorTimezone = booking?.instructor
+      ? booking.instructor.timezone
+        ? resolveTimezone(booking.instructor.timezone)
+        : timezoneFromState(booking.instructor.state)
+      : DEFAULT_TIMEZONE;
+
+    // Authorization — for client callers verify ownership (instructor scope handled by WHERE above)
     const isInstructor = userRole === 'INSTRUCTOR';
     const isClient = userRole === 'CLIENT';
 
-    if (isInstructor && booking.instructorId !== instructorId) {
-      return NextResponse.json({ 
-        error: 'Forbidden - This booking belongs to another instructor' 
-      }, { status: 403 });
+    // Only instructors and clients can check in — admins must not bypass ownership
+    if (!isInstructor && !isClient) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (isClient && booking.client.userId !== userId) {
-      return NextResponse.json({ 
-        error: 'Forbidden - This booking belongs to another client' 
-      }, { status: 403 });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Determine who is checking in
@@ -151,8 +159,9 @@ export async function POST(
     }
 
     // 🔴 FIX: Atomic check-in with idempotency
+    const checkInTime = new Date();
     const updateData: any = {
-      checkInTime: new Date(),
+      checkInTime,
       checkInLocation: location,
       checkInBy,
       checkInPhoto: photo,
@@ -185,20 +194,18 @@ export async function POST(
       return NextResponse.json({ error: 'Already checked in' }, { status: 400 });
     }
 
-    const checkInTime = new Date();
-
-    // 🔴 FIX: SMS sending non-blocking
+    // Send SMS non-blocking — only if phone is available
     const otherPartyPhone = isInstructor ? booking.client.phone : booking.instructor.phone;
-    const otherPartyName = isInstructor ? booking.client.name : booking.instructor.name;
     const checkedInName = isInstructor ? booking.instructor.name : booking.client.name;
 
-    smsService.sendSMS({
-      to: otherPartyPhone,
-      message: `${checkedInName} has checked in for your lesson. Lesson started at ${checkInTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}.`,
-    }).catch(error => {
-      console.error('Failed to send check-in SMS:', error);
-      // Don't fail the check-in if SMS fails
-    });
+    if (otherPartyPhone) {
+      smsService.sendSMS({
+        to: otherPartyPhone,
+        message: `${checkedInName} has checked in for your lesson. Lesson started at ${checkInTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: instructorTimezone })}.`,
+      }).catch(error => {
+        console.error('Failed to send check-in SMS:', error);
+      });
+    }
 
     return NextResponse.json({
       success: true,

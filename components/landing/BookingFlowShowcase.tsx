@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { MapPin, Search, Star, DollarSign, Car, Calendar, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -72,7 +72,7 @@ export default function BookingFlowShowcase() {
   const currentSlide = slides[currentIndex]
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-0">
+    <div className="w-full max-w-7xl mx-auto px-0" inert={true} aria-hidden="true">
       {/* Slide Content */}
       <div className="bg-white rounded-xl md:rounded-2xl shadow-lg md:shadow-2xl overflow-hidden border border-gray-200" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {/* Header */}
@@ -515,3 +515,4 @@ function ConfirmationStep() {
     </div>
   )
 }
+

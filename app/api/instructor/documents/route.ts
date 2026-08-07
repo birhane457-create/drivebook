@@ -122,19 +122,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Return an explicit shape — no extra fields that could pollute client-side
-    // document presence checks (e.g. workingHours is a truthy object for active instructors).
+    // Return an explicit shape — document fields return boolean presence only, not raw URLs.
+    // Raw Cloudinary URLs must never reach the client.
+    // To view a document, use GET /api/instructor/documents/[docType] which returns a signed URL.
     return NextResponse.json({
-      licenseImageFront:      instructor.licenseImageFront      ?? null,
-      licenseImageBack:       instructor.licenseImageBack       ?? null,
-      insurancePolicyDoc:     instructor.insurancePolicyDoc     ?? null,
-      policeCheckDoc:         instructor.policeCheckDoc         ?? null,
-      wwcCheckDoc:            instructor.wwcCheckDoc            ?? null,
-      photoIdDoc:             instructor.photoIdDoc             ?? null,
-      certificationDoc:       instructor.certificationDoc       ?? null,
-      vehicleRegistrationDoc: instructor.vehicleRegistrationDoc ?? null,
-      profileImage:           instructor.profileImage           ?? null,
-      carImage:               instructor.carImage               ?? null,
+      licenseImageFront:      instructor.licenseImageFront      ? true : null,
+      licenseImageBack:       instructor.licenseImageBack       ? true : null,
+      insurancePolicyDoc:     instructor.insurancePolicyDoc     ? true : null,
+      policeCheckDoc:         instructor.policeCheckDoc         ? true : null,
+      wwcCheckDoc:            instructor.wwcCheckDoc            ? true : null,
+      photoIdDoc:             instructor.photoIdDoc             ? true : null,
+      certificationDoc:       instructor.certificationDoc       ? true : null,
+      vehicleRegistrationDoc: instructor.vehicleRegistrationDoc ? true : null,
+      profileImage:           instructor.profileImage           ?? null, // public — URL is fine
+      carImage:               instructor.carImage               ?? null, // public — URL is fine
       documentsVerified:      instructor.documentsVerified      ?? false,
       documentsVerifiedAt:    instructor.documentsVerifiedAt?.toISOString() ?? null,
       licenseExpiry:          instructor.licenseExpiry?.toISOString()       ?? null,

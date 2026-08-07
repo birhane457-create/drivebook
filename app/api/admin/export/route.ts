@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,8 +117,8 @@ export async function GET(req: NextRequest) {
       b.id,
       b.status,
       b.createdAt?.toISOString() ?? '',
-      b.startTime?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) ?? '',
-      b.startTime?.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' }) ?? '',
+      b.startTime?.toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE }) ?? '',
+      b.startTime?.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_TIMEZONE }) ?? '',
       b.duration ?? '',
       b.price ?? '',
       b.platformFee ?? '',
@@ -175,7 +176,7 @@ export async function GET(req: NextRequest) {
 
     const rows = transactions.map((t: any) => [
       t.id,
-      t.createdAt?.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) ?? '',
+      t.createdAt?.toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE }) ?? '',
       t.amount ?? '',
       t.platformFee ?? '',
       t.instructorPayout ?? '',

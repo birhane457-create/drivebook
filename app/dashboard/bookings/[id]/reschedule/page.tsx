@@ -1,10 +1,11 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Calendar, Clock, ArrowLeft, History, AlertTriangle } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import Toast from '@/components/ui/Toast'
+import { resolveTimezone, timezoneFromState, formatLocalDate, formatLocalTime, localDateTimeToUTC, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 
 interface Booking {
   id: string
@@ -17,6 +18,7 @@ interface Booking {
   rescheduledFrom: { previousStart: string; previousEnd: string; rescheduledAt: string; reason?: string; wasInsidePenaltyWindow?: boolean }[]
   rescheduleCount: number
   client: { name: string; phone: string }
+  instructor: { timezone: string | null; state: string | null } | null
 }
 
 interface TimeSlot {
@@ -38,6 +40,11 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
   const [showHistory, setShowHistory] = useState(false)
   // Penalty warning state
   const [penaltyWarning, setPenaltyWarning] = useState<{ message: string; hoursUntil: number } | null>(null)
+
+  // Resolved from booking.instructor once loaded — avoids always-Perth fallback
+  const instructorTz = booking
+    ? resolveTimezone((booking as any)?.instructor?.timezone) || timezoneFromState((booking as any)?.instructor?.state ?? '')
+    : DEFAULT_TIMEZONE
 
   useEffect(() => { fetchBooking() }, [params.id])
   useEffect(() => { if (date && booking) fetchSlots() }, [date, booking])
@@ -87,9 +94,8 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
     if (!date || !time || !booking) return
     setSaving(true)
     try {
-      const [h, m] = time.split(':')
-      const newStart = new Date(date)
-      newStart.setHours(parseInt(h), parseInt(m), 0, 0)
+      // Build UTC datetime using instructor's timezone — not the browser's local TZ
+      const newStart = localDateTimeToUTC(date, time, instructorTz)
       const durationMins = Math.round(
         (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60000
       )
@@ -148,16 +154,16 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
   const isPast = hoursUntilCurrent <= 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <Toast toast={toast} onClose={clearToast} />
       <div className="max-w-2xl mx-auto px-4 py-6">
-        <button onClick={() => router.back()} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4">
+        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-400 hover:text-white mb-4">
           <ArrowLeft className="h-5 w-5" />
           Back
         </button>
 
-        <h1 className="text-2xl font-bold mb-1">Reschedule Booking</h1>
-        <p className="text-gray-500 text-sm mb-6">Client: {booking.client?.name ?? (booking as any).clientName ?? 'Guest'} · {booking.client?.phone ?? (booking as any).clientPhone ?? '—'}</p>
+        <h1 className="text-2xl font-bold mb-1 text-slate-100">Reschedule Booking</h1>
+        <p className="text-slate-400 text-sm mb-6">Client: {booking.client?.name ?? (booking as any).clientName ?? 'Guest'} · {booking.client?.phone ?? (booking as any).clientPhone ?? '—'}</p>
 
         {/* Past booking warning */}
         {isPast && (
@@ -194,11 +200,11 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <p className="text-sm font-medium text-blue-800 mb-1">Current booking time</p>
           <p className="text-blue-900">
-            {new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
-            {' · '}
-            {new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
-            {' – '}
-            {new Date(booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+            {formatLocalDate(booking.startTime, instructorTz, { weekday: 'long', day: 'numeric', month: 'long' })}
+              {' · '}
+              {formatLocalTime(booking.startTime, instructorTz, { hour: '2-digit', minute: '2-digit' })}
+              {' – '}
+              {formatLocalTime(booking.endTime, instructorTz, { hour: '2-digit', minute: '2-digit' })}
             {' '}({durationMins} min)
           </p>
           {booking.rescheduleCount > 0 && (
@@ -214,20 +220,20 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
 
         {/* Reschedule history */}
         {showHistory && booking.rescheduledFrom?.length > 0 && (
-          <div className="bg-white border rounded-lg p-4 mb-6 space-y-2">
-            <p className="text-sm font-semibold text-gray-700 mb-2">Reschedule history</p>
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 mb-6 space-y-2">
+            <p className="text-sm font-semibold text-slate-200 mb-2">Reschedule history</p>
             {[...booking.rescheduledFrom].reverse().map((h, i) => (
-              <div key={i} className="text-xs text-gray-600 border-l-2 border-gray-200 pl-3">
+              <div key={i} className="text-xs text-slate-300 border-l-2 border-slate-600 pl-3">
                 <p className="font-medium">
-                  {new Date(h.previousStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                  {formatLocalDate(h.previousStart, instructorTz, { day: 'numeric', month: 'short' })}
                   {' '}
-                  {new Date(h.previousStart).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                  {formatLocalTime(h.previousStart, instructorTz, { hour: '2-digit', minute: '2-digit' })}
                   {' – '}
-                  {new Date(h.previousEnd).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                  {formatLocalTime(h.previousEnd, instructorTz, { hour: '2-digit', minute: '2-digit' })}
                   {h.wasInsidePenaltyWindow && <span className="ml-2 text-orange-600 font-semibold">⚠️ inside 24h</span>}
                 </p>
-                <p className="text-gray-400">
-                  Changed {new Date(h.rescheduledAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                <p className="text-slate-500">
+                  Changed {formatLocalDate(h.rescheduledAt, instructorTz, { day: 'numeric', month: 'short', year: 'numeric' })}
                   {h.reason ? ` · ${h.reason}` : ''}
                 </p>
               </div>
@@ -238,8 +244,8 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
         {!isPast && (
           <>
             {/* New date picker */}
-            <div className="bg-white rounded-lg shadow p-4 mb-4">
-              <label className="block text-sm font-medium mb-2">
+            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4">
+              <label className="block text-sm font-medium mb-2 text-slate-200">
                 <Calendar className="inline h-4 w-4 mr-1" />
                 New Date
               </label>
@@ -248,21 +254,21 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
                 value={date}
                 min={new Date().toISOString().split('T')[0]}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
               />
             </div>
 
             {/* Time slots */}
             {date && (
-              <div className="bg-white rounded-lg shadow p-4 mb-4">
-                <label className="block text-sm font-medium mb-3">
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4">
+                <label className="block text-sm font-medium mb-3 text-slate-200">
                   <Clock className="inline h-4 w-4 mr-1" />
                   Select New Time
                 </label>
                 {loadingSlots ? (
-                  <p className="text-sm text-gray-500 text-center py-4">Loading available times...</p>
+                  <p className="text-sm text-slate-400 text-center py-4">Loading available times...</p>
                 ) : slots.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">No available slots on this date</p>
+                  <p className="text-sm text-slate-400 text-center py-4">No available slots on this date</p>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-56 overflow-y-auto">
                     {slots.map(slot => (
@@ -284,19 +290,20 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
                     ))}
                   </div>
                 )}
-                {time && <p className="text-sm text-green-600 mt-2">✓ Selected: {time}</p>}
+                {time && <p className="text-sm text-emerald-400 mt-2">✓ Selected: {time}</p>}
               </div>
             )}
 
             {/* Optional reason */}
-            <div className="bg-white rounded-lg shadow p-4 mb-6">
-              <label className="block text-sm font-medium mb-2">Reason (optional)</label>
+            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-6">
+              <label className="block text-sm font-medium mb-2 text-slate-200">Reason (optional)</label>
               <input
                 type="text"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
+                maxLength={200}
                 placeholder="e.g. Client requested, instructor unavailable..."
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600"
+                className="w-full px-3 py-2 border border-slate-700 rounded-lg bg-slate-950 text-slate-100 focus:ring-2 focus:ring-sky-500"
               />
             </div>
 
@@ -313,18 +320,18 @@ export default function ReschedulePage({ params }: { params: { id: string } }) {
         {/* Penalty waiver confirmation modal */}
         {penaltyWarning && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-xl max-w-md w-full p-6">
               <div className="flex gap-3 mb-4">
                 <AlertTriangle className="h-6 w-6 text-orange-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Policy Warning</h3>
-                  <p className="text-sm text-gray-700">{penaltyWarning.message}</p>
+                  <h3 className="font-semibold text-slate-100 mb-2">Policy Warning</h3>
+                  <p className="text-sm text-slate-300">{penaltyWarning.message}</p>
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => setPenaltyWarning(null)}
-                  className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50"
+                  className="flex-1 border border-slate-600 text-slate-300 py-2 rounded-lg hover:bg-slate-800"
                 >
                   Cancel
                 </button>

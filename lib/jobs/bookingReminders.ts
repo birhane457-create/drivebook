@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { createBatchNotifications } from '@/lib/services/notificationService';
+import { resolveTimezone, timezoneFromState, formatLocalDate, formatLocalTime, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 interface BookingWithRelations {
   id: string;
@@ -37,31 +38,15 @@ const REMINDER_STAGES = [
 ] as const;
 
 function resolveReminderTimezone(booking: BookingWithRelations) {
-  // Fallback chain: booking TZ → instructor TZ → env var → Perth (never UTC — platform is WA-based)
-  return booking.timezone || booking.instructor?.timezone || process.env.DEFAULT_TIMEZONE || 'Australia/Perth';
+  const tzCandidate = booking.timezone || booking.instructor?.timezone || process.env.DEFAULT_TIMEZONE || DEFAULT_TIMEZONE;
+  return resolveTimezone(tzCandidate);
 }
 
 function formatReminderDateTime(date: Date, timezone: string) {
-  try {
-    return new Intl.DateTimeFormat('en-AU', {
-      timeZone: timezone,
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  } catch {
-    // Invalid timezone string passed — fall back to Perth, never UTC
-    return new Intl.DateTimeFormat('en-AU', {
-      timeZone: 'Australia/Perth',
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  }
+  const tz = resolveTimezone(timezone);
+  const datePart = formatLocalDate(date, tz, { weekday: 'short', day: 'numeric', month: 'short' } as any);
+  const timePart = formatLocalTime(date, tz, { hour: '2-digit', minute: '2-digit' });
+  return `${datePart} ${timePart}`;
 }
 
 function buildReminderMessage(booking: BookingWithRelations, stageKey: string, startTime: Date, timezone: string) {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Payout Service
  *
  * State machine:
@@ -441,6 +441,7 @@ export async function executePayout(
               <p>These adjustments are made in accordance with our cancellation policy. If you believe this is in error, please contact support.</p>`;
             
             await emailService.sendGenericEmail({
+              from: 'DriveBook Payments <payments@drivebook.com.au>',
               to: instructor.user.email,
               subject: `Payout Adjustment — $${totalDeducted.toFixed(2)} deducted (${payout.payoutRef})`,
               html,

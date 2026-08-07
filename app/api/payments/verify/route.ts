@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,9 @@ export async function POST(req: NextRequest) {
           // the wallet would have a dangling CREDIT with no matching DEBIT.
           await prisma.$transaction(async (tx) => {
             if (isPackage && packageTotalPaid) {
+              // Resolve timezone for wallet TX description — booking has no instructor relation here,
+              // so we use DEFAULT_TIMEZONE as a safe fallback; the date label is informational only.
+              const verifyTz = DEFAULT_TIMEZONE;
               await tx.walletTransaction.create({
                 data: {
                   walletId: wallet.id,
@@ -106,11 +110,12 @@ export async function POST(req: NextRequest) {
                   walletId: wallet.id,
                   type: 'DEBIT',
                   amount: booking.price,
-                  description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+                  description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: verifyTz })} · booking #${bookingId}`,
                   status: 'CONFIRMED',
                 },
               });
             } else {
+              const verifyTz = DEFAULT_TIMEZONE;
               await tx.walletTransaction.create({
                 data: {
                   walletId: wallet.id,
@@ -125,7 +130,7 @@ export async function POST(req: NextRequest) {
                   walletId: wallet.id,
                   type: 'DEBIT',
                   amount: booking.price,
-                  description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+                  description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: verifyTz })} · booking #${bookingId}`,
                   status: 'CONFIRMED',
                 },
               });
@@ -198,6 +203,7 @@ export async function GET(req: NextRequest) {
 
   if (isPackage && packageTotalPaid) {
     await prisma.$transaction(async (tx) => {
+      const verifyTz = DEFAULT_TIMEZONE;
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -212,7 +218,7 @@ export async function GET(req: NextRequest) {
           walletId: wallet.id,
           type: 'DEBIT',
           amount: booking.price,
-          description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+          description: `First lesson — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: verifyTz })} · booking #${bookingId}`,
           status: 'CONFIRMED',
         },
       });
@@ -220,6 +226,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ status: 'credited', amount: packageTotalPaid, debit: booking.price });
   } else {
     await prisma.$transaction(async (tx) => {
+      const verifyTz = DEFAULT_TIMEZONE;
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -234,7 +241,7 @@ export async function GET(req: NextRequest) {
           walletId: wallet.id,
           type: 'DEBIT',
           amount: booking.price,
-          description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} · booking #${bookingId}`,
+          description: `Lesson booked — ${new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: verifyTz })} · booking #${bookingId}`,
           status: 'CONFIRMED',
         },
       });

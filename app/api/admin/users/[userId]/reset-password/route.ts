@@ -39,6 +39,7 @@ export async function POST(
     const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
     await emailService.sendGenericEmail({
+      from: 'DriveBook Account Verification <verification@drivebook.com.au>',
       to: user.email,
       subject: 'Password Reset — DriveBook Support',
       html: `

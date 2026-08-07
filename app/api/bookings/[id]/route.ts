@@ -4,20 +4,22 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
-import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers'
 import { emailService } from '@/lib/services/email'
+import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
+import { bookingActionRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { z } from 'zod'
 
 
 export const dynamic = 'force-dynamic';
 const updateSchema = z.object({
   status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']).optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(2000, 'Notes cannot exceed 2000 characters').optional(),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
-  pickupAddress: z.string().optional(),
-  dropoffAddress: z.string().optional(),
-  price: z.number().optional(),
+  pickupAddress: z.string().max(500).optional(),
+  dropoffAddress: z.string().max(500).optional(),
+  // price is NOT accepted from the client — it's recomputed server-side
+  // from duration changes to prevent price manipulation
 })
 
 export async function PATCH(
@@ -33,6 +35,13 @@ export async function PATCH(
 
     const body = await req.json()
     const data = updateSchema.parse(body)
+
+    // Rate limiting — prevent automated booking manipulation
+    const rlId = getRateLimitIdentifier(session.user.id, req.headers.get('x-forwarded-for'), 'booking-edit')
+    const rl = await checkRateLimit(bookingActionRateLimit, rlId)
+    if (!rl.success) {
+      return NextResponse.json({ error: rl.error }, { status: 429, headers: rl.headers })
+    }
 
     // Check if user is admin or instructor
     const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
@@ -61,6 +70,12 @@ export async function PATCH(
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found or access denied' }, { status: 404 })
     }
+
+    const bookingTimezone = booking.instructor
+      ? booking.instructor.timezone
+        ? resolveTimezone(booking.instructor.timezone)
+        : timezoneFromState(booking.instructor.state)
+      : DEFAULT_TIMEZONE
 
     // FIXED: Prevent editing completed or cancelled bookings
     if (booking.status === 'COMPLETED') {
@@ -104,11 +119,9 @@ export async function PATCH(
     // Track changes for audit log
     const changes: Record<string, any> = {};
     if (data.status && data.status !== booking.status) changes.status = { from: booking.status, to: data.status };
-    if (data.price && data.price !== booking.price) changes.price = { from: booking.price, to: data.price };
     if (data.startTime) changes.startTime = { from: booking.startTime, to: new Date(data.startTime) };
     if (data.endTime) changes.endTime = { from: booking.endTime, to: new Date(data.endTime) };
 
-    // FIXED: Use transaction wrapper for atomic updates
     const newStart = data.startTime ? new Date(data.startTime) : null
     const newEnd   = data.endTime   ? new Date(data.endTime)   : null
 
@@ -125,134 +138,129 @@ export async function PATCH(
       return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 })
     }
 
+    // Compute new price server-side from duration — never trust client-supplied price
+    const lockedRate = (booking as any).lockedHourlyRate ?? booking.instructor?.hourlyRate ?? 60
+    const newDurationHours = (effectiveEnd.getTime() - effectiveStart.getTime()) / 3_600_000
+    const newPrice = parseFloat((lockedRate * newDurationHours).toFixed(2))
+    const priceChanged = Math.abs(newPrice - booking.price) > 0.01
+    if (priceChanged) changes.price = { from: booking.price, to: newPrice }
+
     const updated = await prisma.$transaction(async (tx) => {
       // ── Slot conflict check when time is being changed ──────────────────────
       if (newStart || newEnd) {
-        const checkStart = effectiveStart
-        const checkEnd = effectiveEnd
-
         const slotConflict = await tx.booking.findFirst({
           where: {
             instructorId: booking.instructorId,
-            id: { not: params.id },                               // exclude this booking
+            id: { not: params.id },
             status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
             OR: [
-              { AND: [{ startTime: { gte: checkStart } }, { startTime: { lt: checkEnd } }] },
-              { AND: [{ endTime:   { gt: checkStart } }, { endTime:   { lte: checkEnd } }] },
-              { AND: [{ startTime: { lte: checkStart } }, { endTime:  { gte: checkEnd } }] },
+              { AND: [{ startTime: { gte: effectiveStart } }, { startTime: { lt: effectiveEnd } }] },
+              { AND: [{ endTime:   { gt: effectiveStart } }, { endTime:   { lte: effectiveEnd } }] },
+              { AND: [{ startTime: { lte: effectiveStart } }, { endTime:  { gte: effectiveEnd } }] },
             ],
           },
           select: { id: true },
         })
-
-        if (slotConflict) {
-          throw new Error('SLOT_CONFLICT')
-        }
+        if (slotConflict) throw new Error('SLOT_CONFLICT')
       }
 
-      // Update booking
+      // Update booking — price always derived server-side
       const updatedBooking = await tx.booking.update({
         where: { id: params.id },
         data: {
-          ...data,
+          status:         data.status  ?? undefined,
+          notes:          data.notes   ?? undefined,
+          pickupAddress:  data.pickupAddress  ?? undefined,
+          dropoffAddress: data.dropoffAddress ?? undefined,
           startTime: newStart ?? undefined,
           endTime:   newEnd   ?? undefined,
+          ...(priceChanged ? {
+            price: newPrice,
+            duration: newDurationHours * 60,
+          } : {}),
         },
-        include: {
-          client: true,
-          instructor: true
-        }
+        include: { client: true, instructor: true }
       })
 
-      // If price changed and transaction exists, update it
-      if (data.price && data.price !== booking.price) {
-        const priceDifference = data.price - booking.price;
-        
-        if (priceDifference > 0 && booking.client?.userId) {
-          const wallet = await tx.clientWallet.findUnique({
-            where: { userId: booking.client.userId }
-          });
+      // ── Wallet adjustment if price changed ────────────────────────────────
+      if (priceChanged && booking.client?.userId) {
+        const priceDifference = newPrice - booking.price
 
-          if (wallet) {
-            // ── Balance from ledger inside the transaction (authoritative) ──
-            const txns = await tx.walletTransaction.findMany({
-              where: { walletId: wallet.id, status: 'CONFIRMED' }
+        const wallet = await tx.clientWallet.findUnique({
+          where: { userId: booking.client.userId }
+        })
+
+        if (wallet) {
+          if (priceDifference > 0) {
+            // Duration increased — deduct the difference
+            const creditAgg = await tx.walletTransaction.aggregate({
+              where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' },
+              _sum: { amount: true },
             })
-            const txBalance = txns.reduce((sum: number, t: any) =>
-              t.type === 'CREDIT' ? sum + t.amount : sum - t.amount, 0)
-
+            const debitAgg = await tx.walletTransaction.aggregate({
+              where: { walletId: wallet.id, status: 'CONFIRMED', type: 'DEBIT' },
+              _sum: { amount: true },
+            })
+            const txBalance = (creditAgg._sum.amount ?? 0) - (debitAgg._sum.amount ?? 0)
             if (txBalance < priceDifference) {
               throw new Error(`INSUFFICIENT_BALANCE:${priceDifference.toFixed(2)}`)
             }
-
-            // Deduct from both ledger and stored balance field
             await tx.walletTransaction.create({
               data: {
                 walletId: wallet.id,
                 type: 'DEBIT',
                 amount: priceDifference,
-                description: `Duration increase for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) : 'N/A'}`,
-                status: 'CONFIRMED'
+                description: `Duration increase for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: bookingTimezone }) : 'N/A'}`,
+                status: 'CONFIRMED',
               }
-            });
+            })
             await tx.clientWallet.update({
               where: { id: wallet.id },
               data: { balance: { decrement: priceDifference } },
             })
-          }
-        }
-        
-        if (priceDifference < 0 && booking.client?.userId) {
-          const refundAmount = Math.abs(priceDifference);
-          
-          const wallet = await tx.clientWallet.findUnique({
-            where: { userId: booking.client.userId }
-          });
-
-          if (wallet) {
-            // Refund to both ledger and stored balance field
+          } else {
+            // Duration reduced — refund the difference
+            const refundAmount = Math.abs(priceDifference)
             await tx.walletTransaction.create({
               data: {
                 walletId: wallet.id,
                 type: 'CREDIT',
                 amount: refundAmount,
-                description: `Duration reduction for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' }) : 'N/A'}`,
-                status: 'CONFIRMED'
+                description: `Duration reduction for booking on ${booking.startTime ? new Date(booking.startTime).toLocaleDateString('en-AU', { timeZone: bookingTimezone }) : 'N/A'}`,
+                status: 'CONFIRMED',
               }
-            });
+            })
             await tx.clientWallet.update({
               where: { id: wallet.id },
               data: { balance: { increment: refundAmount } },
             })
-          } else {
-            // Wallet missing — log but don't fail the update
-            console.warn(`[PATCH booking] Could not refund $${refundAmount}: no wallet for userId=${booking.client.userId}`)
-            await tx.auditLog.create({
-              data: {
-                action: 'WALLET_REFUND_SKIPPED',
-                actorId: session.user.id!,
-                actorRole: 'INSTRUCTOR',
-                targetType: 'BOOKING',
-                targetId: params.id,
-                success: false,
-                metadata: { reason: 'Wallet not found', refundAmount, clientUserId: booking.client.userId },
-              },
-            }).catch(() => {})
           }
-        }
 
-        const existingTransaction = await tx.transaction.findFirst({
-          where: { bookingId: params.id }
-        })
-
-        if (existingTransaction) {
-          const platformFee = data.price * (booking.commissionRate || 0.15)
-          const instructorPayout = data.price - platformFee
-
-          await tx.transaction.update({
-            where: { id: existingTransaction.id },
-            data: { amount: data.price, platformFee, instructorPayout }
+          // Update transaction record to match new price
+          const existingTransaction = await (tx as any).transaction.findFirst({
+            where: { bookingId: params.id }
           })
+          if (existingTransaction) {
+            const platformFee = newPrice * (booking.commissionRate || 0.15)
+            const instructorPayout = newPrice - platformFee
+            await (tx as any).transaction.update({
+              where: { id: existingTransaction.id },
+              data: { amount: newPrice, platformFee, instructorPayout }
+            })
+          }
+        } else {
+          console.warn(`[PATCH booking] Wallet adjustment skipped: no wallet for userId=${booking.client.userId}`)
+          await tx.auditLog.create({
+            data: {
+              action: 'WALLET_REFUND_SKIPPED',
+              actorId: session.user.id!,
+              actorRole: 'INSTRUCTOR',
+              targetType: 'BOOKING',
+              targetId: params.id,
+              success: false,
+              metadata: { reason: 'Wallet not found', priceDifference, clientUserId: booking.client.userId },
+            },
+          }).catch(() => {})
         }
       }
 
@@ -337,7 +345,13 @@ export async function GET(
     const booking = await prisma.booking.findFirst({
       where: bookingWhere,
       include: {
-        client: true
+        client: {
+          select: { id: true, name: true, phone: true, email: true, userId: true }
+        },
+        // Include instructor timezone fields so the detail page can display times correctly
+        instructor: {
+          select: { timezone: true, state: true }
+        }
       }
     })
 
@@ -367,6 +381,13 @@ export async function DELETE(
 
     if (!isAdmin && !instructorId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    // Rate limiting — prevent automated deletion spam
+    const rlDeleteId = getRateLimitIdentifier(session.user.id, req.headers.get('x-forwarded-for'), 'booking-delete')
+    const rlDelete = await checkRateLimit(bookingActionRateLimit, rlDeleteId)
+    if (!rlDelete.success) {
+      return NextResponse.json({ error: rlDelete.error }, { status: 429, headers: rlDelete.headers })
     }
 
     const bookingWhere: any = { id: params.id }
@@ -479,11 +500,17 @@ export async function DELETE(
     // Email client when booking is removed from list
     if (booking.client?.email) {
       const isPastBooking = booking.startTime && booking.startTime < now
+      // Resolve timezone for this booking's context — booking.instructor is included above
+      const deleteBookingTimezone = booking.instructor
+        ? booking.instructor.timezone
+          ? resolveTimezone(booking.instructor.timezone)
+          : timezoneFromState(booking.instructor.state)
+        : DEFAULT_TIMEZONE
       const bookingDateStr = booking.startTime
-        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })
+        ? new Date(booking.startTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: deleteBookingTimezone })
         : 'N/A'
       const bookingTimeStr = booking.startTime
-        ? new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
+        ? new Date(booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: deleteBookingTimezone })
         : 'N/A'
       const cancelNote = isPastBooking
         ? 'No refund applies — this lesson had already passed at the time of cancellation.'
@@ -491,6 +518,7 @@ export async function DELETE(
 
       try {
         await emailService.sendGenericEmail({
+          from: 'DriveBook Bookings <bookings@drivebook.com.au>',
           to: booking.client.email,
           subject: `Booking Cancelled — ${bookingDateStr}`,
           html: `

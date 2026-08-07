@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Send, CheckCircle, Loader2 } from 'lucide-react'
+import { Send, CheckCircle, Loader2, Lock } from 'lucide-react'
+import Link from 'next/link'
+import { usePermissions } from '@/hooks/usePermissions'
 
 interface Props {
   bookingId: string
@@ -12,6 +14,7 @@ interface Props {
 export default function RemindButton({ bookingId, clientId, clientFirstName }: Props) {
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+  const { canSendClientReminder, loading: permLoading } = usePermissions()
 
   const handleRemind = async () => {
     if (state !== 'idle') return
@@ -25,7 +28,6 @@ export default function RemindButton({ bookingId, clientId, clientFirstName }: P
       const data = await res.json()
       if (res.ok) {
         setState('sent')
-        // Reset after 4 seconds so it can be used again (next visit)
         setTimeout(() => setState('idle'), 4000)
       } else if (res.status === 429) {
         setState('error')
@@ -60,10 +62,31 @@ export default function RemindButton({ bookingId, clientId, clientFirstName }: P
     )
   }
 
+  // Not permitted — show inline lock with tooltip
+  if (!permLoading && !canSendClientReminder) {
+    return (
+      <div className="relative inline-block group">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/60 border border-slate-700/50 px-3 py-1 text-xs font-semibold text-slate-500 cursor-not-allowed">
+          <Lock className="h-3 w-3" />
+          Remind
+        </span>
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 hidden group-hover:flex flex-col items-center pointer-events-none">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-xl px-3 py-2 text-xs text-slate-200 whitespace-nowrap">
+            <p className="font-medium text-amber-300 mb-1">Verify your account to send reminders</p>
+            <Link href="/dashboard/documents" className="text-sky-400 hover:text-sky-300 underline pointer-events-auto">
+              Upload documents →
+            </Link>
+          </div>
+          <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 -mt-1" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <button
       onClick={handleRemind}
-      disabled={state === 'sending'}
+      disabled={state === 'sending' || permLoading}
       className="inline-flex items-center gap-1.5 rounded-full bg-sky-500 hover:bg-sky-400 disabled:opacity-60 disabled:cursor-not-allowed px-3 py-1 text-xs font-semibold text-white transition"
     >
       {state === 'sending'

@@ -127,6 +127,7 @@ export default function ProfilePage() {
         const data = await res.json()
         setServiceAreas(data)
       }
+      // Non-critical — service areas still show empty if fetch fails
     } catch (error) {
       console.error('Failed to fetch service areas:', error)
     }

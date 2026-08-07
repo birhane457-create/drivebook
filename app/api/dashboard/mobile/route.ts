@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 
 export const dynamic = 'force-dynamic';
@@ -49,6 +50,8 @@ export async function GET(req: NextRequest) {
         where: { id: instructorId },
         select: {
           hourlyRate: true,
+          timezone: true,
+          state: true,
         },
       }),
       prisma.booking.findMany({
@@ -117,6 +120,11 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Resolve instructor timezone for date formatting
+    const mobileTz = instructor?.timezone
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor?.state);
+
     // Format upcoming bookings
     const formattedBookings = upcomingBookings.map((booking) => {
       const startDate = new Date(booking.startTime);
@@ -129,16 +137,16 @@ export async function GET(req: NextRequest) {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
-          timeZone: 'Australia/Perth',
+          timeZone: mobileTz,
         }),
         time: startDate.toLocaleTimeString('en-AU', {
           hour: '2-digit',
           minute: '2-digit',
-          timeZone: 'Australia/Perth',
+          timeZone: mobileTz,
         }) + ' - ' + endDate.toLocaleTimeString('en-AU', {
           hour: '2-digit',
           minute: '2-digit',
-          timeZone: 'Australia/Perth',
+          timeZone: mobileTz,
         }),
         location: booking.pickupAddress || '',
       };

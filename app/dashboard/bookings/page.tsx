@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import { Calendar, Clock, MapPin, User, Plus, Search, ChevronDown, ChevronUp, Edit2, X, RefreshCw, Banknote, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { getStatusConfig } from '@/lib/config/booking-status'
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
+import PermissionGate from '@/components/instructor/PermissionGate'
+import { usePermissions } from '@/hooks/usePermissions'
 
 interface Booking {
   id: string
@@ -48,11 +51,20 @@ export default function BookingsPage() {
   const [editForm, setEditForm] = useState<Partial<Booking>>({})
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [instructorTz, setInstructorTz] = useState(DEFAULT_TIMEZONE)
   // NF-01: single inline confirm state — replaces all window.confirm() calls
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const { canCheckInOut } = usePermissions()
 
   useEffect(() => {
-    fetchBookings()
+    // Fetch bookings and timezone in parallel
+    Promise.all([
+      fetchBookings(),
+      fetch('/api/instructor/settings')
+        .then(r => r.ok ? r.json() : null)
+        .then(s => { if (s?.timezone) setInstructorTz(resolveTimezone(s.timezone)) })
+        .catch(() => {}),
+    ])
   }, [])
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -93,7 +105,21 @@ export default function BookingsPage() {
 
   const fetchBookings = async () => {
     try {
-      const res = await fetch('/api/bookings')
+      // Fetch with a generous window — client-side filter handles the rest.
+      // Past 90 days + future 60 days covers all realistic use without unbounded queries.
+      const from = new Date(Date.now() - 90 * 86400000).toISOString()
+      const to   = new Date(Date.now() + 60 * 86400000).toISOString()
+      const res = await fetch(`/api/bookings?from=${from}&to=${to}&limit=400`)
+      if (res.status === 401) {
+        showToast('error', 'Your session has expired. Please refresh the page.')
+        setLoading(false)
+        return
+      }
+      if (!res.ok) {
+        showToast('error', `Failed to load bookings (${res.status}). Please try again.`)
+        setLoading(false)
+        return
+      }
       const data = await res.json()
       setBookings(data)
     } catch (error) {
@@ -315,20 +341,24 @@ export default function BookingsPage() {
             </div>
           )}
           <div className="flex gap-2">
-            <Link 
-              href="/dashboard/bookings/new"
-              className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-blue-700 text-sm font-medium shadow-sm shadow-blue-600/30"
-            >
-              <Plus className="h-4 w-4" />
-              Platform Booking
-            </Link>
-            <Link
-              href="/dashboard/bookings/new?offline=true"
-              className="bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-white/20 text-sm font-medium"
-            >
-              <Banknote className="h-4 w-4" />
-              Offline / Cash
-            </Link>
+            <PermissionGate capability="canCreateBooking">
+              <Link 
+                href="/dashboard/bookings/new"
+                className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-blue-700 text-sm font-medium shadow-sm shadow-blue-600/30"
+              >
+                <Plus className="h-4 w-4" />
+                Platform Booking
+              </Link>
+            </PermissionGate>
+            <PermissionGate capability="canCreateOfflineBooking">
+              <Link
+                href="/dashboard/bookings/new?offline=true"
+                className="bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-white/20 text-sm font-medium"
+              >
+                <Banknote className="h-4 w-4" />
+                Offline / Cash
+              </Link>
+            </PermissionGate>
           </div>
         </div>
 
@@ -375,10 +405,13 @@ export default function BookingsPage() {
               {filteredBookings.map((booking) => {
                 const isExpanded = expandedId === booking.id
                 const bookingDate = new Date(booking.startTime)
-                const startTime = bookingDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
-                const endTime = new Date(booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
-                const canCheckIn = booking.status === 'CONFIRMED' && !booking.checkInTime
-                const canCheckOut = booking.checkInTime && !booking.checkOutTime
+                const tzOpts = { timeZone: instructorTz }
+                const startTime = bookingDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', ...tzOpts })
+                const endTime   = booking.endTime
+                  ? new Date(booking.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', ...tzOpts })
+                  : '—'
+                const canCheckIn  = canCheckInOut && booking.status === 'CONFIRMED' && !booking.checkInTime
+                const canCheckOut = canCheckInOut && booking.status === 'CONFIRMED' && !!booking.checkInTime && !booking.checkOutTime
                 const canConfirm = booking.status === 'PENDING'
 
                 return (
@@ -415,7 +448,7 @@ export default function BookingsPage() {
                           <div className="flex items-center gap-4 text-sm text-slate-400">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {bookingDate.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })}
+                              {bookingDate.toLocaleDateString('en-AU', { month: 'short', day: 'numeric', timeZone: instructorTz })}
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -477,6 +510,12 @@ export default function BookingsPage() {
                         )}
                       </div>
                     )}
+                    {/* Show lock hint when check-in/out is available but not permitted */}
+                    {!canCheckInOut && (booking.status === 'CONFIRMED') && !booking.checkOutTime && !isExpanded && (
+                      <div className="px-4 pb-3">
+                        <PermissionGate capability="canCheckInOut" showLockCard />
+                      </div>
+                    )}
 
                     {/* Expanded Details */}
                     {isExpanded && (
@@ -508,7 +547,8 @@ export default function BookingsPage() {
                                   weekday: 'long',
                                   year: 'numeric',
                                   month: 'long',
-                                  day: 'numeric'
+                                  day: 'numeric',
+                                  timeZone: instructorTz,
                                 })}
                               </div>
                               <div>

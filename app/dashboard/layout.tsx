@@ -56,7 +56,7 @@ export default async function DashboardLayout({
   const approvalStatus = approvalStatusResult?.approvalStatus ?? null
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-slate-950 text-slate-100" data-theme="dark">
       <DashboardNav />
       {/* Silently syncs Stripe subscription after portal return or payment */}
       <Suspense fallback={null}>

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, Clock, AlertTriangle, ChevronDown, ChevronRight,
@@ -246,7 +246,9 @@ function DocRow({ doc, docs, uploading, onUpload }: {
                     const res = await fetch(`/api/instructor/documents/${doc.key}`);
                     if (res.ok) {
                       const { url } = await res.json();
-                      window.open(url, '_blank', 'noopener,noreferrer');
+                      if (url) {
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }
                     }
                   } catch { /* silent — document still visible in portal */ }
                 }}

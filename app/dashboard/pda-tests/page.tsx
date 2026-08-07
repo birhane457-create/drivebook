@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import {
@@ -6,6 +6,7 @@ import {
   ChevronDown, ChevronUp, Edit2, Save, X, Loader2, User, Phone, Mail, DollarSign,
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 import Toast from '@/components/ui/Toast'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ export default function PDATestsPage() {
   const [slotError, setSlotError] = useState<string | null>(null)
 
   const { toast, showToast, clearToast } = useToast()
+  const [instructorTz, setInstructorTz] = useState(DEFAULT_TIMEZONE)
 
   // Form — step-by-step
   const [form, setForm] = useState({
@@ -94,7 +96,10 @@ export default function PDATestsPage() {
 
   // ── Load on mount ────────────────────────────────────────────────────────────
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchAll()
+    fetch('/api/instructor/settings').then(r => r.ok ? r.json() : null).then(s => { if (s?.timezone) setInstructorTz(resolveTimezone(s.timezone)) }).catch(() => {})
+  }, [])
 
   const fetchAll = async () => {
     try {
@@ -495,7 +500,7 @@ export default function PDATestsPage() {
                             {test.price > 0 && <span className="text-xs text-slate-400">${test.price.toFixed(0)}</span>}
                           </div>
                           <div className="flex items-center gap-3 text-sm text-slate-400">
-                            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{testDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{testDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: instructorTz })}</span>
                             <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{test.testTime}</span>
                             <span className="hidden sm:flex items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{test.testCenterName}</span>
                           </div>

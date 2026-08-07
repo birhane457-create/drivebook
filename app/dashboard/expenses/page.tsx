@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { Plus, Download, AlertCircle, Loader2, Banknote, X } from 'lucide-react';
+import { formatLocalDate, DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ export default function ExpensesPage() {
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [instructorTimezone, setInstructorTimezone] = useState(DEFAULT_TIMEZONE);
 
   // Filters
   const [year, setYear]   = useState(String(CURRENT_YEAR));
@@ -75,6 +77,18 @@ export default function ExpensesPage() {
     amount: '',
   });
 
+  // Load settings once on mount — timezone doesn't change between filter selections
+  useEffect(() => {
+    fetch('/api/instructor/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(s => {
+        if (s?.timezone) {
+          setInstructorTimezone(resolveTimezone(s.timezone) || timezoneFromState(s.state));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => { loadData(); }, [year, month]);
 
   const loadData = async () => {
@@ -84,11 +98,9 @@ export default function ExpensesPage() {
       const params = new URLSearchParams({ year });
       if (month) params.set('month', month);
 
-      // Income from earnings API — already has platform + offline split
-      // Analytics period: pass selected year explicitly as a custom date range
       const [expRes, earningsRes] = await Promise.all([
         fetch(`/api/instructor/expenses?${params}`),
-        fetch('/api/instructor/earnings'),
+        fetch(`/api/instructor/earnings?${params}`),
       ]);
 
       if (expRes.ok) {
@@ -101,19 +113,14 @@ export default function ExpensesPage() {
         const p = d.platform ?? {};
         const o = d.offline ?? {};
 
-        // Filter to the selected year/month on the client side
-        // (earnings API returns all-time totals; we use thisMonth when month is current, else gross total)
-        // For now show the period totals the API provides — thisMonthEarnings for month view,
-        // totalEarnings for year view. A dedicated period endpoint is deferred.
-        const isCurrentMonth = month === String(new Date().getMonth() + 1) &&
-          year === String(new Date().getFullYear());
-        const isCurrentYear = !month && year === String(new Date().getFullYear());
-
-        const platformNet   = isCurrentMonth ? (p.thisMonthEarnings ?? 0)  : isCurrentYear ? (p.totalEarnings ?? 0)   : (p.totalEarnings ?? 0);
-        const platformGross = isCurrentMonth ? (p.thisMonthGross ?? 0)     : isCurrentYear ? (p.totalGross ?? 0)      : (p.totalGross ?? 0);
-        const platformFees  = isCurrentMonth ? (p.thisMonthFees ?? 0)      : isCurrentYear ? (p.totalFees ?? 0)       : (p.totalFees ?? 0);
-        const offlineTotal  = isCurrentMonth ? (o.thisMonthLogged ?? 0)    : isCurrentYear ? (o.totalLogged ?? 0)     : (o.totalLogged ?? 0);
-        const offlineCount  = isCurrentMonth ? (o.thisMonthCount ?? 0)     : isCurrentYear ? (o.completedCount ?? 0)  : (o.completedCount ?? 0);
+        // The earnings API scopes all queries to the requested year+month via startTime filters.
+        // thisMonth* fields always reflect the requested period — even for past years.
+        // totalEarnings reflects all-time regardless of period, so we never use it here.
+        const platformNet   = p.thisMonthEarnings ?? 0;
+        const platformGross = p.thisMonthGross ?? 0;
+        const platformFees  = p.thisMonthFees ?? 0;
+        const offlineTotal  = o.thisMonthLogged ?? 0;
+        const offlineCount  = o.thisMonthCount ?? 0;
 
         setIncome({
           platformGross,
@@ -202,7 +209,7 @@ export default function ExpensesPage() {
       ['EXPENSES (self-entered)', '', '', ''],
       ['Date', 'Category', 'Description', 'Amount (AUD)'],
       ...expenses.map(exp => [
-        new Date(exp.date).toLocaleDateString('en-AU'),
+        formatLocalDate(exp.date, instructorTimezone),
         CATEGORIES[exp.category]?.label || exp.category,
         exp.description,
         (-exp.amount).toFixed(2),
@@ -517,7 +524,7 @@ export default function ExpensesPage() {
                           {CATEGORIES[exp.category]?.label || exp.category}
                         </span>
                         <span className="text-xs text-slate-300 shrink-0">
-                          {new Date(exp.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {formatLocalDate(exp.date, instructorTimezone)}
                         </span>
                       </div>
                       <p className="text-sm text-slate-100 mt-0.5 truncate">{exp.description}</p>

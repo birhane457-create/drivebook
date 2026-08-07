@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -10,6 +10,7 @@ import { getWalletBalance } from '@/lib/services/wallet-helpers'
 import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { getCommissionRate, getPlatformFeeRate } from '@/lib/services/platform-pricing'
 import { checkSubscriptionAccess } from '@/lib/middleware/subscriptionValidation'
+import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -204,9 +205,15 @@ export async function POST(req: NextRequest) {
         subscriptionTier: true,
         syncGoogleCalendar: true,
         hourlyRate: true,
+        timezone: true,
+        state: true,
         user: { select: { email: true } },
       },
     })
+
+    const instructorTimezone = instructor?.timezone
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor?.state)
 
     // Issue 3 fix: check both approvalStatus and isActive
     if (!instructor || instructor.approvalStatus !== 'APPROVED' || instructor.isActive === false) {
@@ -267,6 +274,7 @@ export async function POST(req: NextRequest) {
           index,
           instructor: instructor as InstructorContext,
           instructorId,
+          instructorTimezone,
           clientMap,
           commissionRate,
           platformFeeRate,
@@ -283,6 +291,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await emailService.sendGenericEmail({
+        from: 'DriveBook Bookings <bookings@drivebook.com.au>',
         to: session.user.email || 'noreply@drivebook.com',
         subject: `✅ Batch Booking Summary: ${successful.length}/${data.bookings.length} created`,
         html: `
@@ -320,6 +329,7 @@ type ProcessBookingArgs = {
   index: number
   instructor: InstructorContext
   instructorId: string
+  instructorTimezone: string
   clientMap: Map<string, ClientWithUser>
   commissionRate: number
   platformFeeRate: number
@@ -331,7 +341,7 @@ type ProcessOutcome =
   | { ok: false; error: BatchFailure }
 
 async function processBooking(args: ProcessBookingArgs): Promise<ProcessOutcome> {
-  const { bookingData, index, instructor, instructorId, clientMap, commissionRate, platformFeeRate, now } = args
+  const { bookingData, index, instructor, instructorId, clientMap, commissionRate, platformFeeRate, now, instructorTimezone } = args
 
   try {
     const startTime = new Date(bookingData.startTime)
@@ -364,6 +374,7 @@ async function processBooking(args: ProcessBookingArgs): Promise<ProcessOutcome>
         index,
         instructor,
         instructorId,
+        instructorTimezone,
         client,
         startTime,
         endTime,
@@ -383,6 +394,7 @@ async function processBooking(args: ProcessBookingArgs): Promise<ProcessOutcome>
       index,
       instructor,
       instructorId,
+      instructorTimezone,
       client,
       startTime,
       endTime,
@@ -414,6 +426,7 @@ async function createPendingBooking(ctx: {
   index: number
   instructor: InstructorContext
   instructorId: string
+  instructorTimezone: string
   client: ClientWithUser
   startTime: Date
   endTime: Date
@@ -431,6 +444,7 @@ async function createPendingBooking(ctx: {
     index,
     instructor,
     instructorId,
+    instructorTimezone,
     client,
     startTime,
     endTime,
@@ -502,9 +516,9 @@ async function createPendingBooking(ctx: {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
-      timeZone: 'Australia/Perth',
+      timeZone: instructorTimezone,
     })
-    const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })
+    const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: instructorTimezone })
 
     // Always generate a fresh setup token — works for new accounts and old ones whose token expired
     const { randomUUID } = await import('crypto')
@@ -518,6 +532,7 @@ async function createPendingBooking(ctx: {
     const actionLabel = 'Set up your account & Top Up →'
 
     await emailService.sendGenericEmail({
+      from: 'DriveBook Bookings <bookings@drivebook.com.au>',
       to: client.email,
       subject: `📅 ${instructor.name} booked a lesson — top up to confirm`,
       html: `
@@ -567,6 +582,7 @@ async function createConfirmedBooking(ctx: {
   index: number
   instructor: InstructorContext
   instructorId: string
+  instructorTimezone: string
   client: ClientWithUser
   startTime: Date
   endTime: Date
@@ -583,6 +599,7 @@ async function createConfirmedBooking(ctx: {
     index,
     instructor,
     instructorId,
+    instructorTimezone,
     client,
     startTime,
     endTime,
@@ -632,7 +649,7 @@ async function createConfirmedBooking(ctx: {
           walletId: wallet.id,
           type: 'DEBIT',
           amount: lessonPrice,
-          description: `Lesson booking — ${startTime.toLocaleDateString('en-AU', { timeZone: 'Australia/Perth' })} ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}`,
+          description: `Lesson booking — ${startTime.toLocaleDateString('en-AU', { timeZone: instructorTimezone })} ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: instructorTimezone })}`,
           status: 'CONFIRMED',
         },
       })
@@ -748,15 +765,16 @@ async function createConfirmedBooking(ctx: {
 
   try {
     await emailService.sendGenericEmail({
+      from: 'DriveBook Bookings <bookings@drivebook.com.au>',
       to: client.email,
-      subject: `✅ Lesson Confirmed — ${startTime.toLocaleDateString('en-AU', { month: 'long', day: 'numeric', timeZone: 'Australia/Perth' })}`,
+      subject: `✅ Lesson Confirmed — ${startTime.toLocaleDateString('en-AU', { month: 'long', day: 'numeric', timeZone: instructorTimezone })}`,
       html: `
         <h2>Lesson Confirmed</h2>
         <p>Hi ${client.name},</p>
         <p>Your lesson with <strong>${instructor.name}</strong> has been confirmed and paid.</p>
         <div style="background:#f3f4f6;padding:20px;margin:20px 0;border-radius:8px;">
-          <p><strong>Date:</strong> ${startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' })}</p>
-          <p><strong>Time:</strong> ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' })}</p>
+          <p><strong>Date:</strong> ${startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: instructorTimezone })}</p>
+          <p><strong>Time:</strong> ${startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: instructorTimezone })}</p>
           <p><strong>Cost:</strong> $${lessonPrice.toFixed(2)}</p>
         </div>
       `,

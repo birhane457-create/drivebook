@@ -59,11 +59,11 @@ function relativeTime(iso: string): string {
 }
 
 function exactTime(iso: string): string {
+  // Display in browser's local timezone — admin may be anywhere in Australia
   return new Date(iso).toLocaleString('en-AU', {
-    timeZone: 'Australia/Perth',
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }) + ' AWST';
+  });
 }
 
 function entityLink(targetType: string, targetId: string): string | null {

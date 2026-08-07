@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { resolveTimezone, timezoneFromState, localDateTimeToUTC, getLocalDateKey } from '@/lib/utils/timezone';
 
 /** Aggregate result shape returned by Prisma for transaction queries */
 interface TxAggregate {
@@ -78,33 +79,69 @@ export async function GET(req: NextRequest) {
       instructorId = found.id;
     }
 
-    // FIXED: Use database aggregation instead of loading all data
+    // Determine instructor timezone (fallbacks) and period bounds
+    const instr = await prisma.instructor.findUnique({ where: { id: instructorId }, select: { timezone: true, state: true, hourlyRate: true } });
+    const instructorTz = resolveTimezone(instr?.timezone ?? timezoneFromState(instr?.state));
+
+    const url = new URL(req.url);
+    const qYear = url.searchParams.get('year');
+    const qMonth = url.searchParams.get('month'); // 1-12 or empty
+
+    // Helper to compute UTC start for a local YYYY-MM-DD at 00:00 in instructor TZ
+    const localMidnightToUTC = (dateStr: string) => localDateTimeToUTC(dateStr, '00:00', instructorTz);
+
+    let startOfThisMonth: Date;
+    let startOfLastMonth: Date;
+    let endOfLastMonth: Date;
+
+    if (qYear) {
+      const y = parseInt(qYear, 10);
+      if (qMonth) {
+        const m = parseInt(qMonth, 10);
+        const startLocal = `${y}-${String(m).padStart(2, '0')}-01`;
+        startOfThisMonth = localMidnightToUTC(startLocal);
+        // start of next month
+        const nextM = m === 12 ? 1 : m + 1;
+        const nextY = m === 12 ? y + 1 : y;
+        const startNextLocal = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+        startOfLastMonth = startOfThisMonth; // not used in this path
+        endOfLastMonth = new Date(localMidnightToUTC(startNextLocal).getTime() - 1);
+      } else {
+        const startLocal = `${y}-01-01`;
+        const startNextLocal = `${y + 1}-01-01`;
+        startOfThisMonth = localMidnightToUTC(startLocal);
+        endOfLastMonth = new Date(localMidnightToUTC(startNextLocal).getTime() - 1);
+        startOfLastMonth = localMidnightToUTC(`${y - 1}-12-01`);
+      }
+    } else {
+      // No explicit period requested; compute this month/last month based on instructor local "today"
+      const localTodayKey = getLocalDateKey(new Date(), instructorTz); // YYYY-MM-DD
+      const [yStr, mStr] = localTodayKey.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const startLocal = `${y}-${String(m).padStart(2, '0')}-01`;
+      const prevM = m === 1 ? 12 : m - 1;
+      const prevY = m === 1 ? y - 1 : y;
+      const startPrevLocal = `${prevY}-${String(prevM).padStart(2, '0')}-01`;
+      const startNextLocal = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`;
+      startOfThisMonth = localMidnightToUTC(startLocal);
+      startOfLastMonth = localMidnightToUTC(startPrevLocal);
+      endOfLastMonth = new Date(localMidnightToUTC(startNextLocal).getTime() - 1);
+    }
+
     const now = new Date();
-    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
     const [
-      completedStats,
       completedPlatformStats,
       completedOfflineStats,
       pendingStats,
-      thisMonthStats,
       thisMonthPlatformStats,
       thisMonthOfflineStats,
       lastMonthStats,
       scheduledBookings,
       scheduledOfflineBookings,
       recentTransactions
-    ] = (await Promise.all([      // Completed earnings (all)
-      prisma.transaction.aggregate({
-        where: {
-          instructorId,
-          status: 'COMPLETED'
-        },
-        _sum: { instructorPayout: true },
-        _count: true
-      }),
+    ] = (await Promise.all([
       // Completed earnings (platform only)
       prisma.transaction.aggregate({
         where: {
@@ -139,48 +176,40 @@ export async function GET(req: NextRequest) {
         _sum: { instructorPayout: true },
         _count: true
       }),
-      // This month earnings (all)
+      // This month earnings (platform only) — by lesson date
       prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'COMPLETED',
-          createdAt: { gte: startOfThisMonth }
-        },
-        _sum: { instructorPayout: true },
-        _count: true
-      }),
-      // This month earnings (platform only)
-      prisma.transaction.aggregate({
-        where: {
-          instructorId,
-          status: 'COMPLETED',
-          createdAt: { gte: startOfThisMonth },
           booking: {
+            startTime: { gte: startOfThisMonth },
             source: { not: 'offline' }
           }
         },
         _sum: { instructorPayout: true, amount: true, platformFee: true },
         _count: true
       }),
-      // This month earnings (offline only)
+      // This month earnings (offline only) — by lesson date
       prisma.booking.aggregate({
         where: {
           instructorId,
           source: 'offline',
           status: 'COMPLETED',
-          createdAt: { gte: startOfThisMonth }
+          startTime: { gte: startOfThisMonth }
         },
         _sum: { offlineAmountPaid: true },
         _count: true
       }),
-      // Last month earnings
+      // Last month earnings — by lesson date, not transaction creation date
       prisma.transaction.aggregate({
         where: {
           instructorId,
           status: 'COMPLETED',
-          createdAt: {
-            gte: startOfLastMonth,
-            lte: endOfLastMonth
+          booking: {
+            startTime: {
+              gte: startOfLastMonth,
+              lte: endOfLastMonth
+            }
           }
         },
         _sum: { instructorPayout: true },
@@ -265,9 +294,10 @@ export async function GET(req: NextRequest) {
         take: 100
       })
     ])) as unknown as [
-      TxAggregate, TxAggregate, // completedStats, completedPlatformStats
+      TxAggregate, // completedPlatformStats
       { _sum: { offlineAmountPaid: number | null }; _count: number }, // completedOfflineStats
-      TxAggregate, TxAggregate, TxAggregate, // pendingStats, thisMonthStats, thisMonthPlatformStats
+      TxAggregate, // pendingStats
+      TxAggregate, // thisMonthPlatformStats
       { _sum: { offlineAmountPaid: number | null }; _count: number }, // thisMonthOfflineStats
       TxAggregate, // lastMonthStats
       ScheduledBooking[],
@@ -286,11 +316,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Get instructor hourly rate for fallback calculation
-    const instructor = await prisma.instructor.findUnique({
-      where: { id: instructorId },
-      select: { hourlyRate: true }
-    });
-    const hourlyRate = instructor?.hourlyRate || 0;
+    const hourlyRate = instr?.hourlyRate || 0;
 
     // Calculate platform scheduled bookings totals
     const platformScheduledTotal = scheduledBookings.reduce((sum, b) => {
@@ -391,9 +417,8 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error('Earnings fetch error:', error);
-    console.error('Earnings error stack:', error instanceof Error ? error.stack : String(error));
     return NextResponse.json(
-      { error: 'Failed to fetch earnings', detail: error instanceof Error ? error.message : String(error) },
+      { error: 'Failed to fetch earnings' },
       { status: 500 }
     );
   }

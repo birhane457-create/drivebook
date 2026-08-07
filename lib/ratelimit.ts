@@ -1,4 +1,4 @@
-import { Ratelimit } from '@upstash/ratelimit';
+﻿import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
 /**
@@ -136,6 +136,13 @@ function parseWindow(window: string): number {
  * 10 bookings per minute per instructor
  */
 export const bookingRateLimit = createRateLimiter(10, '1 m');
+
+/**
+ * Bio Generation Rate Limit
+ * Prevents OpenAI cost abuse from spammed bio requests
+ * 5 generations per hour per instructor
+ */
+export const bioGenerateRateLimit = createRateLimiter(5, '1 h');
 
 /**
  * Financial Booking Actions Rate Limit

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -54,7 +54,7 @@ async function getInstructorFromSession(session: any) {
   return prisma.instructor.findFirst({ where: { userId: session.user.id }, select: { id: true } })
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     const ref = await getInstructorFromSession(session)
@@ -70,10 +70,12 @@ export async function GET(req: NextRequest) {
         isActive: true, isVerified: true,
         whatsapp: true, instagram: true, facebook: true, yearsExperience: true,
         videoUrl: true, specialties: true,
-        // Fields needed for account setup completeness checks
+        // Fields needed for account setup completeness checks and permission engine
         abn: true, abnVerified: true,
         workingHours: true,
         subscriptionStatus: true,
+        approvalStatus: true,
+        trialEndsAt: true,
       } as any
     })
 

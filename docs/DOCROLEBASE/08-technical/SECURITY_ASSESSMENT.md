@@ -1,6 +1,6 @@
 # Security Assessment — DriveBook
 
-**Date:** May 2026  
+**Date:** August 2026 (last updated)  
 **Scope:** Full platform — API, auth, payments, data, infrastructure  
 **Framework:** OWASP Top 10 + payment platform requirements  
 **Purpose:** Honest current-state scorecard. Where we are, what we need, what can wait.
@@ -22,21 +22,24 @@ Each area is rated on a 1–5 scale:
 ### 1. Authentication — Score: 4/5
 
 **What's in place:**
-- NextAuth JWT strategy, 30-day session, `httpOnly` + `secure` + `sameSite=lax` cookies
+- NextAuth JWT strategy, 7-day absolute session maxAge, `httpOnly` + `secure` + `sameSite=lax` cookies
 - Cookie name correctly switches between `next-auth.session-token` (dev) and `__Secure-next-auth.session-token` (prod)
 - bcrypt password hashing (cost factor 10)
 - `authOptions` passed to `getServerSession` in all API routes (fixed May 2026)
 - Email verification fields in schema (`emailVerified`, `verificationToken`)
 - Magic-link auto-login for email verification
+- **Session idle timeout (July 2026):** `lastActivity` timestamp embedded in JWT. Sessions expire after 30 minutes of inactivity regardless of absolute maxAge. Implemented in the NextAuth `jwt()` callback — returns `null` when idle threshold exceeded, forcing re-login.
+- **New device OTP verification (August 2026):** Instructor logins from a new browser require a 6-digit email OTP before the dashboard is accessible. `OtpModal` blocks navigation until confirmed. Known browsers skip the check entirely. Non-instructor roles get notification email only. OTP HMAC-SHA256 hashed in DB, 5-min TTL, rate-limited to 3 resends/hour, lockout after 3 failed attempts.
+- **New device login notification (July 2026):** Browser-generated UUID (stored in `localStorage["drivebook_device_id"]`) identifies the device. SHA-256 hash stored in `LoginDevice` table. On first login from a new browser, an email notification is sent to the account holder. IP and User-Agent are stored as audit context only — never used for identity. This prevents false alerts when instructors switch networks (Wi-Fi → mobile data → VPN).
 
 **Gaps:**
-- No MFA (multi-factor authentication) — acceptable for launch, add post-launch
-- Email verification is enforced for instructors (June 2026): unverified instructors cannot log in (web + mobile)
-- Account lockout: `authRateLimit` (5 / 15 min per IP) on check-email, forgot-password, reset-password, set-password, mobile-login (June 16, 2026)
-- Web NextAuth credentials login not separately rate-limited at route level (middleware TBD)
-- Password reset flow exists for instructors but not self-service for clients
+- No TOTP MFA — new-device OTP is the current gate; TOTP deferred post-launch
+- Email verification enforced for instructors: unverified instructors cannot log in
+- Account lockout: `authRateLimit` (5 / 15 min per IP) on auth endpoints
+- `LoginDevice` table requires migration before device tracking is fully active (`add_login_device_and_card_orders`)
+- Phase 2 security items tracked in `docs/DOCROLEBASE/TODO.md` (SEC-3 through SEC-6)
 
-**Risk level:** Low-Medium. The core auth is solid. The gaps are UX/hardening items, not broken auth.
+**Risk level:** Low. Idle timeout closes the shared-computer gap. New-device OTP closes the credential-stuffing gap for instructor accounts that control bank payout details.
 
 ---
 
@@ -277,21 +280,27 @@ We are **not** required to be PCI DSS Level 1 (that's for platforms that store/p
 | 8 | Fix email verification cookie name | ✅ Done | — |
 | 9 | Fix public search admin bypass | ✅ Done | — |
 | 10 | Verify `GOOGLE_REDIRECT_URI` in Vercel | **⚠️ Config — not verified** | 5 min |
-| 11 | Replace placeholder ABN | **⚠️ Content — not done** | 5 min |
+| 11 | Replace placeholder ABN | ✅ Done — 23 806 069 420 | — |
 
 ## Post-Launch Security Roadmap (first 3 months)
 
-| # | Action | Why |
-|---|--------|-----|
-| 1 | Encrypt bank account + Google tokens at rest | Protects instructor financial data if DB is breached |
-| 2 | Add CSP + security headers | Prevents XSS, clickjacking |
-| 3 | Enforce email verification at login | Prevents account takeover via unverified emails |
-| 4 | Add MFA for admin accounts | Admin compromise = full platform access |
-| 5 | Set up Dependabot | Automated CVE alerts |
-| 6 | External uptime monitoring (Better Uptime / UptimeRobot) | Know before users do |
-| 7 | Slack/email alerts for critical errors | Real-time incident response |
-| 8 | Data retention policy + erasure endpoint | Privacy Act compliance at scale |
-| 9 | Penetration test (basic) | Validate assumptions before significant user growth |
+| # | Action | Why | Status |
+|---|--------|-----|--------|
+| 1 | Session idle timeout (30 min) | Closes shared-computer access gap | ✅ Done — July 2026 |
+| 2 | New device login notification | Awareness when account accessed from unknown browser | ✅ Done — July 2026 |
+| 3 | New device OTP verification for instructors | Blocks access until 6-digit email code confirmed — closes credential-stuffing gap | ✅ Done — August 2026 |
+| 4 | Encrypt bank account + Google tokens at rest | Protects instructor financial data if DB is breached | ⏳ Post-launch |
+| 5 | Add CSP + security headers | Prevents XSS, clickjacking | ✅ Done — headers in next.config.js |
+| 6 | Enforce email verification at login | Prevents account takeover via unverified emails | ✅ Done — instructors only |
+| 7 | TOTP MFA for instructor accounts | Stronger than OTP — configurable per-device | ⏳ Post-launch |
+| 8 | Trusted devices list UI | Let instructors see and revoke known devices | ✅ Done — SEC-2 `/dashboard/settings/security` |
+| 9 | Force logout all devices | Requires database sessions strategy | ⏳ SEC-3 in TODO |
+| 10 | IP geolocation in device emails | Add "Perth, WA" context to new device notification | ⏳ SEC-4 in TODO |
+| 11 | Set up Dependabot | Automated CVE alerts | ⏳ Post-launch |
+| 12 | External uptime monitoring | Know before users do | ⏳ Post-launch |
+| 13 | Slack/email alerts for critical errors | Real-time incident response | ⏳ Post-launch |
+| 14 | Data retention policy + erasure endpoint | Privacy Act compliance at scale | ⏳ Post-launch |
+| 15 | Penetration test (basic) | Validate assumptions before significant user growth | ⏳ Post-launch |
 
 ---
 

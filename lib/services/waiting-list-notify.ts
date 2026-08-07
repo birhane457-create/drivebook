@@ -1,4 +1,4 @@
-/**
+﻿/**
  * lib/services/waiting-list-notify.ts
  *
  * Triggers a notification to the first active waiting list entry
@@ -67,6 +67,7 @@ export async function notifyWaitingList(event: SlotOpenedEvent): Promise<void> {
     if (entry.clientEmail) {
       const { emailService } = await import('@/lib/services/email')
       await emailService.sendGenericEmail({
+        from: 'DriveBook Bookings <bookings@drivebook.com.au>',
         to: entry.clientEmail,
         subject: `A lesson slot has opened up with ${instructorName}`,
         html: `

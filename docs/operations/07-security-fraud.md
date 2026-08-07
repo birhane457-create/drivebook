@@ -100,9 +100,18 @@ DriveBook collects and processes personal information under the **Australian Pri
 
 ### Authentication:
 - Passwords: bcrypt hashed, never stored in plain text
-- Sessions: JWT, 7-day max age
+- Sessions: JWT, 7-day absolute max age, **30-minute idle timeout** (inactivity invalidates session — closes shared-computer gap)
 - OTP: 5-minute expiry, 3 attempts, then locked
 - Rate limits on auth: 5 attempts per 15 minutes per IP
+
+### Device recognition:
+- On every login, the browser sends a persistent UUID (`localStorage["drivebook_device_id"]`) to `/api/auth/device-check`
+- SHA-256 hash of the UUID is stored in `LoginDevice` table — raw token never stored
+- If the browser is new for that user: email notification is sent immediately
+- IP and User-Agent are stored as audit context only — not used for device identity
+- This means network changes (Wi-Fi → mobile data → VPN) never trigger false alerts
+- A "new device" means a genuinely different browser or cleared browser storage
+- `LoginDevice` table requires `add_login_device_and_card_orders` migration to be active
 
 ### Access controls:
 - Role-based: CLIENT / INSTRUCTOR / ADMIN / SUPER_ADMIN

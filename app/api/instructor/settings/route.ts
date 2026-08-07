@@ -11,6 +11,11 @@ const settingsSchema = z.object({
   hourlyRate: z.number().positive().optional(),
   serviceRadiusKm: z.number().min(1).max(100).optional(),
   baseAddress: z.string().optional().nullable(),
+  // serviceAreas: JSON-encoded array of "Suburb|STATE|postcode" tokens
+  // e.g. '["Maylands|WA|6051","Bayswater|WA|6053"]'
+  // Suburb-first search uses this list; radius is the fallback for instructors who haven't set it.
+  serviceAreas: z.string().optional().nullable(),
+  timezone: z.string().optional().nullable(),
   vehicleTypes: z.union([
     z.array(z.enum(['AUTO', 'MANUAL'])),
     z.enum(['AUTO', 'MANUAL']).transform(v => [v]),
@@ -52,13 +57,12 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json()
-    console.log('📥 Settings update request body:', JSON.stringify(body, null, 2))
     
     // Validate the data
     const validationResult = settingsSchema.safeParse(body)
     
     if (!validationResult.success) {
-      console.error('❌ Validation failed:', JSON.stringify(validationResult.error, null, 2))
+      console.error('Settings validation failed:', validationResult.error.errors)
       const errorDetails = validationResult.error.errors?.map(e => `${e.path.join('.')}: ${e.message}`).join(', ') || 'Invalid data format'
       return NextResponse.json({ 
         error: 'Validation failed',
@@ -68,12 +72,13 @@ export async function PUT(req: NextRequest) {
     }
     
     const data = validationResult.data
-    console.log('✅ Validation passed')
 
     // Build update object with only provided fields
     const updateData: any = {}
     if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate
     if (data.serviceRadiusKm !== undefined) updateData.serviceRadiusKm = data.serviceRadiusKm
+    if (data.serviceAreas !== undefined) updateData.serviceAreas = data.serviceAreas ?? null
+    if (data.timezone !== undefined) updateData.timezone = data.timezone ?? null
     if (data.baseAddress !== undefined) {
       updateData.baseAddress = data.baseAddress || null
       // Extract discrete location fields from the address string for SEO location pages
@@ -143,7 +148,7 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     
@@ -157,8 +162,14 @@ export async function GET(req: NextRequest) {
         hourlyRate: true,
         serviceRadiusKm: true,
         baseAddress: true,
+        serviceAreas: true,
         vehicleTypes: true,
+        timezone: true,
+        state: true,
         workingHours: true,
+        // Credentials are managed from the Settings page — must be returned here
+        // so the form pre-fills correctly. They are not exposed to other callers
+        // via this route (settings is instructor-only, session-scoped).
         licenseNumber: true,
         insuranceNumber: true,
         allowedDurations: true,

@@ -21,6 +21,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getStatusConfig, isDoneStatus, isActiveStatus } from '@/lib/config/booking-status';
+import { resolveTimezone, formatLocalTime, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 import { MapPin, Phone, ChevronRight } from 'lucide-react';
 
 export interface TodayBooking {
@@ -38,19 +39,11 @@ export interface TodayBooking {
 interface Props {
   bookings:        TodayBooking[];
   instructorName:  string;
+  timezone?:       string;  // instructor's stored timezone — defaults to Perth
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatTime(dt: Date | string): string {
-  const d = typeof dt === 'string' ? new Date(dt) : dt;
-  return d.toLocaleTimeString('en-AU', {
-    hour:   '2-digit',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'Australia/Perth',
-  });
-}
 
 function extractSuburb(address: string | null): string | null {
   if (!address) return null;
@@ -63,25 +56,25 @@ function extractSuburb(address: string | null): string | null {
   return null;
 }
 
-function greetingFor(name: string): string {
-  const h = new Date().toLocaleString('en-AU', { hour: 'numeric', hour12: false, timeZone: 'Australia/Perth' });
-  const hour = parseInt(h, 10);
+function greetingFor(name: string, tz: string): string {
+  const t = new Date();
+  const hourStr = formatLocalTime(t, tz, { hour: 'numeric', hour12: false } as any);
+  const hour = parseInt(String(hourStr), 10);
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   return `${greeting}, ${name.split(' ')[0]}`;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function TodayWorkspace({ bookings, instructorName }: Props) {
+export default function TodayWorkspace({ bookings, instructorName, timezone = DEFAULT_TIMEZONE }: Props) {
   const now = new Date();
-  const perth = { timeZone: 'Australia/Perth' };
+  const resolvedTz = resolveTimezone(timezone);
+  const tzOpts = { timeZone: resolvedTz };
 
-  // Suppress time-based greeting hydration mismatch — server time ≠ client time.
-  // Render blank on server; swap in real greeting after mount.
   const [greeting, setGreeting] = useState('');
   useEffect(() => {
-    setGreeting(greetingFor(instructorName));
-  }, [instructorName]);
+    setGreeting(greetingFor(instructorName, resolvedTz));
+  }, [instructorName, resolvedTz]);
 
   // Sort chronologically
   const sorted = [...bookings].sort(
@@ -112,7 +105,7 @@ export default function TodayWorkspace({ bookings, instructorName }: Props) {
 
   // Today's date label
   const todayLabel = now.toLocaleDateString('en-AU', {
-    ...perth,
+    ...tzOpts,
     weekday: 'long',
     day:     'numeric',
     month:   'long',
@@ -150,7 +143,7 @@ export default function TodayWorkspace({ bookings, instructorName }: Props) {
           <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Next Lesson</p>
           {nextBooking ? (
             <>
-              <p className="text-lg font-bold text-white">{formatTime(nextBooking.startTime)}</p>
+              <p className="text-lg font-bold text-white">{formatLocalTime(nextBooking.startTime, resolvedTz, { hour: 'numeric', minute: '2-digit', hour12: true } as any)}</p>
               <p className="text-xs text-sky-300 truncate mt-0.5">
                 {nextBooking.clientName ?? 'Student'}
               </p>
@@ -214,8 +207,8 @@ export default function TodayWorkspace({ bookings, instructorName }: Props) {
               const isNext      = booking.id === highlighted?.id;
               const isCompleted = isDoneStatus(booking.status);
               const suburb      = extractSuburb(booking.pickupAddress);
-              const startFmt    = formatTime(booking.startTime);
-              const endFmt      = booking.endTime ? formatTime(booking.endTime) : null;
+              const startFmt    = formatLocalTime(booking.startTime, resolvedTz, { hour: '2-digit', minute: '2-digit', hour12: true } as any);
+              const endFmt      = booking.endTime ? formatLocalTime(booking.endTime, resolvedTz, { hour: '2-digit', minute: '2-digit', hour12: true } as any) : null;
               const durationH   = booking.duration ? `${booking.duration} min` : null;
 
               return (

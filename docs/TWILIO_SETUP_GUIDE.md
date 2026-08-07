@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Twilio Account
-- Twilio Phone Number: +17089335601
+- Twilio Phone Number: (your AU number from Twilio dashboard — format: +61XXXXXXXXX)
 - ngrok installed (for exposing local server)
 
 ---
@@ -57,7 +57,7 @@ https://abc123.ngrok.io
 ## Step 4: Configure Twilio Webhooks
 
 1. Go to https://console.twilio.com/us1/develop/phone-numbers/manage/incoming
-2. Click on your phone number: **+17089335601**
+2. Click on your AU phone number (format: +61XXXXXXXXX)
 3. Scroll to **Voice Configuration**
 
 ### Voice & Fax Settings:

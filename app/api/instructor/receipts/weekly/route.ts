@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 
 export const dynamic = 'force-dynamic';
@@ -27,11 +28,13 @@ export async function GET(req: NextRequest) {
     weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6)
     const weekEndDateFinal = new Date(`${weekEndDate.toISOString().slice(0,10)}T23:59:59.999Z`)
 
-    // Get instructor details
+    // Get instructor details including timezone for date formatting
     const instructor = await prisma.instructor.findUnique({
       where: { id: instructorId },
       select: {
         name: true,
+        timezone: true,
+        state: true,
         user: {
           select: {
             email: true
@@ -43,6 +46,10 @@ export async function GET(req: NextRequest) {
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
+
+    const receiptTz = instructor.timezone
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor.state);
 
     // Get all completed transactions for this week
     const transactions = await prisma.transaction.findMany({
@@ -107,7 +114,7 @@ export async function GET(req: NextRequest) {
     const dailyBreakdown: any = {};
     transactions.forEach((t: any) => {
       const date = new Date(t.createdAt);
-      const dayKey = date.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Australia/Perth' });
+      const dayKey = date.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric', timeZone: receiptTz });
       
       if (!dailyBreakdown[dayKey]) {
         dailyBreakdown[dayKey] = {
@@ -142,8 +149,8 @@ export async function GET(req: NextRequest) {
 
 Instructor: ${instructor.name}
 Email: ${instructor.user.email}
-Period: ${weekStartDate.toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Australia/Perth' })}
-     to ${weekEndDateFinal.toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Australia/Perth' })}
+Period: ${weekStartDate.toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: receiptTz })}
+     to ${weekEndDateFinal.toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: receiptTz })}
 
 ───────────────────────────────────────────────────────────
 DAILY BREAKDOWN

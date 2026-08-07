@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
 import { normalizeEmail } from './auth-email'
+import { recordDeviceLogin, getClientIP, parseUserAgent } from './services/deviceTracking'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -42,9 +43,14 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials')
         }
 
-        // FIX #1: Block unapproved instructors at the auth gate.
+        // Allow PENDING instructors to log in — they can explore the dashboard,
+        // complete their profile, and upload documents while awaiting approval.
+        // Capability gates in the UI (PermissionGate) and API route guards prevent
+        // them from creating bookings or receiving payments until APPROVED.
+        // Only block SUSPENDED and REJECTED accounts outright.
         if (user.role === 'INSTRUCTOR') {
-          if (!user.instructor || user.instructor.approvalStatus !== 'APPROVED') {
+          const status = user.instructor?.approvalStatus
+          if (status === 'SUSPENDED' || status === 'REJECTED') {
             throw new Error('INSTRUCTOR_NOT_APPROVED')
           }
         }
@@ -69,12 +75,35 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.role = user.role
         token.instructorId = user.instructorId
         token.clientId = user.clientId
       }
+
+      // Idle timeout: track last activity timestamp
+      const now = Math.floor(Date.now() / 1000) // Unix timestamp in seconds
+      
+      // On sign-in, initialize lastActivity
+      if (user) {
+        token.lastActivity = now
+        return token
+      }
+
+      // On every request, check if idle timeout exceeded
+      const IDLE_TIMEOUT = 30 * 60 // 30 minutes in seconds
+      const lastActivity = token.lastActivity as number | undefined
+      
+      if (lastActivity && now - lastActivity > IDLE_TIMEOUT) {
+        // Session expired due to inactivity
+        // Return null to force re-login
+        return null as any // NextAuth requires null to invalidate
+      }
+
+      // Update lastActivity on every request (extends idle timeout)
+      token.lastActivity = now
+      
       return token
     },
     async session({ session, token }) {
@@ -85,14 +114,34 @@ export const authOptions: NextAuthOptions = {
         session.user.clientId = token.clientId as string
       }
       return session
-    }
+    },
+    async signIn({ user, account, profile, email, credentials }) {
+      // Device tracking + new device email notification
+      // Only track for credential-based logins (not OAuth)
+      if (!user?.id || !user?.email) return true
+
+      try {
+        // Extract device info from the request
+        // Note: NextAuth doesn't expose request headers directly in signIn callback
+        // We'll need to get this from the authorize() credentials context
+        // For now, track at session creation with basic info
+        
+        // This will be handled in a middleware or the authorize callback where we have access to headers
+        return true
+      } catch (error) {
+        console.error('[Auth] Device tracking failed:', error)
+        // Don't block login if tracking fails
+        return true
+      }
+    },
   },
   pages: {
     signIn: '/login',
   },
   session: {
     strategy: 'jwt',
-    maxAge: 7 * 24 * 60 * 60, // FIX #2: 7 days (was 30 days — stolen sessions now expire sooner)
+    maxAge: 7 * 24 * 60 * 60, // 7 days absolute maximum
+    // Idle timeout enforced in jwt() callback: 30 minutes of inactivity forces re-login
   },
   // Explicitly set cookie name so middleware and server components agree
   cookies: {
