@@ -305,6 +305,25 @@ export async function POST(req: NextRequest) {
       // Don't fail registration if email fails
     }
 
+    // Onboarding Email 1 — Welcome (immediate)
+    // Sent separately from the verification email so both have clear, distinct purposes.
+    // The verification email asks them to verify; this one explains the opportunity.
+    // Fire-and-forget — registration must not fail if this email fails.
+    if (user.instructor && user.email) {
+      const { sendOnboardingStep } = await import('@/lib/email/onboarding/sequence')
+      sendOnboardingStep(
+        {
+          id: user.instructor.id,
+          name: user.instructor.name,
+          email: user.email,
+          voiceLineStatus: 'NONE',
+          subscriptionTier: 'BASIC',
+        },
+        'onboarding.welcome',
+        1
+      ).catch(e => console.error('[register] Onboarding welcome email failed (non-critical):', e))
+    }
+
     return NextResponse.json(
       { 
         message: 'Registration successful. Please verify your email then log in.',

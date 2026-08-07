@@ -139,6 +139,23 @@ export async function POST(
       // Don't fail the approval if email fails
     }
 
+    // Onboarding Email 6 — Approved (event-driven, fires immediately on approval)
+    // Fire-and-forget — approval must not fail if this email fails.
+    if (approvedInstructor.user?.email) {
+      const { sendOnboardingStep } = await import('@/lib/email/onboarding/sequence')
+      sendOnboardingStep(
+        {
+          id: approvedInstructor.id,
+          name: approvedInstructor.name,
+          email: approvedInstructor.user.email,
+          voiceLineStatus: approvedInstructor.voiceLineStatus ?? 'NONE',
+          subscriptionTier: approvedInstructor.subscriptionTier ?? 'BASIC',
+        },
+        'onboarding.approved',
+        1
+      ).catch(e => console.error('[approve] Onboarding approved email failed (non-critical):', e))
+    }
+
     return NextResponse.json({ success: true, instructor: approvedInstructor });
   } catch (error) {
     console.error('Error approving instructor:', error);

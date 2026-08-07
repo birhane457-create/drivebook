@@ -526,8 +526,15 @@ export default function AdminInstructorProfilePage() {
   const [nudgeLoading, setNudgeLoading] = useState(false);
   const [nudgeResult, setNudgeResult] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
+  // Onboarding sequence state
+  const [onboardingSteps, setOnboardingSteps] = useState<Array<{
+    id: string; label: string; trigger: string; delayDays: number;
+    status: 'SENT' | 'SKIPPED' | 'PENDING'; sentAt: string | null;
+  }> | null>(null);
+
   useEffect(() => {
     fetchInstructor();
+    fetchOnboardingStatus();
   }, [instructorId]);
 
   const fetchInstructor = async () => {
@@ -546,6 +553,18 @@ export default function AdminInstructorProfilePage() {
       router.push('/admin/instructors');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchOnboardingStatus = async () => {
+    try {
+      const res = await fetch(`/api/admin/instructors/${instructorId}/onboarding-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setOnboardingSteps(data.steps);
+      }
+    } catch {
+      // Non-critical — panel stays hidden if this fails
     }
   };
 
@@ -863,11 +882,117 @@ export default function AdminInstructorProfilePage() {
                   </div>
                 </div>
 
+                {/* ── Onboarding sequence progress ──────────────────────── */}
+                {onboardingSteps && (
+                  <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+                    <h3 className="text-sm font-semibold text-slate-300 mb-3">Onboarding Email Sequence</h3>
+                    <div className="space-y-2">
+                      {onboardingSteps.map(step => {
+                        const statusColor =
+                          step.status === 'SENT'    ? 'text-green-400' :
+                          step.status === 'SKIPPED' ? 'text-slate-500' :
+                          'text-amber-400'
+                        const icon =
+                          step.status === 'SENT'    ? '✓' :
+                          step.status === 'SKIPPED' ? '○' :
+                          '·'
+                        const triggerLabel =
+                          step.trigger === 'registration' ? 'On signup' :
+                          step.trigger === 'approval'     ? 'On approval' :
+                          `Day ${step.delayDays}`
+                        return (
+                          <div key={step.id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-bold w-4 text-center ${statusColor}`}>{icon}</span>
+                              <span className={step.status === 'SKIPPED' ? 'text-slate-500' : 'text-slate-300'}>
+                                {step.label}
+                              </span>
+                              <span className="text-slate-600">({triggerLabel})</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              step.status === 'SENT'    ? 'bg-green-900/30 text-green-400' :
+                              step.status === 'SKIPPED' ? 'bg-slate-700 text-slate-500' :
+                              'bg-amber-900/20 text-amber-400'
+                            }`}>
+                              {step.status === 'SENT' && step.sentAt
+                                ? new Date(step.sentAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+                                : step.status}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── Admin actions ──────────────────────────────────────────── */}
                 <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-slate-300 mb-3">Admin Actions</h3>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {/* Setup nudge */}
+                  <h3 className="text-sm font-semibold text-slate-300 mb-1">Send Onboarding Email</h3>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Manually send any sequence email. Uses the same template as the automatic sequence.
+                    Always sends regardless of prior sends — recorded in audit log with your name.
+                  </p>
+
+                  {/* Manual send buttons */}
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[
+                      { stepId: 'onboarding.welcome',         label: 'Welcome'           },
+                      { stepId: 'onboarding.setup',           label: 'Setup guide'       },
+                      { stepId: 'onboarding.bookings',        label: 'How bookings work' },
+                      { stepId: 'onboarding.profile-tips',    label: 'Profile tips'      },
+                      { stepId: 'onboarding.ai-receptionist', label: 'AI receptionist'   },
+                      { stepId: 'onboarding.approved',        label: 'Approved'          },
+                    ].map(({ stepId, label }) => (
+                      <button
+                        key={stepId}
+                        onClick={async () => {
+                          setNudgeLoading(true)
+                          setNudgeResult(null)
+                          try {
+                            const r = await fetch(
+                              `/api/admin/instructors/${instructorId}/send-onboarding-email`,
+                              {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ stepId }),
+                              }
+                            )
+                            const d = await r.json()
+                            if (r.ok) {
+                              setNudgeResult({ type: 'ok', text: `✓ "${d.label}" sent to ${d.sentTo}` })
+                              // Refresh onboarding status panel
+                              const s = await fetch(`/api/admin/instructors/${instructorId}/onboarding-status`)
+                              if (s.ok) setOnboardingSteps((await s.json()).steps)
+                            } else {
+                              setNudgeResult({ type: 'err', text: d.error || 'Failed' })
+                            }
+                          } catch {
+                            setNudgeResult({ type: 'err', text: 'Network error' })
+                          } finally {
+                            setNudgeLoading(false)
+                          }
+                        }}
+                        disabled={nudgeLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600
+                          text-slate-200 text-xs rounded-lg border border-slate-600
+                          disabled:opacity-40 transition-colors"
+                      >
+                        {nudgeLoading ? (
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                          </svg>
+                        ) : <span className="text-slate-400">📧</span>}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Also keep the personalised setup nudge (shows live step completion) */}
+                  <div className="border-t border-slate-700 pt-3">
+                    <p className="text-xs text-slate-500 mb-2">
+                      Or send the personalised setup nudge with live profile completion state:
+                    </p>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={async () => {
@@ -890,33 +1015,25 @@ export default function AdminInstructorProfilePage() {
                           }
                         }}
                         disabled={nudgeLoading}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded-lg border border-slate-600 disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-blue-900/30 hover:bg-blue-900/50
+                          text-blue-300 text-xs rounded-lg border border-blue-700/50
+                          disabled:opacity-50 transition-colors"
                       >
-                        {nudgeLoading ? (
-                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                          </svg>
-                        ) : (
-                          <span>📧</span>
-                        )}
-                        Send Setup Nudge
+                        📋 Send personalised setup checklist
                       </button>
-                      {nudgeResult && (
-                        <span className={`text-xs px-2 py-1 rounded-lg ${
-                          nudgeResult.type === 'ok'
-                            ? 'bg-green-900/30 text-green-400 border border-green-800/50'
-                            : 'bg-red-900/30 text-red-400 border border-red-800/50'
-                        }`}>
-                          {nudgeResult.text}
-                        </span>
-                      )}
                     </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Sends the profile setup checklist email to the instructor with their current completion state.
-                    Action is recorded in the audit log.
-                  </p>
+
+                  {/* Result feedback */}
+                  {nudgeResult && (
+                    <div className={`mt-3 text-xs px-3 py-2 rounded-lg ${
+                      nudgeResult.type === 'ok'
+                        ? 'bg-green-900/30 text-green-400 border border-green-800/50'
+                        : 'bg-red-900/30 text-red-400 border border-red-800/50'
+                    }`}>
+                      {nudgeResult.text}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
