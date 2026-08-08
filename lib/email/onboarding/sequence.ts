@@ -43,7 +43,7 @@ export interface OnboardingStep {
 
 export const ONBOARDING_SEQUENCE: readonly OnboardingStep[] = [
   { id: 'onboarding.welcome',         version: 1, delayDays: 0, label: 'Welcome',                   trigger: 'registration' },
-  { id: 'onboarding.setup',           version: 1, delayDays: 1, label: 'Setup guide',                trigger: 'cron'         },
+  { id: 'onboarding.setup',           version: 2, delayDays: 1, label: 'Setup guide',                trigger: 'cron'         },
   { id: 'onboarding.bookings',        version: 1, delayDays: 3, label: 'How bookings work',           trigger: 'cron'         },
   { id: 'onboarding.profile-tips',    version: 1, delayDays: 5, label: 'Get more bookings',           trigger: 'cron'         },
   { id: 'onboarding.ai-receptionist', version: 1, delayDays: 7, label: 'AI receptionist',             trigger: 'cron'         },

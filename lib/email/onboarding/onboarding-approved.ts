@@ -1,3 +1,5 @@
+import { demoProfileBlock } from './shared'
+
 /**
  * Email 6 — Post-approval activation (sent immediately on approval)
  * Goal: Activate first-booking behaviours. Tone: congratulatory but action-focused.
@@ -123,6 +125,8 @@ export function buildOnboardingApproved(data: {
           Go to my dashboard &#8594;
         </a>
       </div>
+
+      ${demoProfileBlock(baseUrl)}
 
       <p style="font-size:13px;color:#6b7280;margin:0 0 24px;">
         Questions? Reply to this email or contact us at

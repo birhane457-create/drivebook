@@ -1,3 +1,5 @@
+import { demoProfileBlock } from './shared'
+
 /**
  * Email 3 — How bookings work (Day 3)
  * Goal: Remove uncertainty about what happens after approval.
@@ -111,6 +113,8 @@ export function buildOnboardingBookings(data: {
           View your instructor dashboard &#8594;
         </a>
       </div>
+
+      ${demoProfileBlock(baseUrl)}
 
       <p style="font-size:13px;color:#6b7280;margin:0 0 24px;">
         Questions? Reply to this email or contact us at

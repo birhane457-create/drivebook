@@ -1,3 +1,5 @@
+import { demoProfileBlock } from './shared'
+
 /**
  * Email 4 — Get more bookings: profile optimisation tips (Day 5)
  * Goal: Activate the behaviours that lead to first bookings.
@@ -52,32 +54,17 @@ export function buildOnboardingProfileTips(data: {
       <table width="100%" cellpadding="0" cellspacing="0"
         style="background:white;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:24px;">
         <tbody>
-          ${tip(
-            '1. Add a clear profile photo',
-            'Profiles with a professional headshot get significantly more clicks. Students want to see who they are booking with.'
-          )}
-          ${tip(
-            '2. Write a specific bio',
-            'Instead of "experienced instructor", try "10 years teaching in Perth, specialising in nervous drivers and test preparation." Specific is more convincing.'
-          )}
-          ${tip(
-            '3. Open more availability',
-            'Students often search for lessons within the next few days. If your calendar shows no availability for two weeks, they book someone else.'
-          )}
-          ${tip(
-            '4. Add lesson packages',
-            'Packages (e.g. 5 or 10 hours) give students a reason to commit early and improve your average booking value.'
-          )}
-          ${tip(
-            '5. Respond to enquiries quickly',
-            'Students who send a message and don&#8217;t hear back within a few hours often move on. Fast responses build trust.'
-          )}
+          ${tip('1. Add a clear profile photo', 'Profiles with a professional headshot get significantly more clicks. Students want to see who they are booking with.')}
+          ${tip('2. Write a specific bio', 'Instead of "experienced instructor", try "10 years teaching in Perth, specialising in nervous drivers and test preparation." Specific is more convincing.')}
+          ${tip('3. Open more availability', 'Students often search for lessons within the next few days. If your calendar shows no availability for two weeks, they book someone else.')}
+          ${tip('4. Add lesson packages', 'Packages (e.g. 5 or 10 hours) give students a reason to commit early and improve your average booking value.')}
+          ${tip('5. Respond to enquiries quickly', 'Students who send a message and don&#8217;t hear back within a few hours often move on. Fast responses build trust.')}
         </tbody>
       </table>
 
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:24px;">
         <p style="margin:0;font-size:13px;color:#166534;">
-          <strong>Worth knowing:</strong> DriveBook shows students instructors who are most available and responsive first.
+          <strong>Worth knowing:</strong> DriveBook shows students the most available and responsive instructors first.
           An open calendar and a complete profile means more visibility.
         </p>
       </div>
@@ -90,6 +77,24 @@ export function buildOnboardingProfileTips(data: {
         </a>
       </div>
 
+<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:18px;margin:24px 0;">
+
+  <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#1e40af;">
+    See what your profile could look like
+  </p>
+
+  <p style="margin:0 0 14px;font-size:13px;color:#374151;">
+    Preview the student experience — see how your photo, bio, pricing,
+    availability, and lesson packages appear to learners on DriveBook.
+  </p>
+
+  <a href="${baseUrl}/instructors/demo"
+    style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;
+    border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">
+    View example profile →
+  </a>
+
+</div>
       <p style="font-size:13px;color:#6b7280;margin:0 0 24px;">
         Questions? Reply to this email or contact us at
         <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>

@@ -1,3 +1,5 @@
+import { demoProfileBlock } from './shared'
+
 /**
  * Email 2 — Setup guide (Day 1)
  * Goal: Get them approved. Explains the 5 setup steps clearly.
@@ -43,7 +45,7 @@ export function buildOnboardingSetup(data: {
 
   <tr>
     <td style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;padding:36px 32px;border-radius:10px 10px 0 0;text-align:center;">
-      <h1 style="margin:0;font-size:22px;font-weight:700;">5 steps to get approved</h1>
+      <h1 style="margin:0;font-size:22px;font-weight:700;">4 steps to get approved</h1>
       <p style="margin:10px 0 0;opacity:0.9;font-size:14px;">Complete these to start receiving bookings</p>
     </td>
   </tr>
@@ -55,17 +57,16 @@ export function buildOnboardingSetup(data: {
 
       <p style="margin:0 0 20px;font-size:14px;color:#374151;">
         Your account is currently under review. To speed up approval and start appearing to students,
-        complete these 5 steps in your dashboard.
+        complete these 4 steps in your dashboard.
       </p>
 
       <table width="100%" cellpadding="0" cellspacing="0"
         style="background:white;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:24px;">
         <tbody>
-          ${step(1, 'Upload your licence &amp; insurance', 'These are required for approval. JPG or PDF.')}
+          ${step(1, 'Upload your licence &amp; insurance', 'Required for approval. JPG or PDF accepted.')}
           ${step(2, 'Set your hourly rate &amp; service area', 'Tell students what you charge and where you teach.')}
           ${step(3, 'Configure your weekly availability', 'Open slots students can book. You can change these anytime.')}
           ${step(4, 'Complete your instructor bio', 'A short paragraph about your experience and teaching style.')}
-          ${step(5, 'Connect Stripe to receive payments', 'Required to receive payouts from DriveBook.')}
         </tbody>
       </table>
 
@@ -73,8 +74,11 @@ export function buildOnboardingSetup(data: {
         <p style="margin:0;font-size:13px;color:#1e40af;">
           <strong>Tip:</strong> Instructors who complete all steps are approved
           significantly faster than those who don&#8217;t.
+          Payment setup (Stripe) can be done after approval.
         </p>
       </div>
+
+      ${demoProfileBlock(baseUrl)}
 
       <div style="text-align:center;margin:0 0 24px;">
         <a href="${baseUrl}/dashboard"
