@@ -77,24 +77,8 @@ export function buildOnboardingProfileTips(data: {
         </a>
       </div>
 
-<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:18px;margin:24px 0;">
+      ${demoProfileBlock(baseUrl)}
 
-  <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#1e40af;">
-    See what your profile could look like
-  </p>
-
-  <p style="margin:0 0 14px;font-size:13px;color:#374151;">
-    Preview the student experience — see how your photo, bio, pricing,
-    availability, and lesson packages appear to learners on DriveBook.
-  </p>
-
-  <a href="${baseUrl}/instructors/demo"
-    style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;
-    border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">
-    View example profile →
-  </a>
-
-</div>
       <p style="font-size:13px;color:#6b7280;margin:0 0 24px;">
         Questions? Reply to this email or contact us at
         <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>
