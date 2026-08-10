@@ -1,6 +1,6 @@
 /**
  * Email 5 — AI receptionist (Day 7)
- * Goal: Show the value of the AI voice line feature.
+ * Goal: Show the value of the AI voice line feature. 
  * Only sent when instructor has voiceLineStatus !== 'NONE'.
  */
 export function buildOnboardingAI(data: {

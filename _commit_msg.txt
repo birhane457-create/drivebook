@@ -1,0 +1,5 @@
+feat: add Google Ads conversion tracking tag
+
+Added Google Ads gtag to app/layout.tsx head section.
+Tag ID: AW-18353082328
+Fires on every page load site-wide.
