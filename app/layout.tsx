@@ -174,6 +174,19 @@ export default function RootLayout({
             }),
           }}
         />
+        {/* Google Ads conversion tracking */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18353082328" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'AW-18353082328');
+            `,
+          }}
+        />
       </head>
       <body className={`${inter.variable} ${plusJakartaSans.variable} ${inter.className}`}>
         <Providers>
