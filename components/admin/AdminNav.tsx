@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { Bell, ChevronDown, X, Menu, LayoutDashboard, LogOut } from 'lucide-react';
 import { useNotifications } from '@/lib/hooks/useNotifications';
+import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 
 const TYPE_ICON: Record<string, string> = {
   BOOKING_REQUEST: '📅', BOOKING_CONFIRMED: '✅', BOOKING_CANCELLED: '❌',
@@ -97,6 +98,13 @@ export default function AdminNav() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const { can, loading: permLoading } = useAdminPermissions();
+
+  // Filter a nav item based on permissions.
+  // While loading, show all items so the nav doesn't flash empty.
+  // SUPER_ADMIN: can() always returns true immediately.
+  const canSee = (perm?: string) => !perm || permLoading || can(perm);
 
   const navGroups = [
     {
