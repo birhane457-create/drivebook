@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { checkPermission } from '@/lib/rbac/checkPermission'
+import { PERM } from '@/lib/rbac/permissions'
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -14,9 +16,8 @@ export default async function AdminInstructorsPage({
 }) {
   const session = await getServerSession(authOptions);
 
-  if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    redirect('/login');
-  }
+  const permCheck = await checkPermission(session, PERM.USERS_INSTRUCTORS_VIEW)
+  if (!permCheck.allowed) redirect('/admin')
 
   const status = searchParams.status || 'all';
 

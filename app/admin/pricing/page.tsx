@@ -1,4 +1,6 @@
-import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation'
+import { checkPermission } from '@/lib/rbac/checkPermission'
+import { PERM } from '@/lib/rbac/permissions'
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import AdminNav from '@/components/admin/AdminNav';
@@ -10,9 +12,8 @@ export const revalidate = 0;
 
 export default async function AdminPricingPage() {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    redirect('/login');
-  }
+  const permCheck = await checkPermission(session, PERM.FINANCE_PRICING_VIEW)
+  if (!permCheck.allowed) redirect('/admin')
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">

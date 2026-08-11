@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation'
+import { checkPermission } from '@/lib/rbac/checkPermission'
+import { PERM } from '@/lib/rbac/permissions'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import AdminNav from '@/components/admin/AdminNav'
@@ -14,12 +16,8 @@ export const metadata = {
 
 export default async function AdminPolicyPage() {
   const session = await getServerSession(authOptions)
-  if (
-    !session ||
-    (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')
-  ) {
-    redirect('/login')
-  }
+  const permCheck = await checkPermission(session, PERM.OPERATIONS_POLICY_VIEW)
+  if (!permCheck.allowed) redirect('/admin')
 
   const opsBase = join(process.cwd(), 'docs', 'operations')
   const legacyBase = join(process.cwd(), 'docs', 'DOCROLEBASE', '00-overview')

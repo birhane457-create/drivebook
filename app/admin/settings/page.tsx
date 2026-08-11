@@ -1,4 +1,6 @@
-﻿import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation'
+import { checkPermission } from '@/lib/rbac/checkPermission'
+import { PERM } from '@/lib/rbac/permissions'
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import AdminNav from '@/components/admin/AdminNav';
@@ -26,9 +28,8 @@ function ConfigRow({ label, value, masked }: { label: string; value?: string; ma
 
 export default async function AdminSettingsPage() {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    redirect('/login');
-  }
+  const permCheck = await checkPermission(session, PERM.PLATFORM_SETTINGS_VIEW)
+  if (!permCheck.allowed) redirect('/admin')
 
   const basicMonthly = process.env.BASIC_MONTHLY_PRICE || '29';
   const proMonthly = process.env.PRO_MONTHLY_PRICE || '79';

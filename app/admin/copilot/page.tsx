@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation'
+import { checkPermission } from '@/lib/rbac/checkPermission'
+import { PERM } from '@/lib/rbac/permissions'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import AdminNav from '@/components/admin/AdminNav'
@@ -7,9 +9,8 @@ import { QUESTION_CATEGORIES, getDisplayQuestions } from '@/lib/admin/suggested-
 
 export default async function AdminCopilotPage() {
   const session = await getServerSession(authOptions)
-  if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    redirect('/login')
-  }
+  const permCheck = await checkPermission(session, PERM.PLATFORM_COPILOT_VIEW)
+  if (!permCheck.allowed) redirect('/admin')
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
