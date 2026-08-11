@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import AdminNav from '@/components/admin/AdminNav'
 import {
   UserPlus, Shield, ShieldOff, ChevronDown, ChevronUp,
-  CheckCircle, Eye, EyeOff, RefreshCw, X,
+  CheckCircle, Eye, EyeOff, RefreshCw, X, Copy, RotateCcw,
 } from 'lucide-react'
 import { ALL_PERMISSIONS } from '@/lib/rbac/permissions'
+import { ROLE_PRESETS } from '@/lib/rbac/role-presets'
 
 interface StaffUser {
   id: string
@@ -30,7 +31,7 @@ const PERM_GROUPS: Record<string, string[]> = {
   'Users  Clients': ALL_PERMISSIONS.filter((p: string) => p.startsWith('users.clients')),
   'Users  Subscriptions': ALL_PERMISSIONS.filter((p: string) => p.startsWith('users.subscriptions')),
   'Finance  Payouts': ALL_PERMISSIONS.filter((p: string) => p.startsWith('finance.payouts') || p.startsWith('finance.revenue')),
-  'Finance  Credits & Disputes': ALL_PERMISSIONS.filter((p: string) => p.startsWith('finance.credits') || p.startsWith('finance.disputes') || p.startsWith('finance.pricing')),
+  'Finance — Credits & Disputes': ALL_PERMISSIONS.filter((p: string) => p.startsWith('finance.credits') || p.startsWith('finance.disputes') || p.startsWith('finance.pricing')),
   'Operations': ALL_PERMISSIONS.filter((p: string) => p.startsWith('operations')),
   'Engagement': ALL_PERMISSIONS.filter((p: string) => p.startsWith('engagement')),
   'Platform': ALL_PERMISSIONS.filter((p: string) => p.startsWith('platform')),
@@ -141,6 +142,7 @@ function PermissionEditor({ user, onClose, onSaved }: {
 
         <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-end gap-2">
           {error && <p className="text-xs text-red-400 mr-auto">{error}</p>}
+          <button type="button" onClick={() => setPerms(new Set(ROLE_PRESETS[sm.department] ?? []))} className="px-3 py-2 border border-slate-700 text-xs rounded-lg text-slate-400 hover:bg-slate-800 flex items-center gap-1.5" title="Reset to role preset"><RotateCcw className="w-3 h-3" />Reset preset</button>
           <button onClick={onClose} className="px-4 py-2 border border-slate-700 text-sm rounded-lg text-slate-300 hover:bg-slate-800">Cancel</button>
           <button onClick={save} disabled={saving}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-semibold disabled:opacity-50 flex items-center gap-1.5">
