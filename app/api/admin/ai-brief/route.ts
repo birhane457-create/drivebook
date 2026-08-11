@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic'
 
 // System prompt — tells the LLM its role and output format

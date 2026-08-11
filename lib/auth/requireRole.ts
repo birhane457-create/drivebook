@@ -168,3 +168,28 @@ export async function requireInstructor(session: Session | null): Promise<
     instructor: user.instructor,
   }
 }
+
+// ── requirePermission ─────────────────────────────────────────────────────────
+
+/**
+ * Thin wrapper around checkPermission for use in API routes.
+ * Returns a NextResponse error if the check fails, null if it passes.
+ *
+ * Convenience pattern:
+ *   const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_PROCESS)
+ *   if (deny) return deny
+ *
+ * For routes that also need the staffMember (e.g. to read maxRefundAmount):
+ *   Use checkPermission() directly from lib/rbac/checkPermission.
+ */
+import type { Permission } from '@/lib/rbac/permissions'
+import { checkPermission } from '@/lib/rbac/checkPermission'
+
+export async function requirePermission(
+  session: Session | null,
+  permission: Permission
+): Promise<NextResponse | null> {
+  const result = await checkPermission(session, permission)
+  if (!result.allowed) return result.response
+  return null
+}

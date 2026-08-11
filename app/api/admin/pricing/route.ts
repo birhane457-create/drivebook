@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma';
 import { getPlatformPricing } from '@/lib/services/platform-pricing';
 import { z } from 'zod';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
+
 export const dynamic = 'force-dynamic';
 
 const pricingSchema = z.object({

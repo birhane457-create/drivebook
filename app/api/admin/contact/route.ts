@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { z } from 'zod';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
 const schema = z.object({

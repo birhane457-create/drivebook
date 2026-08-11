@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { getPlatformLedger } from '@/lib/services/ledger-service';
 import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {

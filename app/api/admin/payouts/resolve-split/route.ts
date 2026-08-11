@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
 import crypto from 'crypto';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
 /**

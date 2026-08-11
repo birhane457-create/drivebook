@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { callTool, TOOL_DEFINITIONS } from '@/lib/admin/ai-tools'
 import { checkRateLimitStrict, adminActionRateLimit } from '@/lib/ratelimit'
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic'
 
 // ── Cost / safety controls ────────────────────────────────────────────────

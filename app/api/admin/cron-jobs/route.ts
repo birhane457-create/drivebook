@@ -13,6 +13,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { CRON_JOB_CONFIG } from '@/lib/services/cron-health';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {

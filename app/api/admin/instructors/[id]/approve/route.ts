@@ -3,7 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
-import { requireAdmin } from '@/lib/auth/requireRole';
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry';
 
 export const dynamic = 'force-dynamic';
@@ -15,9 +16,8 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
 
-    // FIX #3: Re-verify admin role from DB — don't trust JWT alone
-    const auth = await requireAdmin(session);
-    if (auth.error) return auth.error;
+    const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_APPROVE);
+    if (deny) return deny;
 
     // MEDIUM-7 FIX: Verify required documents exist before approval
     const instructor = await prisma.instructor.findUnique({

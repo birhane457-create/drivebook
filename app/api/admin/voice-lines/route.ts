@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { assignVoiceLine, releaseVoiceLine, getPoolStats } from '@/lib/services/voice-line-service'
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
+
 export const dynamic = 'force-dynamic'
 
 function requireAdmin(session: any) {

@@ -11,6 +11,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
 function requireAdmin(session: any) {
@@ -23,8 +25,8 @@ function requireAdmin(session: any) {
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const authError = requireAdmin(session);
-    if (authError) return authError;
+    const deny = await requirePermission(session, PERM.USERS_SUBSCRIPTIONS_VIEW);
+  if (deny) return deny;
 
     const instructors = await prisma.instructor.findMany({
       select: {

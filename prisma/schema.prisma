@@ -540,6 +540,9 @@ model PlatformSettings {
   peakSurchargePercent        Float    @default(0)
   updatedAt                   DateTime @updatedAt
   updatedBy                   String?
+  // RBAC configurable limits — adjustable by SUPER_ADMIN via settings API
+  maxAdminCreditAmount        Float    @default(500)
+  maxAdminDeductAmount        Float    @default(500)
 }
 
 model ReconciliationReport {
@@ -723,6 +726,9 @@ model StaffMember {
   avgResolutionTimeHours Float?
   satisfactionScore      Float?
   skills                 Json?
+  // RBAC: permissions[] is authoritative. Empty = no access. SUPER_ADMIN bypasses.
+  // Legacy flags kept for UI only  NOT read by any API permission check.
+  permissions            String[]   @default([])
   canApproveRefunds      Boolean    @default(false)
   canOverridePolicy      Boolean    @default(false)
   canAccessFinancials    Boolean    @default(false)

@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { buildPayout, executePayout } from '@/lib/services/payout-service';
 import { z } from 'zod';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
 // P1-10 FIX: Validate request body — transactionIds must be cuid strings, capped at 500,

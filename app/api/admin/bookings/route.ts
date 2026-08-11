@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma';
 import { getCommissionRate } from '@/lib/services/platform-pricing';
 import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
+
 export const dynamic = 'force-dynamic';
 
 async function getAdmin() {
