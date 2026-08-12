@@ -95,11 +95,10 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 export async function POST(req: NextRequest) {
   const startTime = Date.now()
 
-  // ── 1. Auth — server-side, always first ──────────────────────────────────
+  // ── 1. Auth ──────────────────────────────────────────────────────────────
   const session = await getServerSession(authOptions)
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const deny = await requirePermission(session, PERM.PLATFORM_COPILOT_VIEW)
+  if (deny) return deny
 
   const actorId    = session.user.id ?? 'unknown'
   const actorEmail = session.user.email ?? 'unknown'

@@ -11,25 +11,19 @@ import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS } from '@/lib/config/subscriptions';
 import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
 import { logger } from '@/lib/logger';
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
-function requireAdmin(session: any) {
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  return null;
-}
-
-// ── GET — fetch full subscription picture ────────────────────────────────────
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const authError = requireAdmin(session);
-    if (authError) return authError;
+    const deny = await requirePermission(session, PERM.USERS_SUBSCRIPTIONS_VIEW);
+    if (deny) return deny;
 
     const instructor = await prisma.instructor.findUnique({
       where: { id: params.id },
@@ -133,15 +127,14 @@ export async function GET(
   }
 }
 
-// ── POST — admin actions ──────────────────────────────────────────────────────
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const authError = requireAdmin(session);
-    if (authError) return authError;
+    const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_MANAGE_SUBSCRIPTION);
+    if (deny) return deny;
 
     const body = await req.json();
     const { action, reason } = body;

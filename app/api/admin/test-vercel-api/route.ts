@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * GET /api/admin/test-vercel-api
- * Admin-only endpoint to verify Vercel API credentials are working.
- * Returns the current list of domains on the project.
- */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const deny = await requirePermission(session, PERM.PLATFORM_SETTINGS_VIEW);
+  if (deny) return deny;
 
   const token = process.env.VERCEL_API_TOKEN;
   const projectId = process.env.VERCEL_PROJECT_ID;

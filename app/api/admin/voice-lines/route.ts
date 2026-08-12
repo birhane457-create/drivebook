@@ -4,27 +4,15 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { assignVoiceLine, releaseVoiceLine, getPoolStats } from '@/lib/services/voice-line-service'
-
-import { requirePermission } from '@/lib/auth/requireRole';
-import { PERM } from '@/lib/rbac/permissions';
+import { requirePermission } from '@/lib/auth/requireRole'
+import { PERM } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
-function requireAdmin(session: any) {
-  if (!session?.user || !['ADMIN', 'SUPER_ADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  return null
-}
-
-/**
- * GET /api/admin/voice-lines
- * Returns pool stats + full number list with assignment details.
- */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  const authError = requireAdmin(session)
-  if (authError) return authError
+  const deny = await requirePermission(session, PERM.OPERATIONS_VOICE_LINES_VIEW)
+  if (deny) return deny
 
   const [stats, numbers] = await Promise.all([
     getPoolStats(),
@@ -55,8 +43,8 @@ const addNumberSchema = z.object({
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  const authError = requireAdmin(session)
-  if (authError) return authError
+  const deny = await requirePermission(session, PERM.OPERATIONS_VOICE_LINES_MANAGE)
+  if (deny) return deny
 
   const body = await req.json()
   const parsed = addNumberSchema.safeParse(body)

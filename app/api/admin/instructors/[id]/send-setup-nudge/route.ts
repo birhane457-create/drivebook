@@ -3,27 +3,21 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { emailService } from '@/lib/services/email'
+import { requirePermission } from '@/lib/auth/requireRole'
+import { PERM } from '@/lib/rbac/permissions'
+import { enqueueNotification } from '@/lib/services/notificationRetry'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * POST /api/admin/instructors/[id]/send-setup-nudge
- *
- * Manually triggers the instructor setup nudge email from the admin panel.
- * Fetches live DB state to compute step completion — same logic as the cron.
- * Logs to audit_log so admins can see when nudges were sent and by whom.
- *
- * Unlike the cron, this has no 24h window restriction and can be sent at any time.
- */
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_SEND_EMAIL)
+    if (deny) return deny
+    const actorId = session!.user!.id!
 
     const instructor = await prisma.instructor.findUnique({
       where: { id: params.id },
@@ -84,7 +78,7 @@ export async function POST(
     await prisma.auditLog.create({
       data: {
         action: 'ADMIN_SETUP_NUDGE_SENT',
-        actorId: session.user.id!,
+        actorId: actorId,
         actorRole: 'ADMIN',
         targetType: 'INSTRUCTOR',
         targetId: params.id,

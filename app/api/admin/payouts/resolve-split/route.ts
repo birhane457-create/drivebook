@@ -11,32 +11,12 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/admin/payouts/resolve-split
- *
- * Atomically resolves a disputed transaction as a split:
- *   - Partial refund to client wallet
- *   - Remaining amount approved for instructor payout
- *
- * Both legs execute inside a single DB transaction.
- * No Stripe calls here — payout layer handles execution.
- *
- * Idempotency: resolutionGroupId stored on transaction.
- * If retried with same transactionId, returns existing result.
- *
- * Body:
- *   transactionId  string   — the disputed transaction
- *   refundAmount   number   — amount to refund to client (must be <= transaction.amount)
- *   payoutAmount   number   — amount to approve for instructor (must be <= transaction.instructorPayout)
- *   reason         string?  — admin note
  */
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (
-      !session?.user ||
-      (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')
-    ) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_RESOLVE);
+    if (deny) return deny;
 
     const body = await req.json();
     const { transactionId, refundAmount, payoutAmount, reason } = body as {

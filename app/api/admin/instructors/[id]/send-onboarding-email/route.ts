@@ -3,34 +3,19 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ONBOARDING_SEQUENCE, sendOnboardingStep } from '@/lib/email/onboarding/sequence'
+import { requirePermission } from '@/lib/auth/requireRole'
+import { PERM } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * POST /api/admin/instructors/[id]/send-onboarding-email
- *
- * Manually triggers any onboarding sequence email from the admin panel.
- * Uses the same template + sender + audit trail as the automatic sequence.
- *
- * Body: { stepId: string }
- *
- * Always sends even if the email was already sent (force=true).
- * Records triggeredBy admin user id so audit log shows who sent it manually.
- *
- * Examples:
- *   { stepId: "onboarding.setup" }      — resend the setup guide
- *   { stepId: "onboarding.bookings" }   — explain how bookings work
- *   { stepId: "onboarding.approved" }   — send approval email manually
- */
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_SEND_EMAIL)
+    if (deny) return deny
 
     const body = await req.json()
     const { stepId } = body as { stepId?: string }

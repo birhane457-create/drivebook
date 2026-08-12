@@ -10,20 +10,15 @@ import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
-async function getAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) return null;
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-    select: { id: true, role: true },
-  });
-  return user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' ? user : null;
+async function getAdminSession() {
+  return getServerSession(authOptions);
 }
 
 // GET — list all bookings with filters
 export async function GET(req: NextRequest) {
-  const admin = await getAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  const session = await getAdminSession();
+  const deny = await requirePermission(session, PERM.OPERATIONS_BOOKINGS_VIEW);
+  if (deny) return deny;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -114,8 +109,10 @@ export async function GET(req: NextRequest) {
 
 // PATCH — update booking status (mark complete, no-show, etc.)
 export async function PATCH(req: NextRequest) {
-  const admin = await getAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  const session = await getAdminSession();
+  const deny = await requirePermission(session, PERM.OPERATIONS_BOOKINGS_CANCEL);
+  if (deny) return deny;
+  const adminId = session!.user!.id!;
 
   try {
     const { bookingId, status, noShowParty } = await req.json();
@@ -158,7 +155,7 @@ export async function PATCH(req: NextRequest) {
           : status === 'NO_SHOW' ? 'BOOKING_NO_SHOW'
           : status === 'CANCELLED' ? 'BOOKING_CANCELLED'
           : `BOOKING_STATUS_${status}`,
-        actorId: admin.id,
+        actorId: adminId,
         actorRole: 'ADMIN',
         targetType: 'BOOKING',
         targetId: bookingId,
@@ -176,8 +173,9 @@ export async function PATCH(req: NextRequest) {
 
 // POST — admin creates a booking on behalf of a client
 export async function POST(req: NextRequest) {
-  const admin = await getAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  const session = await getAdminSession();
+  const deny = await requirePermission(session, PERM.OPERATIONS_BOOKINGS_VIEW);
+  if (deny) return deny;
 
   try {
     const { clientId, instructorId, startTime, endTime, notes } = await req.json();

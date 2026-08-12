@@ -7,18 +7,11 @@ import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
-/**
- * GET /api/admin/disputes
- *
- * Returns all StripeDispute records, enriched with booking + instructor data.
- * Used by the admin disputes page to surface chargebacks that need action.
- */
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_DISPUTES_VIEW);
+    if (deny) return deny;
 
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get('status'); // open | won | lost | all
@@ -89,9 +82,8 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_DISPUTES_MANAGE);
+    if (deny) return deny;
 
     const body = await req.json();
     const { stripeDisputeId, action } = body;

@@ -82,18 +82,16 @@ async function readSettings() {
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const deny = await requirePermission(session, PERM.PLATFORM_SETTINGS_VIEW);
+  if (deny) return deny;
   return NextResponse.json(await readSettings());
 }
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.PLATFORM_SETTINGS_MANAGE);
+    if (deny) return deny;
 
     const body = await req.json();
     const settings = schema.parse(body);

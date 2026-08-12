@@ -28,9 +28,8 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_VIEW)
+  if (deny) return deny
 
   const { searchParams } = new URL(req.url)
   const minScore = parseInt(searchParams.get('minScore') ?? '0', 10)

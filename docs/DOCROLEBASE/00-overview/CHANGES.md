@@ -1,4 +1,157 @@
-﻿## Session: 2026-08-05  Final Audit Completion (M + L Findings)
+﻿## Session: 2026-08-11 — Admin RBAC Permission Enforcement
+
+### Summary
+Full implementation of granular admin permissions per RBAC-SPEC.md. Every admin API route now enforces a specific permission from the 47-permission catalogue instead of the old blanket `role === 'ADMIN'` check. AdminNav filters navigation items by the current admin's permission array.
+
+### Core infrastructure (already existed, confirmed wired)
+- `lib/rbac/permissions.ts` — 47 PERM constants + `Permission` type
+- `lib/rbac/role-presets.ts` — ADMIN / FINANCE / OPERATIONS / SUPPORT preset arrays
+- `lib/rbac/checkPermission.ts` — central server-side check (SUPER_ADMIN wildcard, StaffMember lookup, maxRefundAmount returned)
+- `lib/auth/requireRole.ts` — `requirePermission()` thin wrapper for API routes
+- `hooks/useAdminPermissions.ts` — client hook with 5-min cache, `can()` / `canAny()` helpers
+- `app/api/admin/me/permissions/route.ts` — returns current admin's permission array
+- `scripts/migrate-rbac.ts` — idempotent migration to populate existing ADMIN StaffMember.permissions
+
+### API routes updated (old role check → requirePermission)
+
+**Finance**
+- `payouts/route.ts` GET → `finance.payouts.view`
+- `payouts/preview-all` GET → `finance.payouts.view`
+- `payouts/process` POST → `finance.payouts.process`
+- `payouts/process-all` POST → `finance.payouts.process`
+- `payouts/[payoutId]/hold` POST/DELETE → `finance.payouts.hold`
+- `payouts/[payoutId]/mark-sent` POST → `finance.payouts.resolve`
+- `payouts/resolve` POST → `finance.payouts.resolve`
+- `payouts/resolve-split` POST → `finance.payouts.resolve`
+- `revenue/route.ts` GET → `finance.revenue.view`
+- `disputes/route.ts` GET → `finance.disputes.view`
+- `disputes/route.ts` PATCH → `finance.disputes.manage`
+- `pricing/route.ts` GET → `finance.pricing.view`
+- `pricing/route.ts` POST → `finance.pricing.manage`
+- `ledger/route.ts` GET → `finance.revenue.view`
+- `clients/[id]/wallet/add-credit` POST → `finance.credits.manage` + maxRefundAmount cap enforced
+- `clients/[id]/wallet/deduct-credit` POST → `users.clients.wallet_deduct` + maxRefundAmount cap enforced
+- `transactions/[id]/refund` POST → `finance.disputes.manage`
+- `transactions/[id]/invoice` GET → `finance.revenue.view`
+
+**Users / Instructors**
+- `instructors/route.ts` GET → `users.instructors.view`
+- `instructors/[id]/route.ts` GET → `users.instructors.view`
+- `instructors/[id]/approve` POST → `users.instructors.approve` (already wired)
+- `instructors/[id]/reject` POST → `users.instructors.reject` (already wired)
+- `instructors/[id]/suspend` POST → `users.instructors.suspend` (already wired)
+- `instructors/[id]/send-setup-nudge` POST → `users.instructors.send_email`
+- `instructors/[id]/send-onboarding-email` POST → `users.instructors.send_email`
+- `instructors/[id]/verify-abn` POST → `users.instructors.verify_abn`
+- `instructors/[id]/subscription` GET → `users.subscriptions.view`
+- `instructors/[id]/subscription` POST → `users.instructors.manage_subscription`
+- `instructors/[id]/onboarding-status` GET → `users.instructors.view`
+- `clients/route.ts` GET → `users.clients.view`
+- `clients/[id]/route.ts` PATCH → `users.clients.edit`
+- `clients/[id]/wallet/route.ts` GET → `users.clients.view`
+- `subscriptions/route.ts` GET → `users.subscriptions.view`
+- `users/[userId]/reset-password` POST → `users.clients.reset_password`
+
+**Operations**
+- `bookings/route.ts` GET → `operations.bookings.view`
+- `bookings/route.ts` PATCH → `operations.bookings.cancel`
+- `bookings/route.ts` POST → `operations.bookings.view`
+- `booking-payment-status` GET → `operations.bookings.view`
+- `audit-log/route.ts` GET → `operations.audit_log.view`
+- `cron-jobs/route.ts` GET → `operations.cron.view`
+- `documents/compliance` GET → `operations.documents.view`
+- `documents/compliance` POST → `operations.documents.verify`
+- `documents/instructor/[id]/route.ts` GET → `operations.documents.view`
+- `documents/instructor/[id]/approve` POST → `operations.documents.verify`
+- `documents/instructor/[id]/reject` POST → `operations.documents.verify`
+- `documents/instructor/[id]/expiry` POST → `operations.documents.verify`
+- `test-centres/route.ts` GET → `operations.test_centres.view`
+- `test-centres/route.ts` POST → `operations.test_centres.manage`
+- `voice-lines/route.ts` GET → `operations.voice_lines.view`
+- `voice-lines/route.ts` POST → `operations.voice_lines.manage`
+
+**Engagement / Platform / Analytics**
+- `contact/route.ts` POST → `engagement.support.contact`
+- `settings/route.ts` GET → `platform.settings.view`
+- `settings/route.ts` POST → `platform.settings.manage`
+- `ai-brief/route.ts` POST → `platform.copilot.view`
+- `ai-brief/history` GET → `platform.copilot.view`
+- `ai-query/route.ts` POST → `platform.copilot.view`
+- `daily-summary` GET → `operations.audit_log.view`
+- `weekly-report` GET/POST → `operations.audit_log.view`
+- `operations-timeline` GET → `operations.audit_log.view`
+- `health-score` GET → `operations.audit_log.view`
+- `instructor-risk` GET → `users.instructors.view`
+- `export/route.ts` GET → `finance.revenue.view`
+- `test-vercel-api` GET → `platform.settings.view`
+
+### AdminNav permission filtering
+- `navGroups` now typed as `NavGroup[]` with `perm?` field on every item
+- Every nav item has its required permission wired (17 items across 6 groups)
+- `visibleGroups` filters groups/items through `canSee(perm)` — hides inaccessible sections
+- `visibleAllNavItems` used for mobile grid — same filtering
+- While loading: all items shown (no flash) — SUPER_ADMIN always sees everything
+
+### Credit/deduct limit enforcement (new)
+- `add-credit`: checks `finance.credits.manage` via `checkPermission()` (not `requirePermission`) to get `staffMember.maxRefundAmount` — rejects if `amount > maxRefundAmount` for non-SUPER_ADMIN
+- `deduct-credit`: same pattern with `users.clients.wallet_deduct`
+
+### Files changed
+- `components/admin/AdminNav.tsx`
+- `app/api/admin/revenue/route.ts`
+- `app/api/admin/payouts/route.ts`
+- `app/api/admin/payouts/process/route.ts`
+- `app/api/admin/payouts/process-all/route.ts`
+- `app/api/admin/payouts/resolve/route.ts`
+- `app/api/admin/payouts/resolve-split/route.ts`
+- `app/api/admin/payouts/preview-all/route.ts`
+- `app/api/admin/payouts/[payoutId]/hold/route.ts`
+- `app/api/admin/payouts/[payoutId]/mark-sent/route.ts`
+- `app/api/admin/disputes/route.ts`
+- `app/api/admin/bookings/route.ts`
+- `app/api/admin/settings/route.ts`
+- `app/api/admin/audit-log/route.ts`
+- `app/api/admin/instructors/route.ts`
+- `app/api/admin/instructors/[id]/route.ts`
+- `app/api/admin/instructors/[id]/send-setup-nudge/route.ts`
+- `app/api/admin/instructors/[id]/send-onboarding-email/route.ts`
+- `app/api/admin/instructors/[id]/verify-abn/route.ts`
+- `app/api/admin/instructors/[id]/subscription/route.ts`
+- `app/api/admin/instructors/[id]/onboarding-status/route.ts`
+- `app/api/admin/clients/route.ts`
+- `app/api/admin/clients/[id]/route.ts`
+- `app/api/admin/clients/[id]/wallet/route.ts`
+- `app/api/admin/clients/[id]/wallet/add-credit/route.ts`
+- `app/api/admin/clients/[id]/wallet/deduct-credit/route.ts`
+- `app/api/admin/users/[userId]/reset-password/route.ts`
+- `app/api/admin/subscriptions/route.ts`
+- `app/api/admin/pricing/route.ts`
+- `app/api/admin/ledger/route.ts`
+- `app/api/admin/cron-jobs/route.ts`
+- `app/api/admin/voice-lines/route.ts`
+- `app/api/admin/test-centres/route.ts`
+- `app/api/admin/contact/route.ts`
+- `app/api/admin/documents/compliance/route.ts`
+- `app/api/admin/documents/instructor/[instructorId]/route.ts`
+- `app/api/admin/documents/instructor/[instructorId]/approve/route.ts`
+- `app/api/admin/documents/instructor/[instructorId]/reject/route.ts`
+- `app/api/admin/documents/instructor/[instructorId]/expiry/route.ts`
+- `app/api/admin/transactions/[transactionId]/refund/route.ts`
+- `app/api/admin/transactions/[transactionId]/invoice/route.ts`
+- `app/api/admin/booking-payment-status/route.ts`
+- `app/api/admin/daily-summary/route.ts`
+- `app/api/admin/weekly-report/route.ts`
+- `app/api/admin/operations-timeline/route.ts`
+- `app/api/admin/health-score/route.ts`
+- `app/api/admin/instructor-risk/route.ts`
+- `app/api/admin/export/route.ts`
+- `app/api/admin/ai-brief/route.ts`
+- `app/api/admin/ai-brief/history/route.ts`
+- `app/api/admin/ai-query/route.ts`
+- `app/api/admin/test-vercel-api/route.ts`
+
+---
+
 
 ### Summary
 All 43 findings from AUDIT-2026-08-05.md resolved. Zero diagnostics across all changed files.
@@ -26,7 +179,8 @@ Added InstructorProfile interface, state now typed  field renames/deletions will
 
 ### Low fixes
 
-**L-1  profile/route.ts: Unused eq parameter**  
+**L-1  profile/route.ts: Unused 
+eq parameter**  
 Renamed to _req  TypeScript warning removed.
 
 **L-2  nalytics/page.tsx: No empty state for new instructors**  
@@ -38,7 +192,8 @@ Now displayed in the Performance Summary section  instructors can see their curr
 **L-6  io-generate/route.ts: No rate limiting on OpenAI calls**  
 - Added ioGenerateRateLimit = createRateLimiter(5, '1 h') to lib/ratelimit.ts
 - Rate limit check added to the POST handler  5 generations per instructor per hour
-- Also fixed a broken ioGenerateRateLimit export that was referencing an undefined atelimit variable
+- Also fixed a broken ioGenerateRateLimit export that was referencing an undefined 
+atelimit variable
 
 **H-7 companion  vailability/page.tsx: Exception dates showed wrong day**  
 Display uses exDateStr + 'T12:00:00Z' anchor  prevents midnight UTC  previous day shift in AEST.
@@ -132,12 +287,14 @@ Fixed all 11 critical findings from the production audit. Three light-theme page
 
 **C-4  pi/analytics/route.ts: Confirmed scoped to instructorId**  No change needed
 
-**C-5  clients/[id]/page.tsx + ookings/[id]/page.tsx: outer unused**
+**C-5  clients/[id]/page.tsx + ookings/[id]/page.tsx: 
+outer unused**
 - Removed useRouter import and const router = useRouter() from both files
 
 **C-6  ookings/[id]/page.tsx: Fetch error swallowed  would crash on 404/401**
 - Added etchError state
-- Fetch now checks .ok, throws typed errors (
+- Fetch now checks 
+.ok, throws typed errors (
 ot_found vs ailed)
 - Error state rendered with "Back to bookings" link
 
@@ -147,13 +304,15 @@ ot_found vs ailed)
 **C-8  ookings/[id]/page.tsx + clients/[id]/page.tsx: Light theme in dark dashboard**
 - Both pages fully converted: g-gray-50  g-slate-950, 	ext-gray-900  	ext-slate-100, all card/border/input colors updated
 
-**C-9  eschedule/page.tsx: New datetime built in browser TZ, not instructor TZ**
+**C-9  
+eschedule/page.tsx: New datetime built in browser TZ, not instructor TZ**
 - 
 ew Date(date).setHours(h, m)  localDateTimeToUTC(date, time, instructorTz)
 - Added localDateTimeToUTC to timezone import
 - Reschedule page also converted to dark theme
 
-**C-10  eschedule/page.tsx + ookings/[id]/page.tsx: instructorTz always Perth**
+**C-10  
+eschedule/page.tsx + ookings/[id]/page.tsx: instructorTz always Perth**
 - GET /api/bookings/[id] now includes instructor: { select: { timezone, state } } in response
 - Both pages now read instructor timezone directly from the booking API response
 

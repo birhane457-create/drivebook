@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 import { sendAdminDeductionReceipt } from '@/lib/services/receipt-email';
+import { checkPermission } from '@/lib/rbac/checkPermission';
+import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +15,8 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const check = await checkPermission(session, PERM.USERS_CLIENTS_WALLET_DEDUCT);
+    if (!check.allowed) return check.response;
 
     const { amount, reason } = await req.json();
 
@@ -25,6 +26,17 @@ export async function POST(
 
     if (!reason || reason.trim().length < 3) {
       return NextResponse.json({ error: 'Reason is required for deductions' }, { status: 400 });
+    }
+
+    // Enforce per-staff deduction limit (maxRefundAmount)
+    if (!check.isSuperAdmin && check.staffMember) {
+      const limit = check.staffMember.maxRefundAmount;
+      if (amount > limit) {
+        return NextResponse.json(
+          { error: `Amount exceeds your deduction limit of $${limit}` },
+          { status: 403 }
+        );
+      }
     }
 
     // Resolve user — params.id can be a clientId or userId

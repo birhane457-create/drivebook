@@ -32,16 +32,11 @@ const pricingSchema = z.object({
   peakSurchargePercent:       z.number().min(0).max(50).optional().default(0),
 });
 
-function isAdmin(session: any) {
-  return session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN';
-}
-
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!isAdmin(session)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_PRICING_VIEW);
+    if (deny) return deny;
     const settings = await getPlatformPricing();
     return NextResponse.json(settings);
   } catch (error) {
@@ -53,9 +48,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!isAdmin(session)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_PRICING_MANAGE);
+    if (deny) return deny;
 
     const body = await req.json();
     const data = pricingSchema.parse(body);

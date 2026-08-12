@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import crypto from 'crypto';
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +15,8 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.USERS_CLIENTS_RESET_PASSWORD);
+    if (deny) return deny;
 
     const user = await prisma.user.findUnique({
       where: { id: params.userId },

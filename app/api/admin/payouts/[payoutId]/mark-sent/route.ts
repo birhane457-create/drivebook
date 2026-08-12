@@ -2,27 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { markPayoutSent, confirmPayoutReceived } from '@/lib/services/payout-service';
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * POST /api/admin/payouts/[payoutId]/mark-sent
- *
- * Body: { action: 'sent', bankReference: string }
- *   -> PENDING_TRANSFER -> SENT
- *
- * Body: { action: 'confirm' }
- *   -> SENT -> PAID + ledger updated
- */
 export async function POST(
   req: NextRequest,
   { params }: { params: { payoutId: string } },
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_RESOLVE);
+    if (deny) return deny;
 
     const { payoutId } = params;
     const body = await req.json();

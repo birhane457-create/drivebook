@@ -2,26 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
-async function checkAdmin() {
-  const session = await getServerSession(authOptions);
-  const admin = await prisma.user.findUnique({
-    where: { email: session?.user?.email || '' },
-    select: { role: true },
-  });
-  return admin?.role === 'ADMIN' || admin?.role === 'SUPER_ADMIN';
-}
-
-// PATCH - Edit client details (name, email, phone)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  if (!(await checkAdmin())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-  }
+  const session = await getServerSession(authOptions);
+  const deny = await requirePermission(session, PERM.USERS_CLIENTS_EDIT);
+  if (deny) return deny;
 
   try {
     const body = await req.json();

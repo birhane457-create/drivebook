@@ -9,9 +9,7 @@ import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
 export const dynamic = 'force-dynamic';
 
-// P1-10 FIX: Validate request body — transactionIds must be cuid strings, capped at 500,
-// and no unbounded findMany risk. Cross-instructor check is handled in buildPayout which
-// filters by instructorId, but explicit validation here prevents DB amplification.
+// P1-10 FIX: Validate request body
 const processPayoutSchema = z.object({
   instructorId: z.string().cuid(),
   transactionIds: z.array(z.string().cuid()).max(500).optional(),
@@ -20,9 +18,8 @@ const processPayoutSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_PROCESS);
+    if (deny) return deny;
 
     const body = await req.json();
     const parsed = processPayoutSchema.safeParse(body);

@@ -11,35 +11,19 @@ export const dynamic = 'force-dynamic';
 
 type ResolveAction =
   | 'refund_client'
-  | 'approve_for_payout'   // canonical name
-  | 'pay_instructor'        // legacy alias — treated as approve_for_payout
+  | 'approve_for_payout'
+  | 'pay_instructor'
   | 'charge_instructor'
   | 'void';
 
 /**
  * POST /api/admin/payouts/resolve
- *
- * Resolves a withheld or disputed transaction.
- *
- * Actions:
- *   refund_client      — refund full amount to client wallet; mark REFUNDED
- *   approve_for_payout — mark transaction SETTLED so it enters next payout run
- *                        (no Stripe call here — payout layer handles that)
- *   pay_instructor     — legacy alias for approve_for_payout (backward compat)
- *   charge_instructor  — mark CANCELLED + create a negative ADJUSTMENT ledger entry
- *   void               — write off; mark CANCELLED, no money moves
- *
- * Idempotency: terminal states (REFUNDED, CANCELLED, SETTLED) return 409.
  */
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (
-      !session?.user ||
-      (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')
-    ) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_RESOLVE);
+    if (deny) return deny;
 
     // Rate limit: 5 payout mutations per minute per admin — prevents runaway scripts
     // and limits blast radius from a compromised admin account.

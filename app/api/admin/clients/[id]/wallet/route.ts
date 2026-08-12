@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { reconcileWalletBalance } from '@/lib/services/wallet-helpers'
+import { requirePermission } from '@/lib/auth/requireRole'
+import { PERM } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,9 +14,8 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
+    const deny = await requirePermission(session, PERM.USERS_CLIENTS_VIEW)
+    if (deny) return deny
 
     // The ID could be a client ID or user ID — try client first
     let userId: string | null = null

@@ -56,9 +56,8 @@ const BOOKING_STATUS_MAP: Record<string, { type: EventType; severity: EventSever
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const deny = await requirePermission(session, PERM.OPERATIONS_AUDIT_LOG_VIEW)
+  if (deny) return deny
 
   const { searchParams } = new URL(req.url)
   const hours = Math.min(168, Math.max(1, parseInt(searchParams.get('hours') ?? '24', 10)))

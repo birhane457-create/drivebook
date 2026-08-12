@@ -41,9 +41,8 @@ function todayKey(): string {
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const deny = await requirePermission(session, PERM.PLATFORM_COPILOT_VIEW)
+  if (deny) return deny
 
   const openaiKey = process.env.OPENAI_API_KEY
   const anthropicKey = process.env.ANTHROPIC_API_KEY

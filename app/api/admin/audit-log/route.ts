@@ -25,9 +25,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user || !['ADMIN', 'SUPER_ADMIN'].includes(session.user.role ?? '')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const deny = await requirePermission(session, PERM.OPERATIONS_AUDIT_LOG_VIEW);
+  if (deny) return deny;
 
   const { searchParams } = req.nextUrl;
   const targetType = searchParams.get('targetType') ?? undefined;

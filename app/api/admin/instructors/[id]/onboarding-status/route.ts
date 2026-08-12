@@ -3,23 +3,19 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ONBOARDING_SEQUENCE } from '@/lib/email/onboarding/sequence'
+import { requirePermission } from '@/lib/auth/requireRole'
+import { PERM } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * GET /api/admin/instructors/[id]/onboarding-status
- * Returns the onboarding email sequence state for an instructor.
- * Used by the admin instructor detail page to show sequence progress.
- */
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_VIEW)
+    if (deny) return deny
 
     // Fetch all onboarding audit log entries for this instructor
     const logs = await prisma.auditLog.findMany({

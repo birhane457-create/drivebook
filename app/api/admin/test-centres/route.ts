@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
 
@@ -20,16 +19,11 @@ const centreSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-function isAdmin(role: string) {
-  return role === 'ADMIN' || role === 'SUPER_ADMIN';
-}
-
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || !isAdmin(session.user.role)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.OPERATIONS_TEST_CENTRES_VIEW);
+    if (deny) return deny;
     const centres = await (prisma as any).testCentre.findMany({
       orderBy: [{ region: 'asc' }, { name: 'asc' }],
     });
@@ -43,9 +37,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || !isAdmin(session.user.role)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.OPERATIONS_TEST_CENTRES_MANAGE);
+    if (deny) return deny;
     const body = await req.json();
     const data = centreSchema.parse(body);
     const centre = await (prisma as any).testCentre.create({ data });

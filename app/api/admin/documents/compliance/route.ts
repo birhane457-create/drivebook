@@ -20,9 +20,8 @@ function docStatus(expiry: string | null, docUrl: string | null) {
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.OPERATIONS_DOCUMENTS_VIEW);
+    if (deny) return deny;
 
     const instructors = await prisma.instructor.findMany({
       select: {
@@ -98,9 +97,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.OPERATIONS_DOCUMENTS_VERIFY);
+    if (deny) return deny;
 
     const { action, instructorId } = await req.json();
 

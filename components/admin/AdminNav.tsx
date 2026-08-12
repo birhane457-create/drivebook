@@ -106,46 +106,77 @@ export default function AdminNav() {
   // SUPER_ADMIN: can() always returns true immediately.
   const canSee = (perm?: string) => !perm || permLoading || can(perm);
 
-  const navGroups = [
+  type NavItem = { name: string; href: string; icon: string; perm?: string };
+  type NavGroup = {
+    name: string;
+    icon: string;
+    perm?: string;
+    href?: string;    // defined only for top-level direct links (no dropdown)
+    items: NavItem[]; // empty [] for top-level direct links
+  };
+
+  const navGroups: NavGroup[] = [
     {
       name: 'Users', icon: '👥', items: [
-        { name: 'Instructors', href: '/admin/instructors', icon: '🧑‍🏫' },
-        { name: 'Clients', href: '/admin/clients', icon: '👤' },
-        { name: 'Subscriptions', href: '/admin/subscriptions', icon: '💳' },
-        { name: 'Staff Tasks', href: '/staff/dashboard', icon: '📋' },
-      ]
+        { name: 'Instructors',   href: '/admin/instructors',   icon: '🧑‍🏫', perm: 'users.instructors.view' },
+        { name: 'Clients',       href: '/admin/clients',       icon: '👤',    perm: 'users.clients.view' },
+        { name: 'Subscriptions', href: '/admin/subscriptions', icon: '💳',   perm: 'users.subscriptions.view' },
+        { name: 'Staff Tasks',   href: '/staff/dashboard',     icon: '📋' },
+      ],
     },
     {
       name: 'Finance', icon: '💰', items: [
-        { name: 'Credits', href: '/admin/credits', icon: '💳' },
-        { name: 'Revenue', href: '/admin/revenue', icon: '💰' },
-        { name: 'Payouts', href: '/admin/payouts', icon: '💸' },
-        { name: 'Disputes', href: '/admin/disputes', icon: '⚠️' },
-        { name: 'Pricing', href: '/admin/pricing', icon: '🏷️' },
-      ]
+        { name: 'Credits',  href: '/admin/credits',  icon: '💳', perm: 'finance.credits.view' },
+        { name: 'Revenue',  href: '/admin/revenue',  icon: '💰', perm: 'finance.revenue.view' },
+        { name: 'Payouts',  href: '/admin/payouts',  icon: '💸', perm: 'finance.payouts.view' },
+        { name: 'Disputes', href: '/admin/disputes', icon: '⚠️', perm: 'finance.disputes.view' },
+        { name: 'Pricing',  href: '/admin/pricing',  icon: '🏷️', perm: 'finance.pricing.view' },
+      ],
     },
     {
       name: 'Operations', icon: '📋', items: [
-        { name: 'Documents', href: '/admin/documents', icon: '📄' },
-        { name: 'Bookings', href: '/admin/bookings', icon: '📅' },
-        { name: 'Audit Log', href: '/admin/audit-log', icon: '🔍' },
-        { name: 'Test Centres', href: '/admin/test-centres', icon: '🚗' },
-        { name: 'Policy & Rules', href: '/admin/policy', icon: '📚' },
-        { name: 'Cron Jobs', href: '/admin/cron-jobs', icon: '⏱️' },
-      ]
+        { name: 'Documents',      href: '/admin/documents',    icon: '📄', perm: 'operations.documents.view' },
+        { name: 'Bookings',       href: '/admin/bookings',     icon: '📅', perm: 'operations.bookings.view' },
+        { name: 'Audit Log',      href: '/admin/audit-log',    icon: '🔍', perm: 'operations.audit_log.view' },
+        { name: 'Test Centres',   href: '/admin/test-centres', icon: '🚗', perm: 'operations.test_centres.view' },
+        { name: 'Policy & Rules', href: '/admin/policy',       icon: '📚', perm: 'operations.policy.view' },
+        { name: 'Cron Jobs',      href: '/admin/cron-jobs',    icon: '⏱️', perm: 'operations.cron.view' },
+        { name: 'Voice Lines',    href: '/admin/voice-lines',  icon: '📞', perm: 'operations.voice_lines.view' },
+      ],
     },
     {
       name: 'Engagement', icon: '⭐', items: [
-        { name: 'Reviews', href: '/admin/reviews', icon: '⭐' },
-        { name: 'Support', href: '/admin/support', icon: '💬' },
-      ]
+        { name: 'Reviews', href: '/admin/reviews', icon: '⭐', perm: 'engagement.reviews.view' },
+        { name: 'Support', href: '/admin/support', icon: '💬', perm: 'engagement.support.view' },
+      ],
     },
-    { name: 'Settings', icon: '⚙️', href: '/admin/settings', items: [] },
-    { name: 'Copilot', icon: '🤖', href: '/admin/copilot', items: [] },
+    { name: 'Settings', icon: '⚙️', href: '/admin/settings', perm: 'platform.settings.view',  items: [] },
+    { name: 'Copilot',  icon: '🤖', href: '/admin/copilot',  perm: 'platform.copilot.view',    items: [] },
   ];
 
-  const allNavItems = navGroups.flatMap(g =>
-    g.items.length > 0 ? g.items : [{ name: g.name, href: g.href!, icon: g.icon }]
+  // Flatten to a single list for the mobile grid
+  const allNavItems: NavItem[] = navGroups.flatMap(g =>
+    g.items.length > 0
+      ? g.items
+      : g.href ? [{ name: g.name, href: g.href, icon: g.icon, perm: g.perm }] : []
+  );
+
+  // Filter groups/items by permission
+  const visibleGroups: NavGroup[] = navGroups
+    .map(g => ({ ...g, items: g.items.filter(i => canSee(i.perm)) }))
+    .filter(g => {
+      if (g.items.length === 0) {
+        // Top-level direct link — only show if href exists AND perm passes
+        return !!g.href && canSee(g.perm);
+      }
+      // Dropdown — show if at least one item is visible
+      return true;
+    });
+
+  const visibleAllNavItems: NavItem[] = visibleGroups.flatMap(g =>
+    g.items.length > 0
+      ? g.items
+      : g.href ? [{ name: g.name, href: g.href, icon: g.icon, perm: g.perm }] : []
   );
 
   const isActive = (href: string) => {
@@ -177,13 +208,13 @@ export default function AdminNav() {
 
           {/* Desktop nav — lg+ only so tablets get the mobile menu */}
           <div className="hidden lg:flex items-center gap-0.5">
-            {navGroups.map((group) => (
+            {visibleGroups.map((group) => (
               <div key={group.name} className="relative">
-                {group.items.length === 0 ? (
+                {group.items.length === 0 && group.href ? (
                   <Link
-                    href={group.href!}
+                    href={group.href}
                     className={`flex items-center gap-1 px-2 xl:px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive(group.href!)
+                      isActive(group.href)
                         ? 'bg-blue-900/40 text-blue-300'
                         : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/5'
                     }`}
@@ -263,7 +294,7 @@ export default function AdminNav() {
         {isMobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-800 py-3 max-h-[80vh] overflow-y-auto">
             <div className="grid grid-cols-2 gap-1.5 px-1">
-              {allNavItems.map((item) => (
+              {visibleAllNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}

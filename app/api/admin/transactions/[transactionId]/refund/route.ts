@@ -5,19 +5,19 @@ import { prisma } from '@/lib/prisma';
 import { stripeService } from '@/lib/services/stripe';
 import { smsService } from '@/lib/services/sms';
 import { recordFullRefund } from '@/lib/services/ledger-operations';
-
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { transactionId: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requirePermission(session, PERM.FINANCE_DISPUTES_MANAGE);
+    if (deny) return deny;
 
     let amount, reason, deductFromInstructor;
     

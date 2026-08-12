@@ -214,18 +214,16 @@ async function buildReport(): Promise<WeeklyReport> {
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const deny = await requirePermission(session, PERM.OPERATIONS_AUDIT_LOG_VIEW)
+  if (deny) return deny
   const report = await buildReport()
   return NextResponse.json(report)
 }
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const deny = await requirePermission(session, PERM.OPERATIONS_AUDIT_LOG_VIEW)
+  if (deny) return deny
 
   const report = await buildReport()
 
