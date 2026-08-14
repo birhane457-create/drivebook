@@ -186,7 +186,7 @@ Please write the operations brief now.`
         model,
         tokens,
         healthScore,
-        generatedBy: session.user.id ?? 'admin',
+       generatedBy: session!.user.id ?? 'admin',
       },
       update: {
         summaryJson: JSON.stringify(src),
@@ -194,7 +194,7 @@ Please write the operations brief now.`
         model,
         tokens,
         healthScore,
-        generatedBy: session.user.id ?? 'admin',
+        generatedBy: session!.user.id ?? 'admin',
       },
     }).catch((err: unknown) => {
       // Non-fatal — log but still return the brief to the client
