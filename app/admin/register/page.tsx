@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import AdminNav from '@/components/admin/AdminNav'
 import {
   UserPlus, Shield, ShieldOff, ChevronDown, ChevronUp,
-  CheckCircle, Eye, EyeOff, RefreshCw, X, Copy, RotateCcw,
+  CheckCircle, Eye, EyeOff, RefreshCw, X, RotateCcw,
 } from 'lucide-react'
 import { ALL_PERMISSIONS } from '@/lib/rbac/permissions'
 import { ROLE_PRESETS } from '@/lib/rbac/role-presets'

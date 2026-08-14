@@ -4,8 +4,6 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { requirePermission } from '@/lib/auth/requireRole'
-import { PERM } from '@/lib/rbac/permissions'
 import { ROLE_PRESETS } from '@/lib/rbac/role-presets'
 
 export const dynamic = 'force-dynamic'
