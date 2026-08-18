@@ -147,47 +147,49 @@ export async function POST(req: NextRequest) {
     }
     // No user found — OTP not stored, confirm will fail gracefully (prevents enumeration)
 
-    // Respond immediately — email/SMS sent in background so we don't block for ~8s
-    // This eliminates the DoS vector: each request now completes in <300ms
-    const responsePayload = NextResponse.json({
+    // Send email/SMS with proper await to ensure delivery completes before serverless termination
+    // FIX: Fire-and-forget delivery doesn't work in production (Vercel serverless)
+    // Functions terminate immediately after response, preventing email delivery
+    try {
+      if (data.email && user) {
+        await emailService.sendGenericEmail({
+          from: 'DriveBook Account Verification <verification@drivebook.com.au>',
+          to: data.email,
+          subject: 'Your DriveBook verification code',
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px">
+              <h2 style="margin:0 0 8px;font-size:18px;color:#0f172a">Your verification code</h2>
+              <p style="margin:0 0 20px;color:#475569;font-size:14px">
+                Enter this code on the DriveBook login screen. It expires in 5 minutes.
+              </p>
+              <div style="background:#f1f5f9;border-radius:10px;padding:20px;text-align:center;margin-bottom:20px">
+                <span style="font-size:36px;font-weight:bold;letter-spacing:12px;color:#0f172a">${otp}</span>
+              </div>
+              <p style="margin:0;color:#94a3b8;font-size:12px">
+                If you didn't request this code, someone may be attempting to access your account.
+                You can safely ignore this email — your account remains secure.
+              </p>
+            </div>
+          `,
+        });
+      } else if (data.phone) {
+        const { smsService } = await import('@/lib/services/sms');
+        await smsService.sendSMS({
+          to: data.phone!,
+          message: `DriveBook verification code: ${otp}. Expires in 5 minutes.`,
+        });
+      }
+    } catch (err) {
+      console.error('[OTP] Delivery failed:', err);
+      // Don't fail the request - OTP is stored, user can request a new one if needed
+    }
+
+    return NextResponse.json({
       success: true,
       verificationId,
       expiresAt: otpExpiry.toISOString(),
       message: `Verification code sent to ${data.phone || data.email}`,
     });
-
-    // Fire-and-forget delivery — errors logged but never bubble up to caller
-    if (data.email && user) {
-      emailService.sendGenericEmail({
-        from: 'DriveBook Account Verification <verification@drivebook.com.au>',
-        to: data.email,
-        subject: 'Your DriveBook verification code',
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px">
-            <h2 style="margin:0 0 8px;font-size:18px;color:#0f172a">Your verification code</h2>
-            <p style="margin:0 0 20px;color:#475569;font-size:14px">
-              Enter this code on the DriveBook login screen. It expires in 5 minutes.
-            </p>
-            <div style="background:#f1f5f9;border-radius:10px;padding:20px;text-align:center;margin-bottom:20px">
-              <span style="font-size:36px;font-weight:bold;letter-spacing:12px;color:#0f172a">${otp}</span>
-            </div>
-            <p style="margin:0;color:#94a3b8;font-size:12px">
-              If you didn't request this code, someone may be attempting to access your account.
-              You can safely ignore this email — your account remains secure.
-            </p>
-          </div>
-        `,
-      }).catch(err => console.error('[OTP] Email delivery failed:', err));
-    } else if (data.phone) {
-      import('@/lib/services/sms').then(({ smsService }) =>
-        smsService.sendSMS({
-          to: data.phone!,
-          message: `DriveBook verification code: ${otp}. Expires in 5 minutes.`,
-        })
-      ).catch(err => console.error('[OTP] SMS delivery failed:', err));
-    }
-
-    return responsePayload;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 });
