@@ -6,6 +6,7 @@ import { emailService } from '@/lib/services/email';
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry';
+import { RateLimiters } from '@/lib/middleware/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,10 @@ export async function POST(
 
     const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_APPROVE);
     if (deny) return deny;
+
+    // Rate limit: 20 approvals per hour per admin
+    const rateLimitResult = await RateLimiters.highImpactOperations(req, session);
+    if (rateLimitResult) return rateLimitResult;
 
     // MEDIUM-7 FIX: Verify required documents exist before approval
     const instructor = await prisma.instructor.findUnique({

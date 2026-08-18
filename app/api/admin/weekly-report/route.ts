@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
   const recipientEmail =
     process.env.ADMIN_REPORT_EMAIL ||
     process.env.ADMIN_EMAIL ||
-    session.user.email
+    session!.user.email
 
   if (!recipientEmail) {
     return NextResponse.json({ error: 'No recipient email configured. Set ADMIN_REPORT_EMAIL in .env.' }, { status: 503 })

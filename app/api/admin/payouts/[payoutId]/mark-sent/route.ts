@@ -24,12 +24,12 @@ export async function POST(
       if (!bankReference?.trim()) {
         return NextResponse.json({ error: 'bankReference is required' }, { status: 400 });
       }
-      await markPayoutSent(payoutId, session.user.id, bankReference.trim());
+      await markPayoutSent(payoutId, session!.user.id, bankReference.trim());
       return NextResponse.json({ success: true, status: 'SENT', message: 'Payout marked as sent' });
     }
 
     if (action === 'confirm') {
-      await confirmPayoutReceived(payoutId, session.user.id);
+      await confirmPayoutReceived(payoutId, session!.user.id);
       return NextResponse.json({ success: true, status: 'PAID', message: 'Payout confirmed — ledger updated' });
     }
 

@@ -151,6 +151,8 @@ export async function POST(req: NextRequest) {
         hourlyRate: true,
         timezone: true,
         state: true,
+        paymentMode: true,
+        accountType: true,
         user: { select: { email: true } },
       },
     })
@@ -165,13 +167,18 @@ export async function POST(req: NextRequest) {
     const instructorTimezone = instructor.timezone
       ? resolveTimezone(instructor.timezone)
       : timezoneFromState(instructor.state)
-    
-    // MEDIUM-10 FIX: Get platform fee rate from DB instead of hardcoding
-    const platformFeeRate = await getPlatformFeeRate()
-    const platformFee = parseFloat((lessonPrice * (platformFeeRate / 100)).toFixed(2))
-    const commissionRatePct = await getCommissionRate(instructor.subscriptionTier ?? 'BASIC')
+
+    // ── Commission calculation — DIRECT mode = zero commission ───────────────
+    // DIRECT (BUSINESS): instructor receives 100% — no DriveBook cut per booking.
+    // PLATFORM (all other tiers): standard commission deducted.
+    const isDirectMode = instructor.paymentMode === 'DIRECT'
+    const platformFeeRate = isDirectMode ? 0 : await getPlatformFeeRate()
+    const platformFee = isDirectMode ? 0 : parseFloat((lessonPrice * (platformFeeRate / 100)).toFixed(2))
+    const commissionRatePct = isDirectMode ? 0 : await getCommissionRate(instructor.subscriptionTier ?? 'BASIC')
     const commissionRate = commissionRatePct / 100
-    const instructorPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2))
+    const instructorPayout = isDirectMode
+      ? lessonPrice
+      : parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2))
 
     // isFirstBooking check (real DB query via paymentService)
     const isFirstBooking = await paymentService.isFirstBookingWithClient(

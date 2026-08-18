@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       abnStatus: verified ? 'ACTIVE' : 'REVIEW_REQUIRED',
       abnEntityName: entityName ?? undefined,
       abnVerifiedAt: verified ? new Date() : null,
-      abnVerifiedBy: session.user.id,
+      abnVerifiedBy: session!.user.id,
       withholdingTaxRate: verified ? 0 : 47,
     },
   });
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   await prisma.auditLog.create({
     data: {
       action: verified ? 'ABN_VERIFIED' : 'ABN_VERIFICATION_REVOKED',
-      actorId: session.user.id,
+      actorId: session!.user.id,
       actorRole: 'ADMIN',
       targetType: 'INSTRUCTOR',
       targetId: params.id,

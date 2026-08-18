@@ -6,6 +6,7 @@ import { executeInstructorPayout } from '@/lib/services/payout-service';
 
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
+import { RateLimiters } from '@/lib/middleware/rate-limit';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
@@ -13,6 +14,10 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_PROCESS);
     if (deny) return deny;
+
+    // Rate limit: 10 bulk payout operations per hour (VERY restrictive - bulk operation)
+    const rateLimitResult = await RateLimiters.financialOperations(req, session);
+    if (rateLimitResult) return rateLimitResult;
 
     // 48-hour dispute buffer — lessons must be at least 2 days old before becoming payout-eligible
     const bufferCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest) {
             reason: `abn_not_verified (status: ${inst.abnStatus ?? 'PENDING'})`,
           };
         }
-        return executeInstructorPayout(e.instructorId, session.user.id);
+        return executeInstructorPayout(e.instructorId, session!.user.id);
       }),
     );
 

@@ -80,8 +80,9 @@ export function getAccountFeatures(account: {
     // White label: full removal of DriveBook branding — BUSINESS only, not yet active
     whiteLabel: isBusiness,           // phase 2: activate when direct payments ready
 
-    // Direct payments: student money goes to school Stripe, not DriveBook — not yet implemented
-    directPayments: false,            // phase 2: flip to isBusiness when implemented
+    // Direct payments: student money goes to instructor's own Stripe, not DriveBook
+    // Active for BUSINESS accounts with accountType === 'BUSINESS'
+    directPayments: isBusiness,       // phase 2 complete — activated for BUSINESS accounts
 
     // Multi-instructor: PRO and above
     multiInstructor: isPro,

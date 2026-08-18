@@ -522,7 +522,7 @@ export default function AdminInstructorProfilePage() {
   
   const [instructor, setInstructor] = useState<InstructorData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'subscription' | 'bookings' | 'documents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'subscription' | 'bookings' | 'documents' | 'business'>('overview');
   const [nudgeLoading, setNudgeLoading] = useState(false);
   const [nudgeResult, setNudgeResult] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -742,6 +742,16 @@ export default function AdminInstructorProfilePage() {
                 }`}
               >
                 Documents
+              </button>
+              <button
+                onClick={() => setActiveTab('business')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                  activeTab === 'business'
+                    ? 'border-violet-500 text-violet-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                Business / Payment
               </button>
             </nav>
           </div>
@@ -1110,6 +1120,59 @@ export default function AdminInstructorProfilePage() {
             {/* Documents Tab */}
             {activeTab === 'documents' && (
               <AdminDocumentsTab instructorId={instructor.id} instructor={instructor} licenseStatus={licenseStatus} insuranceStatus={insuranceStatus} policeStatus={policeStatus} wwcStatus={wwcStatus} />
+            )}
+
+            {/* Business / Payment Tab */}
+            {activeTab === 'business' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100 mb-3">Business & Payment Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">Payment Mode</p>
+                      <p className="text-slate-100 font-medium">{(instructor as any).paymentMode ?? (instructor as any).payoutMethod ?? 'STRIPE'}</p>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">ABN</p>
+                      <p className="text-slate-100 font-medium">{instructor.abn ?? '—'}</p>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">ABN Verified</p>
+                      <p className={`font-medium ${instructor.abnVerified ? 'text-green-400' : 'text-amber-400'}`}>
+                        {instructor.abnVerified ? 'Verified' : 'Not verified'}
+                      </p>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">Stripe Account</p>
+                      <p className="text-slate-100 font-medium text-xs break-all">{instructor.stripeAccountId ?? '—'}</p>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">Bank BSB</p>
+                      <p className="text-slate-100 font-medium">{(instructor as any).bankBsb ?? '—'}</p>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">Bank Account</p>
+                      <p className="text-slate-100 font-medium">
+                        {(instructor as any).bankAccount
+                          ? `••••${String((instructor as any).bankAccount).slice(-4)}`
+                          : '—'}
+                      </p>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">Account Name</p>
+                      <p className="text-slate-100 font-medium">{(instructor as any).bankAccountName ?? '—'}</p>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 mb-1">Payout Hold</p>
+                      <p className={`font-medium ${(instructor as any).payoutHold ? 'text-red-400' : 'text-green-400'}`}>
+                        {(instructor as any).payoutHold
+                          ? `On hold — ${(instructor as any).payoutHoldReason ?? 'no reason'}`
+                          : 'Clear'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>

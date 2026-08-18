@@ -104,8 +104,8 @@ export async function POST(
       await prisma.auditLog.create({
         data: {
           action: 'WALLET_DEDUCTED',
-          actorId: session.user.id,
-          actorRole: session.user.role,
+          actorId: session!.user.id,
+          actorRole: session!.user.role,
           targetType: 'WALLET',
           targetId: wallet.id,
           success: true,

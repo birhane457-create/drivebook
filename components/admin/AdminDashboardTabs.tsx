@@ -37,6 +37,7 @@ interface DashboardProps {
   recentBookings: any[]
   // Set to true when the DB query block failed — distinguishes "real zeros" from "data unavailable"
   dataUnavailable?: boolean
+  errorDetails?: string | null
 }
 
 type Tab = 'overview' | 'operations' | 'intelligence' | 'risk'
@@ -64,6 +65,7 @@ export default function AdminDashboardTabs(props: DashboardProps) {
     endedConfirmed, expiringDocs, unverifiedABNs, openDisputes,
     recentBookings,
     dataUnavailable = false,
+    errorDetails = null,
   } = props
 
   const alertCount = (pendingInstructors > 0 ? 1 : 0) +
@@ -102,9 +104,20 @@ export default function AdminDashboardTabs(props: DashboardProps) {
 
           {/* Data unavailable banner — shown when DB query block threw an exception */}
           {dataUnavailable && (
-            <div className="flex items-center gap-3 bg-red-900/20 border border-red-700/50 rounded-xl px-4 py-3 text-sm text-red-300">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>Dashboard data is temporarily unavailable — a database query failed. Figures below may be zero or stale. Refresh to retry.</span>
+            <div className="bg-red-900/20 border border-red-700/50 rounded-xl px-4 py-3">
+              <div className="flex items-center gap-3 text-sm text-red-300 mb-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span className="font-semibold">Dashboard data is partially or fully unavailable</span>
+              </div>
+              <p className="text-xs text-red-400 ml-7">
+                {errorDetails || 'Some database queries failed. Figures below may be zero or stale.'}
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="ml-7 mt-2 text-xs text-red-400 hover:text-red-300 underline"
+              >
+                Refresh page to retry
+              </button>
             </div>
           )}
 

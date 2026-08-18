@@ -275,17 +275,19 @@ export default async function DashboardPage() {
   // Merge: replace the placeholder upcoming bookings with the tz-correct set
   ;(instructor as any).bookings = upcomingBookings
 
-  // ── Supplementary queries — all individually guarded with .catch() ─────────
-  // Each query can fail independently without degrading the others.
+  // ── Supplementary queries using Promise.allSettled for partial failure resilience ─────────
+  // Each query can fail independently without blocking other data from loading.
   // instructor data above is already loaded; these add stats and widget data.
-  const [
-    totalRevenue,
-    lastMonthRevenue,
-    clientsWithPackages,
-    inactiveClients,
-    totalClientCount,
-    todayBookings,
-  ] = await Promise.all([
+  let totalRevenue = { _sum: { price: 0 } }
+  let lastMonthRevenue = { _sum: { price: 0 } }
+  let clientsWithPackages: any[] = []
+  let inactiveClients: any[] = []
+  let totalClientCount = 0
+  let todayBookings: any[] = []
+  let dataPartiallyUnavailable = false
+  let failedQueries: string[] = []
+
+  const results = await Promise.allSettled([
     prisma.booking.aggregate({
       where: {
         instructorId: session.user.instructorId,
@@ -293,7 +295,7 @@ export default async function DashboardPage() {
         startTime: { gte: startOfMonth, lte: endOfMonth },
       },
       _sum: { price: true },
-    }).catch(() => ({ _sum: { price: 0 } })),
+    }),
     prisma.booking.aggregate({
       where: {
         instructorId: session.user.instructorId,
@@ -301,8 +303,8 @@ export default async function DashboardPage() {
         startTime: { gte: startOfLastMonth, lte: endOfLastMonth },
       },
       _sum: { price: true },
-    }).catch(() => ({ _sum: { price: 0 } })),
-    // Clients with unused paid package hours — paid only, sorted by oldest activity first
+    }),
+    // Clients with unused paid package hours
     prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
@@ -319,8 +321,8 @@ export default async function DashboardPage() {
       },
       orderBy: { updatedAt: 'asc' },
       take: 5,
-    }).catch(() => []),
-    // Inactive clients who had lessons but no booking in 21+ days
+    }),
+    // Inactive clients
     prisma.client.findMany({
       where: {
         instructorId: session.user.instructorId,
@@ -345,11 +347,10 @@ export default async function DashboardPage() {
       },
       orderBy: { createdAt: 'asc' },
       take: 5,
-    }).catch(() => []),
+    }),
     prisma.client.count({
       where: { instructorId: session.user.instructorId },
-    }).catch(() => 0),
-    // Today's bookings for the Today Workspace — all statuses so progress is accurate
+    }),
     prisma.booking.findMany({
       where: {
         instructorId: session.user.instructorId,
@@ -357,20 +358,44 @@ export default async function DashboardPage() {
         deletedAt: null,
       } as any,
       select: {
-        id:           true,
-        startTime:    true,
-        endTime:      true,
-        duration:     true,
-        status:       true,
-        clientName:   true,
-        clientPhone:  true,
+        id: true,
+        startTime: true,
+        endTime: true,
+        duration: true,
+        status: true,
+        clientName: true,
+        clientPhone: true,
         pickupAddress: true,
-        price:        true,
+        price: true,
         client: { select: { phone: true } },
       },
       orderBy: { startTime: 'asc' },
-    }).catch(() => []),
+    }),
   ])
+
+  // Process results - use defaults for failed queries but track failures
+  if (results[0].status === 'fulfilled') totalRevenue = results[0].value as any
+  else failedQueries.push('this month revenue')
+  
+  if (results[1].status === 'fulfilled') lastMonthRevenue = results[1].value as any
+  else failedQueries.push('last month revenue')
+  
+  if (results[2].status === 'fulfilled') clientsWithPackages = results[2].value
+  else failedQueries.push('clients with packages')
+  
+  if (results[3].status === 'fulfilled') inactiveClients = results[3].value
+  else failedQueries.push('inactive clients')
+  
+  if (results[4].status === 'fulfilled') totalClientCount = results[4].value
+  else failedQueries.push('client count')
+  
+  if (results[5].status === 'fulfilled') todayBookings = results[5].value
+  else failedQueries.push('today bookings')
+
+  if (failedQueries.length > 0) {
+    dataPartiallyUnavailable = true
+    console.error('Instructor dashboard partial failure:', failedQueries.join(', '))
+  }
 
   // Normalise today bookings — phone may be on clientPhone or client relation
   const todayWorkspaceBookings = todayBookings.map((b: any) => ({

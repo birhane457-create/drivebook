@@ -76,7 +76,7 @@ export async function POST(
     const booking = await prisma.booking.findFirst({
       where: bookingWhere,
       include: {
-        instructor: { select: { name: true, phone: true } },
+        instructor: { select: { name: true, phone: true, paymentMode: true, subscriptionTier: true } },
         client: { select: { name: true, phone: true, userId: true } },
       },
     }) as any;
@@ -186,31 +186,52 @@ export async function POST(
         });
       } else {
         console.warn(`[check-out] Transaction missing for booking ${bookingId}, creating now`);
-        
-        const { PaymentService } = await import('@/lib/services/payment');
-        const paymentService = new PaymentService();
-        
-        const calculation = await paymentService.calculateCommission(
-          booking.instructorId,
-          booking.clientId,
-          booking.price
-        );
+
+        // ── DIRECT mode: zero commission, full price to instructor ───────────
+        // DIRECT instructors are paid via their own Stripe account — no DriveBook
+        // commission. Transaction records the full price as instructorPayout.
+        const isDirectMode = booking.instructor?.paymentMode === 'DIRECT'
+
+        let txAmount: number
+        let txPlatformFee: number
+        let txInstructorPayout: number
+        let txCommissionRate: number
+        let txDescription: string
+
+        if (isDirectMode) {
+          txAmount = booking.price
+          txPlatformFee = 0
+          txInstructorPayout = booking.price
+          txCommissionRate = 0
+          txDescription = 'Direct booking payment — no commission'
+        } else {
+          const { PaymentService } = await import('@/lib/services/payment');
+          const paymentService = new PaymentService();
+          const calculation = await paymentService.calculateCommission(
+            booking.instructorId,
+            booking.clientId,
+            booking.price
+          );
+          txAmount = calculation.totalAmount
+          txPlatformFee = calculation.platformFee
+          txInstructorPayout = calculation.instructorPayout
+          txCommissionRate = calculation.commissionRate
+          txDescription = `Booking payment - ${calculation.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`
+        }
 
         await (tx as any).transaction.create({
           data: {
             bookingId,
             instructorId: booking.instructorId,
             type: 'BOOKING_PAYMENT',
-            amount: calculation.totalAmount,
-            platformFee: calculation.platformFee,
-            instructorPayout: calculation.instructorPayout,
-            commissionRate: calculation.commissionRate,
-            status: 'COMPLETED', // Immediately completed since booking is done
+            amount: txAmount,
+            platformFee: txPlatformFee,
+            instructorPayout: txInstructorPayout,
+            commissionRate: txCommissionRate,
+            status: 'COMPLETED',
             processedAt: new Date(),
-            description: `Booking payment - ${calculation.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
-            metadata: {
-              isFirstBooking: calculation.isFirstBooking,
-            },
+            description: txDescription,
+            metadata: isDirectMode ? { paymentMode: 'DIRECT' } : undefined,
           }
         });
       }

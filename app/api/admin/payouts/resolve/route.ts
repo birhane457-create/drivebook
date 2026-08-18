@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     // Rate limit: 5 payout mutations per minute per admin — prevents runaway scripts
     // and limits blast radius from a compromised admin account.
-    const rateLimitId = getRateLimitIdentifier(session.user.id, req.headers.get('x-forwarded-for'), 'payout-resolve');
+    const rateLimitId = getRateLimitIdentifier(session!.user.id, req.headers.get('x-forwarded-for'), 'payout-resolve');
     const rateLimitResult = await checkRateLimitStrict(payoutRateLimit, rateLimitId);
     if (!rateLimitResult.success) {
       return NextResponse.json(
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const adminId = session.user.id;
+    const adminId = session!.user.id;
     const now = new Date();
 
     // ── Execute action ───────────────────────────────────────────────────────

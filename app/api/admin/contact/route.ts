@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const adminName = (session.user as any).name || 'DriveBook Support';
+    const adminName = (session!.user as any).name || 'DriveBook Support';
     const results: string[] = [];
 
     // Send email
@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
     await prisma.auditLog.create({
       data: {
         action: 'ADMIN_CONTACT_SENT',
-        actorId: session.user.id!,
-        actorRole: session.user.role,
+        actorId: session!.user.id!,
+        actorRole: session!.user.role,
         targetType: 'USER',
         targetId: user.id,
         ipAddress: req.headers.get('x-forwarded-for') || 'unknown',

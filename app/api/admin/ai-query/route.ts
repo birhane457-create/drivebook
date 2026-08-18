@@ -100,8 +100,8 @@ export async function POST(req: NextRequest) {
   const deny = await requirePermission(session, PERM.PLATFORM_COPILOT_VIEW)
   if (deny) return deny
 
-  const actorId    = session.user.id ?? 'unknown'
-  const actorEmail = session.user.email ?? 'unknown'
+  const actorId    = session!.user.id ?? 'unknown'
+  const actorEmail = session!.user.email ?? 'unknown'
   const ipAddress  = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined
 
   // ── 2. Rate limit — 20 AI queries per minute per admin ───────────────────

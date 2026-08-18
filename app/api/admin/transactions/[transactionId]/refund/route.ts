@@ -7,6 +7,7 @@ import { smsService } from '@/lib/services/sms';
 import { recordFullRefund } from '@/lib/services/ledger-operations';
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
+import { RateLimiters } from '@/lib/middleware/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,10 @@ export async function POST(
     const session = await getServerSession(authOptions);
     const deny = await requirePermission(session, PERM.FINANCE_DISPUTES_MANAGE);
     if (deny) return deny;
+
+    // Rate limit: 10-30 refunds per hour (financial operation)
+    const rateLimitResult = await RateLimiters.financialOperations(req, session);
+    if (rateLimitResult) return rateLimitResult;
 
     let amount, reason, deductFromInstructor;
     
@@ -127,7 +132,7 @@ export async function POST(
         platformFee: refundPlatformFee,
         instructorPayout: refundInstructorPayout,
         reason: reason || 'Admin refund',
-        createdBy: session.user.id
+        createdBy: session!.user.id
       });
     } catch (ledgerErr) {
       console.error('Warning: Ledger entry failed for refund:', ledgerErr);

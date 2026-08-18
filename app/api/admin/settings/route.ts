@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
           bookingSettings: settings.booking,
           notificationChannels: settings.notifications,
         },
-        updatedBy: session.user.id ?? 'admin',
+        updatedBy: session!.user.id ?? 'admin',
       },
       update: {
         metadata: {
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
           bookingSettings: settings.booking,
           notificationChannels: settings.notifications,
         },
-        updatedBy: session.user.id ?? 'admin',
+        updatedBy: session!.user.id ?? 'admin',
       },
     })
 

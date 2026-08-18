@@ -1,4 +1,116 @@
-﻿## Session: 2026-08-11 — Admin RBAC Permission Enforcement
+﻿## Session: 2026-08-12 — Per-Student Progress Drill-Down + Trend Chart
+
+### Summary
+Added a Progress tab to the instructor client detail page at `/dashboard/clients/[id]`.
+The tab fetches the lesson feedback summary scoped to the specific client and shows
+a trend chart, latest lesson summary, top focus/strength areas, and full feedback history.
+
+### Client detail page (`/dashboard/clients/[id]`) — UPDATED
+- **Tab switcher** added: Bookings | Progress
+- **Parallel fetch** — client data and instructor settings loaded simultaneously
+  (was sequential; settings fetch was not present before)
+- **Progress tab** (`ProgressTab` component):
+  - Stats row: lessons reviewed, feedback rate, mock avg score
+  - **Trend chart** (`SkillTrendBar`): bar chart showing focus area count per lesson,
+    coaching = slate, mock = sky, oldest left → newest right. Pure CSS, no chart library.
+  - **Latest lesson card**: topics covered, next lesson focus (prominent), mock score if applicable
+  - **Top focus areas / strengths**: translated strings from summary API, top 4 each
+  - **Feedback history**: expandable per lesson, next focus icon badge when collapsed,
+    notes visible when expanded, direct link to booking detail
+  - Empty state when no feedback recorded for this client
+- Settings fetch wired so booking history dates use instructor timezone (was missing)
+
+### Trend chart design
+- Focus area count per lesson (not mock score) — works for both COACHING and MOCK
+- Coaching = muted bar, Mock = sky blue bar (visually distinct without a legend key)
+- Absence of data in a lesson = short bar (min 8% height) not invisible
+- Only rendered when 2+ lessons with feedback exist
+
+### Files changed
+- `app/dashboard/clients/[id]/page.tsx`
+
+---
+## Session: 2026-08-12 — Progress & Feedback System Rebuild
+
+### Summary
+Full redesign and implementation of the student progress and lesson feedback system.
+Core product decision: coaching lessons are qualitative (no score), mock assessments are scored.
+"The 97% problem" is eliminated — normal lessons never produce a percentage.
+Student progress is based on observed strengths, focus areas, and skill progression — not a calculated number.
+
+### Product decisions locked in
+- `performanceScore` is MOCK assessment only — server enforced, client cannot override
+- `passed` is MOCK only — server computed from score ≥ 80 + zero critical codes
+- COACHING feedback captures: what was covered, what went well, what to focus on, next lesson priority
+- Skill states: NEEDS_ATTENTION / IMPROVING / GOOD / NOT_OBSERVED
+  - Absence of a code does NOT imply improvement — only explicit observation counts
+  - IMPROVING = previously in `lessonFeedback[]`, subsequently in `studentStrengths[]`
+- `nextLessonFocus` is first-class metadata — shown prominently to student, included in notification
+- Test readiness → "Mock assessment readiness" with disclaimer (not a confidence percentage)
+
+### Feedback POST route (`/api/instructor/lesson-feedback`)
+- **Added `studentStrengthCodes[]`** — explicit strength recording, stored in `studentStrengths` field (was ignored before)
+- **Added `nextLessonFocus`** — stored in `booking.metadata.nextLessonFocus` (no schema migration needed)
+- **Added status check** — feedback only accepted for `status === 'COMPLETED'` bookings
+- **Server enforces scoring rules** — COACHING: score=null, passed=null (always); MOCK: calculated from codes
+- **Detects resubmission** — `isResubmission` flag in response when updating existing feedback
+- **Student notification** — after save, fires `createNotification()` to client.userId with nextLessonFocus snippet
+- **Legacy fields** — `strengths`, `areasToImprove` still accepted for backward compat, concatenated into notes
+
+### Summary API (`/api/instructor/lesson-feedback/summary`)
+- **`totalLessons` fix** — `COMPLETED` only (was COMPLETED + past CONFIRMED, inflating count)
+- **`topStrengths` fix** — from explicit `studentStrengths[]` codes (was broken heuristic based on score ≥ 85)
+- **`averageScore` fix** — MOCK assessments only (was all bookings, mixed COACHING nulls)
+- **`?clientId=` filter** — optional query param to scope to a single student
+- **New fields** — `mockCount`, `coachingCount` for UI breakdown
+- **recentFeedback shape** — `focusAreaCodes`, `strengthCodes`, `assessmentType`, `lessonTopics`, `nextLessonFocus` per row
+
+### Student progress API (`/api/client/progress`) — NEW
+- Scoped to `client.userId` only — IDOR protected
+- `instructorNotes` never returned (private to instructor)
+- PDA codes translated to plain English (`shortText`, `tip`, `category`) server-side
+- Skill states computed server-side from last 5 lessons with feedback
+- COACHING and MOCK clearly separated in response
+- `nextLessonFocus` surfaced first-class
+- Mock assessments use label ("On track" / "Improvement recommended") not raw percentage
+- Disclaimer text included in response: "not an official result"
+- `hasData: false` when no feedback exists — clean empty state
+
+### Skill state computation logic
+```
+For each PDA category across last 5 lessons with feedback (SKILL_WINDOW = 5):
+  GOOD            → code in studentStrengths[] in most recent lesson
+  IMPROVING       → code was in lessonFeedback[] previously, then studentStrengths[] later
+  NEEDS_ATTENTION → code in lessonFeedback[] in most recent lesson
+  NOT_OBSERVED    → no observation in either direction
+Category state = worst state among its constituent codes
+```
+
+### Client progress page (`/client-dashboard/progress`) — REBUILT
+- Fetches `/api/client/progress` (was `/api/client/my-performance`)
+- **Latest lesson**: topics, strengths, focus areas with tips, next lesson focus prominent
+- **Your development**: skill states per category — observed skills first, not-yet-observed collapsed
+- **Mock assessments**: score + label + disclaimer, no invented readiness percentage
+- **Lesson history**: expandable per lesson, coaching/mock badge, MOCK score only
+- `instructorNotes` removed — never shown to student
+- Footer explains COACHING vs MOCK distinction
+
+### Instructor progress page (`/dashboard/progress`) — UPDATED
+- Parallel fetch for settings + summary (was sequential)
+- Stats updated: Mock Avg Score (MOCK only), coaching/mock breakdown counts
+- Recent feedback: shows `nextLessonFocus` inline, COACHING shows count summary not score
+- Expanded view removed instructor notes exposure (kept — instructor sees their own notes)
+
+### Files changed
+- `app/api/instructor/lesson-feedback/route.ts`
+- `app/api/instructor/lesson-feedback/summary/route.ts`
+- `app/api/client/progress/route.ts` (new)
+- `app/client-dashboard/progress/page.tsx` (rebuilt)
+- `app/dashboard/progress/page.tsx` (updated)
+
+---
+## Session: 2026-08-11 — Admin RBAC Permission Enforcement
+
 
 ### Summary
 Full implementation of granular admin permissions per RBAC-SPEC.md. Every admin API route now enforces a specific permission from the 47-permission catalogue instead of the old blanket `role === 'ADMIN'` check. AdminNav filters navigation items by the current admin's permission array.

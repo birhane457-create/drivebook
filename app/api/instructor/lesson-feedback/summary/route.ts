@@ -14,20 +14,31 @@ export async function GET(req: NextRequest) {
     }
 
     const instructorId = session.user.instructorId;
+    const { searchParams } = new URL(req.url);
+    // Optional: filter to a specific client's progress
+    const clientId = searchParams.get('clientId') ?? undefined;
 
     // Get all bookings with feedback for this instructor
-    const bookingsWithFeedback = await prisma.booking.findMany({
+    const bookingsWithFeedback: any[] = await prisma.booking.findMany({
       where: {
         instructorId,
         feedbackGivenAt: { not: null },
+        // Only COMPLETED lessons — avoids inflating stats with cancelled/pending
+        status: 'COMPLETED',
+        ...(clientId ? { clientId } : {}),
       },
       select: {
         id: true,
         startTime: true,
         lessonFeedback: true,
+        studentStrengths: true,
         performanceScore: true,
         instructorNotes: true,
         feedbackGivenAt: true,
+        assessmentType: true,
+        lessonTopics: true,
+        passed: true,
+        // metadata: true,  // Not in schema - access via (booking as any).metadata
         client: {
           select: { name: true },
         },
@@ -35,43 +46,44 @@ export async function GET(req: NextRequest) {
       orderBy: { startTime: 'desc' },
     });
 
-    // Total lessons (completed or confirmed past)
+    // Total COMPLETED lessons (with or without feedback)
     const totalLessons = await prisma.booking.count({
       where: {
         instructorId,
-        status: { in: ['COMPLETED', 'CONFIRMED'] },
-        startTime: { lt: new Date() },
+        status: 'COMPLETED',
+        ...(clientId ? { clientId } : {}),
       },
     });
 
     const totalLessonsWithFeedback = bookingsWithFeedback.length;
 
-    // Average performance score
-    const scoresWithValue = bookingsWithFeedback.filter(b => b.performanceScore !== null);
+    // Average score — MOCK assessments only
+    // COACHING lessons have null score by design — never included in average
+    const mockLessons = bookingsWithFeedback.filter(
+      b => b.assessmentType === 'MOCK' && b.performanceScore !== null
+    );
     const averageScore =
-      scoresWithValue.length > 0
+      mockLessons.length > 0
         ? Math.round(
-            scoresWithValue.reduce((sum, b) => sum + (b.performanceScore ?? 0), 0) /
-              scoresWithValue.length
+            mockLessons.reduce((sum, b) => sum + (b.performanceScore ?? 0), 0) /
+              mockLessons.length
           )
         : null;
 
-    // Aggregate all feedback codes to find top focus areas and strengths
-    const allCodes: number[] = [];
+    // ── Top focus areas — most frequently flagged PDA codes ─────────────────
+    const allFocusCodes: number[] = [];
     bookingsWithFeedback.forEach(b => {
       if (Array.isArray(b.lessonFeedback)) {
-        allCodes.push(...(b.lessonFeedback as number[]));
+        allFocusCodes.push(...(b.lessonFeedback as number[]));
       }
     });
 
-    // Count code frequency
-    const codeFrequency: Record<number, number> = {};
-    allCodes.forEach(code => {
-      codeFrequency[code] = (codeFrequency[code] || 0) + 1;
+    const focusFrequency: Record<number, number> = {};
+    allFocusCodes.forEach(code => {
+      focusFrequency[code] = (focusFrequency[code] || 0) + 1;
     });
 
-    // Top focus areas (most frequent codes)
-    const topFocusAreas = Object.entries(codeFrequency)
+    const topFocusAreas = Object.entries(focusFrequency)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
       .map(([code]) => {
@@ -80,39 +92,57 @@ export async function GET(req: NextRequest) {
       })
       .filter(Boolean) as string[];
 
-    // Top strengths — bookings with high scores (>=85) — extract their category names
-    const highScoreBookings = bookingsWithFeedback.filter(
-      b => (b.performanceScore ?? 0) >= 85
-    );
-    const strengthCategories: Record<string, number> = {};
-    highScoreBookings.forEach(b => {
-      if (Array.isArray(b.lessonFeedback) && (b.lessonFeedback as number[]).length === 0) {
-        // No issues = all categories are strengths
-        strengthCategories['Overall Control'] = (strengthCategories['Overall Control'] || 0) + 1;
-        strengthCategories['Observation'] = (strengthCategories['Observation'] || 0) + 1;
+    // ── Top strengths — most frequently recorded in studentStrengths[] ───────
+    // Only uses explicitly recorded strength codes — not inferred from score.
+    // "Not in lessonFeedback" does NOT mean strength; must be explicitly observed.
+    const allStrengthCodes: number[] = [];
+    bookingsWithFeedback.forEach(b => {
+      if (Array.isArray(b.studentStrengths) && (b.studentStrengths as number[]).length > 0) {
+        allStrengthCodes.push(...(b.studentStrengths as number[]));
       }
     });
-    const topStrengths = Object.entries(strengthCategories)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 3)
-      .map(([name]) => name);
 
-    // Recent feedback (last 20)
-    const recentFeedback = bookingsWithFeedback.slice(0, 20).map(b => ({
-      id: b.id,
-      bookingId: b.id,
-      clientName: b.client?.name ?? 'Unknown',
-      date: b.startTime?.toISOString() ?? b.feedbackGivenAt?.toISOString() ?? '',
-      performanceScore: b.performanceScore,
-      feedbackCodes: Array.isArray(b.lessonFeedback) ? (b.lessonFeedback as number[]) : [],
-      strengthCodes: [],
-      notes: b.instructorNotes,
-    }));
+    const strengthFrequency: Record<number, number> = {};
+    allStrengthCodes.forEach(code => {
+      strengthFrequency[code] = (strengthFrequency[code] || 0) + 1;
+    });
+
+    const topStrengths = Object.entries(strengthFrequency)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([code]) => {
+        const fb = getFeedbackByCode(Number(code));
+        return fb ? `${getCategoryDisplayName(fb.category)}: ${fb.shortText}` : null;
+      })
+      .filter(Boolean) as string[];
+
+    // Recent feedback (last 20) — most recent first
+    const recentFeedback = bookingsWithFeedback.slice(0, 20).map(b => {
+      const meta = (b.metadata as any) ?? {};
+      return {
+        id: b.id,
+        bookingId: b.id,
+        clientName: b.client?.name ?? 'Unknown',
+        date: b.startTime?.toISOString() ?? b.feedbackGivenAt?.toISOString() ?? '',
+        assessmentType: b.assessmentType ?? 'COACHING',
+        // Score only present for MOCK
+        performanceScore: b.assessmentType === 'MOCK' ? b.performanceScore : null,
+        passed: b.assessmentType === 'MOCK' ? b.passed : null,
+        focusAreaCodes: Array.isArray(b.lessonFeedback) ? (b.lessonFeedback as number[]) : [],
+        strengthCodes: Array.isArray(b.studentStrengths) ? (b.studentStrengths as number[]) : [],
+        lessonTopics: b.lessonTopics ?? null,
+        notes: b.instructorNotes,
+        nextLessonFocus: meta.nextLessonFocus ?? null,
+      };
+    });
 
     return NextResponse.json({
       totalLessonsWithFeedback,
       totalLessons,
+      // averageScore only from MOCK — null if no mock assessments yet
       averageScore,
+      mockCount: mockLessons.length,
+      coachingCount: bookingsWithFeedback.filter(b => b.assessmentType !== 'MOCK').length,
       recentFeedback,
       topFocusAreas,
       topStrengths,

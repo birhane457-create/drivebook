@@ -61,7 +61,7 @@ export async function POST(
 
     await sendOnboardingStep(profile, stepId, step.version, {
       force: true,                          // always send regardless of prior sends
-      triggeredBy: session.user.id!,        // recorded in audit log
+      triggeredBy: session!.user.id!,        // recorded in audit log
     })
 
     return NextResponse.json({

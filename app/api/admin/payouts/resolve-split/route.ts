@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const adminId = session.user.id;
+    const adminId = session!.user.id;
     const now = new Date();
 
     // ── Generate or reuse resolutionGroupId ──────────────────────────────────

@@ -42,8 +42,8 @@ export async function POST(
     await prisma.auditLog.create({
       data: {
         action: 'DOCUMENTS_APPROVED',
-        actorId: session.user.id,
-        actorRole: session.user.role,
+        actorId: session!.user.id,
+        actorRole: session!.user.role,
         targetType: 'Instructor',
         targetId: params.instructorId,
         metadata: {

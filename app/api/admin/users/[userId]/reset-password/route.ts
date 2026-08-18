@@ -70,8 +70,8 @@ export async function POST(
     await prisma.auditLog.create({
       data: {
         action: 'ADMIN_PASSWORD_RESET_SENT',
-        actorId: session.user.id!,
-        actorRole: session.user.role,
+        actorId: session!.user.id!,
+        actorRole: session!.user.role,
         targetType: 'USER',
         targetId: user.id,
         ipAddress: req.headers.get('x-forwarded-for') || 'unknown',

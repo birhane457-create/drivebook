@@ -13,6 +13,7 @@ import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
 import { logger } from '@/lib/logger';
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
+import { RateLimiters } from '@/lib/middleware/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,6 +136,10 @@ export async function POST(
     const session = await getServerSession(authOptions);
     const deny = await requirePermission(session, PERM.USERS_INSTRUCTORS_MANAGE_SUBSCRIPTION);
     if (deny) return deny;
+
+    // Rate limit: 20 subscription changes per hour per admin
+    const rateLimitResult = await RateLimiters.highImpactOperations(req, session);
+    if (rateLimitResult) return rateLimitResult;
 
     const body = await req.json();
     const { action, reason } = body;

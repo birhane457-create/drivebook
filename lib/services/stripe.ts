@@ -92,8 +92,75 @@ export class StripeService {
   }
 
   /**
-   * Create a Stripe Connect account for an instructor
+   * Create a payment intent for a DIRECT mode booking.
+   *
+   * DIRECT mode = BUSINESS tier instructor. Student pays the instructor's own
+   * Stripe Connect account directly. No commission deducted. No transfer step.
+   * DriveBook earns via flat subscription fee only.
+   *
+   * Stripe mechanism: Direct Charge with on_behalf_of + transfer_data.destination
+   * pointing to the instructor's stripeAccountId. The full amount lands in the
+   * instructor's Stripe balance immediately.
+   *
+   * Requirements:
+   *   - instructor.stripeAccountId must exist and have charges_enabled = true
+   *   - instructor.paymentMode === 'DIRECT'
+   *   - instructor.accountType === 'BUSINESS'
    */
+  async createDirectPaymentIntent(params: {
+    amount: number
+    instructorStripeAccountId: string
+    bookingId: string
+    clientEmail: string
+    description: string
+    instructorId: string
+  }) {
+    const {
+      amount,
+      instructorStripeAccountId,
+      bookingId,
+      clientEmail,
+      description,
+      instructorId,
+    } = params
+
+    const amountInCents = Math.round(amount * 100)
+
+    try {
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: 'aud',
+        capture_method: 'automatic',
+        // Direct charge: payment goes straight to instructor's Stripe account
+        on_behalf_of: instructorStripeAccountId,
+        transfer_data: {
+          destination: instructorStripeAccountId,
+        },
+        ...(clientEmail ? { receipt_email: clientEmail } : {}),
+        description,
+        metadata: {
+          bookingId,
+          instructorId,
+          paymentMode: 'DIRECT',
+          // No commission — full amount is instructorPayout
+          platformFee: '0.00',
+          instructorPayout: amount.toFixed(2),
+          commissionRate: '0',
+        },
+      })
+
+      return {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        amount,
+        platformFee: 0,
+        instructorPayout: amount,
+      }
+    } catch (error) {
+      console.error('[stripe] createDirectPaymentIntent error:', error)
+      throw new Error('Failed to create direct payment intent')
+    }
+  }
   async createConnectAccount(params: CreateConnectAccountParams) {
     const { instructorId, email, name, phone } = params;
 

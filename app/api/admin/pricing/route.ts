@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
+import { RateLimiters } from '@/lib/middleware/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,10 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const deny = await requirePermission(session, PERM.FINANCE_PRICING_MANAGE);
     if (deny) return deny;
+
+    // Rate limit: 5 pricing changes per hour per admin (critical platform settings)
+    const rateLimitResult = await RateLimiters.settingsChanges(req, session);
+    if (rateLimitResult) return rateLimitResult;
 
     const body = await req.json();
     const data = pricingSchema.parse(body);

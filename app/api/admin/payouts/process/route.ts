@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
+import { RateLimiters } from '@/lib/middleware/rate-limit';
 export const dynamic = 'force-dynamic';
 
 // P1-10 FIX: Validate request body
@@ -20,6 +21,10 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_PROCESS);
     if (deny) return deny;
+
+    // Rate limit: 10 payouts per hour per admin
+    const rateLimitResult = await RateLimiters.financialOperations(req, session);
+    if (rateLimitResult) return rateLimitResult;
 
     const body = await req.json();
     const parsed = processPayoutSchema.safeParse(body);
@@ -45,13 +50,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Phase 1: validate + create payout record (no Stripe)
-    const { payoutId, alreadyPaid } = await buildPayout(instructorId, session.user.id, transactionIds);
+    const { payoutId, alreadyPaid } = await buildPayout(instructorId, session!.user.id, transactionIds);
     if (alreadyPaid) {
       return NextResponse.json({ success: true, status: 'PAID', payoutId, message: 'Already paid' });
     }
 
     // Phase 2: acquire lock + execute Stripe transfer
-    const result = await executePayout(payoutId, session.user.id);
+    const result = await executePayout(payoutId, session!.user.id);
 
     if (result.status === 'FAILED') {
       return NextResponse.json({ error: result.failureReason ?? 'Payout failed', ...result }, { status: 502 });

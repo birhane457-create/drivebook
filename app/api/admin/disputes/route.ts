@@ -118,14 +118,14 @@ export async function PATCH(req: NextRequest) {
       await prisma.auditLog.create({
         data: {
           action: 'DISPUTE_HOLD_RELEASED',
-          actorId: session.user.id,
+          actorId: session!.user.id,
           actorRole: 'ADMIN',
           targetType: 'DISPUTE',
           targetId: stripeDisputeId,
           success: true,
           metadata: {
             instructorId: dispute.instructorId,
-            releasedBy: session.user.id,
+            releasedBy: session!.user.id,
             stripeDisputeId,
           },
         },

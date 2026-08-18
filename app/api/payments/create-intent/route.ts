@@ -108,17 +108,21 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        instructor: { select: { id: true, name: true, businessName: true, accountType: true, paymentMode: true, subscriptionTier: true } }
+        instructor: { select: { id: true, name: true, businessName: true, accountType: true, paymentMode: true, subscriptionTier: true, stripeAccountId: true, chargesEnabled: true } }
       },
     }) as any;
 
-    // ── Payment mode guard (phase 2 safety net) ───────────────────────────────
+    // ── Payment mode routing ──────────────────────────────────────────────────
+    // DIRECT mode: BUSINESS instructor — charge goes straight to their Stripe account.
+    // Zero commission. Full amount is instructorPayout.
     if (booking?.instructor?.paymentMode === 'DIRECT') {
-      console.error(`[create-intent] instructor ${booking.instructor.id} has paymentMode=DIRECT which is not yet implemented`);
-      return NextResponse.json({
-        error: 'Direct payment mode is not yet available. Please contact support.',
-        code: 'PAYMENT_MODE_NOT_IMPLEMENTED',
-      }, { status: 503 });
+      if (!booking.instructor.stripeAccountId || !booking.instructor.chargesEnabled) {
+        return NextResponse.json({
+          error: 'This instructor has not completed Stripe Connect setup for direct payments.',
+          code: 'STRIPE_CONNECT_INCOMPLETE',
+        }, { status: 503 })
+      }
+      // Fall through to DIRECT intent creation below after auth check
     }
 
     if (!booking) {
@@ -270,6 +274,33 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       else if (client?.email) clientEmail = client.email;
     }
 
+    const instructorDisplayName = getDisplayName(booking.instructor);
+
+    // ── DIRECT mode: charge goes straight to instructor's own Stripe account ──
+    // Zero commission. No payout step. Instructor receives full amount immediately.
+    if (booking.instructor.paymentMode === 'DIRECT') {
+      const directIntent = await stripeService.createDirectPaymentIntent({
+        amount: paymentAmount,
+        instructorStripeAccountId: booking.instructor.stripeAccountId!,
+        bookingId: booking.id,
+        clientEmail: clientEmail ?? '',
+        description: `Driving lesson with ${instructorDisplayName}`,
+        instructorId: booking.instructorId,
+      });
+
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data: { paymentIntentId: directIntent.paymentIntentId } as any,
+      });
+
+      return NextResponse.json({
+        clientSecret: directIntent.clientSecret,
+        amount: directIntent.amount,
+        paymentMode: 'DIRECT',
+      });
+    }
+
+    // ── PLATFORM mode: charge through DriveBook Stripe, commission deducted ──
     // Get tier-aware commission rate from DB settings
     const commissionRate = await getCommissionRate(booking.instructor.subscriptionTier ?? 'BASIC');
 
@@ -280,7 +311,7 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       bookingId: booking.id,
       commissionRate,
       clientEmail: clientEmail ?? '',
-      description: `Driving lesson with ${getDisplayName(booking.instructor)}`,
+      description: `Driving lesson with ${instructorDisplayName}`,
     });
 
     // Update booking with payment intent ID

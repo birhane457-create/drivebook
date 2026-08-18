@@ -6,6 +6,7 @@ import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpe
 import { sendAdminCreditReceipt } from '@/lib/services/receipt-email';
 import { checkPermission } from '@/lib/rbac/checkPermission';
 import { PERM } from '@/lib/rbac/permissions';
+import { RateLimiters } from '@/lib/middleware/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,10 @@ export async function POST(
     const session = await getServerSession(authOptions);
     const check = await checkPermission(session, PERM.FINANCE_CREDITS_MANAGE);
     if (!check.allowed) return check.response;
+
+    // Rate limit: 20 credits per hour per admin
+    const rateLimitResult = await RateLimiters.financialOperations(req, session);
+    if (rateLimitResult) return rateLimitResult;
 
     const { amount, reason } = await req.json();
 
@@ -89,8 +94,8 @@ export async function POST(
       await prisma.auditLog.create({
         data: {
           action: 'WALLET_CREDITED',
-          actorId: session.user.id,
-          actorRole: session.user.role,
+          actorId: session!.user.id,
+          actorRole: session!.user.role,
           targetType: 'WALLET',
           targetId: wallet.id,
           success: true,
