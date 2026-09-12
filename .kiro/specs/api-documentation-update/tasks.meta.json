@@ -1,0 +1,139 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Set up project structure and core types": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587162
+      },
+      {
+        "executionId": "8d50fac8-1141-40c8-b635-94f3fed174ff",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788361497536
+      },
+      {
+        "executionId": "8d50fac8-1141-40c8-b635-94f3fed174ff",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788362874560
+      }
+    ],
+    "2.1 Create file system scanner for API routes": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587262
+      },
+      {
+        "executionId": "8d50fac8-1141-40c8-b635-94f3fed174ff",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788362910525
+      }
+    ],
+    "2.2 Create TypeScript AST parser for route metadata extraction": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587323
+      }
+    ],
+    "2.3 Build route registry and save to JSON": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587389
+      }
+    ],
+    "3. Checkpoint - Ensure discovery tool works": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587450
+      }
+    ],
+    "4.1 Create markdown template engine": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587506
+      }
+    ],
+    "4.2 Implement route categorization and sorting": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587578
+      }
+    ],
+    "4.3 Create documentation formatting utilities": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587668
+      }
+    ],
+    "4.4 Generate complete API reference documentation": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587717
+      }
+    ],
+    "5. Checkpoint - Ensure documentation generation works": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587774
+      }
+    ],
+    "6.1 Create markdown parser for existing documentation": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587836
+      }
+    ],
+    "6.2 Implement validation rules": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587884
+      }
+    ],
+    "6.3 Create validation report generator": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587935
+      }
+    ],
+    "7. Checkpoint - Ensure validation tool works": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359587984
+      }
+    ],
+    "8. Create npm scripts and CLI integration": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359588062
+      }
+    ],
+    "9. Create initial documentation baseline": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359588157
+      }
+    ],
+    "12. Final checkpoint and documentation review": [
+      {
+        "executionId": "4625e885-4165-45a8-a74a-e55042cf1f8e",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788359588206
+      }
+    ]
+  }
+}

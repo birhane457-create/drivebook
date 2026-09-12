@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Prisma migration for instructor-user relation",
+			"type": "shell",
+			"command": "npx prisma migrate dev --name add-instructor-user-relation"
+		}
+	]
+}

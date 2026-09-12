@@ -1,0 +1,962 @@
+'use client';
+import { DashboardPageLayout } from '@/components/ui'
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Palette, Upload, Eye, Save, Sparkles, Link2, Copy, Check,
+  MessageCircle, Globe, ShieldCheck, AlertCircle, Loader2, ExternalLink,
+} from 'lucide-react';
+import Image from 'next/image';
+
+// ── Instructor profile shape returned by /api/instructor/profile ─────────────
+interface InstructorProfile {
+  id: string
+  name: string
+  phone: string
+  subscriptionTier: string | null
+  accountType: 'INDIVIDUAL' | 'BUSINESS' | null
+  customSlug: string | null
+  customDomain: string | null
+  showBrandingOnBookingPage: boolean
+  hourlyRate: number | null
+}
+export default function BrandingPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const [instructor, setInstructor] = useState<InstructorProfile | null>(null);
+  const [brandLogo, setBrandLogo] = useState('');
+  const [brandColorPrimary, setBrandColorPrimary] = useState('#3B82F6');
+  const [brandColorSecondary, setBrandColorSecondary] = useState('#10B981');
+  const [showBrandingOnBookingPage, setShowBrandingOnBookingPage] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState('');
+  const [businessName, setBusinessName] = useState('');
+
+  // Slug (PRO+)
+  const [slug, setSlug] = useState('');
+  const [savedSlug, setSavedSlug] = useState('');
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [checkingSlug, setCheckingSlug] = useState(false);
+
+  // Social links
+  const [whatsapp, setWhatsapp] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [facebook, setFacebook] = useState('');
+  const [yearsExperience, setYearsExperience] = useState('');
+
+  // Custom domain (Studio+)
+  const [customDomain, setCustomDomain] = useState('');
+  const [savedCustomDomain, setSavedCustomDomain] = useState('');
+  const [domainVerified, setDomainVerified] = useState(false);
+  const [domainVerifiedAt, setDomainVerifiedAt] = useState<string | null>(null);
+  const [verifyingDomain, setVerifyingDomain] = useState(false);
+  const [domainVerifyResult, setDomainVerifyResult] = useState<{ verified: boolean; message?: string } | null>(null);
+
+  useEffect(() => { fetchData(); }, []);
+
+  const fetchData = async () => {
+    try {
+      const [profileRes, brandingRes] = await Promise.all([
+        fetch('/api/instructor/profile'),
+        fetch('/api/instructor/branding'),
+      ]);
+      if (profileRes.ok) {
+        const d = await profileRes.json();
+        setInstructor(d);
+        setWhatsapp(d.whatsapp || '');
+        setInstagram(d.instagram || '');
+        setFacebook(d.facebook || '');
+        setYearsExperience(d.yearsExperience?.toString() || '');
+      }
+      if (brandingRes.ok) {
+        const d = await brandingRes.json();
+        setBrandLogo(d.brandLogo || '');
+        setBrandColorPrimary(d.brandColorPrimary || '#3B82F6');
+        setBrandColorSecondary(d.brandColorSecondary || '#10B981');
+        setShowBrandingOnBookingPage(d.showBrandingOnBookingPage || false);
+        setLogoPreview(d.brandLogo || '');
+        setDomainVerified(d.domainVerified || false);
+        setDomainVerifiedAt(d.domainVerifiedAt || null);
+        setInstructor(prev => prev ? { ...prev, subscriptionTier: d.subscriptionTier, accountType: d.accountType ?? 'INDIVIDUAL' } : null);
+        setBusinessName(d.businessName || '');
+
+        // Slug (separate field)
+        setSlug(d.customSlug || '');
+        setSavedSlug(d.customSlug || '');
+
+        // Custom domain (Studio+)
+        setCustomDomain(d.customDomain || '');
+        setSavedCustomDomain(d.customDomain || '');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Please upload an image file'); return; }
+    if (file.size > 2 * 1024 * 1024) { setError('Logo must be less than 2MB'); return; }
+    setLogoFile(file);
+    setError('');
+    setShowBrandingOnBookingPage(true);
+    const reader = new FileReader();
+    reader.onloadend = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const checkSlugAvailability = async (value: string) => {
+    if (!value || value.length < 3) { setSlugAvailable(null); return; }
+    if (!/^[a-z0-9-]+$/.test(value)) { setSlugAvailable(false); return; }
+    setCheckingSlug(true);
+    try {
+      const res = await fetch(`/api/instructor/subdomain/check?subdomain=${value}`);
+      const data = await res.json();
+      setSlugAvailable(data.available);
+    } catch { setSlugAvailable(null); }
+    finally { setCheckingSlug(false); }
+  };
+
+  const handleSlugChange = (value: string) => {
+    const cleaned = value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    setSlug(cleaned);
+    if (cleaned !== savedSlug) {
+      setTimeout(() => checkSlugAvailability(cleaned), 500);
+    } else {
+      setSlugAvailable(null);
+    }
+  };
+
+  const copyUrl = (url: string, key: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleVerifyDomain = async () => {
+    if (!customDomain) return;
+    setVerifyingDomain(true);
+    setDomainVerifyResult(null);
+    try {
+      const res = await fetch('/api/instructor/domain/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: customDomain }),
+      });
+      const data = await res.json();
+      setDomainVerifyResult(data);
+      if (data.verified) {
+        setDomainVerified(true);
+        setDomainVerifiedAt(new Date().toISOString());
+        setSavedCustomDomain(customDomain);
+        await fetchData();
+      }
+    } catch {
+      setDomainVerifyResult({ verified: false, message: 'Verification request failed' });
+    } finally {
+      setVerifyingDomain(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError('');
+      setMessage('');
+
+      let logoUrl = brandLogo;
+      if (logoFile) {
+        const fd = new FormData();
+        fd.append('file', logoFile);
+        fd.append('type', 'brand-logo');
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd });
+        if (!uploadRes.ok) throw new Error('Failed to upload logo');
+        logoUrl = (await uploadRes.json()).url;
+      }
+
+      const tier = instructor?.subscriptionTier;
+      const isStudio = tier === 'STUDIO';
+
+      const [brandRes, profileRes] = await Promise.all([
+        fetch('/api/instructor/branding', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            brandLogo: logoUrl,
+            brandColorPrimary,
+            brandColorSecondary,
+            showBrandingOnBookingPage,
+            customSlug: slug || null,
+            customDomain: isStudio ? (customDomain || null) : null,
+            businessName: businessName.trim() || null,
+          }),
+        }),
+        fetch('/api/instructor/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: instructor?.name || '',
+            phone: instructor?.phone || '',
+            whatsapp: whatsapp || null,
+            instagram: instagram || null,
+            facebook: facebook || null,
+            yearsExperience: yearsExperience ? parseInt(yearsExperience) : null,
+          }),
+        }),
+      ]);
+
+      const errors: string[] = [];
+      if (!brandRes.ok) errors.push((await brandRes.json()).error || 'Failed to save branding');
+      if (!profileRes.ok) errors.push('Failed to save social links');
+      if (errors.length > 0) throw new Error(errors.join(' · '));
+
+      setMessage('All settings saved!');
+      setBrandLogo(logoUrl);
+      setLogoFile(null);
+      setSavedSlug(slug);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div><p>Loading...</p></div>;
+
+  const tier = instructor?.subscriptionTier;
+  const accountType = instructor?.accountType ?? 'INDIVIDUAL';
+  const features = {
+    customDomain: tier === 'STUDIO',
+    isBusiness:   accountType === 'BUSINESS',
+  };
+  const isBasic = tier === 'BASIC';
+  const isStudio = features.customDomain;
+
+  if (isBasic) {
+    return (
+      <div>
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-card rounded-2xl border border-border p-8 text-center">
+            <Sparkles className="h-16 w-16 text-purple-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-foreground mb-2">Upgrade to PRO</h2>
+            <p className="text-muted-foreground mb-6">Custom branding is available for PRO and above.</p>
+            <button onClick={() => router.push('/dashboard/subscription')}
+              className="bg-purple-600 hover:bg-purple-700 text-foreground px-6 py-3 rounded-lg font-semibold">
+              Upgrade Now
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="max-w-4xl mx-auto w-full overflow-hidden">
+        {/* Cross-link to Business Setup */}
+        <div className="mb-4 bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-blue-200 font-medium">Need to configure other business settings?</p>
+            <p className="text-xs text-blue-300 mt-0.5">
+              Visit{' '}
+              <a href="/business-setup" className="underline hover:text-blue-100 font-semibold text-blue-200">
+                Business Setup
+              </a>
+              {' '}to configure services, AI receptionist, terminology, and more.
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-2 flex-wrap">
+            <Palette className="h-7 w-7 sm:h-8 sm:w-8 text-purple-600 shrink-0" />
+            <span>Brand &amp; Public Page</span>
+          </h1>
+          <p className="text-muted-foreground mt-1">Manage your booking page, domain, and social links</p>
+        </div>
+
+        {message && <div className="mb-6 bg-green-900/20 border border-green-700/50 rounded-lg p-4"><p className="text-emerald-400">{message}</p></div>}
+        {error && <div className="mb-6 bg-red-900/20 border border-red-700/50 rounded-lg p-4"><p className="text-destructive">{error}</p></div>}
+
+        <div className="grid md:grid-cols-2 gap-6 w-full">
+          <div className="space-y-6 min-w-0 w-full">
+
+            {/* ── Slug section (PRO+, always shown) ── */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-purple-600" />
+                Your Booking URL
+                <span className="ml-auto text-xs font-semibold bg-violet-900/40 text-violet-300 px-2 py-0.5 rounded-full">PRO+</span>
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">Share this link with students to book directly with you</p>
+
+              {/* Default URL — shown when no slug set */}
+              {instructor?.id && !savedSlug && (
+                <div className="mb-4 bg-background border border-border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Your default booking URL (always active):</p>
+                <div className="flex items-center justify-between gap-2">
+                    <a href={`https://${instructor.id}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
+                      className="text-foreground text-xs hover:underline truncate font-mono min-w-0 flex-1">
+                      {instructor.id}.drivebook.com.au
+                    </a>
+                    <button type="button" onClick={() => copyUrl(`https://${instructor.id}.drivebook.com.au`, 'default')}
+                      className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded bg-secondary/70 text-foreground hover:bg-slate-600">
+                      {copied === 'default' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Set a custom slug below to get a friendlier URL</p>
+                </div>
+              )}
+
+              {savedSlug && (
+                <div className="mb-4 bg-violet-900/20 border border-violet-700/50 rounded-lg p-3 flex items-center justify-between gap-2 min-w-0">
+                  <a href={`https://${savedSlug}.drivebook.com.au`} target="_blank" rel="noopener noreferrer"
+                    className="text-violet-300 font-semibold text-sm hover:underline truncate min-w-0 flex-1">
+                    {savedSlug}.drivebook.com.au
+                  </a>
+                  <button type="button" onClick={() => copyUrl(`https://${savedSlug}.drivebook.com.au`, 'slug')}
+                    className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-purple-600 text-foreground hover:bg-purple-700">
+                    {copied === 'slug' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied === 'slug' ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  Custom slug <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <input type="text" value={slug} onChange={(e) => handleSlugChange(e.target.value)}
+                    placeholder="yourname"
+                    className="w-full sm:flex-1 px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
+                    maxLength={30} />
+                  <span className="text-muted-foreground text-sm whitespace-nowrap">.drivebook.com.au</span>
+                </div>
+                {checkingSlug && <p className="text-xs text-muted-foreground mt-1">Checking...</p>}
+                {slugAvailable === true && slug && slug !== savedSlug && (
+                  <p className="text-xs text-emerald-400 mt-1">✓ {slug}.drivebook.com.au is available</p>
+                )}
+                {slugAvailable === false && slug && (
+                  <p className="text-xs text-destructive mt-1">✗ Already taken — try another</p>
+                )}
+                <p className="text-xs text-muted-foreground/60 mt-1">Lowercase letters, numbers, hyphens. Min 3 characters.</p>
+              </div>
+
+              {!isStudio && (
+                <div className="mt-4 bg-indigo-900/20 border border-indigo-700/50 rounded-lg p-3">
+                  <p className="text-xs text-indigo-300 font-medium">Want your own domain?</p>
+                  <p className="text-xs text-indigo-400 mt-0.5">Upgrade to Studio to use <span className="font-semibold">yourdomain.com.au</span></p>
+                  <button onClick={() => router.push('/dashboard/subscription')}
+                    className="mt-2 text-xs font-semibold text-indigo-400 hover:text-indigo-300 underline">
+                    See Studio plan →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Custom Domain section (Studio+ only) ── */}
+            {isStudio && (
+              <CustomDomainWizard
+                customDomain={customDomain}
+                savedCustomDomain={savedCustomDomain}
+                domainVerified={domainVerified}
+                domainVerifiedAt={domainVerifiedAt}
+                verifyingDomain={verifyingDomain}
+                domainVerifyResult={domainVerifyResult}
+                copied={copied}
+                onDomainChange={(v: any) => { setCustomDomain(v); setDomainVerifyResult(null); }}
+                onVerify={handleVerifyDomain}
+                onCopy={() => copyUrl(`https://${savedCustomDomain}`, 'domain')}
+              />
+            )}
+
+            {/* Social Links */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                <Globe className="h-5 w-5 text-purple-600" />
+                Social Links
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">Shown on your public booking page</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">
+                    <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5 text-emerald-400" /> WhatsApp Number</span>
+                  </label>
+                  <input type="text" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="61412345678 (with country code, no spaces)"
+                    className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg text-sm focus:ring-2 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Instagram Handle</label>
+                  <input type="text" value={instagram} onChange={(e) => setInstagram(e.target.value)}
+                    placeholder="yourhandle (without @)"
+                    className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg text-sm focus:ring-2 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Facebook</label>
+                  <input type="text" value={facebook} onChange={(e) => setFacebook(e.target.value)}
+                    placeholder="username or full URL"
+                    className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg text-sm focus:ring-2 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Years of Experience</label>
+                  <input type="number" value={yearsExperience} onChange={(e) => setYearsExperience(e.target.value)}
+                    placeholder="e.g. 5" min="0" max="50"
+                    className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg text-sm focus:ring-2 focus:ring-violet-500" />
+                </div>
+              </div>
+            </div>
+
+            {/* Display / Business Name — all tiers, behaviour adapts */}
+            <div className={`bg-card rounded-2xl border p-6 ${
+              (tier === 'PREMIUM') ? 'border-amber-500/40' : 'border-border'
+            }`}>
+              <h2 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                <Sparkles className={`h-5 w-5 ${(tier === 'PREMIUM') ? 'text-amber-400' : 'text-violet-400'}`} />
+                {(tier === 'PREMIUM') ? 'Business Name' : tier === 'STUDIO' ? 'Brand Name' : 'Display Name'}
+                {(tier === 'PREMIUM')
+                  ? <span className="ml-auto text-xs font-semibold bg-amber-900/40 text-amber-300 px-2 py-0.5 rounded-full">Required</span>
+                  : <span className="ml-auto text-xs font-semibold bg-secondary/70 text-foreground px-2 py-0.5 rounded-full">Optional</span>
+                }
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                {(tier === 'PREMIUM')
+                  ? 'Your business name. This is what clients see everywhere — booking page, AI receptionist, SMS, and email. Your personal name is kept for payouts and compliance only.'
+                  : tier === 'STUDIO'
+                  ? 'Your brand name shown on your booking page and custom domain. Leave blank to use your personal name.'
+                  : 'A nickname or trading name shown to clients instead of your legal name. Great for building a recognisable brand — even as a sole provider.'}
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  {(tier === 'PREMIUM') ? (
+                    <>Business name <span className="text-amber-400">*</span></>
+                  ) : (
+                    <>{tier === 'STUDIO' ? 'Brand name' : 'Display name'} <span className="text-muted-foreground/60 font-normal">(optional)</span></>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value.slice(0, 80))}
+                  placeholder={
+                    (tier === 'PREMIUM') ? 'e.g. Perth Drive Academy'
+                    : tier === 'STUDIO'  ? 'e.g. Perth Drive Academy'
+                    : 'e.g. Dave\'s Driving or Perth Drive Pro'
+                  }
+                  required={tier === 'PREMIUM'}
+                  maxLength={80}
+                  className={`w-full px-3 py-2 border bg-background text-foreground rounded-lg focus:ring-2 focus:border-transparent text-sm ${
+                    (tier === 'PREMIUM') && !businessName.trim()
+                      ? 'border-amber-600/60 focus:ring-amber-500'
+                      : (tier === 'PREMIUM')
+                      ? 'border-amber-700/40 focus:ring-amber-500'
+                      : 'border-border focus:ring-violet-500'
+                  }`}
+                />
+                <p className="text-xs text-muted-foreground/60 mt-1">
+                  {businessName.length}/80 characters
+                  {businessName.trim() ? (
+                    <span className={`ml-2 ${(tier === 'PREMIUM') ? 'text-amber-400' : 'text-violet-400'}`}>
+                      Clients will see &quot;{businessName.trim()}&quot;
+                    </span>
+                  ) : (tier === 'PREMIUM') ? (
+                    <span className="ml-2 text-amber-500">Business name is required — clients need to know who they are booking with</span>
+                  ) : null}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your legal name is kept on file for payouts and compliance — this is display only.
+                </p>
+              </div>
+            </div>
+
+            {/* Logo Upload */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+                <Upload className="h-5 w-5 text-purple-600" />
+                Logo Upload
+              </h2>
+              <input type="file" accept="image/*" onChange={handleLogoChange}
+                className="block w-full text-sm text-muted-foreground/60 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-violet-900/40 file:text-violet-300 hover:file:bg-violet-900/60 cursor-pointer" />
+              <p className="text-xs text-muted-foreground mt-1">PNG, JPG or SVG. Max 2MB. Recommended: 200×200px</p>
+              {logoPreview && (
+                <div className="mt-3 border-2 border-dashed border-border rounded-lg p-3 text-center">
+                  <Image src={logoPreview} alt="Logo preview" width={80} height={80} className="mx-auto object-contain" />
+                </div>
+              )}
+            </div>
+
+            {/* Brand Colors */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+                <Palette className="h-5 w-5 text-purple-600" />
+                Brand Colors
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">Primary Color</label>
+                  <div className="flex items-center gap-3">
+                    <input type="color" value={brandColorPrimary} onChange={(e) => setBrandColorPrimary(e.target.value)}
+                      className="h-10 w-16 rounded-lg border border-border cursor-pointer" />
+                    <input type="text" value={brandColorPrimary} onChange={(e) => setBrandColorPrimary(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-border bg-background text-foreground rounded-lg text-sm" placeholder="#3B82F6" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">Secondary Color</label>
+                  <div className="flex items-center gap-3">
+                    <input type="color" value={brandColorSecondary} onChange={(e) => setBrandColorSecondary(e.target.value)}
+                      className="h-10 w-16 rounded-lg border border-border cursor-pointer" />
+                    <input type="text" value={brandColorSecondary} onChange={(e) => setBrandColorSecondary(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-border bg-background text-foreground rounded-lg text-sm" placeholder="#10B981" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Display toggle */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <div className="flex items-start space-x-3">
+                <input type="checkbox" id="showBranding" checked={showBrandingOnBookingPage}
+                  onChange={(e) => setShowBrandingOnBookingPage(e.target.checked)}
+                  className="mt-1 h-4 w-4 text-purple-600 focus:ring-violet-500 border-border rounded" />
+                <label htmlFor="showBranding" className="text-sm text-foreground">
+                  <span className="font-medium">Show logo & colors on booking page</span>
+                  <p className="text-muted-foreground/60 mt-0.5 text-xs">White-labels your booking page with your brand</p>
+                </label>
+              </div>
+            </div>
+
+            <button onClick={handleSave} disabled={saving}
+              className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-secondary/70 text-foreground py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2">
+              <Save className="h-5 w-5" />
+              {saving ? 'Saving...' : 'Save All Settings'}
+            </button>
+          </div>
+
+          {/* Preview Panel */}
+          <div className="space-y-6 min-w-0 w-full">
+
+            {/* Live booking page link — replaces the fake mock card */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                <Eye className="h-5 w-5 text-purple-600" />
+                Your Booking Page
+              </h2>
+              <p className="text-sm text-muted-foreground mb-5">
+                This is what students see when they visit your link. Open it after saving to see your brand live.
+              </p>
+
+              {/* Primary CTA — open their actual subdomain */}
+              <a
+                href={`https://${savedSlug || instructor?.id}.drivebook.com.au`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-3 w-full bg-violet-600 hover:bg-violet-500 text-foreground px-5 py-3.5 rounded-xl font-semibold text-sm transition-colors mb-3"
+              >
+                <span className="flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4 shrink-0" />
+                  View live booking page
+                </span>
+                <span className="font-mono text-xs text-violet-200 truncate max-w-[160px]">
+                  {savedSlug || instructor?.id}.drivebook.com.au
+                </span>
+              </a>
+
+              {/* Custom domain shortcut if set and verified */}
+              {isStudio && savedCustomDomain && domainVerified && (
+                <a
+                  href={`https://${savedCustomDomain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-3 w-full bg-secondary hover:bg-secondary/70 border border-border text-foreground px-5 py-3 rounded-xl text-sm transition-colors mb-3"
+                >
+                  <span className="flex items-center gap-2">
+                    <ExternalLink className="h-4 w-4 shrink-0 text-indigo-400" />
+                    View on custom domain
+                  </span>
+                  <span className="font-mono text-xs text-indigo-300 truncate max-w-[160px]">
+                    {savedCustomDomain}
+                  </span>
+                </a>
+              )}
+
+              <p className="text-xs text-muted-foreground/60">
+                Save your settings first — changes are reflected on the live page immediately.
+              </p>
+            </div>
+
+            {/* Colour preview — lightweight, clearly labelled */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                <Palette className="h-5 w-5 text-purple-600" />
+                Colour Preview
+              </h2>
+              <p className="text-xs text-muted-foreground/60 mb-4">How your brand colours look on buttons and accents</p>
+              <div className="space-y-3">
+                {logoPreview && (
+                  <div className="flex items-center gap-3 p-3 bg-background rounded-xl border border-border">
+                    <Image src={logoPreview} alt="Logo" width={48} height={48} className="object-contain rounded-lg shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {businessName.trim() || instructor?.name || 'Your Name'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Driving Instructor</p>
+                    </div>
+                  </div>
+                )}
+                <button
+                  style={{ backgroundColor: brandColorPrimary }}
+                  className="w-full py-2.5 px-4 rounded-xl text-foreground font-semibold text-sm"
+                  tabIndex={-1}
+                >
+                  Book a Lesson
+                </button>
+                <div className="flex items-center gap-3">
+                  <span
+                    style={{ backgroundColor: brandColorSecondary }}
+                    className="px-3 py-1 rounded-full text-foreground text-xs font-medium shrink-0"
+                  >
+                    Available Today
+                  </span>
+                  <span style={{ color: brandColorPrimary }} className="text-sm font-bold">
+                    ${instructor?.hourlyRate || '65'}/hr
+                  </span>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <div className="flex-1 h-2 rounded-full" style={{ backgroundColor: brandColorPrimary }} />
+                  <div className="flex-1 h-2 rounded-full" style={{ backgroundColor: brandColorSecondary }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Active URLs summary */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-bold text-foreground mb-3 flex items-center gap-2">
+                <Globe className="h-5 w-5 text-purple-600" />
+                Active URLs
+              </h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-2 bg-background rounded-lg p-2 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground/60">Default</p>
+                    <p className="font-mono text-xs text-foreground truncate">{instructor?.id}.drivebook.com.au</p>
+                  </div>
+                  <span className="text-xs bg-green-900/40 text-emerald-400 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                </div>
+                {savedSlug && (
+                  <div className="flex items-center justify-between gap-2 bg-violet-900/20 rounded-lg p-2 min-w-0">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground/60">Slug</p>
+                      <p className="font-mono text-xs text-violet-300 truncate">{savedSlug}.drivebook.com.au</p>
+                    </div>
+                    <span className="text-xs bg-violet-900/40 text-violet-300 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                  </div>
+                )}
+                {isStudio && savedCustomDomain && (
+                  <div className="flex items-center justify-between gap-2 bg-indigo-900/20 rounded-lg p-2 min-w-0">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground/60">Custom Domain</p>
+                      <p className="font-mono text-xs text-indigo-300 truncate">{savedCustomDomain}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${domainVerified ? 'bg-green-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-300'}`}>
+                      {domainVerified ? 'Verified' : 'Pending'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-violet-900/20 border border-violet-700/50 rounded-lg p-4">
+              <h3 className="font-semibold text-violet-300 mb-2">Tips</h3>
+              <ul className="text-sm text-violet-300/80 space-y-1">
+                <li>• Square logo (200×200px) works best</li>
+                <li>• Share your booking URL on social media</li>
+                <li>• Add WhatsApp so students can message you directly</li>
+                {isStudio
+                  ? <li>• You can use both a slug and a custom domain simultaneously</li>
+                  : <li>• Your slug is live immediately after saving</li>
+                }
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Custom Domain Wizard (Studio tier) ────────────────────────────────────────
+interface DomainWizardProps {
+  customDomain: string;
+  savedCustomDomain: string;
+  domainVerified: boolean;
+  domainVerifiedAt: string | null;
+  verifyingDomain: boolean;
+  domainVerifyResult: { verified: boolean; message?: string } | null;
+  copied: string | null;
+  onDomainChange: (v: string) => void;
+  onVerify: () => void;
+  onCopy: () => void;
+}
+
+function CustomDomainWizard({
+  customDomain, savedCustomDomain, domainVerified, domainVerifiedAt,
+  verifyingDomain, domainVerifyResult, copied,
+  onDomainChange, onVerify, onCopy,
+}: DomainWizardProps) {
+  return (
+    <div className="bg-card rounded-2xl border border-border p-6">
+      <h2 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+        <Globe className="h-5 w-5 text-indigo-600" />
+        Custom Domain
+        <span className="ml-auto text-xs font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/25 px-2 py-0.5 rounded-full">Studio</span>
+      </h2>
+      <p className="text-sm text-muted-foreground mb-4">Use your own domain for your booking page — works alongside your slug</p>
+
+      {domainVerified && savedCustomDomain && (
+        <div className="mb-4 bg-green-900/20 border border-green-700/50 rounded-lg p-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+            <a href={`https://${savedCustomDomain}`} target="_blank" rel="noopener noreferrer"
+              className="text-emerald-400 font-semibold text-sm hover:underline truncate flex items-center gap-1">
+              {savedCustomDomain}
+              <ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          </div>
+          <button type="button" onClick={onCopy}
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-foreground hover:bg-green-700">
+            {copied === 'domain' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied === 'domain' ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      )}
+
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-foreground mb-1">
+          Your domain <span className="text-muted-foreground font-normal">(optional)</span>
+        </label>
+        <input
+          type="text"
+          value={customDomain}
+          onChange={(e) => onDomainChange(e.target.value.toLowerCase().trim())}
+          placeholder="bookings.yourdrivingschool.com.au"
+          className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+        />
+        <p className="text-xs text-muted-foreground/60 mt-1">Enter the full domain or subdomain you want to use</p>
+      </div>
+
+      {/* DNS instructions */}
+      <div className="bg-background border border-border rounded-lg p-4 mb-4">
+        <p className="text-xs font-semibold text-muted-foreground mb-1">Step 1 — Add this DNS record at your registrar:</p>
+        <div className="mb-3 bg-indigo-900/20 border border-indigo-700/50 rounded p-2 flex items-center gap-2">
+          <span className="text-xs text-indigo-400">The value is always:</span>
+          <span className="font-mono text-xs font-bold text-indigo-900 bg-card border border-indigo-200 rounded px-2 py-0.5 select-all">cname.vercel-dns.com</span>
+          <span className="text-xs text-indigo-600">— copy this exactly</span>
+        </div>
+
+        {customDomain ? (() => {
+          const parts = customDomain.split('.');
+          const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au'];
+          const tld2 = parts.slice(-2).join('.');
+          const isCompoundTLD = twoPartTLDs.includes(tld2);
+          const rootParts = isCompoundTLD ? 3 : 2;
+          const isRootDomain = parts.length <= rootParts;
+          const cnameLabel = isRootDomain ? '@' : parts.slice(0, parts.length - rootParts).join('.');
+
+          return isRootDomain ? (
+            <div className="space-y-3">
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded p-2 text-xs text-amber-400">
+                <span className="font-semibold">{customDomain}</span> is a root domain (no subdomain prefix). Root domains can't use a standard CNAME record — pick one of the options below.
+              </div>
+
+              {/* Option A */}
+              <details>
+                <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
+                  <span className="bg-violet-500/15 text-violet-400 border border-violet-500/25 px-1.5 py-0.5 rounded text-xs">Option A</span>
+                  ALIAS / ANAME record <span className="text-muted-foreground font-normal ml-1">(check if your registrar supports it)</span>
+                </summary>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 space-y-2">
+                  <p className="text-xs text-muted-foreground">In your registrar's DNS panel, add a new record with these exact values:</p>
+                  <div className="bg-card border border-border rounded overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-background"><tr>
+                        <th className="text-left px-2 py-1.5 text-muted-foreground/60 font-medium border-b border-border">Field</th>
+                        <th className="text-left px-2 py-1.5 text-muted-foreground/60 font-medium border-b border-border">What to type</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-b border-border">
+                          <td className="px-2 py-1.5 text-muted-foreground">Type</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-foreground">ALIAS <span className="text-muted-foreground font-sans font-normal">or</span> ANAME</td>
+                        </tr>
+                        <tr className="border-b border-border">
+                          <td className="px-2 py-1.5 text-muted-foreground">Name / Host</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-foreground">@ <span className="text-muted-foreground font-sans font-normal text-xs">(means root domain)</span></td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 text-muted-foreground">Value / Points to</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-indigo-400">cname.vercel-dns.com</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-muted-foreground/60">Supported by: VentraIP, Cloudflare, Namecheap (ALIAS), Route 53 (ALIAS). If you don't see ALIAS or ANAME as a record type, use Option B or C instead.</p>
+                </div>
+              </details>
+
+              {/* Option B */}
+              <details>
+                <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
+                  <span className="bg-violet-500/15 text-violet-400 border border-violet-500/25 px-1.5 py-0.5 rounded text-xs">Option B</span>
+                  Move DNS to Cloudflare <span className="text-muted-foreground font-normal ml-1">(free, works with any registrar)</span>
+                </summary>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 space-y-1.5 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Steps:</p>
+                  <p>1. Go to <span className="font-mono text-indigo-400">cloudflare.com</span> → create a free account → Add site → enter <span className="font-mono font-semibold">{customDomain}</span></p>
+                  <p>2. Cloudflare will show you two nameserver addresses (e.g. <span className="font-mono">ada.ns.cloudflare.com</span>)</p>
+                  <p>3. At your current registrar, replace the nameservers with Cloudflare's two addresses</p>
+                  <p>4. Back in Cloudflare DNS, add this record:</p>
+                  <div className="bg-card border border-border rounded overflow-hidden mt-1">
+                    <table className="w-full text-xs">
+                      <thead className="bg-background"><tr>
+                        <th className="text-left px-2 py-1.5 text-muted-foreground/60 font-medium border-b border-border">Field</th>
+                        <th className="text-left px-2 py-1.5 text-muted-foreground/60 font-medium border-b border-border">What to type</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-b border-border">
+                          <td className="px-2 py-1.5 text-muted-foreground">Type</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-foreground">CNAME</td>
+                        </tr>
+                        <tr className="border-b border-border">
+                          <td className="px-2 py-1.5 text-muted-foreground">Name</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-foreground">@ <span className="text-muted-foreground font-sans font-normal text-xs">(root)</span></td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 text-muted-foreground">Target</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-indigo-400">cname.vercel-dns.com</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-muted-foreground/60">Cloudflare automatically flattens CNAME at root — this just works.</p>
+                </div>
+              </details>
+
+              {/* Option C */}
+              <details>
+                <summary className="text-xs font-semibold text-indigo-700 cursor-pointer list-none flex items-center gap-1 select-none">
+                  <span className="bg-violet-500/15 text-violet-400 border border-violet-500/25 px-1.5 py-0.5 rounded text-xs">Option C</span>
+                  Use <span className="font-mono mx-1">www.{customDomain}</span> instead <span className="text-muted-foreground font-normal ml-1">(easiest, no nameserver change)</span>
+                </summary>
+                <div className="mt-2 pl-2 border-l-2 border-indigo-200 space-y-1.5 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Steps:</p>
+                  <p>1. At your registrar, add this DNS record:</p>
+                  <div className="bg-card border border-border rounded overflow-hidden mt-1 mb-1">
+                    <table className="w-full text-xs">
+                      <thead className="bg-background"><tr>
+                        <th className="text-left px-2 py-1.5 text-muted-foreground/60 font-medium border-b border-border">Field</th>
+                        <th className="text-left px-2 py-1.5 text-muted-foreground/60 font-medium border-b border-border">What to type</th>
+                      </tr></thead>
+                      <tbody>
+                        <tr className="border-b border-border">
+                          <td className="px-2 py-1.5 text-muted-foreground">Type</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-foreground">CNAME</td>
+                        </tr>
+                        <tr className="border-b border-border">
+                          <td className="px-2 py-1.5 text-muted-foreground">Name / Host</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-foreground">www</td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 text-muted-foreground">Value / Points to</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold text-indigo-400">cname.vercel-dns.com</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p>2. Also add a URL redirect (usually under "Forwarding" or "Redirects" at your registrar):</p>
+                  <div className="bg-card border border-border rounded p-2 font-mono text-xs">
+                    <span className="text-muted-foreground">{customDomain}</span>
+                    <span className="text-muted-foreground mx-2">→</span>
+                    <span className="text-indigo-400">www.{customDomain}</span>
+                  </div>
+                  <p>3. Come back here and change the domain field above to <span className="font-mono font-semibold">www.{customDomain}</span></p>
+                </div>
+              </details>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead><tr className="text-muted-foreground/60 font-sans">
+                  <th className="text-left pr-3 pb-1">Type</th>
+                  <th className="text-left pr-3 pb-1">Name / Host</th>
+                  <th className="text-left pb-1">Value / Points to</th>
+                </tr></thead>
+                <tbody><tr>
+                  <td className="pr-3 text-foreground">CNAME</td>
+                  <td className="pr-3 text-indigo-800 font-semibold">{cnameLabel}</td>
+                  <td className="text-indigo-700 font-bold">cname.vercel-dns.com</td>
+                </tr></tbody>
+              </table>
+              <p className="text-xs text-muted-foreground/60 mt-2">
+                Name / Host = <span className="font-mono font-semibold">{cnameLabel}</span> &nbsp;|&nbsp; Value = <span className="font-mono font-semibold text-indigo-400">cname.vercel-dns.com</span> (always this, for every instructor)
+              </p>
+            </div>
+          );
+        })() : (
+          <p className="text-xs text-muted-foreground italic">Enter your domain above to see the DNS record</p>
+        )}
+
+        <p className="text-xs text-muted-foreground/60 mt-3">DNS changes can take up to 24 hours to propagate.</p>
+      </div>
+
+      <div className="mb-3">
+        <p className="text-xs font-semibold text-muted-foreground mb-2">Step 2 — Verify your domain:</p>
+        <button
+          type="button"
+          onClick={onVerify}
+          disabled={verifyingDomain || !customDomain}
+          className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-secondary text-foreground py-2 px-4 rounded-lg text-sm font-semibold"
+        >
+          {verifyingDomain
+            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking DNS...</>
+            : <><ShieldCheck className="h-4 w-4" /> Verify Domain</>
+          }
+        </button>
+      </div>
+
+      {domainVerifyResult && (
+        <div className={`rounded-lg p-3 flex items-start gap-2 text-sm ${domainVerifyResult.verified ? 'bg-green-900/20 border border-green-700/50' : 'bg-amber-500/10 border border-amber-500/25'}`}>
+          {domainVerifyResult.verified
+            ? <ShieldCheck className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+            : <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          }
+          <div>
+            {domainVerifyResult.verified
+              ? <p className="text-emerald-400 font-medium">Domain verified! Your booking page is live at {savedCustomDomain}.</p>
+              : <p className="text-amber-400">{domainVerifyResult.message || 'CNAME not found yet. Check your DNS settings and try again.'}</p>
+            }
+          </div>
+        </div>
+      )}
+
+      {domainVerified && domainVerifiedAt && (
+        <p className="text-xs text-muted-foreground mt-2">
+          Verified {new Date(domainVerifiedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+

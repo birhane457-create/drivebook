@@ -1,0 +1,294 @@
+/**
+ * Reviews API
+ *
+ * Reviews are stored directly on the Booking record — there is no separate
+ * Review model in the schema. Fields used:
+ *   Booking.customerRating      Int?       — 1-5 star rating
+ *   Booking.customerRating      String?    — text comment
+ *   Booking.reviewGivenAt     DateTime?  — when the review was submitted
+ *   Booking.isReviewed        Boolean    — dedup guard (via (prisma as any))
+ *
+ * GET  /api/reviews?providerId=  — public: all reviewed bookings for an instructor
+ * GET  /api/reviews                — authenticated: reviews left by the current user
+ * POST /api/reviews                — authenticated: submit a review for a completed booking
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { validateMobileToken } from '@/lib/mobile-auth';
+import { prisma } from '@/lib/prisma';
+import { emailService } from '@/lib/services/email';
+import { notifyReviewReceived } from '@/lib/services/notifications';
+import { reviewRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
+
+// ── Rate limit helper for POST /api/reviews ──────────────────────────────────
+// Applied per authenticated user ID (or IP fallback) to prevent review spam.
+// reviewRateLimit = 10 per hour (defined in lib/ratelimit.ts).
+async function applyReviewRateLimit(req: NextRequest, userId: string): Promise<NextResponse | null> {
+  const identifier = getRateLimitIdentifier(userId, req.headers.get('x-forwarded-for'), 'review');
+  const result = await checkRateLimit(reviewRateLimit, identifier);
+  if (!result.success) {
+    return NextResponse.json(
+      { error: result.error ?? 'Too many review submissions. Please try again later.' },
+      { status: 429, headers: result.headers }
+    );
+  }
+  return null;
+}
+
+export const dynamic = 'force-dynamic';
+
+// ── GET ───────────────────────────────────────────────────────────────────────
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const providerId = searchParams.get('providerId');
+
+    // Public: reviews for a specific instructor
+    if (providerId) {
+      const reviewedBookings = await prisma.booking.findMany({
+        where: {
+          providerId,
+          customerRating: { not: null },
+          reviewGivenAt: { not: null },
+        },
+        select: {
+          id: true,
+          customerRating: true,
+          reviewGivenAt: true,
+          customerName: true,
+          startTime: true,
+        },
+        orderBy: { reviewGivenAt: 'desc' },
+      });
+
+      const reviews = reviewedBookings.map((b: any) => ({
+        id: b.id,
+        rating: b.customerRating,
+        comment: b.customerRating,
+        reviewedAt: b.reviewGivenAt,
+        // Mask to first name + last initial for privacy — public endpoint, no auth required
+        customerName: b.customerName
+          ? (() => {
+              const parts = b.customerName.trim().split(/\s+/);
+              return parts.length > 1
+                ? `${parts[0]} ${parts[parts.length - 1][0]}.`
+                : parts[0];
+            })()
+          : 'Anonymous',
+        lessonDate: b.startTime,
+      }));
+
+      const avgRating =
+        reviews.length > 0
+          ? reviews.reduce((sum: any, r: any) => sum + ((r as any).rating ?? 0), 0) / reviews.length
+          : 0;
+
+      return NextResponse.json({
+        reviews,
+        averageRating: parseFloat(avgRating.toFixed(2)),
+        totalReviews: reviews.length,
+      });
+    }
+
+    // Authenticated: reviews submitted by the current user
+    const auth = await validateMobileToken(req);
+    let userEmail: string | null = null;
+
+    if (auth.valid) {
+      userEmail = auth.user?.email ?? null;
+    } else {
+      const session = await getServerSession(authOptions);
+      userEmail = session?.user?.email ?? null;
+    }
+
+    if (!userEmail) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: userEmail } });
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Find bookings where this user was the client and left a review
+    const reviewedBookings = await prisma.booking.findMany({
+      where: {
+        customer: { userId: user.id },
+        customerRating: { not: null },
+      },
+      select: {
+        id: true,
+        customerRating: true,
+        reviewGivenAt: true,
+        startTime: true,
+        provider: { select: { name: true } },
+      },
+      orderBy: { reviewGivenAt: 'desc' },
+    });
+
+    const reviews = reviewedBookings.map((b: any) => ({
+      id: b.id,
+      instructorName: b.provider.name,
+      rating: b.customerRating,
+      comment: b.customerRating,
+      date: b.reviewGivenAt?.toISOString() ?? null,       // matches page field: review.date
+      bookingDate: b.startTime?.toISOString() ?? null,    // matches page field: review.bookingDate
+    }));
+
+    return NextResponse.json(reviews);
+  } catch (error) {
+    console.error('Error fetching reviews:', error);
+    return NextResponse.json({ error: 'Failed to fetch reviews' }, { status: 500 });
+  }
+}
+
+// ── POST ──────────────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  try {
+    // Support both mobile JWT and web session
+    const auth = await validateMobileToken(req);
+    let userEmail: string | null = null;
+
+    if (auth.valid) {
+      userEmail = auth.user?.email ?? null;
+    } else {
+      const session = await getServerSession(authOptions);
+      userEmail = session?.user?.email ?? null;
+    }
+
+    if (!userEmail) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit: 10 reviews per hour per user (defined in lib/ratelimit.ts)
+    const user = await prisma.user.findUnique({ where: { email: userEmail }, select: { id: true } });
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    const rateLimitReject = await applyReviewRateLimit(req, user.id);
+    if (rateLimitReject) return rateLimitReject;
+
+    const body = await req.json();
+    const { bookingId, rating, comment } = body;
+
+    if (!bookingId || !rating) {
+      return NextResponse.json({ error: 'bookingId and rating are required' }, { status: 400 });
+    }
+
+    if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+      return NextResponse.json({ error: 'Rating must be an integer between 1 and 5' }, { status: 400 });
+    }
+
+    // Fetch booking with client + instructor
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        customer: { include: { user: true } },
+        provider: { include: { user: true } },
+      },
+    }) as any;
+
+    if (!booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+
+    // Ownership check — must be the client who made the booking
+    if (booking.customer?.user?.email !== userEmail) {
+      return NextResponse.json({ error: 'You can only review your own bookings' }, { status: 403 });
+    }
+
+    // Must be a completed or past-confirmed booking
+    const now = new Date();
+    const bookingHasPassed = booking.startTime && new Date(booking.startTime) <= now;
+    const reviewableStatuses = ['CONFIRMED', 'COMPLETED'];
+
+    if (!bookingHasPassed || !reviewableStatuses.includes(booking.status)) {
+      return NextResponse.json({ error: 'You can only review completed bookings' }, { status: 400 });
+    }
+
+    // Dedup + write — transactional upsert on reviewGivenAt prevents duplicate reviews
+    // from concurrent requests hitting the endpoint simultaneously.
+    // updateMany with reviewGivenAt: null as the where clause acts as an atomic guard:
+    // only the first request that matches (reviewGivenAt IS NULL) will succeed.
+    const updated = await prisma.booking.updateMany({
+      where: {
+        id: bookingId,
+        reviewGivenAt: null,   // atomic guard — only one request wins
+        customerRating: null,    // extra guard: ensure no rating written yet
+      },
+      data: {
+        customerRating: Math.round(rating),
+        reviewComment: comment ?? null,
+        reviewGivenAt: now,
+      } as any,
+    });
+
+    // If count is 0, another concurrent request already wrote the review
+    if (updated.count === 0) {
+      return NextResponse.json({ error: 'This booking has already been reviewed' }, { status: 400 });
+    }
+
+    // Update instructor aggregate rating
+    const reviewedBookings = await prisma.booking.findMany({
+      where: {
+        providerId: booking.providerId,
+        customerRating: { not: null },
+        reviewGivenAt: { not: null },
+      },
+      select: { customerRating: true },
+    });
+
+    const avgRating =
+      reviewedBookings.length > 0
+        ? reviewedBookings.reduce((sum: any, b: any) => sum + ((b as any).customerRating ?? 0), 0) / reviewedBookings.length
+        : 0;
+
+    await prisma.provider.update({
+      where: { id: booking.providerId },
+      data: {
+        averageRating: parseFloat(avgRating.toFixed(2)),
+        totalReviews: reviewedBookings.length,
+      },
+    });
+
+    // Notify instructor (non-critical)
+    try {
+      if (booking.provider?.user?.email) {
+        const ratingLabel = ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][Math.round(rating) - 1] ?? `${rating} stars`;
+        await emailService.sendGenericEmail({
+          to: booking.provider.user.email,
+          subject: `New Review from ${booking.customerName ?? 'a student'} — ${ratingLabel}`,
+          html: `
+            <h2>You received a new review</h2>
+            <p>Hi ${booking.provider.name},</p>
+            <p><strong>${booking.customerName ?? 'A student'}</strong> left you a ${rating}/5 ⭐ review.</p>
+            ${comment ? `<blockquote style="border-left:3px solid #e5e7eb;padding-left:12px;color:#374151">${comment}</blockquote>` : ''}
+            <p>Log in to your dashboard to see all your reviews.</p>
+          `,
+        });
+      }
+      if (booking.provider?.userId) {
+        await notifyReviewReceived(booking.provider.userId, booking.customerName ?? 'A student', Math.round(rating));
+      }
+    } catch (notifyErr) {
+      console.error('Review notification failed (non-critical):', notifyErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      review: {
+        bookingId,
+        rating: Math.round(rating),
+        comment: comment ?? null,
+        reviewedAt: now,
+      },
+    });
+  } catch (error) {
+    console.error('Error creating review:', error);
+    return NextResponse.json({ error: 'Failed to create review' }, { status: 500 });
+  }
+}

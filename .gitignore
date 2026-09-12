@@ -1,0 +1,161 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+test-*.js
+test-*.bat
+verify-*.js
+postman-*.json
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+*.bat
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+debug.log
+
+# local env files
+.env
+.env*.local
+!.env.example
+!.env.test
+!.env.voice-service.example
+
+# credentials file (test users)
+.credentials
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# prisma
+# Migrations MUST be committed to git for production deployment
+# prisma/migrations/  # REMOVED - migrations must be version controlled
+*.db
+*.db-journal
+
+# archives
+docs-archive/
+scripts-archive/
+docs/archive/
+
+# temporary files
+cleanupEnv.js
+updateEnv.js
+
+# Pricing config (admin-editable, not committed)
+pricing-config.json
+
+# Platform settings config (admin-editable, not committed)
+settings-config.json
+
+# Dev/debug/test scripts — local only, never commit
+check-*.js
+fix-*.js
+backfill-*.js
+seed-*.js
+set-default-*.js
+create-test-*.js
+test-login.js
+debug.log
+commit.bat
+rebuild-vapi-assistant.js
+create-vapi-assistant.js
+vapi-assistant-config.json
+update-prompt-only.js
+update-vapi-tools.js
+live-tool-test.js
+smoke-test.js
+patch-*.js
+reset-*.js
+test-*.js
+fix_*.mjs
+fix_*.py
+
+# Git/CI artifact files — local only
+branch_*.txt
+cleanup_*.txt
+diff_*.txt
+post_cleanup_*.txt
+repo_*.txt
+staged_*.txt
+status_*.txt
+verify_*.txt
+tracked_*.txt
+tsc-*.txt
+*.log
+FINAL_STATUS.txt
+INSPECTION_SUMMARY.txt
+MOVE_DOCS_TO_FOLDER.txt
+PDA_CONFIG_FIX_SUMMARY.txt
+QUICK_FIX_SUMMARY.txt
+QUICK_REFERENCE_ALL_FIXES.txt
+REBUILD_TRIGGER.txt
+TASK_4_CHANGES_SUMMARY.txt
+DYNAMIC_EXPORT_*.json
+migration-report.json
+
+# Session summary markdown files — superseded by permanent docs
+*_COMPLETION_REPORT.md
+*_SESSION_SUMMARY.md
+*_FINAL_*.md
+*_AUDIT_*.md
+APP_INSPECTION_REPORT.md
+NOTEBOOKLM_SOURCE.md
+BUILD_FIX_CHANGELOG.md
+FOUNDATION_COMPLETE.md
+PR_BATCH_BOOKING_IMPROVEMENTS.md
+PR_REMOVE_LESSONPACKAGES.md
+PRODUCTION_READINESS.md
+SLOT_RESERVATION_MIGRATION_COMPLETE.md
+SLOT_PICKER_CONTRAST_FIX.md
+RESPONSIVE_PADDING_AUDIT.md
+MOBILE_PADDING_FIXES_COMPLETE.md
+MOBILE_PADDING_VISUAL_GUIDE.md
+HEADING_CONTRAST_FINAL_FIX.md
+CUSTOM_HOURS_DISCOUNT_*.md
+BULK_BOOKING_COMPLETION.md
+BOOKING_PAYMENT_FLOW_ANALYSIS.md
+CTO_ARCHITECTURE_AUDIT.md
+OPENAPI_AUDIT.md
+SECURITY_AUDIT_*.md
+README_SESSION_FINAL.md
+
+# Dev-only markdown notes — not needed on production
+ALL_ISSUES_FIXED.md
+BOOK_LATER_FIX.md
+DEPLOY_NOW.md
+FINAL_IMPLEMENTATION_STATUS.md
+FINAL_STATUS_SUMMARY.md
+IMPLEMENTATION_GUIDE.md
+LANDING_PAGE_*.md
+MIGRATION_SCRIPTS.md
+MOBILE_HOTSPOT_TESTING.md
+MOBILE_QUICK_START.md
+MOBILE_SETUP_COMPLETE.md
+MOBILE_TESTING_GUIDE.md
+P0_*.md
+PERFORMANCE_TRACKING_GUIDE.md
+REMAINING_WORK.md
+VERIFICATION_COMPLETE.md
+feedback-critiqe.md

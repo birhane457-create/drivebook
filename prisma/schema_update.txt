@@ -1,0 +1,6 @@
+ADD THESE FIELDS TO BOOKING MODEL AFTER clientEmail LINE:
+
+  // Special Service tracking - stores which instructor service was booked
+  specialServiceId      String?    // Package/service ID from instructor.specialServices
+  specialServiceName    String?    // Package/service name for quick reference
+  specialServiceType    String?    // Type: LESSON_PACKAGE | PDA_TEST | MOCK_TEST | CUSTOM_SERVICE
