@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./dev.db:/app/dev.db
+    depends_on:
+      - mongo
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional MongoDB for local dev; the hybrid service primarily uses DriveBook API
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./mongo-data:/data/db
+
+# Notes:
+# - The hybrid service uses a local SQLite file (dev.db) as a cache for instructors/voicemails.
+# - In production the hybrid service should interact with the main DriveBook platform via its API
+#   rather than connecting directly to DriveBook's MongoDB.

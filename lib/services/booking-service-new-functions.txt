@@ -1,0 +1,240 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// Package Cancellation Approval Workflow (PKG-3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Request cancellation of a package booking (customer-initiated).
+ * Creates CANCELLATION_PENDING status for admin review.
+ * Does NOT issue refund immediately - waits for admin approval.
+ */
+export async function requestPackageCancellation(
+  bookingId: string,
+  customerId: string,
+  reason?: string
+): Promise<{ booking: any; calculatedRefund: number; status: string }> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { customer: true, provider: { include: { user: true } } },
+  }) as any
+  
+  if (!booking) throw makeError('BOOKING_NOT_FOUND', 'Booking not found')
+  if (booking.status === 'CANCELLED') throw makeError('ALREADY_CANCELLED', 'Booking is already cancelled')
+  if (booking.status === 'COMPLETED') throw makeError('ALREADY_COMPLETED', 'Cannot cancel a completed booking')
+  if (booking.customerId !== customerId) throw makeError('UNAUTHORIZED', 'Not authorized to cancel this booking')
+  
+  // Calculate refund amount (tier-aware for packages)
+  const baseRefundAmount = calculatePartialPackageRefund(booking)
+  
+  // Apply time-based policy
+  const now = new Date()
+  const originalTime = new Date((booking as any).originalStartTime || booking.startTime || now)
+  const hoursNotice = (originalTime.getTime() - now.getTime()) / 3_600_000
+  
+  const settings = await (prisma as any).platformSettings.findFirst({
+    select: { lateCancellationWindowHours: true },
+  }).catch(() => null)
+  const lateWindow = settings?.lateCancellationWindowHours ?? 24
+  const fullRefundWindow = lateWindow * 2
+  
+  let refundPercentage = 0
+  let calculatedRefund = 0
+  
+  if (hoursNotice >= fullRefundWindow) {
+    refundPercentage = 100
+    calculatedRefund = baseRefundAmount
+  } else if (hoursNotice >= lateWindow) {
+    refundPercentage = 50
+    calculatedRefund = toNumber(roundAmount(multiplyAmount(toDecimal(baseRefundAmount), 0.5), 2))
+  }
+  
+  // Update booking to CANCELLATION_PENDING
+  const updated = await prisma.booking.update({
+    where: { id: bookingId },
+    data: {
+      cancellationStatus: 'PENDING',
+      cancellationRequestedAt: now,
+      cancellationRequestedBy: 'USER',
+      cancellationReason: reason || null,
+    },
+  })
+  
+  // Audit log
+  await writeAudit('CANCELLATION_REQUESTED', customerId, 'CLIENT', bookingId, {
+    calculatedRefund,
+    refundPercentage,
+    hoursNotice: Math.floor(hoursNotice),
+    reason: reason ?? null,
+  })
+  
+  return { booking: updated, calculatedRefund, status: 'PENDING' }
+}
+
+/**
+ * Approve a pending cancellation request.
+ * Issues Stripe refund + debits wallet + marks booking cancelled.
+ */
+export async function approveCancellation(
+  bookingId: string,
+  adminId: string,
+  overrideAmount?: number,
+  adminNote?: string
+): Promise<{ booking: any; refundAmount: number; stripeRefundId: string }> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { customer: true, provider: { include: { user: true } } },
+  }) as any
+  
+  if (!booking) throw makeError('BOOKING_NOT_FOUND', 'Booking not found')
+  if (booking.cancellationStatus !== 'PENDING') {
+    throw new Error('Booking is not pending cancellation approval')
+  }
+  
+  // Calculate refund amount (use override if provided, else recalculate)
+  let refundAmount: number
+  if (overrideAmount !== undefined && overrideAmount !== null) {
+    refundAmount = overrideAmount
+  } else {
+    const baseRefundAmount = calculatePartialPackageRefund(booking)
+    const requestTime = new Date(booking.cancellationRequestedAt)
+    const originalTime = new Date((booking as any).originalStartTime || booking.startTime || requestTime)
+    const hoursNotice = (originalTime.getTime() - requestTime.getTime()) / 3_600_000
+    
+    const settings = await (prisma as any).platformSettings.findFirst({
+      select: { lateCancellationWindowHours: true },
+    }).catch(() => null)
+    const lateWindow = settings?.lateCancellationWindowHours ?? 24
+    const fullRefundWindow = lateWindow * 2
+    
+    if (hoursNotice >= fullRefundWindow) {
+      refundAmount = baseRefundAmount
+    } else if (hoursNotice >= lateWindow) {
+      refundAmount = toNumber(roundAmount(multiplyAmount(toDecimal(baseRefundAmount), 0.5), 2))
+    } else {
+      refundAmount = 0
+    }
+  }
+  
+  const stripe = (await import('@/lib/services/stripe')).default
+  const paymentIntentId = booking.paymentIntentId
+  if (!paymentIntentId) {
+    throw new Error('No payment intent found - cannot issue Stripe refund')
+  }
+  
+  let stripeRefund: any
+  let walletDebitId: string | null = null
+  
+  try {
+    // Step 1: Issue Stripe refund
+    stripeRefund = await stripe.refunds.create({
+      payment_intent: paymentIntentId,
+      amount: Math.round(refundAmount * 100),
+      reason: 'requested_by_customer',
+      metadata: {
+        bookingId,
+        adminId,
+        calculatedRefund: refundAmount.toString(),
+        adminNote: adminNote || '',
+      },
+    })
+    
+    // Step 2: Debit wallet + update booking (atomic)
+    await prisma.$transaction(async (tx) => {
+      if (booking.customer?.userId) {
+        const wallet = await tx.clientWallet.findUnique({
+          where: { userId: booking.customer.userId },
+        })
+        
+        if (wallet) {
+          const walletTxn = await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'DEBIT',
+              amount: refundAmount,
+              description: `Package cancelled — refunded $${refundAmount.toFixed(2)} to card`,
+              status: 'CONFIRMED',
+            },
+          })
+          walletDebitId = walletTxn.id
+        }
+      }
+      
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancellationStatus: 'APPROVED',
+          adminReviewedAt: new Date(),
+          adminReviewedBy: adminId,
+          adminReviewNote: adminNote || null,
+          adminOverrideAmount: overrideAmount || null,
+          stripeRefundId: stripeRefund.id,
+        },
+      })
+    })
+    
+    await writeAudit('CANCELLATION_APPROVED', adminId, 'ADMIN', bookingId, {
+      refundAmount,
+      stripeRefundId: stripeRefund.id,
+      walletDebitId,
+      overrideAmount: overrideAmount || null,
+      adminNote: adminNote || null,
+    })
+    
+    return {
+      booking: await prisma.booking.findUnique({ where: { id: bookingId } }),
+      refundAmount,
+      stripeRefundId: stripeRefund.id,
+    }
+  } catch (error) {
+    if (stripeRefund?.id) {
+      console.error('[CRITICAL] Stripe refund succeeded but wallet debit failed:', {
+        bookingId,
+        stripeRefundId: stripeRefund.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      await writeAudit('CANCELLATION_PARTIAL_FAILURE', adminId, 'ADMIN', bookingId, {
+        error: 'Stripe refund succeeded but wallet debit failed',
+        stripeRefundId: stripeRefund.id,
+        refundAmount,
+        requiresManualIntervention: true,
+      })
+    }
+    throw error
+  }
+}
+
+/**
+ * Reject a pending cancellation request.
+ * Keeps booking active, notifies customer.
+ */
+export async function rejectCancellation(
+  bookingId: string,
+  adminId: string,
+  reason: string
+): Promise<{ booking: any }> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+  })
+  
+  if (!booking) throw makeError('BOOKING_NOT_FOUND', 'Booking not found')
+  if ((booking as any).cancellationStatus !== 'PENDING') {
+    throw new Error('Booking is not pending cancellation approval')
+  }
+  
+  const updated = await prisma.booking.update({
+    where: { id: bookingId },
+    data: {
+      cancellationStatus: 'REJECTED',
+      adminReviewedAt: new Date(),
+      adminReviewedBy: adminId,
+      adminReviewNote: reason,
+    },
+  })
+  
+  await writeAudit('CANCELLATION_REJECTED', adminId, 'ADMIN', bookingId, {
+    reason,
+  })
+  
+  return { booking: updated }
+}

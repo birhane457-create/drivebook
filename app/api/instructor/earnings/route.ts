@@ -1,0 +1,423 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { resolveTimezone, timezoneFromState, localDateTimeToUTC, getLocalDateKey } from '@/lib/utils/timezone';
+
+/** Aggregate result shape returned by Prisma for transaction queries */
+interface TxAggregate {
+  _sum: { providerPayout: number | null; amount?: number | null; platformFee?: number | null };
+  _count: number;
+}
+
+/** Shape of a scheduled platform booking selected from the DB */
+interface ScheduledBooking {
+  id: string;
+  startTime: Date;
+  endTime: Date | null;
+  duration: number | null;
+  price: number;
+  platformFee: number | null;
+  providerPayout: number | null;
+  customer: { name: string | null } | null;
+  isPackageBooking: boolean;
+  parentBookingId: string | null;
+}
+
+/** Shape of a scheduled offline booking selected from the DB */
+interface ScheduledOfflineBooking {
+  id: string;
+  startTime: Date;
+  endTime: Date | null;
+  duration: number | null;
+  offlineAmountPaid: number | null;
+  customerName: string | null;
+  offlinePaymentMethod: string | null;
+}
+
+/** Shape of a transaction row returned by findMany */
+interface TxRow {
+  id: string;
+  amount: number;
+  platformFee: number;
+  providerPayout: number;
+  status: string;
+  description?: string;
+  createdAt: Date;
+  booking: {
+    id: string;
+    startTime: Date;
+    endTime: Date | null;
+    isPackageBooking: boolean;
+    packageHours: number | null;
+    parentBookingId: string | null;
+    source: string | null;
+    customer: { name: string | null } | null;
+  } | null;
+}
+
+
+export const dynamic = 'force-dynamic';
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Resolve providerId — prefer JWT value, fall back to userId lookup
+    let providerId = session!.user!.providerId;
+    if (!providerId) {
+      const found = await prisma.provider.findFirst({
+        where: { userId: session!.user!.id },
+        select: { id: true },
+      });
+      if (!found) {
+        return NextResponse.json({ error: 'Instructor not found' }, { status: 401 });
+      }
+      providerId = found.id;
+    }
+
+    // Determine instructor timezone (fallbacks) and period bounds
+    const instr = await prisma.provider.findUnique({ where: { id: providerId }, select: { timezone: true, state: true, hourlyRate: true } });
+    const instructorTz = resolveTimezone(instr?.timezone ?? timezoneFromState(instr?.state));
+
+    const url = new URL(req.url);
+    const qYear = url.searchParams.get('year');
+    const qMonth = url.searchParams.get('month'); // 1-12 or empty
+
+    // Helper to compute UTC start for a local YYYY-MM-DD at 00:00 in instructor TZ
+    const localMidnightToUTC = (dateStr: string) => localDateTimeToUTC(dateStr, '00:00', instructorTz);
+
+    let startOfThisMonth: Date;
+    let startOfLastMonth: Date;
+    let endOfLastMonth: Date;
+
+    if (qYear) {
+      const y = parseInt(qYear, 10);
+      if (qMonth) {
+        const m = parseInt(qMonth, 10);
+        const startLocal = `${y}-${String(m).padStart(2, '0')}-01`;
+        startOfThisMonth = localMidnightToUTC(startLocal);
+        // start of next month
+        const nextM = m === 12 ? 1 : m + 1;
+        const nextY = m === 12 ? y + 1 : y;
+        const startNextLocal = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+        startOfLastMonth = startOfThisMonth; // not used in this path
+        endOfLastMonth = new Date(localMidnightToUTC(startNextLocal).getTime() - 1);
+      } else {
+        const startLocal = `${y}-01-01`;
+        const startNextLocal = `${y + 1}-01-01`;
+        startOfThisMonth = localMidnightToUTC(startLocal);
+        endOfLastMonth = new Date(localMidnightToUTC(startNextLocal).getTime() - 1);
+        startOfLastMonth = localMidnightToUTC(`${y - 1}-12-01`);
+      }
+    } else {
+      // No explicit period requested; compute this month/last month based on instructor local "today"
+      const localTodayKey = getLocalDateKey(new Date(), instructorTz); // YYYY-MM-DD
+      const [yStr, mStr] = localTodayKey.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const startLocal = `${y}-${String(m).padStart(2, '0')}-01`;
+      const prevM = m === 1 ? 12 : m - 1;
+      const prevY = m === 1 ? y - 1 : y;
+      const startPrevLocal = `${prevY}-${String(prevM).padStart(2, '0')}-01`;
+      const startNextLocal = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`;
+      startOfThisMonth = localMidnightToUTC(startLocal);
+      startOfLastMonth = localMidnightToUTC(startPrevLocal);
+      endOfLastMonth = new Date(localMidnightToUTC(startNextLocal).getTime() - 1);
+    }
+
+    const now = new Date();
+
+    const [
+      completedPlatformStats,
+      completedOfflineStats,
+      pendingStats,
+      thisMonthPlatformStats,
+      thisMonthOfflineStats,
+      lastMonthStats,
+      scheduledBookings,
+      scheduledOfflineBookings,
+      recentTransactions
+    ] = (await Promise.all([
+      // Completed earnings (platform only)
+      prisma.transaction.aggregate({
+        where: {
+          providerId,
+          status: 'COMPLETED',
+          booking: {
+            source: { not: 'offline' }
+          }
+        },
+        _sum: { providerPayout: true, amount: true, platformFee: true },
+        _count: true
+      }),
+      // Completed earnings (offline only)
+      prisma.booking.aggregate({
+        where: {
+          providerId,
+          source: 'offline',
+          status: 'COMPLETED'
+        },
+        _sum: { offlineAmountPaid: true },
+        _count: true
+      }),
+      // Pending payouts
+      prisma.transaction.aggregate({
+        where: {
+          providerId,
+          status: 'PENDING',
+          booking: {
+            source: { not: 'offline' }
+          }
+        },
+        _sum: { providerPayout: true },
+        _count: true
+      }),
+      // This month earnings (platform only) — by lesson date
+      prisma.transaction.aggregate({
+        where: {
+          providerId,
+          status: 'COMPLETED',
+          booking: {
+            startTime: { gte: startOfThisMonth },
+            source: { not: 'offline' }
+          }
+        },
+        _sum: { providerPayout: true, amount: true, platformFee: true },
+        _count: true
+      }),
+      // This month earnings (offline only) — by lesson date
+      prisma.booking.aggregate({
+        where: {
+          providerId,
+          source: 'offline',
+          status: 'COMPLETED',
+          startTime: { gte: startOfThisMonth }
+        },
+        _sum: { offlineAmountPaid: true },
+        _count: true
+      }),
+      // Last month earnings — by lesson date, not transaction creation date
+      prisma.transaction.aggregate({
+        where: {
+          providerId,
+          status: 'COMPLETED',
+          booking: {
+            startTime: {
+              gte: startOfLastMonth,
+              lte: endOfLastMonth
+            }
+          }
+        },
+        _sum: { providerPayout: true },
+        _count: true
+      }),
+      // Upcoming platform bookings (SCHEDULED - will earn when taught)
+      prisma.booking.findMany({
+        where: {
+          providerId,
+          source: { not: 'offline' },
+          status: 'CONFIRMED',
+          startTime: { gte: now }
+        },
+        select: {
+          id: true,
+          startTime: true,
+          endTime: true,
+          duration: true,
+          price: true,
+          platformFee: true,
+          providerPayout: true,
+          commissionRate: true,
+          customer: { select: {
+              name: true
+            }
+          },
+          isPackageBooking: true,
+          parentBookingId: true
+        } as any,
+        orderBy: {
+          startTime: 'asc'
+        },
+        take: 20
+      }),
+      // Upcoming offline bookings
+      prisma.booking.findMany({
+        where: {
+          providerId,
+          source: 'offline',
+          status: 'CONFIRMED',
+          startTime: { gte: now }
+        },
+        select: {
+          id: true,
+          startTime: true,
+          endTime: true,
+          duration: true,
+          offlineAmountPaid: true,
+          customerName: true,
+          offlinePaymentMethod: true
+        } as any,
+        orderBy: {
+          startTime: 'asc'
+        },
+        take: 20
+      }),
+      // Recent transactions (actual lessons only, not package purchases)
+      prisma.transaction.findMany({
+        where: { 
+          providerId
+        },
+        include: {
+          booking: {
+            select: {
+              id: true,
+              startTime: true,
+              endTime: true,
+              isPackageBooking: true,
+              packageHours: true,
+              parentBookingId: true,
+              source: true,
+              customer: { select: {
+                  name: true,
+                }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100
+      })
+    ])) as unknown as [
+      TxAggregate, // completedPlatformStats
+      { _sum: { offlineAmountPaid: number | null }; _count: number }, // completedOfflineStats
+      TxAggregate, // pendingStats
+      TxAggregate, // thisMonthPlatformStats
+      { _sum: { offlineAmountPaid: number | null }; _count: number }, // thisMonthOfflineStats
+      TxAggregate, // lastMonthStats
+      ScheduledBooking[],
+      ScheduledOfflineBooking[],
+      TxRow[]
+    ];
+
+    // Filter out package purchase transactions (parent bookings)
+    const lessonTransactions = recentTransactions.filter((t: any) => {
+      if (!t.booking) return true; // Keep non-booking transactions
+      // Exclude parent package bookings (these are purchases, not lessons)
+      if (t.booking.isPackageBooking && !t.booking.parentBookingId) {
+        return false;
+      }
+      return true;
+    });
+
+    // Get instructor hourly rate for fallback calculation
+    const hourlyRate = instr?.hourlyRate || 0;
+
+    // Calculate platform scheduled bookings totals
+    const platformScheduledTotal = scheduledBookings.reduce((sum: any, b: any) => {
+      let payout = b.providerPayout;
+      if (!payout || payout === 0) {
+        // Use the commission rate locked at booking creation time.
+        // commissionRate is stored as a decimal (e.g. 0.15 = 15%).
+        // Fall back to 15% (BASIC rate) if not set — only affects very old bookings.
+        const rate = (b as any).commissionRate ?? 0.15;
+        if (b.price > 0) {
+          payout = b.price * (1 - rate);
+        } else if (b.startTime && b.endTime) {
+          const hours = (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / 3600000;
+          payout = hours * hourlyRate * (1 - rate);
+        }
+      }
+      return sum + (payout || 0);
+    }, 0);
+    const platformScheduledCount = scheduledBookings.length;
+
+    // Calculate offline scheduled bookings totals
+    const offlineScheduledTotal = scheduledOfflineBookings.reduce((sum: any, b: any) => {
+      return sum + (b.offlineAmountPaid || 0);
+    }, 0);
+    const offlineScheduledCount = scheduledOfflineBookings.length;
+
+    return NextResponse.json({
+      // ── PLATFORM EARNINGS (DriveBook-processed payments) ──
+      platform: {
+        totalEarnings: completedPlatformStats._sum.providerPayout || 0,
+        totalGross: completedPlatformStats._sum.amount || 0,
+        totalFees: completedPlatformStats._sum.platformFee || 0,
+        completedCount: completedPlatformStats._count || 0,
+        thisMonthEarnings: thisMonthPlatformStats._sum.providerPayout || 0,
+        thisMonthGross: thisMonthPlatformStats._sum.amount || 0,
+        thisMonthFees: thisMonthPlatformStats._sum.platformFee || 0,
+        thisMonthCount: thisMonthPlatformStats._count || 0,
+        pendingPayouts: pendingStats._sum.providerPayout || 0,
+        pendingCount: pendingStats._count || 0,
+        scheduledTotal: platformScheduledTotal,
+        scheduledCount: platformScheduledCount,
+      },
+      
+      // ── OFFLINE EARNINGS (Self-reported, instructor-handled) ──
+      offline: {
+        totalLogged: completedOfflineStats._sum.offlineAmountPaid || 0,
+        completedCount: completedOfflineStats._count || 0,
+        thisMonthLogged: thisMonthOfflineStats._sum.offlineAmountPaid || 0,
+        thisMonthCount: thisMonthOfflineStats._count || 0,
+        scheduledTotal: offlineScheduledTotal,
+        scheduledCount: offlineScheduledCount,
+      },
+
+      // ── COMBINED (for compatibility) ──
+      totalEarnings: (completedPlatformStats._sum.providerPayout || 0) + (completedOfflineStats._sum.offlineAmountPaid || 0),
+      thisMonthEarnings: (thisMonthPlatformStats._sum.providerPayout || 0) + (thisMonthOfflineStats._sum.offlineAmountPaid || 0),
+      lastMonthEarnings: lastMonthStats._sum.providerPayout || 0,
+      
+      // Transactions with full details (filtered to exclude package purchases, platform only)
+      transactions: lessonTransactions,
+      
+      // SCHEDULED - Platform lessons confirmed to teach (will earn when taught)
+      scheduledBookings: scheduledBookings.map((booking: any) => {
+        let payout = booking.providerPayout;
+        if (!payout || payout === 0) {
+          const rate = (booking as any).commissionRate ?? 0.15;
+          if (booking.price > 0) {
+            payout = booking.price * (1 - rate);
+          } else if (booking.startTime && booking.endTime) {
+            const hours = (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3600000;
+            payout = hours * hourlyRate * (1 - rate);
+          }
+        }
+        return {
+          id: booking.id,
+          startTime: booking.startTime,
+          endTime: booking.endTime,
+          duration: (booking as any).duration,
+          customerName: (booking as any).customer?.name ?? 'Guest',
+          providerPayout: payout || 0,
+          price: booking.price,
+          isFromPackage: (booking as any).isPackageBooking && booking.parentBookingId !== null
+        };
+      }),
+      scheduledTotal: platformScheduledTotal,
+      scheduledCount: platformScheduledCount,
+
+      // SCHEDULED OFFLINE - Offline lessons logged for future
+      scheduledOffline: scheduledOfflineBookings.map((booking: any) => ({
+        id: booking.id,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        duration: (booking as any).duration,
+        customerName: (booking as any).customerName || 'Unknown',
+        offlineAmountPaid: (booking as any).offlineAmountPaid || 0,
+        offlinePaymentMethod: (booking as any).offlinePaymentMethod || 'unknown'
+      }))
+    });
+  } catch (error) {
+    console.error('Earnings fetch error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch earnings' },
+      { status: 500 }
+    );
+  }
+}

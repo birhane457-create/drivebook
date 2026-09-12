@@ -1,0 +1,130 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { localDateTimeToUTC, resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
+import { z } from 'zod';
+
+
+export const dynamic = 'force-dynamic';
+const validateSlotsSchema = z.object({
+  providerId: z.string(),
+  slots: z.array(z.object({
+    date: z.string(),
+    time: z.string(),
+    duration: z.number()
+  })),
+  sessionId: z.string()
+});
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const data = validateSlotsSchema.parse(body);
+
+    const invalidSlots = [];
+    const now = new Date();
+
+    const instructor = await prisma.provider.findUnique({
+    where: { id: data.providerId },
+    select: { timezone: true, state: true },
+  });
+  const instructorTimezone = instructor
+    ? resolveTimezone(instructor.timezone) !== DEFAULT_TIMEZONE
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor.state)
+    : DEFAULT_TIMEZONE;
+
+  for (const slot of data.slots) {
+      // Parse date (YYYY-MM-DD) + time (HH:MM) in instructor local time.
+      // Using localDateTimeToUTC avoids server-timezone ambiguity and supports national expansion.
+      const startDateTime = localDateTimeToUTC(slot.date, slot.time, instructorTimezone);
+      const endDateTime = new Date(startDateTime.getTime() + slot.duration * 60 * 1000);
+
+      // Clean up expired reservations for this instructor
+      await prisma.slotReservation.deleteMany({
+        where: {
+          providerId: data.providerId,
+          expiresAt: { lt: now },
+        },
+      });
+
+      // Check for active slot reservations owned by other sessions.
+      // Range overlap: reservation.startTime < thisEndDateTime AND reservation.endTime > thisStartDateTime
+      const conflictingReservation = await prisma.slotReservation.findFirst({
+        where: {
+          providerId: data.providerId,
+          sessionId: { not: data.sessionId },
+          expiresAt: { gt: now },
+          AND: [
+            { startTime: { lt: endDateTime } },
+            { endTime: { gt: startDateTime } }
+          ]
+        },
+        select: { id: true },
+      });
+
+      // Check for overlapping active bookings in database.
+      // COMPLETED bookings are past lessons and must NOT block future slots.
+      const overlappingBookings = await prisma.booking.count({
+        where: {
+          providerId: data.providerId,
+          status: {
+            in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED']
+          },
+          OR: [
+            {
+              // Booking starts during this slot
+              AND: [
+                { startTime: { gte: startDateTime } },
+                { startTime: { lt: endDateTime } }
+              ]
+            },
+            {
+              // Booking ends during this slot
+              AND: [
+                { endTime: { gt: startDateTime } },
+                { endTime: { lte: endDateTime } }
+              ]
+            },
+            {
+              // Booking completely encompasses this slot
+              AND: [
+                { startTime: { lte: startDateTime } },
+                { endTime: { gte: endDateTime } }
+              ]
+            }
+          ]
+        }
+      });
+
+      if (conflictingReservation || overlappingBookings > 0) {
+        invalidSlots.push({
+          date: slot.date,
+          time: slot.time,
+          duration: slot.duration,
+          reason: conflictingReservation
+            ? 'This slot is temporarily reserved by another user'
+            : 'This slot was booked by another user'
+        });
+      }
+    }
+
+    if (invalidSlots.length > 0) {
+      return NextResponse.json({
+        valid: false,
+        invalidSlots,
+        message: `${invalidSlots.length} slot(s) are no longer available. Please select different times.`
+      }, { status: 409 });
+    }
+
+    return NextResponse.json({
+      valid: true,
+      message: 'All slots are available'
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 });
+    }
+    console.error('Validate slots error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

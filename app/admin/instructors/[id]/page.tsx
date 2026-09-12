@@ -1,0 +1,1122 @@
+'use client';
+import { AdminPageLayout } from '@/components/ui'
+
+import React, { useEffect, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import AdminNav from '@/components/admin/AdminNav';
+import Link from 'next/link';
+import { RefreshCw, ShieldOff, Zap, Link2, Trash2, AlertTriangle, CheckCircle, Loader2, X } from 'lucide-react';
+
+interface InstructorData {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  bio: string | null;
+  profileImage: string | null;
+  approvalStatus: string;
+  subscriptionTier: string;
+  subscriptionStatus: string;
+  hourlyRate: number;
+  abn: string | null;
+  abnVerified: boolean;
+  abnStatus: string | null;
+  withholdingTaxRate: number;
+  payoutMethod: string;
+  licenseNumber: string | null;
+  licenseExpiry: Date | null;
+  insuranceNumber: string | null;
+  insuranceExpiry: Date | null;
+  policeCheckExpiry: Date | null;
+  wwcCheckExpiry: Date | null;
+  licenseImageFront: string | null;
+  licenseImageBack: string | null;
+  insurancePolicyDoc: string | null;
+  policeCheckDoc: string | null;
+  wwcCheckDoc: string | null;
+  averageRating: number | null;
+  totalReviews: number;
+  isActive: boolean;
+  createdAt: Date;
+  user: { email: string; createdAt?: string | null; termsAcceptedAt?: string | null } | null;
+  stripeAccountId?: string | null;
+  stripeConnectStatus?: 'connected' | 'not_connected';
+  _count: { bookings: number };
+  bookings: any[];
+}
+
+interface SubData {
+  provider: {
+    subscriptionTier: string;
+    subscriptionStatus: string;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    trialEndsAt: string | null;
+    email: string;
+  };
+  subscriptions: Array<{
+    id: string;
+    tier: string;
+    status: string;
+    monthlyAmount: number;
+    billingCycle: string;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    trialEndsAt: string | null;
+    cancelAtPeriodEnd: boolean;
+    cancelledAt: string | null;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    createdAt: string;
+  }>;
+  stripeData: {
+    id: string;
+    status: string;
+    currentPeriodEnd: string;
+    cancelAtPeriodEnd: boolean;
+    trialEnd: string | null;
+    priceId: string;
+    amount: number;
+    interval: string;
+    metadata: Record<string, string>;
+    latestInvoice: { id: string; status: string; amountPaid: number; created: string; hostedUrl: string } | null;
+  } | null;
+  stripeError: string | null;
+  drift: string[];
+}
+
+// ── Subscription Tab ──────────────────────────────────────────────────────────
+function SubscriptionTab({ providerId }: { providerId: string }) {
+  const [data, setData] = useState<SubData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // Override form
+  const [overrideTier, setOverrideTier] = useState('');
+  const [overrideStatus, setOverrideStatus] = useState('ACTIVE');
+  const [overrideReason, setOverrideReason] = useState('');
+
+  // Link Stripe sub form
+  const [linkSubId, setLinkSubId] = useState('');
+  const [linkRowId, setLinkRowId] = useState('');
+
+  // Cancel confirm
+  const [cancelConfirm, setCancelConfirm] = useState<null | 'period_end' | 'immediately'>(null);
+  const [cancelReason, setCancelReason] = useState('');
+
+  // C-08 fix: inline confirm for subscription row deletion — replaces window.confirm()
+  const [deleteRowConfirm, setDeleteRowConfirm] = useState<string | null>(null);
+
+  const fetchSub = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/admin/instructors/${providerId}/subscription`);
+      if (r.ok) setData(await r.json());
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchSub(); }, [providerId]);
+
+  const doAction = async (action: string, extra: Record<string, any> = {}, reason?: string) => {
+    setActionLoading(true);
+    setMsg(null);
+    try {
+      const r = await fetch(`/api/admin/instructors/${providerId}/subscription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason: reason || overrideReason || 'Admin action', ...extra }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setMsg({ type: 'ok', text: d.message || 'Done' });
+        await fetchSub();
+      } else {
+        setMsg({ type: 'err', text: d.error || 'Action failed' });
+      }
+    } catch { setMsg({ type: 'err', text: 'Network error' }); }
+    finally { setActionLoading(false); setCancelConfirm(null); }
+  };
+
+  const tierColor: Record<string, string> = {
+    BASIC: 'bg-secondary/70 text-foreground',
+    PRO: 'bg-blue-900/40 text-primary',
+    STUDIO: 'bg-indigo-900/40 text-indigo-300',
+    PREMIUM: 'bg-violet-900/40 text-violet-300',
+  };
+  const statusColor: Record<string, string> = {
+    ACTIVE: 'text-emerald-400',
+    TRIAL: 'text-amber-400',
+    PAST_DUE: 'text-destructive',
+    CANCELLED: 'text-muted-foreground/60',
+    SUSPENDED: 'text-orange-400',
+  };
+
+  if (loading) return <div className="flex items-center gap-2 py-8 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading subscription data…</div>;
+  if (!data) return <p className="text-destructive py-4">Failed to load subscription data.</p>;
+
+  const { provider: sub, subscriptions, stripeData, stripeError, drift } = data;
+
+  return (
+    <div className="space-y-5">
+      {msg && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${msg.type === 'ok' ? 'bg-green-900/30 border border-green-700 text-emerald-400' : 'bg-red-900/30 border border-red-700 text-destructive'}`}>
+          {msg.type === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+          {msg.text}
+          <button onClick={() => setMsg(null)} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {/* ── Current state ───────────────────────────────── */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        {/* DB state */}
+        <div className="bg-secondary rounded-xl p-4 border border-border">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Database State</p>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Tier</span>
+              <span className={`px-2 py-0.5 rounded text-xs font-bold ${tierColor[sub.subscriptionTier] || 'bg-secondary/70 text-foreground'}`}>
+                {sub.subscriptionTier || '—'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Status</span>
+              <span className={`font-semibold ${statusColor[sub.subscriptionStatus] || 'text-foreground'}`}>
+                {sub.subscriptionStatus || '—'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Trial ends</span>
+              <span className="text-foreground">{sub.trialEndsAt ? new Date(sub.trialEndsAt).toLocaleDateString('en-AU') : '—'}</span>
+            </div>
+            <div className="flex justify-between items-start">
+              <span className="text-muted-foreground">Stripe Customer</span>
+              <span className="text-foreground text-xs break-all text-right max-w-[55%]">{sub.stripeCustomerId || <span className="text-amber-400">Not linked</span>}</span>
+            </div>
+            <div className="flex justify-between items-start">
+              <span className="text-muted-foreground">Stripe Sub ID</span>
+              <span className="text-foreground text-xs break-all text-right max-w-[55%]">{sub.stripeSubscriptionId || <span className="text-amber-400">Not linked</span>}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Stripe state */}
+        <div className="bg-secondary rounded-xl p-4 border border-border">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Live Stripe State</p>
+            <button onClick={fetchSub} className="text-primary hover:text-primary">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {stripeError ? (
+            <p className="text-amber-400 text-sm">{stripeError}</p>
+          ) : stripeData ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${stripeData.status === 'active' ? 'text-emerald-400' : 'text-amber-400'}`}>{stripeData.status}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="text-foreground">${stripeData.amount}/{stripeData.interval}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Period ends</span><span className="text-foreground">{new Date(stripeData.currentPeriodEnd).toLocaleDateString('en-AU')}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Cancel at end</span><span className={stripeData.cancelAtPeriodEnd ? 'text-destructive' : 'text-muted-foreground'}>{stripeData.cancelAtPeriodEnd ? 'Yes' : 'No'}</span></div>
+              {stripeData.latestInvoice && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Last invoice</span>
+                  <a href={stripeData.latestInvoice.hostedUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-primary hover:underline text-xs">
+                    ${stripeData.latestInvoice.amountPaid} ({stripeData.latestInvoice.status}) →
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-muted-foreground/60 text-sm">No Stripe subscription linked</p>
+          )}
+        </div>
+      </div>
+
+      {/* Drift warning */}
+      {drift.length > 0 && (
+        <div className="bg-amber-900/20 border border-amber-700 rounded-xl px-4 py-3 text-sm">
+          <p className="text-amber-300 font-semibold mb-1">⚠ DB / Stripe Drift Detected</p>
+          {drift.map((d, i) => <p key={i} className="text-amber-400 text-xs">{d}</p>)}
+          <button onClick={() => doAction('sync')} disabled={actionLoading}
+            className="mt-2 flex items-center gap-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-foreground px-3 py-1.5 rounded-lg">
+            {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Fix now — Force Sync
+          </button>
+        </div>
+      )}
+
+      {/* ── Actions ─────────────────────────────────────── */}
+      <div className="grid sm:grid-cols-3 gap-4">
+        {/* Force sync */}
+        <div className="bg-secondary rounded-xl p-4 border border-border">
+          <p className="text-sm font-semibold text-foreground mb-1 flex items-center gap-1.5"><RefreshCw className="w-4 h-4 text-primary" /> Force Sync</p>
+          <p className="text-xs text-muted-foreground mb-3">Pull live Stripe state into DB. Fixes drift after portal changes.</p>
+          <button onClick={() => doAction('sync')} disabled={actionLoading || !sub.stripeSubscriptionId}
+            className="w-full py-2 bg-primary hover:bg-primary/90 text-foreground text-xs rounded-lg disabled:opacity-40 flex items-center justify-center gap-1.5">
+            {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null} Sync from Stripe
+          </button>
+          {!sub.stripeSubscriptionId && <p className="text-xs text-amber-400 mt-1.5">Requires linked Stripe subscription ID</p>}
+        </div>
+
+        {/* Cancel at period end */}
+        <div className="bg-secondary rounded-xl p-4 border border-border">
+          <p className="text-sm font-semibold text-foreground mb-1 flex items-center gap-1.5"><ShieldOff className="w-4 h-4 text-amber-400" /> Cancel Subscription</p>
+          <p className="text-xs text-muted-foreground mb-3">Set to cancel at end of current billing period, or cancel immediately.</p>
+          <div className="flex gap-1.5">
+            <button onClick={() => setCancelConfirm('period_end')} disabled={actionLoading || !sub.stripeSubscriptionId}
+              className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-foreground text-xs rounded-lg disabled:opacity-40">
+              At period end
+            </button>
+            <button onClick={() => setCancelConfirm('immediately')} disabled={actionLoading || !sub.stripeSubscriptionId}
+              className="flex-1 py-2 bg-red-700 hover:bg-red-800 text-foreground text-xs rounded-lg disabled:opacity-40">
+              Immediately
+            </button>
+          </div>
+        </div>
+
+        {/* Link Stripe sub */}
+        <div className="bg-secondary rounded-xl p-4 border border-border">
+          <p className="text-sm font-semibold text-foreground mb-1 flex items-center gap-1.5"><Link2 className="w-4 h-4 text-purple-400" /> Link Stripe Sub</p>
+          <p className="text-xs text-muted-foreground mb-3">Manually link a Stripe subscription ID (fixes missing stripeSubscriptionId).</p>
+          <input value={linkSubId} onChange={e => setLinkSubId(e.target.value.trim())}
+            placeholder="sub_1Xxx…"
+            className="w-full bg-secondary/70 border border-border rounded-lg px-2 py-1.5 text-xs text-foreground mb-1.5 placeholder-slate-500" />
+          <button onClick={() => doAction('link_stripe_sub', { stripeSubscriptionId: linkSubId, subscriptionRowId: linkRowId || undefined })}
+            disabled={actionLoading || !linkSubId}
+            className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-foreground text-xs rounded-lg disabled:opacity-40 flex items-center justify-center gap-1.5">
+            {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null} Link
+          </button>
+        </div>
+      </div>
+
+      {/* Override tier */}
+      <div className="bg-secondary rounded-xl p-4 border border-border">
+        <p className="text-sm font-semibold text-foreground mb-1 flex items-center gap-1.5"><Zap className="w-4 h-4 text-yellow-400" /> Override Tier / Status</p>
+        <p className="text-xs text-muted-foreground mb-3">Manually set the instructor's subscription tier and status. Does not touch Stripe — use for trial extensions, promotional access, or data correction.</p>
+        <div className="grid sm:grid-cols-4 gap-2 items-end">
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Tier</label>
+            <select value={overrideTier} onChange={e => setOverrideTier(e.target.value)}
+              className="w-full bg-secondary/70 border border-border rounded-lg px-2 py-1.5 text-xs text-foreground">
+              <option value="">— select —</option>
+              <option value="BASIC">BASIC</option>
+              <option value="PRO">PRO</option>
+              <option value="STUDIO">STUDIO</option>
+              <option value="PREMIUM">PREMIUM</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Status</label>
+            <select value={overrideStatus} onChange={e => setOverrideStatus(e.target.value)}
+              className="w-full bg-secondary/70 border border-border rounded-lg px-2 py-1.5 text-xs text-foreground">
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="TRIAL">TRIAL</option>
+              <option value="PAST_DUE">PAST_DUE</option>
+              <option value="CANCELLED">CANCELLED</option>
+              <option value="SUSPENDED">SUSPENDED</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-muted-foreground mb-1">Reason (required)</label>
+            <input value={overrideReason} onChange={e => setOverrideReason(e.target.value)}
+              placeholder="e.g. trial extension, data correction…"
+              className="w-full bg-secondary/70 border border-border rounded-lg px-2 py-1.5 text-xs text-foreground placeholder-slate-500" />
+          </div>
+        </div>
+        <button
+          onClick={() => doAction('override_tier', { tier: overrideTier, status: overrideStatus }, overrideReason)}
+          disabled={actionLoading || !overrideTier || overrideReason.length < 5}
+          className="mt-3 flex items-center gap-1.5 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-foreground text-xs rounded-lg disabled:opacity-40">
+          {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} Apply Override
+        </button>
+        <p className="text-xs text-muted-foreground/60 mt-1.5">⚠ This bypasses Stripe — use only for operational corrections. All overrides are audit-logged.</p>
+      </div>
+
+      {/* Subscription history rows */}
+      <div className="bg-secondary rounded-xl border border-border">
+        <p className="text-xs text-muted-foreground uppercase tracking-wide px-4 py-3 border-b border-border font-semibold">Subscription Rows ({subscriptions.length})</p>
+        {subscriptions.length === 0 ? (
+          <p className="text-muted-foreground/60 text-sm text-center py-6">No subscription rows</p>
+        ) : (
+          <div className="divide-y divide-slate-700">
+            {subscriptions.map(row => (
+              <div key={row.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                <div className="text-xs space-y-0.5 flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`px-1.5 py-0.5 rounded font-bold ${tierColor[row.tier] || 'bg-secondary/70 text-foreground'}`}>{row.tier}</span>
+                    <span className={`font-semibold ${statusColor[row.status] || 'text-foreground'}`}>{row.status}</span>
+                    <span className="text-muted-foreground">${row.monthlyAmount}/{row.billingCycle}</span>
+                    {row.cancelAtPeriodEnd && <span className="text-destructive font-medium">Cancels at period end</span>}
+                  </div>
+                  <p className="text-muted-foreground/60">
+                    {row.currentPeriodEnd ? `Period ends ${new Date(row.currentPeriodEnd).toLocaleDateString('en-AU')}` : 'No period date'}
+                    {' · '}Created {new Date(row.createdAt).toLocaleDateString('en-AU')}
+                  </p>
+                  <p className="text-muted-foreground/60 break-all">
+                    {row.stripeSubscriptionId
+                      ? <span className="text-muted-foreground">{row.stripeSubscriptionId}</span>
+                      : <span className="text-amber-400">No Stripe sub ID</span>
+                    }
+                  </p>
+                </div>
+                {subscriptions.length > 1 && (
+                  <button
+                    onClick={() => setDeleteRowConfirm(row.id)}
+                    disabled={actionLoading}
+                    title="Delete duplicate row"
+                    className="shrink-0 p-1.5 text-red-500 hover:bg-red-900/30 rounded-lg disabled:opacity-40">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Delete subscription row inline confirm — replaces window.confirm() */}
+      {deleteRowConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-foreground mb-2">Delete subscription row?</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Row <span className="font-mono text-foreground text-xs">{deleteRowConfirm.slice(-8)}</span> will be permanently deleted. This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteRowConfirm(null)}
+                className="flex-1 py-2 border border-border text-sm rounded-lg hover:bg-secondary text-foreground">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  doAction('delete_subscription_row', { subscriptionRowId: deleteRowConfirm });
+                  setDeleteRowConfirm(null);
+                }}
+                disabled={actionLoading}
+                className="flex-1 py-2 bg-red-700 hover:bg-red-800 text-foreground text-sm rounded-lg font-semibold disabled:opacity-40">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel confirm modal */}
+      {cancelConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-foreground mb-2">
+              {cancelConfirm === 'immediately' ? 'Cancel Immediately?' : 'Cancel at Period End?'}
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {cancelConfirm === 'immediately'
+                ? 'This will cancel the Stripe subscription right now. The instructor loses access immediately. This cannot be undone.'
+                : 'The instructor keeps access until end of current billing period, then it cancels.'
+              }
+            </p>
+            <input value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+              placeholder="Reason for cancellation (required)…"
+              className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground mb-4 placeholder-slate-500" />
+            <div className="flex gap-2">
+              <button onClick={() => setCancelConfirm(null)} className="flex-1 py-2 border border-border text-sm rounded-lg hover:bg-secondary text-foreground">
+                Cancel
+              </button>
+              <button
+                onClick={() => doAction(cancelConfirm === 'immediately' ? 'cancel_immediately' : 'cancel', {}, cancelReason)}
+                disabled={actionLoading || cancelReason.length < 5}
+                className={`flex-1 py-2 text-sm rounded-lg text-foreground font-semibold disabled:opacity-40 flex items-center justify-center gap-1.5
+                  ${cancelConfirm === 'immediately' ? 'bg-destructive hover:bg-destructive/90' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Admin Documents Tab ───────────────────────────────────────────────────────
+// All document views go through the signed URL API — raw Cloudinary URLs are never
+// rendered in the browser. Each "View" button fetches a 5-min signed URL on demand.
+type DocStatus = { status: string; label: string; color: string; icon: string };
+
+function AdminDocViewButton({ providerId, docType, label }: { providerId: string; docType: string; label: string }) {
+  const [loading, setLoading] = React.useState(false);
+  const openDoc = async () => {
+    setLoading(true);
+    try {
+      // Use the existing signed URL route: /api/admin/instructors/[id]/documents/[type]
+      const res = await fetch(`/api/admin/instructors/${providerId}/documents/${docType}`);
+      if (res.ok) {
+        const { url } = await res.json();
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } finally { setLoading(false); }
+  };
+  return (
+    <button onClick={openDoc} disabled={loading}
+      className="text-sm text-primary hover:text-primary hover:underline block disabled:opacity-50 text-left">
+      {loading ? 'Loading…' : label}
+    </button>
+  );
+}
+
+function AdminDocumentsTab({ providerId, instructor, licenseStatus, insuranceStatus, policeStatus, wwcStatus }: {
+  providerId: string;
+  instructor: InstructorData;
+  licenseStatus: DocStatus;
+  insuranceStatus: DocStatus;
+  policeStatus: DocStatus;
+  wwcStatus: DocStatus;
+}) {
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <Link href={`/admin/documents/review/${providerId}`}
+          className="px-4 py-2 bg-primary text-foreground rounded hover:bg-primary/90">
+          Review &amp; Manage Documents
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="border border-border rounded-lg p-4">
+          <h4 className="font-semibold text-foreground mb-3">License</h4>
+          <p className={`font-bold mb-2 ${licenseStatus.color}`}>{licenseStatus.icon} {licenseStatus.label}</p>
+          <p className="text-sm text-muted-foreground">Number: {instructor.licenseNumber || 'Not provided'}</p>
+          {instructor.licenseExpiry && <p className="text-sm text-muted-foreground">Expires: {new Date(instructor.licenseExpiry).toLocaleDateString('en-AU')}</p>}
+          <div className="mt-2 space-y-1">
+            {instructor.licenseImageFront && <AdminDocViewButton providerId={providerId} docType="licenseImageFront" label="View Front Image →" />}
+            {instructor.licenseImageBack  && <AdminDocViewButton providerId={providerId} docType="licenseImageBack"  label="View Back Image →" />}
+          </div>
+        </div>
+
+        <div className="border border-border rounded-lg p-4">
+          <h4 className="font-semibold text-foreground mb-3">Insurance</h4>
+          <p className={`font-bold mb-2 ${insuranceStatus.color}`}>{insuranceStatus.icon} {insuranceStatus.label}</p>
+          <p className="text-sm text-muted-foreground">Number: {instructor.insuranceNumber || 'Not provided'}</p>
+          {instructor.insuranceExpiry && <p className="text-sm text-muted-foreground">Expires: {new Date(instructor.insuranceExpiry).toLocaleDateString('en-AU')}</p>}
+          {instructor.insurancePolicyDoc && <div className="mt-2"><AdminDocViewButton providerId={providerId} docType="insurancePolicyDoc" label="View Document →" /></div>}
+        </div>
+
+        <div className="border border-border rounded-lg p-4">
+          <h4 className="font-semibold text-foreground mb-3">Police Check</h4>
+          <p className={`font-bold mb-2 ${policeStatus.color}`}>{policeStatus.icon} {policeStatus.label}</p>
+          {instructor.policeCheckExpiry && <p className="text-sm text-muted-foreground">Expires: {new Date(instructor.policeCheckExpiry).toLocaleDateString('en-AU')}</p>}
+          {instructor.policeCheckDoc && <div className="mt-2"><AdminDocViewButton providerId={providerId} docType="policeCheckDoc" label="View Document →" /></div>}
+        </div>
+
+        <div className="border border-border rounded-lg p-4">
+          <h4 className="font-semibold text-foreground mb-3">WWC Check</h4>
+          <p className={`font-bold mb-2 ${wwcStatus.color}`}>{wwcStatus.icon} {wwcStatus.label}</p>
+          {instructor.wwcCheckExpiry && <p className="text-sm text-muted-foreground">Expires: {new Date(instructor.wwcCheckExpiry).toLocaleDateString('en-AU')}</p>}
+          {instructor.wwcCheckDoc && <div className="mt-2"><AdminDocViewButton providerId={providerId} docType="wwcCheckDoc" label="View Document →" /></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminInstructorProfilePage() {
+  const router = useRouter();
+  const params = useParams();
+  const providerId = params.id as string;
+  
+  const [instructor, setInstructor] = useState<InstructorData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'overview' | 'subscription' | 'bookings' | 'documents'>('overview');
+  const [nudgeLoading, setNudgeLoading] = useState(false);
+  const [nudgeResult, setNudgeResult] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // Onboarding sequence state
+  const [onboardingSteps, setOnboardingSteps] = useState<Array<{
+    id: string; label: string; trigger: string; delayDays: number;
+    status: 'SENT' | 'SKIPPED' | 'PENDING'; sentAt: string | null;
+  }> | null>(null);
+
+  useEffect(() => {
+    fetchInstructor();
+    fetchOnboardingStatus();
+  }, [providerId]);
+
+  const fetchInstructor = async () => {
+    try {
+      const res = await fetch(`/api/admin/instructors/${providerId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setInstructor(data);
+      } else if (res.status === 401 || res.status === 403) {
+        router.push('/login');
+      } else {
+        router.push('/admin/instructors');
+      }
+    } catch (error) {
+      console.error('Failed to fetch instructor:', error);
+      router.push('/admin/instructors');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOnboardingStatus = async () => {
+    try {
+      const res = await fetch(`/api/admin/instructors/${providerId}/onboarding-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setOnboardingSteps(data.steps);
+      }
+    } catch {
+      // Non-critical — panel stays hidden if this fails
+    }
+  };
+
+  const getDocStatus = (expiry: Date | null, docUrl: string | null) => {
+    if (!expiry || !docUrl) return { status: 'expired', label: 'Missing', color: 'text-destructive', icon: '🔴' };
+    const now = new Date();
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const expiryDate = new Date(expiry);
+    if (expiryDate < now) return { status: 'expired', label: 'Expired', color: 'text-destructive', icon: '🔴' };
+    if (expiryDate < thirtyDaysFromNow) return { status: 'expiring', label: 'Expiring Soon', color: 'text-yellow-600', icon: '🟡' };
+    return { status: 'valid', label: 'Valid', color: 'text-emerald-400', icon: '🟢' };
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <AdminPageLayout title="Instructor Not Found" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'S' }]}>
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <p>Loading instructor profile...</p>
+          </div>
+        </AdminPageLayout>
+      </div>
+    );
+  }
+
+  if (!instructor) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <AdminPageLayout title="Instructor Not Found" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'S' }]}>
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="bg-card rounded-lg border border-border p-6 text-center">
+              <h1 className="text-2xl font-bold text-foreground mb-4">Instructor Not Found</h1>
+              <Link href="/admin/instructors" className="text-primary hover:text-primary">
+                Back to Instructors
+              </Link>
+            </div>
+          </div>
+        </AdminPageLayout>
+      </div>
+    );
+  }
+
+  const licenseStatus = getDocStatus(instructor.licenseExpiry, instructor.licenseImageFront);
+  const insuranceStatus = getDocStatus(instructor.insuranceExpiry, instructor.insurancePolicyDoc);
+  const policeStatus = getDocStatus(instructor.policeCheckExpiry, instructor.policeCheckDoc);
+  const wwcStatus = getDocStatus(instructor.wwcCheckExpiry, instructor.wwcCheckDoc);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <AdminPageLayout title={`Instructor — ${instructor.name}`} breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Instructors', href: '/admin/instructors' }, { label: instructor.name }]}>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Back Button */}
+        <Link 
+          href="/admin/instructors"
+          className="inline-flex items-center text-primary hover:text-primary mb-4"
+        >
+          ← Back to Instructors
+        </Link>
+
+        {/* Profile Header */}
+        <div className="bg-card rounded-lg border border-border mb-6">
+          <div className="p-6">
+            <div className="flex items-start gap-6">
+              {instructor.profileImage ? (
+                <img
+                  src={instructor.profileImage}
+                  alt={instructor.name}
+                  className="h-24 w-24 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-24 w-24 rounded-full bg-secondary flex items-center justify-center">
+                  <span className="text-muted-foreground text-3xl font-medium">
+                    {instructor.name.charAt(0)}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h1 className="text-3xl font-bold text-foreground">{instructor.name}</h1>
+                  <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
+                    instructor.approvalStatus === 'APPROVED' ? 'bg-green-900/40 text-emerald-400' :
+                    instructor.approvalStatus === 'PENDING' ? 'bg-yellow-900/40 text-yellow-300' :
+                    instructor.approvalStatus === 'REJECTED' ? 'bg-red-900/40 text-destructive' :
+                    'bg-card text-foreground'
+                  }`}>
+                    {instructor.approvalStatus}
+                  </span>
+                </div>
+                <div className="space-y-1 text-muted-foreground">
+                  <p>📧 {instructor.user?.email || instructor.email || 'No email'}</p>
+                  <p>📞 {instructor.phone}</p>
+                  <p>🆔 License: {instructor.licenseNumber || 'Not provided'}</p>
+                  <p>📅 Joined: {instructor.user?.createdAt
+                    ? new Date(instructor.user.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : new Date(instructor.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+                  }</p>
+                  <p>📋 Terms: {instructor.user?.termsAcceptedAt
+                    ? <span className="text-emerald-400 font-medium">Accepted {new Date(instructor.user.termsAcceptedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    : <span className="text-amber-600">Not recorded</span>
+                  }</p>
+                </div>
+              </div>
+            </div>
+            {instructor.bio && (
+              <div className="mt-4 pt-4 border-t">
+                <p className="text-foreground">{instructor.bio}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Total Bookings</p>
+            <p className="text-2xl font-bold text-foreground">{instructor._count.bookings}</p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Reviews</p>
+            <p className="text-2xl font-bold text-foreground">{instructor.totalReviews || 0}</p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Average Rating</p>
+            <p className="text-2xl font-bold text-foreground">
+              {instructor.averageRating ? instructor.averageRating.toFixed(1) : 'N/A'}
+            </p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Account Status</p>
+            <p className={`text-lg font-bold ${instructor.isActive ? 'text-emerald-400' : 'text-destructive'}`}>
+              {instructor.isActive ? 'Active' : 'Inactive'}
+            </p>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="bg-card rounded-lg border border-border mb-6">
+          <div className="border-b border-border">
+            <nav className="flex -mb-px">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                  activeTab === 'overview'
+                    ? 'border-blue-500 text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveTab('subscription')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                  activeTab === 'subscription'
+                    ? 'border-blue-500 text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                Subscription
+              </button>
+              <button
+                onClick={() => setActiveTab('bookings')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                  activeTab === 'bookings'
+                    ? 'border-blue-500 text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                Bookings ({instructor.bookings?.length || 0})
+              </button>
+              <button
+                onClick={() => setActiveTab('documents')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                  activeTab === 'documents'
+                    ? 'border-blue-500 text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                Documents
+              </button>
+            </nav>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Overview Tab */}
+            {activeTab === 'overview' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-3">Quick Stats</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground">Completed</p>
+                      <p className="text-xl font-bold text-emerald-400">
+                        {instructor.bookings.filter((b: any) => b.status === 'COMPLETED').length}
+                      </p>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground">Upcoming</p>
+                      <p className="text-xl font-bold text-primary">
+                        {instructor.bookings.filter((b: any) => b.status === 'CONFIRMED' && new Date(b.startTime) > new Date()).length}
+                      </p>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground">Cancelled</p>
+                      <p className="text-xl font-bold text-destructive">
+                        {instructor.bookings.filter((b: any) => b.status === 'CANCELLED').length}
+                      </p>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground">Pending</p>
+                      <p className="text-xl font-bold text-yellow-600">
+                        {instructor.bookings.filter((b: any) => b.status === 'PENDING').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-3">Document Status</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="border rounded-lg p-4">
+                      <p className="text-sm font-medium text-foreground mb-2">License</p>
+                      <p className={`text-lg font-bold ${licenseStatus.color}`}>
+                        {licenseStatus.icon} {licenseStatus.label}
+                      </p>
+                      {instructor.licenseExpiry && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Expires: {new Date(instructor.licenseExpiry).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="border rounded-lg p-4">
+                      <p className="text-sm font-medium text-foreground mb-2">Insurance</p>
+                      <p className={`text-lg font-bold ${insuranceStatus.color}`}>
+                        {insuranceStatus.icon} {insuranceStatus.label}
+                      </p>
+                      {instructor.insuranceExpiry && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Expires: {new Date(instructor.insuranceExpiry).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="border rounded-lg p-4">
+                      <p className="text-sm font-medium text-foreground mb-2">Police Check</p>
+                      <p className={`text-lg font-bold ${policeStatus.color}`}>
+                        {policeStatus.icon} {policeStatus.label}
+                      </p>
+                      {instructor.policeCheckExpiry && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Expires: {new Date(instructor.policeCheckExpiry).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="border rounded-lg p-4">
+                      <p className="text-sm font-medium text-foreground mb-2">WWC Check</p>
+                      <p className={`text-lg font-bold ${wwcStatus.color}`}>
+                        {wwcStatus.icon} {wwcStatus.label}
+                      </p>
+                      {instructor.wwcCheckExpiry && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Expires: {new Date(instructor.wwcCheckExpiry).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-200 mb-3">Subscription & Tax</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Tier</p>
+                      <p className="font-semibold text-foreground">{instructor.subscriptionTier || 'BASIC'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className={`font-semibold ${instructor.subscriptionStatus === 'ACTIVE' ? 'text-emerald-400' : 'text-amber-600'}`}>
+                        {instructor.subscriptionStatus || 'TRIAL'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Hourly Rate</p>
+                      <p className="font-semibold text-foreground">${instructor.hourlyRate}/hr</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Payout Method</p>
+                      <p className="font-semibold text-foreground">{instructor.payoutMethod?.replace('_', ' ') || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Stripe Connect</p>
+                      {instructor.stripeConnectStatus === 'connected' ? (
+                        <p className="font-semibold text-emerald-400">✓ Connected</p>
+                      ) : (
+                        <p className="font-semibold text-amber-600">⚠ Not connected</p>
+                      )}
+                      {instructor.stripeConnectStatus !== 'connected' && instructor.payoutMethod === 'bank_transfer' && (
+                        <p className="text-xs text-muted-foreground/60 mt-0.5">Using manual bank transfer</p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">ABN</p>
+                      <p className="font-semibold text-foreground">{instructor.abn || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">ABN Status</p>
+                      <p className={`font-semibold ${instructor.abnVerified ? 'text-emerald-400' : 'text-destructive'}`}>
+                        {instructor.abnVerified ? '✓ Verified' : '✗ Unverified'} — {instructor.withholdingTaxRate}% withholding
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Link href={`/admin/instructors/${instructor.id}/verify-abn`}
+                      className="text-xs text-primary hover:underline">
+                      Manage ABN →
+                    </Link>
+                  </div>
+                </div>
+
+                {/* ── Onboarding sequence progress ──────────────────────── */}
+                {onboardingSteps && (
+                  <div className="bg-secondary border border-border rounded-xl p-4">
+                    <h3 className="text-sm font-semibold text-foreground mb-3">Onboarding Email Sequence</h3>
+                    <div className="space-y-2">
+                      {onboardingSteps.map(step => {
+                        const statusColor =
+                          step.status === 'SENT'    ? 'text-emerald-400' :
+                          step.status === 'SKIPPED' ? 'text-muted-foreground/60' :
+                          'text-amber-400'
+                        const icon =
+                          step.status === 'SENT'    ? '✓' :
+                          step.status === 'SKIPPED' ? '○' :
+                          '·'
+                        const triggerLabel =
+                          step.trigger === 'registration' ? 'On signup' :
+                          step.trigger === 'approval'     ? 'On approval' :
+                          `Day ${step.delayDays}`
+                        return (
+                          <div key={step.id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-bold w-4 text-center ${statusColor}`}>{icon}</span>
+                              <span className={step.status === 'SKIPPED' ? 'text-muted-foreground/60' : 'text-foreground'}>
+                                {step.label}
+                              </span>
+                              <span className="text-muted-foreground">({triggerLabel})</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              step.status === 'SENT'    ? 'bg-green-900/30 text-emerald-400' :
+                              step.status === 'SKIPPED' ? 'bg-secondary/70 text-muted-foreground/60' :
+                              'bg-amber-900/20 text-amber-400'
+                            }`}>
+                              {step.status === 'SENT' && step.sentAt
+                                ? new Date(step.sentAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+                                : step.status}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Admin actions ──────────────────────────────────────────── */}
+                <div className="bg-secondary border border-border rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-1">Send Onboarding Email</h3>
+                  <p className="text-xs text-muted-foreground/60 mb-3">
+                    Manually send any sequence email. Uses the same template as the automatic sequence.
+                    Always sends regardless of prior sends — recorded in audit log with your name.
+                  </p>
+
+                  {/* Manual send buttons */}
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[
+                      { stepId: 'onboarding.welcome',         label: 'Welcome'           },
+                      { stepId: 'onboarding.setup',           label: 'Setup guide'       },
+                      { stepId: 'onboarding.bookings',        label: 'How bookings work' },
+                      { stepId: 'onboarding.profile-tips',    label: 'Profile tips'      },
+                      { stepId: 'onboarding.ai-receptionist', label: 'AI receptionist'   },
+                      { stepId: 'onboarding.approved',        label: 'Approved'          },
+                    ].map(({ stepId, label }) => (
+                      <button
+                        key={stepId}
+                        onClick={async () => {
+                          setNudgeLoading(true)
+                          setNudgeResult(null)
+                          try {
+                            const r = await fetch(
+                              `/api/admin/instructors/${providerId}/send-onboarding-email`,
+                              {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ stepId }),
+                              }
+                            )
+                            const d = await r.json()
+                            if (r.ok) {
+                              setNudgeResult({ type: 'ok', text: `✓ "${d.label}" sent to ${d.sentTo}` })
+                              // Refresh onboarding status panel
+                              const s = await fetch(`/api/admin/instructors/${providerId}/onboarding-status`)
+                              if (s.ok) setOnboardingSteps((await s.json()).steps)
+                            } else {
+                              setNudgeResult({ type: 'err', text: d.error || 'Failed' })
+                            }
+                          } catch {
+                            setNudgeResult({ type: 'err', text: 'Network error' })
+                          } finally {
+                            setNudgeLoading(false)
+                          }
+                        }}
+                        disabled={nudgeLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary/70 hover:bg-slate-600
+                          text-foreground text-xs rounded-lg border border-border
+                          disabled:opacity-40 transition-colors"
+                      >
+                        {nudgeLoading ? (
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                          </svg>
+                        ) : <span className="text-muted-foreground">📧</span>}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Also keep the personalised setup nudge (shows live step completion) */}
+                  <div className="border-t border-border pt-3">
+                    <p className="text-xs text-muted-foreground/60 mb-2">
+                      Or send the personalised setup nudge with live profile completion state:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          setNudgeLoading(true)
+                          setNudgeResult(null)
+                          try {
+                            const r = await fetch(`/api/admin/instructors/${providerId}/send-setup-nudge`, {
+                              method: 'POST',
+                            })
+                            const d = await r.json()
+                            if (r.ok) {
+                              setNudgeResult({ type: 'ok', text: `✓ ${d.message} (${d.completedCount}/${d.totalSteps} steps done)` })
+                            } else {
+                              setNudgeResult({ type: 'err', text: d.error || 'Failed to send nudge' })
+                            }
+                          } catch {
+                            setNudgeResult({ type: 'err', text: 'Network error' })
+                          } finally {
+                            setNudgeLoading(false)
+                          }
+                        }}
+                        disabled={nudgeLoading}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-blue-900/30 hover:bg-blue-900/50
+                          text-primary text-xs rounded-lg border border-blue-700/50
+                          disabled:opacity-50 transition-colors"
+                      >
+                        📋 Send personalised setup checklist
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Result feedback */}
+                  {nudgeResult && (
+                    <div className={`mt-3 text-xs px-3 py-2 rounded-lg ${
+                      nudgeResult.type === 'ok'
+                        ? 'bg-green-900/30 text-emerald-400 border border-green-800/50'
+                        : 'bg-red-900/30 text-destructive border border-red-800/50'
+                    }`}>
+                      {nudgeResult.text}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Subscription Tab */}
+            {activeTab === 'subscription' && (
+              <SubscriptionTab providerId={instructor.id} />
+            )}
+
+            {/* Bookings Tab */}
+            {activeTab === 'bookings' && (
+              <div>
+                {instructor.bookings && instructor.bookings.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-700">
+                      <thead className="bg-background">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">ID</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Client</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Date/Time</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Type</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Price</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-card divide-y divide-slate-700">
+                        {instructor.bookings.map((booking: any) => (
+                          <tr key={booking.id} className="hover:bg-secondary/50">
+                            <td className="px-4 py-3 text-sm text-foreground">#{booking.id.slice(-6).toUpperCase()}</td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-medium text-foreground">
+                                {booking.customer?.name || booking.customerName || 'N/A'}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {booking.customer?.email || booking.customerEmail || 'N/A'}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                              {new Date(booking.startTime).toLocaleDateString()}
+                              <div className="text-xs">{new Date(booking.startTime).toLocaleTimeString()}</div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-foreground">{booking.bookingType}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                booking.status === 'CONFIRMED' ? 'bg-green-900/40 text-emerald-400' :
+                                booking.status === 'PENDING' ? 'bg-yellow-900/40 text-yellow-300' :
+                                booking.status === 'CANCELLED' ? 'bg-red-900/40 text-destructive' :
+                                'bg-blue-900/40 text-primary'
+                              }`}>
+                                {booking.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium text-foreground">${(typeof booking.price === "number" ? booking.price : Number(booking.price || 0)).toFixed(2)}</td>
+                            <td className="px-4 py-3">
+                              <Link
+                                href={`/admin/bookings`}
+                                className="text-sm text-primary hover:text-blue-200"
+                              >
+                                View
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-center py-8">No bookings yet</p>
+                )}
+              </div>
+            )}
+
+            {/* Documents Tab */}
+            {activeTab === 'documents' && (
+              <AdminDocumentsTab providerId={instructor.id} instructor={instructor} licenseStatus={licenseStatus} insuranceStatus={insuranceStatus} policeStatus={policeStatus} wwcStatus={wwcStatus} />
+            )}
+          </div>
+        </div>
+        </div>
+      </AdminPageLayout>
+    </div>
+  )
+}

@@ -1,0 +1,548 @@
+'use client';
+
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { calculatePackagePrice, PackageType, HOUR_PACKAGES } from '@/lib/config/packages';
+
+interface SlotReservation {
+  key: string;
+  expiresAt: number;
+  providerId: string;
+  date: string;
+  time: string;
+  duration: number;
+}
+
+interface Instructor {
+  id: string;
+  name: string;
+  /** Customer-facing display name: businessName if set, otherwise name. Use this everywhere students see the instructor name. */
+  displayName: string;
+  profileImage: string | null;
+  hourlyRate: number;
+  averageRating: number | null;
+  totalReviews: number;
+  offersTestPackage: boolean;
+  testPackagePrice: number | null;
+  testPackageDuration: number | null;
+  testPackageIncludes: string[];
+  allowedDurations?: number[];
+}
+
+interface PricingBreakdown {
+  subtotal: number;
+  discount: number;
+  discountPercentage: number;
+  testPackage: number;
+  platformFee: number;
+  total: number;
+}
+
+interface PlatformPricingSettings {
+  platformFeePercentage: number;
+  package6Discount: number;
+  package10Discount: number;
+  package15Discount: number;
+}
+
+interface ScheduledBooking {
+  date: string;
+  time: string;
+  duration: number; // minutes
+  pickupLocation: string;
+  notes: string;
+}
+
+interface PdaTestBooking {
+  id: string;
+  configId: string;
+  configName: string;
+  testCentreId: string;
+  testCentreName: string;
+  testCentreAddress: string;
+  testDate: string;
+  testTime: string;
+  price: number;
+  durationMinutes: number;
+  status: string;
+}
+
+interface BookingState {
+  // Step 1: Provider (instructor)
+  provider: Instructor | null;
+  instructor: Instructor | null; // alias kept for backward compat with existing JSX
+  
+  // Step 2: Package
+  packageType: PackageType;
+  hours: number;
+  includeTestPackage: boolean;
+  testPackageDate: string | null; // When user schedules PDA test (e.g., "2026-06-15")
+  
+  // Step 3: Book Now/Later
+  bookingType: 'now' | 'later' | null;
+  
+  // Step 4: Booking Details (if Book Now)
+  scheduledBookings: ScheduledBooking[];
+  remainingHours: number;
+  
+  // PDA Test Booking
+  pdaTestBooking: PdaTestBooking | null;
+  
+  // Step 5: Registration
+  registrationType: 'myself' | 'someone-else';
+  
+  // Account Holder (always required)
+  accountHolderName: string;
+  accountHolderEmail: string;
+  accountHolderPhone: string;
+  accountHolderPassword: string;
+  accountHolderConfirmPassword: string;
+  
+  // Learner (only if "someone else")
+  learnerName: string;
+  learnerPhone: string;
+  learnerRelationship: string;
+  
+  // Slot Reservations (for preventing double booking)
+  slotReservations: SlotReservation[];
+  
+  // Recovery information
+  sessionId: string;
+  savedAt: number;
+  
+  // Calculated
+  pricing: PricingBreakdown;
+
+  // Platform pricing settings (fetched from DB, not hardcoded)
+  platformSettings: PlatformPricingSettings;
+}
+
+interface BookingContextType {
+  bookingState: BookingState;
+  updateBooking: (updates: Partial<BookingState>) => void;
+  setInstructor: (instructor: Instructor) => void;
+  setPackage: (packageType: PackageType, hours: number) => void;
+  toggleTestPackage: () => void;
+  setClientDetails: (details: Partial<BookingState>) => void;
+  addScheduledBooking: (booking: ScheduledBooking) => void;
+  removeScheduledBooking: (index: number) => void;
+  setPdaTestBooking: (booking: PdaTestBooking | null) => void;
+  resetBooking: () => void;
+  
+  // Slot management
+  reserveSlot: (providerId: string, date: string, time: string, duration: number) => string;
+  releaseSlot: (reservationKey: string) => void;
+  isSlotReserved: (reservationKey: string) => boolean;
+  getSessionId: () => string;
+  
+  // Storage management
+  saveToLocalStorage: () => void;
+  loadFromLocalStorage: () => boolean;
+  clearStorage: () => void;
+  hasRecoverableBooking: () => boolean;
+}
+
+const defaultPricing: PricingBreakdown = {
+  subtotal: 0,
+  discount: 0,
+  discountPercentage: 0,
+  testPackage: 0,
+  platformFee: 0,
+  total: 0
+};
+
+const defaultPlatformSettings: PlatformPricingSettings = {
+  platformFeePercentage: 3.6,
+  package6Discount: 5,
+  package10Discount: 10,
+  package15Discount: 12,
+};
+
+const initialState: BookingState = {
+  provider: null,
+  instructor: null,
+  packageType: 'PACKAGE_10',
+  hours: 10,
+  includeTestPackage: false,
+  testPackageDate: null,
+  bookingType: null,
+  scheduledBookings: [],
+  remainingHours: 0,
+  pdaTestBooking: null,
+  registrationType: 'myself',
+  accountHolderName: '',
+  accountHolderEmail: '',
+  accountHolderPhone: '',
+  accountHolderPassword: '',
+  accountHolderConfirmPassword: '',
+  learnerName: '',
+  learnerPhone: '',
+  learnerRelationship: '',
+  slotReservations: [],
+  sessionId: typeof window !== 'undefined' ? localStorage.getItem('bookingSessionId') || generateSessionId() : generateSessionId(),
+  savedAt: 0,
+  pricing: defaultPricing,
+  platformSettings: defaultPlatformSettings,
+};
+
+function generateSessionId(): string {
+  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+const BookingContext = createContext<BookingContextType | undefined>(undefined);
+
+export function BookingProvider({ children }: { children: ReactNode }) {
+  const [bookingState, setBookingState] = useState<BookingState>(initialState);
+
+  // Calculate pricing whenever relevant fields change
+  const calculatePricing = useCallback((state: BookingState): PricingBreakdown => {
+    if (!state.provider) {
+      return defaultPricing;
+    }
+
+    const s = state.platformSettings;
+    
+    // Determine discount percentage
+    let discountPercentage = 0;
+    // Use packageTiers from DB if available, fall back to named columns
+    const tiers = (s as any).packageTiers as Array<{ hours: number; label: string; discount: number; featured: boolean }> | undefined;
+
+    const getDiscountForHoursCtx = (hours: number): number => {
+      if (tiers && tiers.length > 0) {
+        const sorted = [...tiers].sort((a, b) => b.hours - a.hours);
+        return sorted.find(t => hours >= t.hours)?.discount ?? 0;
+      }
+      if (hours >= 15) return s.package15Discount;
+      if (hours >= 10) return s.package10Discount;
+      if (hours >= 6) return s.package6Discount;
+      return 0;
+    };
+
+    if (state.packageType === 'CUSTOM') {
+      discountPercentage = getDiscountForHoursCtx(state.hours);
+    } else {
+      // For predefined packages, find matching tier by hours
+      const pkgHours = state.packageType === 'PACKAGE_6' ? 6
+        : state.packageType === 'PACKAGE_10' ? 10
+        : state.packageType === 'PACKAGE_15' ? 15
+        : state.hours;
+      discountPercentage = getDiscountForHoursCtx(pkgHours);
+    }
+
+    // Standard package: always price it if hours > 0 and packageType is set
+    const standardSubtotal = state.hours > 0 ? state.provider.hourlyRate * state.hours : 0;
+    const standardDiscount = (standardSubtotal * discountPercentage) / 100;
+
+    const testPackageAmount = state.includeTestPackage ? (state.provider.testPackagePrice ?? 0) : 0;
+
+    const subtotal = standardSubtotal + testPackageAmount;
+    const discount = standardDiscount;
+
+    const afterDiscount = subtotal - discount;
+    const platformFee = (afterDiscount * s.platformFeePercentage) / 100;
+    const total = afterDiscount + platformFee;
+
+    return {
+      subtotal,
+      discount,
+      discountPercentage,
+      testPackage: testPackageAmount,
+      platformFee,
+      total,
+    };
+  }, []);
+
+  const updateBooking = useCallback((updates: Partial<BookingState>) => {
+    setBookingState(prev => {
+      const newState = { ...prev, ...updates };
+      newState.pricing = calculatePricing(newState);
+      return newState;
+    });
+  }, [calculatePricing]);
+
+  const setInstructor = useCallback((instructor: Instructor) => {
+    setBookingState(prev => {
+      const newState = { ...prev, instructor, provider: instructor };
+      newState.pricing = calculatePricing(newState);
+      return newState;
+    });
+  }, [calculatePricing]);
+
+  const setPackage = useCallback((packageType: PackageType, hours: number) => {
+    setBookingState(prev => {
+      const actualHours = packageType === 'CUSTOM' ? hours : HOUR_PACKAGES[packageType].hours;
+      const newState = { 
+        ...prev, 
+        packageType, 
+        hours: actualHours,
+        remainingHours: actualHours,
+      };
+      newState.pricing = calculatePricing(newState);
+      return newState;
+    });
+  }, [calculatePricing]);
+
+  const toggleTestPackage = useCallback(() => {
+    setBookingState(prev => {
+      const newState = { ...prev, includeTestPackage: !prev.includeTestPackage };
+      newState.pricing = calculatePricing(newState);
+      return newState;
+    });
+  }, [calculatePricing]);
+
+  const setClientDetails = useCallback((details: Partial<BookingState>) => {
+    setBookingState(prev => ({ ...prev, ...details }));
+  }, []);
+
+  const addScheduledBooking = useCallback((booking: ScheduledBooking) => {
+    setBookingState(prev => {
+      const newBookings = [...prev.scheduledBookings, booking];
+      const bookedHours = newBookings.reduce((sum: any, b: any) => sum + (b.duration / 60), 0);
+      const remaining = prev.hours - bookedHours;
+      
+      return {
+        ...prev,
+        scheduledBookings: newBookings,
+        remainingHours: remaining
+      };
+    });
+  }, []);
+
+  const removeScheduledBooking = useCallback((index: number) => {
+    setBookingState(prev => {
+      const newBookings = prev.scheduledBookings.filter((_, i) => i !== index);
+      const bookedHours = newBookings.reduce((sum: any, b: any) => sum + (b.duration / 60), 0);
+      const remaining = prev.hours - bookedHours;
+      
+      return {
+        ...prev,
+        scheduledBookings: newBookings,
+        remainingHours: remaining
+      };
+    });
+  }, []);
+
+  const resetBooking = useCallback(() => {
+    setBookingState(prev => ({
+      ...initialState,
+      sessionId: prev.sessionId,
+      slotReservations: [] // Clear reservations on reset
+    }));
+  }, []);
+
+  const setPdaTestBooking = useCallback((booking: PdaTestBooking | null) => {
+    setBookingState(prev => ({
+      ...prev,
+      pdaTestBooking: booking,
+      testPackageDate: booking ? booking.testDate : null
+    }));
+  }, []);
+
+  // Slot Reservation Methods (10-minute timeout)
+  const reserveSlot = useCallback((
+    providerId: string,
+    date: string,
+    time: string,
+    duration: number
+  ): string => {
+    const key = `${providerId}:${date}:${time}:${duration}`;
+    const reservation: SlotReservation = {
+      key,
+      providerId,
+      date,
+      time,
+      duration,
+      expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
+    };
+
+    setBookingState(prev => ({
+      ...prev,
+      slotReservations: [
+        ...prev.slotReservations.filter(r => r.expiresAt > Date.now()),
+        reservation
+      ]
+    }));
+
+    return key;
+  }, []);
+
+  const releaseSlot = useCallback((reservationKey: string) => {
+    setBookingState(prev => ({
+      ...prev,
+      slotReservations: prev.slotReservations.filter(r => r.key !== reservationKey)
+    }));
+  }, []);
+
+  const isSlotReserved = useCallback((reservationKey: string): boolean => {
+    return bookingState.slotReservations.some(
+      r => r.key === reservationKey && r.expiresAt > Date.now()
+    );
+  }, [bookingState.slotReservations]);
+
+  const getSessionId = useCallback(() => {
+    return bookingState.sessionId;
+  }, [bookingState.sessionId]);
+
+  // LocalStorage Management
+  const saveToLocalStorage = useCallback(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        // Never persist password fields — they must not survive page refreshes or
+        // be recoverable from localStorage by other scripts in the same origin.
+        const { accountHolderPassword, accountHolderConfirmPassword, ...safeState } = bookingState;
+        const dataToSave = {
+          ...safeState,
+          savedAt: Date.now()
+        };
+        localStorage.setItem('bookingState', JSON.stringify(dataToSave));
+        localStorage.setItem('bookingSessionId', bookingState.sessionId);
+      }
+    } catch (error) {
+      console.error('Failed to save booking to localStorage:', error);
+    }
+  }, [bookingState]);
+
+  const loadFromLocalStorage = useCallback((): boolean => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('bookingState');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          
+          // Only restore if this is recent (less than 24 hours old)
+          const ageInHours = (Date.now() - parsed.savedAt) / (1000 * 60 * 60);
+          if (ageInHours < 24 && parsed.provider) {
+            // Clean up expired slot reservations
+            const cleanedReservations = parsed.slotReservations.filter(
+              (r: SlotReservation) => r.expiresAt > Date.now()
+            );
+            
+            setBookingState({
+              ...parsed,
+              slotReservations: cleanedReservations
+            });
+            return true;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load booking from localStorage:', error);
+    }
+    return false;
+  }, []);
+
+  const clearStorage = useCallback(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('bookingState');
+      }
+    } catch (error) {
+      console.error('Failed to clear booking from localStorage:', error);
+    }
+    resetBooking();
+  }, [resetBooking]);
+
+  const hasRecoverableBooking = useCallback((): boolean => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('bookingState');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const ageInHours = (Date.now() - parsed.savedAt) / (1000 * 60 * 60);
+          return ageInHours < 24 && !!parsed.provider;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check recoverable booking:', error);
+    }
+    return false;
+  }, []);
+
+  // Recover booking state from localStorage on first mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('bookingState');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          
+          // Only restore if this is recent (less than 24 hours old)
+          const ageInHours = (Date.now() - parsed.savedAt) / (1000 * 60 * 60);
+          if (ageInHours < 24 && parsed.provider) {
+            // Clean up expired slot reservations
+            const cleanedReservations = parsed.slotReservations.filter(
+              (r: SlotReservation) => r.expiresAt > Date.now()
+            );
+            
+            setBookingState({
+              ...parsed,
+              slotReservations: cleanedReservations
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load booking from localStorage:', error);
+      }
+    }
+  }, []);
+
+  // Fetch platform pricing settings from DB on mount
+  // Note: localStorage recovery runs in the inline useEffect above — no second call needed.
+  useEffect(() => {
+    fetch('/api/public/pricing')
+      .then(res => res.json())
+      .then(settings => {
+        setBookingState(prev => {
+          const newState = { ...prev, platformSettings: settings };
+          newState.pricing = calculatePricing(newState);
+          return newState;
+        });
+      })
+      .catch(() => {
+        // Keep defaults on failure — booking flow continues
+      });
+  }, [calculatePricing]);
+
+  // Auto-save to localStorage when booking state changes
+  useEffect(() => {
+    if ((bookingState.provider || bookingState.provider)) {
+      saveToLocalStorage();
+    }
+  }, [bookingState, saveToLocalStorage]);
+
+  const value: BookingContextType = {
+    bookingState,
+    updateBooking,
+    setInstructor,
+    setPackage,
+    toggleTestPackage,
+    setClientDetails,
+    addScheduledBooking,
+    removeScheduledBooking,
+    setPdaTestBooking,
+    resetBooking,
+    reserveSlot,
+    releaseSlot,
+    isSlotReserved,
+    getSessionId,
+    saveToLocalStorage,
+    loadFromLocalStorage,
+    clearStorage,
+    hasRecoverableBooking
+  };
+
+  return (
+    <BookingContext.Provider value={value}>
+      {children}
+    </BookingContext.Provider>
+  );
+}
+
+export function useBooking() {
+  const context = useContext(BookingContext);
+  if (context === undefined) {
+    throw new Error('useBooking must be used within a BookingProvider');
+  }
+  return context;
+}
+
+export type { ScheduledBooking, BookingState, PricingBreakdown, SlotReservation, PdaTestBooking };

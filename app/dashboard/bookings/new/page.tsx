@@ -1,0 +1,329 @@
+'use client'
+import { DashboardPageLayout } from '@/components/ui'
+
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Calendar, MapPin, Banknote, AlertCircle } from 'lucide-react'
+import BookingFormNew from '@/components/BookingFormNew'
+import FindNextSlot from '@/components/instructor/FindNextSlot'
+import SlotPicker from '@/components/SlotPicker'
+import PermissionGate from '@/components/instructor/PermissionGate'
+
+interface Client {
+  id: string
+  name: string
+  phone: string
+  email: string
+  addressText?: string
+  addressLatitude?: number
+  addressLongitude?: number
+}
+
+export default function NewBookingPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const preselectedClientId = searchParams.get('customerId')
+  const isOfflineMode = searchParams.get('offline') === 'true'
+
+  const [clients, setClients] = useState<Client[]>([])
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [showCalendar, setShowCalendar] = useState(false)
+  const [instructorData, setInstructorData] = useState<any>(null)
+  // Pre-fill from Find Next Slot
+  const [prefillDate, setPrefillDate] = useState<string | undefined>()
+  const [prefillTime, setPrefillTime] = useState<string | undefined>()
+  const [prefillDuration, setPrefillDuration] = useState<number | undefined>()
+  // Key to remount BookingFormNew when prefill changes
+  const [formKey, setFormKey] = useState(0)
+
+  // Offline form state
+  const [offlineForm, setOfflineForm] = useState({
+    customerName: '', customerPhone: '', customerEmail: '',
+    date: '', time: '', durationMinutes: 60,
+    pickupAddress: '', notes: '',
+    offlinePaymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'other',
+    offlineAmountPaid: '',
+  })
+  const [offlineSubmitting, setOfflineSubmitting] = useState(false)
+  const [offlineError, setOfflineError] = useState<string | null>(null)
+  const [offlineSuccess, setOfflineSuccess] = useState(false)
+
+  useEffect(() => {
+    if (!isOfflineMode) {
+      fetchClients()
+      fetchInstructorData()
+    } else {
+      // Need instructor data for slot availability even in offline mode
+      fetchInstructorData()
+    }
+  }, [isOfflineMode])
+
+  useEffect(() => {
+    if (preselectedClientId && clients.length > 0) {
+      const client = clients.find(c => c.id === preselectedClientId)
+      if (client) { setSelectedClient(client); setShowCalendar(true) }
+    }
+  }, [preselectedClientId, clients])
+
+  const fetchClients = async () => {
+    try {
+      const res = await fetch('/api/clients?limit=200')
+      if (!res.ok) { console.error('Failed to fetch clients:', res.status); return; }
+      const data = await res.json()
+      setClients(Array.isArray(data) ? data : (data.clients ?? []))
+    } catch { console.error('Failed to fetch clients') }
+  }
+
+  const fetchInstructorData = async () => {
+    try {
+      const res = await fetch('/api/instructor/profile')
+      const data = await res.json()
+      if (data?.id) setInstructorData(data)
+    } catch { console.error('Failed to fetch instructor data') }
+  }
+
+  const handleClientSelect = (customerId: string) => {
+    const client = clients.find(c => c.id === customerId)
+    setSelectedClient(client || null)
+    if (client) setShowCalendar(true)
+  }
+
+  const handleOfflineSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setOfflineSubmitting(true)
+    setOfflineError(null)
+    try {
+      const res = await fetch('/api/bookings/offline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...offlineForm,
+          durationMinutes: Number(offlineForm.durationMinutes),
+          offlineAmountPaid: offlineForm.offlineAmountPaid ? Number(offlineForm.offlineAmountPaid) : undefined,
+          customerEmail: offlineForm.customerEmail || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setOfflineSuccess(true)
+      } else if (data.upgradeRequired) {
+        setOfflineError('Offline booking tracking requires PRO or above. Upgrade your subscription to use this feature.')
+      } else if (data.platformClientBlocked) {
+        setOfflineError('This student has a DriveBook account linked to your profile. Please use a platform booking so they can pay through their wallet.')
+      } else if (Array.isArray(data.error)) {
+        // Handle validation errors (ZodError returns array)
+        const messages = data.error.map((err: any) => {
+          const path = Array.isArray(err.path) ? err.path.join('.') : err.path || 'Field'
+          return `${path}: ${err.message}`
+        }).join('; ')
+        setOfflineError(`Validation error: ${messages}`)
+      } else if (typeof data.error === 'string') {
+        setOfflineError(data.error)
+      } else {
+        setOfflineError('Failed to create offline booking')
+      }
+    } catch {
+      setOfflineError('Network error. Please try again.')
+    } finally {
+      setOfflineSubmitting(false)
+    }
+  }
+
+  if (offlineSuccess) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="bg-card/80 border border-border rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
+          <div className="text-5xl mb-4">✅</div>
+          <h2 className="text-xl font-bold text-foreground mb-2">Offline booking logged</h2>
+          <p className="text-muted-foreground text-sm mb-6">The lesson has been added to your schedule.</p>
+          <div className="flex gap-3">
+            <button onClick={() => router.push('/dashboard/bookings')} className="flex-1 py-2.5 bg-primary text-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors">View Bookings</button>
+            <button onClick={() => { setOfflineSuccess(false); setOfflineForm({ customerName: '', customerPhone: '', customerEmail: '', date: '', time: '', durationMinutes: 60, pickupAddress: '', notes: '', offlinePaymentMethod: 'cash', offlineAmountPaid: '' }) }} className="flex-1 py-2.5 border border-white/20 text-foreground rounded-lg font-medium hover:bg-secondary transition-colors">Add Another</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+          <div className="max-w-4xl mx-auto px-4 py-4 sm:py-8">
+        <div className="mb-6">
+          <button onClick={() => router.back()} className="text-primary hover:text-sky-200 mb-4 text-sm font-medium">← Back to Bookings</button>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+              {isOfflineMode ? 'Log Offline / Cash Booking' : 'Create New Booking'}
+            </h1>
+            {isOfflineMode && <span className="px-3 py-1 bg-amber-500/20 border border-amber-500/40 text-amber-200 rounded-full text-xs font-semibold flex items-center gap-1"><Banknote className="h-3 w-3" /> Offline</span>}
+          </div>
+          <p className="text-muted-foreground mt-1">
+            {isOfflineMode
+              ? 'Log a lesson paid by cash or bank transfer. Only for students without a DriveBook account.'
+              : 'Select a client and choose an available time slot'}
+          </p>
+        </div>
+
+        {/* ── OFFLINE BOOKING FORM ── */}
+        {isOfflineMode ? (
+          <div className="rounded-2xl border border-border bg-card/80 shadow-lg p-6">
+            <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-6">
+              <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-200">
+                <p className="font-semibold mb-1">Platform client guard active</p>
+                <p>If you provide an email that belongs to a student with a DriveBook account linked to you, the booking will be blocked. Those students must book through the platform.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleOfflineSubmit} className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Client Name *</label>
+                  <input required value={offlineForm.customerName} onChange={e => setOfflineForm(p => ({ ...p, customerName: e.target.value }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent" placeholder="John Smith" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Phone</label>
+                  <input value={offlineForm.customerPhone} onChange={e => setOfflineForm(p => ({ ...p, customerPhone: e.target.value }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent" placeholder="0400 000 000" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Email (optional — used for platform client check)</label>
+                <input type="email" value={offlineForm.customerEmail} onChange={e => setOfflineForm(p => ({ ...p, customerEmail: e.target.value }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent" placeholder="john@example.com" />
+              </div>
+
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Date *</label>
+                  <input required type="date" value={offlineForm.date} onChange={e => setOfflineForm(p => ({ ...p, date: e.target.value, time: '' }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Duration *</label>
+                  <select value={offlineForm.durationMinutes} onChange={e => setOfflineForm(p => ({ ...p, durationMinutes: Number(e.target.value), time: '' }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent">
+                    {[30, 60, 90, 120, 150, 165, 180, 240].map(m => <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60>0?` ${m%60}m`:''}`}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Time *</label>
+                  <SlotPicker
+                    providerId={instructorData?.id ?? ''}
+                    date={offlineForm.date}
+                    duration={offlineForm.durationMinutes}
+                    value={offlineForm.time}
+                    onChange={time => setOfflineForm(p => ({ ...p, time }))}
+                    variant="dark"
+                    allowFallback={true}
+                  />
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Payment method</label>
+                  <select value={offlineForm.offlinePaymentMethod} onChange={e => setOfflineForm(p => ({ ...p, offlinePaymentMethod: e.target.value as any }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent">
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Amount paid ($)</label>
+                  <input type="number" min="0" step="0.01" value={offlineForm.offlineAmountPaid} onChange={e => setOfflineForm(p => ({ ...p, offlineAmountPaid: e.target.value }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent" placeholder="75.00" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Pickup address</label>
+                <input value={offlineForm.pickupAddress} onChange={e => setOfflineForm(p => ({ ...p, pickupAddress: e.target.value }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent" placeholder="123 Main St" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
+                <textarea rows={2} value={offlineForm.notes} onChange={e => setOfflineForm(p => ({ ...p, notes: e.target.value }))} className="w-full border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg px-3 py-2 text-sm text-foreground placeholder-slate-400 focus:ring-2 focus:ring-primary/50 focus:border-transparent resize-none" placeholder="Any notes..." />
+              </div>
+
+              {offlineError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-200 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  {offlineError}
+                </div>
+              )}
+
+              <PermissionGate capability="canCreateOfflineBooking" showLockCard>
+                <button type="submit" disabled={offlineSubmitting} className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-50 text-foreground rounded-lg font-medium transition-colors">
+                  {offlineSubmitting ? 'Logging...' : 'Log Offline Booking'}
+                </button>
+              </PermissionGate>
+            </form>
+          </div>
+        ) : (
+          <>
+            {/* ── PLATFORM BOOKING FORM ── */}
+            <div className="rounded-2xl border border-border bg-card/80 shadow-lg p-4 sm:p-6 mb-6">
+              <h2 className="text-lg font-semibold text-foreground mb-4">Step 1: Select Client</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">Choose Client</label>
+                  <select value={selectedClient?.id || ''} onChange={(e) => handleClientSelect(e.target.value)} className="w-full px-3 py-2 border border-white/30 bg-secondary/70 transition-all duration-200 hover:border-white/50 focus:outline-none focus:border-sky-400/60 rounded-lg text-foreground focus:ring-2 focus:ring-primary/50 focus:border-transparent">
+                    <option value="" className="bg-background">Select a client...</option>
+                    {clients.map(client => <option key={client.id} value={client.id} className="bg-background">{client.name} - {client.phone}</option>)}
+                  </select>
+                </div>
+                {selectedClient && (
+                  <div className="bg-sky-500/10 border border-sky-500/30 p-4 rounded-lg">
+                    <h3 className="font-medium text-foreground mb-2">Selected Client:</h3>
+                    <div className="space-y-1 text-sm text-foreground">
+                      <p><strong className="text-primary">Name:</strong> {selectedClient.name}</p>
+                      <p><strong className="text-primary">Phone:</strong> {selectedClient.phone}</p>
+                      <p><strong className="text-primary">Email:</strong> {selectedClient.email}</p>
+                      {selectedClient.addressText && <p className="flex items-start gap-2"><MapPin className="h-4 w-4 mt-0.5 shrink-0 text-primary" /><span>{selectedClient.addressText}</span></p>}
+                    </div>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground">Don't see your client? <a href="/dashboard/clients" className="text-primary hover:text-sky-200 font-medium">Add a new client first</a></p>
+              </div>
+            </div>
+
+            {showCalendar && selectedClient && instructorData?.id && (
+              <div className="rounded-2xl border border-border bg-card/80 shadow-lg p-4 sm:p-6">
+                <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2"><Calendar className="h-5 w-5 text-primary" />Step 2: Select Date & Time</h2>
+                <PermissionGate capability="canCreateBooking" showLockCard>
+                  <div>
+                    <FindNextSlot
+                      providerId={instructorData.id}
+                      onSelect={(date, time, duration) => {
+                        setPrefillDate(date);
+                        setPrefillTime(time);
+                        setPrefillDuration(duration);
+                        setFormKey(k => k + 1);
+                      }}
+                    />
+                    <BookingFormNew
+                      key={formKey}
+                      providerId={instructorData.id}
+                      hourlyRate={instructorData.hourlyRate}
+                      preselectedClient={selectedClient}
+                      isInstructorBooking={true}
+                      initialDate={prefillDate}
+                      initialTime={prefillTime}
+                      initialDuration={prefillDuration}
+                    />
+                  </div>
+                </PermissionGate>
+              </div>
+            )}
+            {showCalendar && (!instructorData || !instructorData.id) && (
+              <div className="rounded-2xl border border-border bg-card/80 shadow-lg p-8 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading instructor information...</p>
+              </div>
+            )}
+            {!showCalendar && (
+              <div className="rounded-2xl border border-border bg-card/80 shadow-lg p-8 text-center">
+                <Calendar className="h-16 w-16 text-muted-foreground/60 mx-auto mb-4" />
+                <p className="text-muted-foreground">Select a client above to see available time slots</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+  )
+}

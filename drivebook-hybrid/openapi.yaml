@@ -1,0 +1,2023 @@
+swagger: '2.0'
+info:
+  title: DriveBook Voice Service API
+  version: '2.0.0'
+  description: |
+    Internal proxy spec for the drivebook-hybrid voice service.
+    Used by contract.test.js to validate API response shapes.
+    
+    Related: ../openapi.yaml is the full authoritative documentation spec.
+    Keep both in sync when adding endpoints.
+    
+    API for AI voice agent to interact with DriveBook platform for booking driving lessons.
+    The hybrid voice service exposes these `/api/*` endpoints and proxies them to the main DriveBook application.
+    
+    RECOMMENDED AI CONVERSATION FLOW (OPTIMIZED):
+    1. Ask user for pickup location
+    2. Validate location via /locations/validate
+    3. Get smart recommendations via /instructors/recommendations (AI-ranked, top 3)
+    4. Present options: "I found 3 great instructors: Debesay (top rated), Michael (best value), Sarah (closest)"
+    5. User selects instructor
+    6. Call /availability/slots to check times
+    7. Call /packages to present package options with savings
+    8. Create booking via /public/bookings/bulk (backend calculates pricing, generates password)
+    
+    KEY IMPROVEMENTS:
+    - AI does NOT ask for password (backend generates secure password automatically)
+  x-ai-guidance: |
+    - Prefer `/instructors/recommendations` for ranked results
+    - Validate pickup location with `/locations/validate` before searching
+    - Do not collect or transmit passwords; backend creates credentials
+  x-ai-rules:
+    - Never collect credit card numbers, CVV, or banking details
+    - Never ask for or collect passwords — backend auto-generates them
+    - Always validate pickup location before searching for instructors
+    - Always prefer /instructors/recommendations for ranked results
+    - Always present top 3 instructors by name only — never mention IDs
+    - Never calculate pricing manually — use backend pricing only
+    - Always read back a full summary and get verbal confirmation before creating a booking, cancelling, or rescheduling
+    - Use OTP verification before cancellation or rescheduling
+    - Never cancel a booking without OTP verification — no exceptions
+    - Never infer refund amounts — always call GET /public/bookings/{id}/cancellation-policy first
+    - Always use canCancel field from GET /public/bookings/{id} — never infer from status alone
+    - Always read back instructor name, date, time, refund amount, and refund percentage before cancelling
+    - Never cancel after ambiguous responses — only proceed on an explicit "yes"
+    - After booking, always send checkoutUrl via SMS immediately
+    - Tell caller their slot is held for 10 minutes while they complete payment
+    - If slot is taken (409), offer alternative times — do not give up
+host: drivebook.com.au
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: "JWT Bearer token in the format 'Bearer <token>' for protected endpoints"
+  VerificationToken:
+    type: apiKey
+    name: X-Verification-Token
+    in: header
+    description: |
+      Short-lived verification token issued by POST /verifications/otp/confirm.
+      Required for sensitive operations: cancel booking, reschedule booking.
+      Token is single-use and expires after 10-15 minutes.
+      Obtain by: POST /verifications/otp → POST /verifications/otp/confirm → use token here.
+
+x-status-transitions:
+  description: |
+    Booking status state machine. Transitions are enforced server-side.
+    
+    PENDING_PAYMENT → CONFIRMED   (Stripe webhook: payment_intent.succeeded)
+    PENDING_PAYMENT → EXPIRED     (cron: cleanup every 5 min, after 10 min window)
+    PENDING         → CONFIRMED   (instructor approves short-notice booking)
+    PENDING         → CANCELLED   (instructor declines, or client cancels)
+    CONFIRMED       → COMPLETED   (instructor marks lesson done)
+    CONFIRMED       → CANCELLED   (client or instructor cancels)
+    CONFIRMED       → NO_SHOW     (lesson time passed, no check-in recorded)
+    
+    Terminal states (no further transitions): EXPIRED, COMPLETED, CANCELLED, NO_SHOW
+    
+    Post-CONFIRMED actions (not status transitions):
+      - SMS confirmation sent to client
+      - Receipt email sent to client
+      - In-app notification sent to instructor
+      - Wallet credited + first lesson debited
+    
+    Note: PAID is an internal payout-tracking status on the instructor's ledger,
+    not a booking lifecycle state. It is not returned by public or voice endpoints.
+    
+    Short-notice bookings (isShortNotice=true):
+      - Created with status PENDING (not PENDING_PAYMENT)
+      - No payment taken until instructor approves
+      - AI should say: "Your booking is pending instructor approval."
+
+x-ai-rules:
+  - Never read checkoutUrl aloud over a voice call — always send it via SMS
+  - Never attempt to collect card numbers, CVV, or bank details over voice
+  - Never read out a URL character by character — send it silently via SMS
+  - Always send checkoutUrl via SMS immediately after booking is created
+  - The AI's job ends when the SMS is sent — payment happens on Stripe's secure page
+  - Use GET /public/bookings/{id}/payment-status?token= to check if payment succeeded
+  - Use GET /public/bookings/{id}/timeline?token= to answer "What happened to my booking?"
+  - Never infer canPay from status alone — use the canPay field in payment-status response
+  thresholdMinutes: 120
+  description: |
+    A booking is short-notice when any scheduled lesson starts within
+    thresholdMinutes (120) of the current time at booking creation.
+    The AI/frontend determines this and sets isShortNotice=true in the scheduledBookings array.
+    Short-notice bookings:
+      - status: PENDING (not PENDING_PAYMENT)
+      - total: 0 (no payment until instructor approves)
+      - checkoutUrl: not returned
+      - instructor receives urgent push notification
+    AI should tell the caller: "This booking requires instructor approval before payment."
+
+x-webhooks:
+  payment-succeeded:
+    source: Stripe
+    event: payment_intent.succeeded
+    transition: PENDING_PAYMENT → CONFIRMED (strict — no other source status allowed)
+    description: |
+      Stripe calls /api/stripe/webhook after payment_intent.succeeded.
+      
+      STRICT STATE MACHINE — only PENDING_PAYMENT → CONFIRMED is valid:
+        PENDING_PAYMENT → CONFIRMED: normal payment path
+        EXPIRED (delayed payment): auto-refund via Stripe, booking cancelled, admin flagged
+        CONFIRMED / COMPLETED: idempotent replay — skip wallet ops, return 200
+        CANCELLED / NO_SHOW / any other: rejected, logged, return 200
+      
+      On successful CONFIRMED transition:
+        1. booking.status → CONFIRMED, booking.isPaid = true
+        2. Wallet credited + first lesson debited
+        3. LedgerEntry recorded
+        4. In-app notification sent to instructor
+        5. SMS confirmation sent to client
+        6. Receipt email sent to client
+      
+      On EXPIRED delayed payment:
+        1. Stripe full refund issued automatically
+        2. Booking → CANCELLED with audit note
+        3. Admin flagged — manual action required if refund fails
+      
+      Idempotency key: Stripe event ID.
+  payment-expired:
+    source: Stripe
+    event: checkout.session.expired
+    transition: PENDING_PAYMENT → EXPIRED
+    description: |
+      Stripe calls webhook when checkout session expires without payment.
+      Slot is released automatically.
+  booking-expired:
+    source: Internal Scheduler
+    schedule: Every 5 minutes (cron at /api/cron/cleanup-expired-bookings)
+    transition: PENDING_PAYMENT → EXPIRED
+    description: |
+      Safety net cron — expires bookings where (createdAt + 10 min) < now().
+      If a delayed Stripe payment arrives after this cron, the webhook
+      auto-refunds and cancels — no double-booking is possible.
+parameters:
+  X-Request-Id:
+    name: X-Request-Id
+    in: header
+    type: string
+    required: false
+    description: Correlation id for request tracing. Services should propagate this value when calling upstream services.
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Check if the service is running and database is connected
+      operationId: healthCheck
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: connected
+
+  /instructors/recommendations:
+    get:
+      summary: Get smart instructor recommendations (AI-POWERED)
+      description: |
+        Returns top instructors ranked by intelligent scoring algorithm.
+        Considers rating, distance, price, and experience.
+        This is the BEST endpoint for AI to use - provides pre-ranked, personalized results.
+      operationId: getInstructorRecommendations
+      tags:
+        - Instructors
+      parameters:
+        - name: location
+          in: query
+          type: string
+          required: false
+          description: "Pickup location (e.g. Joondalup WA). Either `location` or `name` should be provided."
+        - name: name
+          in: query
+          type: string
+          required: false
+          description: Instructor name search query (optional; either `name` or `location` required)
+        - name: vehicleType
+          in: query
+          type: string
+          required: false
+          description: Preferred vehicle type
+          enum: [AUTO, MANUAL]
+        - name: language
+          in: query
+          type: string
+          required: false
+          description: "Preferred language (e.g. English)"
+        - name: budget
+          in: query
+          type: number
+          required: false
+          description: "Maximum hourly rate (e.g. 75)"
+        - name: experienceLevel
+          in: query
+          type: string
+          required: false
+          enum: [beginner, intermediate, advanced]
+        - name: limit
+          in: query
+          type: integer
+          required: false
+          description: "Number of recommendations to return (default: 3)"
+          default: 3
+      responses:
+        '200':
+          description: Recommended instructors with reasons
+          schema:
+            type: object
+            properties:
+              recommendations:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    hourlyRate:
+                      type: number
+                    distance:
+                      type: number
+                    rating:
+                      type: number
+                      format: float
+                      example: 4.9
+                    reviews:
+                      type: integer
+                    reason:
+                      type: string
+                    spokenSummary:
+                      type: string
+                      description: Short spoken summary suitable for voice assistants
+                      example: "Top rated automatic instructor 3 kilometres away"
+                    score:
+                      type: integer
+              count:
+                type: integer
+              message:
+                type: string
+          examples:
+            application/json:
+              recommendations:
+                - id: "instr_123"
+                  name: "Debesay"
+                  hourlyRate: 80
+                  distance: 3.2
+                  rating: 4.9
+                  reviews: 120
+                  reason: "Top rated in your area"
+                  score: 98
+                - id: "instr_456"
+                  name: "Michael"
+                  hourlyRate: 65
+                  distance: 5.1
+                  rating: 4.7
+                  reviews: 80
+                  reason: "Best value"
+                  score: 89
+              count: 2
+              message: "Top matches for Joondalup WA"
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
+
+  /bookings/lookup:
+    get:
+      summary: Look up bookings by phone number or email
+      description: |
+        Find existing bookings when the user provides a phone number or email.
+        Used for reschedule/cancel flows.
+        
+        PRIVACY: This endpoint returns limited booking data only (booking ID, date, time,
+        status, instructor name, pickup location). It does not return full PII.
+        The OTP verification step happens AFTER lookup — you need the booking ID from
+        lookup to know which booking to act on, and OTP is required before cancel/reschedule.
+        This design avoids the circular dependency of requiring OTP before you know
+        which booking to verify.
+        
+        RATE LIMIT: 10 requests per minute per IP.
+        Rate limit headers returned: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset.
+      operationId: lookupBookings
+      tags:
+        - Bookings
+      parameters:
+        - name: phone
+          in: query
+          type: string
+          required: false
+          description: Phone number used on the booking (E.164 recommended). Either phone or email must be provided.
+          pattern: '^\+?[1-9]\d{1,14}$'
+          x-format: PhoneNumber
+        - name: email
+          in: query
+          type: string
+          required: false
+          format: email
+          description: Email address used on the booking. Alternative to phone. Either phone or email must be provided.
+          x-format: EmailAddress
+          format: email
+        - $ref: '#/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: Matching bookings
+          schema:
+            type: object
+            properties:
+              bookings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    bookingId:
+                      type: string
+                    status:
+                      $ref: '#/definitions/BookingStatus'
+                    startTime:
+                      type: string
+                      format: date-time
+                    duration:
+                      type: number
+                      description: Duration in hours
+                    pickupLocation:
+                      type: string
+                    instructor:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        # phone intentionally omitted — caller not yet OTP-verified
+              count:
+                type: integer
+        '400':
+          description: Must provide phone number
+          schema:
+            $ref: '#/definitions/Error'
+
+  /instructors/search:
+    get:
+      summary: Search instructors by location or name (PRIMARY ENDPOINT)
+      description: |
+        Find instructors who serve a specific location, sorted by distance and rating.
+        This is the MAIN endpoint for the AI to use when a student provides their pickup location.
+        Also supports ?name= for finding a specific instructor by name.
+      operationId: searchInstructorsByLocation
+      tags:
+        - Instructors
+      x-validation-rules:
+        - description: Either 'location' or 'name' parameter must be provided (XOR relationship)
+          rule: "(location && !name) || (!location && name) || (location && name)"
+      parameters:
+        - name: location
+          in: query
+          type: string
+          required: false
+          description: "Pickup location - address, suburb, or postcode (e.g. Joondalup WA). Either `location` or `name` should be provided."
+        - name: name
+          in: query
+          type: string
+          required: false
+          description: Instructor name search query
+        - name: page
+          in: query
+          type: integer
+          required: false
+          default: 1
+          description: "Page number for pagination (default: 1)"
+        - name: limit
+          in: query
+          type: integer
+          required: false
+          default: 20
+          description: "Results per page, max 50 (default: 20)"
+        - name: language
+          in: query
+          type: string
+          required: false
+          description: |
+            Filter by language spoken (e.g. "Mandarin", "Arabic", "English").
+            Case-insensitive partial match. AI: use when caller says "I need an instructor who speaks Mandarin".
+        - name: vehicleType
+          in: query
+          type: string
+          required: false
+          enum: [AUTO, MANUAL]
+          description: |
+            Filter by vehicle type. AUTO or MANUAL.
+            AI: use when caller says "I want an automatic car".
+        - $ref: '#/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: List of instructors serving the location
+          schema:
+            type: object
+            properties:
+              instructors:
+                type: array
+                items:
+                  $ref: '#/definitions/Instructor'
+              count:
+                type: integer
+              searchLocation:
+                type: object
+                properties:
+                  displayName:
+                    type: string
+              page:
+                type: integer
+                description: Current page number
+              totalPages:
+                type: integer
+                description: Total number of pages available
+              hasMore:
+                type: boolean
+                description: Whether more results exist beyond this page
+          examples:
+            application/json:
+              instructors:
+                - id: "instr_123"
+                  name: "Debesay"
+                  hourlyRate: 80
+                  distance: 3.2
+                  rating: 4.9
+                  reviews: 120
+                  totalBookings: 320
+                  bio: "Patient instructor with 10 years experience"
+                  vehicleTypes: [AUTO]
+                  languages: [English]
+                  profileImage: "https://example.com/image.jpg"
+                  carMake: "Toyota"
+                  carModel: "Corolla"
+                  carYear: 2018
+                  location:
+                    displayName: "Joondalup WA"
+                    lat: -31.745
+                    lng: 115.766
+                - id: "instr_456"
+                  name: "Michael"
+                  hourlyRate: 65
+                  distance: 5.1
+                  rating: 4.7
+                  reviews: 80
+                  totalBookings: 200
+                  bio: "Value-focused instructor"
+                  vehicleTypes: [MANUAL]
+                  languages: [English]
+                  profileImage: "https://example.com/image2.jpg"
+                  carMake: "Hyundai"
+                  carModel: "i30"
+                  carYear: 2016
+                  location:
+                    displayName: "Wanneroo WA"
+                    lat: -31.748
+                    lng: 115.770
+        '404':
+          description: No instructors serve that area
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /locations/validate:
+    post:
+      summary: Validate pickup location
+      description: |
+        Validates and geocodes a pickup location.
+        Prevents bad addresses during voice calls.
+        Returns formatted address and coordinates.
+      operationId: validateLocation
+      tags:
+        - Locations
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - pickupLocation
+            properties:
+              pickupLocation:
+                type: string
+                description: Address, suburb, or postcode to validate
+                example: "123 Main St, Joondalup WA"
+      responses:
+        '200':
+          description: Location validation result
+          schema:
+            type: object
+            properties:
+              valid:
+                type: boolean
+              formattedAddress:
+                type: string
+                example: "123 Main St, Joondalup WA 6027"
+              lat:
+                type: number
+              lng:
+                type: number
+              components:
+                type: object
+                properties:
+                  suburb:
+                    type: string
+                  state:
+                    type: string
+                  postcode:
+                    type: string
+              error:
+                type: string
+                description: Present if valid is false
+              suggestions:
+                type: array
+                items:
+                  type: string
+                description: Suggestions if location not found
+          examples:
+            application/json:
+              valid: true
+              formattedAddress: "123 Main St, Joondalup WA 6027"
+              lat: -31.745
+              lng: 115.766
+              components:
+                suburb: "Joondalup"
+                state: "WA"
+                postcode: "6027"
+
+  /packages:
+    get:
+      summary: Get available lesson packages
+      description: |
+        Returns available lesson packages with pricing.
+        AI should call this to present package options to students.
+      operationId: getPackages
+      tags:
+        - Packages
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+          description: Instructor ID to get their specific pricing
+      responses:
+        '200':
+          description: Available packages
+          schema:
+            type: object
+            properties:
+              packages:
+                type: array
+                items:
+                  $ref: '#/definitions/Package'
+              testPackage:
+                type: object
+                properties:
+                  available:
+                    type: boolean
+                  price:
+                    type: number
+                    example: 150
+                  includes:
+                    type: string
+                    example: "1-hour pre-test lesson, car rental, test day support"
+          examples:
+            application/json:
+              packages:
+                - type: PACKAGE_6
+                  hours: 6
+                  price: 360
+                  originalPrice: 420
+                  discount: 60
+                  discountPercentage: 14
+                  savings: 60
+                  currency: AUD
+                - type: PACKAGE_10
+                  hours: 10
+                  price: 580
+                  originalPrice: 700
+                  discount: 120
+                  discountPercentage: 17
+                  savings: 120
+                  currency: AUD
+              testPackage:
+                available: true
+                price: 150
+                includes: "1-hour pre-test lesson, car rental, test day support"
+
+  /availability/slots:
+    get:
+      summary: Get available time slots
+      description: Returns available booking slots for an instructor on a specific date
+      operationId: getAvailableSlots
+      tags:
+        - Availability
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+          description: Instructor ID to get slots for
+        - $ref: '#/parameters/X-Request-Id'
+        - name: date
+          in: query
+          type: string
+          required: true
+          description: Date in YYYY-MM-DD format (e.g. 2026-03-25)
+          format: date
+        - name: duration
+          in: query
+          type: integer
+          required: false
+          description: Lesson duration in minutes (e.g. 60)
+      responses:
+        '200':
+          description: Available slots for an instructor
+          schema:
+            $ref: '#/definitions/AvailabilityResponse'
+          examples:
+            application/json:
+              slots:
+                - slotId: "s1"
+                  instructorId: "instr_123"
+                  time: "09:00"
+                  start: "2026-03-25T09:00:00+08:00"
+                  end: "2026-03-25T10:00:00+08:00"
+                  available: true
+                  seats: 1
+                  recommended: true
+                  score: 95
+                - slotId: "s2"
+                  instructorId: "instr_456"
+                  time: "10:00"
+                  start: "2026-03-25T10:00:00+08:00"
+                  end: "2026-03-25T11:00:00+08:00"
+                  available: false
+                  seats: 0
+              date: "2026-03-25"
+              duration: 60
+              timezone: "Australia/Perth"
+              currency: AUD
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
+
+  /availability:
+    post:
+      summary: Check availability (general)
+      description: General availability check endpoint proxied to main app.
+      operationId: checkAvailability
+      tags:
+        - Availability
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+        - name: date
+          in: query
+          type: string
+          required: true
+          description: "Date in YYYY-MM-DD format (e.g. 2026-03-25)"
+          format: date
+        - name: duration
+          in: query
+          type: integer
+          required: true
+          description: "Lesson duration in minutes: 60, 90, or 120"
+      responses:
+        '200':
+          description: Available slots
+          schema:
+            type: object
+            properties:
+              slots:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    time:
+                      type: string
+                      example: "09:00"
+                    available:
+                      type: boolean
+              date:
+                type: string
+                format: date
+              duration:
+                type: integer
+
+  /public/bookings/bulk:
+    post:
+      summary: Create booking with package
+      description: |
+        Create a new booking or package purchase.
+        IMPORTANT: Backend calculates pricing - AI should NOT send pricing fields.
+        AI only sends: instructor, package type, schedule, and account details.
+        
+        SLOT RESERVATION:
+        This endpoint atomically reserves the slot AND creates the booking in a single
+        database transaction. There is no separate reservation step. The slot is held
+        for 10 minutes (PENDING_PAYMENT status). If payment is not completed within
+        10 minutes, the booking expires and the slot is released automatically.
+        This prevents race conditions — two concurrent requests for the same slot will
+        result in one succeeding (201) and one failing (409 SLOT_TAKEN).
+        
+        INSTRUCTOR RESOLUTION:
+        Either `instructorId` or `instructorQuery` must be provided.
+        - `instructorId`: use when you already have the ID from a previous search/recommendations call
+        - `instructorQuery`: use when you only have a name or phone — backend resolves to an ID
+        AI should NEVER ask the caller for an instructor ID directly.
+        
+        NOTE: Although this path is under `/public`, this endpoint requires Bearer authentication and is intended for trusted service-to-service calls from the hybrid voice service to the main DriveBook API. Present a valid `Authorization: Bearer <token>`.
+        
+        CONDITIONAL VALIDATION (documented):
+        - Either `instructorId` or `instructorQuery` must be present.
+        - If `packageType` is `CUSTOM`, `hours` is required.
+        - If `bookingType` is `now`, `scheduledBookings` must be supplied and each entry must include `date`, `time`, `duration`, and `pickupLocation`.
+      operationId: createBooking
+      tags:
+        - Bookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safely retrying create booking requests
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - packageType
+              - bookingType
+              - registrationType
+              - accountHolderName
+              - accountHolderEmail
+              - accountHolderPhone
+            properties:
+              instructorId:
+                type: string
+                description: |
+                  Instructor ID resolved from API responses.
+                  Use when you have the ID from GET /instructors/recommendations or GET /instructors/search.
+                  Either instructorId or instructorQuery must be provided.
+              instructorQuery:
+                type: string
+                description: |
+                  Optional: instructor name or phone number.
+                  Use when you only have a name (e.g. "Debesay") or phone number.
+                  Backend will resolve to an instructorId automatically.
+                  Either instructorId or instructorQuery must be provided.
+                  Examples: "Debesay", "Debesay Birhane", "0400123456"
+              packageType:
+                type: string
+                enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
+              hours:
+                type: number
+                description: Required only for CUSTOM package
+              includeTestPackage:
+                type: boolean
+                default: false
+              bookingType:
+                type: string
+                enum: [now, later]
+                description: Schedule now or buy credits for later
+              registrationType:
+                type: string
+                enum: [myself, someone-else]
+              accountHolderName:
+                type: string
+              accountHolderEmail:
+                type: string
+                format: email
+              accountHolderPhone:
+                $ref: '#/definitions/PhoneNumber'
+              learnerName:
+                type: string
+                description: Required if registrationType is someone-else
+              learnerPhone:
+                $ref: '#/definitions/PhoneNumber'
+              learnerRelationship:
+                type: string
+                enum: [child, partner, grandchild, parent, friend, other]
+              scheduledBookings:
+                type: array
+                description: Required if bookingType is now
+                items:
+                  type: object
+                  required:
+                    - date
+                    - time
+                    - duration
+                    - pickupLocation
+                  properties:
+                    date:
+                      type: string
+                      format: date
+                      example: "2026-03-25"
+                    time:
+                      type: string
+                      example: "09:00"
+                    duration:
+                      type: integer
+                      example: 60
+                    pickupLocation:
+                      type: string
+                      example: "123 Main St, Joondalup WA 6027"
+                    timezone:
+                      type: string
+                      example: "Australia/Perth"
+                    notes:
+                      type: string
+            x-examples:
+              immediateBooking:
+                instructorId: "instr_123"
+                packageType: PACKAGE_10
+                bookingType: now
+                registrationType: myself
+                accountHolderName: "Liam Parker"
+                accountHolderEmail: "liam.parker@example.com"
+                accountHolderPhone: "+61400123456"
+                scheduledBookings:
+                  - date: "2026-03-25"
+                    time: "09:00"
+                    duration: 60
+                    pickupLocation: "123 Main St, Joondalup WA 6027"
+                    notes: "Please pick me up at the front of the shopping centre."
+                includeTestPackage: true
+              futurePackagePurchase:
+                instructorQuery: "Michael"
+                packageType: PACKAGE_15
+                bookingType: later
+                registrationType: someone-else
+                accountHolderName: "Sophie Brown"
+                accountHolderEmail: "sophie.brown@example.com"
+                accountHolderPhone: "+61400987654"
+                learnerName: "Ethan Brown"
+                learnerPhone: "+61400111222"
+                learnerRelationship: child
+                includeTestPackage: false
+      responses:
+        '201':
+          description: Booking created successfully
+          schema:
+            allOf:
+              - $ref: '#/definitions/BookingCreated'
+              - type: object
+                properties:
+                  clientId:
+                    type: string
+                  isShortNotice:
+                    type: boolean
+                    description: True if booking requires instructor approval before payment. See x-short-notice.
+                  payment:
+                    type: object
+                    description: Payment details. Present when status is PENDING_PAYMENT (AI flow — no pricing submitted).
+                    properties:
+                      checkoutUrl:
+                        type: string
+                        format: uri
+                        description: Stripe checkout URL. AI must send this to the caller via SMS immediately.
+                      reservationExpiresAt:
+                        type: string
+                        format: date-time
+                        description: When the slot reservation expires (typically 10 minutes from booking creation). AI should tell caller their slot is held until this time.
+                  pricing:
+                    type: object
+                    description: Pricing breakdown (calculated by backend)
+                    properties:
+                      subtotal:
+                        type: number
+                      discount:
+                        type: number
+                      platformFee:
+                        type: number
+                      total:
+                        type: number
+        '400':
+          description: Invalid booking data
+          schema:
+            $ref: '#/definitions/Error'
+        '409':
+          description: Slot already taken
+          schema:
+            $ref: '#/definitions/Error'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              type: integer
+            X-RateLimit-Limit:
+              type: integer
+            X-RateLimit-Remaining:
+              type: integer
+            X-RateLimit-Reset:
+              type: string
+          schema:
+            $ref: '#/definitions/Error'
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
+        
+
+  /voice/incoming:
+    post:
+      summary: Handle incoming voice call (Twilio webhook)
+      description: Twilio webhook endpoint for incoming calls. Validate the X-Twilio-Signature header using your Twilio auth token to verify request authenticity.
+      operationId: handleIncomingCall
+      tags:
+        - Voice
+      produces:
+        - text/xml
+      parameters:
+        - name: X-Twilio-Signature
+          in: header
+          type: string
+          required: true
+          description: Signature sent by Twilio. Server must validate this header against the Twilio auth token to verify source authenticity.
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              From:
+                type: string
+              To:
+                type: string
+              CallSid:
+                type: string
+      responses:
+        '200':
+          description: TwiML response (XML)
+          schema:
+            type: string
+            description: TwiML XML document
+
+  /voice/voicemail:
+    post:
+      summary: Handle voicemail recording (Twilio webhook)
+      description: Twilio webhook for voicemail callbacks. Validate the X-Twilio-Signature header using your Twilio auth token to verify request authenticity.
+      operationId: handleVoicemail
+      tags:
+        - Voice
+      produces:
+        - text/xml
+      parameters:
+        - name: X-Twilio-Signature
+          in: header
+          type: string
+          required: true
+          description: Signature sent by Twilio. Server must validate this header against the Twilio auth token to verify source authenticity.
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              RecordingUrl:
+                type: string
+              RecordingSid:
+                type: string
+              From:
+                type: string
+      responses:
+        '200':
+          description: Voicemail processed (TwiML XML)
+          schema:
+            type: string
+            description: TwiML XML document
+
+  /verifications/otp:
+    post:
+      summary: Send OTP for identity verification
+      description: |
+        Generate and send a one-time PIN (OTP) to the provided phone or email
+        for actions that require identity verification (reschedule, cancel).
+        Returns a short-lived `verificationId` used to confirm the OTP.
+        Codes expire after 5 minutes, allow up to 3 failed confirmation attempts,
+        require a 60-second resend delay, and are rate-limited to 3 requests per hour.
+        
+        AUTHENTICATION: This endpoint is intentionally public (no BearerAuth required).
+        The OTP code itself is the secret — only the recipient of the SMS/email can confirm it.
+        Rate limiting (3 requests/hour per phone/email) prevents abuse.
+      x-idempotency:
+        key-generation: Per phone/email + purpose combination
+        behavior: |
+          Requests with the same phone/email and purpose will return the same verification ID
+          if sent within 60 seconds (resend delay). After the resend delay expires, a new OTP
+          is generated and the verification ID is refreshed.
+      operationId: sendOtp
+      tags:
+        - Verifications
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - purpose
+            properties:
+              purpose:
+                type: string
+                enum: [reschedule, cancel, login]
+                description: Purpose for verification; used for auditing and expiry.
+              phone:
+                $ref: '#/definitions/PhoneNumber'
+              email:
+                $ref: '#/definitions/EmailAddress'
+              ttlSeconds:
+                type: integer
+                description: Optional desired TTL for the OTP in seconds (backend may enforce limits)
+      responses:
+        '200':
+          description: OTP sent
+          schema:
+            $ref: '#/definitions/OtpResponse'
+        '400':
+          description: Missing contact
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '429':
+          description: Rate limit exceeded (max 3 OTP requests per hour per phone/email)
+          headers:
+            Retry-After:
+              type: integer
+              description: Seconds until the client may retry
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '502':
+          description: Upstream service unavailable
+          x-retryable: true
+        '504':
+          description: Upstream timeout
+          x-retryable: true
+
+  /verifications/otp/confirm:
+    post:
+      summary: Confirm OTP and issue verification token
+      description: |
+        Confirm the one-time PIN sent to the user. On success returns a
+        short-lived `verificationToken` which clients must present when
+        performing sensitive actions like cancelling or rescheduling a booking.
+      x-idempotency:
+        key-generation: Per verificationId
+        behavior: |
+          Retrying a successful confirmation with the same verificationId will return
+          the same verificationToken. Tokens are cached for 5 minutes to support safe retries.
+      operationId: confirmOtp
+      tags:
+        - Verifications
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - verificationId
+              - code
+            properties:
+              verificationId:
+                type: string
+              code:
+                type: string
+                description: Numeric or alphanumeric OTP code
+      responses:
+        '200':
+          description: Verified
+          schema:
+            type: object
+            properties:
+              verified:
+                type: boolean
+              verificationToken:
+                type: string
+                description: |
+                  Token to present to sensitive endpoints such as /bookings/{id}/cancel and /bookings/{id}/reschedule.
+                  Token is short-lived (typically 10-15 minutes) and automatically expires after the TTL.
+                  Do not cache or reuse across different operations.
+              expiresIn:
+                type: integer
+              attemptsLeft:
+                type: integer
+                description: Number of remaining attempts before the verification is locked
+              maxAttempts:
+                type: integer
+                description: Maximum allowed attempts for this verification
+        '400':
+          description: Invalid code
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+        '429':
+          description: Too many attempts - verification temporarily locked after 3 failed attempts
+          headers:
+            Retry-After:
+              type: integer
+              description: Seconds until the verification attempt window resets
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  /public/bookings/{id}/payment-summary:
+    get:
+      summary: Get payment summary for booking (public — requires paymentToken)
+      description: |
+        Lightweight endpoint used by the payment page (/booking/{id}/payment).
+        Returns only the fields needed to render the booking summary and start Stripe Checkout.
+        
+        SECURITY: Both bookingId (path) AND paymentToken (query ?token=) must match.
+        Returns 404 (not 403) when token is missing or wrong — prevents bookingId enumeration.
+        Backend validates expiry server-side regardless of UI countdown.
+        
+        RESUME PAYMENT: SMS link stays valid until expiresAt.
+        POST /payments/create-intent reuses the existing PaymentIntent.
+      operationId: getPaymentSummary
+      tags:
+        - Bookings
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID from POST /public/bookings/bulk response
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: paymentToken from the SMS checkoutUrl. Returns 404 if missing or wrong.
+        - $ref: '#/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: Payment summary
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                $ref: '#/definitions/BookingStatus'
+              isPaid:
+                type: boolean
+              date:
+                $ref: '#/definitions/ISO8601Date'
+              time:
+                type: string
+              startTime:
+                $ref: '#/definitions/ISO8601DateTime'
+              endTime:
+                $ref: '#/definitions/ISO8601DateTime'
+              duration:
+                type: integer
+                description: Duration in minutes
+              pickupLocation:
+                type: string
+              isPackageBooking:
+                type: boolean
+              packageHours:
+                type: integer
+              total:
+                type: number
+              currency:
+                type: string
+                example: AUD
+              hourlyRate:
+                type: number
+              discountPct:
+                type: number
+              instructor:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  profileImage:
+                    type: string
+                    format: uri
+                  rating:
+                    type: number
+                  reviews:
+                    type: integer
+              expiresAt:
+                $ref: '#/definitions/ISO8601DateTime'
+              reservationExpired:
+                type: boolean
+        '401':
+          description: Token missing
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found or token mismatch (404 prevents bookingId enumeration)
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/timeline:
+    get:
+      summary: Get booking event timeline (public — requires paymentToken)
+      description: |
+        Returns a chronological list of events for a booking.
+        Designed for AI voice agents to answer "What happened to my booking?"
+        without exposing internal table data or financial details.
+        
+        Security: requires paymentToken. Returns 404 on token mismatch.
+        
+        AI USAGE:
+        Caller: "What happened to my booking?"
+        AI: Fetch timeline → summarise events in plain English.
+        Example: "Your booking was created at 9am, payment was received at 9:03am,
+        and your lesson is confirmed for Tuesday 25 March at 10am."
+      operationId: getBookingTimeline
+      tags:
+        - Bookings
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: paymentToken from the SMS link
+        - $ref: '#/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: Booking timeline
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                $ref: '#/definitions/BookingStatus'
+              events:
+                type: array
+                description: Chronologically ordered booking events
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum:
+                        - BOOKING_CREATED
+                        - AWAITING_PAYMENT
+                        - SLOT_EXPIRED
+                        - PAYMENT_COMPLETED
+                        - BOOKING_CONFIRMED
+                        - BOOKING_CANCELLED
+                        - LESSON_STARTED
+                        - LESSON_ENDED
+                        - BOOKING_COMPLETED
+                        - NO_SHOW
+                        - REVIEW_SUBMITTED
+                    time:
+                      $ref: '#/definitions/ISO8601DateTime'
+                    description:
+                      type: string
+                      description: Human-readable event description for AI to read aloud
+        '401':
+          description: Token missing
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found or token mismatch
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/payment-status:
+    get:
+      summary: Get payment status for booking (public — requires paymentToken)
+      description: |
+        Lean polling endpoint for AI voice agents and mobile apps.
+        Returns only booking status and a human-readable paymentStatus field.
+        No booking details or PII returned.
+        
+        AI USAGE:
+        "I can see your payment is still processing. Please wait a moment."
+        "Your booking is now confirmed — you'll receive an SMS shortly."
+        
+        Designed for polling every 3-5 seconds. Rate limited to 30/min per IP.
+        
+        paymentStatus values:
+        - pending: PENDING_PAYMENT (slot reserved, awaiting payment)
+        - awaiting_approval: PENDING (short-notice, waiting for instructor)
+        - succeeded: CONFIRMED (payment received)
+        - expired: EXPIRED
+        - cancelled: CANCELLED
+      operationId: getPaymentStatus
+      tags:
+        - Bookings
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: token
+          in: query
+          type: string
+          required: true
+          description: paymentToken from the SMS link
+        - $ref: '#/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: Payment status
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                $ref: '#/definitions/BookingStatus'
+              paymentStatus:
+                type: string
+                enum: [pending, awaiting_approval, succeeded, expired, cancelled]
+              isPaid:
+                type: boolean
+              canPay:
+                type: boolean
+                description: |
+                  True only when the booking can still be paid. Use this field directly —
+                  never infer it from status + isPaid + expiresAt.
+                  true: status=PENDING_PAYMENT, not paid, slot not expired
+                  false: any other status
+              expiresAt:
+                $ref: '#/definitions/ISO8601DateTime'
+        '401':
+          description: Token missing
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found or token mismatch
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}:
+    get:
+      summary: Get booking details by ID (public)
+      description: |
+        Retrieve full or limited details of a specific booking.
+        No instructor session required — caller authenticates via phone match or OTP token.
+        
+        SECURITY MODEL (one of the following must be provided):
+        - X-Verification-Token header:
+            Short-lived token from POST /verifications/otp/confirm.
+            Returns FULL booking details including price, package, client phone.
+            Token is NOT consumed — GET is read-only.
+        - phone query param:
+            Must match the booking's clientPhone.
+            Returns LIMITED details only (status, times, instructor name).
+            No PII beyond what the caller already knows.
+        
+        The verificationToken query param is NOT supported — tokens must be sent
+        via header only to prevent them appearing in server logs or browser history.
+        
+        AI USAGE:
+        - After booking creation: confirm status is PENDING_PAYMENT or CONFIRMED
+        - When caller asks "When is my lesson?": return startTime + instructor name
+        - When caller asks "Did my payment go through?": check status field
+        - Before reschedule/cancel: confirm booking exists and is eligible
+        
+        RATE LIMITING:
+        - 20 requests per minute per IP
+      operationId: getPublicBooking
+      tags:
+        - Bookings
+      security:
+        - VerificationToken: []
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID from lookup or creation response
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: false
+          description: |
+            Short-lived token from POST /verifications/otp/confirm.
+            Grants full booking details. Token is NOT consumed by this call.
+        - name: phone
+          in: query
+          type: string
+          required: false
+          description: |
+            Client phone number. Must match the booking's clientPhone.
+            Returns limited details only (no price, no PII).
+      responses:
+        '200':
+          description: Booking details (full or limited depending on auth method)
+          schema:
+            type: object
+            properties:
+              bookingId:
+                type: string
+              status:
+                $ref: '#/definitions/BookingStatus'
+              canCancel:
+                type: boolean
+                description: |
+                  True when this booking can be cancelled.
+                  AI MUST use this field directly — never infer from status alone.
+                  A CONFIRMED booking may still have canCancel=false (e.g. lesson already passed).
+              canReschedule:
+                type: boolean
+                description: |
+                  True when this booking can be rescheduled.
+                  AI MUST use this field directly — never infer from status alone.
+                  PENDING_PAYMENT bookings always have canReschedule=false.
+              startTime:
+                $ref: '#/definitions/ISO8601DateTime'
+              endTime:
+                $ref: '#/definitions/ISO8601DateTime'
+              duration:
+                type: integer
+                description: Duration in minutes
+              pickupLocation:
+                type: string
+              price:
+                type: number
+                description: Present only when accessed via verificationToken
+              isShortNotice:
+                type: boolean
+                description: See x-short-notice
+              expiresAt:
+                $ref: '#/definitions/ISO8601DateTime'
+                description: Present only for PENDING_PAYMENT status — when the slot reservation expires
+              isPackageBooking:
+                type: boolean
+                description: Present only when accessed via verificationToken
+              package:
+                type: object
+                description: Present only when accessed via verificationToken and isPackageBooking=true
+                properties:
+                  hours:
+                    type: integer
+                  hoursRemaining:
+                    type: number
+              instructor:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: Present only when accessed via verificationToken
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                    description: Present only when accessed via verificationToken
+                  hourlyRate:
+                    type: number
+                    description: Present only when accessed via verificationToken
+              client:
+                type: object
+                description: Present only when accessed via verificationToken
+                properties:
+                  name:
+                    type: string
+                  phone:
+                    type: string
+              createdAt:
+                $ref: '#/definitions/ISO8601DateTime'
+                description: Present only when accessed via verificationToken
+              updatedAt:
+                $ref: '#/definitions/ISO8601DateTime'
+                description: Present only when accessed via verificationToken
+        '401':
+          description: No authentication provided (missing both token and phone)
+          schema:
+            $ref: '#/definitions/Error'
+        '403':
+          description: Phone does not match booking, or token belongs to a different client
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: Booking not found
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/cancellation-policy:
+    get:
+      summary: Get cancellation policy for a booking
+      description: |
+        Returns the exact refund eligibility for a booking based on server-side
+        policy calculation. No authentication required.
+
+        AI MUST call this endpoint BEFORE presenting a cancellation to the caller.
+        Never calculate or guess refund amounts — use refundAmount and refundPercentage
+        directly from this response.
+
+        PENDING_PAYMENT bookings return isPendingPayment=true with refundAmount=0 and
+        a distinct reason string. The AI must handle this as a separate script path:
+        "This booking hasn't been paid yet. I can release the slot immediately."
+
+        AI usage:
+          1. Call this endpoint after OTP verification
+          2. Check canCancel — if false, tell the caller why (use reason field)
+          3. Read back: "Cancelling now will return $[refundAmount] to your wallet."
+          4. Only proceed to POST /cancel after explicit "yes"
+
+        RATE LIMIT: 20 requests per minute per IP
+      operationId: getCancellationPolicy
+      tags:
+        - Bookings
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+          description: Booking ID
+        - $ref: '#/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: Cancellation policy details
+          schema:
+            type: object
+            required:
+              - bookingId
+              - eligible
+              - canCancel
+              - refundPercentage
+              - refundAmount
+              - walletCredit
+              - reason
+              - status
+            properties:
+              bookingId:
+                type: string
+              eligible:
+                type: boolean
+                description: Whether cancellation is possible at all
+              canCancel:
+                type: boolean
+                description: |
+                  Whether this booking can be cancelled right now.
+                  False for terminal states (CANCELLED, COMPLETED, EXPIRED, NO_SHOW).
+              isPendingPayment:
+                type: boolean
+                description: |
+                  True when no payment has been captured yet.
+                  AI script: "This booking hasn't been paid yet. I can release the slot immediately."
+                  refundAmount will be 0 — no wallet credit needed.
+              refundPercentage:
+                type: number
+                description: Refund percentage — 0, 50, or 100
+                enum: [0, 50, 100]
+              refundAmount:
+                type: number
+                description: Exact dollar amount to be credited to the client wallet
+              walletCredit:
+                type: number
+                description: Same as refundAmount — wallet credit in AUD
+              hoursUntilLesson:
+                type: number
+                description: Hours remaining until the lesson (negative if past)
+              reason:
+                type: string
+                description: |
+                  Human-readable reason for the refund tier.
+                  Examples:
+                    "More than 48 hours notice — full refund applies"
+                    "Between 24 and 48 hours notice — 50% refund applies"
+                    "Less than 24 hours notice — no refund applies"
+                    "No payment captured — booking can be released immediately"
+                    "Lesson has already passed — no refund applies"
+              status:
+                type: string
+                description: Current booking status
+              lessonPrice:
+                type: number
+                description: Original lesson price
+        '404':
+          description: Booking not found
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/cancel:
+    post:
+      summary: Cancel a booking (requires verification)
+      description: Cancel a booking after verifying the requestor's identity via the `X-Verification-Token` header (OTP confirmation).
+      operationId: cancelBooking
+      tags:
+        - Bookings
+      security:
+        - BearerAuth: []
+        - VerificationToken: []
+      x-idempotency:
+        key-header: Idempotency-Key
+        behavior: |
+          Use the Idempotency-Key header to safely retry cancellation requests.
+          If a retry arrives with the same key within 24 hours, the service will return
+          the same cancellation response without processing the cancellation again.
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: true
+          description: Short-lived verification token from OTP confirmation
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safely retrying cancel requests
+        - name: body
+          in: body
+          required: false
+          schema:
+            type: object
+            properties:
+              reason:
+                type: string
+                description: Optional cancellation reason
+      responses:
+        '200':
+          description: Booking cancelled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              booking:
+                type: object
+              refund:
+                type: object
+                properties:
+                  percentage:
+                    type: number
+                    description: Refund percentage (0, 50, or 100)
+                  amount:
+                    type: number
+                    description: Refund amount in AUD
+                  stripeRefundId:
+                    type: string
+                    description: Stripe refund ID if successfully issued. Null if no refund applies or refund failed.
+                  requiresManualAction:
+                    type: boolean
+                    description: |
+                      True when a refund was due but Stripe refund failed.
+                      AI should say: "The automatic refund failed — our team will process it manually within 1 business day."
+                  error:
+                    type: string
+                    description: Stripe error message if refund failed.
+        '401':
+          description: Verification failed
+          schema:
+            $ref: '#/definitions/Error'
+
+  /public/bookings/{id}/reschedule:
+    post:
+      summary: Reschedule a booking (requires verification)
+      description: Reschedule a booking after verifying the requestor's identity via the `X-Verification-Token` header (OTP confirmation).
+      operationId: rescheduleBooking
+      tags:
+        - Bookings
+      security:
+        - BearerAuth: []
+        - VerificationToken: []
+      x-idempotency:
+        key-header: Idempotency-Key
+        behavior: |
+          Use the Idempotency-Key header to safely retry reschedule requests.
+          If a retry arrives with the same key within 24 hours, the service will return
+          the same reschedule response without rescheduling again.
+      parameters:
+        - name: id
+          in: path
+          type: string
+          required: true
+        - name: X-Verification-Token
+          in: header
+          type: string
+          required: true
+          description: Short-lived verification token from OTP confirmation
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: Idempotency key for safely retrying reschedule requests
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - date
+              - time
+              - duration
+            properties:
+              date:
+                $ref: '#/definitions/ISO8601Date'
+              time:
+                type: string
+                pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+                description: "New time in HH:MM 24-hour format (e.g. 14:00)"
+              duration:
+                type: integer
+                example: 60
+              pickupLocation:
+                type: string
+              notes:
+                type: string
+      responses:
+        '200':
+          description: Booking rescheduled
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              newDate:
+                $ref: '#/definitions/ISO8601DateTime'
+              newTime:
+                type: string
+        '401':
+          description: Verification failed
+          schema:
+            $ref: '#/definitions/Error'
+
+definitions:
+  Error:
+    type: object
+    properties:
+      error:
+        type: string
+        description: Human-readable error message
+      code:
+        type: string
+        description: |
+          Machine-readable error code for AI to react intelligently.
+          Known codes:
+          - SLOT_TAKEN: The requested time slot is no longer available. AI should offer alternatives.
+          - INSTRUCTOR_NOT_FOUND: instructorQuery did not match any active instructor.
+          - INSTRUCTOR_INACTIVE: Instructor is not currently accepting bookings.
+          - BOOKING_NOT_FOUND: Booking ID does not exist.
+          - BOOKING_NOT_CANCELLABLE: Booking status does not allow cancellation.
+          - BOOKING_NOT_RESCHEDULABLE: Booking status does not allow rescheduling.
+          - VERIFICATION_REQUIRED: OTP verification required before this action.
+          - VERIFICATION_EXPIRED: Verification token has expired. Request a new OTP.
+          - VERIFICATION_INVALID: Verification token does not match.
+          - RATE_LIMIT_EXCEEDED: Too many requests. Check Retry-After header.
+          - VALIDATION_ERROR: Request body failed validation. Check details field.
+      requestId:
+        type: string
+        description: Correlation id propagated from the caller or generated by the service
+      details:
+        type: object
+        description: Optional structured details with additional diagnostic information
+  Instructor:
+    type: object
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      hourlyRate:
+        type: number
+      distance:
+        type: number
+      rating:
+        type: number
+      reviews:
+        type: integer
+      bio:
+        type: string
+      vehicleTypes:
+        type: array
+        items:
+          type: string
+      languages:
+        type: array
+        items:
+          type: string
+      profileImage:
+        type: string
+        format: uri
+        description: URL to the instructor's profile image
+      totalBookings:
+        type: integer
+      carMake:
+        type: string
+      carModel:
+        type: string
+      carYear:
+        type: integer
+      location:
+        type: object
+        properties:
+          displayName:
+            type: string
+          lat:
+            type: number
+          lng:
+            type: number
+  AvailabilityResponse:
+    type: object
+    properties:
+      slots:
+        type: array
+        items:
+          type: object
+          required:
+            - slotId
+            - instructorId
+            - time
+            - start
+            - end
+            - available
+            - seats
+          properties:
+            slotId:
+              type: string
+            instructorId:
+              type: string
+            time:
+              type: string
+              description: Local time (HH:MM)
+            start:
+              type: string
+              format: date-time
+              description: ISO-8601 start datetime
+            end:
+              type: string
+              format: date-time
+              description: ISO-8601 end datetime
+            available:
+              type: boolean
+            seats:
+              type: integer
+      nextAvailable:
+        type: string
+        description: |
+          The first available time slot that is not short-notice (HH:MM format).
+          Null if no slots are available on this date.
+          AI should use this to suggest the earliest bookable time when the caller
+          says "as soon as possible" or "what's the earliest available?".
+        example: "09:00"
+      date:
+        type: string
+        format: date
+      duration:
+        type: integer
+      timezone:
+        type: string
+        description: IANA timezone identifier (e.g., Australia/Perth)
+      currency:
+        type: string
+        description: ISO 4217 currency code
+        example: AUD
+      notes:
+        type: string
+  BookingStatus:
+    type: string
+    description: |
+      Status of a booking in the DriveBook system.
+      - PENDING: Short-notice booking awaiting instructor approval (no payment yet)
+      - PENDING_PAYMENT: Slot reserved, awaiting payment (expires in 10 minutes)
+      - CONFIRMED: Payment received, booking confirmed
+      - COMPLETED: Lesson completed
+      - CANCELLED: Booking cancelled by client or instructor
+      - EXPIRED: Payment window elapsed without payment (slot released)
+      - NO_SHOW: Lesson time passed with no check-in recorded
+    enum:
+      - PENDING
+      - PENDING_PAYMENT
+      - CONFIRMED
+      - COMPLETED
+      - CANCELLED
+      - EXPIRED
+      - NO_SHOW
+  BookingCreated:
+    type: object
+    properties:
+      success:
+        type: boolean
+      bookingId:
+        type: string
+      clientId:
+        type: string
+      total:
+        type: number
+      status:
+        $ref: '#/definitions/BookingStatus'
+  OtpResponse:
+    type: object
+    properties:
+      verificationId:
+        type: string
+      delivery:
+        type: string
+      expiresIn:
+        type: integer
+      maxAttempts:
+        type: integer
+      resendAfterSeconds:
+        type: integer
+      rateLimitPerHour:
+        type: integer
+
+  Package:
+    type: object
+    properties:
+      type:
+        type: string
+        enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15, CUSTOM]
+      hours:
+        type: integer
+      price:
+        type: number
+      originalPrice:
+        type: number
+      discount:
+        type: number
+      discountPercentage:
+        type: integer
+      savings:
+        type: number
+      currency:
+        type: string
+        example: AUD
+
+  EmailAddress:
+    type: string
+    format: email
+    description: RFC 5322-compliant email address
+
+  PhoneNumber:
+    type: string
+    pattern: '^\+?[1-9]\d{1,14}$'
+    description: E.164 formatted phone number
+
+  ISO8601Date:
+    type: string
+    format: date
+    description: ISO 8601 calendar date
+
+  ISO8601DateTime:
+    type: string
+    format: date-time
+    description: ISO 8601 date-time with timezone
+
+tags:
+  - name: System
+    description: System health and status
+  - name: Instructors
+    description: Instructor discovery and search
+  - name: Locations
+    description: Location validation and geocoding
+  - name: Packages
+    description: Lesson packages and pricing
+  - name: Availability
+    description: Time slot availability
+  - name: Bookings
+    description: Booking creation, cancellation, and rescheduling
+  - name: Voice
+    description: Twilio voice webhooks (native to hybrid service — not proxied)
+  - name: Verifications
+    description: OTP identity verification for sensitive operations

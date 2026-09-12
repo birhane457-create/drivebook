@@ -1,0 +1,347 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_VIEW);
+    if (deny) return deny;
+
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
+    const skip = (page - 1) * limit;
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const bufferCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Transactions already covered by an active or paid payout
+    const coveredTxIds = await prisma.payoutTransaction.findMany({
+      where: { payout: { status: { in: ['PAID', 'PROCESSING', 'PENDING_TRANSFER', 'SENT', 'ON_HOLD'] } } },
+      select: { transactionId: true },
+    });
+    const excludeIds = coveredTxIds.map((p) => p.transactionId);
+
+    const eligibleTransactions = await prisma.transaction.findMany({
+      where: {
+        status: 'SETTLED',
+        type: 'BOOKING_PAYMENT',
+        id: excludeIds.length ? { notIn: excludeIds } : undefined,
+        booking: {
+          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          endTime: { lte: bufferCutoff },
+          deletedAt: null,
+          source: { not: 'offline' }, // offline/cash bookings handled by instructor — no platform payout
+        },
+      },
+      include: {
+        booking: {
+          select: {
+            id: true, startTime: true, endTime: true, status: true,
+            duration: true, price: true, pickupAddress: true,
+            customerName: true, customerPhone: true, notes: true,
+            provider: { select: { id: true, name: true, phone: true, stripeAccountId: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    });
+
+    const totalEligible = await prisma.transaction.count({
+      where: {
+        status: 'SETTLED',
+        type: 'BOOKING_PAYMENT',
+        id: excludeIds.length ? { notIn: excludeIds } : undefined,
+        booking: {
+          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          endTime: { lte: bufferCutoff },
+          deletedAt: null,
+          source: { not: 'offline' },
+        },
+      },
+    });
+
+    // WITHHELD: cancelled/no-show bookings with SETTLED transactions
+    const cancelledTransactions = await prisma.transaction.findMany({
+      where: {
+        status: 'SETTLED',
+        type: 'BOOKING_PAYMENT',
+        booking: {
+          status: { in: ['CANCELLED', 'NO_SHOW'] },
+          deletedAt: null,
+        },
+      },
+      include: {
+        booking: {
+          select: {
+            id: true, startTime: true, endTime: true, status: true,
+            duration: true, price: true, customerName: true, customerPhone: true,
+            notes: true, isPackageBooking: true, pickupAddress: true,
+            provider: { select: { id: true, name: true, phone: true } },
+            customer: { select: { id: true, name: true, email: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // DISPUTES: bookings marked NO_SHOW with noShowParty = 'both', or transactions with DISPUTED tag
+    const disputedTransactions = await prisma.transaction.findMany({
+      where: {
+        status: 'SETTLED',
+        booking: {
+          status: 'NO_SHOW',
+          noShowParty: 'both',
+        } as any,
+      },
+      include: {
+        booking: {
+          select: {
+            id: true, startTime: true, endTime: true, status: true,
+            duration: true, price: true, customerName: true, customerPhone: true,
+            notes: true, isPackageBooking: true, pickupAddress: true,
+            provider: { select: { id: true, name: true, phone: true } },
+            customer: { select: { id: true, name: true, email: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // PENDING_TRANSFER payouts (bank/manual — approved, awaiting admin to send)
+    const pendingTransferPayouts = await prisma.payout.findMany({
+      where: { status: 'PENDING_TRANSFER' },
+      orderBy: { updatedAt: 'asc' },
+      include: {
+        transactions: { select: { transactionId: true } },
+      },
+    });
+
+    // SENT payouts (admin recorded bank ref, awaiting confirmation)
+    const sentPayouts = await prisma.payout.findMany({
+      where: { status: 'SENT' },
+      orderBy: { sentAt: 'asc' },
+      include: {
+        transactions: { select: { transactionId: true } },
+      },
+    });
+
+    // Enrich pending/sent with instructor name
+    const manualPayoutInstructorIds = [
+      ...pendingTransferPayouts.map((p) => p.providerId),
+      ...sentPayouts.map((p) => p.providerId),
+    ];
+    const manualInstructors = manualPayoutInstructorIds.length
+      ? await prisma.provider.findMany({
+          where: { id: { in: manualPayoutInstructorIds } },
+          select: { id: true, name: true, phone: true, bankBsb: true, bankAccount: true, bankAccountName: true },
+        })
+      : [];
+    const manualInstructorMap = new Map(manualInstructors.map((i: any) => [i.id, i]));
+
+    // Group eligible by instructor
+    const byInstructor = new Map<string, any>();
+    for (const t of eligibleTransactions) {
+      const iid = t.providerId;
+      if (!t.booking) continue; // skip orphaned transactions
+      if (!byInstructor.has(iid)) {
+        byInstructor.set(iid, {
+          providerId: iid,
+          instructorName: t.booking.provider.name,
+          instructorPhone: t.booking.provider.phone,
+          stripeAccountId: t.booking.provider.stripeAccountId,
+          totalAmount: 0,
+          transactionCount: 0,
+          transactions: [],
+        });
+      }
+      const g = byInstructor.get(iid);
+      g.totalAmount += t.providerPayout;
+      g.transactionCount += 1;
+      g.transactions.push({
+        id: t.id,
+        bookingId: t.bookingId,
+        amount: t.amount,
+        platformFee: t.platformFee,
+        providerPayout: t.providerPayout,
+        commissionRate: t.commissionRate,
+        createdAt: t.createdAt,
+        bookingDate: t.booking.startTime,
+        bookingEndDate: t.booking.endTime,
+        duration: t.booking.duration,
+        customerName: t.booking.customerName,
+        pickupAddress: t.booking.pickupAddress,
+        description: t.description,
+      });
+    }
+
+    const pendingPayouts = Array.from(byInstructor.values())
+      .sort((a: any, b: any) => b.totalAmount - a.totalAmount);
+
+    const totalPending = pendingPayouts.reduce((s: any, p: any) => s + p.totalAmount, 0);
+
+    // Completed this month
+    const completedAgg = await prisma.payout.aggregate({
+      where: { status: 'PAID', paidAt: { gte: startOfMonth } },
+      _sum: { netAmount: true },
+    });
+
+    // Failed payouts
+    const failedPayouts = await prisma.payout.findMany({
+      where: { status: 'FAILED' },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+      select: {
+        id: true, payoutRef: true, providerId: true, netAmount: true,
+        failureReason: true, retryCount: true, updatedAt: true,
+      },
+    });
+
+    const noShowCount = await prisma.booking.count({
+      where: { status: 'NO_SHOW', deletedAt: null } as any,
+    });
+    const cancelledCount = await prisma.booking.count({
+      where: { status: 'CANCELLED', deletedAt: null } as any,
+    });
+
+    // Withheld grouped by instructor
+    const withheldByInstructor = new Map<string, any>();
+    for (const t of cancelledTransactions) {
+      const iid = t.providerId;
+      if (!t.booking) continue; // skip orphaned transactions
+      if (!withheldByInstructor.has(iid)) {
+        withheldByInstructor.set(iid, {
+          providerId: iid,
+          instructorName: t.booking.provider.name,
+          totalWithheld: 0,
+          transactions: [],
+        });
+      }
+      const g = withheldByInstructor.get(iid);
+      g.totalWithheld += t.providerPayout;
+      g.transactions.push({
+        id: t.id,
+        bookingId: t.bookingId,
+        bookingStatus: t.booking.status,
+        amount: t.amount,
+        platformFee: t.platformFee,
+        providerPayout: t.providerPayout,
+        bookingDate: t.booking.startTime,
+        bookingEndDate: t.booking.endTime,
+        duration: t.booking.duration,
+        customerName: t.booking.customerName || t.booking.customer?.name,
+        customerPhone: t.booking.customerPhone || null,
+        customerEmail: t.booking.customer?.email || null,
+        instructorPhone: t.booking.provider?.phone || null,
+        pickupAddress: t.booking.pickupAddress || null,
+        notes: t.booking.notes || null,
+        isPackageBooking: t.booking.isPackageBooking || false,
+        description: t.description,
+      });
+    }
+
+    return NextResponse.json({
+      pendingPayouts,
+      totalPending,
+      completedThisMonth: completedAgg._sum.netAmount || 0,
+      failedPayouts,
+      page,
+      totalPages: Math.ceil(totalEligible / limit),
+      totalEligible,
+      // Manual transfer queues
+      pendingTransferPayouts: pendingTransferPayouts.map((p) => {
+        const inst = manualInstructorMap.get(p.providerId);
+        // P1-7 FIX: Mask bank account — full BSB+account is enough for fraud.
+        // Full details available only via explicit "reveal" action in admin dashboard.
+        const maskedAccount = inst?.bankAccount
+          ? '****' + inst.bankAccount.slice(-3)
+          : null;
+        return {
+          id: p.id,
+          payoutRef: p.payoutRef,
+          providerId: p.providerId,
+          instructorName: inst?.name ?? 'Unknown',
+          instructorPhone: inst?.phone ?? null,
+          bankBsb: inst?.bankBsb ?? null,
+          bankAccount: maskedAccount,
+          bankAccountName: inst?.bankAccountName ?? null,
+          grossAmount: p.grossAmount,
+          taxWithheld: p.taxWithheld,
+          netAmount: p.netAmount,
+          payoutMethod: p.payoutMethod,
+          transactionCount: p.transactions.length,
+          createdAt: p.createdAt,
+        };
+      }),
+      sentPayouts: sentPayouts.map((p) => {
+        const inst = manualInstructorMap.get(p.providerId);
+        const maskedAccount = inst?.bankAccount
+          ? '****' + inst.bankAccount.slice(-3)
+          : null;
+        return {
+          id: p.id,
+          payoutRef: p.payoutRef,
+          providerId: p.providerId,
+          instructorName: inst?.name ?? 'Unknown',
+          instructorPhone: inst?.phone ?? null,
+          bankBsb: inst?.bankBsb ?? null,
+          bankAccount: maskedAccount,
+          bankAccountName: inst?.bankAccountName ?? null,
+          grossAmount: p.grossAmount,
+          taxWithheld: p.taxWithheld,
+          netAmount: p.netAmount,
+          payoutMethod: p.payoutMethod,
+          bankReference: p.bankReference,
+          sentAt: p.sentAt,
+          sentBy: p.sentBy,
+          transactionCount: p.transactions.length,
+          createdAt: p.createdAt,
+        };
+      }),
+      withheld: Array.from(withheldByInstructor.values()),
+      totalWithheld: cancelledTransactions.reduce((s: number, t: any) => s + t.providerPayout, 0),
+      disputes: disputedTransactions.map((t: any) => ({
+        id: t.id,
+        bookingId: t.bookingId,
+        providerId: t.providerId,
+        instructorName: t.booking?.provider?.name,
+        instructorPhone: t.booking?.provider?.phone || null,
+        customerName: t.booking?.customerName || t.booking?.customer?.name,
+        customerPhone: t.booking?.customerPhone || null,
+        customerEmail: t.booking?.customer?.email || null,
+        amount: t.amount,
+        platformFee: t.platformFee,
+        providerPayout: t.providerPayout,
+        description: t.description,
+        bookingDate: t.booking?.startTime,
+        bookingEndDate: t.booking?.endTime,
+        duration: t.booking?.duration,
+        bookingStatus: t.booking?.status,
+        pickupAddress: t.booking?.pickupAddress || null,
+        notes: t.booking?.notes || null,
+        isPackageBooking: t.booking?.isPackageBooking || false,
+      })),
+      stats: {
+        noShowCount,
+        cancelledCount,
+        eligibleCount: eligibleTransactions.length,
+        withheldCount: cancelledTransactions.length,
+        disputeCount: disputedTransactions.length,
+        pendingTransferCount: pendingTransferPayouts.length,
+        sentCount: sentPayouts.length,
+      },
+    });
+  } catch (error) {
+    console.error('Payouts fetch error:', error);
+    return NextResponse.json({ error: 'Failed to fetch payouts' }, { status: 500 });
+  }
+}

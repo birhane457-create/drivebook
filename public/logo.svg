@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 160" fill="none">
+  <defs>
+    <!-- D shape gradient: blue → purple → pink -->
+    <linearGradient id="dGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#4338ca"/>
+      <stop offset="55%"  stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <!-- Wordmark "Book" gradient -->
+    <linearGradient id="bookGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <!-- Steering wheel gradient -->
+    <radialGradient id="wheelGrad" cx="50%" cy="35%" r="65%">
+      <stop offset="0%"   stop-color="#fde68a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <!-- Clip path: the D shape, so road is masked inside it -->
+    <clipPath id="dClip">
+      <!-- D letterform: left vertical bar + large right arc -->
+      <path d="
+        M14 8
+        L14 152
+        L62 152
+        C110 152 148 140 148 80
+        C148 20  110 8   62 8
+        Z
+        M42 32
+        L62 32
+        C90 32 118 46 118 80
+        C118 114 90 128 62 128
+        L42 128
+        Z
+      " fill-rule="evenodd"/>
+    </clipPath>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════
+       ICON MARK  (0,0  →  162,160)
+  ════════════════════════════════════════════ -->
+
+  <!-- D shape fill -->
+  <path d="
+    M14 8
+    L14 152
+    L62 152
+    C110 152 148 140 148 80
+    C148 20  110 8   62 8
+    Z
+    M42 32
+    L62 32
+    C90 32 118 46 118 80
+    C118 114 90 128 62 128
+    L42 128
+    Z
+  " fill="url(#dGrad)" fill-rule="evenodd"/>
+
+  <!-- Road inside the D (clipped) -->
+  <g clip-path="url(#dClip)">
+    <!-- Dark road surface — winding from bottom-left up and around -->
+    <path d="M 22 155
+             C 30 130  38 120  52 108
+             C 66  96  80  88  95  78
+             C 110 68  120 60  125 45"
+          stroke="#1e1b4b" stroke-width="26" stroke-linecap="round" fill="none"/>
+    <!-- Road centre dashes -->
+    <path d="M 22 155
+             C 30 130  38 120  52 108
+             C 66  96  80  88  95  78
+             C 110 68  120 60  125 45"
+          stroke="white" stroke-width="3" stroke-linecap="round"
+          stroke-dasharray="10 9" fill="none" opacity="0.85"/>
+  </g>
+
+  <!-- Steering wheel — centred at ~(68, 95), radius 22 -->
+  <!-- Outer ring -->
+  <circle cx="68" cy="95" r="22" fill="url(#wheelGrad)"/>
+  <!-- Inner ring cutout -->
+  <circle cx="68" cy="95" r="14" fill="#fbbf24"/>
+  <!-- Hub -->
+  <circle cx="68" cy="95" r="5" fill="#d97706"/>
+  <!-- Spokes -->
+  <line x1="68" y1="73"  x2="68" y2="81"  stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="68" y1="109" x2="68" y2="117" stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="46" y1="95"  x2="54" y2="95"  stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="82" y1="95"  x2="90" y2="95"  stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Diagonal spokes -->
+  <line x1="52" y1="79" x2="58" y2="85" stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+  <line x1="84" y1="79" x2="78" y2="85" stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+  <line x1="52" y1="111" x2="58" y2="105" stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+  <line x1="84" y1="111" x2="78" y2="105" stroke="#d97706" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- ═══════════════════════════════════════════
+       WORDMARK  (starts at x=175)
+  ════════════════════════════════════════════ -->
+
+  <!-- "Drive" — dark navy -->
+  <text
+    x="175" y="100"
+    font-family="'Plus Jakarta Sans','Inter',system-ui,sans-serif"
+    font-size="72" font-weight="800" letter-spacing="-2"
+    fill="#0f172a"
+  >Drive</text>
+
+  <!-- "Book" — gradient purple→pink -->
+  <text
+    x="354" y="100"
+    font-family="'Plus Jakarta Sans','Inter',system-ui,sans-serif"
+    font-size="72" font-weight="800" letter-spacing="-2"
+    fill="url(#bookGrad)"
+  >Book</text>
+
+  <!-- Tagline -->
+  <text
+    x="177" y="128"
+    font-family="'Plus Jakarta Sans','Inter',system-ui,sans-serif"
+    font-size="18" font-weight="400" letter-spacing="0.5"
+    fill="#64748b"
+  >Learn. Drive. Succeed.</text>
+</svg>

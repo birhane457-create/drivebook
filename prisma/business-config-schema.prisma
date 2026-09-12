@@ -1,0 +1,310 @@
+// business-config-schema.prisma
+//
+// Business Configuration System — new models to add to schema.prisma
+//
+// HOW TO APPLY:
+//   1. Copy all models below into the main schema.prisma
+//   2. Run: npx prisma migrate dev --name add_business_config_tables
+//   3. Populate initial data from existing Instructor fields (see migration notes)
+//
+// These models implement the relational database design from ARCHITECTURE.md.
+// getBusinessConfig() assembles them into a unified BusinessConfig object.
+
+// ── Business ──────────────────────────────────────────────────────────────────
+// The core tenant entity. Every provider/customer/booking belongs to a Business.
+// Phase 1: one Business per Instructor (created automatically at signup).
+// Phase 2+: multi-provider Businesses (driving schools, agencies).
+
+model Business {
+  id              String   @id @default(cuid())
+  name            String                          // "Smith Tax & Accounting"
+  legalName       String?
+  abn             String?
+  abnVerified     Boolean  @default(false)
+  supportEmail    String
+  phone           String?
+  timezone        String   @default("Australia/Perth")
+  templateSlug    String?                         // "driving" | "tax" | "beauty" — onboarding template used
+  subscriptionTier String  @default("BASIC")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  settings        BusinessSettings?
+  branding        BusinessBranding?
+  capabilities    BusinessCapabilities?
+  terminology     BusinessTerminology?
+  aiConfig        BusinessAIConfig?
+  services        BusinessService[]
+  domains         BusinessDomain[]
+  website         BusinessWebsite?
+
+  @@index([subscriptionTier])
+  @@index([isActive])
+}
+
+// ── BusinessSettings ──────────────────────────────────────────────────────────
+// Booking, payment and policy rules for the business.
+
+model BusinessSettings {
+  id                          String   @id @default(cuid())
+  businessId                  String   @unique
+  
+  // Booking rules
+  minAdvanceHours             Int      @default(2)
+  maxAdvanceDays              Int      @default(60)
+  bookingBufferMinutes        Int      @default(10)
+  maxAppointmentsPerDay       Int      @default(8)
+  
+  // Payment rules
+  platformFeePercent          Float    @default(3.6)
+  commissionRate              Float    @default(15.0)
+  
+  // Cancellation policy
+  freeCancellationHours       Int      @default(48)
+  lateCancellationWindowHours Int      @default(24)
+  cancellationRefundPercent   Float    @default(100.0)
+  
+  // Package discounts
+  package6Discount            Float    @default(5)
+  package10Discount           Float    @default(10)
+  package15Discount           Float    @default(12)
+  
+  // GST
+  gstEnabled                  Boolean  @default(true)
+  gstRate                     Float    @default(10)
+  
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  business                    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// ── BusinessBranding ──────────────────────────────────────────────────────────
+// Visual identity for the business's public-facing surfaces.
+
+model BusinessBranding {
+  id                      String   @id @default(cuid())
+  businessId              String   @unique
+  
+  logo                    String?  // Cloudinary URL
+  primaryColour           String   @default("#3B82F6")
+  secondaryColour         String?
+  fontFamily              String?
+  theme                   String   @default("light") // "light" | "dark"
+  
+  // White-label controls
+  showPlatformBranding    Boolean  @default(true)   // show "Powered by X" footer
+  customSlug              String?  @unique           // name.platform.com
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  business                Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([customSlug])
+}
+
+// ── BusinessCapabilities ──────────────────────────────────────────────────────
+// Feature flags — which platform capabilities this business has enabled.
+
+model BusinessCapabilities {
+  id                    String   @id @default(cuid())
+  businessId            String   @unique
+  
+  onlineBooking         Boolean  @default(true)
+  onlinePayments        Boolean  @default(true)
+  quotes                Boolean  @default(false)
+  packages              Boolean  @default(true)
+  waitingList           Boolean  @default(false)
+  reviews               Boolean  @default(true)
+  aiReceptionist        Boolean  @default(false)
+  voiceLine             Boolean  @default(false)
+  mobileApp             Boolean  @default(false)
+  googleCalendar        Boolean  @default(true)
+  documentVerification  Boolean  @default(false)
+  travelTime            Boolean  @default(false)
+  assessmentTracking    Boolean  @default(false)
+  websiteBuilder        Boolean  @default(true)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  business              Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// ── BusinessTerminology ───────────────────────────────────────────────────────
+// Label overrides — what the business calls Core platform concepts.
+
+model BusinessTerminology {
+  id            String   @id @default(cuid())
+  businessId    String   @unique
+  
+  provider      String   @default("Provider")
+  providers     String   @default("Providers")
+  customer      String   @default("Customer")
+  customers     String   @default("Customers")
+  booking       String   @default("Booking")
+  bookings      String   @default("Bookings")
+  service       String   @default("Service")
+  services      String   @default("Services")
+  providerGroup String   @default("Business")
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// ── BusinessAIConfig ──────────────────────────────────────────────────────────
+// AI receptionist configuration for the business.
+
+model BusinessAIConfig {
+  id                  String   @id @default(cuid())
+  businessId          String   @unique
+  
+  businessDescription String   @db.Text
+  openingHours        String   @default("Mon-Fri 9am-5pm")
+  greetingScript      String?
+  personality         String   @default("friendly")  // "professional" | "friendly" | "concise"
+  
+  // JSON arrays
+  faq                 Json     @default("[]")         // Array<{ question: string, answer: string }>
+  allowedActions      Json     @default("[\"book\",\"reschedule\",\"cancel\",\"message\"]")
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// ── BusinessService ───────────────────────────────────────────────────────────
+// The service catalogue for a business.
+// Implements ServiceDefinition from lib/core/types.ts as a DB model.
+
+model BusinessService {
+  id              String   @id @default(cuid())
+  businessId      String
+  
+  name            String
+  description     String?  @db.Text
+  duration        Int                              // minutes (0 = variable)
+  price           Float
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  
+  // bookingMode: "appointment" | "request" | "package"
+  bookingMode     String   @default("appointment")
+  // locationMode: "provider_travels" | "customer_travels" | "remote" | "flexible"
+  locationMode    String   @default("flexible")
+  providerRequired Boolean @default(true)
+  
+  // Payment rules
+  depositPercent  Float?
+  payOnBooking    Boolean  @default(true)
+  payOnCompletion Boolean  @default(false)
+  quoteRequired   Boolean  @default(false)
+  
+  // Cancellation rules
+  freeCancellationHours Int   @default(48)
+  refundPercent         Float @default(100)
+  
+  // Availability rules
+  minAdvanceHours Int    @default(2)
+  maxAdvanceDays  Int    @default(60)
+  
+  // AI receptionist permissions
+  aiCanBook       Boolean  @default(false)
+  aiCanQuote      Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, isActive])
+  @@index([businessId, sortOrder])
+}
+
+// ── BusinessDomain ────────────────────────────────────────────────────────────
+// Custom domains and subdomains for the business.
+
+model BusinessDomain {
+  id            String    @id @default(cuid())
+  businessId    String
+  
+  host          String    @unique  // "smithtax.com.au" | "john.platform.com"
+  type          String    @default("subdomain")  // "custom" | "subdomain"
+  isPrimary     Boolean   @default(false)
+  
+  // DNS verification
+  verified      Boolean   @default(false)
+  verifiedAt    DateTime?
+  verificationToken String? @unique
+  
+  // For Vercel/custom domain provisioning
+  provisionedAt DateTime?
+  sslActive     Boolean   @default(false)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([host])
+  @@index([verified])
+}
+
+// ── BusinessWebsite ───────────────────────────────────────────────────────────
+// Website configuration for the business's public site.
+
+model BusinessWebsite {
+  id          String   @id @default(cuid())
+  businessId  String   @unique
+  
+  // SEO defaults (per-page overrides in WebsitePage)
+  seoTitle    String?
+  seoDesc     String?  @db.Text
+  seoImage    String?
+  
+  // Page and section config stored as JSON for flexibility
+  // Structure: Array<{ id, type, title, content, settings, sortOrder }>
+  pages       Json     @default("[]")
+  
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// ── Migration notes ───────────────────────────────────────────────────────────
+//
+// After applying this migration, run a data migration script to:
+//
+// 1. Create one Business record per existing Instructor:
+//    Business.name         ← Instructor.businessName ?? Instructor.name
+//    Business.abn          ← Instructor.abn
+//    Business.supportEmail ← Instructor.user.email
+//    Business.timezone     ← Instructor.timezone
+//
+// 2. Create BusinessBranding from Instructor branding fields:
+//    logo          ← Instructor.brandLogo
+//    primaryColour ← Instructor.brandColorPrimary
+//    customSlug    ← Instructor.customSlug
+//
+// 3. Create BusinessTerminology with driving defaults for all existing Instructors:
+//    provider = "Instructor", customer = "Learner", booking = "Lesson", etc.
+//
+// 4. Create BusinessDomain from Instructor.customDomain (where set)
+//
+// 5. Populate BusinessCapabilities from Instructor.subscriptionTier:
+//    PRO+: aiReceptionist, voiceLine, assessmentTracking, documentVerification, travelTime
+//    BASIC: onlineBooking, onlinePayments, reviews, googleCalendar, websiteBuilder
+//
+// 6. Create BusinessService entries from the driving template defaults per instructor
+//
+// After data migration: update getBusinessConfig() to read from these tables.
+// Keep Instructor branding fields as fallback until all data is migrated.

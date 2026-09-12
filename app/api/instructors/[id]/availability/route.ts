@@ -1,0 +1,116 @@
+// @ts-nocheck
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+
+export const dynamic = 'force-dynamic';
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get('date');
+
+    if (!date) {
+      return NextResponse.json(
+        { error: 'Date parameter required' },
+        { status: 400 }
+      );
+    }
+
+    if (!params.id) {
+      return NextResponse.json(
+        { error: 'Instructor ID required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify instructor exists
+    const instructor = await prisma.provider.findUnique({
+      where: { id: params.id },
+      include: {
+        user: true
+      }
+    });
+
+    if (!instructor) {
+      return NextResponse.json(
+        { error: 'Instructor not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get bookings for this date to exclude booked times
+    // Use explicit UTC boundaries to avoid server TZ shifting the day window
+    const startOfDay = new Date(`${date}T00:00:00.000Z`)
+    const endOfDay   = new Date(`${date}T23:59:59.999Z`)
+
+    const existingBookings = await prisma.booking.findMany({
+      where: {
+        providerId: params.id,
+        startTime: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+        status: { in: ['PENDING', 'CONFIRMED'] },
+      },
+      select: {
+        startTime: true,
+        endTime: true,
+        duration: true,
+      },
+    });
+
+    // Get working hours for this day — use UTC date string to get correct day name
+    const dayName = new Date(`${date}T12:00:00.000Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase();
+    const workingHours = (instructor.workingHours as any) || {};
+
+    // Normalize: DB may store { day: { start, end, enabled } } or { day: [{ start, end }] }
+    function normalizeDaySlots(val: any): { start: string; end: string }[] {
+      if (!val) return []
+      if (Array.isArray(val)) return val.filter((s: any) => s?.start && s?.end)
+      if (typeof val === 'object' && val.start && val.end && val.enabled !== false) return [{ start: val.start, end: val.end }]
+      return []
+    }
+
+    const daySlots = normalizeDaySlots(workingHours[dayName]);
+
+    if (daySlots.length === 0) {
+      return NextResponse.json({
+        date,
+        slots: [],
+        message: 'Instructor not available on this day',
+      });
+    }
+
+    // Generate slots based on working hours (hourly intervals)
+    const allSlots: string[] = [];
+    for (const slot of daySlots) {
+      const [startHour] = slot.start.split(':').map(Number);
+      const [endHour] = slot.end.split(':').map(Number);
+      
+      for (let hour = startHour; hour < endHour; hour++) {
+        allSlots.push(`${String(hour).padStart(2, '0')}:00`);
+      }
+    }
+
+    // Filter out booked slots - extract UTC time from startTime ISO string
+    const bookedTimes = existingBookings.map((b: any) => {
+      return new Date(b.startTime).toISOString().slice(11, 16)
+    });
+    const availableSlots = allSlots.filter(slot => !bookedTimes.includes(slot));
+
+    return NextResponse.json({
+      date,
+      slots: availableSlots,
+      booked: bookedTimes,
+    });
+  } catch (error) {
+    console.error('Availability check error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch availability' },
+      { status: 500 }
+    );
+  }
+}
