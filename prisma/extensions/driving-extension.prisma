@@ -1,0 +1,145 @@
+// driving-extension.prisma
+//
+// Phase 2 — Driving vertical extension tables.
+// These models extend the generic Core models (Booking, Instructor/Provider)
+// with driving-specific data without polluting the core schema.
+//
+// HOW TO APPLY:
+//   1. Review each model below.
+//   2. Copy the models into schema.prisma.
+//   3. Run: npx prisma migrate dev --name add_driving_extension_tables
+//   4. After migration: remove the listed fields from Booking and Instructor models.
+//
+// DO NOT run prisma migrate on this file directly — it is documentation only.
+
+// ── DrivingLessonOutcome ──────────────────────────────────────────────────────
+//
+// Stores driving-specific outcome data for a completed booking.
+// Replaces these fields currently on Booking:
+//   assessmentType, lessonTopics, passed, performanceScore,
+//   studentStrengths, focusAreas, instructorNotes, whiteboardSketchUrl
+//
+// Fields to REMOVE from Booking model after migration:
+//   assessmentType    String        @default("COACHING")
+//   lessonTopics      String?
+//   passed            Boolean?
+//   performanceScore  Int?
+//   studentStrengths  Int[]         @default([])
+//   focusAreas        Int[]         @default([])
+//   lessonFeedback    Int[]         @default([])
+//   feedbackGivenAt   DateTime?
+//   instructorNotes   String?
+//   whiteboardSketchUrl String?
+
+model DrivingLessonOutcome {
+  id              String   @id @default(cuid())
+  bookingId       String   @unique  // one outcome per booking
+  
+  /// COACHING (everyday lesson) | MOCK (practice PDA) | OFFICIAL (accredited result)
+  assessmentType  String   @default("COACHING")
+  
+  /// Comma-separated PDA topic codes e.g. "3,7,12,45"
+  lessonTopics    String?
+  
+  /// PDA assessment scores — array of { code: Int, score: 0|1|2|3 }
+  pdaScores       Json?
+  
+  /// null for COACHING type; true/false for MOCK/OFFICIAL
+  passed          Boolean?
+  
+  /// Overall performance score (0–100) for MOCK/OFFICIAL
+  performanceScore Int?
+  
+  /// PDA topic codes where the student showed strength
+  studentStrengths Int[]   @default([])
+  
+  /// PDA topic codes that need more practice
+  focusAreas      Int[]   @default([])
+  
+  /// Overall lesson feedback rating codes from instructor
+  lessonFeedback  Int[]   @default([])
+  
+  /// Instructor's written notes for this lesson
+  instructorNotes String?
+  
+  /// URL of whiteboard sketch uploaded during lesson
+  whiteboardSketchUrl String?
+  
+  /// When the instructor recorded the feedback
+  feedbackGivenAt DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([bookingId])
+}
+
+// ── DrivingProviderProfile ────────────────────────────────────────────────────
+//
+// Stores driving-specific provider data.
+// Replaces these fields currently on Instructor:
+//   carMake, carModel, carYear, vehicleTypes, vehicleRegistrationDoc,
+//   licenseNumber, licenseExpiry, licenseImageFront, licenseImageBack,
+//   insuranceNumber, insurancePolicyDoc, policeCheckDoc, policeCheckExpiry,
+//   wwcCheckDoc, wwcCheckExpiry, certificationDoc, photoIdDoc,
+//   offersTestPackage, testPackageDuration, testPackageIncludes, testPackagePrice
+//
+// Fields to REMOVE from Instructor model after migration:
+//   (see list above)
+
+model DrivingProviderProfile {
+  id                    String   @id @default(cuid())
+  
+  /// FK to Instructor.id (Phase 1) — will become Provider.id in Phase 2 DB migration
+  providerId            String   @unique
+  
+  // Vehicle
+  carMake               String?
+  carModel              String?
+  carYear               String?
+  vehicleTypes          String?  // comma-separated e.g. "Manual,Automatic"
+  vehicleRegistrationDoc String?
+  
+  // Regulatory compliance documents
+  licenseNumber         String?
+  licenseExpiry         DateTime?
+  licenseImageFront     String?
+  licenseImageBack      String?
+  
+  insuranceNumber       String?
+  insuranceExpiry       DateTime?  @map("insuranceExpiry")
+  insurancePolicyDoc    String?
+  
+  policeCheckDoc        String?
+  policeCheckExpiry     DateTime?
+  
+  wwcCheckDoc           String?
+  wwcCheckExpiry        DateTime?
+  
+  certificationDoc      String?
+  photoIdDoc            String?
+  
+  // PDA test package offering
+  offersTestPackage     Boolean  @default(false)
+  testPackageDuration   Int?     // minutes
+  testPackageIncludes   Json?
+  testPackagePrice      Float?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([providerId])
+}
+
+// ── Migration notes ───────────────────────────────────────────────────────────
+//
+// Step 1: Add these models to schema.prisma
+// Step 2: Run migration (adds tables, does not yet remove old fields)
+// Step 3: Write a data migration script to copy existing data:
+//         - Booking.assessmentType → DrivingLessonOutcome.assessmentType
+//         - Instructor.carMake → DrivingProviderProfile.carMake
+//         etc.
+// Step 4: Update all application code to read from extension tables
+// Step 5: Run another migration to remove the old fields from Booking/Instructor
+//
+// This two-step approach ensures zero data loss and allows rollback at step 4.

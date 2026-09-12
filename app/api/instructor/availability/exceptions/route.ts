@@ -1,0 +1,108 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
+
+const exceptionSchema = z.object({
+  label: z.string().optional(),
+  exceptionDate: z.string(), // ISO date string
+  startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  allDay: z.boolean().optional().default(false),
+})
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.providerId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
+
+    const exceptions = await (prisma as any).availabilityException.findMany({
+      where: {
+        providerId: session!.user!.providerId,
+        ...(from && to ? {
+          exceptionDate: {
+            gte: new Date(from),
+            lte: new Date(to),
+          }
+        } : {}),
+      },
+      orderBy: { exceptionDate: 'asc' },
+    })
+
+    return NextResponse.json(exceptions)
+  } catch (error) {
+    console.error('Error fetching exceptions:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.providerId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = exceptionSchema.parse(body)
+
+    if (data.startTime >= data.endTime && !data.allDay) {
+      return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 })
+    }
+
+    const exception = await (prisma as any).availabilityException.create({
+      data: {
+        providerId: session!.user!.providerId,
+        label: data.label || null,
+        // Store at noon UTC so the date displays correctly in any AU timezone
+        exceptionDate: new Date(data.exceptionDate + 'T12:00:00.000Z'),
+        startTime: data.allDay ? '00:00' : data.startTime,
+        endTime: data.allDay ? '23:59' : data.endTime,
+        allDay: data.allDay,
+      },
+    })
+
+    return NextResponse.json(exception, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: (error as z.ZodError).errors }, { status: 400 })
+    }
+    console.error('Error creating exception:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.providerId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+    // Verify ownership
+    const existing = await (prisma as any).availabilityException.findFirst({
+      where: { id, providerId: session!.user!.providerId },
+    })
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    await (prisma as any).availabilityException.delete({ where: { id } })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting exception:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

@@ -1,0 +1,85 @@
+﻿═══════════════════════════════════════════════════════════════
+  MANUAL FIX GUIDE - Copy/Paste These Exact Changes
+═══════════════════════════════════════════════════════════════
+
+## FIX #1: Add sendAlert Import
+
+**Location**: Line 10 (after logger import)
+**Action**: Add this line after line 10:
+
+import { sendAlert } from '@/lib/services/alert-service'
+
+**Result should be**:
+import { logger } from '@/lib/logger'
+import { sendAlert } from '@/lib/services/alert-service'
+import { paymentService } from '@/lib/services/payment'
+
+---
+
+## FIX #2: Add sendAlert Call After Ledger Error
+
+**Location**: Line 577 (after the logger.error line)
+**Current code** (lines 576-579):
+    } catch (ledgerErr) {
+      logger.error('[CRITICAL] Ledger write failed after booking commit', { bookingId: booking.id, userId: client.userId, amount: toNumber(booking.price), error: ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr) })
+    }
+
+**Replace with**:
+    } catch (ledgerErr) {
+      logger.error('[CRITICAL] Ledger write failed after booking commit', { bookingId: booking.id, userId: client.userId, amount: toNumber(booking.price), error: ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr) })
+      void sendAlert({
+        type: 'RECONCILIATION_ISSUES',
+        severity: 'WARNING',
+        message: \Ledger write failed for booking \ — reconciliation required\,
+        entityId: booking.id,
+        metadata: {
+          bookingId: booking.id,
+          userId: client.userId,
+          amount: toNumber(booking.price),
+          idempotencyKey: \ooking-\-payment\
+        }
+      })
+    }
+
+---
+
+## FIX #3: Add SERIALIZABLE_TX to PENDING_PAYMENT Transaction
+
+**Location**: Line 284 (closing of pendingBooking transaction)
+**Current code** (lines 283-285):
+          })
+        })
+      } catch (txError) {
+
+**Replace with**:
+          })
+        }, SERIALIZABLE_TX)
+      } catch (txError) {
+
+---
+
+## FIX #4: Add notifyPaymentReceived Import
+
+**Location**: Line 13 (after getWalletBalance import)
+**Current**:
+import { notifyBookingRequest } from '@/lib/services/notifications'
+
+**Replace with**:
+import { notifyBookingRequest, notifyPaymentReceived } from '@/lib/services/notifications'
+
+---
+
+## FIX #5: Add drainRetryQueueAsync Import
+
+**Location**: Line 19 (enqueueNotification import)
+**Current**:
+import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry'
+
+**Check**: This is already correct! ✓
+
+---
+
+SAVE THE FILE and test TypeScript compilation:
+npx tsc --noEmit
+
+═══════════════════════════════════════════════════════════════

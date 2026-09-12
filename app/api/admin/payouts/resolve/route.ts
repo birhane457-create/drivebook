@@ -1,0 +1,277 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
+import { payoutRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
+
+import { requirePermission } from '@/lib/auth/requireRole';
+import { PERM } from '@/lib/rbac/permissions';
+export const dynamic = 'force-dynamic';
+
+type ResolveAction =
+  | 'refund_client'
+  | 'approve_for_payout'
+  | 'pay_instructor'
+  | 'charge_instructor'
+  | 'void';
+
+/**
+ * POST /api/admin/payouts/resolve
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_RESOLVE);
+    if (deny) return deny;
+
+    // Rate limit: 5 payout mutations per minute per admin — prevents runaway scripts
+    // and limits blast radius from a compromised admin account.
+    const rateLimitId = getRateLimitIdentifier(session!.user!.id, req.headers.get('x-forwarded-for'), 'payout-resolve');
+    const rateLimitResult = await checkRateLimitStrict(payoutRateLimit, rateLimitId);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: rateLimitResult.error },
+        { status: 429, headers: rateLimitResult.headers },
+      );
+    }
+
+    const body = await req.json();
+    const { transactionId, action: rawAction, reason } = body as {
+      transactionId: string;
+      action: ResolveAction;
+      reason?: string;
+    };
+
+    if (!transactionId || !rawAction) {
+      return NextResponse.json(
+        { error: 'transactionId and action are required' },
+        { status: 400 },
+      );
+    }
+
+    // Normalise legacy alias
+    const action: ResolveAction =
+      rawAction === 'pay_instructor' ? 'approve_for_payout' : rawAction;
+
+    const validActions: ResolveAction[] = [
+      'refund_client',
+      'approve_for_payout',
+      'charge_instructor',
+      'void',
+    ];
+    if (!validActions.includes(action)) {
+      return NextResponse.json({ error: `Unknown action: ${rawAction}` }, { status: 400 });
+    }
+
+    // Load transaction — wallet reached via booking → client → user → wallet
+    const txn = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: {
+        booking: {
+          include: { customer: {
+              include: {
+                user: { include: { wallet: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!txn) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+
+    // ── Idempotency guard — terminal states ──────────────────────────────────
+    const TERMINAL = ['REFUNDED', 'CANCELLED', 'COMPLETED'];
+    if (txn.status === 'SETTLED' && action === 'approve_for_payout') {
+      return NextResponse.json(
+        { error: 'Transaction already approved for payout', status: txn.status },
+        { status: 409 },
+      );
+    }
+    if (TERMINAL.includes(txn.status)) {
+      return NextResponse.json(
+        { error: `Transaction already resolved (status: ${txn.status})`, status: txn.status },
+        { status: 409 },
+      );
+    }
+
+    const adminId = session!.user!.id;
+    const now = new Date();
+
+    // ── Execute action ───────────────────────────────────────────────────────
+
+    if (action === 'refund_client') {
+      // Wallet lives on User, not Client — go through client.user.wallet
+      const wallet = (txn.booking?.customer as any)?.user?.wallet;
+      if (!wallet) {
+        return NextResponse.json(
+          { error: 'Client wallet not found — cannot refund' },
+          { status: 422 },
+        );
+      }
+
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: transactionId },
+          data: { status: 'REFUNDED', updatedAt: now },
+        }),
+        // Credit client wallet balance (cache field)
+        prisma.clientWallet.update({
+          where: { id: wallet.id },
+          data: { balance: { increment: txn.amount } },
+        }),
+        // Authoritative ledger entry
+        prisma.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            amount: txn.amount,
+            type: 'REFUND',
+            status: 'CONFIRMED',
+            description: `Dispute refund — booking ${txn.bookingId}`,
+            bookingId: txn.bookingId ?? undefined,
+          },
+        }),
+        prisma.auditLog.create({
+          data: {
+            action: 'DISPUTE_RESOLVED_REFUND_CLIENT',
+            actorId: adminId,
+            actorRole: 'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId: transactionId,
+            success: true,
+            metadata: { amount: txn.amount, reason, bookingId: txn.bookingId },
+          },
+        }),
+      ]);
+
+      await Promise.all([
+        appendLedgerEntry({
+          type: 'REFUND_ISSUED',
+          amount: -txn.amount,
+          referenceId: transactionId,
+          referenceType: 'TRANSACTION',
+          providerId: txn.providerId,
+          description: `Dispute refund to client — booking ${txn.bookingId}`,
+          metadata: { reason, resolvedBy: adminId },
+        }),
+        incrementLedger({ totalRefunded: txn.amount.toNumber() }),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        message: `Refunded $${txn.amount.toFixed(2)} to client wallet`,
+        action: 'refund_client',
+      });
+    }
+
+    if (action === 'approve_for_payout') {
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: transactionId },
+          data: { status: 'SETTLED', updatedAt: now },
+        }),
+        prisma.auditLog.create({
+          data: {
+            action: 'DISPUTE_RESOLVED_APPROVE_FOR_PAYOUT',
+            actorId: adminId,
+            actorRole: 'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId: transactionId,
+            success: true,
+            metadata: {
+              providerPayout: txn.providerPayout,
+              reason,
+              bookingId: txn.bookingId,
+              note: 'Approved for payout — funds will be sent during next payout run',
+            },
+          },
+        }),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        message: `Instructor approved for payout ($${txn.providerPayout.toFixed(2)}). Funds will be sent during payout processing.`,
+        action: 'approve_for_payout',
+        pendingPayout: true,
+      });
+    }
+
+    if (action === 'charge_instructor') {
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: transactionId },
+          data: { status: 'CANCELLED', updatedAt: now },
+        }),
+        prisma.auditLog.create({
+          data: {
+            action: 'DISPUTE_RESOLVED_CHARGE_INSTRUCTOR',
+            actorId: adminId,
+            actorRole: 'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId: transactionId,
+            success: true,
+            metadata: {
+              penaltyAmount: txn.providerPayout,
+              reason,
+              bookingId: txn.bookingId,
+            },
+          },
+        }),
+      ]);
+
+      await appendLedgerEntry({
+        type: 'ADJUSTMENT',
+        amount: -txn.providerPayout,
+        referenceId: transactionId,
+        referenceType: 'ADJUSTMENT',
+        providerId: txn.providerId,
+        description: `Instructor penalty — booking ${txn.bookingId} (recovered from next payout)`,
+        metadata: { reason, resolvedBy: adminId },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: `Instructor penalty of $${txn.providerPayout.toFixed(2)} applied — deducted from next payout`,
+        action: 'charge_instructor',
+      });
+    }
+
+    if (action === 'void') {
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: transactionId },
+          data: { status: 'CANCELLED', updatedAt: now },
+        }),
+        prisma.auditLog.create({
+          data: {
+            action: 'DISPUTE_RESOLVED_VOID',
+            actorId: adminId,
+            actorRole: 'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId: transactionId,
+            success: true,
+            metadata: { reason, bookingId: txn.bookingId, amount: txn.amount },
+          },
+        }),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Transaction voided — no money moved',
+        action: 'void',
+      });
+    }
+
+    // Should never reach here
+    return NextResponse.json({ error: 'Unhandled action' }, { status: 500 });
+  } catch (error) {
+    console.error('Resolve error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to resolve transaction' },
+      { status: 500 },
+    );
+  }
+}

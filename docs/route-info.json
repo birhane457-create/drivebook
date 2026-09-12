@@ -1,0 +1,1997 @@
+﻿[
+    {
+        "Route":  {
+                      "value":  "/api/admin/ai-brief",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  1
+                  },
+        "Methods":  "POST",
+        "Auth":  "ADMIN",
+        "Description":  "System prompt â€” tells the LLM its role and output format",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/ai-brief/history",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  2
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "API endpoint",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/ai-query",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  3
+                  },
+        "Methods":  "POST",
+        "Auth":  "ADMIN",
+        "Description":  "max tool-calling iterations per request",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/booking-payment-status",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  4
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Fetch all relevant bookings from last 24 hours",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/cron-jobs",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  6
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Load all CronHealth records in one query",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/daily-summary",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  7
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Stuck payments â€” include price for impact calculation",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/disputes",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  8
+                  },
+        "Methods":  "GET/PATCH",
+        "Auth":  "ADMIN",
+        "Description":  "open | won | lost | all",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/export",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  14
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Wrap in quotes if it contains comma, quote, or newline",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/health-score",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  15
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Count bookings that were created but NEVER confirmed because payment failed",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/instructor-risk",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  16
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Bookings last 30d grouped by instructor + status",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/learning-content",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  22
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "ADMIN",
+        "Description":  "GET â€” list all content",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/me/permissions",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  23
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Re-read from DB â€” never trust JWT role alone",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/operations-timeline",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  24
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Generic: convert SNAKE_CASE to Title Case",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/payouts/preview-all",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  26
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Get all settled BOOKING_PAYMENT transactions not yet covered by a payout,",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/payouts/resolve-split",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  27
+                  },
+        "Methods":  "POST",
+        "Auth":  "ADMIN",
+        "Description":  "Both legs (refund + approve) commit together or not at all.",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/staff",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  28
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "ADMIN",
+        "Description":  "Staff management is SUPER_ADMIN only â€” no regular ADMIN can see or edit other a",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/staff-governance/stats",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  31
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "Pending instructor approvals (tasks requiring approval)",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/subscriptions",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  32
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "API endpoint",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/test-centres",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  33
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "ADMIN",
+        "Description":  "API endpoint",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/test-vercel-api",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  35
+                  },
+        "Methods":  "GET",
+        "Auth":  "ADMIN",
+        "Description":  "api.vercel.com",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/voice-lines",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  38
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "ADMIN",
+        "Description":  "Check for duplicate",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/admin/weekly-report",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  40
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "ADMIN",
+        "Description":  "Resolve top instructor name",
+        "Category":  "admin"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/auth/device-check",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  41
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Called immediately after a successful login to record the browser device",
+        "Category":  "auth"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/auth/set-password",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  42
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "email is accepted for display",
+        "Category":  "auth"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/auth/verify-setup-token",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  43
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Rate limit: 20 requests per 15 minutes per IP (prevents setup-token enumeration)",
+        "Category":  "auth"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/availability",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  44
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/availability/check-and-reserve",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  45
+                  },
+        "Methods":  "POST/DELETE",
+        "Auth":  "Session",
+        "Description":  "Unique session ID for this booking flow",
+        "Category":  "availability"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/availability/check-and-reserve-status",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  46
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Check if a reserved slot is still valid (before payment)",
+        "Category":  "availability"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/availability/pda-tests",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  47
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Parse HH:mm string into a UTC Date on the given YYYY-MM-DD date string.",
+        "Category":  "availability"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/availability/validate-slots",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  48
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Parse date (YYYY-MM-DD) + time (HH:MM) in instructor local time.",
+        "Category":  "availability"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/bookings/batch",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  50
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Process batch bookings sequentially to avoid intra-batch slot conflicts.",
+        "Category":  "bookings"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/bookings/combined",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  51
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Lesson booking",
+        "Category":  "bookings"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/bookings/lookup",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  52
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Normalize phone number (remove spaces, dashes, etc.)",
+        "Category":  "bookings"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/bookings/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  53
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "JWT",
+        "Description":  "Get token from Authorization header",
+        "Category":  "bookings"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/bookings/offline",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  55
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "used only for platform client guard check",
+        "Category":  "bookings"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/branding",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  56
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/business",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  57
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "Session",
+        "Description":  "Helper â€” resolve or create a Business record for the current provider",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/business/ai-config",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  58
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "Session",
+        "Description":  "Check subscription â€” AI receptionist requires PRO+",
+        "Category":  "business"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/business/branding",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  59
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "Session",
+        "Description":  "Slug uniqueness check",
+        "Category":  "business"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/business/capabilities",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  60
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "Session",
+        "Description":  "Capabilities gated behind PRO+",
+        "Category":  "business"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/business/config",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  61
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "Session",
+        "Description":  "Derive businessId from providerId (set as `biz_${provider.id}` at registration)",
+        "Category":  "business"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/business/services",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  62
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "Default sortOrder to end of list",
+        "Category":  "business"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/business/terminology",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  64
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "business"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/bookings/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  65
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Validate mobile token",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/confirm-package-booking",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  66
+                  },
+        "Methods":  "POST",
+        "Auth":  "CLIENT",
+        "Description":  "Get the current booking to finalize",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/dashboard/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  67
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Validate mobile token",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/instructors/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  68
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Validate mobile token (optional - allow searches without auth too)",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/notifications",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  69
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "UI expects these legacy fields; DB uses `link` + `metadata`.",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/notifications/unread-count",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  71
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Get current user",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/packages",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  72
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Get all clients associated with this user",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/packages/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  73
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "CLIENT",
+        "Description":  "Validate mobile token",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/pending-reviews",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  74
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Guard null startTime â€” page renders new Date(bookingDate) so empty string â†’ I",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/profile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  75
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "CLIENT",
+        "Description":  "Pagination params",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/quotes",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  76
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "API endpoint",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/quotes/request",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  79
+                  },
+        "Methods":  "POST",
+        "Auth":  "CLIENT",
+        "Description":  "Create job request",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/recommendations",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  80
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Auth boundary fix: do not use session!.user.customerId for data access.",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/schedule-package-hours",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  81
+                  },
+        "Methods":  "POST",
+        "Auth":  "CLIENT",
+        "Description":  "Verify the package booking exists and belongs to this user",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/transactions",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  82
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Format transactions",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/wallet",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  83
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Issue 6 fix: ensure only CLIENT role can access their own wallet",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/client/wallet/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  84
+                  },
+        "Methods":  "GET",
+        "Auth":  "CLIENT",
+        "Description":  "Validate mobile token",
+        "Category":  "client"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/clients",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  85
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "frontend sends \"addressText\"",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/clients/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  87
+                  },
+        "Methods":  "GET",
+        "Auth":  "JWT",
+        "Description":  "JWT authentication for mobile",
+        "Category":  "clients"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/create-payment-intent",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  88
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/check-trial-expiry",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  89
+                  },
+        "Methods":  "GET",
+        "Auth":  "CRON_SECRET",
+        "Description":  "Find all expired trials",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/health-check",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  90
+                  },
+        "Methods":  "GET",
+        "Auth":  "CRON_SECRET",
+        "Description":  "Job has never run â€” only flag if it\u0027s been longer than 2Ã— the expected window",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/instructor-onboarding",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  91
+                  },
+        "Methods":  "GET",
+        "Auth":  "CRON_SECRET",
+        "Description":  "Cron steps only â€” excludes step 1 (registration) and step 6 (approval)",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/instructor-setup-nudge",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  92
+                  },
+        "Methods":  "GET",
+        "Auth":  "CRON_SECRET",
+        "Description":  "API endpoint",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/notification-retry",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  93
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "CRON_SECRET",
+        "Description":  "Auth: Vercel Crons or CRON_SECRET bearer",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/notifications",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  94
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "CRON_SECRET",
+        "Description":  "Auth: accept either CRON_SECRET Bearer token (external schedulers)",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/send-trial-expiry-alerts",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  95
+                  },
+        "Methods":  "GET",
+        "Auth":  "CRON_SECRET",
+        "Description":  "Dedupe: send once per subscription",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/slot-cleanup",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  96
+                  },
+        "Methods":  "GET",
+        "Auth":  "CRON_SECRET",
+        "Description":  "API endpoint",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/cron/weekly-payouts",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  97
+                  },
+        "Methods":  "GET",
+        "Auth":  "CRON_SECRET",
+        "Description":  "Dispute buffer: read from PlatformSettings (lateCancellationWindowHours * 2).",
+        "Category":  "cron"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/dashboard/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  98
+                  },
+        "Methods":  "GET",
+        "Auth":  "JWT",
+        "Description":  "JWT authentication for mobile",
+        "Category":  "dashboard"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/debug/session",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  99
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "debug"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/feedback/categories",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  100
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Transform into response format",
+        "Category":  "feedback"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/google-calendar",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  101
+                  },
+        "Methods":  "GET/POST/DELETE",
+        "Auth":  "Session",
+        "Description":  "Get connection status",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/google-calendar/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  102
+                  },
+        "Methods":  "GET/POST/DELETE",
+        "Auth":  "JWT",
+        "Description":  "GET - Get calendar connection status",
+        "Category":  "google-calendar"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/google-calendar/settings",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  103
+                  },
+        "Methods":  "PUT",
+        "Auth":  "Session",
+        "Description":  "Update instructor\u0027s calendar buffer mode preference",
+        "Category":  "google-calendar"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/google-calendar/sync",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  104
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "google-calendar"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/google-calendar/sync/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  105
+                  },
+        "Methods":  "POST",
+        "Auth":  "JWT",
+        "Description":  "API endpoint",
+        "Category":  "google-calendar"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/bio-generate",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  106
+                  },
+        "Methods":  "POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Rate limit: 5 bio generations per hour per instructor",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/card-order",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  107
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Submit a physical card print request.",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/client-lesson-feedback",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  108
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Get URL params",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/client-performance",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  109
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Get URL params",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/consent",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  110
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "API endpoint",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/custom-packages",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  111
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "For PDA tests: required to have test centres",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/devices",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  113
+                  },
+        "Methods":  "GET/DELETE",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "GET  â€” list recognised devices for the current instructor",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/documents",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  115
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Document types that live in DrivingProviderProfile (D7: removed from Instructor)",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/documents/expiry",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  117
+                  },
+        "Methods":  "POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Write to DrivingProviderProfile (D7: expiry columns removed from Instructor)",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/documents/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  118
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "JWT authentication",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/domain/verify",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  119
+                  },
+        "Methods":  "POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Add domain to Vercel project via API",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/earnings/this-week",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  120
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Get instructor\u0027s hourly rate and timezone",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/lesson-feedback",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  123
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Assessment types â€” v1 supports COACHING and MOCK only.",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/lesson-feedback/summary",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  124
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Get all bookings with feedback for this instructor",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/packages",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  125
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Fetch instructor\u0027s hourly rate and subscription tier in a single query",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/payouts",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  126
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Cron runs Monday 6pm UTC = Tuesday 2am AWST",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/pda-configs",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  127
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "GET - List all PDA configs for current instructor",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/profile/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  129
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "JWT authentication for mobile",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/quotes",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  130
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "API endpoint",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/receipts/weekly",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  132
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Get instructor details including timezone for date formatting",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/remind-client",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  133
+                  },
+        "Methods":  "POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Verify the booking",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/service-areas",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  134
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "ServiceArea model not implemented yet - return empty array",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/settings/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  136
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "GET - Get instructor settings",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/stripe-connect/onboard",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  137
+                  },
+        "Methods":  "POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "localhost:3000\u0027;",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/subdomain/check",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  138
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Validate format",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/test-package",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  139
+                  },
+        "Methods":  "GET/PUT",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "GET - Fetch instructor\u0027s test package settings",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/voice-line",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  140
+                  },
+        "Methods":  "GET",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Formatted for display",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructor/whiteboard/upload",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  141
+                  },
+        "Methods":  "POST",
+        "Auth":  "INSTRUCTOR",
+        "Description":  "Validate it looks like a PNG data URI",
+        "Category":  "instructor"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/instructors/recommendations",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  144
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Normalise voice",
+        "Category":  "instructors"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/locations/validate",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  145
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Attempt to resolve the address â€” static postcode",
+        "Category":  "locations"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/mobile/push/register-device",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  146
+                  },
+        "Methods":  "POST/DELETE",
+        "Auth":  "JWT",
+        "Description":  "Upsert: if the exact token string already exists, claim it for this user",
+        "Category":  "mobile"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/packages",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  147
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Fetch instructor (core fields) and platform settings in parallel",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/pda-bookings",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  148
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "Link to parent lesson package booking",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/pda-tests",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  149
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "YYYY-MM-DD",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/pda-tests/mobile",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  151
+                  },
+        "Methods":  "GET",
+        "Auth":  "JWT",
+        "Description":  "API endpoint",
+        "Category":  "pda-tests"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/public/instructors",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  154
+                  },
+        "Methods":  "GET",
+        "Auth":  "—",
+        "Description":  "Only return approved and active instructors",
+        "Category":  "public"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/reviews",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  155
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "Applied per authenticated user ID (or IP fallback) to prevent review spam.",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/seed/instructor-services",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  156
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Find instructor by email",
+        "Category":  "seed"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/seed/test-centres",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  157
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "POST - Seed test centres (admin only)",
+        "Category":  "seed"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/seed/test-feedback",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  158
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "SECURITY: Only allow in development",
+        "Category":  "seed"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/staff/members",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  159
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "GET - Fetch all staff members",
+        "Category":  "staff"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/staff/tasks",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  160
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "GET - Fetch tasks for staff member",
+        "Category":  "staff"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/subscriptions/webhook",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  163
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Return 200 so Stripe does not retry (would create noisy duplicate delivery attemp",
+        "Category":  "subscriptions"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/test-centres",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  164
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "GET - List all active test centres",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/test-email",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  165
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/upload",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  166
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Map the `type` param to the correct Cloudinary subfolder and resource type",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/verifications/otp",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  167
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "FIX #6: Replace in-memory Map with Upstash Redis rate limiter when configured.",
+        "Category":  "verifications"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/verifications/otp/confirm",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  168
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Track failed attempts per verificationId",
+        "Category":  "verifications"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/voice/availability",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  169
+                  },
+        "Methods":  "",
+        "Auth":  "Session",
+        "Description":  "YYYY-MM-DD",
+        "Category":  "voice"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/voice/bookings",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  170
+                  },
+        "Methods":  "",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "voice"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/voice/instructors/lookup",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  171
+                  },
+        "Methods":  "GET",
+        "Auth":  "Session",
+        "Description":  "Voice service auth",
+        "Category":  "voice"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/waiting-list",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  172
+                  },
+        "Methods":  "GET/POST",
+        "Auth":  "Session",
+        "Description":  "API endpoint",
+        "Category":  "other"
+    },
+    {
+        "Route":  {
+                      "value":  "/api/webhooks/stripe",
+                      "PSPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs\\missing-api-routes.txt",
+                      "PSParentPath":  "E:\\DOC\\flowstate-wms\\AI voice assistance - Copy - Copy - Copy\\drivebook\\docs",
+                      "PSChildName":  "missing-api-routes.txt",
+                      "PSDrive":  "E",
+                      "PSProvider":  "Microsoft.PowerShell.Core\\FileSystem",
+                      "ReadCount":  173
+                  },
+        "Methods":  "POST",
+        "Auth":  "Session",
+        "Description":  "Forward the raw body and all headers to the canonical webhook handler",
+        "Category":  "webhooks"
+    }
+]

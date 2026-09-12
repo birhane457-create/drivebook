@@ -1,0 +1,308 @@
+import { redirect } from 'next/navigation';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import SubscriptionPlans from '@/components/SubscriptionPlans';
+import { SUBSCRIPTION_PLANS, isTrialExpired, SubscriptionTier } from '@/lib/config/subscriptions';
+import { getCommissionRate } from '@/lib/services/platform-pricing';
+import DashboardPageLayout from '@/components/ui/page-layout'
+
+export default async function SubscriptionPage() {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session!.user!.role !== 'provider') {
+    redirect('/login');
+  }
+
+  const instructor = await prisma.provider.findUnique({
+    where: { userId: session!.user!.id },
+    include: {
+      subscriptions: {
+        where: { status: { in: ['TRIAL', 'ACTIVE', 'EXPIRED'] } },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+
+  if (!instructor) {
+    redirect('/setup');
+  }
+
+  const currentSubscription = instructor.subscriptions[0];
+  const trialExpired = instructor.trialEndsAt ? isTrialExpired(instructor.trialEndsAt) : false;
+  const daysLeftInTrial = instructor.trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(instructor.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  // Get live commission rate from DB (not hardcoded from config)
+  const commissionRate = await getCommissionRate(instructor.subscriptionTier || 'BASIC');
+
+  // Check for any pending rate change affecting this tier
+  // Uses raw SQL to avoid dependency on Prisma client regeneration
+  const fieldMap: Record<string, string> = {
+    BASIC:    'basicCommissionRate',
+    PRO:      'proCommissionRate',
+    STUDIO:   'studioCommissionRate',
+    PREMIUM:  'businessCommissionRate',  // DB field name for PREMIUM tier (legacy naming)
+    BUSINESS: 'businessCommissionRate',  // legacy tier, same rate
+  };
+  const field = fieldMap[instructor.subscriptionTier || 'BASIC'] || 'basicCommissionRate';
+
+  let pendingRateChange: { newRate: number; effectiveDate: Date; reason: string } | null = null;
+  try {
+    const rows = await prisma.$queryRaw<Array<{ newRate: number; effectiveDate: Date; reason: string }>>`
+      SELECT "newRate", "effectiveDate", "reason"
+      FROM "PlatformRateChange"
+      WHERE "field" = ${field}
+        AND "status" = 'PENDING'
+        AND "effectiveDate" > NOW()
+      ORDER BY "effectiveDate" ASC
+      LIMIT 1
+    `;
+    pendingRateChange = rows.length > 0 ? rows[0] : null;
+  } catch {
+    // Table may not exist yet or client not regenerated — silently skip
+    pendingRateChange = null;
+  }
+
+  return (
+          <DashboardPageLayout title="Subscription & Billing" breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'N' }]}>
+      <div className="py-8 bg-card/60 border border-border rounded-2xl shadow-sm">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-foreground">Subscription & Billing</h1>
+          <p className="mt-2 text-muted-foreground">
+            Choose the plan that works best for your business
+          </p>
+        </div>
+
+        {/* EXPIRED — trial ended without payment, or subscription lapsed */}
+        {instructor.subscriptionStatus === 'EXPIRED' && (
+          <div className="mb-8 bg-destructive/10 border-2 border-red-300 rounded-lg p-6">
+            <div className="flex items-start gap-3">
+              <svg className="h-6 w-6 text-destructive shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <h3 className="text-sm font-semibold text-destructive">Your account is in read-only mode</h3>
+                <p className="mt-1 text-sm text-destructive">
+                  {currentSubscription?.tier && currentSubscription.tier !== 'BASIC'
+                    ? `You previously selected the ${SUBSCRIPTION_PLANS[currentSubscription.tier as SubscriptionTier]?.name ?? currentSubscription.tier} plan but payment was not completed.`
+                    : 'Your trial has ended and no payment method was added.'}
+                  {' '}Select a plan below and complete checkout to restore full access.
+                </p>
+                <p className="mt-2 text-xs text-destructive">
+                  Once you subscribe, billing renews automatically each month or year — you only need to do this once.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Current Plan Status */}
+        {instructor.subscriptionStatus === 'TRIAL' && (
+          <div className={`mb-8 rounded-lg p-6 ${trialExpired ? 'bg-destructive/10 border-2 border-red-200' : daysLeftInTrial <= 3 ? 'bg-amber-500/10 border-2 border-amber-300' : 'bg-primary/10 border-2 border-blue-200'}`}>
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                {trialExpired ? (
+                  <svg className="h-6 w-6 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                ) : (
+                  <svg className={`h-6 w-6 ${daysLeftInTrial <= 3 ? 'text-amber-600' : 'text-primary'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className={`text-sm font-medium ${trialExpired ? 'text-destructive' : daysLeftInTrial <= 3 ? 'text-amber-400' : 'text-foreground'}`}>
+                  {trialExpired
+                    ? 'Trial Expired'
+                    : daysLeftInTrial <= 3
+                    ? `⏰ Only ${daysLeftInTrial} day${daysLeftInTrial !== 1 ? 's' : ''} left on your free trial`
+                    : `Free Trial — ${daysLeftInTrial} days remaining`}
+                </h3>
+                <div className={`mt-2 text-sm ${trialExpired ? 'text-destructive' : daysLeftInTrial <= 3 ? 'text-amber-400' : 'text-primary'}`}>
+                  {trialExpired ? (
+                    <p>Your trial has ended. Select a plan below to restore full access.</p>
+                  ) : (
+                    <>
+                      <p>
+                        You&apos;re on a free trial of the <strong>{SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier].name}</strong> plan.
+                        Trial ends on <strong>{new Date(instructor.trialEndsAt!).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                      </p>
+                      {/* No stripeSubscriptionId = no payment method added yet */}
+                      {!currentSubscription?.stripeSubscriptionId && (
+                        <p className="mt-2 font-medium">
+                          💳 Add a payment method now to avoid interruption — you won&apos;t be charged until your trial ends.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {instructor.subscriptionStatus === 'ACTIVE' && currentSubscription && (
+          <div className="mb-8 bg-green-50 border-2 border-green-200 rounded-lg p-6">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-emerald-400">
+                  Active Subscription - {(SUBSCRIPTION_PLANS[instructor.subscriptionTier as SubscriptionTier]?.name ?? instructor.subscriptionTier)} Plan
+                </h3>
+                <div className="mt-2 text-sm text-emerald-400">
+                  <p>
+                    ${Number(currentSubscription.monthlyAmount).toFixed(2)}/month • 
+                    Renews on {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })} ••
+                    {commissionRate}% commission per booking
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {instructor.subscriptionStatus === 'PAST_DUE' && (
+          <div className="mb-8 bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-amber-400">
+                  Payment Past Due
+                </h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>Your last payment failed. Please update your payment method to continue using the platform.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Subscription Plans */}
+        <SubscriptionPlans
+          currentTier={instructor.subscriptionTier}
+          currentStatus={instructor.subscriptionStatus}
+          providerId={instructor.id}
+        />
+
+        {/* Current Plan Details */}
+        {instructor.subscriptionStatus === 'ACTIVE' && (
+          <div className="mt-8 bg-card rounded-2xl shadow-sm border border-border p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4">Your Plan Benefits</h2>
+
+            {/* Pending rate change notice */}
+            {pendingRateChange && (
+              <div className="mb-5 bg-primary/10 border border-primary/25 rounded-lg p-4 flex items-start gap-3">
+                <svg className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="font-semibold text-sm text-foreground">Upcoming commission rate change</p>
+                  <p className="text-sm text-foreground mt-0.5">
+                    Your commission rate will change from <strong>{commissionRate}%</strong> to{' '}
+                    <strong>{pendingRateChange.newRate}%</strong> effective{' '}
+                    <strong>{new Date(pendingRateChange.effectiveDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                  </p>
+                  <p className="text-xs text-primary mt-1 italic">{pendingRateChange.reason}</p>
+                  <p className="text-xs text-primary mt-1">Existing confirmed bookings are not affected — only new bookings from the effective date.</p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-background border border-border rounded-2xl p-4">
+                <h3 className="text-sm font-medium text-foreground mb-1">Commission Rate</h3>
+                <p className="text-3xl font-bold text-foreground">{commissionRate}%</p>
+                <p className="text-sm text-muted-foreground mt-1">Platform keeps this per booking</p>
+                <p className="text-sm text-emerald-400 font-medium mt-1">You keep {(100 - commissionRate).toFixed(0)}%</p>
+                <div className="mt-3 bg-card rounded-2xl p-2 text-xs font-mono text-foreground border border-border">
+                  <div className="flex justify-between"><span>$70 booking</span><span>$70.00</span></div>
+                  <div className="flex justify-between text-rose-400"><span>Commission ({commissionRate}%)</span><span>-${(70 * commissionRate / 100).toFixed(2)}</span></div>
+                  <div className="flex justify-between text-emerald-400 font-bold border-t border-border pt-1 mt-1"><span>Your payout</span><span>${(70 * (1 - commissionRate / 100)).toFixed(2)}</span></div>
+                </div>
+              </div>
+              {(instructor.subscriptionTier === 'PREMIUM' || instructor.subscriptionTier === 'STUDIO') && (
+                <>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-1">Booking Slug</h3>
+                    <p className="text-sm text-foreground">
+                      {instructor.customSlug ? `${instructor.customSlug}.drivebook.com.au` : 'Not configured'}
+                    </p>
+                    {!instructor.customSlug && (
+                      <a href="/dashboard/branding" className="text-xs text-primary hover:underline mt-0.5 inline-block">Configure →</a>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-1">Custom Domain</h3>
+                    <p className="text-sm text-foreground">
+                      {instructor.customDomain || 'Not configured'}
+                    </p>
+                    {!instructor.customDomain && (
+                      <a href="/dashboard/branding" className="text-xs text-primary hover:underline mt-0.5 inline-block">Configure →</a>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-1">Branded Pages</h3>
+                    <p className="text-sm text-foreground">
+                      {instructor.showBrandingOnBookingPage ? 'Enabled' : 'Not configured'}
+                    </p>
+                    {!instructor.showBrandingOnBookingPage && (
+                      <a href="/dashboard/branding" className="text-xs text-primary hover:underline mt-0.5 inline-block">Configure →</a>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Billing History */}
+        {instructor.subscriptions.length > 0 && (
+          <div className="mt-8 bg-card rounded-2xl shadow-sm border border-border">
+            <div className="px-6 py-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">Billing History</h2>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {instructor.subscriptions.map((sub) => (
+                  <div key={sub.id} className="flex justify-between items-center py-3 border-b border-border last:border-0">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {/* Map legacy tier value 'BUSINESS' → 'PREMIUM' for display.
+                            DB records created before the rename may still have tier='BUSINESS'. */}
+                        {SUBSCRIPTION_PLANS[(instructor.subscriptionTier === 'BUSINESS' ? 'PREMIUM' : instructor.subscriptionTier) as SubscriptionTier]?.name ?? instructor.subscriptionTier} Plan
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(sub.currentPeriodStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {' — '}
+                        {new Date(sub.currentPeriodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-foreground">
+                        ${Number(sub.monthlyAmount).toFixed(2)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {sub.status}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </DashboardPageLayout>
+  )
+}

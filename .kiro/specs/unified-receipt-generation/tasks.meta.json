@@ -1,0 +1,232 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Create core TypeScript types and enums": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839044
+      },
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766858843
+      },
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788767034009
+      }
+    ],
+    "2.1 Create ContextValidator class in `lib/services/receipt/validator.ts`": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839138
+      },
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788767058747
+      },
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787586701
+      }
+    ],
+    "3.1 Create TaxDocumentBuilder class in `lib/services/receipt/builder.ts`": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839270
+      },
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788767060530
+      },
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787587589
+      }
+    ],
+    "4.1 Add grouping and section methods to TaxDocumentBuilder": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839337
+      },
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787602552
+      }
+    ],
+    "5.1 Add build method to TaxDocumentBuilder": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839401
+      },
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787616004
+      }
+    ],
+    "6.1 Create ReceiptTemplateEngine class in `lib/services/receipt/template-engine.ts`": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839461
+      },
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787684202
+      }
+    ],
+    "7.1 Add header and metadata methods to ReceiptTemplateEngine": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839524
+      }
+    ],
+    "8.1 Add supplier and line item methods to ReceiptTemplateEngine": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839585
+      }
+    ],
+    "9.1 Add GST summary and section methods to ReceiptTemplateEngine": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839640
+      }
+    ],
+    "10.1 Add wallet and payment methods to ReceiptTemplateEngine": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839697
+      }
+    ],
+    "11.1 Add cancellation policy and footer methods to ReceiptTemplateEngine": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839756
+      }
+    ],
+    "12. Checkpoint - Verify template engine generates valid HTML": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839821
+      }
+    ],
+    "13.1 Create ReceiptService class in `lib/services/receipt/receipt-service.ts`": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766839906
+      }
+    ],
+    "13.2 Add email subject generation to ReceiptService": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840001
+      }
+    ],
+    "14.1 Create context factories in `lib/services/receipt/context-factories.ts`": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840060
+      }
+    ],
+    "15.1 Create LegacyReceiptAdapters class in `lib/services/receipt/legacy-adapters.ts`": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840130
+      }
+    ],
+    "16.1 Add exports to receipt module": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840193
+      }
+    ],
+    "17.1 Update TaxDocumentBuilder to use getPlatformIdentity": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840257
+      }
+    ],
+    "18. Checkpoint - Verify complete system integration": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840320
+      }
+    ],
+    "19.1 Create migration documentation": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840387
+      }
+    ],
+    "19.2 Create usage examples documentation": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840452
+      }
+    ],
+    "20. Final checkpoint - Complete system verification": [
+      {
+        "executionId": "d2e60775-4ca4-44bc-9a69-366952467443",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788766840508
+      }
+    ],
+    "2. Implement context validation logic": [
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787586779
+      }
+    ],
+    "3. Implement GST calculation and line item classification": [
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787587653
+      }
+    ],
+    "4. Implement supplier grouping and section building": [
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787602655
+      }
+    ],
+    "5. Implement main document building orchestration": [
+      {
+        "executionId": "f096acd3-f97b-4eb1-ab03-ac93a5c6e2c9",
+        "chatSessionId": "sess_187b3999-abba-468e-8453-e953ff25ae49",
+        "timestamp": 1788787616158
+      }
+    ]
+  }
+}

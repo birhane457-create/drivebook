@@ -1,0 +1,124 @@
+# Student Wallet
+
+**Route:** `/client-dashboard/wallet`  
+**Auth required:** CLIENT role  
+**APIs:**
+- `GET /api/client/wallet` — balance + usage stats (used by wallet page and main dashboard)
+- `GET /api/client/wallet/summary` — extended summary with transaction history (used by mobile app)
+- `POST /api/client/wallet-topup-intent` — creates Stripe PaymentIntent for top-up
+- `POST /api/client/wallet-add` — confirms a top-up after Stripe payment (webhook-driven)
+
+---
+
+## Purpose
+
+The wallet holds pre-paid credit that students use to book lessons via the client dashboard. It is funded by Stripe payments (top-ups or package purchases).
+
+---
+
+## Balance Calculation
+
+Balance is never stored as a field. It is always computed:
+
+```
+balance = SUM(CONFIRMED CREDIT transactions) − SUM(CONFIRMED DEBIT transactions)
+```
+
+The `GET /api/client/wallet/summary` endpoint returns:
+- `balance` — current available balance
+- `transactions` — recent wallet transaction history
+
+---
+
+## Top-Up
+
+Students can add funds directly to their wallet:
+
+1. Student enters a top-up amount (min $10, max $500 — configurable via `/admin/pricing`)
+2. Calls `POST /api/client/wallet-topup-intent` → creates a PENDING `WalletTransaction`, then creates a Stripe PaymentIntent
+3. If Stripe fails, the PENDING transaction is deleted immediately (no orphaned records)
+4. Stripe Elements collects card details
+5. On `payment_intent.succeeded` webhook:
+   - Validates `amount_received` matches the PENDING transaction amount (rejects if mismatch)
+   - Confirms the transaction to `CONFIRMED`
+   - Balance is immediately available
+   - **Receipt email sent** — `sendWalletTopUpReceipt()` fires showing credits added, previous balance, new balance with approx hours remaining
+
+**URL shortcut:** `/client-dashboard/wallet?topup=XX.XX` — pre-fills the top-up amount. Used by the "Send Payment Link" feature when an instructor books on behalf of a client with insufficient balance.
+
+---
+
+## Wallet Transactions
+
+Each transaction has:
+- `amount` — AUD value
+- `type` — `CREDIT` or `DEBIT`
+- `description` — human-readable reason (e.g. "Lesson payment — John Smith", "Wallet top-up")
+- `status` — `PENDING` or `CONFIRMED`
+
+**CREDIT sources:**
+- Stripe top-up → receipt type D sent
+- Package purchase (full package amount credited on payment) → receipt type A sent
+- Lesson cancellation refund (partial or full, depending on notice period) → receipt type E sent
+- Admin manual credit → receipt type F sent (includes `WalletTransaction.id` for dispute reference)
+
+**DEBIT sources:**
+- Lesson booking (per lesson) → receipt type B sent
+- Lesson price increase on reschedule (duration extended)
+- Admin manual deduction → receipt type G sent (includes `WalletTransaction.id` for dispute reference)
+
+---
+
+## Package Flow
+
+When a student purchases a package via the public booking form or subdomain:
+
+**Book Later (no slot selected):**
+1. `POST /api/public/bookings/bulk` with `bookingType: later`
+2. No booking record created — only a `WalletTransaction (PENDING)` for the full package amount
+3. Returns `{ transactionId }` — payment page opens at `/payment/wallet/[transactionId]`
+4. On `payment_intent.succeeded` webhook: transaction confirmed to `CONFIRMED`
+5. Wallet balance immediately available — student books lessons from dashboard
+6. Receipt email sent
+
+**Book Now (slot selected):**
+1. `POST /api/public/bookings/bulk` with `bookingType: now` + scheduled slots
+2. Booking created (`PENDING_PAYMENT`), slot held for 10 minutes
+3. Returns `{ bookingId }` — payment page at `/booking/[id]/payment`
+4. On `payment_intent.succeeded` webhook:
+   - Wallet CREDITED with `packageTotalPaid`
+   - Wallet DEBITED with `booking.price` (first lesson)
+   - Remaining balance available for future lessons
+5. Receipt email sent
+
+**Rate & discount locking:**
+
+| Scenario | Rate used | Locked? |
+|----------|-----------|---------|
+| Buy package + book all slots now | `instructor.hourlyRate` at purchase time | Yes — `lockedHourlyRate` + `lockedDiscountPct` on `Booking` |
+| Buy package + book later (wallet top-up) | `instructor.hourlyRate` at time of each individual booking | No — wallet is plain money |
+| Already-confirmed booking | `booking.price` (immutable) | Yes |
+
+**Book-now:** `lockedHourlyRate` and `lockedDiscountPct` stored on the booking at creation. Instructor rate changes after purchase have zero effect.
+
+**Book-later:** The wallet holds money, not a rate promise. When the student books individual lessons from the dashboard (`POST /api/client/bookings/create-bulk`), the server fetches the instructor's current `hourlyRate` and recalculates the price server-side — client-submitted prices are ignored. If the instructor raised their rate from $70 to $80 between the top-up and the booking, the student pays $80/hr.
+
+**Wallet top-up (not yet booked):**
+A plain wallet top-up is just money — no rate is locked. If the instructor changes their rate between the top-up and the booking, the booking uses the current rate at booking time.
+
+---
+
+## Limits
+
+| Setting | Default | Configurable |
+|---------|---------|-------------|
+| Min top-up | $10 | Yes — `/admin/pricing` |
+| Max top-up | $500 | Yes — `/admin/pricing` |
+
+---
+
+## Related
+
+- [BOOKINGS.md](./BOOKINGS.md) — How wallet is debited on booking
+- `docs/06-payments/WALLET.md` — Technical wallet mechanics
+- `docs/06-payments/REFUNDS.md` — Refund policy

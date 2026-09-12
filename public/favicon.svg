@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+  <!-- Book left page -->
+  <path d="M6 24 L16 19 L16 8 L6 13 Z" fill="white" opacity="0.25"/>
+  <!-- Book right page -->
+  <path d="M26 24 L16 19 L16 8 L26 13 Z" fill="white" opacity="0.40"/>
+  <!-- Spine -->
+  <line x1="16" y1="8" x2="16" y2="19" stroke="white" stroke-width="1.5" opacity="0.7"/>
+  <!-- Tick badge -->
+  <circle cx="24" cy="10" r="6" fill="url(#bg)"/>
+  <circle cx="24" cy="10" r="5" fill="white" opacity="0.15"/>
+  <polyline points="21,10 23,12 27,7" stroke="#fde68a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

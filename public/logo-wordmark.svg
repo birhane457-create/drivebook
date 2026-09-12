@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 80" fill="none">
+  <defs>
+    <linearGradient id="iconBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#fde68a"/>
+      <stop offset="45%"  stop-color="#f9a8d4"/>
+      <stop offset="100%" stop-color="#c4b5fd"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon mark -->
+  <rect x="0" y="8" width="64" height="64" rx="14" fill="url(#iconBg)"/>
+
+  <!-- Book pages -->
+  <path d="M18 54 L32 44 L46 54 L46 28 L32 18 L18 28 Z" fill="white" opacity="0.12"/>
+  <path d="M18 28 L32 18 L32 44 L18 54 Z" fill="white" opacity="0.18"/>
+  <path d="M46 28 L32 18 L32 44 L46 54 Z" fill="white" opacity="0.28"/>
+  <line x1="32" y1="18" x2="32" y2="44" stroke="white" stroke-width="2" opacity="0.65"/>
+
+  <!-- Checkmark badge -->
+  <circle cx="47" cy="25" r="11" fill="url(#iconBg)"/>
+  <circle cx="47" cy="25" r="9"  fill="white" opacity="0.12"/>
+  <polyline points="42,25 46,29 53,20" stroke="#fde68a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Wordmark: DriveBook -->
+  <text
+    x="84"
+    y="55"
+    font-family="'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif"
+    font-size="42"
+    font-weight="700"
+    letter-spacing="-1"
+    fill="url(#textGrad)"
+  >DriveBook</text>
+</svg>

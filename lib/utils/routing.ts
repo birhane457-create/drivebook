@@ -1,0 +1,236 @@
+// Daily routing logic utilities
+import { prisma } from '@/lib/prisma';
+import { calculateDistance } from './distance';
+
+export interface InstructorPosition {
+  lat: number;
+  lng: number;
+  source: 'base' | 'previous_lesson';
+  label: string;
+  isFirstBookingOfDay: boolean;
+  previousBookingId?: string;
+}
+
+/**
+ * Get instructor's current position for a specific booking time
+ * Uses daily routing logic:
+ * - First booking of day: from base
+ * - Subsequent bookings: from previous booking's dropoff location
+ */
+export async function getInstructorPosition(
+  providerId: string,
+  bookingDateTime: Date
+): Promise<InstructorPosition> {
+  // Get start and end of the booking day — use UTC boundaries from ISO string
+  const dayStartStr = bookingDateTime.toISOString().slice(0, 10)
+  const dayStart = new Date(`${dayStartStr}T00:00:00.000Z`)
+  const dayEnd   = new Date(`${dayStartStr}T23:59:59.999Z`)
+
+  // Find last completed/confirmed booking before this time on same day
+  const lastBookingToday = await prisma.booking.findFirst({
+    where: {
+      providerId,
+      startTime: {
+        gte: dayStart,
+        lt: bookingDateTime // Before the current booking time
+      },
+      status: { in: ['CONFIRMED', 'COMPLETED'] }
+    },
+    orderBy: { endTime: 'desc' }
+  }) as any;
+
+  // Get instructor's base location
+  const instructor = await prisma.provider.findUnique({
+    where: { id: providerId },
+    select: {
+      baseLatitude: true,
+      baseLongitude: true
+    }
+  });
+
+  if (!instructor) {
+    throw new Error('Instructor not found');
+  }
+
+  // If there's a booking earlier today with dropoff location, use it
+  if (lastBookingToday?.dropoffLatitude && lastBookingToday?.dropoffLongitude) {
+    return {
+      lat: lastBookingToday.dropoffLatitude,
+      lng: lastBookingToday.dropoffLongitude,
+      source: 'previous_lesson',
+      label: 'from previous lesson',
+      isFirstBookingOfDay: false,
+      previousBookingId: lastBookingToday.id
+    };
+  }
+
+  // Otherwise, use base location (first booking of day)
+  return {
+    lat: instructor.baseLatitude ?? 0,
+    lng: instructor.baseLongitude ?? 0,
+    source: 'base',
+    label: 'from base',
+    isFirstBookingOfDay: true
+  };
+}
+
+/**
+ * Calculate distance for a booking considering daily routing
+ */
+export async function calculateBookingDistance(
+  providerId: string,
+  clientLat: number,
+  clientLng: number,
+  bookingDateTime: Date
+): Promise<{
+  distance: number;
+  fromLocation: 'base' | 'previous_lesson';
+  label: string;
+  isFirstBookingOfDay: boolean;
+  travelTimeMinutes: number;
+}> {
+  const position = await getInstructorPosition(providerId, bookingDateTime);
+  
+  const distance = calculateDistance(
+    position.lat,
+    position.lng,
+    clientLat,
+    clientLng
+  );
+
+  // Estimate travel time (assume 40km/h average in city)
+  const travelTimeMinutes = Math.ceil((distance / 40) * 60);
+
+  return {
+    distance,
+    fromLocation: position.source,
+    label: position.label,
+    isFirstBookingOfDay: position.isFirstBookingOfDay,
+    travelTimeMinutes
+  };
+}
+
+/**
+ * Get instructor's daily route for visualization
+ */
+export async function getDailyRoute(
+  providerId: string,
+  date: Date
+) {
+  const dayStartStr = date.toISOString().slice(0, 10)
+  const dayStart = new Date(`${dayStartStr}T00:00:00.000Z`)
+  const dayEnd   = new Date(`${dayStartStr}T23:59:59.999Z`)
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      providerId,
+      startTime: {
+        gte: dayStart,
+        lte: dayEnd
+      },
+      status: { in: ['CONFIRMED', 'COMPLETED'] }
+    },
+    include: { customer: {
+        select: {
+          name: true
+        }
+      }
+    },
+    orderBy: { startTime: 'asc' }
+  });
+
+  const instructor = await prisma.provider.findUnique({
+    where: { id: providerId },
+    select: {
+      baseLatitude: true,
+      baseLongitude: true,
+      baseAddress: true
+    }
+  });
+
+  if (!instructor) {
+    return null;
+  }
+
+  // Calculate route segments
+  const route = [];
+  let currentLat = instructor.baseLatitude ?? 0;
+  let currentLng = instructor.baseLongitude ?? 0;
+  let totalDistance = 0;
+  let totalTravelTime = 0;
+
+  for (const booking of bookings) {
+    if (booking.pickupLatitude && booking.pickupLongitude) {
+      const distance = calculateDistance(
+        currentLat,
+        currentLng,
+        booking.pickupLatitude,
+        booking.pickupLongitude
+      );
+      
+      const travelTime = Math.ceil((distance / 40) * 60);
+      
+      route.push({
+        bookingId: booking.id,
+        customerName: booking.customer?.name ?? booking.customerName ?? 'Client',
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        pickupAddress: booking.pickupAddress,
+        dropoffAddress: booking.dropoffAddress,
+        distance,
+        travelTime,
+        fromLocation: route.length === 0 ? 'base' : 'previous_lesson'
+      });
+
+      totalDistance += distance;
+      totalTravelTime += travelTime;
+
+      // Update current position to dropoff (or pickup if no dropoff)
+      if (booking.dropoffLatitude && booking.dropoffLongitude) {
+        currentLat = booking.dropoffLatitude;
+        currentLng = booking.dropoffLongitude;
+      } else {
+        currentLat = booking.pickupLatitude;
+        currentLng = booking.pickupLongitude;
+      }
+    }
+  }
+
+  // Calculate return to base
+  const returnDistance = calculateDistance(
+    currentLat,
+    currentLng,
+    instructor.baseLatitude ?? 0,
+    instructor.baseLongitude ?? 0
+  );
+  const returnTime = Math.ceil((returnDistance / 40) * 60);
+
+  return {
+    baseAddress: instructor.baseAddress,
+    baseLocation: {
+      lat: instructor.baseLatitude ?? 0,
+      lng: instructor.baseLongitude ?? 0
+    },
+    route,
+    totalDistance: totalDistance + returnDistance,
+    totalTravelTime: totalTravelTime + returnTime,
+    returnDistance,
+    returnTime,
+    bookingCount: bookings.length
+  };
+}
+
+/**
+ * Calculate route efficiency score (0-100)
+ * Higher score = less travel, more teaching
+ */
+export function calculateRouteEfficiency(
+  totalTravelTimeMinutes: number,
+  totalTeachingTimeMinutes: number
+): number {
+  const totalTime = totalTravelTimeMinutes + totalTeachingTimeMinutes;
+  if (totalTime === 0) return 0;
+  
+  const efficiency = (totalTeachingTimeMinutes / totalTime) * 100;
+  return Math.round(efficiency);
+}

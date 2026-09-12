@@ -1,0 +1,174 @@
+// @ts-nocheck
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
+import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
+
+
+export const dynamic = 'force-dynamic';
+export async function GET(req: NextRequest) {
+  try {
+    console.log('[Dashboard Mobile API] Request received');
+    
+    // JWT authentication for mobile
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('[Dashboard Mobile API] No authorization header');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const token = authHeader.substring(7);
+    let providerId: string;
+
+    try {
+      const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET!) as {
+        userId: string;
+        role: string;
+        providerId?: string;
+      };
+      
+      console.log('[Dashboard Mobile API] Token decoded:', { userId: decoded.userId, role: decoded.role, providerId: decoded.providerId });
+      
+      if (!decoded.providerId) {
+        console.log('[Dashboard Mobile API] No providerId in token');
+        return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
+      }
+      
+      providerId = decoded.providerId;
+    } catch (error) {
+      console.log('[Dashboard Mobile API] Token verification failed:', error);
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    // Get instructor with stats
+    const [instructor, upcomingBookings, totalClients, monthlyRevenue, recentClients] = await Promise.all([
+      prisma.provider.findUnique({
+        where: { id: providerId },
+        select: {
+          hourlyRate: true,
+          timezone: true,
+          state: true,
+        },
+      }),
+      prisma.booking.findMany({
+        where: {
+          providerId,
+          status: 'CONFIRMED',
+          startTime: {
+            gte: now,
+          },
+        },
+        take: 5,
+        orderBy: {
+          startTime: 'asc',
+        },
+        include: { customer: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      }),
+      prisma.customer.count({
+        where: { providerId },
+      }),
+      prisma.booking.aggregate({
+        where: {
+          providerId,
+          status: 'COMPLETED',
+          startTime: {
+            gte: startOfMonth,
+            lte: endOfMonth,
+          },
+        },
+        _sum: {
+          price: true,
+        },
+      }),
+      prisma.customer.findMany({
+        where: { providerId },
+        take: 5,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+        },
+      }),
+    ]);
+
+    if (!instructor) {
+      return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
+    }
+
+    // Count all upcoming lessons (not just the 5 we're showing)
+    const upcomingCount = await prisma.booking.count({
+      where: {
+        providerId,
+        status: 'CONFIRMED',
+        startTime: {
+          gte: now,
+        },
+      },
+    });
+
+    // Resolve instructor timezone for date formatting
+    const mobileTz = instructor?.timezone
+      ? resolveTimezone(instructor.timezone)
+      : timezoneFromState(instructor?.state);
+
+    // Format upcoming bookings
+    const formattedBookings = upcomingBookings.map((booking: any) => {
+      const startDate = new Date(booking.startTime);
+      const endDate = new Date(booking.endTime);
+      
+      return {
+        id: booking.id,
+        customerName: booking.customer.name,
+        date: startDate.toLocaleDateString('en-AU', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          timeZone: mobileTz,
+        }),
+        time: startDate.toLocaleTimeString('en-AU', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: mobileTz,
+        }) + ' - ' + endDate.toLocaleTimeString('en-AU', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: mobileTz,
+        }),
+        location: booking.pickupAddress || '',
+      };
+    });
+
+    return NextResponse.json({
+      upcomingLessons: upcomingCount,
+      totalClients,
+      monthlyRevenue: Math.round(monthlyRevenue._sum?.price || 0),
+      hourlyRate: instructor.hourlyRate,
+      upcomingBookings: formattedBookings,
+      recentClients: recentClients.map(client => ({
+        id: client.id,
+        name: client.name,
+        phone: client.phone,
+        email: client.email,
+      })),
+    });
+  } catch (error) {
+    console.error('[Dashboard Mobile API] Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch dashboard' },
+      { status: 500 }
+    );
+  }
+}

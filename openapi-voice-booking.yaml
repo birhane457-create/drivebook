@@ -1,0 +1,462 @@
+swagger: '2.0'
+info:
+  title: DriveBook - Booking API
+  version: '2.0.0'
+  description: >
+    Find instructors, check availability, get pricing, validate addresses,
+    check service areas, and create driving lesson bookings.
+
+    Flow: suburb → findInstructors → getPackages → getAvailableSlots →
+    validateLocation → checkServiceArea → createBooking.
+
+    Never send a pricing field — the backend calculates it server-side.
+    Never send isShortNotice — the backend computes it from the lesson time.
+    Always use voice.* fields from responses — they are pre-formatted for speech.
+host: drivebook-production-12ab.up.railway.app
+basePath: /api
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+paths:
+
+  /instructors/recommendations:
+    get:
+      summary: Find and rank instructors by suburb
+      description: >
+        Primary instructor search. Call after collecting suburb and transmission preference.
+        Returns scored instructors with a pre-assembled voice.summary field.
+        Read voice.summary verbatim — do not say "X km away".
+        Badges: Top Rated, Closest, Best Value, Highly Experienced.
+      operationId: findInstructors
+      parameters:
+        - name: location
+          in: query
+          type: string
+          required: true
+          description: "Suburb name e.g. 'Maylands' — NOT a pickup address"
+        - name: vehicleType
+          in: query
+          type: string
+          description: "AUTO or MANUAL — ask before calling"
+        - name: language
+          in: query
+          type: string
+          description: "e.g. English, Arabic, Mandarin — optional caller preference"
+        - name: limit
+          in: query
+          type: integer
+          description: "Max results to return (default 3)"
+      responses:
+        '200':
+          description: Ranked instructor recommendations
+          schema:
+            type: object
+            properties:
+              recommendations:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: Use this id in all subsequent calls
+                    name:
+                      type: string
+                    hourlyRate:
+                      type: number
+                    rating:
+                      type: number
+                    reviews:
+                      type: integer
+                    reason:
+                      type: string
+                      description: e.g. "Top rated instructor near you"
+                    badges:
+                      type: array
+                      items:
+                        type: string
+                    vehicleTypes:
+                      type: string
+                    languages:
+                      type: string
+                    voice:
+                      type: object
+                      description: Pre-formatted fields for speech — use these, do not format manually
+                      properties:
+                        summary:
+                          type: string
+                          description: >
+                            Read verbatim to caller.
+                            e.g. "Top rated instructor near you • Automatic • English • $75 per hour"
+              count:
+                type: integer
+        '404':
+          description: No instructors found for that location
+
+  /locations/validate:
+    post:
+      summary: Validate and geocode a pickup address
+      description: >
+        Call after the caller gives their pickup address.
+        On failure: ask once more, then accept the spoken address with pickupValidated=false.
+        NEVER loop more than twice — accept spoken address after second failure.
+      operationId: validateLocation
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - pickupLocation
+            properties:
+              pickupLocation:
+                type: string
+                example: "81 King William Street Bayswater WA"
+      responses:
+        '200':
+          description: Location validated
+          schema:
+            type: object
+            properties:
+              valid:
+                type: boolean
+              formattedAddress:
+                type: string
+                description: Use this in createBooking if valid=true
+              suburb:
+                type: string
+
+  /public/check-service-area:
+    get:
+      summary: Check if pickup address is within instructor's service area
+      description: >
+        Call after pickup address is accepted (validated or spoken fallback).
+        Result "in" — continue silently.
+        Result "out" — inform caller and offer to find a different instructor.
+        Result "unknown" — geocoding failed or no base configured, continue silently.
+        This check is informational only — never block a booking because of it.
+      operationId: checkServiceArea
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+        - name: address
+          in: query
+          type: string
+          required: true
+          description: "formattedAddress from validateLocation, or spoken address"
+      responses:
+        '200':
+          description: Service area check result
+          schema:
+            type: object
+            properties:
+              result:
+                type: string
+                enum: [in, out, unknown]
+                description: "in=inside radius, out=outside radius, unknown=could not check"
+              distanceKm:
+                type: number
+                description: Distance from instructor base (only present when result is in or out)
+              radiusKm:
+                type: number
+                description: Instructor's configured service radius
+
+  /availability/slots:
+    get:
+      summary: Get available lesson time slots
+      description: >
+        Returns open slots for a specific instructor and date.
+        Use voice.confirmation from each slot to present times to the caller — it is pre-formatted.
+        Use bookingTime (HH:MM) when building the createBooking payload.
+        All times are already in Perth local time (Australia/Perth).
+      operationId: getAvailableSlots
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+        - name: date
+          in: query
+          type: string
+          required: true
+          description: "YYYY-MM-DD format"
+        - name: lessonDurationMinutes
+          in: query
+          type: integer
+          description: "Lesson duration in minutes (default 60)"
+      responses:
+        '200':
+          description: Available time slots
+          schema:
+            type: object
+            properties:
+              timezone:
+                type: string
+                example: "Australia/Perth"
+              availableSlots:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    startTime:
+                      type: string
+                      description: ISO UTC timestamp — for reference only
+                    endTime:
+                      type: string
+                      description: ISO UTC timestamp — for reference only
+                    bookingTime:
+                      type: string
+                      description: "HH:MM 24-hour Perth time — use this in createBooking scheduledBookings[].time"
+                      example: "09:00"
+                    lessonDuration:
+                      type: integer
+                      description: Duration in minutes
+                    voice:
+                      type: object
+                      description: Pre-formatted for speech — use these fields, never format manually
+                      properties:
+                        speakTime:
+                          type: string
+                          description: "e.g. '9:00 AM'"
+                        speakDate:
+                          type: string
+                          description: "e.g. 'Monday 20 July'"
+                        confirmation:
+                          type: string
+                          description: "Read verbatim to caller. e.g. 'Monday 20 July at 9:00 AM'"
+
+  /packages:
+    get:
+      summary: Get lesson package pricing for an instructor
+      description: >
+        Always call this before quoting prices — never quote from memory.
+        Always use priceWithFee, never price. priceWithFee is what the student pays.
+      operationId: getPackages
+      parameters:
+        - name: instructorId
+          in: query
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Available packages with pricing
+          schema:
+            type: object
+            properties:
+              packages:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    packageType:
+                      type: string
+                      enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15]
+                    hours:
+                      type: integer
+                    price:
+                      type: number
+                      description: Before platform fee — DO NOT quote this
+                    priceWithFee:
+                      type: number
+                      description: What the student actually pays — ALWAYS quote this
+                    discountPercent:
+                      type: number
+              testPackage:
+                type: object
+                properties:
+                  price:
+                    type: number
+                  description:
+                    type: string
+
+  /public/bookings/bulk:
+    post:
+      summary: Create a booking
+      description: >
+        Only call after full verbal confirmation from the caller.
+        Do NOT send a pricing field — backend calculates it.
+        Do NOT send isShortNotice — backend computes it from the lesson time.
+        For Book Later: set bookingType="later", omit scheduledBookings entirely.
+        Response includes voice.* fields — read them directly, no calculation needed.
+        If instructorId is lost, pass instructorQuery with the instructor's name instead.
+      operationId: createBooking
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          type: string
+          required: false
+          description: >
+            Automatically derived from Vapi call ID — prevents duplicate bookings on retry.
+            Do not set manually unless you need to override.
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - packageType
+              - hours
+              - bookingType
+              - registrationType
+              - accountHolderName
+              - accountHolderEmail
+              - accountHolderPhone
+              - includeTestPackage
+            properties:
+              instructorId:
+                type: string
+                description: Preferred — from findInstructors response
+              instructorQuery:
+                type: string
+                description: Fallback if instructorId is lost — backend resolves by name
+              packageType:
+                type: string
+                enum: [PACKAGE_6, PACKAGE_10, PACKAGE_15]
+              hours:
+                type: number
+                description: "6, 10, or 15 — must match packageType"
+              includeTestPackage:
+                type: boolean
+                default: false
+                description: Set true only if caller explicitly asked for the PDA test package
+              bookingType:
+                type: string
+                enum: [now, later]
+                description: "now=schedule a lesson, later=buy package only (no lesson scheduled)"
+              registrationType:
+                type: string
+                enum: [myself, someone-else]
+              accountHolderName:
+                type: string
+              accountHolderEmail:
+                type: string
+              accountHolderPhone:
+                type: string
+                description: "10-digit Australian mobile e.g. 0400123456"
+              learnerName:
+                type: string
+                description: Required when registrationType is someone-else
+              learnerPhone:
+                type: string
+                description: Required when registrationType is someone-else
+              learnerRelationship:
+                type: string
+                description: "e.g. son, daughter, partner — required when registrationType is someone-else"
+              scheduledBookings:
+                type: array
+                description: "Required for bookingType=now. Omit entirely for bookingType=later."
+                items:
+                  type: object
+                  required:
+                    - date
+                    - time
+                    - duration
+                    - pickupLocation
+                    - notes
+                  properties:
+                    date:
+                      type: string
+                      description: "YYYY-MM-DD"
+                    time:
+                      type: string
+                      description: "HH:MM 24-hour Perth time — use bookingTime from getAvailableSlots"
+                    duration:
+                      type: integer
+                      description: "Lesson duration in minutes (60)"
+                    pickupLocation:
+                      type: string
+                      description: "formattedAddress from validateLocation, or spoken address if validation failed"
+                    pickupValidated:
+                      type: boolean
+                      default: true
+                      description: >
+                        Set to false when address validation failed and a spoken address is being used.
+                        The instructor dashboard will flag unverified addresses for manual confirmation.
+                    notes:
+                      type: string
+                      default: ""
+      responses:
+        '201':
+          description: Booking created
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              bookingId:
+                type: string
+              bookingType:
+                type: string
+                enum: [now, later]
+              status:
+                type: string
+                enum: [PENDING_PAYMENT, PENDING]
+                description: "PENDING_PAYMENT=normal booking, PENDING=short-notice awaiting instructor approval"
+              isShortNotice:
+                type: boolean
+                description: Computed by backend — true if lesson is within 2 hours
+              total:
+                type: number
+              checkoutUrl:
+                type: string
+                description: "HTTPS URL for Stripe payment — SMS this to the student. Present for both now and later."
+              voice:
+                type: object
+                description: Pre-formatted fields for speech — read these directly, never calculate
+                properties:
+                  instructor:
+                    type: string
+                    description: Instructor name
+                  package:
+                    type: string
+                    description: "e.g. '10 Hour Package'"
+                  packageHours:
+                    type: integer
+                    description: Total hours purchased
+                  scheduledHours:
+                    type: number
+                    description: Hours consumed by lessons booked in this call
+                  scheduledLessons:
+                    type: integer
+                    description: Number of lessons scheduled so far
+                  remainingHours:
+                    type: number
+                    description: Hours still available — read this directly, never subtract yourself
+                  firstLesson:
+                    type: string
+                    description: "Pre-formatted Perth local time e.g. 'Monday 10:00 AM'"
+                  paymentRequired:
+                    type: boolean
+                    description: False for short-notice (instructor approves first)
+                  slotHeldMinutes:
+                    type: integer
+                    description: How long the slot reservation holds (10 minutes)
+                  pickupVerified:
+                    type: boolean
+                    description: False if address was spoken after geocoding failed
+                  confirmation:
+                    type: string
+                    description: "Read verbatim to caller after booking. e.g. 'Your 10 Hour Package with Debesay is reserved for 10 minutes. A payment link has been sent to your phone.'"
+        '400':
+          description: Validation error or overbooking attempt
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+        '409':
+          description: Slot taken — offer alternative times
+          schema:
+            type: object
+            properties:
+              error:
+                type: string

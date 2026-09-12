@@ -1,0 +1,1300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                      String        @id @default(cuid())
+  email                   String        @unique
+  password                String?
+  name                    String?
+  role                    String        @default("CLIENT")
+  providerId              String?
+  resetToken              String?
+  resetTokenExpiry        DateTime?
+  termsAcceptedAt         DateTime?
+  termsVersion            String?
+  ageDeclaration          Boolean       @default(false)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  emailVerified           Boolean       @default(false)
+  emailVerifiedAt         DateTime?
+  verificationToken       String?
+  verificationTokenExpiry DateTime?
+  customers               Customer[]
+  wallet                  ClientWallet?
+  provider                Provider?
+  staffMember             StaffMember?
+  deviceTokens            DeviceToken[]
+  loginDevices            LoginDevice[]
+}
+
+/// Generic customer â€” works for any business type.
+/// Belongs to a Business (not to a single Provider).
+/// preferredProviderId is optional â€” the customer's preferred provider for bookings.
+/// For driving schools the preferred instructor is set here; for walk-in beauty studios it may be null.
+model Customer {
+  id                   String           @id @default(cuid())
+  userId               String?
+  businessId           String?
+  preferredProviderId  String?
+  name                 String
+  email                String
+  phone                String
+  defaultPickupAddress String?
+  defaultPickupLat     Float?
+  defaultPickupLng     Float?
+  notes                String?
+  status               String           @default("ACTIVE")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  bookings             Booking[]
+  user                 User?            @relation(fields: [userId], references: [id])
+  pdaTestBookings      PDATestBooking[]
+  quotes               Quote[]
+}
+
+/// Generic service provider â€” works for any business type.
+/// Driving-specific fields live in DrivingProviderProfile (extension table).
+/// A plumber, electrician, or beauty therapist has a Provider record here
+/// and no DrivingProviderProfile record at all.
+model Provider {
+  id                        String             @id @default(cuid())
+  userId                    String?            @unique
+  name                      String
+  phone                     String
+  hourlyRate                Float
+  serviceAreas              String?
+  copilotAgentEndpoint      String?
+  bio                       String?
+  languages                 String?
+  baseAddress               String?
+  serviceRadiusKm           Float?
+  isActive                  Boolean            @default(true)
+  isVerified                Boolean            @default(false)
+  isFeatured                Boolean            @default(false)
+  averageRating             Float?
+  totalReviews              Int                @default(0)
+  subscriptionTier          String             @default("BASIC")
+  subscriptionStatus        String             @default("TRIAL")
+  trialEndsAt               DateTime?
+  // Account type â€” INDIVIDUAL (default) or BUSINESS (multi-provider).
+  accountType               String             @default("INDIVIDUAL")
+  // Business model â€” MARKETPLACE (platform operates discovery+payments) or SAAS (provider brings own clients).
+  // MARKETPLACE = driving today. SAAS = tradies, driving schools (Phase 2).
+  businessModel             String             @default("SAAS")
+  // Payment routing â€” PLATFORM (marketplace, platform collects) or DIRECT (SaaS, provider collects).
+  paymentMode               String             @default("PLATFORM")
+  customDomain              String?
+  brandedBookingPage        Boolean            @default(false)
+  brandLogo                 String?
+  brandColorPrimary         String?
+  brandColorSecondary       String?
+  showBrandingOnBookingPage Boolean            @default(false)
+  maxProviders              Int                @default(1)
+  stripeCustomerId          String?
+  stripeAccountId           String?
+  profileImage              String?
+  // documentsVerified â€” used by extension-driven compliance flows (e.g. driving).
+  // Null/false for business types that do not require document verification.
+  documentsVerified         Boolean            @default(false)
+  documentsVerifiedAt       DateTime?
+  // approvalStatus â€” used when the platform vets providers before they go live.
+  // Not all business types require this; defaults to PENDING for safety.
+  approvalStatus            String             @default("PENDING")
+  workingHours              Json?
+  policyExceptionCount      Int                @default(0)
+  allowedDurations          Json?
+  bookingBufferMinutes      Int?
+  enableTravelTime          Boolean            @default(false)
+  travelTimeMinutes         Int?
+  payoutMethod              String             @default("stripe_connect")
+  bankBsb                   String?
+  bankAccount               String?
+  bankAccountName           String?
+  abn                       String?
+  abnVerified               Boolean            @default(false)
+  abnStatus                 String?
+  abnEntityName             String?
+  abnVerifiedAt             DateTime?
+  abnVerifiedBy             String?
+  gstRegistered             Boolean            @default(false)
+  withholdingTaxRate        Decimal            @default(47) @db.Decimal(5, 2)
+  syncGoogleCalendar        Boolean            @default(false)
+  googleAccessToken         String?
+  googleRefreshToken        String?
+  googleTokenExpiry         DateTime?
+  googleCalendarId          String?
+  calendarBufferMode        String?
+  whatsapp                  String?
+  instagram                 String?
+  facebook                  String?
+  yearsExperience           Int?
+  domainVerified            Boolean            @default(false)
+  domainVerifiedAt          DateTime?
+  customSlug                String?
+  baseAddressLat            Float?
+  baseAddressLng            Float?
+  baseLatitude              Float?
+  baseLongitude             Float?
+  acceptingBookings         Boolean            @default(true)
+  chargesEnabled            Boolean            @default(false)
+  payoutHold                Boolean            @default(false)
+  payoutHoldReason          String?
+  payoutsEnabled            Boolean            @default(false)
+  videoUrl                  String?
+  specialties               String?
+  suburb                    String?
+  state                     String?
+  postcode                  String?
+  timezone                  String?
+  businessName              String?
+  bookings                  Booking[]
+  user                      User?              @relation(fields: [userId], references: [id])
+  expenses                  ProviderExpense[]
+  pdaBookings               PDATestBooking[]
+  pdaConfigs                PDATestConfig[]
+  slotReservations          SlotReservation[]
+  subscriptions             Subscription[]
+  cardOrders                CardOrder[]
+  voiceLineRecord           TwilioPhoneNumber? @relation("AssignedToProvider")
+  quotes                    Quote[]
+
+  @@index([state, suburb])
+}
+
+model TwilioPhoneNumber {
+  id           String    @id @default(cuid())
+  sid          String    @unique
+  phoneNumber  String    @unique
+  friendlyName String?
+  areaCode     String?
+  status       String    @default("AVAILABLE")
+  assignedTo   String?   @unique
+  assignedAt   DateTime? @db.Timestamptz(6)
+  assignedBy   String?
+  releasedAt   DateTime? @db.Timestamptz(6)
+  releasedBy   String?
+  notes        String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  provider     Provider? @relation("AssignedToProvider", fields: [assignedTo], references: [id], onUpdate: NoAction)
+
+  @@index([status])
+  @@index([assignedTo])
+}
+
+model ProviderExpense {
+  id          String   @id @default(cuid())
+  providerId  String
+  date        DateTime
+  category    String
+  description String
+  amount      Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  provider    Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+}
+
+model SlotReservation {
+  id         String   @id @default(cuid())
+  providerId String
+  sessionId  String
+  startTime  DateTime
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  endTime    DateTime
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, expiresAt])
+  @@index([sessionId])
+}
+
+model PlatformRateChange {
+  id            String    @id @default(cuid())
+  tier          String
+  field         String
+  currentRate   Decimal   @db.Decimal(10, 4)
+  newRate       Decimal   @db.Decimal(10, 4)
+  effectiveDate DateTime
+  reason        String
+  status        String    @default("PENDING")
+  notifiedAt    DateTime?
+  appliedAt     DateTime?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Booking {
+  id                    String        @id @default(cuid())
+  providerId            String
+  customerId            String?
+  customerName          String?
+  customerPhone         String?
+  bookingType           String?
+  status                String        @default("PENDING")
+  startTime             DateTime?
+  endTime               DateTime?
+  duration              Float?
+  price                 Decimal       @default(0) @db.Decimal(12, 2)
+  platformFee           Decimal       @default(0) @db.Decimal(12, 2)
+  providerPayout        Decimal       @default(0) @db.Decimal(12, 2)
+  commissionRate        Decimal       @default(0) @db.Decimal(5, 4)
+  isPaid                Boolean       @default(false)
+  paidAt                DateTime?
+  paymentCaptured       Boolean       @default(false)
+  paymentCapturedAt     DateTime?
+  paymentIntentId       String?
+  pickupAddress         String?
+  pickupLatitude        Float?
+  pickupLongitude       Float?
+  dropoffAddress        String?
+  dropoffLatitude       Float?
+  dropoffLongitude      Float?
+  notes                 String?
+  isFirstBooking        Boolean       @default(false)
+  isPackageBooking      Boolean       @default(false)
+  parentBookingId       String?
+  packageHours          Decimal?      @db.Decimal(8, 2)
+  packageHoursUsed      Decimal       @default(0) @db.Decimal(8, 2)
+  packageHoursRemaining Decimal?      @db.Decimal(8, 2)
+  packageTotalPaid      Decimal?      @db.Decimal(12, 2)
+  packageExpiryDate     DateTime?
+  packageStatus         String?
+  createdBy             String?
+  originalStartTime     DateTime?
+  isNonRefundable       Boolean       @default(false)
+  rescheduledFrom       Json?
+  rescheduleCount       Int           @default(0)
+  deletedAt             DateTime?
+  deletedBy             String?
+  noShowParty           String?
+  googleCalendarEventId String?
+  customerRating        Int?
+  customerReview        String?
+  reviewGivenAt         DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  customerEmail         String?
+  lockedDiscountPct     Decimal?      @db.Decimal(5, 2)
+  lockedHourlyRate      Decimal?      @db.Decimal(10, 2)
+  offlineAmountPaid     Decimal?      @db.Decimal(12, 2)
+  offlinePaymentMethod  String?
+  source                String        @default("platform")
+  cancelledAt           DateTime?
+  actualDuration        Int?
+  checkInBy             String?
+  checkInLocation       String?
+  checkInPhoto          String?
+  checkInTime           DateTime?
+  checkOutBy            String?
+  checkOutLocation      String?
+  checkOutPhoto         String?
+  checkOutTime          DateTime?
+  smsCheckOutSent       Boolean       @default(false)
+
+  // Package cancellation approval workflow (PKG-3)
+  cancellationStatus        String?
+  cancellationRequestedAt   DateTime?
+  cancellationRequestedBy   String?
+  cancellationReason        String?       @db.Text
+  adminReviewedAt           DateTime?
+  adminReviewedBy           String?
+  adminReviewNote           String?       @db.Text
+  adminOverrideAmount       Decimal?      @db.Decimal(10, 2)
+  stripeRefundId            String?
+  paymentToken          String?
+  timezone              String?
+  // â”€â”€ Request/Quote mode fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // These are populated when bookingMode='request' (plumber, electrician, etc.)
+  // startTime/endTime are null until the provider confirms a time in the quote.
+  serviceId             String? // FK to BusinessService.id (which service was requested)
+  requestDescription    String?       @db.Text // customer's description of the job
+  requestedAt           DateTime? // when the customer submitted the request
+  preferredDate         String? // customer's preferred date range (free text or ISO date)
+  siteAddress           String? // where the job needs to happen (may differ from pickup)
+  siteAddressLat        Float?
+  siteAddressLng        Float?
+  customer              Customer?     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  provider              Provider      @relation(fields: [providerId], references: [id])
+  transactions          Transaction[]
+  quotes                Quote[]
+
+  @@index([providerId, customerRating])
+}
+
+model Transaction {
+  id                    String              @id @default(cuid())
+  bookingId             String?
+  providerId            String
+  type                  String
+  amount                Decimal             @db.Decimal(12, 2)
+  platformFee           Decimal             @default(0) @db.Decimal(12, 2)
+  providerPayout        Decimal             @default(0) @db.Decimal(12, 2)
+  commissionRate        Decimal             @default(0) @db.Decimal(5, 4)
+  status                String              @default("PENDING")
+  description           String?
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  stripeTransferId      String?
+  taxWithheld           Decimal             @default(0) @db.Decimal(12, 2)
+  gstAmount             Decimal             @default(0) @db.Decimal(12, 2)
+  metadata              Json?
+  resolutionGroupId     String?
+  resolutionStatus      String?
+  processedAt           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  payoutTransactions    PayoutTransaction[]
+  booking               Booking?            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model ClientWallet {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  balance      Decimal             @default(0) @db.Decimal(12, 2)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String       @id @default(cuid())
+  walletId    String
+  amount      Decimal      @db.Decimal(12, 2)
+  type        String
+  description String?
+  status      String       @default("PENDING")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  metadata    Json?
+  bookingId   String?
+  wallet      ClientWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id           String   @id @default(cuid())
+  callerNumber String
+  callerName   String?
+  message      String
+  timestamp    DateTime @default(now())
+  status       String
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  providerId           String
+  tier                 String
+  status               String    @default("ACTIVE")
+  billingCycle         String    @default("monthly")
+  monthlyAmount        Decimal   @db.Decimal(10, 2)
+  stripeSubscriptionId String?
+  stripeCustomerId     String?
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  trialEndsAt          DateTime?
+  cancelledAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  provider             Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id            String   @id @default(cuid())
+  userId        String
+  type          String
+  title         String
+  message       String
+  link          String?
+  isRead        Boolean  @default(false)
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  reminderStage String?
+  channel       String?
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  action       String
+  actorId      String
+  actorRole    String
+  targetType   String
+  targetId     String
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  success      Boolean  @default(true)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+}
+
+model Payout {
+  id               String              @id @default(cuid())
+  providerId       String
+  status           String              @default("PENDING")
+  grossAmount      Decimal             @db.Decimal(12, 2)
+  taxWithheld      Decimal             @default(0) @db.Decimal(12, 2)
+  gstAmount        Decimal             @default(0) @db.Decimal(12, 2)
+  netAmount        Decimal             @db.Decimal(12, 2)
+  payoutMethod     String
+  stripeAccountId  String?
+  stripeTransferId String?
+  bankReference    String?
+  sentAt           DateTime?
+  sentBy           String?
+  confirmedAt      DateTime?
+  confirmedBy      String?
+  idempotencyKey   String              @unique
+  failureReason    String?
+  holdReason       String?
+  retryCount       Int                 @default(0)
+  approvedBy       String?
+  approvedAt       DateTime?
+  paidAt           DateTime?
+  payoutRef        String              @unique
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  transactions     PayoutTransaction[]
+}
+
+model PayoutTransaction {
+  id            String      @id @default(cuid())
+  payoutId      String
+  transactionId String
+  payout        Payout      @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+}
+
+model PlatformLedger {
+  id               String   @id @default(cuid())
+  key              String   @unique @default("default")
+  totalCollected   Decimal  @default(0) @db.Decimal(12, 2)
+  totalReserved    Decimal  @default(0) @db.Decimal(12, 2)
+  totalPaidOut     Decimal  @default(0) @db.Decimal(12, 2)
+  totalRefunded    Decimal  @default(0) @db.Decimal(12, 2)
+  totalTaxWithheld Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt        DateTime @updatedAt
+}
+
+model LedgerEntry {
+  id            String   @id @default(cuid())
+  type          String
+  amount        Decimal  @db.Decimal(12, 2)
+  currency      String   @default("AUD")
+  referenceId   String
+  referenceType String
+  providerId    String?
+  description   String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+}
+
+model WebhookEvent {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  eventType      String
+  stripeEventId  String
+  metadata       Json?
+  processedAt    DateTime @default(now())
+}
+
+model PlatformSettings {
+  id                          String   @id @default(cuid())
+  key                         String   @unique @default("default")
+  basicCommissionRate         Decimal  @default(15) @db.Decimal(5, 2)
+  proCommissionRate           Decimal  @default(12) @db.Decimal(5, 2)
+  studioCommissionRate        Decimal  @default(11) @db.Decimal(5, 2)
+  businessCommissionRate      Decimal  @default(10) @db.Decimal(5, 2)
+  basicNewStudentBonus        Decimal  @default(8) @db.Decimal(10, 2)
+  proNewStudentBonus          Decimal  @default(10) @db.Decimal(10, 2)
+  businessNewStudentBonus     Decimal  @default(12) @db.Decimal(10, 2)
+  platformFeePercentage       Decimal  @default(3.6) @db.Decimal(5, 2)
+  package6Discount            Decimal  @default(5) @db.Decimal(5, 2)
+  package10Discount           Decimal  @default(10) @db.Decimal(5, 2)
+  package15Discount           Decimal  @default(12) @db.Decimal(5, 2)
+  // Replaces package6/10/15Discount named columns — admin manages tier structure + discounts together.
+  // Null = fall back to the 3 named columns above (backward compat during rollout).
+  // Schema: Array<{ hours: number; label: string; discount: number; featured: boolean }>
+  packageTiers                Json?
+  discountPaidBy              String   @default("shared")
+  cancellationFee             Decimal  @default(0) @db.Decimal(10, 2)
+  lateCancellationWindowHours Decimal  @default(24) @db.Decimal(6, 2)
+  noShowPenaltyAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  walletTopUpMin              Decimal  @default(10) @db.Decimal(10, 2)
+  walletTopUpMax              Decimal  @default(500) @db.Decimal(10, 2)
+  gstEnabled                  Boolean  @default(true)
+  gstRate                     Decimal  @default(10) @db.Decimal(5, 2)
+  withholdingTaxRate          Decimal  @default(47) @db.Decimal(5, 2)
+  peakSurchargeEnabled        Boolean  @default(false)
+  peakSurchargePercent        Decimal  @default(0) @db.Decimal(5, 2)
+  updatedAt                   DateTime @updatedAt
+  updatedBy                   String?
+  // RBAC configurable limits â€” adjustable by SUPER_ADMIN via settings API
+  maxAdminCreditAmount        Decimal  @default(500) @db.Decimal(12, 2)
+  maxAdminDeductAmount        Decimal  @default(500) @db.Decimal(12, 2)
+}
+
+model ReconciliationReport {
+  id               String    @id @default(cuid())
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  status           String
+  windowStart      DateTime
+  windowEnd        DateTime
+  paymentsChecked  Int       @default(0)
+  missingPayments  Int       @default(0)
+  transfersChecked Int       @default(0)
+  missingTransfers Int       @default(0)
+  stuckPayouts     Int       @default(0)
+  metadata         Json?
+  createdAt        DateTime  @default(now())
+}
+
+model AvailabilityException {
+  id            String   @id @default(cuid())
+  providerId    String
+  label         String?
+  exceptionDate DateTime
+  startTime     String
+  endTime       String
+  allDay        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  reason        String?
+
+  @@index([providerId, exceptionDate])
+}
+
+model LearningContent {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  tipText      String
+  videoUrl     String?
+  thumbnailUrl String?
+  category     String
+  difficulty   String   @default("basic")
+  pdaCodes     Int[]    @default([])
+  durationSec  Int?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model TestCentre {
+  id          String                @id @default(cuid())
+  name        String                @unique
+  address     String
+  suburb      String
+  state       String                @default("WA")
+  region      String?
+  lat         Float?
+  lng         Float?
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  pdaConfigs  PDAConfigTestCentre[]
+  pdaBookings PDATestBooking[]
+}
+
+model PDATestConfig {
+  id              String                @id @default(cuid())
+  providerId      String
+  name            String
+  durationMinutes Int
+  price           Decimal               @db.Decimal(12, 2)
+  discountPercent Decimal?              @db.Decimal(5, 2)
+  includes        Json?
+  notes           String?
+  isActive        Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  testCentres     PDAConfigTestCentre[]
+  bookings        PDATestBooking[]
+  provider        Provider              @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([isActive])
+}
+
+model PDAConfigTestCentre {
+  id           String        @id @default(cuid())
+  pdaConfigId  String
+  testCentreId String
+  pdaConfig    PDATestConfig @relation(fields: [pdaConfigId], references: [id], onDelete: Cascade)
+  testCentre   TestCentre    @relation(fields: [testCentreId], references: [id], onDelete: Cascade)
+
+  @@unique([pdaConfigId, testCentreId])
+  @@index([testCentreId])
+}
+
+model PDATestBooking {
+  id              String        @id @default(cuid())
+  providerId      String
+  customerId      String
+  configId        String
+  testCentreId    String
+  testDate        DateTime
+  testTime        String
+  price           Decimal       @db.Decimal(12, 2)
+  discountPercent Decimal?      @db.Decimal(5, 2)
+  status          String        @default("PENDING")
+  result          String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  notes           String?
+  parentBookingId String?
+  customer        Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  config          PDATestConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  provider        Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  testCentre      TestCentre    @relation(fields: [testCentreId], references: [id])
+
+  @@index([providerId, testDate])
+  @@index([customerId])
+  @@index([configId])
+  @@index([testCentreId])
+  @@index([status])
+}
+
+model BookingIdempotencyKey {
+  key       String   @id
+  bookingId String
+  response  Json
+  createdAt DateTime @default(now())
+  email     String
+
+  @@index([createdAt])
+  @@index([email])
+}
+
+model CronHealth {
+  id         String   @id @default(cuid())
+  jobName    String   @unique
+  lastRunAt  DateTime
+  lastStatus String   @default("OK")
+  lastError  String?
+  runCount   Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@index([jobName])
+}
+
+model StripeDispute {
+  id                    String    @id @default(cuid())
+  stripeDisputeId       String    @unique
+  stripeChargeId        String
+  stripePaymentIntentId String?
+  bookingId             String?
+  providerId            String?
+  amount                Decimal   @db.Decimal(12, 2)
+  currency              String    @default("AUD")
+  reason                String
+  status                String
+  payoutFrozen          Boolean   @default(false)
+  adjustmentCreated     Boolean   @default(false)
+  resolvedAt            DateTime?
+  metadata              Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([bookingId])
+  @@index([providerId])
+  @@index([stripePaymentIntentId])
+}
+
+model StaffMember {
+  id                     String     @id @default(cuid())
+  userId                 String     @unique
+  name                   String
+  email                  String     @unique
+  department             String
+  isActive               Boolean    @default(true)
+  isSupervisor           Boolean    @default(false)
+  currentLoad            Int        @default(0)
+  maxCapacity            Int        @default(10)
+  tasksCompleted         Int        @default(0)
+  avgResolutionTimeHours Float?
+  satisfactionScore      Float?
+  skills                 Json?
+  // RBAC: permissions[] is authoritative. Empty = no access. SUPER_ADMIN bypasses.
+  // Legacy flags kept for UI only  NOT read by any API permission check.
+  permissions            String[]   @default([])
+  canApproveRefunds      Boolean    @default(false)
+  canOverridePolicy      Boolean    @default(false)
+  canAccessFinancials    Boolean    @default(false)
+  maxRefundAmount        Decimal    @default(100) @db.Decimal(10, 2)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  user                   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedTasks          Task[]     @relation("AssignedTasks")
+  taskNotes              TaskNote[]
+
+  @@index([department, isActive])
+}
+
+model Task {
+  id                   String       @id @default(cuid())
+  type                 String
+  category             String
+  priority             String
+  status               String       @default("OPEN")
+  title                String
+  description          String
+  providerId           String?
+  customerId           String?
+  bookingId            String?
+  userId               String?
+  contactName          String?
+  contactEmail         String?
+  contactPhone         String?
+  assignedToId         String?
+  assignedAt           DateTime?
+  autoAssigned         Boolean      @default(false)
+  dueDate              DateTime?
+  financialAmount      Decimal?     @db.Decimal(12, 2)
+  financialImpact      Json?
+  requiresApproval     Boolean      @default(false)
+  firstResponseAt      DateTime?
+  slaBreached          Boolean      @default(false)
+  slaBreachReason      String?
+  resolutionTimeHours  Float?
+  escalatedAt          DateTime?
+  escalatedTo          String?
+  escalationReason     String?
+  escalationCount      Int          @default(0)
+  autoEscalated        Boolean      @default(false)
+  resolution           String?
+  resolvedAt           DateTime?
+  resolvedBy           String?
+  closedAt             DateTime?
+  closedBy             String?
+  linkedEntityVerified Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  assignedTo           StaffMember? @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  notes                TaskNote[]
+
+  @@index([status, priority])
+  @@index([providerId])
+  @@index([bookingId])
+  @@index([assignedToId])
+}
+
+model TaskNote {
+  id          String      @id @default(cuid())
+  taskId      String
+  staffId     String
+  note        String
+  isInternal  Boolean     @default(true)
+  attachments Json?
+  createdAt   DateTime    @default(now())
+  staff       StaffMember @relation(fields: [staffId], references: [id])
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model FinancialLedger {
+  id             String   @id @default(cuid())
+  debitAccount   String
+  creditAccount  String
+  amount         Decimal  @db.Decimal(12, 2)
+  description    String
+  idempotencyKey String   @unique
+  bookingId      String?
+  transactionId  String?
+  payoutId       String?
+  userId         String?
+  providerId     String?
+  metadata       Json?
+  createdBy      String   @default("SYSTEM")
+  createdAt      DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([providerId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// DeviceToken â€” stores mobile push notification tokens for Expo/FCM/APNs.
+// Used by the mobile push notification service to target specific devices.
+// Each token is unique; upsert on registration to avoid duplicates.
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String // "ios" | "android" | "web"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([active])
+}
+
+model LoginDevice {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String // hash of user-agent + IP
+  lastUsedAt  DateTime @default(now())
+  firstSeenAt DateTime @default(now())
+  ipAddress   String
+  userAgent   String
+  location    String? // "Perth, WA" from IP geolocation (future)
+  trusted     Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fingerprint])
+  @@index([userId])
+  @@index([lastUsedAt])
+}
+
+model CardOrder {
+  id         String   @id @default(cuid())
+  providerId String
+  quantity   Int
+  suburbs    String?
+  notes      String?
+  status     String   @default("PENDING") // PENDING | APPROVED | PRINTING | READY | DELIVERED | CANCELLED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([status])
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// QUOTE SYSTEM
+// Supports the request â†’ quote â†’ accept â†’ pay booking flow.
+// Used by SaaS businesses where the provider quotes before committing
+// (plumber, electrician, cleaner, landscaper, etc.).
+// Not used by marketplace/appointment businesses (driving school).
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+/// A quote issued by a provider in response to a customer's job request.
+/// One Quote per Booking â€” a provider may revise by setting status=REVISED
+/// and creating a new Quote on the same Booking.
+///
+/// Lifecycle:
+///   Booking(REQUEST_PENDING)
+///     â†’ provider calls submitQuote()  â†’ Quote(PENDING) + Booking(QUOTE_SENT)
+///     â†’ customer calls acceptQuote()  â†’ Quote(ACCEPTED) + Booking(QUOTE_ACCEPTED)
+///       â†’ SaaS:        Stripe Checkout created â†’ Booking(PENDING_PAYMENT)
+///                       â†’ payment succeeds     â†’ Booking(CONFIRMED) + Quote.stripeSessionId
+///       â†’ marketplace: wallet deduct           â†’ Booking(CONFIRMED) immediately
+///     â†’ customer calls declineQuote() â†’ Quote(DECLINED) + Booking(QUOTE_DECLINED)
+///     â†’ validUntil passes (cron)      â†’ Quote(EXPIRED)  + Booking(QUOTE_EXPIRED)
+model Quote {
+  id String @id @default(cuid())
+
+  /// The Booking this quote is for. One active quote per booking.
+  bookingId String
+
+  /// Who issued the quote
+  providerId String
+
+  /// Who the quote is for
+  customerId String
+
+  /// Total quoted amount (AUD)
+  amount Decimal @db.Decimal(12, 2)
+
+  /// Human-readable summary sent to customer
+  description String @db.Text
+
+  /// Structured line items â€” array of { label: string, amount: number }
+  lineItems Json @default("[]")
+
+  /// When this quote expires if not accepted (provider sets this)
+  validUntil DateTime
+
+  /// Quote workflow status
+  /// PENDING    â€” issued, waiting for customer response
+  /// ACCEPTED   â€” customer accepted, booking moves to payment/confirmed
+  /// DECLINED   â€” customer declined
+  /// EXPIRED    â€” passed validUntil without response
+  /// REVISED    â€” superseded by a newer quote on the same booking
+  /// CANCELLED  â€” booking was cancelled before customer responded
+  status String @default("PENDING")
+
+  acceptedAt    DateTime?
+  declinedAt    DateTime?
+  declineReason String?
+
+  /// Stripe Checkout Session ID â€” set when customer clicks "Pay Now" after accepting
+  stripeSessionId       String? @unique
+  /// Stripe PaymentIntent ID â€” set after checkout completes
+  stripePaymentIntentId String?
+
+  /// Optional deposit (e.g. 30% upfront, remainder on completion)
+  depositPercent Decimal? @db.Decimal(5, 2)
+  depositAmount  Decimal? @db.Decimal(12, 2)
+  depositPaid    Boolean  @default(false)
+
+  /// Notes visible to customer
+  customerNotes String? @db.Text
+  /// Internal notes for the provider only
+  internalNotes String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking  Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([bookingId])
+  @@index([providerId, status])
+  @@index([customerId, status])
+  @@index([status, validUntil])
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// BUSINESS CONFIGURATION SYSTEM
+// Added: Business Operating System refactor
+// Run migration: npx prisma migrate dev --name add_business_config_tables
+// Then run: npx tsx scripts/migrate-business-config.ts
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+model Business {
+  id               String   @id @default(cuid())
+  name             String
+  legalName        String?
+  abn              String?
+  abnVerified      Boolean  @default(false)
+  supportEmail     String
+  phone            String?
+  timezone         String   @default("Australia/Perth")
+  templateSlug     String?
+  subscriptionTier String   @default("BASIC")
+  isActive         Boolean  @default(true)
+  // â”€â”€ Onboarding Separation Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Set once at onboarding. Controls which capabilities and payment flows
+  // are available to this business.
+  //
+  // 'marketplace' â€” platform collects payments, pays provider (driving model)
+  //                 enables: wallet, payouts, commission, Stripe Connect
+  // 'saas'        â€” provider collects payments directly from customers
+  //                 platform earns via subscription fee only
+  //                 disables: wallet, payouts, commission
+  paymentModel     String   @default("saas")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  settings     BusinessSettings?
+  branding     BusinessBranding?
+  capabilities BusinessCapabilities?
+  terminology  BusinessTerminology?
+  aiConfig     BusinessAIConfig?
+  services     BusinessService[]
+  domains      BusinessDomain[]
+  website      BusinessWebsite?
+
+  @@index([subscriptionTier])
+  @@index([isActive])
+  @@index([paymentModel])
+}
+
+model BusinessSettings {
+  id                          String   @id @default(cuid())
+  businessId                  String   @unique
+  minAdvanceHours             Int      @default(2)
+  maxAdvanceDays              Int      @default(60)
+  bookingBufferMinutes        Int      @default(10)
+  maxAppointmentsPerDay       Int      @default(8)
+  platformFeePercent          Decimal  @default(3.6) @db.Decimal(5, 2)
+  commissionRate              Decimal  @default(15.0) @db.Decimal(5, 2)
+  freeCancellationHours       Int      @default(48)
+  lateCancellationWindowHours Int      @default(24)
+  cancellationRefundPercent   Decimal  @default(100.0) @db.Decimal(5, 2)
+  package6Discount            Decimal  @default(5) @db.Decimal(5, 2)
+  package10Discount           Decimal  @default(10) @db.Decimal(5, 2)
+  package15Discount           Decimal  @default(12) @db.Decimal(5, 2)
+  gstEnabled                  Boolean  @default(true)
+  gstRate                     Decimal  @default(10) @db.Decimal(5, 2)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model BusinessBranding {
+  id                   String   @id @default(cuid())
+  businessId           String   @unique
+  logo                 String?
+  primaryColour        String   @default("#3B82F6")
+  secondaryColour      String?
+  fontFamily           String?
+  theme                String   @default("light")
+  showPlatformBranding Boolean  @default(true)
+  customSlug           String?  @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([customSlug])
+}
+
+model BusinessCapabilities {
+  id                   String   @id @default(cuid())
+  businessId           String   @unique
+  // â”€â”€ Booking & Discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  onlineBooking        Boolean  @default(true)
+  onlinePayments       Boolean  @default(true)
+  quotes               Boolean  @default(false)
+  packages             Boolean  @default(true)
+  waitingList          Boolean  @default(false)
+  reviews              Boolean  @default(true)
+  // â”€â”€ Communication & AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  aiReceptionist       Boolean  @default(false)
+  voiceLine            Boolean  @default(false)
+  mobileApp            Boolean  @default(false)
+  googleCalendar       Boolean  @default(true)
+  // â”€â”€ Compliance & Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  documentVerification Boolean  @default(false)
+  travelTime           Boolean  @default(false)
+  assessmentTracking   Boolean  @default(false)
+  websiteBuilder       Boolean  @default(true)
+  // â”€â”€ Payment Model Capabilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // These three are set by the onboarding gate based on Business.paymentModel.
+  // marketplace â†’ wallet=true, payouts=true, commission=true
+  // saas        â†’ wallet=false, payouts=false, commission=false
+  //
+  // wallet     â€” customers hold a prepaid credit balance (marketplace only)
+  wallet               Boolean  @default(false)
+  // payouts    â€” platform collects then pays provider via Stripe Connect (marketplace only)
+  payouts              Boolean  @default(false)
+  // commission â€” platform takes a cut per transaction (marketplace only)
+  commission           Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model BusinessTerminology {
+  id            String   @id @default(cuid())
+  businessId    String   @unique
+  provider      String   @default("Provider")
+  providers     String   @default("Providers")
+  customer      String   @default("Customer")
+  customers     String   @default("Customers")
+  booking       String   @default("Booking")
+  bookings      String   @default("Bookings")
+  service       String   @default("Service")
+  services      String   @default("Services")
+  providerGroup String   @default("Business")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model BusinessAIConfig {
+  id                  String   @id @default(cuid())
+  businessId          String   @unique
+  businessDescription String   @db.Text
+  openingHours        String   @default("Mon-Fri 9am-5pm")
+  greetingScript      String?
+  personality         String   @default("friendly")
+  faq                 Json     @default("[]")
+  allowedActions      Json     @default("[\"book\",\"reschedule\",\"cancel\",\"message\"]")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model BusinessService {
+  id                    String   @id @default(cuid())
+  businessId            String
+  name                  String
+  description           String?  @db.Text
+  duration              Int
+  price                 Decimal  @db.Decimal(12, 2)
+  sortOrder             Int      @default(0)
+  isActive              Boolean  @default(true)
+  bookingMode           String   @default("appointment")
+  locationMode          String   @default("flexible")
+  providerRequired      Boolean  @default(true)
+  depositPercent        Decimal? @db.Decimal(5, 2)
+  payOnBooking          Boolean  @default(true)
+  payOnCompletion       Boolean  @default(false)
+  quoteRequired         Boolean  @default(false)
+  freeCancellationHours Int      @default(48)
+  refundPercent         Decimal  @default(100) @db.Decimal(5, 2)
+  minAdvanceHours       Int      @default(2)
+  maxAdvanceDays        Int      @default(60)
+  aiCanBook             Boolean  @default(false)
+  aiCanQuote            Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, isActive])
+  @@index([businessId, sortOrder])
+}
+
+model BusinessDomain {
+  id                String    @id @default(cuid())
+  businessId        String
+  host              String    @unique
+  type              String    @default("subdomain")
+  isPrimary         Boolean   @default(false)
+  verified          Boolean   @default(false)
+  verifiedAt        DateTime?
+  verificationToken String?   @unique
+  provisionedAt     DateTime?
+  sslActive         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([host])
+  @@index([verified])
+}
+
+model BusinessWebsite {
+  id          String    @id @default(cuid())
+  businessId  String    @unique
+  seoTitle    String?
+  seoDesc     String?   @db.Text
+  seoImage    String?
+  pages       Json      @default("[]")
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// PHASE 2B â€” DRIVING EXTENSION TABLES
+// Moves driving-specific fields out of the core Instructor and Booking models
+// into proper extension tables. This keeps Core generic.
+// Migration: npx prisma migrate dev --name add_driving_extension_tables_phase2b
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+/// Driving-specific provider profile data.
+/// Extends the generic Provider with fields only relevant to driving instructors.
+/// A plumber or tax agent has no record here.
+/// Fields moved here from the former Instructor model (Phase 6):
+///   voiceLine, voiceLineStatus, voiceLineSid, lessonPackages, carImage
+model DrivingProviderProfile {
+  id String @id @default(cuid())
+
+  /// FK to Provider.id
+  providerId String @unique
+
+  // Vehicle details
+  carMake                String?
+  carModel               String?
+  carYear                String?
+  vehicleTypes           String? // comma-separated e.g. "Manual,Automatic"
+  carImage               String?
+  vehicleRegistrationDoc String?
+
+  // Regulatory compliance documents
+  licenseNumber     String?
+  licenseExpiry     DateTime?
+  licenseImageFront String?
+  licenseImageBack  String?
+
+  insuranceNumber    String?
+  insuranceExpiry    DateTime?
+  insurancePolicyDoc String?
+
+  policeCheckDoc    String?
+  policeCheckExpiry DateTime?
+
+  wwcCheckDoc    String?
+  wwcCheckExpiry DateTime?
+
+  certificationDoc String?
+  photoIdDoc       String?
+
+  // PDA test package
+  offersTestPackage       Boolean  @default(false)
+  testPackageDuration     Int?
+  testPackageIncludes     Json?
+  testPackagePrice        Decimal? @db.Decimal(12, 2)
+  // Platform-level default price for new PDA test configs (moved from PlatformSettings)
+  testPackageDefaultPrice Decimal? @default(225) @db.Decimal(12, 2)
+
+  // Voice line (Twilio) â€” driving instructors only
+  voiceLine       String?
+  voiceLineStatus String  @default("NONE")
+  voiceLineSid    String?
+
+  // Lesson packages â€” bulk hour purchases, driving school specific
+  lessonPackages Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([providerId])
+}
+
+/// Driving-specific outcome data for a completed booking/lesson.
+/// Extends the generic Booking with fields only relevant to driving assessments.
+model DrivingLessonOutcome {
+  id String @id @default(cuid())
+
+  /// FK to Booking.id â€” one outcome record per booking
+  bookingId String @unique
+
+  /// COACHING (everyday lesson) | MOCK (practice PDA) | OFFICIAL (accredited result)
+  assessmentType String @default("COACHING")
+
+  /// Comma-separated PDA topic codes e.g. "3,7,12,45"
+  lessonTopics String?
+
+  /// PDA assessment scores â€” JSON array of { code: Int, score: 0-3 }
+  pdaScores Json?
+
+  /// null for COACHING; true/false for MOCK/OFFICIAL
+  passed Boolean?
+
+  /// Overall performance score 0-100 for MOCK/OFFICIAL
+  performanceScore Int?
+
+  /// PDA topic codes where student showed strength
+  studentStrengths Int[] @default([])
+
+  /// PDA topic codes that need more practice
+  focusAreas Int[] @default([])
+
+  /// Overall lesson feedback rating codes from instructor
+  lessonFeedback Int[] @default([])
+
+  /// Instructor written notes for this lesson
+  instructorNotes String?
+
+  /// URL of whiteboard sketch uploaded during lesson
+  whiteboardSketchUrl String?
+
+  /// When the instructor recorded the feedback
+  feedbackGivenAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+}

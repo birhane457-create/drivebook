@@ -1,0 +1,51 @@
+import { redirect } from 'next/navigation'
+import { checkPermission } from '@/lib/rbac/checkPermission'
+import { PERM } from '@/lib/rbac/permissions'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import AdminNav from '@/components/admin/AdminNav'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+import AdminPolicyViewer from '@/components/admin/AdminPolicyViewer'
+import { AdminPageLayout } from '@/components/ui'
+
+export const dynamic = 'force-dynamic'
+
+export const metadata = {
+  title: 'Admin Policy & Operations Manual',
+}
+
+export default async function AdminPolicyPage() {
+  const session = await getServerSession(authOptions)
+  const permCheck = await checkPermission(session, PERM.OPERATIONS_POLICY_VIEW)
+  if (!permCheck.allowed) redirect('/admin')
+
+  const opsBase = join(process.cwd(), 'docs', 'operations')
+  const legacyBase = join(process.cwd(), 'docs', 'DOCROLEBASE', '00-overview')
+
+  const read = (path: string) => { try { return readFileSync(path, 'utf-8') } catch { return `# File not found\n\`${path}\`` } }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <AdminPageLayout title="Admin Policy & Operations Manual" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Y' }]}>
+        <AdminPolicyViewer
+        documents={[
+          { id: 'index',        title: 'Manual Index',              icon: '📖', content: read(join(opsBase, 'README.md')) },
+          { id: 'governance',   title: '01 Admin Governance',       icon: '🔐', content: read(join(opsBase, '01-admin-governance.md')) },
+          { id: 'finance',      title: '02 Finance & Payments',     icon: '💰', content: read(join(opsBase, '02-finance.md')) },
+          { id: 'bookings',     title: '03 Booking Operations',     icon: '📅', content: read(join(opsBase, '03-bookings.md')) },
+          { id: 'instructors',  title: '04 Instructor Management',  icon: '🧑‍🏫', content: read(join(opsBase, '04-instructors.md')) },
+          { id: 'premium-tier',  title: '05 Premium Tier',           icon: '🏢', content: read(join(opsBase, '05-business-tier.md')) },
+          { id: 'ai',           title: '06 AI Operations',          icon: '🤖', content: read(join(opsBase, '06-ai-operations.md')) },
+          { id: 'security',     title: '07 Security & Fraud',       icon: '🛡️', content: read(join(opsBase, '07-security-fraud.md')) },
+          { id: 'data',         title: '08 Data & Documents',       icon: '📂', content: read(join(opsBase, '08-data-documents.md')) },
+          { id: 'emergency',    title: '09 Emergency Runbooks',     icon: '🚨', content: read(join(opsBase, '09-emergency-runbooks.md')) },
+          { id: 'audit',        title: '10 Audit & Compliance',     icon: '✅', content: read(join(opsBase, '10-audit-compliance.md')) },
+          { id: 'release',      title: '11 Release Management',     icon: '🚀', content: read(join(opsBase, '11-release-management.md')) },
+          { id: 'hardcoded',    title: 'Hardcoded Values',          icon: '🔧', content: read(join(legacyBase, 'HARDCODED_VALUES.md')) },
+        ]}
+      />
+      </AdminPageLayout>
+    </div>
+  )
+}
