@@ -126,7 +126,7 @@ export default function ClientDashboard() {
   const [rescheduleModal, setRescheduleModal] = useState<{
     isOpen: boolean;
     bookingId: string;
-    instructorId: string;
+    providerId: string;
     date: string;
     time: string;
     duration: number;
@@ -666,7 +666,7 @@ export default function ClientDashboard() {
                                 onClick={() => setRescheduleModal({
                                   isOpen: true,
                                   bookingId: booking.id,
-                                  instructorId: booking.instructor.id,
+                                  providerId: booking.instructor.id,
                                   date: booking.date,
                                   time: booking.time,
                                   duration: booking.duration * 60,
@@ -775,7 +775,7 @@ export default function ClientDashboard() {
                                 onClick={() => setRescheduleModal({
                                   isOpen: true,
                                   bookingId: booking.id,
-                                  instructorId: booking.instructor.id,
+                                  providerId: booking.instructor.id,
                                   date: booking.date,
                                   time: booking.time,
                                   duration: booking.duration * 60,
@@ -1046,7 +1046,7 @@ export default function ClientDashboard() {
           isOpen={rescheduleModal.isOpen}
           onClose={() => setRescheduleModal(null)}
           bookingId={rescheduleModal.bookingId}
-          instructorId={rescheduleModal.instructorId}
+          providerId={rescheduleModal.providerId}
           currentDate={rescheduleModal.date}
           currentTime={rescheduleModal.time}
           currentDuration={rescheduleModal.duration}
