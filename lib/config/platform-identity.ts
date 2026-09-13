@@ -25,7 +25,7 @@ export const PLATFORM_IDENTITY = {
   abn: process.env.PLATFORM_ABN ?? '23 806 069 420',
   email: process.env.ADMIN_EMAIL ?? 'support@drivebook.com.au',
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@drivebook.com.au',
-  website: process.env.NEXT_PUBLIC_SITE_URL ?? 'drivebook.com.au',
+  website: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://drivebook.com.au',
   baseUrl: process.env.NEXTAUTH_URL ?? 'https://drivebook.com.au',
 } as const
 
