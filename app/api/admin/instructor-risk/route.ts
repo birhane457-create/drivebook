@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   const in30Days = new Date(now.getTime() + 30 * 86400000)
 
   // ── Fetch all approved instructors ────────────────────────────────────────
-  const instructors = await (prisma as any).provider.findMany({
+  const instructors = await prisma.provider.findMany({
     where: { approvalStatus: 'APPROVED' },
     select: {
       id: true,
@@ -60,6 +60,34 @@ export async function GET(req: NextRequest) {
   }
 
   const ids = instructors.map((i: any) => i.id)
+
+  // ── Fetch driving profiles for document expiry checks ────────────────────────
+  // Document expiry fields live in DrivingProviderProfile (multi-vertical architecture)
+  let drivingProfiles
+  try {
+    drivingProfiles = await prisma.drivingProviderProfile.findMany({
+      where: { providerId: { in: ids } },
+      select: {
+        providerId: true,
+        licenseExpiry: true,
+        insuranceExpiry: true,
+        policeCheckExpiry: true,
+        wwcCheckExpiry: true,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to fetch DrivingProviderProfile data for risk calculation:', error)
+    return NextResponse.json(
+      { error: 'PROFILE_QUERY_FAILED', message: 'Unable to fetch compliance data for risk calculation' },
+      { status: 500 }
+    )
+  }
+
+  // Index driving profiles by providerId for O(1) lookup
+  const drivingProfileMap: Record<string, any> = {}
+  for (const profile of drivingProfiles) {
+    if (profile.providerId) drivingProfileMap[profile.providerId] = profile
+  }
 
   // ── Batch queries for all instructors at once ─────────────────────────────
 
@@ -193,12 +221,14 @@ export async function GET(req: NextRequest) {
     }
 
     // 5. Expiring documents within 30 days (max 15pts total across all docs)
-    const expiryChecks = [
-      { field: 'Driving licence', date: instructor.licenseExpiry },
-      { field: 'Insurance policy', date: instructor.insuranceExpiry },
-      { field: 'Police check', date: instructor.policeCheckExpiry },
-      { field: 'Working With Children Check', date: instructor.wwcCheckExpiry },
-    ]
+    // Document expiry dates live in DrivingProviderProfile (driving compliance)
+    const drivingProfile = drivingProfileMap[instructor.id]
+    const expiryChecks = drivingProfile ? [
+      { field: 'Driving licence', date: drivingProfile.licenseExpiry },
+      { field: 'Insurance policy', date: drivingProfile.insuranceExpiry },
+      { field: 'Police check', date: drivingProfile.policeCheckExpiry },
+      { field: 'Working With Children Check', date: drivingProfile.wwcCheckExpiry },
+    ] : []
 
     let docPoints = 0
     for (const check of expiryChecks) {

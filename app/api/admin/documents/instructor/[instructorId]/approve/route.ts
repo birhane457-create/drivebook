@@ -17,42 +17,55 @@ export async function POST(
     const deny = await requirePermission(session, PERM.OPERATIONS_DOCUMENTS_VERIFY);
     if (deny) return deny;
 
+    // Validate provider exists
     const instructor: any = await prisma.provider.findUnique({
       where: { id: params.providerId },
-      select: { phone: true, name: true }
+      select: { id: true, phone: true, name: true }
     });
 
-    await prisma.provider.update({
-      where: { id: params.providerId },
-      data: {
-        documentsVerified: true,
-        documentsVerifiedAt: new Date(),
-      },
-    });
-
-    // Send SMS notification
-    if (instructor?.phone) {
-      await smsService.sendSMS({
-        to: instructor.phone,
-        message: `DriveBook: Your documents have been verified and approved! You can now accept bookings.`
-      });
+    if (!instructor) {
+      return NextResponse.json({ error: 'Provider not found' }, { status: 404 });
     }
 
-    // Log audit entry
-    await prisma.auditLog.create({
-      data: {
-        action: 'DOCUMENTS_APPROVED',
-        actorId: session!.user!.id,
-        actorRole: session!.user!.role,
-        targetType: 'provider',
-        targetId: params.providerId,
-        metadata: {
-          instructorName: instructor?.name,
-          instructorPhone: instructor?.phone,
+    // Update and audit in transaction to ensure consistency
+    await prisma.$transaction(async (tx) => {
+      await tx.provider.update({
+        where: { id: params.providerId },
+        data: {
+          documentsVerified: true,
+          documentsVerifiedAt: new Date(),
         },
-        success: true,
-      },
+      });
+
+      // Log audit entry
+      await tx.auditLog.create({
+        data: {
+          action: 'DOCUMENTS_APPROVED',
+          actorId: session!.user!.id,
+          actorRole: session!.user!.role,
+          targetType: 'provider',
+          targetId: params.providerId,
+          metadata: {
+            instructorName: instructor.name,
+            instructorPhone: instructor.phone,
+          },
+          success: true,
+        },
+      });
     });
+
+    // Send SMS notification (outside transaction - non-critical)
+    if (instructor.phone) {
+      try {
+        await smsService.sendSMS({
+          to: instructor.phone,
+          message: `DriveBook: Your documents have been verified and approved! You can now accept bookings.`
+        });
+      } catch (smsError) {
+        console.error('SMS notification failed:', smsError);
+        // Don't fail the approval if SMS fails
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
