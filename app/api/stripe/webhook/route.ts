@@ -11,6 +11,7 @@ import { recordPaymentCollected } from '@/lib/services/payout-service';
 import { logger } from '@/lib/logger';
 import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
 import { sendAlert } from '@/lib/services/alert-service';
+import { withSerializableRetry } from '@/lib/utils/transaction-retry';
 import Stripe from 'stripe';
 import { Prisma } from '@prisma/client';
 import { getDisplayName } from '@/lib/utils/account';
@@ -25,6 +26,23 @@ class DuplicateWebhookEventError extends Error {
     this.name = 'DuplicateWebhookEventError';
   }
 }
+
+class ExpiredBookingError extends Error {
+  constructor(
+    public readonly bookingId: string,
+    public readonly paymentIntentId: string
+  ) {
+    super(`Booking ${bookingId} expired before payment confirmed`);
+    this.name = 'ExpiredBookingError';
+    
+    // Maintains proper stack trace in V8 environments (like Node.js)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, ExpiredBookingError);
+    }
+  }
+}
+
+
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-02-25.clover',
@@ -74,33 +92,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // SECURITY: Idempotency check
+    // F-10 FIX: Atomic idempotency claim moved INSIDE transaction
     const idempotencyKey = `${event.type}_${event.id}_${event.created}`;
 
-    try {
-      const existingEvent = await prisma.webhookEvent.findUnique({
-        where: { idempotencyKey }
-      });
+    // The idempotency check now happens atomically within each handler's SERIALIZABLE
+    // transaction via recordWebhookEvent(). This prevents the race condition where two
+    // concurrent deliveries both passed the pre-check before either recorded the event.
+    //
+    // recordWebhookEvent() uses WebhookEvent.idempotencyKey @unique constraint.
+    // If a concurrent delivery claims the same event, Prisma throws P2002, which
+    // recordWebhookEvent catches and converts to DuplicateWebhookEventError.
 
-      if (existingEvent) {
-        logger.info('âœ… Webhook already processed (idempotent)', { idempotencyKey });
-        return NextResponse.json({ received: true, duplicate: true });
-      }
-    } catch (idempotencyErr) {
-      // DB error during duplicate check â€” MUST reject rather than continue.
-      // If we process anyway and Stripe retries, we risk double-crediting a wallet.
-      // Returning 500 tells Stripe to retry later when the DB is healthy.
-      logger.error('ðŸš¨ Idempotency check failed â€” rejecting webhook to prevent duplicate processing', {
-        idempotencyKey,
-        error: idempotencyErr instanceof Error ? idempotencyErr.message : String(idempotencyErr),
-      });
-      return NextResponse.json(
-        { error: 'Idempotency check failed â€” will retry' },
-        { status: 500 }
-      );
-    }
-
-    // Process event based on type â€” errors here are caught below
+    // Process event based on type
     try {
       await handleStripeEvent(event, idempotencyKey);
     } catch (handlerErr) {
@@ -443,32 +446,40 @@ async function handleCheckoutCompleted(
       }
     }
 
-    await prisma.$transaction(async (tx) => {
-      await recordWebhookEvent(tx, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
-        type: 'wallet_credit',
-        userId,
-        amount: amountPaid,
-      });
-
-      // Find or create wallet
-      let wallet = await tx.clientWallet.findUnique({ where: { userId } });
-      if (!wallet) {
-        wallet = await tx.clientWallet.create({ data: { userId } });
-      }
-
-      // Credit the wallet
-      await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'CREDIT',
-          amount: amountPaid,
-          description: `Package purchase â€” ${hours ?? '?'} hours via Stripe Checkout`,
-          status: 'CONFIRMED',
-        },
-      });
-
-      logger.info(`âœ… Wallet credited: +$${amountPaid} for userId=${userId}`);
-    }, SERIALIZABLE_TX);
+    await withSerializableRetry(async () => {
+      await prisma.$transaction(async (tx) => {
+            await recordWebhookEvent(tx, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
+              type: 'wallet_credit',
+              userId,
+              amount: amountPaid,
+            });
+      
+            // Find or create wallet
+            let wallet = await tx.clientWallet.findUnique({ where: { userId } });
+            if (!wallet) {
+              wallet = await tx.clientWallet.create({ data: { userId } });
+            }
+      
+            // Credit the wallet
+            await tx.walletTransaction.create({
+              data: {
+                walletId: wallet.id,
+                type: 'CREDIT',
+                amount: amountPaid,
+                description: `Package purchase – ${hours ?? '?'} hours via Stripe Checkout`,
+                status: 'CONFIRMED',
+                // F-12 FIX: Store PaymentIntent ID for explicit correlation
+                metadata: {
+                  stripePaymentIntentId: typeof payment_intent === 'string' ? payment_intent : payment_intent?.id,
+                  stripeCheckoutSessionId: checkoutSession.id,
+                  packageType: packageType ?? 'unknown',
+                },
+              },
+            });
+      
+            logger.info(`âœ… Wallet credited: +$${amountPaid} for userId=${userId}`);
+          }, SERIALIZABLE_TX);
+    }, { operationName: 'webhook-checkout-session-1' });
 
     // Send wallet top-up receipt (non-critical)
     try {
@@ -551,84 +562,107 @@ async function handleCheckoutCompleted(
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
-    // Record webhook event
-    await recordWebhookEvent(tx, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
-      providerId,
-      customerId: customer
-    });
-
-    const tier = metadata?.tier;
-    const billingCycle = metadata?.billingCycle ?? 'monthly';
-    const stripeSubId = checkoutSession.subscription as string | null;
-
-    // Update instructor with Stripe customer ID and â€” if tier is known â€” tier/status/stripeSubscriptionId atomically
-    await tx.provider.update({
-      where: { id: providerId },
-      data: {
-        stripeCustomerId: customer as string,
-        ...(tier && stripeSubId && {
-          subscriptionTier: tier as any,
-          subscriptionStatus: 'ACTIVE',
-          stripeSubscriptionId: stripeSubId,
-        }),
-      } as any
-    });
-
-    // Update subscription row: link customer ID and â€” if tier is known â€” tier/status/stripeSubscriptionId atomically
-    if (tier && stripeSubId) {
-      // Find the trial row without a stripeSubscriptionId first (race condition safe)
-      const trialRow = await tx.subscription.findFirst({
-        where: {
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        // Record webhook event
+        await recordWebhookEvent(tx, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
           providerId,
-          stripeSubscriptionId: null,
-          status: { in: ['TRIAL', 'ACTIVE'] },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (trialRow) {
-        await tx.subscription.update({
-          where: { id: trialRow.id },
-          data: {
-            tier: tier as any,
-            status: 'ACTIVE',
-            stripeCustomerId: customer as string,
-            stripeSubscriptionId: stripeSubId,
-          },
+          customerId: customer
         });
-      } else {
-        await tx.subscription.updateMany({
-          where: { providerId },
+    
+        const tier = metadata?.tier;
+        const billingCycle = metadata?.billingCycle ?? 'monthly';
+        const stripeSubId = checkoutSession.subscription as string | null;
+    
+        // Update instructor with Stripe customer ID and â€” if tier is known â€” tier/status/stripeSubscriptionId atomically
+        await tx.provider.update({
+          where: { id: providerId },
           data: {
-            tier: tier as any,
-            status: 'ACTIVE',
             stripeCustomerId: customer as string,
-            stripeSubscriptionId: stripeSubId,
-          },
+            ...(tier && stripeSubId && {
+              subscriptionTier: tier as any,
+              subscriptionStatus: 'ACTIVE',
+              stripeSubscriptionId: stripeSubId,
+            }),
+          } as any
         });
-      }
-    } else {
-      // No tier in metadata yet â€” just update customer ID for now
-      await tx.subscription.updateMany({
-        where: { providerId },
-        data: { stripeCustomerId: customer as string }
-      });
-    }
-
-    // Audit log
-    await logSubscriptionAction({
-      subscriptionId: checkoutSession.id,
-      providerId,
-      action: AuditAction.SUBSCRIPTION_UPDATED,
-      metadata: {
-        event: 'checkout_completed',
-        customerId: customer,
-        tier: tier ?? 'unknown',
-        stripeSubscriptionId: checkoutSession.subscription ?? null,
-      }
-    });
-  }, SERIALIZABLE_TX);
+    
+        // Update subscription row: link customer ID and â€” if tier is known â€” tier/status/stripeSubscriptionId atomically
+        if (tier && stripeSubId) {
+          // F-13 FIX: Atomic conditional update using stripeCustomerId correlation
+          // This prevents race condition where multiple webhooks try to claim the same trial row
+          const claimResult = await tx.subscription.updateMany({
+            where: {
+              providerId,
+              stripeCustomerId: customer as string,  // F-13: Authoritative correlation
+              stripeSubscriptionId: null,            // F-13: Atomic claim condition
+              // status filter as additional safety, but stripeSubscriptionId IS NULL is the key invariant
+              status: { in: ['TRIAL', 'ACTIVE'] },
+            },
+            data: {
+              tier: tier as any,
+              status: 'ACTIVE',
+              stripeCustomerId: customer as string,  // Ensure it's set (idempotent)
+              stripeSubscriptionId: stripeSubId,     // Atomic claim
+            },
+          });
+    
+          if (claimResult.count === 0) {
+            // No trial row claimed - check if already linked by another webhook
+            const existingSubscription = await tx.subscription.findFirst({
+              where: { stripeSubscriptionId: stripeSubId }
+            });
+    
+            if (existingSubscription) {
+              // Already linked by concurrent webhook - update it (idempotent)
+              logger.info(`Subscription ${stripeSubId} already linked by another webhook - updating existing row`);
+              await tx.subscription.update({
+                where: { id: existingSubscription.id },
+                data: {
+                  tier: tier as any,
+                  status: 'ACTIVE',
+                  stripeCustomerId: customer as string,
+                },
+              });
+            } else {
+              // No trial row exists and not yet linked - use broad update as fallback
+              // This handles legacy data or edge cases
+              logger.warn(`No trial row found for providerId=${providerId} customerId=${customer} - using fallback`);
+              await tx.subscription.updateMany({
+                where: { providerId },
+                data: {
+                  tier: tier as any,
+                  status: 'ACTIVE',
+                  stripeCustomerId: customer as string,
+                  stripeSubscriptionId: stripeSubId,
+                },
+              });
+            }
+          } else {
+            logger.info(`✓ Successfully claimed trial row for subscription ${stripeSubId} (count: ${claimResult.count})`);
+          }
+        } else {
+          // No tier in metadata yet â€” just update customer ID for now
+          await tx.subscription.updateMany({
+            where: { providerId },
+            data: { stripeCustomerId: customer as string }
+          });
+        }
+    
+        // Audit log
+        await logSubscriptionAction({
+          subscriptionId: checkoutSession.id,
+          providerId,
+          action: AuditAction.SUBSCRIPTION_UPDATED,
+          metadata: {
+            event: 'checkout_completed',
+            customerId: customer,
+            tier: tier ?? 'unknown',
+            stripeSubscriptionId: checkoutSession.subscription ?? null,
+          }
+        });
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-checkout-session-subscription' });
 
   // â”€â”€ Stamp metadata onto the Stripe subscription (non-fatal, best-effort) â”€â”€
   // Ensures future webhooks (renewal, upgrade, cancel) have providerId + tier in metadata.
@@ -668,71 +702,95 @@ async function handleWalletPaymentSuccess(
 
   let confirmedTransactions: any[] = [];
 
-  await prisma.$transaction(async (tx) => {
-    // Record webhook event
-    await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
-      transactionId,
-      walletId,
-      amount: paymentIntent.amount / 100,
-      type: 'wallet_purchase'
-    });
-
-    // Find wallet transaction(s) to confirm
-    let transactions: any[] = [];
-
-    if (transactionId) {
-      // Specific transaction ID provided
-      const transaction = await tx.walletTransaction.findUnique({
-        where: { id: transactionId }
-      });
-      if (transaction) {
-        transactions = [transaction];
-      }
-    } else if (walletId) {
-      // Find recent PENDING transactions for this wallet
-      transactions = await tx.walletTransaction.findMany({
-        where: {
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        // Record webhook event
+        await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
+          transactionId,
           walletId,
-          status: 'PENDING',
-          createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) } // Last 10 minutes
+          amount: paymentIntent.amount / 100,
+          type: 'wallet_purchase'
+        });
+    
+        // Find wallet transaction(s) to confirm
+        let transactions: any[] = [];
+    
+        if (transactionId) {
+          // Specific transaction ID provided
+          const transaction = await tx.walletTransaction.findUnique({
+            where: { id: transactionId }
+          });
+          if (transaction) {
+            transactions = [transaction];
+          }
+        } else if (walletId) {
+          // F-12 FIX: Match by PaymentIntent ID in metadata (explicit correlation)
+          // Fallback to time window only if no PaymentIntent ID match found
+          const paymentIntentId = paymentIntent.id;
+          
+          // Try explicit match first
+          const explicitMatch = await tx.walletTransaction.findFirst({
+            where: {
+              walletId,
+              status: 'PENDING',
+              metadata: {
+                path: ['stripePaymentIntentId'],
+                equals: paymentIntentId
+              }
+            }
+          });
+          
+          if (explicitMatch) {
+            transactions = [explicitMatch];
+          } else {
+            // Fallback: Find recent PENDING transactions (legacy behavior)
+            // NOTE: This time-window approach is ambiguous if multiple purchases occur
+            // within 10 minutes. Explicit PaymentIntent ID matching (above) prevents this.
+            transactions = await tx.walletTransaction.findMany({
+              where: {
+                walletId,
+                status: 'PENDING',
+                createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
+              }
+            });
+          }
         }
-      });
-    }
-
-    if (transactions.length === 0) {
-      logger.error('âŒ No wallet transactions found to confirm');
-      throw new Error('No wallet transactions found');
-    }
-
-    // âœ… Validate payment amount matches transaction total (prevents underpayment fraud)
-    const expectedCents = Math.round(
-      transactions.filter((t: any) => t.type === 'CREDIT').reduce((s: number, t: any) => s + t.amount, 0) * 100
-    );
-    const receivedCents = paymentIntent.amount_received;
-    if (receivedCents !== expectedCents) {
-      logger.error('âŒ Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
-      throw new Error(`Wallet payment amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
-    }
-
-    // âœ… Confirm all PENDING wallet transactions
-    for (const transaction of transactions) {
-      await tx.walletTransaction.update({
-        where: { id: transaction.id },
-        data: { status: 'CONFIRMED' }
-      });
-
-      logger.info(`âœ… Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount})`);
-    }
-
-    // Get wallet details for logging
-    const wallet = await tx.clientWallet.findUnique({
-      where: { id: transactions[0].walletId },
-      include: { user: true }
-    });
-
-    logger.info(`âœ… Wallet payment processed: ${wallet?.user.email} - ${transactions.length} transaction(s) confirmed`);
-    confirmedTransactions = transactions;
-  }, SERIALIZABLE_TX);
+    
+        if (transactions.length === 0) {
+          logger.error('âŒ No wallet transactions found to confirm');
+          throw new Error('No wallet transactions found');
+        }
+    
+        // âœ… Validate payment amount matches transaction total (prevents underpayment fraud)
+        const expectedCents = Math.round(
+          transactions.filter((t: any) => t.type === 'CREDIT').reduce((s: number, t: any) => s + t.amount, 0) * 100
+        );
+        const receivedCents = paymentIntent.amount_received;
+        if (receivedCents !== expectedCents) {
+          logger.error('âŒ Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
+          throw new Error(`Wallet payment amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
+        }
+    
+        // âœ… Confirm all PENDING wallet transactions
+        for (const transaction of transactions) {
+          await tx.walletTransaction.update({
+            where: { id: transaction.id },
+            data: { status: 'CONFIRMED' }
+          });
+    
+          logger.info(`âœ… Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount})`);
+        }
+    
+        // Get wallet details for logging
+        const wallet = await tx.clientWallet.findUnique({
+          where: { id: transactions[0].walletId },
+          include: { user: true }
+        });
+    
+        logger.info(`âœ… Wallet payment processed: ${wallet?.user.email} - ${transactions.length} transaction(s) confirmed`);
+        confirmedTransactions = transactions;
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-wallet-payment' });
 
   // Send wallet top-up receipt (non-critical)
   try {
@@ -842,221 +900,240 @@ async function handleBookingPaymentSuccess(
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
-    // Claim the webhook inside the same DB transaction as the booking mutation.
-    await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
-      bookingId,
-      amount: paymentIntent.amount / 100
-    });
-
-    // Fetch booking to validate
-    const booking = await tx.booking.findUnique({
-      where: { id: bookingId },
-      include: { customer: true, provider: { include: { user: true } } }
-    });
-
-    if (!booking) {
-      logger.error('âŒ Booking not found', { bookingId });
-      throw new Error(`Booking not found: ${bookingId}`);
-    }
-
-    // â”€â”€ Handle EXPIRED booking â€” DO NOT revive, issue refund instead â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // If the booking expired before Stripe confirmed payment, the slot may have been
-    // released and taken by another student. Reviving the booking risks a double-booking.
-    // Safe policy: issue a full refund via Stripe and flag for admin review.
-    if (booking.status === 'EXPIRED') {
-      logger.error(`ðŸš¨ Delayed payment on expired booking ${bookingId} â€” issuing automatic refund`);
-
-      // Issue automatic full refund via Stripe
+  try {
+    await withSerializableRetry(async () => {
+      await prisma.$transaction(async (tx) => {
+            // Claim the webhook inside the same DB transaction as the booking mutation.
+            await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
+              bookingId,
+              amount: paymentIntent.amount / 100
+            });
+      
+          // Fetch booking to validate
+          const booking = await tx.booking.findUnique({
+            where: { id: bookingId },
+            include: { customer: true, provider: { include: { user: true } } }
+          });
+      
+          if (!booking) {
+            logger.error('âŒ Booking not found', { bookingId });
+            throw new Error(`Booking not found: ${bookingId}`);
+          }
+      
+          // â”€â”€ Handle EXPIRED booking â€” DO NOT revive, issue refund instead â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // If the booking expired before Stripe confirmed payment, the slot may have been
+          // released and taken by another student. Reviving the booking risks a double-booking.
+          // Safe policy: issue a full refund via Stripe and flag for admin review.
+          // ── Handle EXPIRED booking – DO NOT revive, issue refund instead ────────
+          // If the booking expired before Stripe confirmed payment, the slot may have been
+          // released and taken by another student. Reviving the booking risks a double-booking.
+          // Safe policy: issue a full refund via Stripe and flag for admin review.
+          // IMPORTANT: Throw error here so refund happens OUTSIDE transaction (P2034 retry-safe)
+          if (booking.status === 'EXPIRED') {
+            logger.error(`🚨 Delayed payment on expired booking ${bookingId} – will issue refund outside transaction`);
+            
+            // Mark booking as cancelled INSIDE transaction
+            await tx.booking.update({
+              where: { id: bookingId },
+              data: {
+                status: 'CANCELLED',
+                notes: `EXPIRED_PAYMENT: Stripe charged after slot expiry. Refund pending. PaymentIntent: ${paymentIntent.id}. Admin review required.`,
+              } as any,
+            });
+      
+            // Throw error to trigger refund OUTSIDE transaction (safe for P2034 retry)
+            throw new ExpiredBookingError(bookingId, paymentIntent.id);
+          }
+      
+          // â”€â”€ Already confirmed (idempotent replay) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
+            logger.info(`â„¹ï¸ Booking ${bookingId} already ${booking.status} â€” skipping wallet ops`);
+            return;
+          }
+      
+          // â”€â”€ Strict state machine: only PENDING_PAYMENT â†’ CONFIRMED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          if (booking.status !== 'PENDING_PAYMENT') {
+            logger.error(`ðŸš¨ Webhook rejected: booking ${bookingId} is in status '${booking.status}' â€” cannot confirm`);
+            return;
+          }
+      
+          // âœ… Validate payment amount matches what was charged
+          // For packages: Stripe charged packageTotalPaid. For single lessons: booking.price.
+          const chargedAmount = (booking as any).packageTotalPaid || booking.price;
+          const expectedAmount = Math.round(chargedAmount * 100); // Convert to cents
+          const receivedAmount = paymentIntent.amount_received;
+      
+          if (receivedAmount !== expectedAmount) {
+            logger.error('âŒ Payment amount mismatch:', {
+              expected: expectedAmount,
+              received: receivedAmount,
+              bookingId
+            });
+            throw new Error(
+              `Payment amount mismatch: expected ${expectedAmount} cents, received ${receivedAmount} cents`
+            );
+          }
+      
+          // Get userId from client relation â€” try multiple fallbacks
+          let userId = booking.customer?.userId;
+      
+          if (!userId && booking.customerId) {
+            // Direct lookup by customerId (most reliable)
+            const client = await tx.customer.findUnique({ where: { id: booking.customerId } });
+            userId = client?.userId ?? undefined;
+          }
+      
+          if (!userId && booking.customerPhone) {
+            const client = await tx.customer.findFirst({
+              where: { phone: booking.customerPhone }
+            });
+            userId = client?.userId ?? undefined;
+          }
+      
+          if (!userId) {
+            logger.warn(`âš ï¸ Could not resolve userId for booking ${bookingId} â€” wallet ops skipped`);
+          }
+      
+          // REMOVED: P0 FIX â€” Backwards customer validation compared paymentIntent.customer (student)
+          // against instructor.stripeCustomerId (instructor's SaaS subscription). These are never the same.
+          // The amount validation above is sufficient security. Do not re-add without understanding
+          // the Stripe customer model: paymentIntent.customer = student, provider.stripeCustomerId = instructor.
+      
+          // âœ… All validations passed - Update booking
+          await tx.booking.update({
+            where: { id: bookingId },
+            data: {
+              isPaid: true,
+              paidAt: new Date(),
+              status: 'CONFIRMED',
+              paymentCaptured: true,
+              paymentCapturedAt: new Date(),
+            } as any
+          });
+      
+          // Update transaction â€” SETTLED means eligible for payout
+          await (tx as any).transaction.updateMany({
+            where: { stripePaymentIntentId: paymentIntentId },
+            data: {
+              status: 'SETTLED',
+              processedAt: new Date(),
+              stripeChargeId: (paymentIntent as any).charges?.data[0]?.id,
+            }
+          });
+      
+          // â”€â”€ Wallet: credit full package amount, debit first lesson â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // Per financial doctrine (PATH 2: STRIPE BOOKING):
+          //   CREDIT wallet = full package amount paid via Stripe (packageTotalPaid)
+          //   DEBIT  wallet = first lesson price (booking.price = 1hr Ã— hourlyRate)
+          // Remaining balance = credits available for future lessons from this package.
+          // For single lessons: just confirm any pending wallet transactions.
+          if (userId) {
+            let wallet = await tx.clientWallet.findUnique({ where: { userId } });
+            if (!wallet) {
+              wallet = await tx.clientWallet.create({ data: { userId } });
+            }
+      
+            const packageTotalPaid = (booking as any).packageTotalPaid as number | null;
+            const isPackage = (booking as any).isPackageBooking && (booking as any).packageHours > 1;
+      
+            if (isPackage && packageTotalPaid) {
+              // CREDIT: full package amount the client paid via Stripe
+              await tx.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'CREDIT',
+                  amount: packageTotalPaid,
+                  description: `Package purchase â€” ${(booking as any).packageHours} hours (Stripe)`,
+                  status: 'CONFIRMED',
+                }
+              });
+      
+              // DEBIT: first lesson already scheduled (booking.price = 1hr Ã— hourlyRate)
+              await tx.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'DEBIT',
+                  amount: booking.price,
+                  description: `Lesson: ${booking.provider?.user?.name || "Instructor"} â€” ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE })} ${new Date(booking.startTime!).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_TIMEZONE })} (${Number(booking.duration ?? 60)}min) #${bookingId.slice(0,8)}`,
+                  status: 'CONFIRMED',
+                }
+              });
+      
+              const remaining = packageTotalPaid - Number(booking.price);
+              logger.info(`âœ… Package wallet: +${packageTotalPaid} CREDIT / -${booking.price} DEBIT = ${remaining.toFixed(2)} remaining for userId=${userId}`);
+            } else {
+              // Single lesson â€” confirm any pending wallet transactions
+              await tx.walletTransaction.updateMany({
+                where: {
+                  walletId: wallet.id,
+                  status: 'PENDING',
+                  createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
+                },
+                data: { status: 'CONFIRMED' }
+              });
+            }
+          }
+        }, SERIALIZABLE_TX);
+    }, { operationName: 'webhook-booking-payment' });
+  } catch (err) {
+    // Handle expired booking error - issue refund OUTSIDE transaction (P2034 retry-safe)
+    if (err instanceof ExpiredBookingError) {
+      logger.info(`ðŸ"„ Handling expired booking refund outside transaction for ${err.bookingId}`);
+      
       try {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
         await stripe.refunds.create({
-          payment_intent: paymentIntent.id,
+          payment_intent: err.paymentIntentId,
           reason: 'duplicate', // closest Stripe reason code
           metadata: {
-            bookingId,
-            reason: 'Booking expired before payment confirmed â€” automatic refund',
+            bookingId: err.bookingId,
+            reason: 'Booking expired before payment confirmed — automatic refund',
           },
+        }, {
+          idempotencyKey: `expired-booking-refund-${err.bookingId}-${err.paymentIntentId}`
         });
-        logger.info(`âœ… Auto-refund issued for expired booking ${bookingId}`);
+        logger.info(`✅ Auto-refund issued for expired booking ${err.bookingId}`);
 
-        // Alert ops â€” admin should know a payment hit an expired slot even when refund succeeded
+        // Alert ops â€" admin should know a payment hit an expired slot even when refund succeeded
         void sendAlert({
           type: 'RECONCILIATION_ISSUES',
           severity: 'WARNING',
-          message: `Delayed payment on expired booking ${bookingId} â€” auto-refund issued successfully. Student was charged after slot expired. Admin review recommended.`,
-          entityId: bookingId,
+          message: `Delayed payment on expired booking ${err.bookingId} â€" auto-refund issued successfully. Student was charged after slot expired. Admin review recommended.`,
+          entityId: err.bookingId,
           metadata: {
-            bookingId,
-            stripePaymentIntentId: paymentIntent.id,
+            bookingId: err.bookingId,
+            stripePaymentIntentId: err.paymentIntentId,
             outcome: 'auto_refund_succeeded',
           },
         });
       } catch (refundErr) {
-        // Refund failed â€” must flag for manual admin action
-        logger.error(`ðŸš¨ CRITICAL: Auto-refund FAILED for expired booking ${bookingId}. Manual action required.`, {
+        // Refund failed â€" must flag for manual admin action
+        logger.error(`ðŸš¨ CRITICAL: Auto-refund FAILED for expired booking ${err.bookingId}. Manual action required.`, {
           error: refundErr instanceof Error ? refundErr.message : String(refundErr),
         });
 
-        // Alert ops â€” this requires immediate manual intervention via Stripe Dashboard
+        // Alert ops â€" this requires immediate manual intervention via Stripe Dashboard
         void sendAlert({
           type: 'RECONCILIATION_ISSUES',
           severity: 'CRITICAL',
-          message: `Auto-refund FAILED for expired booking ${bookingId}. Student was charged $${(paymentIntent.amount / 100).toFixed(2)} but refund could not be issued. MANUAL REFUND REQUIRED via Stripe Dashboard. PaymentIntent: ${paymentIntent.id}`,
-          entityId: bookingId,
+          message: `Auto-refund FAILED for expired booking ${err.bookingId}. Student was charged but refund could not be issued. MANUAL REFUND REQUIRED via Stripe Dashboard. PaymentIntent: ${err.paymentIntentId}`,
+          entityId: err.bookingId,
           metadata: {
-            bookingId,
-            stripePaymentIntentId: paymentIntent.id,
-            amountCharged: paymentIntent.amount / 100,
+            bookingId: err.bookingId,
+            stripePaymentIntentId: err.paymentIntentId,
             error: refundErr instanceof Error ? refundErr.message : String(refundErr),
             outcome: 'auto_refund_failed',
             action: 'Manual refund required via Stripe Dashboard',
           },
         });
       }
-
-      // Mark booking as requiring admin review regardless of refund success
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          status: 'CANCELLED',
-          notes: `EXPIRED_PAYMENT: Stripe charged after slot expiry. Auto-refund attempted at ${new Date().toISOString()}. PaymentIntent: ${paymentIntent.id}. Admin review required.`,
-        } as any,
-      });
-
-      // Non-fatal: transaction will complete, booking is cancelled
+      
+      // Expired booking handled, return early
       return;
     }
-
-    // â”€â”€ Already confirmed (idempotent replay) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
-      logger.info(`â„¹ï¸ Booking ${bookingId} already ${booking.status} â€” skipping wallet ops`);
-      return;
-    }
-
-    // â”€â”€ Strict state machine: only PENDING_PAYMENT â†’ CONFIRMED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if (booking.status !== 'PENDING_PAYMENT') {
-      logger.error(`ðŸš¨ Webhook rejected: booking ${bookingId} is in status '${booking.status}' â€” cannot confirm`);
-      return;
-    }
-
-    // âœ… Validate payment amount matches what was charged
-    // For packages: Stripe charged packageTotalPaid. For single lessons: booking.price.
-    const chargedAmount = (booking as any).packageTotalPaid || booking.price;
-    const expectedAmount = Math.round(chargedAmount * 100); // Convert to cents
-    const receivedAmount = paymentIntent.amount_received;
-
-    if (receivedAmount !== expectedAmount) {
-      logger.error('âŒ Payment amount mismatch:', {
-        expected: expectedAmount,
-        received: receivedAmount,
-        bookingId
-      });
-      throw new Error(
-        `Payment amount mismatch: expected ${expectedAmount} cents, received ${receivedAmount} cents`
-      );
-    }
-
-    // Get userId from client relation â€” try multiple fallbacks
-    let userId = booking.customer?.userId;
-
-    if (!userId && booking.customerId) {
-      // Direct lookup by customerId (most reliable)
-      const client = await tx.customer.findUnique({ where: { id: booking.customerId } });
-      userId = client?.userId ?? undefined;
-    }
-
-    if (!userId && booking.customerPhone) {
-      const client = await tx.customer.findFirst({
-        where: { phone: booking.customerPhone }
-      });
-      userId = client?.userId ?? undefined;
-    }
-
-    if (!userId) {
-      logger.warn(`âš ï¸ Could not resolve userId for booking ${bookingId} â€” wallet ops skipped`);
-    }
-
-    // REMOVED: P0 FIX â€” Backwards customer validation compared paymentIntent.customer (student)
-    // against instructor.stripeCustomerId (instructor's SaaS subscription). These are never the same.
-    // The amount validation above is sufficient security. Do not re-add without understanding
-    // the Stripe customer model: paymentIntent.customer = student, provider.stripeCustomerId = instructor.
-
-    // âœ… All validations passed - Update booking
-    await tx.booking.update({
-      where: { id: bookingId },
-      data: {
-        isPaid: true,
-        paidAt: new Date(),
-        status: 'CONFIRMED',
-        paymentCaptured: true,
-        paymentCapturedAt: new Date(),
-      } as any
-    });
-
-    // Update transaction â€” SETTLED means eligible for payout
-    await (tx as any).transaction.updateMany({
-      where: { stripePaymentIntentId: paymentIntentId },
-      data: {
-        status: 'SETTLED',
-        processedAt: new Date(),
-        stripeChargeId: (paymentIntent as any).charges?.data[0]?.id,
-      }
-    });
-
-    // â”€â”€ Wallet: credit full package amount, debit first lesson â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Per financial doctrine (PATH 2: STRIPE BOOKING):
-    //   CREDIT wallet = full package amount paid via Stripe (packageTotalPaid)
-    //   DEBIT  wallet = first lesson price (booking.price = 1hr Ã— hourlyRate)
-    // Remaining balance = credits available for future lessons from this package.
-    // For single lessons: just confirm any pending wallet transactions.
-    if (userId) {
-      let wallet = await tx.clientWallet.findUnique({ where: { userId } });
-      if (!wallet) {
-        wallet = await tx.clientWallet.create({ data: { userId } });
-      }
-
-      const packageTotalPaid = (booking as any).packageTotalPaid as number | null;
-      const isPackage = (booking as any).isPackageBooking && (booking as any).packageHours > 1;
-
-      if (isPackage && packageTotalPaid) {
-        // CREDIT: full package amount the client paid via Stripe
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            type: 'CREDIT',
-            amount: packageTotalPaid,
-            description: `Package purchase â€” ${(booking as any).packageHours} hours (Stripe)`,
-            status: 'CONFIRMED',
-          }
-        });
-
-        // DEBIT: first lesson already scheduled (booking.price = 1hr Ã— hourlyRate)
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            type: 'DEBIT',
-            amount: booking.price,
-            description: `Lesson: ${booking.provider?.user?.name || "Instructor"} â€” ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE })} ${new Date(booking.startTime!).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_TIMEZONE })} (${Number(booking.duration ?? 60)}min) #${bookingId.slice(0,8)}`,
-            status: 'CONFIRMED',
-          }
-        });
-
-        const remaining = packageTotalPaid - Number(booking.price);
-        logger.info(`âœ… Package wallet: +${packageTotalPaid} CREDIT / -${booking.price} DEBIT = ${remaining.toFixed(2)} remaining for userId=${userId}`);
-      } else {
-        // Single lesson â€” confirm any pending wallet transactions
-        await tx.walletTransaction.updateMany({
-          where: {
-            walletId: wallet.id,
-            status: 'PENDING',
-            createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
-          },
-          data: { status: 'CONFIRMED' }
-        });
-      }
-    }
-  }, SERIALIZABLE_TX);
+    
+    // Re-throw other errors
+    throw err;
+  }
 
   logger.info(`âœ… Booking payment processed with validations: ${bookingId}`);
 
@@ -1269,19 +1346,21 @@ async function handleBookingPaymentFailed(
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.payment_failed', paymentIntent.id, {
-      bookingId
-    });
-
-    await tx.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: 'PENDING',
-        paymentCaptured: false,
-      } as any
-    });
-  }, SERIALIZABLE_TX);
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.payment_failed', paymentIntent.id, {
+          bookingId
+        });
+    
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: {
+            status: 'PENDING',
+            paymentCaptured: false,
+          } as any
+        });
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-booking-payment-failed' });
 
   logger.info(`âŒ Booking payment failed: ${bookingId}`);
 
@@ -1379,105 +1458,107 @@ async function handleSubscriptionUpdate(
     return upper === 'CANCELED' ? 'CANCELLED' : upper;
   };
 
-  await prisma.$transaction(async (tx) => {
-    // Record webhook event
-    await recordWebhookEvent(tx, idempotencyKey, 'subscription.updated', subscription.id, {
-      providerId,
-      tier,
-      status
-    });
-
-    // Update instructor
-    await tx.provider.update({
-      where: { id: providerId },
-      data: {
-        subscriptionTier: tier as any,
-        subscriptionStatus: normalizeStatus(status) as any,
-        trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
-        stripeCustomerId: subscription.customer as string,
-        stripeSubscriptionId: subscription.id,
-      } as any
-    });
-
-    // Update or create subscription record
-    // Priority: find by stripeSubscriptionId first (renewal/update).
-    // If not found, find the most-recent non-stripe trial row for this instructor
-    // (race condition: customer.subscription.created fires before checkout.session.completed
-    // stamps the stripeSubscriptionId â€” so we link it rather than create a duplicate).
-    const existingSubscription = await tx.subscription.findFirst({
-      where: { stripeSubscriptionId: subscription.id }
-    });
-
-    if (existingSubscription) {
-      await tx.subscription.update({
-        where: { id: existingSubscription.id },
-        data: {
-          tier: tier as any,
-          status: normalizeStatus(status) as any,
-          monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
-          billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
-          currentPeriodEnd: new Date(current_period_end * 1000),
-          stripeSubscriptionId: subscription.id,
-          stripeCustomerId: subscription.customer as string,
-        }
-      });
-    } else {
-      // Look for an existing trial subscription record without a stripeSubscriptionId
-      const trialRow = await tx.subscription.findFirst({
-        where: {
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        // Record webhook event
+        await recordWebhookEvent(tx, idempotencyKey, 'subscription.updated', subscription.id, {
           providerId,
-          stripeSubscriptionId: null,
-          status: { in: ['TRIAL', 'ACTIVE'] },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (trialRow) {
-        // Link the Stripe subscription to the existing trial row â€” prevents duplicate rows
-        logger.info(`ðŸ”— Linking Stripe subscription ${subscription.id} to existing trial row ${trialRow.id} for instructor ${providerId}`);
-        await tx.subscription.update({
-          where: { id: trialRow.id },
-          data: {
-            tier: tier as any,
-            status: normalizeStatus(status) as any,
-            monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
-            billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
-            currentPeriodEnd: new Date(current_period_end * 1000),
-            stripeSubscriptionId: subscription.id,
-            stripeCustomerId: subscription.customer as string,
-          }
+          tier,
+          status
         });
-      } else {
-        const current_period_start = (subscription as any).current_period_start;
-        await tx.subscription.create({
+    
+        // Update instructor
+        await tx.provider.update({
+          where: { id: providerId },
           data: {
-            providerId,
-            tier: tier as any,
-            status: normalizeStatus(status) as any,
-            monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
-            billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
-            currentPeriodStart: new Date(current_period_start * 1000),
-            currentPeriodEnd: new Date(current_period_end * 1000),
+            subscriptionTier: tier as any,
+            subscriptionStatus: normalizeStatus(status) as any,
+            trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
             stripeCustomerId: subscription.customer as string,
             stripeSubscriptionId: subscription.id,
+          } as any
+        });
+    
+        // Update or create subscription record
+        // Priority: find by stripeSubscriptionId first (renewal/update).
+        // If not found, find the most-recent non-stripe trial row for this instructor
+        // (race condition: customer.subscription.created fires before checkout.session.completed
+        // stamps the stripeSubscriptionId â€” so we link it rather than create a duplicate).
+        const existingSubscription = await tx.subscription.findFirst({
+          where: { stripeSubscriptionId: subscription.id }
+        });
+    
+        if (existingSubscription) {
+          await tx.subscription.update({
+            where: { id: existingSubscription.id },
+            data: {
+              tier: tier as any,
+              status: normalizeStatus(status) as any,
+              monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
+              billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+              currentPeriodEnd: new Date(current_period_end * 1000),
+              stripeSubscriptionId: subscription.id,
+              stripeCustomerId: subscription.customer as string,
+            }
+          });
+        } else {
+          // Look for an existing trial subscription record without a stripeSubscriptionId
+          const trialRow = await tx.subscription.findFirst({
+            where: {
+              providerId,
+              stripeSubscriptionId: null,
+              status: { in: ['TRIAL', 'ACTIVE'] },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+    
+          if (trialRow) {
+            // Link the Stripe subscription to the existing trial row â€” prevents duplicate rows
+            logger.info(`ðŸ”— Linking Stripe subscription ${subscription.id} to existing trial row ${trialRow.id} for instructor ${providerId}`);
+            await tx.subscription.update({
+              where: { id: trialRow.id },
+              data: {
+                tier: tier as any,
+                status: normalizeStatus(status) as any,
+                monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
+                billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+                currentPeriodEnd: new Date(current_period_end * 1000),
+                stripeSubscriptionId: subscription.id,
+                stripeCustomerId: subscription.customer as string,
+              }
+            });
+          } else {
+            const current_period_start = (subscription as any).current_period_start;
+            await tx.subscription.create({
+              data: {
+                providerId,
+                tier: tier as any,
+                status: normalizeStatus(status) as any,
+                monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
+                billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+                currentPeriodStart: new Date(current_period_start * 1000),
+                currentPeriodEnd: new Date(current_period_end * 1000),
+                stripeCustomerId: subscription.customer as string,
+                stripeSubscriptionId: subscription.id,
+              }
+            });
+          }
+        }
+    
+        // Audit log
+        await logSubscriptionAction({
+          subscriptionId: subscription.id,
+          providerId,
+          action: AuditAction.SUBSCRIPTION_UPDATED,
+          metadata: {
+            tier,
+            status,
+            commissionRate: plan.commissionRate,
+            amount: subscription.items.data[0].price.unit_amount! / 100
           }
         });
-      }
-    }
-
-    // Audit log
-    await logSubscriptionAction({
-      subscriptionId: subscription.id,
-      providerId,
-      action: AuditAction.SUBSCRIPTION_UPDATED,
-      metadata: {
-        tier,
-        status,
-        commissionRate: plan.commissionRate,
-        amount: subscription.items.data[0].price.unit_amount! / 100
-      }
-    });
-  }, SERIALIZABLE_TX);
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-subscription-updated' });
 
   // Send email if active
   if (status === 'active') {
@@ -1523,29 +1604,31 @@ async function handleSubscriptionCancelled(
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await recordWebhookEvent(tx, idempotencyKey, 'subscription.cancelled', subscription.id, {
-      providerId
-    });
-
-    await tx.provider.update({
-      where: { id: providerId },
-      data: { subscriptionStatus: 'CANCELLED' as any }
-    });
-
-    await tx.subscription.updateMany({
-      where: { stripeSubscriptionId: subscription.id },
-      data: {
-        status: 'CANCELLED',
-      }
-    });
-
-    await logSubscriptionAction({
-      subscriptionId: subscription.id,
-      providerId,
-      action: AuditAction.SUBSCRIPTION_CANCELLED
-    });
-  }, SERIALIZABLE_TX);
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        await recordWebhookEvent(tx, idempotencyKey, 'subscription.cancelled', subscription.id, {
+          providerId
+        });
+    
+        await tx.provider.update({
+          where: { id: providerId },
+          data: { subscriptionStatus: 'CANCELLED' as any }
+        });
+    
+        await tx.subscription.updateMany({
+          where: { stripeSubscriptionId: subscription.id },
+          data: {
+            status: 'CANCELLED',
+          }
+        });
+    
+        await logSubscriptionAction({
+          subscriptionId: subscription.id,
+          providerId,
+          action: AuditAction.SUBSCRIPTION_CANCELLED
+        });
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-subscription-cancelled' });
 
   logger.info(`âœ… Subscription cancelled: ${subscription.id}`);
 }
@@ -1560,12 +1643,14 @@ async function handleTrialEnding(
 
   if (!providerId) return;
 
-  await prisma.$transaction(async (tx) => {
-    await recordWebhookEvent(tx, idempotencyKey, 'subscription.trial_ending', subscription.id, {
-      providerId,
-      trialEnd: trial_end
-    });
-  }, SERIALIZABLE_TX);
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        await recordWebhookEvent(tx, idempotencyKey, 'subscription.trial_ending', subscription.id, {
+          providerId,
+          trialEnd: trial_end
+        });
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-trial-ending' });
 
   const instructor = await prisma.provider.findUnique({
     where: { id: providerId },
@@ -1608,36 +1693,38 @@ async function handleInvoicePaymentSucceeded(
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await recordWebhookEvent(tx, idempotencyKey, 'invoice.payment_succeeded', invoice.id, {
-      subscriptionId: subscription
-    });
-
-    // Update subscription record
-    await tx.subscription.updateMany({
-      where: { stripeSubscriptionId: subscription as string },
-      data: { status: 'ACTIVE' }
-    });
-
-    // â”€â”€ Also update instructor.subscriptionStatus â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // This is the critical step that was missing â€” without it, the instructor
-    // stays stuck at TRIAL after their first real payment or monthly renewal.
-    const subscriptionRecord = await tx.subscription.findFirst({
-      where: { stripeSubscriptionId: subscription as string },
-      select: { providerId: true }
-    });
-
-    if (subscriptionRecord?.providerId) {
-      await tx.provider.update({
-        where: { id: subscriptionRecord.providerId },
-        data: {
-          subscriptionStatus: 'ACTIVE' as any,
-          trialEndsAt: null, // Clear trial end date â€” they're now a paying customer
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        await recordWebhookEvent(tx, idempotencyKey, 'invoice.payment_succeeded', invoice.id, {
+          subscriptionId: subscription
+        });
+    
+        // Update subscription record
+        await tx.subscription.updateMany({
+          where: { stripeSubscriptionId: subscription as string },
+          data: { status: 'ACTIVE' }
+        });
+    
+        // â”€â”€ Also update instructor.subscriptionStatus â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // This is the critical step that was missing â€” without it, the instructor
+        // stays stuck at TRIAL after their first real payment or monthly renewal.
+        const subscriptionRecord = await tx.subscription.findFirst({
+          where: { stripeSubscriptionId: subscription as string },
+          select: { providerId: true }
+        });
+    
+        if (subscriptionRecord?.providerId) {
+          await tx.provider.update({
+            where: { id: subscriptionRecord.providerId },
+            data: {
+              subscriptionStatus: 'ACTIVE' as any,
+              trialEndsAt: null, // Clear trial end date â€” they're now a paying customer
+            }
+          });
+          logger.info(`âœ… Instructor ${subscriptionRecord.providerId} status â†’ ACTIVE (invoice paid)`);
         }
-      });
-      logger.info(`âœ… Instructor ${subscriptionRecord.providerId} status â†’ ACTIVE (invoice paid)`);
-    }
-  }, SERIALIZABLE_TX);
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-invoice-payment-succeeded' });
 
   logger.info(`âœ… Invoice payment succeeded: ${invoice.id}`);
 }
@@ -1653,28 +1740,30 @@ async function handleInvoicePaymentFailed(
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await recordWebhookEvent(tx, idempotencyKey, 'invoice.payment_failed', invoice.id, {
-      subscriptionId: subscription
-    });
-
-    await tx.subscription.updateMany({
-      where: { stripeSubscriptionId: subscription as string },
-      data: { status: 'PAST_DUE' }
-    });
-
-    // Find instructor via subscription
-    const subscriptionRecord = await tx.subscription.findFirst({
-      where: { stripeSubscriptionId: subscription as string }
-    });
-
-    if (subscriptionRecord) {
-      await tx.provider.update({
-        where: { id: subscriptionRecord.providerId },
-        data: { subscriptionStatus: 'PAST_DUE' as any }
-      });
-    }
-  }, SERIALIZABLE_TX);
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        await recordWebhookEvent(tx, idempotencyKey, 'invoice.payment_failed', invoice.id, {
+          subscriptionId: subscription
+        });
+    
+        await tx.subscription.updateMany({
+          where: { stripeSubscriptionId: subscription as string },
+          data: { status: 'PAST_DUE' }
+        });
+    
+        // Find instructor via subscription
+        const subscriptionRecord = await tx.subscription.findFirst({
+          where: { stripeSubscriptionId: subscription as string }
+        });
+    
+        if (subscriptionRecord) {
+          await tx.provider.update({
+            where: { id: subscriptionRecord.providerId },
+            data: { subscriptionStatus: 'PAST_DUE' as any }
+          });
+        }
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-invoice-payment-failed' });
 
   // Send payment failed email
   const subscriptionRecord = await prisma.subscription.findFirst({
@@ -2189,84 +2278,86 @@ async function handleChargeRefunded(
   // Declare refundDelta outside transaction (needed for alert after transaction)
   let refundDelta = 0;
 
-  await prisma.$transaction(async (tx) => {
-    // Record webhook event inside transaction
-    await recordWebhookEvent(tx, idempotencyKey, 'charge.refunded', chargeId, {
-      bookingId,
-      piId,
-      refundedAmount,
-      isFullRefund,
-      bookingStatus: booking.status,
-    });
-
-    // charge.amount_refunded is cumulative. Calculate only the amount not already
-    // represented locally, so multiple partial refunds cannot be double-counted.
-    const existingRefunds = await tx.ledgerEntry.findMany({
-      where: {
-        referenceId: bookingId,
-        type: { in: ['REFUND_ISSUED', 'REFUND_SYNCED'] },
-      },
-      select: { amount: true },
-    });
-
-    const alreadyRecordedRefund = existingRefunds.reduce(
-      (sum: number, entry: any) => sum + Math.abs(Number(entry.amount) || 0),
-      0
-    );
-
-    refundDelta = Math.max(0, refundedAmount - alreadyRecordedRefund);
-
-    if (refundDelta <= 0.000001) {
-      logger.info(`â„¹ï¸ [REFUND SYNC] Charge ${chargeId} already fully represented locally`);
-      return; // Exit transaction â€” nothing to do
-    }
-
-    // Out-of-band refund â€” sync only the new refund amount.
-    await appendLedgerEntry({
-      type: 'REFUND_SYNCED',
-      amount: -refundDelta,
-      referenceId: bookingId,
-      referenceType: 'BOOKING',
-      providerId: booking.providerId ?? undefined,
-      description: `Out-of-band refund from Stripe Dashboard â€” $${refundedAmount.toFixed(2)} on charge ${chargeId}`,
-      metadata: { stripeChargeId: chargeId, piId, refundedAmount, refundDelta, isFullRefund },
-    });
-
-    await incrementLedger({ totalRefunded: refundDelta });
-
-    // Update booking status if it was CONFIRMED
-    if (isFullRefund && (booking.status === 'CONFIRMED' || booking.status === 'PENDING_PAYMENT')) {
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: { status: 'CANCELLED' } as any,
-      });
-    }
-
-    // Update transaction record
-    await tx.transaction.updateMany({
-      where: { bookingId, status: 'SETTLED' },
-      data: { status: 'REFUNDED', processedAt: new Date() },
-    });
-
-    // Audit log
-    try {
-      await tx.auditLog.create({
-        data: {
-          action: 'REFUND_SYNCED',
-          actorId: 'STRIPE',
-          actorRole: 'SYSTEM',
-          targetType: 'BOOKING',
-          targetId: bookingId,
-          success: true,
-          metadata: { stripeChargeId: chargeId, piId, refundedAmount, isFullRefund },
-        },
-      });
-    } catch (auditErr) {
-      logger.error('[REFUND SYNC] Audit log failed', {
-        error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-      });
-    }
-  }, SERIALIZABLE_TX);
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+        // Record webhook event inside transaction
+        await recordWebhookEvent(tx, idempotencyKey, 'charge.refunded', chargeId, {
+          bookingId,
+          piId,
+          refundedAmount,
+          isFullRefund,
+          bookingStatus: booking.status,
+        });
+    
+        // charge.amount_refunded is cumulative. Calculate only the amount not already
+        // represented locally, so multiple partial refunds cannot be double-counted.
+        const existingRefunds = await tx.ledgerEntry.findMany({
+          where: {
+            referenceId: bookingId,
+            type: { in: ['REFUND_ISSUED', 'REFUND_SYNCED'] },
+          },
+          select: { amount: true },
+        });
+    
+        const alreadyRecordedRefund = existingRefunds.reduce(
+          (sum: number, entry: any) => sum + Math.abs(Number(entry.amount) || 0),
+          0
+        );
+    
+        refundDelta = Math.max(0, refundedAmount - alreadyRecordedRefund);
+    
+        if (refundDelta <= 0.000001) {
+          logger.info(`â„¹ï¸ [REFUND SYNC] Charge ${chargeId} already fully represented locally`);
+          return; // Exit transaction â€” nothing to do
+        }
+    
+        // Out-of-band refund â€” sync only the new refund amount.
+        await appendLedgerEntry({
+          type: 'REFUND_SYNCED',
+          amount: -refundDelta,
+          referenceId: bookingId,
+          referenceType: 'BOOKING',
+          providerId: booking.providerId ?? undefined,
+          description: `Out-of-band refund from Stripe Dashboard â€” $${refundedAmount.toFixed(2)} on charge ${chargeId}`,
+          metadata: { stripeChargeId: chargeId, piId, refundedAmount, refundDelta, isFullRefund },
+        });
+    
+        await incrementLedger({ totalRefunded: refundDelta });
+    
+        // Update booking status if it was CONFIRMED
+        if (isFullRefund && (booking.status === 'CONFIRMED' || booking.status === 'PENDING_PAYMENT')) {
+          await tx.booking.update({
+            where: { id: bookingId },
+            data: { status: 'CANCELLED' } as any,
+          });
+        }
+    
+        // Update transaction record
+        await tx.transaction.updateMany({
+          where: { bookingId, status: 'SETTLED' },
+          data: { status: 'REFUNDED', processedAt: new Date() },
+        });
+    
+        // Audit log
+        try {
+          await tx.auditLog.create({
+            data: {
+              action: 'REFUND_SYNCED',
+              actorId: 'STRIPE',
+              actorRole: 'SYSTEM',
+              targetType: 'BOOKING',
+              targetId: bookingId,
+              success: true,
+              metadata: { stripeChargeId: chargeId, piId, refundedAmount, isFullRefund },
+            },
+          });
+        } catch (auditErr) {
+          logger.error('[REFUND SYNC] Audit log failed', {
+            error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+          });
+        }
+      }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-checkout-connect-account' });
 
   // Alert outside transaction (non-critical)
   void sendAlert({
