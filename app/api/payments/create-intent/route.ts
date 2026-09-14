@@ -163,6 +163,18 @@ async function handleWalletPaymentIntent(transactionId: string, amount?: number)
       description: transaction.description || 'Package purchase',
     });
 
+    // F-12 FIX: Store PaymentIntent ID in transaction metadata for explicit correlation
+    // This enables the webhook to match by PaymentIntent ID instead of time window
+    await prisma.walletTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        metadata: {
+          ...(transaction.metadata as any || {}),
+          stripePaymentIntentId: paymentIntent.paymentIntentId,
+        }
+      }
+    });
+
     return NextResponse.json({
       clientSecret: paymentIntent.clientSecret,
       amount: paymentIntent.amount,
