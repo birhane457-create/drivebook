@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     // Only give a trial if this instructor has never had one
     const existingSubscription = await prisma.subscription.findFirst({
-      where: { preferredProviderId: user.provider?.id },
+      where: { providerId: user.provider?.id },
       orderBy: { createdAt: 'asc' },
     });
     const hasHadTrial = !!existingSubscription;

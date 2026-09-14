@@ -870,7 +870,8 @@ export async function cancelBooking(
       if (guard.count === 0) throw makeError('ALREADY_CANCELLED', 'Booking was already cancelled')
 
       // Wallet refund (WalletTransaction only â€” no balance field update)
-      if (refundAmount > 0 && booking.customer?.userId) {
+      // SECURITY: Offline bookings never issue platform wallet credits (cash payments handled externally)
+      if (refundAmount > 0 && booking.source === 'platform' && booking.customer?.userId) {
         const wallet = await tx.clientWallet.findUnique({ where: { userId: booking.customer.userId } })
         if (wallet) {
           await tx.walletTransaction.create({
@@ -899,7 +900,8 @@ export async function cancelBooking(
   }
 
   // FinancialLedger â€” after tx (non-critical)
-  if (refundAmount > 0 && booking.customer?.userId) {
+  // SECURITY: Offline bookings never record platform refunds (cash handled externally)
+  if (refundAmount > 0 && booking.source === 'platform' && booking.customer?.userId) {
     try {
       const args = {
         refundId:           `cancel-${bookingId}`,

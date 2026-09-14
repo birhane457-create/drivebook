@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     if ((DRIVING_DOC_FIELDS as readonly string[]).includes(documentType)) {
       await (prisma as any).drivingProviderProfile.upsert({
         where: { providerId: session!.user!.providerId },
-        create: { preferredproviderId: session!.user!.providerId, [documentType]: result.url },
+        create: { providerId: session!.user!.providerId, [documentType]: result.url },
         update: { [documentType]: result.url },
       });
     } else {
