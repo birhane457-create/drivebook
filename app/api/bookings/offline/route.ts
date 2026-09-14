@@ -61,6 +61,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = offlineBookingSchema.parse(body);
 
+    // ── Offline amount validation ─────────────────────────────────────────────
+    // Offline bookings are self-reported (cash/bank transfer external to platform).
+    // Set reasonable maximum to prevent earnings report fraud while preserving
+    // legitimate use cases: discounts, free lessons, test prep ($150), packages ($1500).
+    const MAX_OFFLINE_BOOKING_AMOUNT = 2000;
+    
+    if (data.offlineAmountPaid && data.offlineAmountPaid > MAX_OFFLINE_BOOKING_AMOUNT) {
+      return NextResponse.json({
+        error: `Offline booking amount ($${data.offlineAmountPaid.toFixed(2)}) exceeds platform maximum ($${MAX_OFFLINE_BOOKING_AMOUNT}). For lessons above this amount, please contact support.`,
+        maxAllowed: MAX_OFFLINE_BOOKING_AMOUNT,
+      }, { status: 400 });
+    }
+
     // ── Platform client guard ─────────────────────────────────────────────────
     // Offline bookings are only for the instructor's pre-existing cash students.
     // If a client with this email already has a DriveBook account linked to this

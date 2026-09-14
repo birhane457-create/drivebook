@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { stripeService } from '@/lib/services/stripe';
 import { smsService } from '@/lib/services/sms';
 import { recordFullRefund } from '@/lib/services/ledger-operations';
-import { requirePermission } from '@/lib/auth/requireRole';
+import { checkPermission } from '@/lib/rbac/checkPermission';
 import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
@@ -16,8 +16,9 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const deny = await requirePermission(session, PERM.FINANCE_DISPUTES_MANAGE);
-    if (deny) return deny;
+    // F-08 FIX: Use checkPermission (not requirePermission) to get full result for maxRefundAmount enforcement
+    const check = await checkPermission(session, PERM.FINANCE_DISPUTES_MANAGE);
+    if (!check.allowed) return check.response;
 
     let amount, reason, deductFromInstructor;
     
@@ -73,6 +74,25 @@ export async function POST(
         { error: `Refund amount ($${refundAmount}) cannot exceed transaction amount ($${transaction.amount})` },
         { status: 400 }
       );
+    }
+
+    // F-08 FIX: Enforce maxRefundAmount for non-SUPER_ADMIN users
+    // SUPER_ADMIN: no limit (isSuperAdmin = true, staffMember = null)
+    // ADMIN with maxRefundAmount = 0: cannot refund anything
+    // ADMIN with maxRefundAmount = 500: can refund up to $500
+    // ADMIN with maxRefundAmount = null: treated as 0 (no refunds)
+    if (!check.isSuperAdmin && check.staffMember) {
+      const limit = check.staffMember.maxRefundAmount != null 
+        ? Number(check.staffMember.maxRefundAmount) 
+        : 0;
+      
+      if (refundAmount > limit) {
+        return NextResponse.json({
+          error: `Refund amount ($${refundAmount.toFixed(2)}) exceeds your authorized limit of $${limit.toFixed(2)}. Contact a SUPER_ADMIN for refunds above this amount.`,
+          maxAllowed: limit,
+          requested: refundAmount,
+        }, { status: 403 });
+      }
     }
 
     // Process refund through Stripe
