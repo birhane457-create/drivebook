@@ -228,6 +228,14 @@ export async function POST(req: NextRequest) {
     } else {
       // First-ever subscription — start fresh trial
       const trialEnd = getTrialEndDate(tier as any);
+      
+      // F-13 FIX: Copy Provider's stripeCustomerId to Subscription for authoritative correlation
+      // This allows webhooks to match the trial using stripeCustomerId + providerId
+      const provider = await prisma.provider.findUnique({
+        where: { id: user.provider?.id },
+        select: { stripeCustomerId: true }
+      });
+      
       subscription = await prisma.subscription.create({
         data: {
           providerId: user.provider?.id,
@@ -238,6 +246,7 @@ export async function POST(req: NextRequest) {
           currentPeriodStart: now,
           currentPeriodEnd: periodEnd,
           trialEndsAt: trialEnd,
+          stripeCustomerId: provider?.stripeCustomerId || null,  // F-13: Authoritative correlation
         },
       });
 
