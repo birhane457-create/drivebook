@@ -375,5 +375,301 @@ Need to verify remaining findings from GPT's audit:
 - AUTH/RBAC/DATA findings (15+ items)
 - Total: 40+ remaining claims to verify
 
-**Next Step:** Continue systematic verification or implement P0-01 fix first?
+### What's Left
+
+**Total findings to verify:** ~60+ across multiple audit documents
+
+**Subscription findings (SUB-*):** 24 items
+- Source: `SUBSCRIPTION_PRODUCTION_CHAIN_AUDIT_2026-09-14.md`
+- Already verified: SUB-H-01, SUB-H-02 (Area 6 - both confirmed)
+- Remaining: 22 items
+
+**Area 4-6 findings (F-*):** ~20 items
+- Area 4: F-05, F-06, F-07, I-01, I-02 (5 items)
+- Area 5: F-08 (1 item)
+- Area 6: F-09, F-10, F-11, F-12, F-13 (5 items - some already verified)
+
+**Security audit findings (H-*, M-*, C-*):** ~26 items
+- Forensic audit: H-1 through H-4, M-1+ (12 items)
+- Phase 2 audit: C-1 through C-3, H-5, H-6+ (14 items)
+
+**Next step:** Start with subscription findings (SUB-*) since they're well-documented
+
+
+
+---
+
+## Subscription Findings Verification
+
+### SUB-01-A: Duplicate State Representation
+
+**GPT Claim:**
+> "Provider and Subscription both contain state that can represent the same business fact. This is workable, but only if every mutation path maintains an explicit invariant."
+
+**Severity:** P1 architectural risk
+
+**Status:** ✅ CONFIRMED
+
+**Actual Schema Found:**
+
+```prisma
+// Provider model (lines ~90-95)
+model Provider {
+  subscriptionTier          String             @default("BASIC")
+  subscriptionStatus        String             @default("TRIAL")
+  trialEndsAt               DateTime?
+  stripeCustomerId          String?
+  stripeSubscriptionId      String?
+  // ... many other fields ...
+  subscriptions             Subscription[]
+}
+
+// Subscription model (found via search)
+model Subscription {
+  id                   String    @id @default(cuid())
+  providerId           String
+  tier                 String
+  status               String
+  stripeSubscriptionId String?
+  stripeCustomerId     String?
+  trialEndsAt          DateTime?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean?
+  cancelledAt          DateTime?
+  // ... more fields ...
+}
+```
+
+**My Assessment:**
+
+**GPT's Claim:** ✅ **100% ACCURATE**
+
+- ✅ Both models DO contain overlapping state
+- ✅ Provider has: subscriptionTier, subscriptionStatus, trialEndsAt, stripeCustomerId, stripeSubscriptionId
+- ✅ Subscription has: tier, status, trialEndsAt, stripeCustomerId, stripeSubscriptionId
+- ✅ This IS duplicate state representation
+- ✅ Requires invariant maintenance across all mutation paths
+
+**Real Risk:** HIGH (Architectural)
+- Data can become inconsistent
+- No single source of truth
+- Multiple update paths can diverge
+- Requires careful synchronization
+
+**Is This A Bug?** NO - It's an architectural pattern
+- Intentional denormalization for query performance
+- Provider fields allow fast access without JOIN
+- Subscription table provides full history/audit trail
+- Common pattern BUT requires discipline
+
+**Required:** Central invariant enforcement or state machine
+
+---
+
+### SUB-02-A: Provider + Subscription Not One Transaction
+
+**GPT Claim:**
+> "The route creates/updates Subscription and then updates Provider separately. A failure between the two operations can produce: Subscription = TRIAL, Provider = old state (or reverse)."
+
+**Severity:** P1
+
+**File:** `app/api/instructor/subscription/route.ts`
+
+**Status:** ✅ CONFIRMED
+
+**Actual Code Found (lines 201-231 for first subscription):**
+
+```typescript
+// First-ever subscription — start fresh trial
+const trialEnd = getTrialEndDate(tier as any);
+
+// Get provider's stripeCustomerId
+const provider = await prisma.provider.findUnique({
+  where: { id: user.provider?.id },
+  select: { stripeCustomerId: true }
+});
+
+// Step 1: Create subscription (separate operation)
+subscription = await prisma.subscription.create({
+  data: {
+    providerId: user.provider?.id,
+    tier,
+    status: 'TRIAL',
+    monthlyAmount: amount,
+    billingCycle,
+    currentPeriodStart: now,
+    currentPeriodEnd: periodEnd,
+    trialEndsAt: trialEnd,
+    stripeCustomerId: provider?.stripeCustomerId || null,
+  },
+});
+
+// Step 2: Update provider (separate operation - NOT in transaction)
+await prisma.provider.update({
+  where: { id: user.provider?.id },
+  data: {
+    subscriptionTier: tier  as any,
+    subscriptionStatus: 'TRIAL',
+    trialEndsAt: trialEnd,
+    maxProviders: plan.limits.providers,
+  },
+});
+```
+
+**My Assessment:**
+
+**GPT's Claim:** ✅ **100% ACCURATE**
+
+- ✅ Two separate DB operations (NOT in `$transaction`)
+- ✅ Subscription created first (line 209)
+- ✅ Provider updated second (line 223)
+- ✅ Failure between them creates inconsistent state
+
+**Attack/Failure Scenarios:**
+
+**Scenario 1: Provider update fails**
+```
+subscription.create() ✅ succeeds
+provider.update() ❌ fails
+Result: Subscription=TRIAL, Provider=OLD_STATE
+```
+
+**Scenario 2: Network/timeout between calls**
+```
+subscription.create() ✅ completes
+<network interruption>
+provider.update() never executes
+Result: Orphaned subscription in DB
+```
+
+**Real Risk:** HIGH
+- No atomic guarantee
+- State can diverge
+- No automatic recovery
+- Affects billing and access control
+
+**Required Fix:**
+```typescript
+await prisma.$transaction(async (tx) => {
+  const subscription = await tx.subscription.create({...});
+  await tx.provider.update({...});
+  return subscription;
+});
+```
+
+---
+
+### SUB-02-B: Concurrent First-Trial Creation
+
+**GPT Claim:**
+> "The route performs a `findFirst()` before deciding whether to create a Subscription. Two simultaneous POST requests can theoretically both observe no existing subscription."
+
+**Severity:** P1
+
+**File:** `app/api/instructor/subscription/route.ts`
+
+**Status:** ✅ CONFIRMED
+
+**Actual Code Found (lines 109-200):**
+
+```typescript
+// Step 1: Check if subscription exists (separate query)
+const existingSubscription = await prisma.subscription.findFirst({
+  where: {
+    providerId: user.provider?.id,
+    status: { in: ['TRIAL', 'ACTIVE'] },
+  },
+});
+
+// ... handling for existing subscription ...
+
+} else {
+  // Step 2: No existing found - create new (separate operation)
+  subscription = await prisma.subscription.create({
+    data: {
+      providerId: user.provider?.id,
+      tier,
+      status: 'TRIAL',
+      // ...
+    },
+  });
+}
+```
+
+**My Assessment:**
+
+**GPT's Claim:** ✅ **100% ACCURATE**
+
+- ✅ `findFirst()` check happens first
+- ✅ `create()` happens later (NOT atomic)
+- ✅ Race condition IS possible
+
+**Race Condition Scenario:**
+
+```
+Time  Request A                    Request B
+---   ---------                    ---------
+T1    findFirst() → null
+T2                                 findFirst() → null
+T3    create() → subscription A
+T4                                 create() → subscription B
+Result: TWO trial subscriptions for same provider!
+```
+
+**Real Risk:** HIGH
+- Creates duplicate subscriptions
+- Billing confusion
+- Access control issues
+- No unique constraint prevents it
+
+**Why It Happens:**
+- No transaction wrapping check + create
+- No database-level unique constraint on `(providerId, status IN ('TRIAL','ACTIVE'))`
+- Concurrent requests see "no subscription exists" simultaneously
+
+**Required Fix Option 1 (Atomic):**
+```typescript
+// Use updateMany with count check (atomic claim pattern)
+const result = await prisma.subscription.updateMany({
+  where: {
+    providerId,
+    status: { in: ['TRIAL', 'ACTIVE'] },
+    // Will match 0 rows if none exist
+  },
+  data: { tier /* update if exists */ }
+});
+
+if (result.count === 0) {
+  // Try create with unique constraint violation handling
+  try {
+    await prisma.subscription.create({...});
+  } catch (e) {
+    if (e.code === 'P2002') {
+      // Another request won - retry findFirst
+    }
+  }
+}
+```
+
+**Required Fix Option 2 (DB Constraint):**
+```sql
+-- Add partial unique index
+CREATE UNIQUE INDEX subscription_active_per_provider 
+ON "Subscription" (provider_id) 
+WHERE status IN ('TRIAL', 'ACTIVE');
+```
+
+---
+
+## Subscription Verification Progress
+
+**Completed:** 3/24 findings
+- ✅ SUB-01-A: Duplicate state (CONFIRMED - architectural risk)
+- ✅ SUB-02-A: Not one transaction (CONFIRMED - high risk)
+- ✅ SUB-02-B: Concurrent creation race (CONFIRMED - high risk)
+
+**Remaining:** 21 subscription findings + 40+ other findings
+
+**Status:** Continuing systematic verification...
 
