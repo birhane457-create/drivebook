@@ -613,35 +613,118 @@ await prisma.auditLog.create({
 
 ---
 
-## Verdict
+## Verdict (Updated After Independent Review)
 
-**Status**: ✅ **SOURCE VERIFIED** + 🧪 **LOGIC TEST VERIFIED**
+**Status**: ⚠️ **PARTIAL CLOSE - CONCURRENT RACE CONDITION IDENTIFIED**
 
-**Summary**:
-The P0-01 vulnerability has been correctly fixed in source code:
-- Ownership checks are properly implemented
-- Fail-closed behavior is correct
-- Attack paths are blocked
-- No bypass routes exist
-- Logic tests confirm correctness
+### What Was Verified ✅
 
-**Remaining Work**:
-1. ⏳ Run TypeScript build verification
-2. ⏳ Add integration tests for end-to-end attack scenarios
-3. ⏳ Test in actual Stripe sandbox environment
-4. ⏳ Review production logs for any P0-01 exploitation attempts
+**Ownership Security - SOURCE VERIFIED - CLOSED**:
+- Ownership checks are properly implemented ✅
+- Fail-closed behavior is correct ✅
+- Cross-user attack paths are blocked ✅
+- No bypass routes exist ✅
+- Original P0-01 vulnerability is FIXED ✅
 
-**Confidence Level**: **HIGH (90%)**
-- Source code is correct ✅
-- Logic is sound ✅
-- Tests verify logic ✅
-- No bypass routes ✅
-- Integration testing needed for 100% confidence
+### What Was NOT Verified ⚠️
 
-**Recommendation for Closure**: 
-- ✔️ **APPROVED** for deployment with caveat that integration tests should be added
-- ✔️ Fix is sound and secure based on source inspection
-- ✔️ No critical gaps identified in implementation
+**Concurrent Replay Protection - RACE CONDITION FOUND - OPEN**:
+
+**Issue**: The idempotency check occurs OUTSIDE the database transaction:
+
+```typescript
+// Line 189: Check happens OUTSIDE transaction
+const existingTransaction = await prisma.walletTransaction.findFirst({...});
+
+if (existingTransaction) return duplicate;
+
+// Line 218: Transaction starts AFTER the check
+const result = await prisma.$transaction(async (tx) => {
+  await tx.walletTransaction.create({...});  // Race window here!
+});
+```
+
+**Race Scenario**:
+```
+Time    Request A                    Request B
+----    ---------                    ---------
+T0      findFirst(pi_123) → NULL     
+T1                                   findFirst(pi_123) → NULL
+T2      create(pi_123) ✅            
+T3                                   create(pi_123) ✅
+Result: DOUBLE CREDIT ($200 from $100 payment)
+```
+
+**Root Cause**:
+- Check-then-act pattern (TOCTOU vulnerability)
+- No database uniqueness constraint on `stripePaymentIntentId`
+- No serialization of concurrent requests for same PaymentIntent
+
+**Test Gap**:
+- Existing test uses sequential `await POST()` calls
+- Does NOT test genuine concurrency (`Promise.all`)
+- Does NOT verify database-level race protection
+
+### Severity Assessment
+
+**P0-01A (Original): Cross-User PaymentIntent Theft**
+- Status: ✅ CLOSED
+- Severity: CRITICAL (was)
+- Fix: SOURCE VERIFIED
+
+**P0-01B (New): Concurrent Double-Credit Race**
+- Status: ⚠️ OPEN
+- Severity: MEDIUM
+- Requires: Database constraint OR transaction refactor
+
+**Why MEDIUM (not CRITICAL)**:
+- Attacker must pay real money (no free money)
+- Narrow race window (low success rate)
+- Platform takes financial loss but attacker also pays
+- Requires programming knowledge + precise timing
+
+### Recommended Fixes
+
+**Option 1 (Preferred): Database Unique Constraint**
+```sql
+CREATE UNIQUE INDEX wallet_transaction_stripe_payment_intent_unique
+ON "WalletTransaction" ((metadata->>'stripePaymentIntentId'))
+WHERE metadata->>'stripePaymentIntentId' IS NOT NULL;
+```
+
+**Option 2: Move Check Inside Transaction with Serializable Isolation**
+
+**Option 3: PostgreSQL Advisory Lock**
+
+See `P0-01_VERIFICATION_ADDENDUM.md` for detailed implementation.
+
+### Updated Closure Criteria
+
+P0-01 can be fully closed when:
+
+1. ✅ Ownership security verified (DONE)
+2. ⚠️ Concurrent race condition fixed (PENDING)
+3. ⚠️ Database constraint OR transaction pattern fixed (PENDING)
+4. ⚠️ Concurrent integration tests added and passing (PENDING)
+5. ⚠️ Fix deployed and verified (PENDING)
+
+**Confidence Level**: **HIGH for ownership, LOW for concurrency**
+- Ownership fix is correct ✅
+- Concurrent replay has exploitable race ⚠️
+- Integration testing required before full closure ⚠️
+
+**Recommendation**: 
+- ✔️ **DEPLOY** ownership fix (original P0-01A is closed)
+- ⚠️ **TRACK** P0-01B as new MEDIUM finding
+- 🔧 **IMPLEMENT** database constraint fix
+- 🧪 **ADD** concurrent integration tests
+- ❌ **DO NOT CLOSE** P0-01 completely until P0-01B resolved
+
+---
+
+**Verification Principle Validated**:
+> Kiro's 90% confidence is useful evidence, but not the closure criterion.
+> Independent verification caught concurrency issue that automated analysis missed.
 
 ---
 
