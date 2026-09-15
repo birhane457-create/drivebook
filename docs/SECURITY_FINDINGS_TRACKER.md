@@ -54,37 +54,47 @@
 
 ### P0-01B: Concurrent Wallet Credit Race Condition
 
-**Status**: ✅ **FIXED** (New finding + fix from independent review)  
+**Status**: ✔️ **CLOSED**  
 **Severity**: MEDIUM → FIXED  
 **Original Issue**: Two simultaneous requests could both credit wallet from same PaymentIntent (TOCTOU race)
 
 **Verification**:
-- ✅ SOURCE VERIFIED (2026-09-11)
-- ✅ FIX IMPLEMENTED - Database unique constraint
-- ✅ TEST CREATED - Genuine concurrent test (Promise.all)
+- ✅ SOURCE VERIFIED (2026-09-11) — race condition confirmed in source
+- ✅ DATABASE CONSTRAINT APPLIED — migration deployed to Supabase (2026-09-11)
+- ✅ TEST VERIFIED (2026-09-11) — 12/12 tests pass against live database
+- ✅ ROUTE UPDATED — dynamic `require()` replaced with top-level import; P2002 catch returns 409
+
+**Test Evidence** (actual run output):
+```
+Test Files  2 passed (2)
+     Tests  12 passed (12)
+  Start at  22:40:22
+  Duration  98.27s
+  TEST_EXIT: 0
+```
+
+**Tests that pass**:
+- ✓ prevents double-credit when two genuinely concurrent requests arrive
+- ✓ allows sequential requests with different PaymentIntents (no false positives)
+- ✓ handles triple concurrent requests (stress test)
+- ✓ demonstrates the vulnerability window (before database constraint)
+- ✓ All 8 ownership tests (P0-01A) still pass
 
 **Fix Implemented**:
-- Database unique index on `metadata->>'stripePaymentIntentId'`
-- Migration: `20260911000000_add_wallet_transaction_payment_intent_unique`
-- Concurrent integration test: `p0-01b-concurrent.test.ts`
-- Second concurrent request will fail with unique violation (409 or 500)
+- Database unique index on `metadata->>'stripePaymentIntentId'` (partial, WHERE NOT NULL)
+- Migration: `20260911000000_add_wallet_transaction_payment_intent_unique` — **DEPLOYED**
+- Route: `stripeService` moved to top-level import (allows vi.mock to intercept)
+- Route: P2002 catch block returns 409 with `PAYMENT_ALREADY_CREDITED` code
+- Tests: fixed `next-auth/next` mock, scoped DB cleanup, vi.mock hoisting issue
 
 **Files Changed**:
-- `prisma/migrations/20260911000000_add_wallet_transaction_payment_intent_unique/migration.sql`
-- `prisma/schema.prisma` (documentation comment)
-- `app/api/client/wallet-add/__tests__/p0-01b-concurrent.test.ts` (new test)
-- `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts` (clarified sequential test)
+- `prisma/migrations/20260911000000_.../migration.sql` — deployed to DB
+- `app/api/client/wallet-add/route.ts` — top-level import + P2002 catch
+- `app/api/client/wallet-add/__tests__/p0-01b-concurrent.test.ts` — concurrent tests
+- `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts` — mock fixes
+- `vitest.config.ts` — hookTimeout/testTimeout for cloud DB
 
-**Attack Blocked**: ✅ Two concurrent requests → only ONE wallet credit created
-
-**Closure Criteria**:
-- ✅ Database constraint provides foolproof protection
-- ✅ Concurrent tests verify behavior
-- ⚠️ Deployment pending (migration needs to run)
-
-**See**: 
-- `docs/P0-01B_FIX_IMPLEMENTATION.md` - Full fix documentation
-- `docs/P0-01_VERIFICATION_ADDENDUM.md` - Race condition discovery
+**Attack Blocked**: ✅ Concurrent requests → exactly ONE WalletTransaction row (DB enforced)
 
 ---
 

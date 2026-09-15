@@ -27,21 +27,21 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '../route';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 
-// Mock next-auth
-vi.mock('next-auth', () => ({
+// Mock next-auth/next — matches the production route import
+vi.mock('next-auth/next', () => ({
   getServerSession: vi.fn(),
 }));
 
-// Mock Stripe service
-const mockStripeService = {
-  retrievePaymentIntent: vi.fn(),
-};
-
+// Stripe mock — factory must not reference outer variables (vi.mock is hoisted)
 vi.mock('@/lib/services/stripe', () => ({
-  stripeService: mockStripeService,
+  stripeService: { retrievePaymentIntent: vi.fn() },
 }));
+
+// Typed accessor used in tests
+import { stripeService as _stripeService } from '@/lib/services/stripe';
+const mockStripeService = _stripeService as { retrievePaymentIntent: ReturnType<typeof vi.fn> };
 
 describe('P0-01: Wallet Ownership Bypass Remediation', () => {
   let userA: { id: string; email: string; walletId: string };
@@ -50,12 +50,21 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
   let paymentIntentB: string;
 
   beforeAll(async () => {
-    // Clean slate
-    await prisma.walletTransaction.deleteMany({});
-    await prisma.clientWallet.deleteMany({});
-    await prisma.user.deleteMany({
-      where: { email: { in: ['user-a-p001@test.com', 'user-b-p001@test.com'] } }
-    });
+    // Clean slate — scoped to test emails only (no full-table deletes)
+    const TEST_EMAILS = ['user-a-p001@test.com', 'user-b-p001@test.com'];
+    for (const email of TEST_EMAILS) {
+      const existing = await prisma.user.findUnique({
+        where: { email },
+        include: { wallet: { include: { transactions: true } } }
+      });
+      if (existing?.wallet) {
+        await prisma.walletTransaction.deleteMany({ where: { walletId: existing.wallet.id } });
+        await prisma.clientWallet.delete({ where: { id: existing.wallet.id } });
+      }
+      if (existing) {
+        await prisma.user.delete({ where: { id: existing.id } });
+      }
+    }
 
     // Create User A with wallet
     const userARecord = await prisma.user.create({
@@ -142,7 +151,7 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.wallet.balance).toBe(100);
-      expect(data.transaction.amount).toBe(100);
+      expect(Number(data.transaction.amount)).toBe(100);
 
       // Verify wallet transaction created
       const tx = await prisma.walletTransaction.findFirst({
@@ -409,6 +418,14 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
 
   describe('❌ NEGATIVE PATH: Nonexistent wallet', () => {
     it('creates wallet if user exists but wallet missing', async () => {
+      // Clean up any leftover from a previous run
+      const existingNoWallet = await prisma.user.findUnique({ where: { email: 'user-nowallet-p001@test.com' }, include: { wallet: { include: { transactions: true } } } });
+      if (existingNoWallet?.wallet) {
+        await prisma.walletTransaction.deleteMany({ where: { walletId: existingNoWallet.wallet.id } });
+        await prisma.clientWallet.delete({ where: { id: existingNoWallet.wallet.id } });
+      }
+      if (existingNoWallet) await prisma.user.delete({ where: { id: existingNoWallet.id } });
+
       // Create user without wallet
       const userNoWallet = await prisma.user.create({
         data: {
