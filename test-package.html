@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt DB-2026-PKG001</title>
+  
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    color: #1f2937;
+    background-color: #f3f4f6;
+    padding: 20px;
+  }
+  
+  .receipt-container {
+    max-width: 650px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  
+  /* Header Styles */
+  .header {
+    padding: 32px;
+    color: white;
+    text-align: center;
+  }
+  
+  .header.blue-gradient {
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  }
+  
+  .header.red-gradient {
+    background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  }
+  
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  
+  .header .subtitle {
+    font-size: 14px;
+    opacity: 0.9;
+  }
+  
+  /* Metadata Table */
+  .metadata {
+    padding: 24px 32px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .metadata table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .metadata td {
+    padding: 6px 0;
+    font-size: 14px;
+  }
+  
+  .metadata td:first-child {
+    color: #6b7280;
+    width: 140px;
+  }
+  
+  .metadata td:last-child {
+    color: #1f2937;
+    font-weight: 500;
+  }
+  
+  /* Section Styles */
+  .section {
+    padding: 24px 32px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .section h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 16px;
+  }
+  
+  .supplier-info {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  
+  .supplier-info p {
+    margin: 4px 0;
+  }
+  
+  .rcti-block {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  
+  .rcti-block .rcti-label {
+    font-weight: 700;
+    color: #92400e;
+    margin-bottom: 8px;
+  }
+  
+  .rcti-block p {
+    margin: 4px 0;
+  }
+  
+  /* Line Items Table */
+  .line-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+  }
+  
+  .line-items tr {
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .line-items tr:last-child {
+    border-bottom: none;
+  }
+  
+  .line-items td {
+    padding: 12px 0;
+    font-size: 14px;
+  }
+  
+  .line-items td:first-child {
+    color: #1f2937;
+  }
+  
+  .line-items td.amount {
+    text-align: right;
+    font-weight: 600;
+    color: #1f2937;
+    white-space: nowrap;
+  }
+  
+  /* GST Summary */
+  .gst-summary {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 8px;
+  }
+  
+  .note {
+    font-size: 13px;
+    color: #6b7280;
+    font-style: italic;
+    margin-top: 12px;
+  }
+  
+  /* Wallet Box */
+  .wallet-box {
+    padding: 24px 32px;
+    background: #eff6ff;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .wallet-box h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e40af;
+    margin-bottom: 16px;
+  }
+  
+  .wallet-box table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .wallet-box td {
+    padding: 6px 0;
+    font-size: 14px;
+  }
+  
+  .wallet-box td:first-child {
+    color: #1f2937;
+  }
+  
+  .wallet-box td:last-child {
+    text-align: right;
+    font-weight: 600;
+  }
+  
+  .wallet-box .credit {
+    color: #059669;
+  }
+  
+  .wallet-box .debit {
+    color: #dc2626;
+  }
+  
+  .wallet-box .balance {
+    font-size: 16px;
+    color: #1e40af;
+  }
+  
+  /* Payment Details */
+  .payment-details {
+    padding: 24px 32px;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .payment-details h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 16px;
+  }
+  
+  .payment-details table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .payment-details td {
+    padding: 6px 0;
+    font-size: 14px;
+  }
+  
+  .payment-details td:first-child {
+    color: #6b7280;
+  }
+  
+  .payment-details td:last-child {
+    text-align: right;
+    font-weight: 600;
+    color: #1f2937;
+  }
+  
+  .payment-details .total {
+    font-size: 18px;
+    color: #1e40af;
+    padding-top: 8px;
+    border-top: 2px solid #e5e7eb;
+  }
+  
+  .payment-details .reference {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #6b7280;
+  }
+  
+  /* Cancellation Policy */
+  .policy {
+    padding: 24px 32px;
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+  }
+  
+  .policy h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #92400e;
+    margin-bottom: 12px;
+  }
+  
+  .policy ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .policy li {
+    padding: 6px 0;
+    font-size: 14px;
+    color: #78350f;
+  }
+  
+  .policy li:before {
+    content: "• ";
+    font-weight: bold;
+    margin-right: 8px;
+  }
+  
+  /* Footer */
+  .footer {
+    padding: 24px 32px;
+    background: #f9fafb;
+    font-size: 13px;
+    color: #6b7280;
+    text-align: center;
+  }
+  
+  .footer a {
+    color: #2563eb;
+    text-decoration: none;
+  }
+  
+  .footer a:hover {
+    text-decoration: underline;
+  }
+  
+  .footer p {
+    margin: 8px 0;
+  }
+  
+  .footer .links {
+    margin: 16px 0;
+  }
+  
+  .footer .links a {
+    margin: 0 12px;
+  }
+</style>
+    
+</head>
+<body>
+  <div class="receipt-container">
+    <div class="header blue-gradient">
+  <h1>Payment Receipt &amp; Tax Invoice</h1>
+  <p class="subtitle">DriveBook Platform</p>
+</div>
+    <div class="metadata">
+  <table>
+    
+      <tr>
+        <td>Receipt Number:</td>
+        <td>DB-2026-PKG001</td>
+      </tr>
+      <tr>
+        <td>Date:</td>
+        <td>Wednesday 9 September 2026 at 02:13 am</td>
+      </tr>
+      <tr>
+        <td>Customer:</td>
+        <td>John Smith</td>
+      </tr>
+      <tr>
+        <td>Email:</td>
+        <td>john@test.com</td>
+      </tr>
+    
+      <tr>
+        <td>Booking Start:</td>
+        <td>Saturday 15 June 2024 at 10:00 am</td>
+      </tr>
+      <tr>
+        <td>Duration:</td>
+        <td>{context.booking.duration} minutes</td>
+      </tr>
+      
+  </table>
+</div>
+    <div class="section">
+  <h2>Platform Fee</h2>
+  <div class="supplier-info">
+  <p><strong>Supplier:</strong> DriveBook</p>
+  <p><strong>ABN:</strong> 23 806 069 420</p>
+</div>
+  <table class="line-items">
+  
+      <tr>
+        <td>Platform Service Fee</td>
+        <td class="amount">$30.78</td>
+      </tr>
+    
+</table>
+  <p class="gst-summary">GST included: $2.80 (Goods & Services Tax)</p>
+  
+</div>
+<div class="section">
+  <h2>Service</h2>
+  <div class="supplier-info">
+  <p><strong>Supplier:</strong> Jane Instructor</p>
+  <p><strong>ABN:</strong> 12345678901</p>
+</div>
+  <table class="line-items">
+  
+      <tr>
+        <td>Driving Lesson - 60 minutes</td>
+        <td class="amount">$90.00</td>
+      </tr>
+    
+</table>
+  <p class="gst-summary">GST included: $8.18 (Goods & Services Tax)</p>
+  
+</div>
+<div class="section">
+  <h2>Wallet</h2>
+  
+  <table class="line-items">
+  
+      <tr>
+        <td>Wallet Credits</td>
+        <td class="amount">$734.22</td>
+      </tr>
+    
+</table>
+  
+  <p class="note">GST (if any) applies when credits are redeemed for services</p>
+</div>
+    <div class="wallet-box">
+  <h3>Wallet Balance</h3>
+  <table>
+    
+        <tr>
+          <td>Previous balance:</td>
+          <td>$0.00</td>
+        </tr>
+      
+        <tr>
+          <td>Credits added:</td>
+          <td class="credit">+$734.22</td>
+        </tr>
+      
+        <tr>
+          <td>Lesson debit:</td>
+          <td class="debit">-$90.00</td>
+        </tr>
+      
+      <tr>
+        <td>New balance:</td>
+        <td class="balance">$644.22</td>
+      </tr>
+    
+        <tr>
+          <td></td>
+          <td style="font-size: 12px; color: #6b7280;">(approx. 7.2 hrs)</td>
+        </tr>
+      
+  </table>
+</div>
+    <div class="payment-details">
+  <h3>Payment</h3>
+  <table>
+    
+        <tr class="total">
+          <td>Total charged:</td>
+          <td>$885.78</td>
+        </tr>
+      
+          <tr>
+            <td>Payment method:</td>
+            <td>Visa 4242</td>
+          </tr>
+        
+  </table>
+</div>
+    <div class="policy">
+  <h3>Cancellation Policy</h3>
+  <ul>
+    <li>24+ hours notice: full refund</li>
+    <li>Under 24 hours: no refund</li>
+  </ul>
+</div>
+    <div class="footer">
+  <p class="links">
+    <a href="https://drivebook.com.au/bookings/b1">Manage booking</a> &nbsp;|&nbsp; <a href="mailto:support@drivebook.com.au">Contact support</a> &nbsp;|&nbsp; <a href="https://drivebook.com.au/client-dashboard">View dashboard</a> &nbsp;|&nbsp; <a href="https://drivebook.com.au/login">Login</a>
+  </p>
+  <p>Questions? Email us at <a href="mailto:support@drivebook.com.au">support@drivebook.com.au</a></p>
+  <p style="margin-top: 16px; font-size: 12px;">
+    New to DriveBook? Your account was created automatically.<br>
+    Login at <a href="https://drivebook.com.au/login">https://drivebook.com.au/login</a> using the email this receipt was sent to.
+  </p>
+</div>
+  </div>
+</body>
+</html>

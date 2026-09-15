@@ -1,0 +1,268 @@
+# Test User Credentials
+
+**Created:** August 15, 2026  
+**Status:** ✅ Active
+
+---
+
+## 🔐 Super Admin
+
+**Purpose:** Full system administration access
+
+| Field | Value |
+|-------|-------|
+| **Email** | `admin@drivebook.com.au` |
+| **Password** | `Admin123!` |
+| **Role** | SUPER_ADMIN |
+| **Status** | Email Verified ✅ |
+
+**Access:**
+- Admin dashboard: `http://localhost:3000/admin`
+- Full access to all admin features
+- Can approve/reject providers
+- Manage platform settings
+- View all bookings, revenue, analytics
+
+---
+
+## 👤 Provider (Driving Instructor)
+
+**Purpose:** Test provider/instructor account
+
+| Field | Value |
+|-------|-------|
+| **Email** | `instructor@drivebook.com.au` |
+| **Password** | `Provider123!` |
+| **Name** | John Smith |
+| **Phone** | +61412345678 |
+| **Role** | provider |
+| **Status** | APPROVED & ACTIVE ✅ |
+
+**Business Details:**
+- **Business Model:** MARKETPLACE (driving instructor)
+- **Payment Mode:** PLATFORM
+- **Account Type:** INDIVIDUAL
+- **Base Address:** Sydney CBD, NSW 2000
+- **Service Radius:** 20km
+- **Hourly Rate:** $65
+
+**Subscription:**
+- **Tier:** PRO (Trial)
+- **Trial Duration:** 14 days
+- **Features:** All PRO tier features unlocked
+
+**Access:**
+- Provider dashboard: `http://localhost:3000/dashboard`
+- Can manage bookings, clients, schedule
+- Access to analytics and earnings
+- Calendar integration available
+- Mobile app access
+
+---
+
+## 🔗 URLs
+
+| Service | URL |
+|---------|-----|
+| **Homepage** | `http://localhost:3000` |
+| **Login** | `http://localhost:3000/login` |
+| **Register** | `http://localhost:3000/register` |
+| **Admin Dashboard** | `http://localhost:3000/admin` |
+| **Provider Dashboard** | `http://localhost:3000/dashboard` |
+| **Booking Page** | `http://localhost:3000/book` |
+
+---
+
+## 🚀 Quick Start
+
+### Login as Admin
+```bash
+# Navigate to admin login
+# URL: http://localhost:3000/login
+# Email: admin@drivebook.com.au
+# Password: Admin123!
+```
+
+### Login as Provider
+```bash
+# Navigate to login
+# URL: http://localhost:3000/login
+# Email: instructor@drivebook.com.au
+# Password: Provider123!
+```
+
+---
+
+## 📝 Re-running the Script
+
+To create these users again (if database is reset):
+
+```bash
+node scripts/register-test-users.mjs
+```
+
+The script will:
+- Check if users already exist
+- Create users if they don't exist
+- Skip creation if they already exist (idempotent)
+
+---
+
+## 🔄 Reset Users
+
+If you need to delete and recreate users:
+
+```sql
+-- Connect to your PostgreSQL database
+-- Delete provider-related data first (foreign keys)
+DELETE FROM "Subscription" WHERE "providerId" IN (
+  SELECT id FROM "Provider" WHERE "userId" IN (
+    SELECT id FROM "User" WHERE email IN ('admin@drivebook.com.au', 'instructor@drivebook.com.au')
+  )
+);
+
+DELETE FROM "Provider" WHERE "userId" IN (
+  SELECT id FROM "User" WHERE email IN ('admin@drivebook.com.au', 'instructor@drivebook.com.au')
+);
+
+-- Delete users
+DELETE FROM "User" WHERE email IN ('admin@drivebook.com.au', 'instructor@drivebook.com.au');
+```
+
+Then re-run the script to create fresh users.
+
+---
+
+## 📊 Database IDs
+
+**Created on:** First run (IDs will vary)
+
+These IDs are generated dynamically using `cuid()` format.
+
+To check current IDs:
+```sql
+SELECT id, email, role, "emailVerified" FROM "User" 
+WHERE email IN ('admin@drivebook.com.au', 'instructor@drivebook.com.au');
+
+SELECT p.id, p.name, p."approvalStatus", p."subscriptionTier", u.email 
+FROM "Provider" p 
+JOIN "User" u ON p."userId" = u.id 
+WHERE u.email = 'instructor@drivebook.com.au';
+```
+
+---
+
+## ⚠️ Security Notes
+
+**For Development Only:**
+- These credentials are for **local testing only**
+- **DO NOT** use these credentials in production
+- **DO NOT** commit real production credentials to git
+- Change passwords before deploying to production
+- Use strong, unique passwords for production accounts
+
+**Production Setup:**
+1. Use environment-specific credentials
+2. Enable 2FA for admin accounts
+3. Use OAuth/SSO where possible
+4. Rotate passwords regularly
+5. Monitor login attempts
+6. Enable audit logging
+
+---
+
+## 🎯 Next Steps
+
+1. ✅ Users created successfully
+2. Start the development server: `npm run dev`
+3. Login with either credential set
+4. Test admin features (approve providers, view analytics)
+5. Test provider features (create bookings, manage schedule)
+6. Verify email functionality (check logs)
+7. Test subscription flows
+
+---
+
+**Status:** ✅ Ready for testing!
+
+
+---
+
+## 🐛 Recent Bug Fixes (Aug 15, 2026)
+
+### Booking Form Fixes
+
+#### 1. ✅ Split Address Fields
+**Issue:** Single address field didn't allow exact street addresses  
+**Solution:** Split into 2 separate fields:
+- **Street Address / Building** - Free text input (e.g., "123 Main Street, Unit 5")
+- **Suburb / Locality** - Autocomplete from 17,396 Australian suburbs
+- Auto-combines both into full address for API
+
+**Test:**
+```bash
+1. Login: instructor@drivebook.com.au / Provider123!
+2. Go to: /dashboard/bookings/new
+3. Select client
+4. Pick date → time slots appear ✅
+5. Enter street: "123 Main Street"
+6. Type suburb: "sydney" → select from dropdown
+7. Submit → full address saved ✅
+```
+
+#### 2. ✅ Fixed 404 Error on New Client Bookings
+**Issue:** API returned 404 when creating bookings for newly added clients  
+**Root Cause:** API only checked for clients with existing bookings, not manually added clients  
+**Solution:** Updated `/api/bookings` to check BOTH:
+- `preferredProviderId` (manually added clients)
+- Existing bookings with provider
+
+**Before:**
+```typescript
+// Only checked existing bookings
+bookings: { some: { providerId: session.user.providerId } }
+```
+
+**After:**
+```typescript
+// Checks both paths
+OR: [
+  { preferredProviderId: session.user.providerId },
+  { bookings: { some: { providerId: session.user.providerId } } }
+]
+```
+
+#### 3. ✅ Fixed 400 Error on Booking Submission
+**Issue:** Form sent invalid fields causing schema validation errors  
+**Problems:**
+- Sent `price` field (not in instructor booking schema)
+- Sent `createdBy` field (not in schema at all)
+- Incomplete address validation
+
+**Solution:**
+- Removed invalid `price` and `createdBy` fields from instructor bookings
+- Added validation: both street AND suburb required
+- Combined fields properly before submission
+
+**Files Changed:**
+- `components/BookingFormNew.tsx` - Split address UI, validation, removed invalid fields
+- `app/api/bookings/route.ts` - Fixed customer lookup query
+- `components/AddressAutocomplete.tsx` - Renamed to SuburbAutocomplete
+
+---
+
+### Testing Checklist
+
+- [ ] Login as instructor
+- [ ] Navigate to booking form
+- [ ] Select client from dropdown
+- [ ] Date picker appears and works ✅
+- [ ] Select date → time slots load ✅
+- [ ] Enter street address
+- [ ] Type suburb → autocomplete shows results ✅
+- [ ] Select suburb → both fields populated ✅
+- [ ] Submit form → booking created ✅
+- [ ] Verify booking appears in list
+- [ ] Check pickup address is correct (street + suburb)
+
+---

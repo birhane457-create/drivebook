@@ -1,0 +1,163 @@
+# DriveBook Documentation Index
+
+**Purpose:** Quick reference to find documentation by topic.  
+This index reflects the current state of the system — not history.
+
+> **AI Agent:** Before any code change, read `.kiro/steering/platform-model.md` and `.kiro/steering/doc-sync.md`. Both are auto-loaded by Kiro.
+
+---
+
+## By Role
+
+### Students / Clients
+- Booking a lesson → `01-public/BOOKING_FLOW_COMPLETE.md`
+- Payments & wallet → `06-payments/WALLET.md`
+- Cancellations & refunds → `06-payments/REFUNDS.md`
+- Client dashboard → `02-student/DASHBOARD.md`
+- Awaiting payment → `02-student/AWAITING_PAYMENT.md`
+
+### Instructors / Providers
+- Dashboard → `03-instructor/DASHBOARD.md`
+- Schedule (Today / Week / Agenda) → `03-instructor/SCHEDULE.md`
+- Bookings → `03-instructor/BOOKINGS.md`
+- Availability → `03-instructor/AVAILABILITY.md`
+- Earnings & payouts → `06-payments/PAYOUTS.md`
+- Approval & onboarding → `03-instructor/ONBOARDING_APPROVAL.md`
+- Subscription tiers → `07-subscriptions/TIERS.md`
+- Stripe Connect setup → `07-subscriptions/STRIPE_CONNECT_SETUP.md`
+- Branding, logo, domain → `03-instructor/BRANDING.md`
+- Marketing flyer & business cards → `03-instructor/MARKETING.md`
+
+### Admin
+- Dashboard → `05-admin/DASHBOARD.md`
+- Instructor approvals → `05-admin/INSTRUCTOR_APPROVALS.md`
+- Revenue → `05-admin/REVENUE.md`
+- Audit log → `05-admin/AUDIT_LOG.md`
+- Disputes → `05-admin/DISPUTES.md`
+- Payouts → `06-payments/PAYOUTS.md`
+
+### Developers
+- System overview → `00-overview/SYSTEM_OVERVIEW.md`
+- Codebase map → `08-technical/CODEBASE_MAP.md`
+- All API endpoints → `08-technical/API_REFERENCE.md`
+- Stripe & webhooks → `06-payments/STRIPE.md`, `08-technical/WEBHOOKS.md`
+- Security → `08-technical/SECURITY_ASSESSMENT.md`
+- Rate limiting → `08-technical/RATE_LIMITING.md`
+- Cron jobs → `08-technical/CRON_JOBS.md`
+- UI design system → `08-technical/STYLING.md`
+
+---
+
+## By Feature Area
+
+### Booking System
+- Complete user journey → `01-public/BOOKING_FLOW_COMPLETE.md`
+- High-level overview → `01-public/BOOKING_FLOW.md`
+- Slot persistence → `01-public/SLOT_PERSISTENCE_FIX.md`
+- Double-booking prevention → `01-public/RACE_CONDITION_FIX.md`
+- Instructor microsite → `01-public/SUBDOMAIN_PAGE.md`
+- Instructor view → `03-instructor/BOOKINGS.md`
+
+### Payments & Wallet
+- Wallet mechanics → `06-payments/WALLET.md`
+- Stripe integration → `06-payments/STRIPE.md`
+- Instructor payouts → `06-payments/PAYOUTS.md`
+- Commission rates → `06-payments/COMMISSIONS.md`
+- Receipts → `06-payments/RECEIPTS.md`
+- Webhooks → `08-technical/WEBHOOKS.md`
+
+### Subscriptions & Billing
+- Tier comparison (BASIC/PRO/STUDIO/PREMIUM) → `07-subscriptions/TIERS.md`
+- Billing & invoicing → `07-subscriptions/BILLING.md`
+- Trial mechanics → `07-subscriptions/TRIAL.md`
+- Upgrade/downgrade/cancel → `07-subscriptions/UPGRADE_FLOW.md`
+- Trial enforcement → `07-subscriptions/TRIAL_ENFORCEMENT.md`
+
+### Branding & White-Label
+- Provider branding (logo, colours, slug) → `03-instructor/BRANDING.md`
+- Public booking page (subdomain) → `01-public/SUBDOMAIN_PAGE.md`
+- Custom domain setup → `04-business/DOMAIN_SETUP.md`
+- Display name rules → `.kiro/steering/platform-model.md`
+
+### Multi-Vertical / Business Model
+- Platform mental model → `.kiro/steering/platform-model.md`
+- Multi-provider features → `04-business/` ⚠️ **Coming Soon — BUSINESS tier not yet implemented**
+
+### Security
+- Security scorecard & controls → `08-technical/SECURITY_ASSESSMENT.md`
+- Rate limiting → `08-technical/RATE_LIMITING.md`
+- Fraud signals & device tracking → `operations/07-security-fraud.md`
+- Approval gates → `03-instructor/ONBOARDING_APPROVAL.md`
+- Document verification → `05-admin/DOCUMENTS.md`
+
+### Voice AI / Receptionist
+- Integration guide → `08-technical/VOICE_AI_RECEPTIONIST.md`
+- Booking API voice fields → `01-public/BOOKING_FLOW_COMPLETE.md`
+
+---
+
+## Deep-Reference Docs
+
+These are authoritative sources — richer than the role-based summaries above.
+
+| File | Why authoritative |
+|------|------------------|
+| `docs/00-foundation/STATE_MACHINE.md` | Full booking state diagram, transition table, validTransitions code |
+| `docs/00-foundation/FINANCIAL_DOCTRINE.md` | Ledger reconstruction, reconciliation, payout protection, wallet locking |
+| `docs/SUBSCRIPTION_SYSTEM.md` | Full subscription API docs, Stripe integration, payment mode |
+| `docs/SUBDOMAIN_SYSTEM.md` | DNS setup, middleware, branding tiers, custom domain flow |
+| `docs/PUBLIC_BOOKING_FLOW.md` | Voice service bookings, rate limiting, production checklist |
+| `docs/01-architecture/DATABASE_SCHEMA.md` | Full Prisma schema with all fields and integrity rules |
+| `docs/04-legal/CANCELLATION_POLICY.md` | Legal requirements, dispute evidence, policy versioning |
+
+---
+
+## Quick Facts
+
+| Property | Value |
+|----------|-------|
+| Timezone | `Australia/Perth` (AWST, UTC+8) |
+| Currency | AUD |
+| Platform fee | 3.6% of booking total |
+| Commission | BASIC 15% / PRO 12% / STUDIO 11% / PREMIUM 10% |
+| Trial | BASIC/PRO/STUDIO 14 days · PREMIUM 30 days |
+| Slot hold | 10 minutes (`PENDING_PAYMENT` → `EXPIRED`) |
+| Refund window | ≥48h full · 24–48h 50% · <24h none |
+| Payout frequency | Weekly (Tuesdays, 48h settlement) |
+| ABN withholding | 47% withheld if no ABN (remitted to ATO) |
+
+---
+
+## Directory Structure
+
+```
+docs/DOCROLEBASE/
+├── 00-overview/        ← system overview, glossary, flows, state machines
+├── 01-public/          ← public booking, subdomain, SEO
+├── 02-student/         ← student dashboard
+├── 03-instructor/      ← instructor dashboard & features
+├── 04-business/        ← multi-provider (⚠️ Coming Soon)
+├── 05-admin/           ← admin panel
+├── 06-payments/        ← wallet, commissions, payouts, receipts
+├── 07-subscriptions/   ← tiers, billing, trial
+└── 08-technical/       ← webhooks, codebase map, API reference
+
+.kiro/steering/         ← AI agent standing instructions (always loaded)
+  ├── platform-model.md   ← core mental model + quick facts
+  └── doc-sync.md         ← doc update rules
+
+docs/newplan/           ← planning notes (NOT living docs — do not update)
+```
+
+---
+
+## Status
+
+| Area | Status |
+|------|--------|
+| TypeScript | ✅ 0 errors |
+| Public booking flow | ✅ Complete — `getDisplayName()` wired everywhere |
+| White-label (PREMIUM) | ✅ Complete — business name on all public surfaces |
+| BUSINESS tier (multi-provider) | ⏳ Coming Soon — UI placeholder only |
+| DIRECT payment mode | ⏳ Phase 2 — blocked by `assertPlatformPaymentMode()` |
+| Steering files | ✅ `platform-model.md`, `doc-sync.md` |
