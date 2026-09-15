@@ -181,14 +181,13 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
-    let subscription;
     if (existingSubscription) {
       // Changing tier mid-trial — keep the ORIGINAL trial end date, never reset it.
       // The instructor gets one trial across all tiers, not a fresh trial per tier change.
       //
       // SUB-02-A FIX: Both writes are inside a single $transaction so a failure between
       // them cannot leave Subscription and Provider in inconsistent states.
-      subscription = await prisma.$transaction(async (tx) => {
+      const subscription = await prisma.$transaction(async (tx) => {
         const updatedSub = await tx.subscription.update({
           where: { id: existingSubscription.id },
           data: {
