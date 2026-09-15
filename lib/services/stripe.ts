@@ -21,6 +21,12 @@ interface CreatePaymentIntentParams {
   bookingId?: string; // For booking payments
   transactionId?: string; // For wallet purchases
   walletId?: string; // For wallet purchases
+  /**
+   * P0-01 FIX: userId of the authenticated user initiating a wallet top-up.
+   * Stamped into PaymentIntent metadata so wallet-add can verify ownership:
+   * the user submitting the wallet-add request must match the user who created the intent.
+   */
+  userId?: string;
   customerEmail: string;
   description: string;
   commissionRate?: number; // Per-tier rate from DB — falls back to env if not provided
@@ -42,7 +48,7 @@ export class StripeService {
    * commissionRate must be passed from getCommissionRate() — never rely on a default.
    */
   async createPaymentIntent(params: CreatePaymentIntentParams) {
-    const { amount, providerId, bookingId, transactionId, walletId, customerEmail, description, commissionRate } = params;
+    const { amount, providerId, bookingId, transactionId, walletId, userId, customerEmail, description, commissionRate } = params;
 
     // Rate must come from DB via getCommissionRate(). If somehow omitted, fetch it now.
     let rate = commissionRate;
@@ -89,6 +95,9 @@ export class StripeService {
       // Wallet/package purchase
       if (transactionId) metadata.transactionId = transactionId;
       if (walletId) metadata.walletId = walletId;
+      // P0-01 FIX: stamp the authenticated userId so wallet-add can verify ownership.
+      // Without this, any user can reuse a succeeded PaymentIntent to credit their wallet.
+      if (userId) metadata.userId = userId;
       metadata.type = 'wallet_purchase';
     }
 

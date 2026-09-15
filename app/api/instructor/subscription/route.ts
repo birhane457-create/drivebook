@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS, getTrialEndDate } from '@/lib/config/subscriptions';
+import { cancelSubscription } from '@/lib/services/subscription-cancel';
 
 
 export const dynamic = 'force-dynamic';
@@ -184,26 +185,33 @@ export async function POST(req: NextRequest) {
     if (existingSubscription) {
       // Changing tier mid-trial — keep the ORIGINAL trial end date, never reset it.
       // The instructor gets one trial across all tiers, not a fresh trial per tier change.
-      subscription = await prisma.subscription.update({
-        where: { id: existingSubscription.id },
-        data: {
-          tier: tier as any,
-          monthlyAmount: amount,
-          billingCycle,
-          currentPeriodEnd: periodEnd,
-          // trialEndsAt intentionally NOT updated — preserve original trial window
-        },
-      });
+      //
+      // SUB-02-A FIX: Both writes are inside a single $transaction so a failure between
+      // them cannot leave Subscription and Provider in inconsistent states.
+      subscription = await prisma.$transaction(async (tx) => {
+        const updatedSub = await tx.subscription.update({
+          where: { id: existingSubscription.id },
+          data: {
+            tier: tier as any,
+            monthlyAmount: amount,
+            billingCycle,
+            currentPeriodEnd: periodEnd,
+            // trialEndsAt intentionally NOT updated — preserve original trial window
+          },
+        });
 
-      // Update instructor tier but keep existing trialEndsAt
-      await prisma.provider.update({
-        where: { id: user.provider?.id },
-        data: {
-          subscriptionTier: tier as any,
-          subscriptionStatus: subscription.status  as any,
-          maxProviders: plan.limits.providers,
-          // trialEndsAt intentionally NOT updated
-        },
+        // Update instructor tier but keep existing trialEndsAt
+        await tx.provider.update({
+          where: { id: user.provider?.id },
+          data: {
+            subscriptionTier: tier as any,
+            subscriptionStatus: updatedSub.status as any,
+            maxProviders: plan.limits.providers,
+            // trialEndsAt intentionally NOT updated
+          },
+        });
+
+        return updatedSub;
       });
 
       const daysLeft = existingSubscription.trialEndsAt
@@ -226,39 +234,69 @@ export async function POST(req: NextRequest) {
           : `Switched to ${plan.name} plan`,
       });
     } else {
-      // First-ever subscription — start fresh trial
+      // First-ever subscription — start fresh trial.
+      //
+      // SUB-02-A FIX: Both writes are inside a single $transaction.
+      // SUB-02-B FIX: Re-check inside the transaction that no concurrent request
+      // already created a subscription. If one is found (race), return it directly
+      // without creating a duplicate.
       const trialEnd = getTrialEndDate(tier as any);
-      
-      // F-13 FIX: Copy Provider's stripeCustomerId to Subscription for authoritative correlation
-      // This allows webhooks to match the trial using stripeCustomerId + providerId
+
+      // Read stripeCustomerId before entering transaction (read-only, no locking needed).
       const provider = await prisma.provider.findUnique({
         where: { id: user.provider?.id },
-        select: { stripeCustomerId: true }
-      });
-      
-      subscription = await prisma.subscription.create({
-        data: {
-          providerId: user.provider?.id,
-          tier,
-          status: 'TRIAL',
-          monthlyAmount: amount,
-          billingCycle,
-          currentPeriodStart: now,
-          currentPeriodEnd: periodEnd,
-          trialEndsAt: trialEnd,
-          stripeCustomerId: provider?.stripeCustomerId || null,  // F-13: Authoritative correlation
-        },
+        select: { stripeCustomerId: true },
       });
 
-      await prisma.provider.update({
-        where: { id: user.provider?.id },
-        data: {
-          subscriptionTier: tier  as any,
-          subscriptionStatus: 'TRIAL',
-          trialEndsAt: trialEnd,
-          maxProviders: plan.limits.providers,
-        },
+      const result = await prisma.$transaction(async (tx) => {
+        // SUB-02-B: Re-check for an existing subscription INSIDE the transaction.
+        // With SERIALIZABLE isolation any concurrent transaction that reads the same
+        // absent row will either retry or get a serialization error, ensuring exactly
+        // one row is created.
+        const raceCheck = await tx.subscription.findFirst({
+          where: {
+            providerId: user.provider!.id,
+            status: { in: ['TRIAL', 'ACTIVE'] },
+          },
+        });
+
+        if (raceCheck) {
+          // A concurrent request already created the subscription — return it.
+          return { existing: raceCheck };
+        }
+
+        // F-13 FIX: Copy Provider's stripeCustomerId into Subscription row for
+        // authoritative webhook-to-trial correlation.
+        const newSub = await tx.subscription.create({
+          data: {
+            providerId: user.provider!.id,
+            tier,
+            status: 'TRIAL',
+            monthlyAmount: amount,
+            billingCycle,
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            trialEndsAt: trialEnd,
+            stripeCustomerId: provider?.stripeCustomerId || null,
+          },
+        });
+
+        await tx.provider.update({
+          where: { id: user.provider!.id },
+          data: {
+            subscriptionTier: tier as any,
+            subscriptionStatus: 'TRIAL',
+            trialEndsAt: trialEnd,
+            maxProviders: plan.limits.providers,
+          },
+        });
+
+        return { created: newSub };
+      }, {
+        isolationLevel: 'Serializable',
       });
+
+      const subscription = 'existing' in result ? result.existing : result.created;
 
       return NextResponse.json({
         success: true,
@@ -300,40 +338,44 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Find active subscription
-    const subscription = await prisma.subscription.findFirst({
-      where: {
-        providerId: user.provider?.id,
-        status: { in: ['TRIAL', 'ACTIVE'] },
-      },
+    // SUB-09-A FIX: Delegate to the authoritative cancellation service.
+    // The service calls Stripe first (when a Stripe subscription ID exists) and only
+    // updates the local DB after Stripe confirms cancellation. If Stripe fails, this
+    // throws and the local row is left unchanged — the caller receives a 502 so the
+    // user knows the cancellation did not go through rather than seeing a false success.
+    const result = await cancelSubscription({
+      providerId: user.provider.id,
+      mode: 'period_end',
+      actorEmail: session!.user!.email,
+      reason: 'Instructor-initiated cancellation via dashboard',
     });
 
-    if (!subscription) {
-      return NextResponse.json(
-        { error: 'No active subscription found' },
-        { status: 404 }
-      );
+    if (result.stripeAction === 'already_cancelled') {
+      return NextResponse.json({
+        success: true,
+        message: result.message,
+        endsAt: result.endsAt,
+      });
     }
-
-    // Mark for cancellation at period end
-    await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: {
-        cancelAtPeriodEnd: true,
-        cancelledAt: new Date(),
-      },
-    });
 
     return NextResponse.json({
       success: true,
-      message: 'Subscription will be cancelled at the end of the current period',
-      endsAt: subscription.currentPeriodEnd,
+      message: result.message,
+      endsAt: result.endsAt,
     });
-  } catch (error) {
-    console.error('Error cancelling subscription:', error);
+  } catch (error: any) {
+    // Stripe failure — surface as 502 so the client knows Stripe was not cancelled.
+    // Do NOT return 200 or silently swallow this: the instructor would believe they
+    // cancelled while Stripe continues billing (the original SUB-09-A defect).
+    console.error('Subscription cancellation error:', error);
+    const isStripeError = error?.type?.startsWith('Stripe') || error?.raw?.type;
     return NextResponse.json(
-      { error: 'Failed to cancel subscription' },
-      { status: 500 }
+      {
+        error: isStripeError
+          ? 'Could not cancel with Stripe. Your subscription has not been cancelled — please try again or contact support.'
+          : 'Failed to cancel subscription',
+      },
+      { status: isStripeError ? 502 : 500 },
     );
   }
 }
