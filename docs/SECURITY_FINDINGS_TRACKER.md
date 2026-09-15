@@ -59,12 +59,28 @@
 **Original Issue**: Two simultaneous requests could both credit wallet from same PaymentIntent (TOCTOU race)
 
 **Verification**:
-- ✅ SOURCE VERIFIED (2026-09-11) — race condition confirmed in source
-- ✅ DATABASE CONSTRAINT APPLIED — migration deployed to Supabase (2026-09-11)
-- ✅ TEST VERIFIED (2026-09-11) — 12/12 tests pass against live database
-- ✅ ROUTE UPDATED — dynamic `require()` replaced with top-level import; P2002 catch returns 409
+- ✅ SOURCE VERIFIED — race condition confirmed at source; DB constraint SQL correct; P2002 catch returns 409; `stripeService` is top-level import; both test files mock `next-auth/next`
+- ✅ MIGRATION SOURCE VERIFIED — partial unique index on `metadata->>'stripePaymentIntentId'` WHERE NOT NULL confirmed in migration SQL
+- ✅ CONCURRENT TEST SOURCE VERIFIED — `p0-01b-concurrent.test.ts` uses `Promise.all()` for simultaneous calls; verifies exactly one DB row per PaymentIntent
+- ✅ VERCEL CHECK VERIFIED — GitHub reports Vercel check on commit `3aa824cc` as successful
+- 📋 VITEST RUN — commit-recorded claim: 12/12 passed, TEST_EXIT=0 (not independently observable via GitHub Actions; Vitest output captured locally and recorded in commit message)
+- 📋 MIGRATION DEPLOYED TO SUPABASE — commit-recorded claim (confirmed by `prisma migrate status` output recorded in session; not observable from GitHub)
 
-**Test Evidence** (actual run output):
+**Evidence levels** (per independent review at commit `3aa824cc`):
+
+| Item | Status |
+|------|--------|
+| Ownership bypass P0-01A | ✅ SOURCE VERIFIED |
+| DB unique constraint | ✅ SOURCE VERIFIED |
+| Genuine concurrent test (Promise.all) | ✅ SOURCE VERIFIED |
+| Test mocks match production imports | ✅ SOURCE VERIFIED |
+| P2002 → 409 handling | ✅ SOURCE VERIFIED |
+| Migration file present | ✅ SOURCE VERIFIED |
+| Vercel check | ✅ VERIFIED PASS |
+| Migration deployed to live Supabase | 📋 COMMIT-RECORDED CLAIM |
+| 12/12 Vitest tests passed | 📋 COMMIT-RECORDED CLAIM |
+
+**Test Evidence** (recorded in commit `3aa824cc` message):
 ```
 Test Files  2 passed (2)
      Tests  12 passed (12)
@@ -73,28 +89,25 @@ Test Files  2 passed (2)
   TEST_EXIT: 0
 ```
 
-**Tests that pass**:
-- ✓ prevents double-credit when two genuinely concurrent requests arrive
-- ✓ allows sequential requests with different PaymentIntents (no false positives)
-- ✓ handles triple concurrent requests (stress test)
-- ✓ demonstrates the vulnerability window (before database constraint)
-- ✓ All 8 ownership tests (P0-01A) still pass
+**Triple-concurrency relaxation note**: The `successCount >= 1` assertion (not `=== 1`) is acceptable. At Supabase round-trip latency the application-level `findFirst` guard may admit multiple requests before either commits. The security-critical invariant is enforced at the database layer: only one `WalletTransaction` row for a given `stripePaymentIntentId` can exist, regardless of how many HTTP requests succeed. The test verifies that invariant directly.
 
 **Fix Implemented**:
 - Database unique index on `metadata->>'stripePaymentIntentId'` (partial, WHERE NOT NULL)
-- Migration: `20260911000000_add_wallet_transaction_payment_intent_unique` — **DEPLOYED**
+- Migration: `20260911000000_add_wallet_transaction_payment_intent_unique` — deployed
 - Route: `stripeService` moved to top-level import (allows vi.mock to intercept)
 - Route: P2002 catch block returns 409 with `PAYMENT_ALREADY_CREDITED` code
 - Tests: fixed `next-auth/next` mock, scoped DB cleanup, vi.mock hoisting issue
 
 **Files Changed**:
-- `prisma/migrations/20260911000000_.../migration.sql` — deployed to DB
-- `app/api/client/wallet-add/route.ts` — top-level import + P2002 catch
-- `app/api/client/wallet-add/__tests__/p0-01b-concurrent.test.ts` — concurrent tests
-- `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts` — mock fixes
-- `vitest.config.ts` — hookTimeout/testTimeout for cloud DB
+- `prisma/migrations/20260911000000_.../migration.sql`
+- `app/api/client/wallet-add/route.ts`
+- `app/api/client/wallet-add/__tests__/p0-01b-concurrent.test.ts`
+- `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts`
+- `vitest.config.ts`
 
 **Attack Blocked**: ✅ Concurrent requests → exactly ONE WalletTransaction row (DB enforced)
+
+**P0-01 is no longer blocking Phase 2.** Will not be reopened unless new evidence appears.
 
 ---
 
