@@ -111,17 +111,20 @@ export async function POST(req: NextRequest) {
   // abnChanged = false: preserve existing abnVerified, abnStatus, withholdingTaxRate
   // abnEntityName from the request body will be saved via ...data spread (if provided)
 
-  // Strip verification fields from data spread — handled explicitly below
+  // Strip verification and tax fields from client input — handled explicitly below.
+  // These are admin-only: the instructor can submit the ABN number and entity name,
+  // but they cannot assert that the ABN has been verified or set the resulting tax rate.
   const { abnEntityName, abnVerified, abnStatus, withholdingTaxRate: wtFromClient, ...dataCore } = data;
 
-  // When ABN unchanged: persist the verification state the client just confirmed
+  // When ABN unchanged: the instructor can update display fields (abnEntityName)
+  // but cannot set abnVerified, abnStatus, or withholdingTaxRate — those are
+  // admin-controlled after ABN verification review.
+  // C-3 FIX: removed abnVerified, abnStatus, and withholdingTaxRate from this block.
   const verificationUpdate: Record<string, unknown> = abnChanged ? {} : {
     ...(abnEntityName !== undefined ? { abnEntityName } : {}),
-    ...(abnVerified !== undefined ? { abnVerified } : {}),
-    ...(abnStatus !== undefined ? { abnStatus } : {}),
-    // Only allow client to lower withholding (0%) if they're claiming verified.
-    // Never allow client to set 0% without abnVerified = true.
-    ...(wtFromClient !== undefined && abnVerified === true ? { withholdingTaxRate: wtFromClient } : {}),
+    // abnVerified: ADMIN-ONLY — never written from client request
+    // abnStatus:   ADMIN-ONLY — never written from client request
+    // withholdingTaxRate: ADMIN-ONLY — set by admin after ABN verification review
   };
 
   const updated = await prisma.provider.update({
