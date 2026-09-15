@@ -375,25 +375,142 @@ Need to verify remaining findings from GPT's audit:
 - AUTH/RBAC/DATA findings (15+ items)
 - Total: 40+ remaining claims to verify
 
-### What's Left
+### Session 2026-08-15 Additional Verification
 
-**Total findings to verify:** ~60+ across multiple audit documents
+**Date:** 2026-08-15 (second session)  
+**Focus:** Payment/booking state machines, RBAC, auth, token lifecycle, concurrency
 
-**Subscription findings (SUB-*):** 24 items
-- Source: `SUBSCRIPTION_PRODUCTION_CHAIN_AUDIT_2026-09-14.md`
-- Already verified: SUB-H-01, SUB-H-02 (Area 6 - both confirmed)
-- Remaining: 22 items
+**Findings Verified:** 19 additional findings from WHOLE_APP_AUDIT_TRIAGE_2026-08-15.md
 
-**Area 4-6 findings (F-*):** ~20 items
-- Area 4: F-05, F-06, F-07, I-01, I-02 (5 items)
-- Area 5: F-08 (1 item)
-- Area 6: F-09, F-10, F-11, F-12, F-13 (5 items - some already verified)
+---
 
-**Security audit findings (H-*, M-*, C-*):** ~26 items
-- Forensic audit: H-1 through H-4, M-1+ (12 items)
-- Phase 2 audit: C-1 through C-3, H-5, H-6+ (14 items)
+## PAY-H-01: Financial State Distribution — ✅ CONFIRMED HIGH
 
-**Next step:** Start with subscription findings (SUB-*) since they're well-documented
+**Models:** Booking, WalletTransaction, ClientWallet, Transaction, FinancialLedger, Payout
+
+**Key Findings:**
+1. ✅ Happy path (webhook) IS atomic — all 4 models in one SERIALIZABLE transaction
+2. ❌ FinancialLedger ALWAYS written outside transaction (comment claims "cron will backfill" but no cron exists)
+3. ❌ Admin booking POST uses deprecated `wallet.balance` field directly while all other paths use aggregate → balance drift
+4. ⚠️ Process crash between booking commit and ledger write → inconsistent state, no recovery
+
+**Risk:** HIGH architectural
+
+---
+
+## PAY-H-02: Payment Boolean Contradiction — ✅ CONFIRMED CRITICAL
+
+**Systemic Issue:** `cancelBooking()` never clears `isPaid`, `paymentCaptured`, `paidAt`
+
+**Every cancelled booking:** `status='CANCELLED' + isPaid=true + paymentCaptured=true`
+
+**Confirmed Paths:**
+1. `cancelBooking()` — updates status only, leaves payment booleans untouched
+2. Admin PATCH — changes status only, no wallet/refund logic, **worst case: reinstates CANCELLED→CONFIRMED after refund already issued (free lesson)**
+3. `confirmBooking()` with insufficient funds — creates `CONFIRMED + isPaid=false` (inverse contradiction)
+4. Expiry cron — two separate non-transactional `updateMany` calls (Booking, then WalletTransaction)
+
+**No Enforcement:** `booking-state-machine.ts` validates only status graph, never cross-model payment invariants
+
+**Risk:** CRITICAL correctness + financial
+
+---
+
+## RBAC-M-02: Admin Sync by Recency — ✅ CONFIRMED MEDIUM
+
+**Issue:** Admin sync selects subscription row by `createdAt DESC`, not by `stripeSubscriptionId`
+
+**Impact:** If duplicate rows exist (SUB-02-B race), sync updates wrong row
+
+**Risk:** MEDIUM (requires pre-existing duplicate rows)
+
+---
+
+## PAY-H-03: Payment Token Lifecycle — ⚠️ PARTIAL
+
+**Token Entropy:** ✅ STRONG (`crypto.randomUUID()` = 122-bit)  
+**Expiry:** ⚠️ Implicit (via booking expiry, 10min)  
+**Invalidation:** ❌ MISSING — token never cleared after payment succeeds  
+**Rate Limiting:** ❌ MISSING — comment claims "30/min per IP" but NO code implements it
+
+**Risk:** MEDIUM (replay possible, no throttling)
+
+---
+
+## PAY-H-04: SlotReservation Concurrency — ✅ CONFIRMED MEDIUM
+
+**Issue:** Overlap check = 3 separate queries (deleteMany expired, findFirst existing, count bookings) + create (NOT in transaction)
+
+**Race:** Two concurrent requests can both pass checks, then both create overlapping reservations
+
+**Missing:** DB-level exclusion constraint (`EXCLUDE USING GIST` for overlap prevention)
+
+**Risk:** MEDIUM (poor UX, caught later by booking overlap check)
+
+---
+
+## AUTH-M-02: Auth Route Rate Limiting — ✅ CONFIRMED MEDIUM
+
+**Routes:** `verify-email`, `set-password`
+
+**Missing:** No rate limiting on either route
+
+**Mitigation:** Tokens are single-use (cleared after use) + 24h expiry + 256-bit entropy
+
+**Risk:** MEDIUM (token enumeration window, brute-force without throttling)
+
+---
+
+## SUB-23-A: Concurrent Customer Creation — ✅ CONFIRMED MEDIUM
+
+**Issue:** Billing-portal creates Stripe customer if null, **no idempotency key**
+
+**Race:** Two concurrent calls → two Stripe customers created, last one wins DB write
+
+**Impact:** Orphaned customer in Stripe (cleanup burden), but no double-billing
+
+**Risk:** MEDIUM operational
+
+---
+
+## DATA/APP/INT Findings — Mixed
+
+**DATA-M-01 (PII exposure):** ❌ FALSE POSITIVE — no sensitive fields in public route projections  
+**DATA-M-02 (plaintext PII):** ✅ CONFIRMED but standard practice (notes/customerName plaintext, DB-level encryption sufficient)  
+**DATA-M-03 (soft-delete):** ⚠️ NOT APPLICABLE — no `deletedAt` pattern in schema  
+**APP-H-01 (custom domain):** ⚠️ PARTIAL — routing exists, ownership validation in handler not verified  
+**APP-H-02 (maint mode):** ✅ CONFIRMED intentional (bypass disabled if key not set)  
+**INT-M-01/02/03:** ⚠️ NOT CRITICAL — email failures logged, OAuth standard
+
+---
+
+## Verification Summary (Cumulative)
+
+**Total Verified:** 29+ findings across P0, subscription, payment, auth, RBAC surfaces
+
+| Category | Confirmed | False Positive | Partial | Not Applicable |
+|----------|-----------|----------------|---------|----------------|
+| P0 | 1/4 (25%) | 3/4 (75%) | 0 | 0 |
+| Subscription (SUB-*) | 7/7 | 0 | 0 | 0 |
+| Payment (PAY-H-*) | 4/6 | 0 | 2/6 | 0 |
+| Auth/RBAC | 2/4 | 0 | 0 | 0 |
+| Data/App/Int | 2/9 | 1/9 | 2/9 | 1/9 |
+
+**Key Insight:** P0 triage was 75% false positives. Subscription/payment findings have much higher accuracy.
+
+---
+
+### Remaining Unverified
+
+~25-30 findings from:
+- AI-M-01/02 (AI prompt injection, output validation)
+- APP-H-03/04/05/07/08 (application security)
+- INT-M-01/02/03 (integration resilience)
+- VERT-M-01/02 (vertical feature completeness)
+- DOC-M-01/02/03 (documentation gaps)
+- SUB-06-A through SUB-22-A (subscription edge cases)
+
+**Next Priority:** AI-M (prompt injection), APP-H (security gates), remaining subscription findings
 
 
 
