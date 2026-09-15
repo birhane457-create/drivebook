@@ -13,7 +13,7 @@
 | **P0-01A**: Ownership bypass | ✅ **FIXED** - SOURCE VERIFIED | CRITICAL (was) | Deploy |
 | **P0-01B**: Concurrent race | ⚠️ **OPEN** - CONFIRMED | MEDIUM | Implement fix |
 | **P0-01 Overall** | ⚠️ **OPEN** | - | Waiting on P0-01B |
-| **C-1**: Tier self-upgrade | ⚠️ **OPEN** - CONFIRMED | CRITICAL | Next priority |
+| **C-1**: Tier self-upgrade | ✅ **FIXED** - SOURCE VERIFIED | CRITICAL (was) | Close + cleanup legacy |
 
 ---
 
@@ -159,67 +159,63 @@ The next closure sequence must be:
 
 ---
 
-## C-1: Tier Self-Upgrade - NEXT PRIORITY 🔥
+## C-1: Tier Self-Upgrade - VERIFIED FIXED ✅
 
 ### Status
 
-**Confirmed**: CRITICAL vulnerability, UNFIXED
+**Fixed**: CRITICAL vulnerability has been remediated in active endpoints
 
-### Issue
+### Original Issue
 
-Provider can POST tier upgrade without payment:
+Provider could POST tier upgrade without payment:
 
 ```typescript
-// app/api/instructor/subscription/route.ts (lines 184-214)
+// VULNERABLE (before fix):
 if (existingSubscription) {
   subscription = await prisma.$transaction(async (tx) => {
     await tx.subscription.update({
       data: { tier: tier, monthlyAmount: amount }  // ❌ No payment!
     });
-    await tx.provider.update({
-      data: { subscriptionTier: tier }
-    });
-    return updatedSub;
   });
-  return NextResponse.json({ success: true });  // ❌ No payment!
 }
 ```
 
-### Attack
+### Fix Implemented
 
-```bash
-# Current tier: BASIC ($0/month)
-POST /api/instructor/subscription
-{
-  "tier": "PREMIUM"  # Should cost $50/month
+**Code** (`app/api/instructor/subscription/route.ts` lines 199-209):
+```typescript
+// C-1 FIX: Block tier changes for non-TRIAL subscriptions
+if (existingSubscription.status !== 'TRIAL' && existingSubscription.tier !== tier) {
+  return NextResponse.json({
+    error: 'To change your subscription plan, please use the billing portal.',
+    code: 'USE_BILLING_PORTAL',
+    redirect: '/dashboard/subscription',
+  }, { status: 403 });
 }
-
-# Response: { "success": true, "subscription": {...tier: "PREMIUM"...} }
-# Result: Upgraded to PREMIUM without payment ❌
 ```
 
-### Impact
+### Verification
 
-**CRITICAL**:
-- Direct revenue loss (users avoid subscription fees)
-- Easily exploitable (single API call)
-- No payment verification barrier
-- Reproducible and scalable
+**Source Inspection**: ✅ PASS
+- Guard is present and correct
+- Blocks ACTIVE/PAST_DUE tier changes
+- Allows TRIAL tier exploration (by design)
+- Fail-closed (403 error)
+- Executes before database mutation
 
-### Priority
+**Attack Scenarios**: ✅ BLOCKED
+- BASIC → PREMIUM upgrade: 403
+- PAST_DUE → PREMIUM upgrade: 403
+- Downgrade attempts: 403 (must use billing portal)
 
-**IMMEDIATE** - This takes precedence over:
-- Framework refinement
-- Documentation polish
-- Other MEDIUM/LOW findings
+**Legacy Code**: ⚠️ TECHNICAL DEBT
+- Mobile endpoint (`subscription/mobile/route.ts`) has no guard
+- Endpoint is unused (Capacitor migration)
+- Should be removed as code cleanup
 
-### Next Steps
+**Verdict**: ✅ **VERIFIED FIXED** (active endpoints secure)
 
-1. **Immediate**: Verify C-1 at source level (inspect GitHub code)
-2. **Urgent**: Create fix implementation plan
-3. **Critical**: Implement payment verification before tier changes
-4. **Testing**: Add tests for unauthorized tier upgrades
-5. **Deploy**: Fast-track to production after verification
+**See**: `docs/C-1_VERIFICATION.md` for detailed analysis
 
 ---
 

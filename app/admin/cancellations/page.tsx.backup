@@ -1,0 +1,412 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { formatDistanceToNow } from 'date-fns'
+import PageLayout from '@/components/ui/page-layout'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AlertCircle, CheckCircle, XCircle, Clock, DollarSign } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+interface Booking {
+  id: string
+  status: string
+  cancellationStatus: string
+  cancellationRequestedAt: string
+  cancellationRequestedBy: string
+  cancellationReason: string | null
+  adminReviewedAt: string | null
+  adminReviewedBy: string | null
+  adminReviewNote: string | null
+  adminOverrideAmount: number | null
+  packageTotalPaid: number
+  packageHoursUsed: number
+  packageHours: number
+  startTime: string
+  customer: {
+    user: { name: string; email: string }
+  }
+  provider: {
+    user: { name: string; email: string }
+  }
+}
+
+export default function CancellationsPage() {
+  const { data: session } = useSession()
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState('pending')
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [showApproveDialog, setShowApproveDialog] = useState(false)
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [overrideAmount, setOverrideAmount] = useState('')
+  const [adminNote, setAdminNote] = useState('')
+  const [rejectReason, setRejectReason] = useState('')
+  const [processing, setProcessing] = useState(false)
+
+  useEffect(() => {
+    if (session?.user?.role !== 'SUPER_ADMIN' && session?.user?.role !== 'ADMIN') {
+      router.push('/dashboard')
+    }
+  }, [session, router])
+
+  useEffect(() => {
+    fetchBookings(activeTab.toUpperCase())
+  }, [activeTab])
+
+  const fetchBookings = async (status: string) => {
+    try {
+      setLoading(true)
+      const res = await fetch(`/api/admin/cancellations?status=${status}`)
+      const data = await res.json()
+      setBookings(data.bookings || [])
+    } catch (error) {
+      console.error('Failed to fetch bookings:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleApprove = async () => {
+    if (!selectedBooking) return
+    
+    try {
+      setProcessing(true)
+      const res = await fetch(`/api/admin/cancellations/${selectedBooking.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          overrideAmount: overrideAmount ? parseFloat(overrideAmount) : undefined,
+          adminNote,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to approve cancellation')
+
+      const data = await res.json()
+      alert(`✅ ${data.message}`)
+      setShowApproveDialog(false)
+      setSelectedBooking(null)
+      setOverrideAmount('')
+      setAdminNote('')
+      fetchBookings(activeTab.toUpperCase())
+    } catch (error: any) {
+      alert(`❌ Error: ${error.message}`)
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!selectedBooking || !rejectReason.trim()) return
+
+    try {
+      setProcessing(true)
+      const res = await fetch(`/api/admin/cancellations/${selectedBooking.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: rejectReason }),
+      })
+
+      if (!res.ok) throw new Error('Failed to reject cancellation')
+
+      const data = await res.json()
+      alert(`✅ ${data.message}`)
+      setShowRejectDialog(false)
+      setSelectedBooking(null)
+      setRejectReason('')
+      fetchBookings(activeTab.toUpperCase())
+    } catch (error: any) {
+      alert(`❌ Error: ${error.message}`)
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const calculateRefund = (booking: Booking) => {
+    const totalPaid = booking.packageTotalPaid || 0
+    const hoursUsed = booking.packageHoursUsed || 0
+    const totalHours = booking.packageHours || 1
+    const hourlyRate = totalPaid / totalHours
+    const baseRefund = totalPaid - (hoursUsed * hourlyRate)
+    return baseRefund.toFixed(2)
+  }
+
+  const renderBookingCard = (booking: Booking) => {
+    const refundEstimate = calculateRefund(booking)
+
+    return (
+      <Card key={booking.id} className="mb-4">
+        <CardHeader>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="text-lg">
+                {booking.customer.user.name} → {booking.provider.user.name}
+              </CardTitle>
+              <CardDescription>
+                Requested {formatDistanceToNow(new Date(booking.cancellationRequestedAt))} ago
+              </CardDescription>
+            </div>
+            <Badge variant={
+              booking.cancellationStatus === 'PENDING' ? 'warning' :
+              booking.cancellationStatus === 'APPROVED' ? 'success' : 'destructive'
+            }>
+              {booking.cancellationStatus}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="font-medium">Package:</span> {booking.packageHours}hr
+            </div>
+            <div>
+              <span className="font-medium">Used:</span> {booking.packageHoursUsed}hr
+            </div>
+            <div>
+              <span className="font-medium">Total Paid:</span> ${booking.packageTotalPaid?.toFixed(2)}
+            </div>
+            <div>
+              <span className="font-medium">Est. Refund:</span> ${refundEstimate}
+            </div>
+          </div>
+
+          {booking.cancellationReason && (
+            <div className="bg-muted p-3 rounded">
+              <p className="text-sm font-medium mb-1">Customer Reason:</p>
+              <p className="text-sm">{booking.cancellationReason}</p>
+            </div>
+          )}
+
+          {booking.adminReviewNote && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
+              <p className="text-sm font-medium mb-1">Admin Note:</p>
+              <p className="text-sm">{booking.adminReviewNote}</p>
+            </div>
+          )}
+
+          {booking.cancellationStatus === 'PENDING' && (
+            <div className="flex gap-2 mt-4">
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => {
+                  setSelectedBooking(booking)
+                  setShowApproveDialog(true)
+                }}
+              >
+                <CheckCircle className="w-4 h-4 mr-1" />
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  setSelectedBooking(booking)
+                  setShowRejectDialog(true)
+                }}
+              >
+                <XCircle className="w-4 h-4 mr-1" />
+                Reject
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => router.push(`/admin/bookings/${booking.id}`)}
+              >
+                View Details
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <PageLayout
+      title="Package Cancellations"
+      description="Review and approve cancellation requests with refund calculations"
+    >
+      <div className="space-y-6">
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="pending" className="flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Pending
+            </TabsTrigger>
+            <TabsTrigger value="approved" className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" />
+              Approved
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="flex items-center gap-2">
+              <XCircle className="w-4 h-4" />
+              Rejected
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending" className="mt-6">
+            {loading ? (
+              <p>Loading...</p>
+            ) : bookings.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-center text-muted-foreground">
+                  <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No pending cancellation requests</p>
+                </CardContent>
+              </Card>
+            ) : (
+              bookings.map(renderBookingCard)
+            )}
+          </TabsContent>
+
+          <TabsContent value="approved" className="mt-6">
+            {loading ? (
+              <p>Loading...</p>
+            ) : bookings.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-center text-muted-foreground">
+                  <p>No approved cancellations</p>
+                </CardContent>
+              </Card>
+            ) : (
+              bookings.map(renderBookingCard)
+            )}
+          </TabsContent>
+
+          <TabsContent value="rejected" className="mt-6">
+            {loading ? (
+              <p>Loading...</p>
+            ) : bookings.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-center text-muted-foreground">
+                  <p>No rejected cancellations</p>
+                </CardContent>
+              </Card>
+            ) : (
+              bookings.map(renderBookingCard)
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Approve Dialog */}
+      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve Cancellation</DialogTitle>
+            <DialogDescription>
+              Review and approve this cancellation request. Refund will be issued to customer's card.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBooking && (
+            <div className="space-y-4">
+              <div className="bg-muted p-4 rounded space-y-2">
+                <p><strong>Customer:</strong> {selectedBooking.customer.user.name}</p>
+                <p><strong>Package:</strong> {selectedBooking.packageHours}hr (used {selectedBooking.packageHoursUsed}hr)</p>
+                <p><strong>Calculated Refund:</strong> ${calculateRefund(selectedBooking)}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="overrideAmount">Override Amount (optional)</Label>
+                <Input
+                  id="overrideAmount"
+                  type="number"
+                  step="0.01"
+                  placeholder="Leave blank to use calculated amount"
+                  value={overrideAmount}
+                  onChange={(e) => setOverrideAmount(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use this for goodwill adjustments or special cases
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adminNote">Admin Note (optional)</Label>
+                <Textarea
+                  id="adminNote"
+                  placeholder="Internal note for audit trail..."
+                  value={adminNote}
+                  onChange={(e) => setAdminNote(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowApproveDialog(false)}
+              disabled={processing}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleApprove} disabled={processing}>
+              {processing ? 'Processing...' : 'Approve & Refund'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Cancellation</DialogTitle>
+            <DialogDescription>
+              Explain why this cancellation cannot be approved.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="rejectReason">Rejection Reason *</Label>
+              <Textarea
+                id="rejectReason"
+                placeholder="E.g., 'Cancellation window has passed' or 'Package already partially used'"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowRejectDialog(false)}
+              disabled={processing}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={processing || !rejectReason.trim()}
+            >
+              {processing ? 'Processing...' : 'Reject Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PageLayout>
+  )
+}
