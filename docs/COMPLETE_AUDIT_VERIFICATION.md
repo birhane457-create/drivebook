@@ -2678,3 +2678,481 @@ This is not a code vulnerability. It is an unimplemented feature with:
 
 **Test count:** 323 → 332 passing (+9 for C-3)
 
+
+
+---
+
+## Task 2 — Remaining Subscription Findings (SUB-03-B, SUB-07-A/B, SUB-12-B, SUB-13-A, SUB-16-A, SUB-17-A, SUB-19-A, SUB-23-A)
+
+---
+
+### SUB-03-B: `currentPeriodEnd` Reset on Trial Tier Change
+
+**GPT Claim:** "`currentPeriodEnd` is reset to 30 days from now even when the existing trial's original end is preserved. If it is a billing-period field, this is potentially misleading."
+
+**Status:** ✅ CONFIRMED — semantic issue
+
+**Actual code (subscription/route.ts, tier-change branch):**
+```typescript
+const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+subscription = await prisma.$transaction(async (tx) => {
+  const updatedSub = await tx.subscription.update({
+    data: {
+      tier: tier as any,
+      monthlyAmount: amount,
+      billingCycle,
+      currentPeriodEnd: periodEnd,      // ← reset to now+30 on every tier change
+      // trialEndsAt intentionally NOT updated
+    },
+  });
+```
+
+`trialEndsAt` correctly preserved. `currentPeriodEnd` always reset to `now + 30 days`. These are two separate fields with overlapping semantics during trial. The field is semantically ambiguous: during a paid subscription it means "billing period end"; during a trial it is being used inconsistently. No security risk but creates confusion in UI and admin views. **Verdict: CONFIRMED, semantic/documentation gap.**
+
+---
+
+### SUB-07-A: Two Sources of Trial Timing
+
+**GPT Claim:** "DriveBook stores a local trial end while the billing-portal route can also create a Stripe trial using remaining days. A mismatch can cause divergence."
+
+**Status:** ✅ CONFIRMED — semantic risk
+
+**Actual code (billing-portal/route.ts, lines 105-114):**
+```typescript
+const trialEndsAt = user.provider?.trialEndsAt;
+const trialDaysLeft = trialEndsAt
+  ? Math.max(0, Math.ceil(
+      (new Date(trialEndsAt).getTime() - Date.now()) / 86400000
+    ))
+  : 0;
+
+// ...
+subscription_data: {
+  ...(trialDaysLeft > 0 && { trial_period_days: trialDaysLeft }),
+```
+
+`Math.ceil` on fractional days means if 2.1 days remain locally, Stripe gets `trial_period_days: 3`. The two systems can diverge by up to 24 hours. In practice the difference is small, but it means "Stripe trial end" ≠ "local trialEndsAt" by up to one day. **Verdict: CONFIRMED, real but low-severity drift.**
+
+---
+
+### SUB-07-B: `targetTier` Can Change Tier in Billing Portal
+
+**GPT Claim:** "The billing portal route accepts `targetTier` for trial checkout. Kiro should verify that changing tier this way does not accidentally create a new trial."
+
+**Status:** ✅ CONFIRMED — design risk, no new trial created
+
+**Actual code (billing-portal/route.ts, lines 88-92):**
+```typescript
+const tier = (targetTier && ['BASIC','PRO','STUDIO','PREMIUM'].includes(targetTier))
+  ? targetTier
+  : (user.provider?.subscriptionTier || 'BASIC');
+```
+
+For a trial subscriber calling this route with `targetTier: 'PREMIUM'`, a Checkout session is created for the PREMIUM price. No new local trial row is created — the existing trial row is used by the webhook when checkout completes. However:
+- The local Subscription row still shows the original tier until the webhook fires
+- If the webhook does not fire (network failure), the tier diverges between Stripe and local DB
+- No explicit validation that `targetTier` differs from current tier (redundant checkout possible)
+
+**Verdict: CONFIRMED, moderate risk. The webhook handles tier alignment but there is a window of divergence.**
+
+---
+
+### SUB-12-B: Cron Resets Provider Tier to BASIC
+
+**GPT Claim:** "The cron changes `subscriptionTier` to BASIC when a trial expires. BASIC is itself a paid plan ($29/month). Therefore TRIAL of PRO → EXPIRED + BASIC creates potentially misleading state."
+
+**Status:** ✅ CONFIRMED — semantic issue
+
+**Actual code (cron/check-trial-expiry/route.ts):**
+```typescript
+const updatedInstructor = await tx.provider.update({
+  where: { id: trial.providerId },
+  data: {
+    subscriptionTier: 'BASIC',        // ← BASIC = $29/month paid tier
+    subscriptionStatus: 'EXPIRED',
+  },
+});
+```
+
+Confirmed from subscriptions config: `BASIC.monthlyPrice = 29`. After trial expiry the provider's tier is set to `BASIC` (paid tier label) while their status is `EXPIRED`. The access control correctly gates on `status = EXPIRED` → read-only, so no functional bypass. The issue is semantic: a provider in state `{tier: BASIC, status: EXPIRED}` looks like a non-paying BASIC subscriber rather than an expired trial. Admin reports may misclassify them. **Verdict: CONFIRMED, semantic issue. No security or functional impact.**
+
+---
+
+### SUB-13-A: Fail-Open on DB Errors
+
+Previously verified. **Status: CONFIRMED MEDIUM — intentional documented policy. See earlier entry.**
+
+---
+
+### SUB-16-A: Mobile Subscription Route Materially Different
+
+**GPT Claim:** "Mobile POST does not copy `stripeCustomerId` into Subscription. Mobile has `@ts-nocheck`. Mobile cancellation was local-only."
+
+**Status:** ⚠️ PARTIALLY OUTDATED — Kiro fixed some items this session
+
+**Actual current state of mobile/route.ts:**
+- `@ts-nocheck` remains: ✅ CONFIRMED still present
+- `stripeCustomerId` copy: ❌ The mobile POST still does NOT copy `stripeCustomerId` into the new Subscription row (unlike web POST which has the F-13 fix). This was not fixed in the SUB-02 work.
+- Cancellation: ✅ FIXED this session — mobile DELETE now delegates to `cancelSubscription()` service
+- Transaction strategy: ✅ FIXED this session — mobile POST now uses `$transaction` with Serializable
+
+**Verdict: PARTIALLY CONFIRMED. Mobile cancellation and transaction fixes are in. `stripeCustomerId` copy and `@ts-nocheck` remain as gaps.**
+
+---
+
+### SUB-17-A: Legacy `/api/subscriptions/checkout` Route
+
+**GPT Claim:** "There are multiple subscription checkout implementations. The legacy `/api/subscriptions/checkout` path has materially different semantics from the newer F-13-aware flow. Kiro must determine whether this route is reachable in production."
+
+**Status:** ✅ CONFIRMED — reachability assessed
+
+**Verified reachability:**
+
+The subscription dashboard (`app/dashboard/subscription/page.tsx`) and the `SubscriptionPlans` component only call:
+- `/api/instructor/subscription` (POST)
+- `/api/instructor/subscription/billing-portal` (POST)
+- `/api/instructor/subscription/sync` (POST)
+
+The legacy `/api/subscriptions/checkout` route is **not referenced anywhere** in UI components, other routes, or any `.tsx`/`.ts` file. Confirmed with `Select-String` — zero references found.
+
+**The legacy route differences (confirmed by reading it):**
+- Uses `customer_email` instead of `customer:` (Stripe customer ID) — can create duplicate customers
+- No F-13 `stripeCustomerId` correlation
+- `@ts-nocheck`
+- Has a `!STRIPE_SECRET_KEY` fallback that directly updates `Provider` fields
+
+**Verdict: CONFIRMED as dead code. Not reachable from production UI. Should be explicitly removed before production to prevent accidental future activation. Low urgency — no current attack surface.**
+
+---
+
+### SUB-19-A: Stripe API Version Drift
+
+**GPT Claim:** "Different routes use different Stripe API version strings: some `2026-01-28.clover`, some `2026-02-25.clover`."
+
+**Status:** ✅ CONFIRMED
+
+**Versions found by code search:**
+
+| Route | Version |
+|-------|---------|
+| `instructor/subscription/route.ts` | `2026-01-28.clover` |
+| `instructor/subscription/billing-portal/route.ts` | `2026-01-28.clover` |
+| `instructor/subscription/sync/route.ts` | `2026-01-28.clover` |
+| `admin/instructors/[id]/subscription/route.ts` | `2026-02-25.clover` |
+| `stripe/webhook/route.ts` | `2026-02-25.clover` |
+
+Two versions in use. The webhook and admin routes use `2026-02-25`, the instructor-facing routes use `2026-01-28`. **Verdict: CONFIRMED. Risk is low in practice (versions are close), but should be standardised to `2026-02-25` across all routes before production.**
+
+---
+
+### SUB-23-A: Concurrent Stripe Customer Creation
+
+**GPT Claim:** "The current code uses a check-then-create pattern when the customer ID is missing. Two simultaneous checkout requests with `stripeCustomerId = null` can create duplicate Stripe customers."
+
+**Status:** ✅ CONFIRMED — present in two locations
+
+**Actual code — billing-portal/route.ts has TWO occurrences:**
+
+```typescript
+// Occurrence 1 (line 64) — active subscriber path
+let customerId = user.provider?.stripeCustomerId;
+if (!customerId) {
+  const customer = await stripe.customers.create({...});   // ← no idempotency key
+  customerId = customer.id;
+  await prisma.provider.update({ data: { stripeCustomerId: customerId } });
+}
+
+// Occurrence 2 (line 95) — trial subscriber checkout path
+let customerId = user.provider?.stripeCustomerId;
+if (!customerId) {
+  const customer = await stripe.customers.create({...});   // ← no idempotency key
+  customerId = customer.id;
+  await prisma.provider.update({ data: { stripeCustomerId: customerId } });
+}
+```
+
+And `instructor/subscription/route.ts` checkout block (line 133) has the same pattern.
+
+No Stripe idempotency key used on `customers.create`. Concurrent requests both see `stripeCustomerId = null`, both create customers, last DB write wins (one customer is orphaned). **Verdict: CONFIRMED in three locations. Medium severity — duplicate customer records are recoverable via admin `link_stripe_sub` action, but operationally messy.**
+
+---
+
+## Task 2 Summary
+
+| Finding | Status | Severity |
+|---------|--------|---------|
+| SUB-03-B `currentPeriodEnd` reset | ✅ CONFIRMED | Semantic/MEDIUM |
+| SUB-07-A Trial timing drift | ✅ CONFIRMED | Low-MEDIUM |
+| SUB-07-B targetTier divergence window | ✅ CONFIRMED | Moderate risk |
+| SUB-12-B BASIC tier naming | ✅ CONFIRMED | Semantic/LOW |
+| SUB-13-A Fail-open | ✅ CONFIRMED MEDIUM | Intentional policy |
+| SUB-16-A Mobile parity | ⚠️ PARTIALLY OUTDATED | Residual: stripeCustomerId + @ts-nocheck |
+| SUB-17-A Legacy checkout route | ✅ CONFIRMED dead code | LOW — remove before prod |
+| SUB-19-A Stripe version drift | ✅ CONFIRMED | LOW — standardise to 2026-02-25 |
+| SUB-23-A Concurrent customer creation | ✅ CONFIRMED x3 | MEDIUM |
+
+**9 findings verified — all confirmed at various severities. No false positives in this batch.**
+
+
+
+---
+
+## Task 3 — PAY-H-01 through PAY-H-06 Verification
+
+---
+
+### PAY-H-01: Financial State is Distributed Across Multiple Models
+
+**GPT Claim:** "Financial correctness depends on consistent cross-model transitions and idempotency across Booking, Transaction, WalletTransaction, PlatformLedger, LedgerEntry, and Payout."
+
+**Status:** ✅ CONFIRMED — architectural risk, not a code bug
+
+**Evidence:** Schema contains Booking.isPaid / paymentCaptured / paymentIntentId, WalletTransaction, FinancialLedger / LedgerEntry (ledger-service.ts), and Payout. There is no single state machine coordinating them — each subsystem updates its own records. This is consistent with the finding.
+
+**Assessment:** This is a real architectural complexity. It does not introduce a vulnerability on its own — individual flows have their own transaction wrappers. The risk is incomplete cross-model coverage (e.g. a refund creates a wallet credit but must also update ledger and payout records atomically). **Confirmed as architectural risk requiring a money-flow matrix review. Low urgency unless a gap in a specific flow is identified.**
+
+---
+
+### PAY-H-02: Booking and Payment Are Separate State Machines
+
+**GPT Claim:** "Boolean payment fields (`isPaid`, `paymentCaptured`) can contradict booking status unless every transition is centralized and tested."
+
+**Status:** ✅ CONFIRMED — architectural risk
+
+**Evidence from schema:** Booking has both `status` (enum string) and `isPaid` (Boolean) and `paymentCaptured` (Boolean). These can diverge: a booking can be `status: CANCELLED` with `isPaid: true` (legitimate refund scenario) or `status: CONFIRMED` with `isPaid: false` (pending payment). Each is valid but the invariants between them must be maintained.
+
+**Assessment:** Real architectural concern. The existing webhook handler (verified in Area 6 work) does handle the main transitions correctly with idempotency. The risk is edge cases: manual admin status overrides, race conditions on cancellation after payment, expired bookings. **Confirmed as architectural risk. No specific exploit identified — requires test matrix coverage to confirm invariants hold in all paths.**
+
+---
+
+### PAY-H-03: Payment Token is a Bearer Credential
+
+**GPT Claim:** "Any bearer token exposed through logs, URLs, screenshots, referrers, or email forwarding can become an authorization credential."
+
+**Status:** ✅ CONFIRMED — risk is real and specific
+
+**Actual code (bookings route, line 749):**
+```typescript
+paymentToken: crypto.randomUUID(),
+// ...
+`${process.env.NEXTAUTH_URL}/booking/${newBooking.id}/payment?token=${(newBooking as any).paymentToken}`
+```
+
+`crypto.randomUUID()` provides 122 bits of entropy — sufficient. The token is passed as a URL query parameter, which means it appears in:
+- Browser history
+- Server access logs (URL path is logged by default in most setups)
+- HTTP Referer header if the page links externally
+- Email links if sent via booking confirmation
+
+The public payment-status route (`/api/public/bookings/[id]/payment-status`) also accepts `paymentToken` for unauthenticated payment page access.
+
+No expiry or rotation observed — the token appears to be valid indefinitely until the booking is completed/cancelled.
+
+**Assessment:** ✅ CONFIRMED. Token entropy is fine. Exposure via URL is a real risk. Missing: token expiry after payment completion, and confirmation that the route invalidates the token once used. **Medium severity — should add expiry/invalidation logic.**
+
+---
+
+### PAY-H-04: SlotReservation Has No DB-Level Overlap Constraint
+
+**GPT Claim:** "SlotReservation has no database-level exclusion/unique constraint preventing duplicate active reservations for the same provider/time."
+
+**Status:** ✅ CONFIRMED — no constraint
+
+**Actual schema:**
+```prisma
+model SlotReservation {
+  id         String   @id @default(cuid())
+  providerId String
+  sessionId  String
+  startTime  DateTime
+  endTime    DateTime
+  expiresAt  DateTime
+  // ...
+  @@index([providerId, expiresAt])
+  @@index([sessionId])
+  // NO @@unique or exclusion constraint for overlapping time ranges
+}
+```
+
+No constraint prevents two rows with the same `providerId` covering overlapping `startTime`–`endTime`. Application-level conflict checks exist in some booking routes (confirmed in Area 4 work — I-02), but those check Booking records, not SlotReservation records. If the reservation check and booking creation are not in the same transaction, a race can exist.
+
+**Assessment:** ✅ CONFIRMED. No DB enforcement of non-overlapping reservations. Application-level checks exist but are not universally applied to SlotReservation. **Medium-High severity.**
+
+---
+
+### PAY-H-05: Payment/Booking Route Duplication
+
+**GPT Claim:** "The repository contains multiple payment-related paths including `app/api/payments/create-intent/`, `app/api/create-payment-intent/`, public payment-status routes, and others."
+
+**Status:** ⚠️ PARTIALLY OUTDATED — legacy route is a tombstone
+
+**Actual state:**
+- `app/api/create-payment-intent/route.ts` — exists but is a **tombstone** returning HTTP 410 Gone with redirect message:
+  ```typescript
+  return NextResponse.json({
+    error: 'This endpoint is deprecated.',
+    walletTopUp: 'POST /api/client/wallet-topup-intent',
+    bookingPayment: 'POST /api/payments/create-intent',
+  }, { status: 410 });
+  ```
+- `app/api/payments/create-intent/route.ts` — canonical, active (verified in P0-01 fix)
+- `app/api/client/wallet-topup-intent/route.ts` — wallet-specific path
+- `app/api/public/bookings/[id]/payment-status/route.ts` — read-only status check
+- `app/api/public/bookings/[id]/payment-summary/route.ts` — read-only summary
+
+**Assessment:** The legacy route is correctly tombstoned with 410. The GPT finding was accurate at audit time. Current state is PARTIALLY RESOLVED — the deprecated route is harmless. The remaining routes serve distinct purposes. **GPT's concern about inconsistent authorization/idempotency across parallel paths is still valid for the remaining active routes — they need an explicit authorization/idempotency matrix comparison.**
+
+---
+
+### PAY-H-06: Webhook Event Idempotency ≠ Business-Operation Idempotency
+
+**GPT Claim:** "Event-level deduplication prevents duplicate handling of the same event but does not prevent invalid state transitions caused by different events arriving out of order."
+
+**Status:** ✅ CONFIRMED — already verified in SUB-05-A
+
+This finding is identical to SUB-05-A, which was confirmed earlier. The webhook's `WebhookEvent.idempotencyKey` deduplicates per event ID. It does not prevent out-of-order arrival of `subscription.created`, `subscription.updated`, and `checkout.completed`. **Confirmed. Same finding as SUB-05-A — no new evidence needed.**
+
+---
+
+## PAY-H Summary
+
+| Finding | Status | Severity |
+|---------|--------|---------|
+| PAY-H-01 Financial state distribution | ✅ CONFIRMED | Architectural risk |
+| PAY-H-02 Booking/payment invariants | ✅ CONFIRMED | Architectural risk |
+| PAY-H-03 Payment token as bearer | ✅ CONFIRMED | MEDIUM — missing expiry |
+| PAY-H-04 SlotReservation no DB constraint | ✅ CONFIRMED | MEDIUM-HIGH |
+| PAY-H-05 Route duplication | ⚠️ PARTIALLY OUTDATED | LOW — tombstone exists |
+| PAY-H-06 Webhook idempotency scope | ✅ CONFIRMED | Architectural risk |
+
+**All 6 findings confirmed at some level. No false positives in PAY-H.**
+
+---
+
+## Task 4 — AUTH-M-01, AUTH-M-02, RBAC-M-01, RBAC-M-02 Verification
+
+---
+
+### AUTH-M-01: Stale JWT Usage in Sensitive Routes
+
+**GPT Claim:** "Routes that use `session.user.role`, `session.user.providerId`, `businessType`, and `paymentModel` directly can observe stale identity or business state."
+
+**Status:** ⚠️ CONFIRMED but BOUNDED — risk is lower than implied
+
+**Evidence from `lib/auth.ts`:**
+
+The JWT stores: `role`, `providerId`, `customerId`, `businessType`, `paymentModel`. These are written at sign-in and refreshed only when the JWT is rotated. The JWT has a 30-minute idle timeout (checked in the `jwt()` callback).
+
+**Key finding — `requirePermission()` re-reads DB:**
+```typescript
+// lib/auth/requireRole.ts (from payout-settings and other verified routes)
+// requirePermission() calls checkPermission() which re-reads StaffMember from DB
+```
+
+Admin and permission-sensitive routes use `requirePermission()` which re-reads DB. The P0-04 verification confirmed payout-settings uses `session!.user!.role !== 'provider'` — this IS using the JWT value directly, not DB.
+
+**Scope of direct JWT usage found:**
+```
+route.ts:11: if (!session || (session!.user!.role !== 'ADMIN' && ...))
+route.ts:45: if (!['provider', 'ADMIN', ...].includes(session!.user!.role))
+```
+
+These are role checks for basic access control — is the user a provider or admin. Not high-stakes permission checks. The pattern is: JWT for coarse role gate, `requirePermission()` for fine-grained admin permission.
+
+**Assessment:** ⚠️ CONFIRMED but PARTIALLY MITIGATED. JWT role can be stale (max 30 minutes of stale data, then idle timeout forces re-login). For role changes (provider → admin), stale JWT is a real concern for up to 30 minutes. For most routes this is acceptable. **Medium severity — matches GPT's assessment. Would benefit from a staleness audit on routes that use `session.user.role` directly for access control decisions.**
+
+---
+
+### AUTH-M-02: Auth Endpoint Rate Limiting Gaps
+
+**GPT Claim:** "Registration has rate limiting, but login/reset/verification paths need equivalent protection."
+
+**Status:** ✅ CONFIRMED — 3 auth routes missing rate limiting
+
+**Actual state (checked by reading each auth route):**
+
+| Route | Has Rate Limit |
+|-------|---------------|
+| `register` | ✅ YES |
+| `auth/forgot-password` | ✅ YES |
+| `auth/reset-password` | ✅ YES |
+| `auth/mobile-login` | ✅ YES |
+| `auth/verify-setup-token` | ✅ YES |
+| `auth/set-password` | ❌ NO |
+| `auth/verify-email` | ❌ NO |
+| `admin/register` | ❌ NO (admin-only) |
+
+`set-password` and `verify-email` have no rate limiting. These can be brute-forced (token enumeration) or denial-of-serviced (locking out legitimate token use).
+
+**Assessment:** ✅ CONFIRMED. Two user-facing routes lack rate limiting. `verify-email` is most concerning — repeated calls could be used to enumerate valid tokens. **Medium severity.**
+
+---
+
+### RBAC-M-01: Admin Endpoint Permission Coverage
+
+**GPT Claim:** "Admin routes use `requirePermission()` but coverage across the full `/api/admin/**` tree is assumed, not proven."
+
+**Status:** ✅ CONFIRMED — not fully verified, but strong pattern present
+
+**Evidence:** Every admin route I've read in this session (subscription management, payout settings, user management) uses either `requirePermission(session, PERM.X)` or `requireAdmin(session)`. The pattern is consistently applied in the routes that have been verified.
+
+This finding is a test-gap claim, not a specific code bug. The audit is correct that coverage should be enumerated and proven by matrix — it cannot be assumed from pattern consistency alone.
+
+**Assessment:** ✅ CONFIRMED as a gap in proof, not necessarily a gap in implementation. **Low-Medium severity — requires an admin route coverage audit, not an immediate code fix.**
+
+---
+
+### RBAC-M-02: Admin Sync Uses Local Row Selected by Recency, Not Stripe ID
+
+**GPT Claim:** "The admin sync action queries the latest active/trial/past-due Subscription row by recency, while Stripe retrieval is driven by the Provider-level Stripe subscription ID. If multiple rows exist, Stripe data may be written into the wrong row."
+
+**Status:** ✅ CONFIRMED — mismatch exists
+
+**Actual code (admin subscription route, sync case, line 147):**
+```typescript
+const instructor = await prisma.provider.findUnique({
+  where: { id: params.id },
+  select: {
+    subscriptions: {
+      where: { status: { in: ['ACTIVE', 'TRIAL', 'PAST_DUE'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 1               // ← picks most recently created row
+    }
+  },
+}) as any;
+
+// But Stripe data retrieved using Provider-level stripeSubscriptionId:
+if (!instructor?.stripeSubscriptionId) { ... }  // ← note: this is on provider, not on subscriptions[0]
+
+const stripeSub = await stripe.subscriptions.retrieve(
+  instructor.stripeSubscriptionId,  // ← Provider.stripeSubscriptionId
+  ...
+);
+
+// Later writes back to:
+const subRow = instructor.subscriptions[0];  // ← the row selected by recency
+if (subRow) {
+  await tx.subscription.update({ where: { id: subRow.id }, ... });
+}
+```
+
+The Stripe subscription is retrieved using `Provider.stripeSubscriptionId`. The DB update targets `subscriptions[0]` (most recently created active/trial/past-due row). These can be different rows if:
+- There are duplicate rows (admin tool explicitly supports deleting them → implies they occur)
+- The `Provider.stripeSubscriptionId` was linked to an older row
+
+**Assessment:** ✅ CONFIRMED. The selection mismatch is real. Fix: target the Subscription row whose `stripeSubscriptionId` matches `Provider.stripeSubscriptionId`, not the most recently created one. **Medium-High severity in the presence of duplicate rows.**
+
+---
+
+## AUTH/RBAC Summary
+
+| Finding | Status | Severity |
+|---------|--------|---------|
+| AUTH-M-01 Stale JWT | ✅ CONFIRMED | MEDIUM — 30min window, mitigated |
+| AUTH-M-02 Rate limit gaps | ✅ CONFIRMED | MEDIUM — set-password, verify-email |
+| RBAC-M-01 Admin coverage | ✅ CONFIRMED (gap in proof) | LOW-MEDIUM |
+| RBAC-M-02 Admin sync row mismatch | ✅ CONFIRMED | MEDIUM-HIGH |
+
+**All 4 confirmed. No false positives.**
+

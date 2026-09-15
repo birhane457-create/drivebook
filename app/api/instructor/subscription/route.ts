@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     const existingSubscription = await prisma.subscription.findFirst({
       where: {
         providerId: user.provider?.id,
-        status: { in: ['TRIAL', 'ACTIVE'] },
+        status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] },
       },
     });
 
@@ -182,6 +182,31 @@ export async function POST(req: NextRequest) {
     const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
     if (existingSubscription) {
+      // C-1 FIX: Block tier changes for non-TRIAL subscriptions.
+      //
+      // TRIAL tier changes are intentionally free — the instructor explores tiers
+      // within their single trial window without resetting the trial end date.
+      // (See: platform-model.md, code comment below.)
+      //
+      // ACTIVE and PAST_DUE subscriptions already have a Stripe billing relationship.
+      // Changing tier locally without a corresponding Stripe operation would:
+      //   - reduce the commission rate immediately (e.g. 15% → 10%)
+      //   - grant higher-tier features
+      //   - without the platform receiving the higher subscription fee
+      //
+      // All non-TRIAL tier changes must go through the Stripe Billing Portal so
+      // the subscription price change is recorded in Stripe before taking effect locally.
+      if (existingSubscription.status !== 'TRIAL' && existingSubscription.tier !== tier) {
+        return NextResponse.json(
+          {
+            error: 'To change your subscription plan, please use the billing portal.',
+            code:  'USE_BILLING_PORTAL',
+            redirect: '/dashboard/subscription',
+          },
+          { status: 403 },
+        );
+      }
+
       // Changing tier mid-trial — keep the ORIGINAL trial end date, never reset it.
       // The instructor gets one trial across all tiers, not a fresh trial per tier change.
       //
