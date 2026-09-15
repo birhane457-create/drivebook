@@ -380,6 +380,10 @@ model WalletTransaction {
   wallet      ClientWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 
+// NOTE: WalletTransaction has a unique index on metadata->>'stripePaymentIntentId'
+// See migration: 20260911000000_add_wallet_transaction_payment_intent_unique
+// This prevents P0-01B concurrent double-credit attacks
+
 model Message {
   id           String   @id @default(cuid())
   callerNumber String
