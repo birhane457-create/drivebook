@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       if (!walletSession?.user?.id) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
-      return handleWalletPaymentIntent(transactionId, amount);
+      return handleWalletPaymentIntent(transactionId, amount, walletSession.user.id);
     }
 
     // ✅ Handle booking payment (book now)
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
 /**
  * Create payment intent for wallet/package purchase (book later)
  */
-async function handleWalletPaymentIntent(transactionId: string, amount?: number) {
+async function handleWalletPaymentIntent(transactionId: string, amount?: number, userId?: string) {
   try {
     // Get wallet transaction details
     const transaction = await prisma.walletTransaction.findUnique({
@@ -159,6 +159,7 @@ async function handleWalletPaymentIntent(transactionId: string, amount?: number)
       providerId: '', // Not applicable for wallet purchases
       transactionId: transaction.id, // ✅ Pass transactionId instead of bookingId
       walletId: transaction.walletId, // ✅ Also pass walletId for webhook
+      userId,          // P0-01 FIX: stamp owner so wallet-add can verify
       customerEmail,
       description: transaction.description || 'Package purchase',
     });

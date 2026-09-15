@@ -56,19 +56,32 @@ export async function GET(req: NextRequest) {
 
     // Mark each trial as expired and revert instructor to BASIC tier
     const updated: any[] = [];
+    const skipped: string[] = [];
     const auditLogs: any[] = [];
 
     for (const trial of expiredTrials) {
       try {
-        // Atomically update subscription and instructor in transaction
+        // SUB-12-A FIX: Use updateMany with a status condition INSIDE the transaction.
+        // This makes the expiry conditional/atomic: if a concurrent webhook already
+        // converted this trial to ACTIVE (paid conversion), the updateMany matches
+        // 0 rows and we skip the provider update entirely — no overwrite occurs.
         const result = await prisma.$transaction(async (tx) => {
-          // Update subscription status
-          const updatedSub = await tx.subscription.update({
-            where: { id: trial.id },
+          const expireResult = await tx.subscription.updateMany({
+            where: {
+              id: trial.id,
+              status: 'TRIAL',          // Atomic guard: only expire if still TRIAL
+              trialEndsAt: { lt: now }, // Re-confirm expiry inside transaction
+            },
             data: { status: 'EXPIRED' },
           });
 
-          // Revert instructor to BASIC tier
+          if (expireResult.count === 0) {
+            // Row was already converted to ACTIVE/PAST_DUE by a concurrent webhook,
+            // or another cron invocation already expired it. Do not touch provider.
+            return null;
+          }
+
+          // Subscription was still TRIAL — safe to revert provider to BASIC.
           const updatedInstructor = await tx.provider.update({
             where: { id: trial.providerId },
             data: {
@@ -77,8 +90,14 @@ export async function GET(req: NextRequest) {
             },
           });
 
-          return { updatedSub, updatedInstructor };
+          return { updatedSub: { id: trial.id, status: 'EXPIRED' }, updatedInstructor };
         });
+
+        if (result === null) {
+          // Skipped — subscription was already converted or previously expired.
+          skipped.push(trial.id);
+          continue;
+        }
 
         updated.push(result);
 
@@ -116,12 +135,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       count: updated.length,
-      message: `Expired ${updated.length} trial subscription(s)`,
+      skipped: skipped.length,
+      message: `Expired ${updated.length} trial subscription(s)${skipped.length > 0 ? `, skipped ${skipped.length} already-converted` : ''}`,
       details: updated.map((u) => ({
         subscriptionId: u.updatedSub.id,
         providerId: u.updatedInstructor.id,
         instructorName: u.updatedInstructor.name,
       })),
+      skippedIds: skipped,
       duration: `${Date.now() - startTime}ms`,
     });
   } catch (error) {
