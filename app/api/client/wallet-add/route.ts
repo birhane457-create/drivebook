@@ -102,43 +102,75 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // P0-01 FIX: Verify the PaymentIntent was created for this user's wallet.
-      // Without this check, any authenticated user could call this endpoint with
-      // a PaymentIntent that belonged to a different user and receive wallet credits.
+      // ═══════════════════════════════════════════════════════════════════════════
+      // P0-01 FIX: Wallet Ownership Enforcement
+      // ═══════════════════════════════════════════════════════════════════════════
       //
-      // Two complementary checks:
-      //   1. metadata.userId must match the current user's id (new intents).
-      //   2. metadata.walletId must match the current user's wallet id (belt + braces,
-      //      and covers intents created before userId was stamped).
+      // VULNERABILITY (baseline):
+      //   Any authenticated user could call this endpoint with ANY succeeded PaymentIntent
+      //   and credit their wallet, even if the payment was made by a different user.
+      //
+      // ATTACK SCENARIO:
+      //   1. Attacker creates PaymentIntent for $100, completes payment
+      //   2. Victim also creates PaymentIntent for $100, completes payment
+      //   3. Attacker calls /api/client/wallet-add with VICTIM's paymentIntentId
+      //   4. Attacker receives $100 wallet credit (one payment → two credits)
+      //
+      // INVARIANT ENFORCED:
+      //   A PaymentIntent can ONLY credit the wallet belonging to the user who created it.
+      //   We verify ownership via PaymentIntent.metadata.userId (set during creation).
+      //
+      // DEFENSE IN DEPTH:
+      //   - Primary: metadata.userId must match session.user.id (REQUIRED)
+      //   - Secondary: metadata.walletId must match user's wallet (belt-and-braces)
+      //   - Fail-closed: Reject if metadata is missing/malformed (no fail-open path)
+      //
+      // ═══════════════════════════════════════════════════════════════════════════
+
       const metaUserId  = paymentIntent.metadata?.userId;
       const metaWalletId = paymentIntent.metadata?.walletId;
 
-      const userIdMismatch  = metaUserId  && metaUserId  !== user.id;
-      const walletIdMismatch = metaWalletId && metaWalletId !== wallet.id;
-
-      if (userIdMismatch || walletIdMismatch) {
+      // PRIMARY OWNERSHIP CHECK: userId must match
+      if (!metaUserId) {
+        // PaymentIntent has no userId metadata → fail closed
         console.error(
-          `[wallet-add] Ownership check failed: intent=${paymentIntentId} ` +
-          `meta.userId=${metaUserId} caller=${user.id} ` +
-          `meta.walletId=${metaWalletId} callerWallet=${wallet.id}`
+          `[P0-01] PaymentIntent ${paymentIntentId} missing userId metadata — REJECTING`
         );
         return NextResponse.json(
-          { error: 'Payment intent does not belong to your account' },
+          { error: 'Payment intent is not linked to your account' },
           { status: 403 }
         );
       }
 
-      // If neither metadata field is present (very old intent or non-wallet intent),
-      // reject conservatively rather than fail open.
-      if (!metaUserId && !metaWalletId) {
+      if (metaUserId !== user.id) {
+        // userId mismatch → attacker attempting cross-user credit
         console.error(
-          `[wallet-add] PaymentIntent ${paymentIntentId} has no wallet ownership metadata — rejecting`
+          `[P0-01] Ownership violation: intent=${paymentIntentId} ` +
+          `meta.userId=${metaUserId} caller=${user.id} — REJECTING`
         );
         return NextResponse.json(
-          { error: 'Payment intent is not linked to a wallet account' },
+          { error: 'Payment intent belongs to a different account' },
           { status: 403 }
         );
       }
+
+      // SECONDARY OWNERSHIP CHECK: walletId must match (if present)
+      if (metaWalletId && metaWalletId !== wallet.id) {
+        // WalletId mismatch (shouldn't happen if userId matched, but belt-and-braces)
+        console.error(
+          `[P0-01] Wallet mismatch: intent=${paymentIntentId} ` +
+          `meta.walletId=${metaWalletId} callerWallet=${wallet.id} — REJECTING`
+        );
+        return NextResponse.json(
+          { error: 'Payment intent linked to different wallet' },
+          { status: 403 }
+        );
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // Ownership verified: PaymentIntent.metadata.userId matches authenticated user
+      // Safe to proceed with wallet credit
+      // ═══════════════════════════════════════════════════════════════════════════
     } catch (stripeErr) {
       console.error('Stripe verification failed:', stripeErr);
       return NextResponse.json(
