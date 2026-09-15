@@ -8,6 +8,8 @@ import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/led
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 import { sendWalletTopUpReceipt } from '@/lib/services/receipt-bridge';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
+import { stripeService } from '@/lib/services/stripe';
 
 
 export const dynamic = 'force-dynamic';
@@ -76,7 +78,6 @@ export async function POST(req: NextRequest) {
     // Don't accept any paymentIntentId without Stripe confirmation
     // This prevents fraud where attacker could call wallet-add with a fake/pending intent ID
     try {
-      const stripeService = require('@/lib/services/stripe').stripeService;
       const paymentIntent = await stripeService.retrievePaymentIntent(paymentIntentId);
       
       if (!paymentIntent) {
@@ -304,6 +305,20 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
+    // P0-01B: Unique constraint violation — concurrent request already credited this PaymentIntent.
+    // The database unique index on metadata->>'stripePaymentIntentId' rejected the second insert.
+    // Return 409 so the caller knows the payment was already processed, not a server fault.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      console.warn(`[P0-01B] Concurrent duplicate wallet credit blocked by DB constraint: ${error.meta?.target}`);
+      return NextResponse.json(
+        { error: 'Payment already processed', code: 'PAYMENT_ALREADY_CREDITED' },
+        { status: 409 }
+      );
+    }
+
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: 'Validation failed', details: error.errors },
