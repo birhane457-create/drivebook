@@ -2428,3 +2428,253 @@ Per Area 5 audit document: Fix implemented, 22/22 verification tests passed. Use
 
 **Status:** Verification ongoing. 6 confirmed critical issues implemented and tested. 2 additional confirmed critical issues (C-1, C-3) require implementation.
 
+
+
+---
+
+## GPT Review Response — Source-Verified Re-Checks
+
+**Date:** 2026-08-15  
+**Trigger:** GPT reviewed the handoff and identified four items requiring deeper verification before they could be considered closed.
+
+---
+
+### Re-check: SUB-02-B — Is the protection a DB invariant or application logic?
+
+**Question from GPT:** Is the concurrent trial protection enforced by a DB-level unique constraint or only by check→create inside SERIALIZABLE?
+
+**Finding:**
+
+The `Subscription` schema has no unique constraint on `(providerId, status)`:
+
+```prisma
+model Subscription {
+  id         String @id @default(cuid())
+  providerId String
+  // No @@unique, no partial index, no constraint
+  provider   Provider @relation(...)
+}
+```
+
+The protection is entirely application-level: `findFirst` re-check inside a `SERIALIZABLE` `$transaction`.
+
+**What SERIALIZABLE actually provides:**
+PostgreSQL detects the read/write conflict (both transactions read "no rows exist" then both attempt create) and aborts one with P2034. The surviving transaction creates the row; the aborted one propagates an error.
+
+**The remaining gap:**
+The subscription route has no `withSerializableRetry()` wrapper. A P2034 abort surfaces as a generic 500 to the caller. Duplicate row creation is prevented, but the losing concurrent request does not get a clean idempotent response.
+
+**Assessment:** SUB-02-B prevents duplicate rows. It does not provide a clean response to the losing concurrent request. The retry gap is a separate, lower-severity issue.
+
+**Status:** Application-level protection only. No DB backstop. Duplicate creation prevented; 500 on race is pre-existing limitation.
+
+---
+
+### Re-check: Stripe-succeeds/DB-fails path in subscription-cancel.ts
+
+**Question from GPT:** What happens when Stripe succeeds but the subsequent DB update fails?
+
+**Finding from code (lines 130–160):**
+
+```typescript
+// Step 2: Stripe call — can succeed
+await stripe.subscriptions.update(stripeSubId, { cancel_at_period_end: true });
+stripeAction = 'cancelled_in_stripe';
+
+// Step 3: DB update — can fail independently
+await prisma.$transaction(async (tx) => {
+  await tx.subscription.update({ ... });
+});
+// If this throws, the function throws. Caller gets 500.
+// Stripe: cancelled. Local DB: still shows active.
+```
+
+**Failure path:**
+1. Stripe call succeeds
+2. `prisma.$transaction` throws (DB timeout, connection lost, P2034)
+3. `cancelSubscription()` throws
+4. Route's catch block returns 500 with generic "Failed to cancel subscription" message
+5. **Split-brain state: Stripe cancelled, local DB shows active**
+
+**Recovery mechanism:** Exists but is not automatic. The instructor can call `/api/instructor/subscription/sync` (which reads live Stripe state) to correct the local row. This is not triggered automatically.
+
+**Direction of failure:** Less dangerous than the original SUB-09-A defect (local cancelled, Stripe billing continues). With this failure, Stripe is correctly cancelled but the UI appears inconsistent until sync.
+
+**What is missing:**
+- The error message on failure does not distinguish "Stripe may have been cancelled" from other errors
+- No automatic reconciliation
+- No durable logging of the partial-cancel state for operator visibility
+
+**Status:** Original billing-continuation defect (SUB-09-A) is fixed. Inverse failure path (Stripe cancelled, DB stale) is a separate, documented gap requiring reconciliation automation.
+
+---
+
+### Re-check: C-1 business rule — is trial tier-change intentionally free?
+
+**Question from GPT:** Is changing tier during a trial supposed to be free, or is the concern specifically for paid (ACTIVE) subscriptions?
+
+**Finding from steering file (platform-model.md):**
+
+The platform model explicitly lists separate `trialDays` per tier (14 for BASIC/PRO/STUDIO, 30 for PREMIUM). The code comment in the tier-change branch says:
+
+> "Changing tier mid-trial — keep the ORIGINAL trial end date, never reset it. The instructor gets one trial across all tiers, not a fresh trial per tier change."
+
+**Conclusion from evidence:** Tier changes during TRIAL are **intentionally free by product design**. An instructor on BASIC trial exploring STUDIO features before committing is the intended use case. The trial window is preserved (not reset) to prevent abuse.
+
+**Where the real vulnerability exists:**
+The `if (existingSubscription)` branch fires for ALL statuses: TRIAL, ACTIVE, PAST_DUE. For an ACTIVE subscriber, changing tier via this API updates `subscriptionTier` (and effectively commission rate) without modifying the Stripe subscription.
+
+**Revised C-1 scope:** Not "any tier change without payment" but specifically "ACTIVE subscription tier change without Stripe billing."
+
+**Required fix — scoped correctly:**
+```typescript
+if (existingSubscription) {
+  // TRIAL: tier changes are intentionally free (product decision)
+  // ACTIVE/PAST_DUE: must go through Stripe Billing Portal
+  if (existingSubscription.status !== 'TRIAL') {
+    return NextResponse.json({
+      error: 'To change your subscription plan, please use the billing portal.',
+      redirect: '/dashboard/subscription',
+    }, { status: 403 });
+  }
+  // ... proceed with trial tier change (free) ...
+}
+```
+
+**Status:** C-1 confirmed, scope corrected. TRIAL tier changes are intentional. ACTIVE tier changes via API are the vulnerability. Fix not yet implemented.
+
+---
+
+### C-3 Fix — CONFIRMED IMPLEMENTED AND TESTED
+
+**Change made:** `app/api/instructor/payout-settings/route.ts`
+
+Removed `abnVerified`, `abnStatus`, and `withholdingTaxRate` from the client-settable `verificationUpdate` block. Only `abnEntityName` remains as a client-settable field in that block. The instructor can submit their ABN number and entity name; admin sets verification status and tax rate through admin-only routes.
+
+**Before (vulnerable):**
+```typescript
+const verificationUpdate = abnChanged ? {} : {
+  ...(abnEntityName !== undefined ? { abnEntityName } : {}),
+  ...(abnVerified !== undefined ? { abnVerified } : {}),           // ← REMOVED
+  ...(abnStatus !== undefined ? { abnStatus } : {}),               // ← REMOVED
+  ...(wtFromClient !== undefined && abnVerified === true           // ← REMOVED
+    ? { withholdingTaxRate: wtFromClient } : {}),
+};
+```
+
+**After (fixed):**
+```typescript
+const verificationUpdate = abnChanged ? {} : {
+  ...(abnEntityName !== undefined ? { abnEntityName } : {}),
+  // abnVerified:        ADMIN-ONLY
+  // abnStatus:          ADMIN-ONLY
+  // withholdingTaxRate: ADMIN-ONLY
+};
+```
+
+**Test:** `app/api/instructor/payout-settings/__tests__/withholding-tax.test.ts` — 9 tests covering all attack vectors. All pass.
+
+**Status:** CONFIRMED → FIX IMPLEMENTED → TEST VERIFIED
+
+---
+
+### APP-H-03 — Entitlement Fail-Open
+
+**GPT triage:** "⚠️ CRITICAL"
+
+**Finding from reading `lib/middleware/subscriptionValidation.ts`:**
+
+Two fail-open paths confirmed:
+
+```typescript
+// Path 1: No instructor record
+if (!instructor) {
+  // No instructor record — fail open, let page-level auth handle it
+  return { valid: true, readOnly: false };  // ← full access
+}
+
+// Path 2: DB error
+} catch (error) {
+  console.error('Subscription check error:', error);
+  // Fail open — never block on a DB error
+  return { valid: true, readOnly: false };  // ← full access
+}
+```
+
+**Both paths are explicitly documented in the code as intentional.**
+
+**Assessment:**
+
+This is a documented policy decision, not an accidental code path. The comment on path 2 says "never block on a DB error." The Australian Privacy Act comment in the file header provides the stated rationale.
+
+**What the triage called "critical" is real but:**
+- It is intentional, documented policy
+- The risk is bounded: DB errors grant full access only to authenticated users (session check runs first)
+- An unauthenticated user cannot exploit this — they never reach `checkSubscriptionAccess`
+- A DB error during a legitimate paid user's session means they keep working, which is the intended behavior
+
+**The actual gap (lower severity than triage suggests):**
+- A DB outage during an expired/cancelled subscriber's session would grant them access they should not have
+- No monitoring/alerting when `checkSubscriptionAccess` fails
+
+**Verdict:** CONFIRMED as fail-open. GPT triage of CRITICAL is overstated — this is MEDIUM at most. The authenticated-only context significantly limits the attack surface. The policy decision should be explicitly documented and monitored.
+
+---
+
+### APP-H-06 — DIRECT Payment Mode Contradiction
+
+**GPT triage:** "⚠️ CRITICAL CONTRADICTION"
+
+**Finding from code search:**
+
+Three locations handle DIRECT mode:
+
+1. `app/api/payments/create-intent/route.ts` line 214:
+   ```typescript
+   if (booking?.provider?.paymentMode === 'DIRECT') {
+     return NextResponse.json({
+       error: 'Direct payment mode is not yet available.',
+       code: 'PAYMENT_MODE_NOT_IMPLEMENTED',
+     }, { status: 503 });
+   }
+   ```
+
+2. `app/api/public/bookings/bulk/route.ts` line 246: same guard pattern
+
+3. `lib/utils/account.ts` line 131: `assertPlatformPaymentMode()` throws if `paymentMode === 'DIRECT'`
+
+**Assessment:**
+
+The "contradiction" is that PREMIUM tier promises 0% commission (which requires DIRECT mode per the steering file) but DIRECT mode is phase 2 and not implemented. The steering file explicitly documents this:
+
+> "0% commission — requires DIRECT mode which is phase 2"
+
+This is not a code vulnerability. It is an unimplemented feature with:
+- Guards at the payment creation level (503 returned)
+- Guards at the bulk booking level
+- The `assertPlatformPaymentMode()` utility for enforcement
+- Explicit documentation in the steering file
+
+**The register route** (`app/api/register/route.ts` line 88) sets `paymentMode: 'PLATFORM'` as the default — no DIRECT mode accounts are created through normal registration.
+
+**Verdict:** FALSE POSITIVE as "critical." This is documented, guarded, and intentional. The risk is an admin accidentally setting `paymentMode = 'DIRECT'` on a Provider via a direct DB change — which would cause 503s on payment creation, not silent revenue loss. The guards are working as designed.
+
+---
+
+## Updated Status
+
+**Total verified findings: 29 (4 new re-checks + 1 C-3 fix)**
+
+| Category | Status |
+|----------|--------|
+| P0-01 Wallet ownership | ✅ Fixed + tested |
+| SUB-02-A/B Atomic creation | ✅ Fixed; DB constraint gap documented |
+| SUB-09-A/10-A Cancellation | ✅ Original defect fixed; inverse failure path documented |
+| SUB-12-A Cron race | ✅ Fixed + tested |
+| C-1 Active sub tier change | ⚠️ Confirmed (ACTIVE only), fix pending |
+| C-3 Withholding tax | ✅ Fixed + tested (9 tests) |
+| APP-H-03 Entitlement fail-open | ✅ CONFIRMED MEDIUM — documented intentional policy |
+| APP-H-06 DIRECT mode | ❌ FALSE POSITIVE — guarded and documented |
+
+**Test count:** 323 → 332 passing (+9 for C-3)
+
