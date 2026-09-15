@@ -357,8 +357,8 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
     });
   });
 
-  describe('🔄 CONCURRENCY: Idempotency', () => {
-    it('prevents duplicate credits from concurrent/repeated requests', async () => {
+  describe('🔄 IDEMPOTENCY: Sequential duplicate detection', () => {
+    it('detects duplicate when second request arrives after first completes', async () => {
       const paymentIntentIdempotent = 'pi_test_idem_' + Date.now();
 
       vi.mocked(getServerSession).mockResolvedValue({
@@ -388,6 +388,8 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
       expect(data1.success).toBe(true);
 
       // Second request with same PaymentIntent - should detect duplicate
+      // NOTE: This is SEQUENTIAL (await), not concurrent
+      // For true concurrency test, see p0-01b-concurrent.test.ts
       const response2 = await POST(createRequest());
       const data2 = await response2.json();
       expect(response2.status).toBe(200);
@@ -474,8 +476,12 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
  *    5. Amount validation: Amount mismatch rejected
  *    6. Nonexistent wallet: Auto-created (not an error condition)
  * 
- * 🔄 CONCURRENCY TESTED:
- *    - Duplicate requests with same PaymentIntent create only one credit
+ * 🔄 IDEMPOTENCY TESTED:
+ *    - Sequential duplicate requests detected and handled gracefully
+ * 
+ * ⚠️ CONCURRENT RACE CONDITION:
+ *    - NOT tested here (sequential await, not concurrent)
+ *    - See p0-01b-concurrent.test.ts for true concurrency tests
  * 
  * INVARIANT VERIFIED:
  *    PaymentIntent.metadata.userId MUST match session.user.id
