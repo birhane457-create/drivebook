@@ -1,0 +1,101 @@
+﻿[
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  1,
+        "Context":  "Unknown",
+        "Safe":  true,
+        "Line":  448
+    },
+    {
+        "SideEffects":  [
+                            "Audit Log External"
+                        ],
+        "Number":  2,
+        "Context":  "Unknown",
+        "Safe":  false,
+        "Line":  562
+    },
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  3,
+        "Context":  "handleWalletPaymentSuccess",
+        "Safe":  true,
+        "Line":  679
+    },
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  4,
+        "Context":  "both booking payments AND wallet/package purchases\r",
+        "Safe":  true,
+        "Line":  876
+    },
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  5,
+        "Context":  "handleBookingPaymentFailed",
+        "Safe":  true,
+        "Line":  1317
+    },
+    {
+        "SideEffects":  [
+                            "Audit Log External"
+                        ],
+        "Number":  6,
+        "Context":  "Unknown",
+        "Safe":  false,
+        "Line":  1427
+    },
+    {
+        "SideEffects":  [
+                            "Audit Log External"
+                        ],
+        "Number":  7,
+        "Context":  "handleSubscriptionCancelled",
+        "Safe":  false,
+        "Line":  1571
+    },
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  8,
+        "Context":  "handleTrialEnding",
+        "Safe":  true,
+        "Line":  1608
+    },
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  9,
+        "Context":  "handleInvoicePaymentSucceeded",
+        "Safe":  true,
+        "Line":  1656
+    },
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  10,
+        "Context":  "handleInvoicePaymentFailed",
+        "Safe":  true,
+        "Line":  1701
+    },
+    {
+        "SideEffects":  [
+
+                        ],
+        "Number":  11,
+        "Context":  "Unknown",
+        "Safe":  true,
+        "Line":  2237
+    }
+]

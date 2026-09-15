@@ -1,0 +1,212 @@
+# Subscription System
+
+**Last updated:** August 2026
+**Verified against:** `lib/config/subscriptions.ts`, `lib/config/packages.ts`, `prisma/schema.prisma`
+**Status:** Fully implemented and working
+
+---
+
+## Overview
+
+DriveBook uses a 4-tier subscription model for providers. Subscriptions are managed via Stripe. The system handles trials, upgrades, downgrades, billing portal, and post-portal sync.
+
+A 5th tier (BUSINESS — multi-provider) is displayed in the UI as "Coming Soon" but has no backend implementation and no Stripe price IDs.
+
+---
+
+## Active Tiers
+
+Source of truth: `lib/config/subscriptions.ts` → `SUBSCRIPTION_PLANS`
+
+| Tier | Monthly | Annual | Commission | Trial | Status |
+|------|---------|--------|------------|-------|--------|
+| BASIC | $29 | $290 | 15% | 14 days | Live |
+| PRO | $79 | $790 | 12% | 14 days | Live |
+| STUDIO | $129 | $1,290 | 11% | 14 days | Live |
+| PREMIUM | $199 | $1,990 | 10% | 30 days | Live |
+| BUSINESS | TBD | TBD | TBD | TBD | Coming Soon |
+
+**PREMIUM** is the 4th active tier — renamed from BUSINESS in August 2026. It is for **single providers** with full white-label and direct payment capability (direct payments are phase 2 — see below).
+
+**BUSINESS** tier is a future multi-provider tier (unlimited providers, role-based access, school-level branding). It is shown in the subscription UI with a "Coming Soon" badge. There is no `SUBSCRIPTION_PLANS.BUSINESS` key and no Stripe price IDs for it.
+
+Note: The `newStudentBonus` concept was removed May 2026. Commission is a flat rate per tier.
+
+---
+
+## Commission Rate Source
+
+Commission rates are read from `PlatformSettings` DB record at payment creation time via `lib/services/platform-pricing.ts → getCommissionRate(tier)`.
+
+Internal DB field names:
+- `basicCommissionRate` → BASIC tier
+- `proCommissionRate` → PRO tier
+- `studioCommissionRate` → STUDIO tier
+- `businessCommissionRate` → PREMIUM tier (field name unchanged for DB compatibility; also serves any future BUSINESS tier until it has its own rate)
+
+The rate is locked on the booking at creation time — never re-derived at payout time.
+
+Config fallback: `lib/config/packages.ts` → `DEFAULT_SETTINGS` defines hardcoded defaults used when no DB record exists:
+```typescript
+basicCommissionRate: 15,
+proCommissionRate: 12,
+studioCommissionRate: 11,
+businessCommissionRate: 10,  // serves PREMIUM tier
+```
+
+---
+
+## Tier Feature Matrix
+
+Source of truth: `lib/config/subscriptions.ts` → `SUBSCRIPTION_PLANS[tier].limits`
+
+| Feature | BASIC | PRO | STUDIO | PREMIUM |
+|---------|-------|-----|--------|---------|
+| Max providers | 1 | 1 | 1 | 1 |
+| Custom domain | ❌ | ❌ | ✅ | ✅ |
+| Branded pages | ❌ | ✅ | ✅ | ✅ |
+| Priority support | ❌ | ✅ | ✅ | ✅ |
+| API access | ❌ | ❌ | ❌ | ✅ |
+
+**Multi-provider management** is NOT in any active tier. It is planned for the future BUSINESS tier.
+
+**Direct payments (0% commission)** is listed as a PREMIUM feature but is NOT yet implemented. All payments currently route through the DriveBook Stripe account (PLATFORM mode). The guard is in `lib/utils/account.ts → assertPlatformPaymentMode()` which throws a runtime error if `paymentMode=DIRECT` is set on any account.
+
+---
+
+## Payment Mode
+
+Two payment modes exist on the `Provider` schema:
+- `PLATFORM` (default) — all payments flow through DriveBook Stripe
+- `DIRECT` — payments go to provider's own Stripe account via Stripe Connect
+
+**DIRECT mode is phase 2 and not yet implemented.** Any account set to `paymentMode=DIRECT` will throw an error at checkout. Do not set this value manually.
+
+---
+
+## DB Models
+
+### `Provider` model (subscription fields)
+
+From `prisma/schema.prisma`:
+```prisma
+subscriptionTier    String    @default("BASIC")   // BASIC | PRO | STUDIO | PREMIUM
+subscriptionStatus  String    @default("TRIAL")   // TRIAL | ACTIVE | PAST_DUE | CANCELLED
+trialEndsAt         DateTime?
+stripeCustomerId    String?
+stripeAccountId     String?
+paymentMode         String    @default("PLATFORM") // PLATFORM | DIRECT (DIRECT = phase 2)
+businessModel       String    @default("SAAS")     // MARKETPLACE | SAAS
+```
+
+### `Subscription` model
+
+```prisma
+id                   String
+providerId           String
+tier                 String    // BASIC | PRO | STUDIO | PREMIUM
+status               String    @default("ACTIVE")
+billingCycle         String    @default("monthly")
+monthlyAmount        Float
+stripeSubscriptionId String?
+stripeCustomerId     String?
+currentPeriodStart   DateTime
+currentPeriodEnd     DateTime
+cancelAtPeriodEnd    Boolean   @default(false)
+trialEndsAt          DateTime?
+cancelledAt          DateTime?
+```
+
+### `PlatformRateChange` model
+
+```prisma
+id            String
+tier          String    // BASIC | PRO | STUDIO | PREMIUM | ALL
+field         String    // basicCommissionRate | proCommissionRate | studioCommissionRate | businessCommissionRate
+currentRate   Float
+newRate       Float
+effectiveDate DateTime
+reason        String
+status        String    @default("PENDING")  // PENDING | APPLIED | CANCELLED
+notifiedAt    DateTime?
+appliedAt     DateTime?
+createdBy     String
+```
+
+Note: The `businessCommissionRate` field name serves the PREMIUM tier. There is no separate `premiumCommissionRate` DB column.
+
+---
+
+## Stripe Price IDs
+
+From `lib/config/subscriptions.ts → STRIPE_PRICE_IDS`:
+```typescript
+BASIC_MONTHLY, BASIC_ANNUAL
+PRO_MONTHLY, PRO_ANNUAL
+STUDIO_MONTHLY, STUDIO_ANNUAL
+PREMIUM_MONTHLY, PREMIUM_ANNUAL
+```
+
+Environment variables:
+```
+STRIPE_BASIC_MONTHLY_PRICE_ID
+STRIPE_PRO_MONTHLY_PRICE_ID
+STRIPE_STUDIO_MONTHLY_PRICE_ID
+STRIPE_PREMIUM_MONTHLY_PRICE_ID   # was STRIPE_BUSINESS_MONTHLY_PRICE_ID before rename
+STRIPE_PREMIUM_ANNUAL_PRICE_ID
+```
+
+---
+
+## APIs
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/instructor/subscription` | Current subscription + all plan definitions |
+| POST | `/api/instructor/subscription` | Create trial or change tier during trial |
+| DELETE | `/api/instructor/subscription` | Cancel subscription (sets cancelAtPeriodEnd) |
+| POST | `/api/instructor/subscription/billing-portal` | Open Stripe Billing Portal (active) or Checkout (trial) |
+| POST | `/api/instructor/subscription/sync` | Sync state from Stripe after portal return |
+| POST | `/api/instructor/subscription/mobile` | Mobile app tier selection |
+| GET | `/api/admin/rate-changes` | List scheduled rate changes |
+| POST | `/api/admin/rate-changes` | Schedule a rate change |
+| DELETE | `/api/admin/rate-changes/[id]` | Cancel pending rate change |
+| GET | `/api/cron/apply-rate-changes` | Apply due rate changes (daily cron) |
+
+---
+
+## Upgrade/Downgrade Flow
+
+**Trial providers:** `POST /api/instructor/subscription` with new tier. DB updated immediately. Trial end date preserved.
+
+**Active paid providers:** `POST /api/instructor/subscription/billing-portal` → Stripe Billing Portal → return with `?portal_return=true` → `POST /api/instructor/subscription/sync` pulls latest state from Stripe.
+
+Webhook (`customer.subscription.updated`) also fires as a second DB update. Tier is derived from the Stripe price ID when metadata is missing (handles Billing Portal upgrades). Price ID → tier mapping lives in all webhook handlers.
+
+---
+
+## Stripe Webhook Events Handled
+
+| Event | Handler |
+|-------|---------|
+| `customer.subscription.created` | `handleSubscriptionUpdate` — creates/updates Subscription record |
+| `customer.subscription.updated` | `handleSubscriptionUpdate` — syncs tier, status, period |
+| `customer.subscription.deleted` | `handleSubscriptionCancelled` — sets status CANCELLED |
+| `customer.subscription.trial_will_end` | `handleTrialEnding` — sends 3-day warning email |
+| `invoice.payment_succeeded` | `handleInvoicePaymentSucceeded` — sets status ACTIVE |
+| `invoice.payment_failed` | `handleInvoicePaymentFailed` — sets status PAST_DUE |
+
+---
+
+## Scheduled Rate Changes
+
+Admins schedule rate changes via `/admin/pricing → Rate Change Scheduler`. The `apply-rate-changes` cron applies them on the effective date and notifies all affected providers.
+
+---
+
+## What Is NOT Implemented (Phase 2)
+
+- **DIRECT payment mode** — `paymentMode=DIRECT` throws a runtime error. Do not use.
+- **BUSINESS tier** — no `SUBSCRIPTION_PLANS.BUSINESS` key, no Stripe price IDs, no backend routes. UI shows "Coming Soon".
+- **Multi-provider management** — all tiers have `providers: 1`. No account can have multiple providers.
+- **0% commission** — PREMIUM tier lists this as a future feature; it requires DIRECT mode which is phase 2.
