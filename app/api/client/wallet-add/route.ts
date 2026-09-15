@@ -101,6 +101,44 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      // P0-01 FIX: Verify the PaymentIntent was created for this user's wallet.
+      // Without this check, any authenticated user could call this endpoint with
+      // a PaymentIntent that belonged to a different user and receive wallet credits.
+      //
+      // Two complementary checks:
+      //   1. metadata.userId must match the current user's id (new intents).
+      //   2. metadata.walletId must match the current user's wallet id (belt + braces,
+      //      and covers intents created before userId was stamped).
+      const metaUserId  = paymentIntent.metadata?.userId;
+      const metaWalletId = paymentIntent.metadata?.walletId;
+
+      const userIdMismatch  = metaUserId  && metaUserId  !== user.id;
+      const walletIdMismatch = metaWalletId && metaWalletId !== wallet.id;
+
+      if (userIdMismatch || walletIdMismatch) {
+        console.error(
+          `[wallet-add] Ownership check failed: intent=${paymentIntentId} ` +
+          `meta.userId=${metaUserId} caller=${user.id} ` +
+          `meta.walletId=${metaWalletId} callerWallet=${wallet.id}`
+        );
+        return NextResponse.json(
+          { error: 'Payment intent does not belong to your account' },
+          { status: 403 }
+        );
+      }
+
+      // If neither metadata field is present (very old intent or non-wallet intent),
+      // reject conservatively rather than fail open.
+      if (!metaUserId && !metaWalletId) {
+        console.error(
+          `[wallet-add] PaymentIntent ${paymentIntentId} has no wallet ownership metadata — rejecting`
+        );
+        return NextResponse.json(
+          { error: 'Payment intent is not linked to a wallet account' },
+          { status: 403 }
+        );
+      }
     } catch (stripeErr) {
       console.error('Stripe verification failed:', stripeErr);
       return NextResponse.json(
