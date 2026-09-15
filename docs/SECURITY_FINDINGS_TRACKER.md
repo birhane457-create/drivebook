@@ -54,53 +54,37 @@
 
 ### P0-01B: Concurrent Wallet Credit Race Condition
 
-**Status**: ⚠️ **OPEN** (New finding from independent review)  
-**Severity**: MEDIUM  
-**Issue**: Two simultaneous requests can both credit wallet from same PaymentIntent
-
-**Root Cause**:
-```typescript
-// Check happens OUTSIDE transaction (TOCTOU vulnerability)
-const existingTransaction = await prisma.walletTransaction.findFirst({...});
-if (existingTransaction) return duplicate;
-
-// Race window here ↓
-await prisma.$transaction(async (tx) => {
-  await tx.walletTransaction.create({...});  // Both requests can reach here
-});
-```
-
-**Attack Scenario**:
-```javascript
-// Fire two concurrent requests with same PaymentIntent
-await Promise.all([
-  fetch('/api/client/wallet-add', {body: {paymentIntentId: 'pi_123', amount: 100}}),
-  fetch('/api/client/wallet-add', {body: {paymentIntentId: 'pi_123', amount: 100}})
-]);
-// Result: Wallet credited $200 for $100 payment
-```
+**Status**: ✅ **FIXED** (New finding + fix from independent review)  
+**Severity**: MEDIUM → FIXED  
+**Original Issue**: Two simultaneous requests could both credit wallet from same PaymentIntent (TOCTOU race)
 
 **Verification**:
-- ✅ SOURCE REVIEWED - Race condition confirmed
-- ❌ TEST VERIFIED - Existing test uses sequential calls, not concurrent
-- ⚠️ FIX PENDING
+- ✅ SOURCE VERIFIED (2026-09-11)
+- ✅ FIX IMPLEMENTED - Database unique constraint
+- ✅ TEST CREATED - Genuine concurrent test (Promise.all)
 
-**Recommended Fix** (Option 1 - Preferred):
-```sql
-CREATE UNIQUE INDEX wallet_transaction_stripe_payment_intent_unique
-ON "WalletTransaction" ((metadata->>'stripePaymentIntentId'))
-WHERE metadata->>'stripePaymentIntentId' IS NOT NULL;
-```
+**Fix Implemented**:
+- Database unique index on `metadata->>'stripePaymentIntentId'`
+- Migration: `20260911000000_add_wallet_transaction_payment_intent_unique`
+- Concurrent integration test: `p0-01b-concurrent.test.ts`
+- Second concurrent request will fail with unique violation (409 or 500)
 
-**Required Actions**:
-1. Implement database constraint OR move check inside transaction
-2. Add genuine concurrent test (Promise.all)
-3. Verify fix prevents race condition
-4. Deploy to production
+**Files Changed**:
+- `prisma/migrations/20260911000000_add_wallet_transaction_payment_intent_unique/migration.sql`
+- `prisma/schema.prisma` (documentation comment)
+- `app/api/client/wallet-add/__tests__/p0-01b-concurrent.test.ts` (new test)
+- `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts` (clarified sequential test)
 
-**Priority**: HIGH (financial vulnerability, though MEDIUM severity)
+**Attack Blocked**: ✅ Two concurrent requests → only ONE wallet credit created
 
-**See**: `docs/P0-01_VERIFICATION_ADDENDUM.md` for detailed analysis
+**Closure Criteria**:
+- ✅ Database constraint provides foolproof protection
+- ✅ Concurrent tests verify behavior
+- ⚠️ Deployment pending (migration needs to run)
+
+**See**: 
+- `docs/P0-01B_FIX_IMPLEMENTATION.md` - Full fix documentation
+- `docs/P0-01_VERIFICATION_ADDENDUM.md` - Race condition discovery
 
 ---
 
@@ -135,19 +119,42 @@ WHERE metadata->>'stripePaymentIntentId' IS NOT NULL;
 
 ### F-08: Refund maxRefundAmount Enforcement
 
-**Status**: 🔍 **IN REVIEW**  
-**Severity**: MEDIUM → FIXED (per Kiro)  
-**Issue**: Refund endpoint did not enforce maxRefundAmount limit for non-SUPER_ADMIN users
+**Status**: ✔️ **CLOSED**  
+**Severity**: MEDIUM → FIXED  
+**Original Issue**: Refund endpoint did not enforce maxRefundAmount limit for non-SUPER_ADMIN users
 
-**Kiro's Claim**:
-- Added maxRefundAmount check in refund route
-- Consistent with wallet credit/debit endpoints
-- Returns 403 if limit exceeded
+**Verification**:
+- ✅ SOURCE VERIFIED (2026-09-11)
+- ✅ HIGH CONFIDENCE (95%)
 
-**Required Verification**:
-1. ⏳ Inspect `/api/admin/transactions/[transactionId]/refund/route.ts`
-2. ⏳ Verify checkPermission import and usage
-3. ⏳ Confirm maxRefundAmount enforcement logic
+**Fix Implemented**:
+- Changed `requirePermission` → `checkPermission` to access full result
+- Added maxRefundAmount enforcement BEFORE Stripe API call (lines 80-94)
+- Returns 403 when refund exceeds authorized limit
+- SUPER_ADMIN has no limit (by design)
+- Null maxRefundAmount treated as $0 (no refunds)
+
+**Files Changed**:
+- `app/api/admin/transactions/[transactionId]/refund/route.ts`
+
+**Critical Verifications**:
+1. ✅ checkPermission import (line 8)
+2. ✅ Authorization check captures full result (lines 19-21)
+3. ✅ maxRefundAmount enforcement BEFORE Stripe call (lines 80-94)
+4. ✅ SUPER_ADMIN exemption correct
+5. ✅ Null handling safe (treats as $0)
+6. ✅ Returns 403 with detailed error
+7. ✅ All existing validations preserved
+
+**Attack Blocked**: ✅ ADMIN with $500 limit → cannot refund $5000 (403 error)
+
+**Closure Criteria Met**:
+- ✅ Source code is correct
+- ✅ Enforcement happens before financial mutation
+- ✅ Consistent with wallet endpoints
+- ✅ Safe to deploy
+
+**See**: `docs/F-08_VERIFICATION.md` - Detailed source-level analysis
 4. ⏳ Check if SUPER_ADMIN bypass works
 5. ⏳ Verify error messages include limit details
 6. ⏳ Check enforcement happens BEFORE Stripe call
@@ -192,46 +199,151 @@ WHERE metadata->>'stripePaymentIntentId' IS NOT NULL;
 
 ---
 
+### SUB-02-A: Subscription Creation Not Atomic
+
+**Status**: ✔️ **CLOSED**  
+**Severity**: HIGH → FIXED  
+**Original Issue**: Subscription.create() and Provider.update() were separate operations. Failure between them created inconsistent state.
+
+**Verification**:
+- ✅ SOURCE VERIFIED (2026-09-11)
+- ✅ HIGH CONFIDENCE (95%)
+
+**Fix Implemented**:
+- Wrapped both operations in `prisma.$transaction()`
+- Applies to BOTH tier update (lines 207-228) and new subscription (lines 273-301)
+- Atomic guarantee: both succeed or both fail
+- No orphaned subscriptions possible
+
+**Files Changed**:
+- `app/api/instructor/subscription/route.ts`
+
+**Attack Blocked**: ✅ Network failure → database rolls back both operations (no inconsistency)
+
+**See**: `docs/SUB-02_VERIFICATION.md` - Detailed analysis
+
+---
+
+### SUB-02-B: Concurrent First-Trial Creation Race
+
+**Status**: ✔️ **CLOSED**  
+**Severity**: HIGH → FIXED  
+**Original Issue**: findFirst() before create() allowed two concurrent requests to both create trial subscriptions
+
+**Verification**:
+- ✅ SOURCE VERIFIED (2026-09-11)
+- ✅ HIGH CONFIDENCE (90%)
+
+**Fix Implemented**:
+- Race check INSIDE transaction (lines 277-283)
+- SERIALIZABLE isolation level (line 300)
+- Early return if concurrent request already created (line 283)
+- PostgreSQL enforces one-row guarantee
+
+**Files Changed**:
+- `app/api/instructor/subscription/route.ts`
+
+**Attack Blocked**: ✅ Two concurrent requests → exactly ONE subscription created
+
+**Note**: P2034 serialization errors surface as 500 (UX limitation, not security issue)
+
+**See**: `docs/SUB-02_VERIFICATION.md` - Detailed analysis
+
+---
+
 ### SUB-09-A: Instructor Cancellation Missing Stripe Call
 
-**Status**: 🔍 **IN REVIEW**  
-**Severity**: CRITICAL → FIXED (per Kiro)  
-**Issue**: Instructor cancel route updated DB but didn't call Stripe
+**Status**: ✔️ **CLOSED**  
+**Severity**: CRITICAL → FIXED  
+**Original Issue**: Instructor DELETE updated DB but didn't call Stripe API. Stripe continued billing.
 
-**Kiro's Claim**:
-- Created `subscription-cancel.ts` service
-- Stripe-first invariant enforced
-- Returns 502 if Stripe fails
+**Verification**:
+- ✅ SOURCE VERIFIED (2026-09-11)
+- ✅ HIGH CONFIDENCE (95%)
 
-**Required Verification**: TBD
+**Fix Implemented**:
+- Instructor DELETE delegates to `cancelSubscription()` service (line 352)
+- Service calls Stripe BEFORE updating local DB (lines 109-130)
+- Stripe failure returns 502 (not 200 success)
+- Clear error message if Stripe fails
+- Trial-only handling correct (DB-only when no stripeSubscriptionId)
+
+**Files Changed**:
+- `lib/services/subscription-cancel.ts` (new unified service)
+- `app/api/instructor/subscription/route.ts` (delegates to service)
+
+**Attack Blocked**: ✅ Cancellation request → Stripe cancelled BEFORE local DB updated
+
+**Residual Risk**: ⚠️ If Stripe cancels but DB update fails → Stripe shows cancelled, DB shows active (not security issue, recovery via sync)
+
+**See**: `docs/SUB-09-10-12_VERIFICATION.md` - Detailed analysis
 
 ---
 
 ### SUB-10-A: Inconsistent Cancellation Implementations
 
-**Status**: 🔍 **IN REVIEW**  
-**Severity**: HIGH → FIXED (per Kiro)  
-**Issue**: Multiple cancellation code paths with different logic
+**Status**: ✔️ **CLOSED**  
+**Severity**: CRITICAL → FIXED  
+**Original Issue**: Three different cancellation paths (instructor web, instructor mobile, admin) with inconsistent implementations
 
-**Kiro's Claim**:
-- Centralized in `subscription-cancel.ts`
-- All routes delegate to service
+**Verification**:
+- ✅ SOURCE VERIFIED (2026-09-11)
+- ✅ HIGH CONFIDENCE (95%)
 
-**Required Verification**: TBD
+**Fix Implemented**:
+- Unified cancellation service `subscription-cancel.ts`
+- All paths delegate to same service
+- Stripe-first invariant enforced everywhere
+- No code duplication
+- Architectural consistency achieved
+
+**Files Changed**:
+- `lib/services/subscription-cancel.ts` (new unified service)
+- All cancellation routes now use service
+
+**Attack Blocked**: ✅ All cancellation paths have consistent Stripe-first behavior
+
+**See**: `docs/SUB-09-10-12_VERIFICATION.md` - Detailed analysis
 
 ---
 
 ### SUB-12-A: Trial Expiry Cron Race with Paid Conversion
 
-**Status**: 🔍 **IN REVIEW**  
-**Severity**: HIGH → FIXED (per Kiro)  
-**Issue**: Cron could downgrade recently-paid subscription
+**Status**: ✔️ **CLOSED**  
+**Severity**: CRITICAL → FIXED  
+**Original Issue**: Cron queried expired trials, then updated without re-checking status. Webhook could activate subscription between query and update, cron overwrites to EXPIRED.
 
-**Kiro's Claim**:
-- Changed to `updateMany` with status check
-- Skips if already converted
+**Verification**:
+- ✅ SOURCE VERIFIED (2026-09-11)
+- ✅ HIGH CONFIDENCE (95%)
 
-**Required Verification**: TBD
+**Fix Implemented**:
+- Uses `updateMany` with `status: 'TRIAL'` condition (lines 68-74)
+- Re-confirms expiry inside transaction
+- Checks `count === 0` to detect webhook conversion (lines 76-80)
+- Skips provider update if already converted
+- Transaction wrapper ensures atomicity
+
+**Files Changed**:
+- `app/api/cron/check-trial-expiry/route.ts`
+
+**Attack Blocked**: ✅ Webhook activates subscription → cron detects (count=0) → skips downgrade
+
+**See**: `docs/SUB-09-10-12_VERIFICATION.md` - Detailed analysis
+
+---
+
+## Subscription Findings (Tier Updates)
+
+### SUB-02-A: Subscription Creation Not Atomic
+
+**Status**: ✔️ **CLOSED** (see above)
+
+---
+
+### SUB-02-B: Concurrent First-Trial Creation Race
+
+**Status**: ✔️ **CLOSED** (see above)
 
 ---
 
