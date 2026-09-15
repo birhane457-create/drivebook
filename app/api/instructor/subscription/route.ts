@@ -295,7 +295,7 @@ export async function POST(req: NextRequest) {
         isolationLevel: 'Serializable',
       });
 
-      const subscription = 'existing' in result ? result.existing : result.created;
+      const subscription = ('existing' in result ? result.existing : result.created)!;
 
       return NextResponse.json({
         success: true,
