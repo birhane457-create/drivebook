@@ -1,4 +1,4 @@
-﻿-- Package Cancellation Approval Workflow (PKG-3)
+-- Package Cancellation Approval Workflow (PKG-3)
 -- Adds manual approval fields for package cancellations
 
 ALTER TABLE "Booking" 
