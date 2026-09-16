@@ -1458,8 +1458,10 @@ async function handleSubscriptionUpdate(
     return upper === 'CANCELED' ? 'CANCELLED' : upper;
   };
 
-  await withSerializableRetry(async () => {
-    await prisma.$transaction(async (tx) => {
+  // SUB-22 P2002 handling: wrap transaction in try-catch to handle constraint violations OUTSIDE transaction
+  try {
+    await withSerializableRetry(async () => {
+      await prisma.$transaction(async (tx) => {
         // Record webhook event
         await recordWebhookEvent(tx, idempotencyKey, 'subscription.updated', subscription.id, {
           providerId,
@@ -1475,7 +1477,6 @@ async function handleSubscriptionUpdate(
             subscriptionStatus: normalizeStatus(status) as any,
             trialEndsAt: trial_end ? new Date(trial_end * 1000) : null,
             stripeCustomerId: subscription.customer as string,
-            stripeSubscriptionId: subscription.id,
           } as any
         });
     
@@ -1548,29 +1549,10 @@ async function handleSubscriptionUpdate(
               throw new Error(`Multiple trial subscriptions found for provider ${providerId}`);
             }
           } catch (err: any) {
-            // Handle unique constraint violations (PostgreSQL 23505 / Prisma P2002)
-            if (err.code === 'P2002' || err.code === '23505') {
-              // Another webhook won the race - verify Stripe subscription ID matches
-              const existingRow = await tx.subscription.findFirst({
-                where: {
-                  providerId,
-                  status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] }
-                },
-                select: { id: true, stripeSubscriptionId: true }
-              });
-
-              if (existingRow?.stripeSubscriptionId === subscription.id) {
-                // Same Stripe ID - idempotent success
-                logger.info(`Idempotent: Stripe subscription ${subscription.id} already linked for instructor ${providerId}`);
-              } else {
-                // Different Stripe ID - conflict must not be silently accepted
-                logger.error(`SUB-22 CONFLICT: Provider ${providerId} already has subscription ${existingRow?.stripeSubscriptionId}, cannot overwrite with ${subscription.id}`);
-                throw new Error(`Stripe subscription ID conflict for provider ${providerId}: existing=${existingRow?.stripeSubscriptionId}, incoming=${subscription.id}`);
-              }
-            } else {
-              // Re-throw other errors (including serialization failures)
-              throw err;
-            }
+            // SUB-22: Re-throw P2002/23505 to abort transaction - handle outside with fresh query
+            // PostgreSQL aborts transactions on constraint violations (error 25P02),
+            // so we cannot query tx after P2002. Let it propagate and handle externally.
+            throw err;
           }
         }
     
@@ -1588,6 +1570,32 @@ async function handleSubscriptionUpdate(
         });
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-subscription-updated' });
+  } catch (err: any) {
+    // SUB-22: Handle P2002/23505 OUTSIDE transaction (PostgreSQL aborts on constraint violations)
+    if (err.code === 'P2002' || err.code === '23505') {
+      // Another webhook won the race - verify Stripe subscription ID with fresh query
+      const existingRow = await prisma.subscription.findFirst({
+        where: {
+          providerId,
+          status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] }
+        },
+        select: { id: true, stripeSubscriptionId: true }
+      });
+
+      if (existingRow?.stripeSubscriptionId === subscription.id) {
+        // Same Stripe ID - idempotent success
+        logger.info(`Idempotent: Stripe subscription ${subscription.id} already linked for instructor ${providerId}`);
+        // Don't throw - this is a successful idempotent operation
+      } else {
+        // Different Stripe ID - conflict must not be silently accepted
+        logger.error(`SUB-22 CONFLICT: Provider ${providerId} already has subscription ${existingRow?.stripeSubscriptionId}, cannot overwrite with ${subscription.id}`);
+        throw new Error(`Stripe subscription ID conflict for provider ${providerId}: existing=${existingRow?.stripeSubscriptionId}, incoming=${subscription.id}`);
+      }
+    } else {
+      // Re-throw other errors (including serialization failures)
+      throw err;
+    }
+  }
 
   // Send email if active
   if (status === 'active') {
@@ -1597,7 +1605,8 @@ async function handleSubscriptionUpdate(
     });
 
     if (instructor?.user) {
-      await emailService.sendGenericEmail({
+      try {
+        await emailService.sendGenericEmail({
         from: 'DriveBook Payments <payments@drivebook.com.au>',
         to: instructor.user.email,
         subject: `${plan.name} subscription activated â€” DriveBook`,
@@ -1612,7 +1621,15 @@ async function handleSubscriptionUpdate(
           </ul>
           <p>Your commission rate applies to all new bookings from today.</p>
         `
-      });
+        });
+      } catch (emailErr: any) {
+        // Email failure should not fail the webhook - log and continue
+        logger.error(`Failed to send subscription activation email to ${instructor.user.email}`, {
+          error: emailErr.message,
+          providerId,
+          subscriptionId: subscription.id
+        });
+      }
     }
   }
 
