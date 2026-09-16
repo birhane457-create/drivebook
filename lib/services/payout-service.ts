@@ -364,12 +364,32 @@ export async function executePayout(
     await assertSufficientBalance(Number(payout.netAmount));
 
     if (isStripe) {
+      // PAY-01 SECURITY: Verify destination ownership before money movement
+      // Prevents account substitution attacks by checking Stripe-side metadata
+      const { verifyPayoutDestinationOwnership } = await import('./payout-security');
+      const ownershipCheck = await verifyPayoutDestinationOwnership(
+        stripe,
+        payout.stripeAccountId!,
+        payout.providerId
+      );
+
+      if (!ownershipCheck.valid) {
+        throw new Error(
+          `Payout destination ownership verification failed: ${ownershipCheck.reason}. ` +
+          `Payout ${payoutId} blocked for security. Expected provider ${payout.providerId}, ` +
+          `account ${payout.stripeAccountId}.`
+        );
+      }
+
+      // TOCTOU Protection: Use the verified account ID (same value we just checked)
+      const verifiedAccountId = payout.stripeAccountId!;
+
       // Stripe Connect: money moves now -> PAID -> ledger updated
       const transfer = await stripe.transfers.create(
         {
           amount: Math.round(toNumber(toDecimal(payout.netAmount)) * 100),
           currency: 'aud',
-          destination: payout.stripeAccountId!,
+          destination: verifiedAccountId,
           description: `DriveBook ${payout.payoutRef} - ${txCount} lesson(s)`,
           metadata: {
             payoutRef: payout.payoutRef,

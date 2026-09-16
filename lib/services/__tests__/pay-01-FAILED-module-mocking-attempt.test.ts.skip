@@ -1,0 +1,399 @@
+/**
+ * PAY-01-C: Payout Destination Ownership Security Test
+ * 
+ * OBJECTIVE: Establish executable reproduction of payout destination tampering vulnerability
+ * 
+ * SECURITY INVARIANT BEING TESTED:
+ * At the moment stripe.transfers.create() executes, the destination Stripe account
+ * MUST belong to the providerId recorded in the payout record.
+ * 
+ * ATTACK SCENARIO:
+ * Database record tampered from:
+ *   providerId = Provider A, stripeAccountId = acct_A
+ * to:
+ *   providerId = Provider A, stripeAccountId = acct_B (attacker's account)
+ * 
+ * EXPECTED BEHAVIOR AFTER FIX:
+ * - executePayout() retrieves Stripe account metadata before transfer
+ * - Verifies account.metadata.providerId === payout.providerId
+ * - Rejects payout if mismatch detected
+ * - stripe.transfers.create() never called for tampered payouts
+ */
+
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import type { Payout, Provider } from '@prisma/client';
+import Stripe from 'stripe';
+
+// Mock dependencies
+const mockPrismaFindUnique = vi.fn();
+const mockPrismaUpdateMany = vi.fn();
+const mockPrismaUpdate = vi.fn();
+const mockStripeTransfersCreate = vi.fn();
+const mockStripeAccountsRetrieve = vi.fn();
+
+// Mock modules
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    payout: {
+      findUnique: (...args: any[]) => mockPrismaFindUnique(...args),
+      updateMany: (...args: any[]) => mockPrismaUpdateMany(...args),
+      update: (...args: any[]) => mockPrismaUpdate(...args),
+    },
+    provider: {
+      findUnique: vi.fn(),
+    },
+  },
+}));
+
+vi.mock('@/lib/stripe', () => ({
+  stripe: {
+    transfers: {
+      create: (...args: any[]) => mockStripeTransfersCreate(...args),
+    },
+    accounts: {
+      retrieve: (...args: any[]) => mockStripeAccountsRetrieve(...args),
+    },
+  },
+}));
+
+// Mock other dependencies that executePayout needs
+vi.mock('@/lib/services/ledger-service', () => ({
+  appendLedgerEntry: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/services/payout-service', async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  return {
+    ...actual,
+    logTransition: vi.fn().mockResolvedValue(undefined),
+    assertSufficientBalance: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+describe('PAY-01-C: Payout Destination Ownership Security', () => {
+  const PROVIDER_A_ID = 'provider-alice';
+  const PROVIDER_A_STRIPE_ACCOUNT = 'acct_alice_legitimate';
+  const ATTACKER_PROVIDER_ID = 'provider-attacker';
+  const ATTACKER_STRIPE_ACCOUNT = 'acct_attacker_substituted';
+  const ADMIN_USER_ID = 'admin-001';
+
+  const createMockPayout = (overrides: Partial<Payout> = {}): Payout => ({
+    id: 'payout-001',
+    providerId: PROVIDER_A_ID,
+    stripeAccountId: PROVIDER_A_STRIPE_ACCOUNT,
+    payoutRef: 'PO-2026-001',
+    payoutMethod: 'stripe_connect',
+    status: 'ELIGIBLE',
+    grossAmount: new (require('@prisma/client/runtime/library').Decimal)(100),
+    netAmount: new (require('@prisma/client/runtime/library').Decimal)(95),
+    taxWithheld: new (require('@prisma/client/runtime/library').Decimal)(5),
+    gstAmount: new (require('@prisma/client/runtime/library').Decimal)(0),
+    scheduledFor: new Date('2026-09-16'),
+    idempotencyKey: 'idem-001',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    paidAt: null,
+    stripeTransferId: null,
+    failureReason: null,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    
+    // Default: Lock succeeds
+    mockPrismaUpdateMany.mockResolvedValue({ count: 1 });
+    
+    // Default: Provider lookup succeeds
+    vi.mocked(require('@/lib/prisma').prisma.provider.findUnique).mockResolvedValue({
+      id: PROVIDER_A_ID,
+      name: 'Alice Instructor',
+      phone: '+1234567890',
+      user: { email: 'alice@example.com' },
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('VULNERABILITY: Current implementation (BEFORE FIX)', () => {
+    it('EXPLOIT: allows payout with tampered stripeAccountId', async () => {
+      // SETUP: Payout was created legitimately
+      const originalPayout = createMockPayout({
+        providerId: PROVIDER_A_ID,
+        stripeAccountId: PROVIDER_A_STRIPE_ACCOUNT,
+      });
+
+      // ATTACK: Database record tampered to point to attacker's Stripe account
+      const tamperedPayout = createMockPayout({
+        providerId: PROVIDER_A_ID,  // Still claims to be Alice's payout
+        stripeAccountId: ATTACKER_STRIPE_ACCOUNT,  // But destination changed to attacker
+        status: 'PROCESSING',  // After lock acquired
+        transactions: [],
+      });
+
+      // Mock: First call returns payout after lock, second returns payout with transactions
+      mockPrismaFindUnique
+        .mockResolvedValueOnce(tamperedPayout)
+        .mockResolvedValueOnce({ ...tamperedPayout, transactions: [] });
+
+      // Mock: Stripe transfer succeeds (VULNERABILITY: no verification performed)
+      mockStripeTransfersCreate.mockResolvedValue({
+        id: 'tr_attacker_succeeded',
+        object: 'transfer',
+        amount: 9500,
+        currency: 'aud',
+        destination: ATTACKER_STRIPE_ACCOUNT,
+      });
+
+      // Mock: Payout marked as PAID
+      mockPrismaUpdate.mockResolvedValue({
+        ...tamperedPayout,
+        status: 'PAID',
+        stripeTransferId: 'tr_attacker_succeeded',
+      });
+
+      // EXECUTE: Current executePayout implementation
+      const { executePayout } = await import('@/lib/services/payout-service');
+      const result = await executePayout(tamperedPayout.id, ADMIN_USER_ID);
+
+      // VULNERABILITY DEMONSTRATED:
+      // 1. Transfer was created with attacker's account
+      expect(mockStripeTransfersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          destination: ATTACKER_STRIPE_ACCOUNT,  // Money sent to attacker
+        }),
+        expect.any(Object)
+      );
+
+      // 2. Transfer metadata claims legitimate provider (but doesn't prevent exploit)
+      expect(mockStripeTransfersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            providerId: PROVIDER_A_ID,  // Metadata says Alice, but money went to attacker
+          }),
+        }),
+        expect.any(Object)
+      );
+
+      // 3. Payout marked as successfully paid
+      expect(result.status).toBe('PAID');
+      expect(result.stripeTransferId).toBe('tr_attacker_succeeded');
+
+      // 4. NO verification was performed (accounts.retrieve never called)
+      expect(mockStripeAccountsRetrieve).not.toHaveBeenCalled();
+    });
+
+    it('CONTROL: legitimate payout succeeds (to establish baseline)', async () => {
+      // SETUP: Legitimate payout with correct binding
+      const legitimatePayout = createMockPayout({
+        providerId: PROVIDER_A_ID,
+        stripeAccountId: PROVIDER_A_STRIPE_ACCOUNT,
+        status: 'PROCESSING',
+        transactions: [],
+      });
+
+      mockPrismaFindUnique
+        .mockResolvedValueOnce(legitimatePayout)
+        .mockResolvedValueOnce({ ...legitimatePayout, transactions: [] });
+
+      mockStripeTransfersCreate.mockResolvedValue({
+        id: 'tr_legitimate',
+        object: 'transfer',
+        amount: 9500,
+        currency: 'aud',
+        destination: PROVIDER_A_STRIPE_ACCOUNT,
+      });
+
+      mockPrismaUpdate.mockResolvedValue({
+        ...legitimatePayout,
+        status: 'PAID',
+        stripeTransferId: 'tr_legitimate',
+      });
+
+      // EXECUTE
+      const { executePayout } = await import('@/lib/services/payout-service');
+      const result = await executePayout(legitimatePayout.id, ADMIN_USER_ID);
+
+      // CONTROL: Legitimate payout succeeds
+      expect(mockStripeTransfersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          destination: PROVIDER_A_STRIPE_ACCOUNT,
+        }),
+        expect.any(Object)
+      );
+      expect(result.status).toBe('PAID');
+    });
+  });
+
+  describe('REGRESSION TEST: After security fix implementation', () => {
+    it('SECURITY FIX: rejects payout when Stripe metadata mismatches providerId', async () => {
+      // SETUP: Tampered payout (same as exploit scenario)
+      const tamperedPayout = createMockPayout({
+        providerId: PROVIDER_A_ID,
+        stripeAccountId: ATTACKER_STRIPE_ACCOUNT,
+        status: 'PROCESSING',
+        transactions: [],
+      });
+
+      mockPrismaFindUnique
+        .mockResolvedValueOnce(tamperedPayout)
+        .mockResolvedValueOnce({ ...tamperedPayout, transactions: [] });
+
+      // MOCK FIX: Stripe account retrieval returns attacker's account metadata
+      mockStripeAccountsRetrieve.mockResolvedValue({
+        id: ATTACKER_STRIPE_ACCOUNT,
+        object: 'account',
+        metadata: {
+          providerId: ATTACKER_PROVIDER_ID,  // MISMATCH: attacker's provider, not Alice
+          instructorName: 'Attacker',
+        },
+        type: 'express',
+        capabilities: { transfers: 'active' },
+      } as Stripe.Account);
+
+      // MOCK FIX: Payout marked as FAILED when mismatch detected
+      mockPrismaUpdate.mockResolvedValue({
+        ...tamperedPayout,
+        status: 'FAILED',
+        failureReason: `PAY-01 Security: Stripe account ${ATTACKER_STRIPE_ACCOUNT} metadata.providerId (${ATTACKER_PROVIDER_ID}) does not match payout.providerId (${PROVIDER_A_ID})`,
+      });
+
+      // AFTER FIX: Import patched executePayout with security check
+      // NOTE: This test will FAIL until fix is implemented
+      const { executePayoutWithSecurityCheck } = await import('@/lib/services/payout-service-fixed');
+      
+      await expect(
+        executePayoutWithSecurityCheck(tamperedPayout.id, ADMIN_USER_ID)
+      ).rejects.toThrow(/Payout destination ownership verification failed/);
+
+      // SECURITY FIX VERIFIED:
+      // 1. Stripe account was retrieved and checked
+      expect(mockStripeAccountsRetrieve).toHaveBeenCalledWith(ATTACKER_STRIPE_ACCOUNT);
+
+      // 2. Transfer was NEVER created
+      expect(mockStripeTransfersCreate).not.toHaveBeenCalled();
+
+      // 3. Payout was marked as FAILED with audit trail
+      expect(mockPrismaUpdate).toHaveBeenCalledWith({
+        where: { id: tamperedPayout.id },
+        data: expect.objectContaining({
+          status: 'FAILED',
+          failureReason: expect.stringContaining('PAY-01 Security'),
+        }),
+      });
+    });
+
+    it('REGRESSION: legitimate payout still succeeds after fix', async () => {
+      // SETUP: Legitimate payout
+      const legitimatePayout = createMockPayout({
+        providerId: PROVIDER_A_ID,
+        stripeAccountId: PROVIDER_A_STRIPE_ACCOUNT,
+        status: 'PROCESSING',
+        transactions: [],
+      });
+
+      mockPrismaFindUnique
+        .mockResolvedValueOnce(legitimatePayout)
+        .mockResolvedValueOnce({ ...legitimatePayout, transactions: [] });
+
+      // MOCK FIX: Stripe account retrieval returns CORRECT metadata
+      mockStripeAccountsRetrieve.mockResolvedValue({
+        id: PROVIDER_A_STRIPE_ACCOUNT,
+        object: 'account',
+        metadata: {
+          providerId: PROVIDER_A_ID,  // MATCH: correct binding
+          instructorName: 'Alice Instructor',
+        },
+        type: 'express',
+        capabilities: { transfers: 'active' },
+      } as Stripe.Account);
+
+      mockStripeTransfersCreate.mockResolvedValue({
+        id: 'tr_legitimate_after_fix',
+        object: 'transfer',
+        amount: 9500,
+        currency: 'aud',
+        destination: PROVIDER_A_STRIPE_ACCOUNT,
+      });
+
+      mockPrismaUpdate.mockResolvedValue({
+        ...legitimatePayout,
+        status: 'PAID',
+        stripeTransferId: 'tr_legitimate_after_fix',
+      });
+
+      // AFTER FIX
+      const { executePayoutWithSecurityCheck } = await import('@/lib/services/payout-service-fixed');
+      const result = await executePayoutWithSecurityCheck(legitimatePayout.id, ADMIN_USER_ID);
+
+      // REGRESSION TEST: Fix doesn't break legitimate payouts
+      expect(mockStripeAccountsRetrieve).toHaveBeenCalledWith(PROVIDER_A_STRIPE_ACCOUNT);
+      expect(mockStripeTransfersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          destination: PROVIDER_A_STRIPE_ACCOUNT,
+        }),
+        expect.any(Object)
+      );
+      expect(result.status).toBe('PAID');
+    });
+
+    it('EDGE CASE: missing metadata.providerId fails closed', async () => {
+      const tamperedPayout = createMockPayout({
+        providerId: PROVIDER_A_ID,
+        stripeAccountId: ATTACKER_STRIPE_ACCOUNT,
+        status: 'PROCESSING',
+      });
+
+      mockPrismaFindUnique
+        .mockResolvedValueOnce(tamperedPayout)
+        .mockResolvedValueOnce({ ...tamperedPayout, transactions: [] });
+
+      // Stripe account has NO metadata (edge case)
+      mockStripeAccountsRetrieve.mockResolvedValue({
+        id: ATTACKER_STRIPE_ACCOUNT,
+        object: 'account',
+        metadata: {},  // Missing providerId
+        type: 'express',
+      } as Stripe.Account);
+
+      const { executePayoutWithSecurityCheck } = await import('@/lib/services/payout-service-fixed');
+      
+      // FAIL CLOSED: Missing metadata treated as mismatch
+      await expect(
+        executePayoutWithSecurityCheck(tamperedPayout.id, ADMIN_USER_ID)
+      ).rejects.toThrow(/ownership verification failed/);
+
+      expect(mockStripeTransfersCreate).not.toHaveBeenCalled();
+    });
+
+    it('IDEMPOTENCY: second attempt after security rejection does not bypass check', async () => {
+      const tamperedPayout = createMockPayout({
+        providerId: PROVIDER_A_ID,
+        stripeAccountId: ATTACKER_STRIPE_ACCOUNT,
+        status: 'PROCESSING',
+      });
+
+      mockPrismaFindUnique.mockResolvedValue({ ...tamperedPayout, transactions: [] });
+
+      mockStripeAccountsRetrieve.mockResolvedValue({
+        id: ATTACKER_STRIPE_ACCOUNT,
+        metadata: { providerId: ATTACKER_PROVIDER_ID },
+        type: 'express',
+      } as Stripe.Account);
+
+      const { executePayoutWithSecurityCheck } = await import('@/lib/services/payout-service-fixed');
+
+      // First attempt: Rejected
+      await expect(executePayoutWithSecurityCheck(tamperedPayout.id, ADMIN_USER_ID)).rejects.toThrow();
+
+      // Second attempt: Still rejected (no bypass)
+      await expect(executePayoutWithSecurityCheck(tamperedPayout.id, ADMIN_USER_ID)).rejects.toThrow();
+
+      // Verification called both times
+      expect(mockStripeAccountsRetrieve).toHaveBeenCalledTimes(2);
+      expect(mockStripeTransfersCreate).not.toHaveBeenCalled();
+    });
+  });
+});
