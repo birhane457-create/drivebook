@@ -1,349 +1,287 @@
 # DriveBook Security Audit — Master Tracker
 
+**Version:** 2.0 (lifecycle state machine)  
 **Last Updated:** 2026-09-16  
-**Maintained by:** Security audit sessions (Kiro + independent review)
-
-This is the single source of truth for audit status. Cross-references the Phase 1 Remediation Register (`PHASE1_REMEDIATION_REGISTER.md`), the Security Findings Tracker (`SECURITY_FINDINGS_TRACKER.md`), and the new money-movement audit work done in this session.
+**Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
+**Authority:** This file is the single authoritative record of every finding's lifecycle state.  
+All other audit documents are evidence records that support this file.
 
 ---
 
-## Status Legend
+## How to Read This Table
 
-| Symbol | Meaning |
+| Column | Meaning |
 |---|---|
-| ✅ CLOSED | Fix implemented, tested (passing), verified |
-| 🔨 FIXED — TEST PENDING | Production code changed, tests not yet written/run |
-| 🔍 IN PROGRESS | Currently being worked |
-| ⚠️ OPEN | Known, not yet started |
-| ❌ REJECTED | False positive or verified safe |
-| ⏸ DEFERRED | Awaiting architecture/prerequisite |
+| **ID** | Stable identifier — never changes |
+| **Title** | Short description |
+| **Risk** | CRITICAL / HIGH / MEDIUM / LOW / NONE / ARCHITECTURAL |
+| **Finding** | CONFIRMED / REJECTED / SUPERSEDED |
+| **Verification** | VERIFIED (independent code proof) / UNVERIFIED |
+| **Fix** | Commit SHA or NOT-STARTED or N/A |
+| **Fix-Verified** | `N tests, exit 0` or PENDING or N/A |
+| **Status** | OPEN / CLOSED / SUPERSEDED / REJECTED |
+| **Evidence** | Primary evidence document path |
+| **Phase-1-ref** | Cross-ref to PHASE1_REMEDIATION_REGISTER ID |
 
 ---
 
-## PHASE 1 — Original 56-Finding Register
+## Section 1 — Phase 1 Findings (Original 56-Finding Register)
 
-### P0 — Critical
+### 1.1 — P0 Critical
 
-| ID | Finding | Status | Evidence |
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| P0-01A | Wallet PaymentIntent cross-user theft | CRITICAL | CONFIRMED | VERIFIED — `wallet-add/route.ts` ownership check absent confirmed in source | `b9c2f0ff` (metadata check + userId stamping) | 12 tests, exit 0 | ✅ CLOSED | `phase1/P0-01_VERIFICATION.md` | P0-01 |
+| P0-01B | Concurrent wallet credit race condition | MEDIUM | CONFIRMED | VERIFIED — DB constraint absent confirmed; test was sequential not concurrent | `b9c2f0ff` (partial unique index on `stripePaymentIntentId`; P2002 → 409) | 12 tests, exit 0 | ✅ CLOSED | `phase1/P0-01B_FIX_IMPLEMENTATION.md` | P0-01 |
+
+### 1.2 — P1 High Priority
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| SUB-22 | Subscription duplicate rows — missing unique constraints | HIGH | CONFIRMED | VERIFIED — source confirmed no `@@unique` on Provider/Subscription | `2422870d` (@@unique constraints applied) | DB constraint + tests | ✅ CLOSED | `phase1/SUB-22_VERIFICATION.md` | SUB-22 |
+| SUB-04-A | Unpaid subscription activated on `subscription.created` | HIGH | CONFIRMED | VERIFIED — webhook handler activated on wrong event | Activation moved to `invoice.payment_succeeded` | Verified in source | ✅ CLOSED | `phase1/SUB-04-A_VERIFICATION.md` | SUB-04-A |
+| SUB-09-A | Instructor cancellation missing Stripe call | CRITICAL | CONFIRMED | VERIFIED — DELETE route updated DB without calling Stripe | `subscription-cancel.ts` service; Stripe-first order | Verified in source | ✅ CLOSED | `phase1/SUB-09-10-12_VERIFICATION.md` | SUB-09-A |
+| SUB-10-A | Three inconsistent cancellation implementations | CRITICAL | CONFIRMED | VERIFIED — three paths with different Stripe behaviour | Unified `subscription-cancel.ts`; all paths delegate | Verified in source | ✅ CLOSED | `phase1/SUB-09-10-12_VERIFICATION.md` | SUB-10-A |
+| SUB-12-A | Trial expiry cron race with paid conversion | CRITICAL | CONFIRMED | VERIFIED — `updateMany` with status guard confirmed correct | Already fixed; no change needed | N/A — pre-existing fix | ✅ CLOSED | `phase1/SUB-12A-VERIFICATION-COMPLETE.md` | SUB-12-A |
+| SUB-02-A | Subscription creation not atomic | HIGH | CONFIRMED | VERIFIED — Subscription.create and Provider.update were separate | `prisma.$transaction()` wraps both operations | Verified in source | ✅ CLOSED | `phase1/SUB-02_VERIFICATION.md` | SUB-02-A |
+| SUB-02-B | Concurrent trial creation race | HIGH | CONFIRMED | VERIFIED — findFirst before create allowed race | Race check inside SERIALIZABLE transaction | Verified in source | ✅ CLOSED | `phase1/SUB-02_VERIFICATION.md` | SUB-02-B |
+| C-1 | Provider self-upgrade tier without payment | CRITICAL | CONFIRMED | VERIFIED — guard present at subscription route line 199–209 | 403 guard on non-TRIAL tier change | Verified in source | ✅ CLOSED | `phase1/C-1_VERIFICATION.md` | C-1 |
+| PAY-H-01 | Stripe refund outside transaction — no reconciliation | HIGH | CONFIRMED | VERIFIED — F-09 left refund call outside tx by design | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-01 |
+| PAY-H-02 | Booking reschedule price not recalculated | HIGH | CONFIRMED | VERIFIED — `reschedule/route.ts` no price comparison | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-02 |
+| INT-M-01A | Stripe refund reconciliation gap (inverse of PAY-H-01) | HIGH | CONFIRMED | VERIFIED — no reconciliation cron exists | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-01A |
+| INT-M-03A | OAuth tokens stored plaintext | HIGH | CONFIRMED | VERIFIED — `googleAccessToken` plaintext in Provider model | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03A |
+| INT-M-03F | OAuth token not revoked on calendar disconnect | HIGH | CONFIRMED | VERIFIED — no revocation call in disconnect flow | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03F |
+
+### 1.3 — P2 Medium Priority
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PAY-H-04 | SlotReservation concurrency — no unique constraint | MEDIUM | CONFIRMED | VERIFIED — no `@@unique([providerId, startTime])` | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-04 |
+| SUB-06-A | No tests for subscription event ordering | MEDIUM | CONFIRMED | VERIFIED — zero tests for updated→deleted | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | SUB-06-A |
+| SUB-08-A | Seat limit not enforced in webhook | MEDIUM | CONFIRMED | VERIFIED — no seat count check before subscription.create | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | SUB-08-A |
+| RBAC-M-02 | Admin routes use role check instead of permission check | MEDIUM | CONFIRMED | VERIFIED — `role === 'SUPER_ADMIN'` pattern found | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | RBAC-M-02 |
+| DATA-EXP-01 | Public instructor phone exposed in API | MEDIUM | CONFIRMED | VERIFIED — `phone` in public projection | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | DATA-EXP-01 |
+| DOC-EXP-01 | Expired provider can still receive bookings | MEDIUM | CONFIRMED | VERIFIED — no document expiry gate in booking creation | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | DOC-EXP-01 |
+| AUDIT-01 | Audit logging fails open (swallows errors) | MEDIUM | CONFIRMED | VERIFIED — catch block uses console.error only | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | AUDIT-01 |
+| AUDIT-02 | Audit log write not atomic with state change | MEDIUM | CONFIRMED | VERIFIED — separate writes confirmed | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | AUDIT-02 |
+| AUDIT-05 | Audit coverage gaps (wallet, booking mutations) | MEDIUM | CONFIRMED | VERIFIED — no audit trail for wallet operations | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | AUDIT-05 |
+| INT-M-01B | Stripe payment reconciliation (missed webhooks) | MEDIUM | CONFIRMED | VERIFIED — no payment reconciliation in cron | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-01B |
+| F-08 | Admin refund maxRefundAmount not enforced | MEDIUM | CONFIRMED | VERIFIED — enforcement absent before fix | Fixed: checkPermission + limit check before Stripe call | Verified in source | ✅ CLOSED | `phase1/F-08_VERIFICATION.md` | F-08 |
+
+### 1.4 — P3 Low Priority
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|
+| PAY-H-06 | Package expiry refund policy undocumented | LOW | CONFIRMED | VERIFIED — business policy, not bug | NOT-STARTED | N/A | ⚠️ OPEN | PAY-H-06 |
+| AUDIT-03 | AuditLog deletable (no DB trigger) | LOW | CONFIRMED | VERIFIED — no immutability protection | NOT-STARTED | PENDING | ⚠️ OPEN | AUDIT-03 |
+| AUDIT-04 | No audit log retention policy | LOW | CONFIRMED | UNVERIFIED | NOT-STARTED | PENDING | ⚠️ OPEN | AUDIT-04 |
+| APP-H-04 | Role catalogue incomplete | LOW | ARCHITECTURAL | VERIFIED — documented gap | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-04 |
+| APP-H-05 | No centralised authorisation matrix | LOW | ARCHITECTURAL | VERIFIED — documented gap | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-05 |
+| APP-H-06 | DIRECT booking mode undocumented | LOW | ARCHITECTURAL | VERIFIED — feature exists without docs | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-06 |
+| APP-H-07 | Business template feature incomplete | LOW | ARCHITECTURAL | VERIFIED — feature incomplete | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-07 |
+| APP-H-08 | RBAC usage guide missing | LOW | ARCHITECTURAL | VERIFIED — onboarding gap | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-08 |
+
+### 1.5 — Deferred
+
+| ID | Title | Risk | Finding | Status | Reason |
+|---|---|---|---|---|---|
+| AI-M-01 | AI prompt injection | MEDIUM | CONFIRMED | ⏸ DEFERRED | Awaiting AI architecture redesign |
+| AI-M-02 | AI tool authorisation completeness | MEDIUM | CONFIRMED | ⏸ DEFERRED | Awaiting AI architecture redesign |
+
+### 1.6 — Rejected / Verified Safe
+
+| ID | Title | Finding | Reason |
 |---|---|---|---|
-| P0-01A | Wallet PaymentIntent ownership (cross-user theft) | ✅ CLOSED | `wallet-add/route.ts` ownership check; tests 12/12 exit 0 |
-| P0-01B | Concurrent wallet credit race condition | ✅ CLOSED | DB unique partial index on `stripePaymentIntentId`; P2002 → 409; concurrent test |
+| P0-02 | Client reschedule TOCTOU | REJECTED | Code has correct ownership check |
+| P0-03 | Reviews authorisation missing | REJECTED | Ownership check present at line 207 |
+| PAY-H-03 | Package hour credit race | REJECTED | Transaction-wrapped updateMany with status guard — safe |
+| PAY-H-05 | Wallet-booking disconnect | REJECTED | Separate flows by design; balance checked atomically |
+| AUTH-M-01 | Session fixation | REJECTED | NextAuth v4 regenerates tokens on auth |
+| AUTH-M-02 | Token rotation | REJECTED | NextAuth v4 handles JWT rotation |
+| RBAC-M-01 | Role escalation via API | REJECTED | No route allows self-role modification |
+| APP-H-01/02/03 | Rate limiting gaps | REJECTED | Vercel Edge + Stripe built-in limits adequate |
+| DATA-M-01/02/03 | Data over-projection | REJECTED | Projections verified appropriate |
+| INT-M-01C | SMS delivery failure | REJECTED | Notification-only; fire-and-forget acceptable |
+| INT-M-01D | Webhook retry behaviour | REJECTED | WebhookEvent idempotency key prevents duplicate processing |
+| INT-M-02 | Email failure handling | REJECTED | Fire-and-forget; retry queue exists for critical emails |
+| INT-M-03B/C/D/E | OAuth token sub-issues | REJECTED | Refresh, exposure, expiry, scope all verified safe |
 
-### P1 — High Priority
+---
 
-| ID | Finding | Status | Evidence |
+## Section 2 — Phase 2: PAY-01 Payout Destination Ownership
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| PAY-01 | Provider payout destination ownership | HIGH | CONFIRMED | VERIFIED — `executePayout()` used DB-supplied `stripeAccountId` without Stripe-side check | `b9c2f0ff` — `verifyPayoutDestinationOwnership()` before `stripe.transfers.create()`; TOCTOU-safe `const verifiedAccountId` | 28 tests, exit 0 | ✅ CLOSED | `phase2/PAY-01-INVESTIGATION-STATUS.md` |
+
+**PAY-01 sub-task evidence:**
+
+| Sub-task | Purpose | Status | Evidence |
 |---|---|---|---|
-| SUB-22 | Subscription duplicate rows (missing unique constraints) | ✅ CLOSED | `@@unique([providerId])`, `@@unique([stripeSubscriptionId])` applied; verified |
-| SUB-04-A | Unpaid subscription activation (`subscription.created` → ACTIVE before payment) | ✅ CLOSED | Activation only on `invoice.payment_succeeded` |
-| SUB-09-A | Instructor cancellation missing Stripe call | ✅ CLOSED | `subscription-cancel.ts` service; Stripe-first |
-| SUB-10-A | Inconsistent cancellation implementations (3 paths) | ✅ CLOSED | Unified `subscription-cancel.ts`; all paths delegate |
-| SUB-12-A | Trial expiry cron race with paid conversion | ✅ CLOSED | `updateMany` with `status: 'TRIAL'` guard; `count === 0` check |
-| SUB-02-A | Subscription creation not atomic | ✅ CLOSED | `prisma.$transaction()` wraps subscription + provider update |
-| SUB-02-B | Concurrent trial creation race | ✅ CLOSED | Race check inside SERIALIZABLE transaction |
-| C-1 | Provider self-upgrade tier without payment | ✅ CLOSED | 403 guard at line 199–209 of subscription route |
-| PAY-H-01 / INT-M-01A | Stripe refund outside transaction — reconciliation needed | ⚠️ OPEN | No reconciliation cron exists. F-09 left refund call outside tx by design. |
-| PAY-H-02 | Booking reschedule price not recalculated | ⚠️ OPEN | `reschedule/route.ts` does not compare old/new price |
-| INT-M-03A | OAuth tokens stored plaintext in DB | ⚠️ OPEN | `googleAccessToken`, `googleRefreshToken` unencrypted |
-| INT-M-03F | OAuth token not revoked on calendar disconnect | ⚠️ OPEN | No revocation call in disconnect flow |
+| PAY-01-A | Write-path audit — confirmed DB-write attack vector, no API path | ✅ CLOSED | `phase2/PAY-01-STRIPE-RELATIONSHIP-AUDIT.md` |
+| PAY-01-B | Stripe metadata binding — `metadata.providerId` authoritative for this threat model | ✅ CLOSED | `phase2/PAY-01-STRIPE-RELATIONSHIP-AUDIT.md` |
+| PAY-01-C | Reproduction + regression tests | ✅ CLOSED | `phase2/PAY-01-C-REPRODUCTION-TEST.md`; `payout-security.test.ts` 7/7; `pay-01-executePayout-security.test.ts` 5/5 |
+| PAY-01-D | Post-fix state/retry/idempotency/ledger/alert/concurrency | ✅ CLOSED | `pay-01-d-state-consistency.test.ts` 16/16; exit 0 |
 
-### P2 — Medium Priority
+**Test files (all in `lib/services/__tests__/`):**
+- `payout-security.test.ts` — 7 unit tests for helper
+- `pay-01-executePayout-security.test.ts` — 5 service-level tests; critical: `transfers.create` NOT called on failure; TOCTOU assertion
+- `pay-01-d-state-consistency.test.ts` — 16 tests: D1 state, D2 retry, D3 idempotency, D4 ledger, D5 alerts, D6 concurrency
 
-| ID | Finding | Status | Evidence |
-|---|---|---|---|
-| PAY-H-04 | SlotReservation concurrency (no unique constraint) | ⚠️ OPEN | No `@@unique` on `(providerId, startTime)` |
-| SUB-06-A | No tests for subscription event ordering | ⚠️ OPEN | Zero tests for `updated` → `deleted` ordering |
-| SUB-08-A | Seat limit not enforced in webhook | ⚠️ OPEN | No seat count check before subscription.create |
-| RBAC-M-02 | Admin routes use role check instead of permission check | ⚠️ OPEN | `role === 'SUPER_ADMIN'` instead of `requirePermission()` |
-| DATA-EXP-01 | Public instructor phone exposed in API | ⚠️ OPEN | `phone` in public projection |
-| DOC-EXP-01 | Expired provider can still receive bookings | ⚠️ OPEN | No document expiry gate in booking creation |
-| AUDIT-01 | Audit logging fails open (swallows errors) | ⚠️ OPEN | `catch` block uses `console.error` only |
-| AUDIT-02 | Audit log write not in same transaction as state change | ⚠️ OPEN | Separate writes, not atomic |
-| AUDIT-05 | Audit coverage gaps (wallet, booking mutations not logged) | ⚠️ OPEN | No audit trail for wallet operations |
-| INT-M-01B | Stripe payment reconciliation (missed webhooks) | ⚠️ OPEN | No payment reconciliation in cron |
-
-### P3 — Low Priority
-
-| ID | Finding | Status |
-|---|---|---|
-| PAY-H-06 | Package expiry refund policy not documented | ⚠️ OPEN |
-| AUDIT-03 | AuditLog deletable (no DB trigger) | ⚠️ OPEN |
-| AUDIT-04 | No audit log retention policy | ⚠️ OPEN |
-| APP-H-04 to APP-H-08 | Documentation gaps | ⚠️ OPEN |
-
-### Deferred
-
-| ID | Finding | Status |
-|---|---|---|
-| AI-M-01 | AI prompt injection | ⏸ DEFERRED — awaiting architecture redesign |
-| AI-M-02 | AI tool authorization completeness | ⏸ DEFERRED — awaiting architecture redesign |
-
-### Verified Safe (no fix needed)
-
-PAY-H-03, PAY-H-05, SUB-12-A (already was correct), AUTH-M-01, AUTH-M-02, RBAC-M-01, APP-H-01, APP-H-02, APP-H-03, DATA-M-01, DATA-M-02, DATA-M-03, INT-M-01C, INT-M-01D, INT-M-02, INT-M-03B, INT-M-03C, INT-M-03D, INT-M-03E, F-08 (ADMIN-05 refund limit)
+**OPS-01 (operational note, not a finding):** `sendAlert()` in catch block is fire-and-forget. Payout correctly reaches FAILED state independently of alert delivery. Not a financial invariant issue.
 
 ---
 
-## PHASE 2 — PAY-01 Payout Destination Ownership
+## Section 3 — Phase 2: Money-Movement Inventory
 
-This was identified during Phase 1 gap analysis and fully addressed this session.
+Full inventory: `MONEY-MOVEMENT-INVENTORY.md`
 
-| Sub-task | Finding | Status | Evidence |
-|---|---|---|---|
-| PAY-01-A | Write-path audit: no API vulnerability, DB write is attack vector | ✅ CLOSED | Code audit; no API path writes stripeAccountId without auth |
-| PAY-01-B | Stripe metadata binding established | ✅ CLOSED | `PAY-01-STRIPE-RELATIONSHIP-AUDIT.md` |
-| PAY-01-C | Reproduction + regression tests | ✅ CLOSED | `payout-security.test.ts` (7/7) + `pay-01-executePayout-security.test.ts` (5/5); exit 0 |
-| PAY-01-D | Post-verification state, retry, idempotency, ledger, alert, concurrency | ✅ CLOSED | `pay-01-d-state-consistency.test.ts` (16/16); exit 0 |
+### 3.1 — Controlled (no fix required)
 
-**Total PAY-01 tests:** 28/28 passing, Vitest exit code 0.
-
-**Fix location:** `lib/services/payout-service.ts` — `verifyPayoutDestinationOwnership()` called before `stripe.transfers.create()` with TOCTOU protection (verified account ID used as `const verifiedAccountId`).
-
-**Operational note (OPS-01):** `sendAlert()` in catch block is `void` (fire-and-forget). Payout correctly reaches FAILED state independently of alert delivery. Monitoring runbooks should account for alert-service unavailability. Not a financial invariant issue.
-
----
-
-## PHASE 2 — Money-Movement Inventory (new this session)
-
-17 paths identified. Full detail: `docs/MONEY-MOVEMENT-INVENTORY.md`
-
-| ID | Path | Severity | Status |
-|---|---|---|---|
-| MM-01 | Provider payout (Stripe Connect transfer) | NONE | ✅ CONTROLLED — PAY-01-D closed |
-| MM-02 | `StripeService.createPayout()` — unguarded dead code | MEDIUM | ⚠️ OPEN — delete |
-| MM-03 | Customer payment intent (booking/top-up) | LOW | ⚠️ OPEN — minor wallet top-up amount bounds |
-| MM-04 | Wallet top-up webhook confirmation | NONE | ✅ CONTROLLED |
-| MM-05-A | Concurrent admin refund race — `approveCancellation()` | HIGH | ⚠️ OPEN — confirmed; no idempotency key, TOCTOU gate |
-| MM-05-B | Lost-refund / no-retry gap — public cancel route | MEDIUM | ⚠️ OPEN — confirmed; atomic CAS exists, Stripe call outside tx |
-| MM-05-C | Concurrent admin transaction refund | HIGH | ⚠️ OPEN — confirmed; fully unprotected, no gate, no key |
-| MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | ⚠️ OPEN — theoretical; Stripe dedup reduces real risk |
-| MM-05-E | Webhook record rolls back on expired-booking refund (Site B) | LOW | ⚠️ OPEN — behavioural gap; idempotency key exists |
-| MM-06 | Duplicate-charge auto-refund (webhook) — same class as MM-05-D | MEDIUM | ⚠️ OPEN — missing idempotency key; no WebhookEvent record |
-| MM-07 | Refund ledger reconciliation defect (`charge.refunded` double-writes) | MEDIUM | ⚠️ OPEN — confirmed ledger accuracy bug; no wallet double-credit |
-| MM-08 | Subscription checkout | NONE | ✅ CONTROLLED |
-| MM-09 | Subscription cancellation | LOW | ⚠️ OPEN — no internal ownership guard in service |
-| MM-10-A | SaaS provider routing absent — no `transfer_data.destination` | — | ⚠️ OPEN — architectural incompleteness, not a security exploit |
-| MM-10-B | Concurrent SaaS checkout session creation — double-charge risk | MEDIUM | ⚠️ OPEN — confirmed; two concurrent accepts → two Stripe sessions |
-| MM-10-C | `applicationFeeAmount` always zero — commission config defect | MEDIUM | ⚠️ OPEN — confirmed logic bug; `commissionPercent` not in `BusinessConfig` |
-| MM-11 | Stripe Connect account creation | NONE | ✅ CONTROLLED |
-| MM-12 | Admin wallet credit/debit | MEDIUM | ⚠️ OPEN — no idempotency |
-| MM-13 | Wallet-funded booking | NONE | ✅ CONTROLLED |
-| MM-14 | Dispute handling | MEDIUM | ⚠️ OPEN — overlap with MM-07 possible |
-| MM-15 | Transfer failure recovery (`transfer.failed`) | MEDIUM | ⚠️ OPEN — possible ledger mismatch if fired post-PAID |
-| MM-16 | Reconciliation cron | NONE | ✅ CONTROLLED — read-only |
-| MM-17 | Dead code `StripeService.createPayout()` | MEDIUM | ⚠️ OPEN — same as MM-02 |
-
----
-
-## MM-10 — SaaS Payment Findings (reclassified 2026-09-16)
-
-**Investigation:** `audit/phase2/MM10-MM05-INVESTIGATION.md`  
-**Original classification:** HIGH (PAY-01 parallel) — **INCORRECT. Reclassified.**
-
-`saas-payment.ts` does not read `provider.stripeAccountId` and does not set `transfer_data.destination`. Money lands on the platform Stripe account, not the provider. The PAY-01 account-substitution attack class is **not applicable** to this path. The three remaining findings are tracked independently below.
-
-### MM-10-A — Provider routing absent (architectural incompleteness)
-
-| Field | Value |
-|---|---|
-| Class | Architectural gap — not an exploitable security vulnerability |
-| Impact | SaaS providers cannot receive direct payment; every SaaS booking payment accumulates on the platform account with no forwarding |
-| Code location | `lib/services/saas-payment.ts` — `createCheckoutSession()` — no `transfer_data` in `sessionParams` |
-| Phase 1 cross-ref | None — new finding from Phase 2 money-movement audit |
-| Security note | When `transfer_data.destination` IS added, ownership verification (same as PAY-01 fix) MUST be applied before session creation |
-| Status | ⚠️ OPEN — P1 (feature completion prerequisite for future security control) |
-
-### MM-10-B — Concurrent checkout session creation (double-charge risk)
-
-| Field | Value |
-|---|---|
-| Class | Application-level concurrency defect — no database compromise required |
-| Impact | Two concurrent `/api/client/quotes/[id]/accept` requests create two Stripe sessions for the same quote; customer paying both is double-charged; `handleCheckoutComplete()` idempotency prevents double-booking but not double-charge |
-| Code location | `lib/services/saas-payment.ts` lines ~106–236 — `quote.stripeSessionId` write is not conditional on `stripeSessionId === null` |
-| Exploit complexity | Two concurrent browser requests (e.g. double-click, two tabs) |
-| Required fix | `prisma.quote.update({ where: { id: quoteId, stripeSessionId: null }, data: { stripeSessionId: session.id } })` — reject if 0 rows updated |
-| Phase 1 cross-ref | None — new finding |
-| Status | ⚠️ OPEN — P1 |
-
-### MM-10-C — `applicationFeeAmount` always zero (commission config defect)
-
-| Field | Value |
-|---|---|
-| Class | Logic bug — dead code |
-| Impact | Platform collects 0 commission on all SaaS bookings regardless of `BusinessSettings.commissionRate`; `commissionPercent` is not a field on `BusinessConfig`; `assembleConfig()` never populates it; `?? 0` fallback makes fee permanently zero |
-| Code location | `lib/services/saas-payment.ts` lines ~130–136 |
-| Required fix | Read `BusinessSettings.commissionRate` directly instead of the non-existent `businessConfig.commissionPercent` |
-| Phase 1 cross-ref | None — new finding |
-| Status | ⚠️ OPEN — P1 |
-
----
-
-## MM-05 — Refund Idempotency Findings (granular 2026-09-16)
-
-**Investigation:** `audit/phase2/MM10-MM05-INVESTIGATION.md`  
-**Root structural weakness:** No dedicated `Refund` entity. State is scattered across `Booking.stripeRefundId`, `Booking.cancellationStatus`, `LedgerEntry`, and `Transaction` records. The fix must establish **one authoritative refund lifecycle** covering: refund intent → Stripe refund ID → idempotency key → status → amount → booking/transaction → ledger linkage. Every refund entry point must use that lifecycle. "Create a Refund model" is one possible implementation but not the only valid one.
-
-### MM-05-A — Concurrent admin refund race (`approveCancellation()`)
-
-| Field | Value |
-|---|---|
-| Class | Confirmed money-movement defect |
-| Impact | Two concurrent admin approve requests for the same cancellation can both pass the `cancellationStatus !== 'PENDING'` check before either writes `APPROVED`; both call `stripe.refunds.create()`; two separate Stripe refund objects may be issued |
-| Code location | `lib/services/booking-service.ts` ~line 659 — `approveCancellation()` |
-| Gate | `cancellationStatus !== 'PENDING'` check — **not atomic** with Stripe call (TOCTOU) |
-| Idempotency key | **None** |
-| Stable key available | `bookingId` — use `approve-cancel-${bookingId}` |
-| Phase 1 cross-ref | PAY-H-01 (refund reconciliation) — related but separate |
-| Status | ⚠️ OPEN — **P0** |
-
-### MM-05-B — Lost-refund / no-retry gap (public cancel route)
-
-| Field | Value |
-|---|---|
-| Class | Confirmed reliability / money-movement defect |
-| Impact | `stripe.refunds.create()` is called **after** the DB transaction commits (booking → CANCELLED via atomic CAS); if the Stripe call fails (network partition, Stripe outage), the booking is cancelled but no refund is ever issued; no safe retry path exists without an idempotency key |
-| Code location | `app/api/public/bookings/[id]/cancel/route.ts` ~line 250 |
-| Gate | ✅ Atomic `updateMany` CAS — correctly prevents double-cancellation |
-| Idempotency key | **None** — key would be `cancel-refund-${bookingId}` |
-| Phase 1 cross-ref | PAY-H-01 / INT-M-01A (Stripe call outside transaction) |
-| Status | ⚠️ OPEN — **P0** |
-
-### MM-05-C — Concurrent admin transaction refund
-
-| Field | Value |
-|---|---|
-| Class | Confirmed money-movement defect |
-| Impact | Two concurrent admin refund requests for the same transaction both pass `transaction.status !== 'COMPLETED'` check; both reach `stripe.refunds.create()`; no atomic gate, no idempotency key |
-| Code location | `app/api/admin/transactions/[transactionId]/refund/route.ts` ~line 99 |
-| Gate | `transaction.status !== 'COMPLETED'` — **not atomic** with Stripe call (TOCTOU) |
-| Idempotency key | **None** — key would be `admin-refund-${transactionId}` |
-| Phase 1 cross-ref | F-08 (refund limit enforcement — separate concern, already closed) |
-| Status | ⚠️ OPEN — **P0** |
-
-### MM-05-D — No app-level guard on 3DS/prepaid auto-refund (Site A)
-
-| Field | Value |
-|---|---|
-| Class | Theoretical risk |
-| Impact | `checkout.session.completed` webhook handler issues refund without calling `recordWebhookEvent()`; Stripe retry of the same event re-executes the refund path; Stripe's own deduplication (same PaymentIntent, already fully refunded) is the only guard |
-| Code location | `app/api/stripe/webhook/route.ts` ~line 392 |
-| Idempotency key | **None** — key would be `prepaid-refund-${checkoutSession.id}` |
-| Status | ⚠️ OPEN — P1 (Stripe dedup reduces urgency) |
-
-### MM-05-E — WebhookEvent rolls back on expired-booking refund (Site B)
-
-| Field | Value |
-|---|---|
-| Class | Behavioural gap |
-| Impact | `ExpiredBookingError` thrown inside `$transaction` rolls back the `recordWebhookEvent` INSERT; Stripe retries the event indefinitely; the Stripe idempotency key (`expired-booking-refund-${bookingId}-${paymentIntentId}`) prevents duplicate Stripe refund objects but the application keeps re-executing the code path |
-| Code location | `app/api/stripe/webhook/route.ts` ~line 1084 |
-| Idempotency key | ✅ Stripe key present and correct |
-| Required fix | Write `recordWebhookEvent` **outside** (after) the transaction, once the Stripe refund call succeeds |
-| Status | ⚠️ OPEN — P1 |
-
----
-
-## MM-07 — Refund Ledger Reconciliation Defect (confirmed 2026-09-16)
-
-| Field | Value |
-|---|---|
-| Class | Confirmed ledger accuracy / reconciliation defect |
-| Impact | `approveCancellation()` (MM-05-A) and the public cancel route (MM-05-B) issue Stripe refunds but write **no `LedgerEntry(REFUND_ISSUED)`**. When Stripe subsequently fires `charge.refunded`, `handleChargeRefunded()` finds `alreadyRecordedRefund = 0` and writes a `REFUND_SYNCED` entry for the full amount. The same economic refund is double-represented in the ledger: once as a booking debit, once as a `REFUND_SYNCED` that implies the refund was platform-originated. |
-| What is NOT affected | Customer wallet balance — `handleChargeRefunded()` does not write wallet credits; no customer-facing money is double-counted |
-| What IS affected | `totalRefunded` on `PlatformLedger`; financial reconciliation reports; any dashboard that aggregates `LedgerEntry` by type |
-| Root cause | No `LedgerEntry(REFUND_ISSUED)` written at refund-issuance time by Sites C/D/E |
-| Required fix | Every refund entry point that calls `stripe.refunds.create()` must also write `LedgerEntry(REFUND_ISSUED)` in the same transaction as the booking/status update, so `handleChargeRefunded()` can correctly compute `refundDelta = 0` |
-| Phase 1 cross-ref | PAY-H-01, INT-M-01A (reconciliation gaps) |
-| Phase 1 cross-ref | AUDIT-02 (financial state changes not transactionally linked to audit/ledger records) |
-| Status | ⚠️ OPEN — **P0** (prerequisite for MM-05 fixes to be complete) |
-
----
-
-## Current Priority Queue
-
-### P0 — Fix before next release
-
-| # | ID | Item | Why | Prerequisite |
+| ID | Title | Risk | Status | Evidence |
 |---|---|---|---|---|
-| 1 | MM-05-A | Add idempotency key + atomic gate to `approveCancellation()` | Confirmed: concurrent admin approvals can double-refund | None |
-| 2 | MM-05-C | Add idempotency key + atomic gate to admin transaction refund | Confirmed: fully unprotected, no gate, no key | None |
-| 3 | MM-05-B | Add idempotency key to public cancel route | DB gate (CAS) exists; key enables safe retry on Stripe failure | None |
-| 4 | MM-07 | Write `LedgerEntry(REFUND_ISSUED)` from all refund entry points (MM-05-A/B/C) | Prerequisite for `handleChargeRefunded()` to detect already-processed refunds; fixes ledger double-count | None — but implement alongside P0 items 1–3 |
+| MM-01 | Provider payout (Stripe Connect) | NONE | ✅ CONTROLLED — PAY-01 closed | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-04 | Wallet top-up webhook confirmation | NONE | ✅ CONTROLLED | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-08 | Subscription checkout | NONE | ✅ CONTROLLED | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-11 | Stripe Connect account creation | NONE | ✅ CONTROLLED | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-13 | Wallet-funded booking | NONE | ✅ CONTROLLED | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-16 | Reconciliation cron (read-only) | NONE | ✅ CONTROLLED | `MONEY-MOVEMENT-INVENTORY.md` |
 
-### P1 — Next sprint
+### 3.2 — MM-10: SUPERSEDED (reclassified 2026-09-16)
 
-| # | ID | Item | Why | Prerequisite |
+| ID | Title | Status | Reason | Replaced-by |
 |---|---|---|---|---|
-| 5 | MM-10-B | Fix session creation race — conditional `stripeSessionId` write | Two concurrent accepts → double charge; no DB compromise needed | None |
-| 6 | MM-10-C | Fix `applicationFeeAmount` — read `BusinessSettings.commissionRate` | Commission is permanently zero; dead code | None |
-| 7 | MM-10-A | Complete SaaS Connect destination routing | SaaS providers cannot receive payment; when implemented, apply PAY-01 ownership verification | Stripe Connect setup for business accounts |
-| 8 | MM-05-D | Add idempotency key + `recordWebhookEvent()` to 3DS/prepaid refund (Site A) | Stripe retries re-execute path; no app-level guard | None |
-| 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path (Site B) | Stripe retries indefinitely; idempotency key is only guard | None |
-| 10 | MM-15 | Verify/fix `handleTransferFailed()` ledger reversal | Possible ledger mismatch if fired after `PAYOUT_PAID` entries written | Read `handleTransferFailed()` first |
-| 11 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron | No detection mechanism when refund Stripe call succeeds but DB fails | None |
-| 12 | PAY-H-02 | Booking reschedule price recalculation | Wrong amount charged when reschedule changes duration | None |
+| MM-10 | SaaS direct-to-provider payment (PAY-01 parallel) | **SUPERSEDED** | Original HIGH classification was incorrect. `saas-payment.ts` never reads `provider.stripeAccountId`; no `transfer_data.destination` in session params; money lands on platform account not provider. PAY-01 account-substitution attack class not applicable. | MM-10-A, MM-10-B, MM-10-C |
+
+Sub-findings from reclassification:
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| MM-10-A | SaaS provider routing absent — no `transfer_data.destination` | ARCHITECTURAL | CONFIRMED | VERIFIED — `saas-payment.ts` confirmed: no `transfer_data` in `sessionParams`; money lands on platform | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-10-B | Concurrent checkout session creation — double-charge risk | MEDIUM | CONFIRMED | VERIFIED — `Quote.stripeSessionId` write not conditional on null; two concurrent accepts → two sessions | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-10-C | `applicationFeeAmount` always zero — commission config defect | MEDIUM | CONFIRMED | VERIFIED — `commissionPercent` not a field on `BusinessConfig`; `assembleConfig()` never sets it; `?? 0` fallback makes fee zero | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+
+### 3.3 — MM-05: Refund Idempotency (5 confirmed sites)
+
+Structural root weakness: no dedicated `Refund` entity. State scattered across `Booking.stripeRefundId`, `Booking.cancellationStatus`, `LedgerEntry`, `Transaction`. Fix must establish one authoritative refund lifecycle used by all entry points.
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| MM-05-A | Concurrent admin refund race — `approveCancellation()` | HIGH | CONFIRMED | VERIFIED — `booking-service.ts` ~659: no idempotency key; `cancellationStatus` check not atomic with Stripe call (TOCTOU) | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-B | Lost-refund / no-retry gap — public cancel route | MEDIUM | CONFIRMED | VERIFIED — `public/bookings/[id]/cancel` ~250: atomic CAS exists (prevents double-cancel); Stripe call outside transaction; no idempotency key means no safe retry | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-C | Concurrent admin transaction refund | HIGH | CONFIRMED | VERIFIED — `admin/transactions/[id]/refund` ~99: no atomic gate, no idempotency key; `transaction.status` check not atomic with Stripe call | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~392: no idempotency key, no `recordWebhookEvent()` call on this path | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-E | WebhookEvent rolls back on expired-booking refund (Site B) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~1084: `ExpiredBookingError` inside `$transaction` rolls back `recordWebhookEvent` INSERT; Stripe key correct but Stripe retries indefinitely | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+
+### 3.4 — MM-06 / MM-07 / MM-12 / MM-15
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| MM-06 | Duplicate-charge auto-refund — missing idempotency key | MEDIUM | CONFIRMED | VERIFIED — same class as MM-05-D; same webhook path; no key, no WebhookEvent record | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-07 | Refund ledger reconciliation defect | MEDIUM | CONFIRMED | VERIFIED — Sites C/D/E write no `REFUND_ISSUED` ledger entry; `handleChargeRefunded()` sees `alreadyRecordedRefund=0` → writes duplicate `REFUND_SYNCED`; no wallet double-credit; ledger `totalRefunded` systematically over-counted | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-09 | Subscription cancellation — no internal ownership guard | LOW | CONFIRMED | VERIFIED — `subscription-cancel.ts` takes `stripeSubId` from caller with no internal check | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-12 | Admin wallet credit/debit — no idempotency | MEDIUM | CONFIRMED | VERIFIED — `add-credit/route.ts` no duplicate-submit protection | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-14 | Dispute handling — potential overlap with MM-07 | MEDIUM | UNVERIFIED | UNVERIFIED — needs `handleDisputeClosed()` read to confirm/clear double-credit | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-15 | Late `transfer.failed` — possible post-PAID ledger mismatch | MEDIUM | CONFIRMED | UNVERIFIED — needs `handleTransferFailed()` read to confirm reversal behaviour | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
+
+### 3.5 — Dead Code
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status |
+|---|---|---|---|---|---|---|---|
+| MM-02 | `StripeService.createPayout()` — unguarded, zero callers | MEDIUM | CONFIRMED | VERIFIED — grep confirms 0 callers; method has no ownership check, no idempotency, no ledger | NOT-STARTED | PENDING | ⚠️ OPEN |
+| MM-17 | Same as MM-02 (duplicate inventory entry) | — | SUPERSEDED | — | — | — | SUPERSEDED → MM-02 |
+
+### 3.6 — Minor Open
+
+| ID | Title | Risk | Finding | Status |
+|---|---|---|---|---|
+| MM-03 | Customer payment intent — wallet top-up amount bounds | LOW | CONFIRMED | ⚠️ OPEN |
+
+---
+
+## Section 4 — Current Priority Queue
+
+> Ordered by confirmed severity and P0/P1/P2 classification.  
+> **No finding may enter FIX stage without VERIFIED status.**
+
+### P0 — Fix before next release (all VERIFIED, awaiting fix)
+
+| # | ID | Title | Key risk | Note |
+|---|---|---|---|---|
+| 1 | MM-07 | Refund ledger reconciliation defect | Ledger `totalRefunded` over-counted on every admin cancellation | **Ship in same commit as P0 items 2–4** — the `REFUND_ISSUED` write must exist before the keyed refund calls, or there is a gap window |
+| 2 | MM-05-A | Concurrent admin refund race in `approveCancellation()` | Two admins can double-refund same booking | Idempotency key `approve-cancel-${bookingId}` + `updateMany` CAS on `cancellationStatus` |
+| 3 | MM-05-C | Concurrent admin transaction refund | Fully unprotected — no gate, no key | Idempotency key `admin-refund-${transactionId}` + atomic gate |
+| 4 | MM-05-B | Lost-refund gap on public cancel route | Stripe failure after DB commit leaves booking cancelled but no refund issued | Idempotency key `cancel-refund-${bookingId}` (CAS gate already correct) |
+
+### P1 — Next sprint (all VERIFIED, awaiting fix)
+
+| # | ID | Title |
+|---|---|---|
+| 5 | MM-10-B | Concurrent checkout session creation — double-charge |
+| 6 | MM-10-C | `applicationFeeAmount` always zero |
+| 7 | MM-10-A | Complete SaaS Connect destination routing (apply PAY-01 ownership check when implemented) |
+| 8 | MM-05-D | 3DS/prepaid auto-refund idempotency key + `recordWebhookEvent()` |
+| 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path |
+| 10 | MM-15 | Verify `handleTransferFailed()` ledger reversal (read first, then fix) |
+| 11 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron |
+| 12 | PAY-H-02 | Booking reschedule price recalculation |
+| 13 | MM-14 | Read `handleDisputeClosed()` to confirm or clear MM-07 overlap |
 
 ### P2 — Follow-up
 
-| # | ID | Item |
+| # | ID | Title |
 |---|---|---|
-| 13 | MM-12 | Admin wallet credit/debit idempotency |
-| 14 | MM-02/MM-17 | Delete `StripeService.createPayout()` (dead code) |
-| 15 | INT-M-03A | Encrypt OAuth tokens at rest |
-| 16 | INT-M-03F | Revoke OAuth token on calendar disconnect |
-| 17 | PAY-H-04 | SlotReservation unique constraint |
-| 18 | DOC-EXP-01 | Block bookings with expired provider documents |
-| 19 | DATA-EXP-01 | Remove phone number from public instructor API |
-| 20 | AUDIT-01/02/05 | Audit logging hardening |
-| 21 | RBAC-M-02 | Replace role checks with permission checks in admin routes |
+| 14 | MM-12 | Admin wallet credit idempotency |
+| 15 | MM-02 | Delete `StripeService.createPayout()` |
+| 16 | INT-M-03A | Encrypt OAuth tokens at rest |
+| 17 | INT-M-03F | Revoke OAuth token on calendar disconnect |
+| 18 | PAY-H-04 | SlotReservation unique constraint |
+| 19 | DOC-EXP-01 | Block bookings with expired provider documents |
+| 20 | DATA-EXP-01 | Remove phone from public instructor API |
+| 21 | AUDIT-01/02/05 | Audit logging hardening |
+| 22 | RBAC-M-02 | Replace role checks with permission checks in admin routes |
 
 ---
 
-## Files Written This Session
+## Section 5 — Reconciliation Summary
 
-| File | Purpose |
-|---|---|
-| `lib/services/payout-security.ts` | `verifyPayoutDestinationOwnership()` helper |
-| `lib/services/__tests__/payout-security.test.ts` | Unit tests for helper (7/7) |
-| `lib/services/__tests__/pay-01-executePayout-security.test.ts` | Service-level tests — proves `transfers.create` not called on failure (5/5) |
-| `lib/services/__tests__/pay-01-d-state-consistency.test.ts` | D1–D6 state/retry/idempotency/ledger/alert/concurrency tests (16/16) |
-| `lib/services/__tests__/pay-01-FAILED-module-mocking-attempt.test.ts.skip` | Preserved audit evidence of earlier failed approach |
-| `docs/PAY-01-STRIPEACCOUNTID-UPDATE-PATH-AUDIT.md` | Complete write-path audit for `Provider.stripeAccountId` |
-| `docs/MONEY-MOVEMENT-INVENTORY.md` | 17-path money-movement inventory |
-| `docs/MM10-MM05-INVESTIGATION.md` | Deep investigation of MM-10 and MM-05 (5 refund sites) |
-| `docs/PAY-01-C-REPRODUCTION-TEST.md` | PAY-01-C status document (closed) |
-| `docs/PAY-01-INVESTIGATION-STATUS.md` | PAY-01 overall status |
-| `PAY-01-STRIPEACCOUNTID-UPDATE-PATH-AUDIT.md` | (root-level copy) |
-| `docs/AUDIT-MASTER-TRACKER.md` | **This file** |
+### Findings with missing lifecycle evidence
+
+| ID | Gap | Action required |
+|---|---|---|
+| MM-14 | Finding CONFIRMED but Verification UNVERIFIED — `handleDisputeClosed()` not yet read | Read function before advancing to FIX |
+| MM-15 | Finding CONFIRMED but Verification UNVERIFIED — `handleTransferFailed()` not yet read | Read function before advancing to FIX |
+| AUDIT-04 | Finding CONFIRMED but Verification UNVERIFIED | Read retention policy (or absence of one) before advancing |
+| PAY-H-01 | Finding CONFIRMED, Verification VERIFIED, but Fix and Fix-Verified both PENDING | Blocked behind MM-07/MM-05 (same refund reconciliation concern) |
+
+### Findings with no targeted tests (closure not yet possible)
+
+All OPEN findings have no targeted tests by definition — tests are part of FIX-VERIFIED stage.  
+The following CLOSED findings have tests recorded:
+
+| ID | Tests | Exit code |
+|---|---|---|
+| P0-01A | 12 (ownership + concurrent) | 0 |
+| P0-01B | 12 (ownership + concurrent) | 0 |
+| PAY-01 | 28 (7 unit + 5 service + 16 state) | 0 |
+
+All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 
 ---
 
-## Quick Reference: What Is Done / What Is Next
+## Section 6 — Document Map
 
-```
-DONE:
-  PAY-01 (A/B/C/D)   ← full payout destination ownership fix, 28/28 tests, exit 0
-  MM inventory        ← 17 paths catalogued
-  MM-10 investigation ← reclassified into MM-10-A/B/C (not a PAY-01 parallel)
-  MM-05 investigation ← 5 refund sites → granular sub-findings MM-05-A/B/C/D/E
-  MM-07 investigation ← confirmed ledger reconciliation defect
-
-NEXT (P0 — implement now, in order):
-  MM-07               ← write REFUND_ISSUED ledger entries (enables correct dedup)
-  MM-05-A             ← approveCancellation() idempotency key + atomic gate
-  MM-05-C             ← admin transaction refund idempotency key + atomic gate
-  MM-05-B             ← public cancel route idempotency key
-
-  NOTE: MM-07 is listed first because the REFUND_ISSUED ledger write must ship
-  in the same commit as the Stripe call changes, so handleChargeRefunded() can
-  immediately detect the newly keyed refunds rather than double-counting them.
-
-NEXT (P1 — next sprint):
-  MM-10-B             ← session creation race (conditional stripeSessionId write)
-  MM-10-C             ← applicationFeeAmount fix (use BusinessSettings.commissionRate)
-  MM-10-A             ← SaaS Connect destination routing (full feature, with PAY-01 guard)
-  MM-05-D/E           ← webhook refund path guards
-  MM-15               ← handleTransferFailed() ledger reversal verification
-
-OPEN (Phase 1 P1 not yet started):
-  PAY-H-01/INT-M-01A, PAY-H-02, INT-M-03A, INT-M-03F
-```
+| Document | Role | Status |
+|---|---|---|
+| `AUDIT-MASTER-TRACKER.md` | **Authoritative lifecycle state machine** | Active — this file |
+| `AUDIT-PROCESS.md` | Lifecycle rules and Kiro enforcement | Active |
+| `MONEY-MOVEMENT-INVENTORY.md` | 17-path inventory (input to tracker) | Active — read-only reference |
+| `PHASE1_REMEDIATION_REGISTER.md` | Frozen Phase 1 baseline (56 findings) | Read-only — do not edit |
+| `PHASE1_COVERAGE_MAP.md` | 20-area coverage reconciliation | Read-only |
+| `COMPLETE_AUDIT_VERIFICATION.md` | Source-level verification record | Read-only |
+| `SECURITY_FINDINGS_TRACKER.md` | Old tracker — superseded by this file | **Read-only — do not update** |
+| `VERIFICATION_FRAMEWORK.md` | Old verification methodology | Read-only reference |
+| `VERIFICATION_OUTCOMES.md` | Old outcomes record | Read-only reference |
+| `phase1/*.md` | Phase 1 evidence records (P0-01, SUB-*, C-1, F-*, AREA*) | Read-only evidence |
+| `phase2/*.md` | Phase 2 evidence records (PAY-01, MM-10, MM-05) | Read-only evidence |
+| `archive/*.md` | Historical session logs | Read-only |

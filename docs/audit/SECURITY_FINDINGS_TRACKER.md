@@ -1,8 +1,30 @@
-# Security Findings Tracker
+# Security Findings Tracker — SUPERSEDED
 
-**Last Updated**: 2026-09-11  
+> ⛔ **THIS FILE IS READ-ONLY. DO NOT UPDATE.**
+>
+> This document has been superseded by the audit state machine established on 2026-09-16.
+>
+> **Authoritative status for all findings:** [`AUDIT-MASTER-TRACKER.md`](AUDIT-MASTER-TRACKER.md)  
+> **Lifecycle rules:** [`AUDIT-PROCESS.md`](AUDIT-PROCESS.md)  
+> **Full reconciliation:** [`AUDIT-RECONCILIATION-REPORT.md`](AUDIT-RECONCILIATION-REPORT.md)
+>
+> This file is preserved as a historical record of the verification work done during the
+> 2026-08-15 to 2026-09-11 audit sessions. Its finding status fields are no longer
+> maintained and may not reflect the current lifecycle state in the master tracker.
+>
+> If there is any discrepancy between this file and `AUDIT-MASTER-TRACKER.md`,
+> the master tracker is correct.
+
+---
+
+**Original header preserved below for historical reference.**
+
+**Last Updated**: 2026-09-11 (frozen)  
 **Verification Process**: Independent source-level review  
-**Repository**: birhane457-create/drivebook
+**Repository**: birhane457-create/drivebook  
+**Superseded by**: `AUDIT-MASTER-TRACKER.md` on 2026-09-16
+
+---
 
 ---
 
