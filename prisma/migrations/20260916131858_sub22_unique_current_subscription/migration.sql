@@ -27,13 +27,14 @@ BEGIN
 END $$;
 
 -- Create partial unique index: one current subscription per provider
--- CONCURRENTLY allows this to run without blocking production traffic
-CREATE UNIQUE INDEX CONCURRENTLY "Subscription_provider_current_unique"
+-- Note: CONCURRENTLY removed because Prisma runs migrations in transactions
+-- With only 19 subscriptions, lock duration will be negligible
+CREATE UNIQUE INDEX "Subscription_provider_current_unique"
 ON "Subscription"("providerId")
 WHERE status IN ('TRIAL', 'ACTIVE', 'PAST_DUE');
 
 -- Optional: Also enforce Stripe subscription ID uniqueness
 -- Prevents the same Stripe subscription from being linked to multiple local rows
-CREATE UNIQUE INDEX CONCURRENTLY "Subscription_stripeSubscriptionId_unique"
+CREATE UNIQUE INDEX "Subscription_stripeSubscriptionId_unique"
 ON "Subscription"("stripeSubscriptionId")
 WHERE "stripeSubscriptionId" IS NOT NULL;
