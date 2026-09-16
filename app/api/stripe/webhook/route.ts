@@ -1572,6 +1572,7 @@ async function handleSubscriptionUpdate(
               throw err;
             }
           }
+        }
     
         // Audit log
         await logSubscriptionAction({
