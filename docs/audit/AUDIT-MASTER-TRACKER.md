@@ -173,7 +173,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~392: no idempotency key, no `recordWebhookEvent()` call on this path | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-E | WebhookEvent rolls back on expired-booking refund (Site B) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~1084: `ExpiredBookingError` inside `$transaction` rolls back `recordWebhookEvent` INSERT; Stripe key correct but Stripe retries indefinitely | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
 
-### 3.4 — MM-06 / MM-07 / MM-12 / MM-15
+### 3.4 — MM-06 / MM-07 / MM-12 / MM-14 / MM-15
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|
@@ -223,7 +223,8 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | 7 | MM-10-A | Complete SaaS Connect destination routing (apply PAY-01 ownership check when implemented) |
 | 8 | MM-05-D | 3DS/prepaid auto-refund idempotency key + `recordWebhookEvent()` |
 | 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path |
-| 10 | MM-15 | Verify `handleTransferFailed()` ledger reversal (read first, then fix) |
+| 10 | MM-15-A | Late `transfer.failed` reverses retried payout — add `stripeTransferId` to WHERE clause | Prevents silent reversal of valid payout |
+| 11 | MM-15-B | `handleTransferFailed()` non-atomic — wrap `recordWebhookEvent` + financial ops in single `$transaction` | Same class as MM-05-E |
 | 11 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron |
 | 12 | PAY-H-02 | Booking reschedule price recalculation |
 | 13 | MM-14 | `charge.refunded` double-count after lost dispute — fix `handleChargeRefunded()` guard to include `DISPUTE_LOST` in already-accounted types | **Directly affects MM-07 fix scope** — must be in same commit |
@@ -252,8 +253,9 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 
 | ID | Gap | Action required |
 |---|---|---|
-| MM-14 | Finding CONFIRMED but Verification UNVERIFIED — `handleDisputeClosed()` not yet read | Read function before advancing to FIX |
-| MM-15 | Finding CONFIRMED but Verification UNVERIFIED — `handleTransferFailed()` not yet read | Read function before advancing to FIX |
+| MM-14 | Finding CONFIRMED, Verification VERIFIED — `ba61c154` is verification evidence commit, not a fix commit | Implement fix alongside MM-07 |
+| MM-15-A | Finding CONFIRMED, Verification VERIFIED — `ba61c154` is verification evidence commit | Implement fix alongside MM-07 |
+| MM-15-B | Finding CONFIRMED, Verification VERIFIED — `ba61c154` is verification evidence commit | Implement fix alongside MM-07 |
 | AUDIT-04 | Finding CONFIRMED but Verification UNVERIFIED | Read retention policy (or absence of one) before advancing |
 | PAY-H-01 | Finding CONFIRMED, Verification VERIFIED, but Fix and Fix-Verified both PENDING | Blocked behind MM-07/MM-05 (same refund reconciliation concern) |
 
