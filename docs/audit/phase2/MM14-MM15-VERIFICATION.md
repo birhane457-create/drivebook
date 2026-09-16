@@ -216,3 +216,99 @@ After both changes, `handleChargeRefunded()` correctly detects:
 | MM-15-A: Late `transfer.failed` reverses retried payout | ✅ | WHERE clause missing `stripeTransferId` filter |
 | MM-15-B: Non-atomic idempotency in `handleTransferFailed()` | ✅ | `recordWebhookEvent` outside `$transaction` |
 | MM-14 fix must ship with MM-07 fix | ✅ | Same guard in `handleChargeRefunded()`; splitting creates gap window |
+
+---
+
+## Required Tests Before CLOSED (combined remediation set)
+
+The following test cases must pass before any of MM-05-A/B/C, MM-07, MM-14, MM-15-A, MM-15-B can be marked CLOSED. They form a coupled correctness boundary. All must be present in the same test run.
+
+### T1 — Application refund: exactly one ledger entry; `charge.refunded` creates no duplicate
+
+```
+Setup:    booking exists; approveCancellation() succeeds; REFUND_ISSUED written
+Trigger:  charge.refunded fires for same bookingId
+Assert:   LedgerEntry count for bookingId = 1 (REFUND_ISSUED only)
+Assert:   REFUND_SYNCED NOT written
+Assert:   totalRefunded incremented exactly once
+```
+
+### T2 — Dispute lost: exactly one DISPUTE_LOST; `charge.refunded` creates no REFUND_SYNCED
+
+```
+Setup:    handleDisputeClosed(status='lost') runs; DISPUTE_LOST written
+Trigger:  charge.refunded fires for same bookingId (Stripe auto-fires after chargeback)
+Assert:   LedgerEntry count for bookingId includes DISPUTE_LOST; no REFUND_SYNCED added
+Assert:   totalRefunded NOT incremented by charge.refunded handler
+```
+
+### T3 — Normal dashboard refund: no prior refund/dispute entry; charge.refunded creates exactly one REFUND_SYNCED
+
+```
+Setup:    no REFUND_ISSUED, no DISPUTE_LOST for bookingId
+Trigger:  charge.refunded fires
+Assert:   exactly one REFUND_SYNCED written
+Assert:   totalRefunded incremented once
+```
+
+### T4 — Transfer failure with matching stripeTransferId: payout reversal occurs exactly once
+
+```
+Setup:    payout in PAID state with stripeTransferId = 'tr_ORIGINAL'
+Trigger:  transfer.failed event with transferId = 'tr_ORIGINAL'
+Assert:   payout.status = FAILED
+Assert:   payout.stripeTransferId = null
+Assert:   ADJUSTMENT ledger entry written once
+Assert:   totalPaidOut decremented; totalReserved incremented
+```
+
+### T5 — Late transfer.failed after successful retry: no reversal; payout remains PAID
+
+```
+Setup:    payout originally PAID with tr_ORIGINAL; retried; now PAID with tr_RETRY
+Trigger:  late transfer.failed event with transferId = 'tr_ORIGINAL'
+Assert:   payout.status = PAID (unchanged)
+Assert:   payout.stripeTransferId = 'tr_RETRY' (unchanged)
+Assert:   ADJUSTMENT ledger entry NOT written
+Assert:   instructor NOT notified (no false SMS)
+```
+
+### T6 — MM-15-B transaction failure: webhook rolls back; Stripe retry is processable
+
+```
+Setup:    transfer.failed event arrives
+Action:   force appendLedgerEntry to throw after recordWebhookEvent succeeds
+Assert:   payout.status unchanged (not FAILED)
+Assert:   WebhookEvent record NOT committed (transaction rolled back)
+Assert:   second delivery of same event is processed (not rejected as duplicate)
+Assert:   second delivery completes the reversal correctly
+```
+
+### T7 — Concurrent transfer.failed delivery: exactly one financial reversal
+
+```
+Setup:    payout in PAID state
+Trigger:  two concurrent deliveries of the same transfer.failed event
+Assert:   payout.status = FAILED (set exactly once)
+Assert:   ADJUSTMENT ledger entry written exactly once
+Assert:   second delivery returns 200 without writing a second reversal
+```
+
+---
+
+## Invariants These Tests Enforce
+
+1. `handleChargeRefunded()` only writes `REFUND_SYNCED` when no prior economic accounting exists for the full refund amount across types `REFUND_ISSUED`, `REFUND_SYNCED`, and `DISPUTE_LOST`
+2. `handleTransferFailed()` only reverses the specific transfer that failed — not any later successful transfer for the same payout
+3. `handleTransferFailed()` is atomic: either all financial operations commit or none do; the WebhookEvent record commits only with the financial ops
+4. Each reversal path (refund, dispute, transfer failure) is idempotent — exactly one financial effect per economic event regardless of webhook delivery count
+
+---
+
+## Note on Commit Strategy
+
+These seven test cases verify the combined correctness boundary. The six production changes (MM-05-A/B/C `REFUND_ISSUED` writes, MM-14 type filter extension, MM-15-A `stripeTransferId` filter, MM-15-B transaction wrapping) form a coupled set because they all interact through `handleChargeRefunded()`'s guard logic. They should ship in one commit so the invariants hold from the moment the code lands in `main`.
+
+The reason is not that splitting commits is inherently unsafe — it is that any intermediate state where some entry points write `REFUND_ISSUED` but the `DISPUTE_LOST` type filter is not yet added leaves `charge.refunded` still double-counting dispute refunds during the gap.
+
+Evidence commit (verification only): `ba61c1547db63f4bab15eb61a99492dd91ced855`
