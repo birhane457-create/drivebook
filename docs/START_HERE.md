@@ -1,271 +1,129 @@
-# START HERE - DriveBook Documentation
+# DriveBook — Documentation Entry Point
 
-**Welcome to DriveBook!**
-
-This is your entry point to understanding the entire system.
+> **Start here every session.** This file tells you what exists, where it lives, and what to open depending on what you need to do.
 
 ---
 
-## 🎯 WHAT IS DRIVEBOOK?
+## "What should I work on next?"
 
-DriveBook is a **controlled booking marketplace with a protected financial ledger** connecting learners and driving instructors.
+Open this file:
 
-**Not** a social app. **Not** a messaging platform. **Not** flexible.
+```
+docs/audit/AUDIT-MASTER-TRACKER.md
+```
 
-It's a **rules-based marketplace** where everything obeys strict principles.
-
----
-
-## 📚 READ THESE FIRST (In Order)
-
-### 1. CORE_ESSENCE.md (10 minutes)
-**What you'll learn**:
-- What DriveBook is and is not
-- Why it exists
-- The 8 core entities
-- System boundaries
-- The 8 non-negotiables
-
-**Read this**: `00-foundation/CORE_ESSENCE.md`
+It contains the complete priority queue (P0 → P1 → P2), the status of every finding, and a quick-reference summary at the bottom showing exactly what is done and what is next.
 
 ---
 
-### 2. SYSTEM_PRINCIPLES.md (15 minutes)
-**What you'll learn**:
-- The 5 non-negotiable principles
-- Financial immutability
-- Money conservation
-- State machine control
-- Freeze-after-start rule
-- Audit logging requirements
+## "I want to understand the current state of a specific finding"
 
-**Read this**: `00-foundation/SYSTEM_PRINCIPLES.md`
-
----
-
-### 3. FINANCIAL_DOCTRINE.md (20 minutes)
-**What you'll learn**:
-- How money flows
-- Transaction types
-- Wallet system
-- Commission structure
-- Refund policy
-- Payout process
-- Reconciliation method
-
-**Read this**: `00-foundation/FINANCIAL_DOCTRINE.md`
+| You want to know about… | Open this file |
+|---|---|
+| Overall audit status, all findings, priority queue | `audit/AUDIT-MASTER-TRACKER.md` |
+| Phase 1 original 56-finding register (frozen baseline) | `audit/PHASE1_REMEDIATION_REGISTER.md` |
+| Phase 1 verification outcomes per finding | `audit/VERIFICATION_OUTCOMES.md` |
+| PAY-01 payout destination ownership (CLOSED) | `audit/phase2/PAY-01-INVESTIGATION-STATUS.md` |
+| PAY-01-C reproduction test (CLOSED) | `audit/phase2/PAY-01-C-REPRODUCTION-TEST.md` |
+| PAY-01 Stripe metadata binding audit | `audit/phase2/PAY-01-STRIPE-RELATIONSHIP-AUDIT.md` |
+| MM-10 SaaS payment + MM-05 refund idempotency deep investigation | `audit/phase2/MM10-MM05-INVESTIGATION.md` |
+| Full money-movement inventory (17 paths) | `audit/MONEY-MOVEMENT-INVENTORY.md` |
+| Phase 1 area-by-area audit detail (AREA4/5/6, F-series, SUB, P0) | `audit/phase1/` — pick by finding ID prefix |
 
 ---
 
-### 4. STATE_MACHINE.md (15 minutes)
-**What you'll learn**:
-- 7 booking states
-- Valid transitions
-- Invalid transitions
-- Freeze rules
-- Auto-transitions
-- Consistency checks
+## "I want to read the detailed evidence for a closed finding"
 
-**Read this**: `00-foundation/STATE_MACHINE.md`
+```
+audit/phase1/    ← P0-01, SUB-*, C-1, F-*, AREA* findings
+audit/phase2/    ← PAY-01, MM-10, MM-05 findings
+audit/archive/   ← old session logs, superseded reports (read-only history)
+```
 
 ---
 
-## ⏱️ TOTAL TIME: 60 minutes
+## "I'm setting up the project / onboarding"
 
-After reading these 4 documents, you'll understand:
-- What DriveBook is
-- How it works
-- Why it works this way
-- What rules govern it
-- How money flows
-- How bookings progress
-
----
-
-## 🎓 LEARNING PATHS
-
-### For Developers
-1. Read all 4 foundation docs (60 min)
-2. Read `01-architecture/DATABASE_SCHEMA.md`
-3. Read `01-architecture/API_STRUCTURE.md`
-4. Read `02-finance/LEDGER_RULES.md`
-5. Review code with foundation in mind
-
-### For Admins
-1. Read `00-foundation/CORE_ESSENCE.md` (10 min)
-2. Read `00-foundation/FINANCIAL_DOCTRINE.md` (20 min)
-3. Read `03-operations/ADMIN_MANUAL.md`
-4. Read `03-operations/DAILY_CHECKLIST.md`
-5. Read `04-legal/CANCELLATION_POLICY.md`
-
-### For Product/Business
-1. Read `00-foundation/CORE_ESSENCE.md` (10 min)
-2. Read `00-foundation/SYSTEM_PRINCIPLES.md` (15 min)
-3. Understand the constraints
-4. Make decisions within boundaries
+| Task | File |
+|---|---|
+| Project setup and dev environment | `README.md` |
+| Stripe account setup | `STRIPE_SETUP_GUIDE.md` |
+| Twilio SMS setup | `TWILIO_SETUP_GUIDE.md` |
+| Test user credentials | `TEST_USERS.md` |
+| Subdomain and custom domain system | `SUBDOMAIN_SYSTEM.md` |
+| Subscription system overview | `SUBSCRIPTION_SYSTEM.md` |
+| Design system / component guide | `DESIGN_SYSTEM.md` |
 
 ---
 
-## 🔴 THE 8 NON-NEGOTIABLES
+## "I want to understand the product / business domain"
 
-These rules can NEVER be violated:
-
-1. No transaction is ever updated
-2. No booking skips state progression
-3. No payout without COMPLETED booking
-4. Audit log always written for money movements
-5. Only authorized roles can act
-6. Wallet balance must reconcile daily
-7. Refund after payout blocked (except admin override)
-8. Financial operations are atomic
-
-**Memorize these.**
+```
+DOCROLEBASE/     ← role-based feature documentation (payments, bookings, etc.)
+00-foundation/   ← platform vision and core concepts
+01-architecture/ ← system architecture
+02-finance/      ← financial model
+03-operations/   ← operational runbooks
+04-legal/        ← compliance and legal
+05-integrations/ ← third-party integration guides
+newplan/         ← future product direction
+```
 
 ---
 
-## 💡 THE 5 PRINCIPLES
-
-These govern all system behavior:
-
-1. **Financial History Is Immutable**
-2. **Money Cannot Be Created or Destroyed**
-3. **State Machine Control**
-4. **After Start Time = Frozen**
-5. **Every Financial Action Must Be Logged**
-
-**Understand these deeply.**
-
----
-
-## 🗺️ DOCUMENTATION MAP
+## Audit Structure at a Glance
 
 ```
 docs/
-├── START_HERE.md ← You are here
-├── README.md (Full navigation)
-├── FOUNDATION_COMPLETE.md (What we built)
+├── START_HERE.md                        ← you are here
 │
-├── 00-foundation/ ← READ FIRST
-│   ├── CORE_ESSENCE.md
-│   ├── SYSTEM_PRINCIPLES.md
-│   ├── STATE_MACHINE.md
-│   └── FINANCIAL_DOCTRINE.md
+├── audit/
+│   ├── AUDIT-MASTER-TRACKER.md          ← ★ SINGLE SOURCE OF TRUTH for all findings
+│   ├── MONEY-MOVEMENT-INVENTORY.md      ← all 17 money-movement paths
+│   ├── PHASE1_REMEDIATION_REGISTER.md   ← frozen 56-finding Phase 1 baseline
+│   ├── PHASE1_COVERAGE_MAP.md           ← 20-area coverage reconciliation
+│   ├── PHASE2_SECURITY_AUDIT.md         ← Phase 2 scope definition
+│   ├── COMPLETE_AUDIT_VERIFICATION.md   ← source-level verification for all findings
+│   ├── SECURITY_FINDINGS_TRACKER.md     ← per-finding verification status
+│   ├── VERIFICATION_FRAMEWORK.md        ← verification methodology
+│   ├── VERIFICATION_OUTCOMES.md         ← outcomes per finding
+│   ├── EXECUTIVE_SUMMARY.md             ← high-level summary for stakeholders
+│   │
+│   ├── phase1/                          ← evidence for Phase 1 closed findings
+│   │   ├── P0-01_VERIFICATION.md
+│   │   ├── P0-01B_FIX_IMPLEMENTATION.md
+│   │   ├── SUB-22_VERIFICATION.md       (and all other SUB-* files)
+│   │   ├── C-1_VERIFICATION.md
+│   │   ├── F-08_VERIFICATION.md         (and other F-series)
+│   │   └── AREA4/5/6 findings and attack surfaces
+│   │
+│   ├── phase2/                          ← evidence for Phase 2 / PAY-01 / MM work
+│   │   ├── PAY-01-INVESTIGATION-STATUS.md
+│   │   ├── PAY-01-C-REPRODUCTION-TEST.md
+│   │   ├── PAY-01-STRIPE-RELATIONSHIP-AUDIT.md
+│   │   ├── MM10-MM05-INVESTIGATION.md   ← ★ deep investigation report
+│   │   └── PAYMENT_* and PHASE_2_* files
+│   │
+│   └── archive/                         ← old session logs, superseded reports
+│       └── (read-only — do not edit)
 │
-├── 01-architecture/ (System design)
-├── 02-finance/ (Financial operations)
-├── 03-operations/ (Daily procedures)
-├── 04-legal/ (Policies & agreements)
-└── archive/ (Old docs)
+├── DOCROLEBASE/                         ← role-based feature docs
+├── 00-foundation/ … 05-integrations/    ← product/domain docs
+└── [setup guides, system docs]
 ```
 
 ---
 
-## 🚀 QUICK REFERENCE
+## Current Work Status (as of 2026-09-16)
 
-### When Adding a Feature
-1. Does it map to the 8 core entities?
-2. Does it violate any of the 8 non-negotiables?
-3. Does it follow the 5 principles?
-4. Does it respect the state machine?
+| Phase | Status |
+|---|---|
+| Phase 1 — 56 findings | ~12 closed, remainder open (see tracker) |
+| PAY-01 — Payout destination ownership | ✅ **CLOSED** — 28/28 tests, exit 0 |
+| Money-movement inventory | ✅ **COMPLETE** — 17 paths catalogued |
+| MM-10 investigation | ✅ **COMPLETE** — split into MM-10-A (routing absent), MM-10-B (session race), MM-10-C (fee bug); PAY-01 parallel classification rejected |
+| MM-05 investigation | ✅ **COMPLETE** — split into MM-05-A/B/C (confirmed) + MM-05-D/E (lower risk) |
+| MM-07 investigation | ✅ **COMPLETE** — confirmed ledger reconciliation defect |
+| MM-07 + MM-05-A/B/C fix | ⚠️ **NEXT** — P0 priority |
 
-If any answer is NO → Don't build it.
-
-### When Fixing a Bug
-1. Check `03-operations/INCIDENT_RESPONSE.md`
-2. Review relevant foundation doc
-3. Check audit logs
-4. Follow problem-solving method
-5. Document the fix
-
-### When Money Doesn't Balance
-1. Reconstruct ledger (FINANCIAL_DOCTRINE.md)
-2. Check wallet transactions
-3. Verify state machine
-4. Run reconciliation
-5. Alert if discrepancy
-
----
-
-## 📖 DOCUMENT STANDARDS
-
-Every doc has:
-- **Purpose**: What it covers
-- **Owner**: Who maintains it
-- **Last Updated**: Date
-- **Scope**: What's included
-- **Non-Negotiable Rules**: Critical rules
-
----
-
-## 🎯 YOUR GOAL
-
-**Not**: Learn everything immediately
-
-**But**: Understand the foundation
-
-Once you understand:
-- System identity
-- Core principles
-- Money flow
-- State machine
-
-You can make **aligned decisions** without asking.
-
----
-
-## 💬 KEY QUOTES
-
-> "DriveBook is a controlled booking marketplace with a protected financial ledger."
-
-> "Everything must obey the rules engine."
-
-> "Once a transaction is created, it can NEVER be modified."
-
-> "No state skipping. No silent transitions."
-
-> "Every dollar must be traceable."
-
----
-
-## ✅ CHECKLIST
-
-After reading foundation docs, you should be able to answer:
-
-- [ ] What is DriveBook?
-- [ ] What are the 8 core entities?
-- [ ] What are the 8 non-negotiables?
-- [ ] What are the 5 principles?
-- [ ] How does money flow?
-- [ ] What are the booking states?
-- [ ] When is a booking frozen?
-- [ ] How do refunds work?
-- [ ] When can instructors be paid?
-- [ ] What must be logged?
-
-If you can answer all these → You understand the foundation.
-
----
-
-## 🆘 NEED HELP?
-
-1. Re-read the relevant foundation doc
-2. Check `03-operations/INCIDENT_RESPONSE.md`
-3. Review audit logs
-4. Ask with context (what you tried, what failed)
-
----
-
-## 🎓 REMEMBER
-
-**From Builder to System Architect**
-
-You're not just writing code.
-
-You're maintaining a **financial system** that people trust with their money.
-
-Every decision must align with the foundation.
-
----
-
-**Now go read `00-foundation/CORE_ESSENCE.md` →**
-
+**Next action:** Open `audit/AUDIT-MASTER-TRACKER.md` → "Current Priority Queue" → start with MM-07 + MM-05-A.
