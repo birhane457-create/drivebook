@@ -181,8 +181,9 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-07 | Refund ledger reconciliation defect | MEDIUM | CONFIRMED | VERIFIED — Sites C/D/E write no `REFUND_ISSUED` ledger entry; `handleChargeRefunded()` sees `alreadyRecordedRefund=0` → writes duplicate `REFUND_SYNCED`; no wallet double-credit; ledger `totalRefunded` systematically over-counted | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-09 | Subscription cancellation — no internal ownership guard | LOW | CONFIRMED | VERIFIED — `subscription-cancel.ts` takes `stripeSubId` from caller with no internal check | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
 | MM-12 | Admin wallet credit/debit — no idempotency | MEDIUM | CONFIRMED | VERIFIED — `add-credit/route.ts` no duplicate-submit protection | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
-| MM-14 | Dispute handling — potential overlap with MM-07 | MEDIUM | UNVERIFIED | UNVERIFIED — needs `handleDisputeClosed()` read to confirm/clear double-credit | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
-| MM-15 | Late `transfer.failed` — possible post-PAID ledger mismatch | MEDIUM | CONFIRMED | UNVERIFIED — needs `handleTransferFailed()` read to confirm reversal behaviour | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-14 | Dispute handling — `charge.refunded` double-count after lost dispute | MEDIUM | CONFIRMED | VERIFIED — `handleChargeRefunded()` type guard only checks `REFUND_ISSUED`/`REFUND_SYNCED`; `DISPUTE_LOST` entries not included; Stripe fires `charge.refunded` automatically after a lost chargeback; results in spurious `REFUND_SYNCED` written on top of existing `DISPUTE_LOST` | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM14-MM15-VERIFICATION.md` |
+| MM-15-A | Late `transfer.failed` reverses a successfully-retried payout | MEDIUM | CONFIRMED | VERIFIED — `payout.updateMany WHERE status='PAID'` does NOT filter on `stripeTransferId`; late event for original failed transfer matches payout re-PAID via retry; reversal incorrectly applied to completed payout | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM14-MM15-VERIFICATION.md` |
+| MM-15-B | `handleTransferFailed()` non-atomic: idempotency key consumed before financial reversal | MEDIUM | CONFIRMED | VERIFIED — `recordWebhookEvent(prisma, ...)` called outside `$transaction`; if `appendLedgerEntry`/`incrementLedger` fail after webhook record is committed, idempotency key prevents retry but reversal never completes | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM14-MM15-VERIFICATION.md` |
 
 ### 3.5 — Dead Code
 
@@ -225,7 +226,9 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | 10 | MM-15 | Verify `handleTransferFailed()` ledger reversal (read first, then fix) |
 | 11 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron |
 | 12 | PAY-H-02 | Booking reschedule price recalculation |
-| 13 | MM-14 | Read `handleDisputeClosed()` to confirm or clear MM-07 overlap |
+| 13 | MM-14 | `charge.refunded` double-count after lost dispute — fix `handleChargeRefunded()` guard to include `DISPUTE_LOST` in already-accounted types | **Directly affects MM-07 fix scope** — must be in same commit |
+| 14 | MM-15-A | Late `transfer.failed` reverses retried payout — add `stripeTransferId` to WHERE clause | Prevents silent reversal of valid payout |
+| 15 | MM-15-B | `handleTransferFailed()` non-atomic — wrap `recordWebhookEvent` + financial ops in single `$transaction` | Same class as MM-05-E |
 
 ### P2 — Follow-up
 
