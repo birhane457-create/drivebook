@@ -88,16 +88,18 @@ Syntax being correct does NOT prove the race condition fix works under concurren
 ### PHASE 2: BUILD VERIFICATION
 
 #### 2.1 TypeScript Compilation
-- [ ] **REQUIRED:** Full production build must succeed
-  - Command: `npm run build`
+- [x] **REQUIRED:** Full production build must succeed
+  - Command: `npm run build` (or Vercel deployment)
   - Expected: Zero TypeScript errors
-  - Result: `[ PENDING ]`
-  - TypeScript Error Count: `[ TBD ]`
-  - Build Output: (to be recorded)
+  - Result: `✅ PASS` (via Vercel deployment)
+  - TypeScript Error Count: `0`
+  - Build Output: Vercel production deployment succeeded
+  - Evidence: Vercel deployment logs show successful build completion
+  - Note: Local build timed out after 10 minutes, but Vercel build completed successfully, confirming TypeScript/compilation passed
 
 #### 2.2 Build Artifacts
-- [ ] **REQUIRED:** Verify `.next` directory created successfully
-  - Result: `[ PENDING ]`
+- [x] **REQUIRED:** Verify `.next` directory created successfully
+  - Result: `✅ PASS` (Vercel deployment confirms build artifacts generated)
 
 ---
 
@@ -294,12 +296,23 @@ After running all concurrency tests, verify database invariants hold.
 
 All required tests MUST pass before production migration is authorized.
 
+**Current Phase Status:**
+- Phase 1 — Database Migration: 🔴 **BLOCKED** (production DB detected in .env)
+- Phase 2 — Build Verification: ✅ **PASS** (via Vercel deployment)
+- Phase 3 — Existing Tests: ⏸️ **PENDING** (awaiting safe database)
+- Phase 4 — Real Concurrency Tests: ⏸️ **PENDING** (test harness needs modification + safe database)
+- Phase 5 — Database Invariants: ⏸️ **PENDING** (requires safe database with migration applied)
+- Phase 6 — Production Gate: 🔴 **BLOCKED** (correctly blocked)
+
 **Blocking Issues:**
-1. Migration not run (dev/staging)
-2. Build verification not complete
-3. Concurrency tests not updated (still using `simulateWebhookTransaction`)
-4. Real webhook route tests not executed
-5. Database invariants not verified
+1. ❌ No dev/staging database available (production DB must not be used)
+2. ✅ Build verification complete (Vercel deployment successful)
+3. ⏸️ Migration not run (waiting for safe database)
+4. ⏸️ Concurrency tests not updated (still using `simulateWebhookTransaction`)
+5. ⏸️ Real webhook route tests not executed
+6. ⏸️ Database invariants not verified
+
+**Next Required Action:** Obtain/create separate staging Supabase project/database for safe verification
 
 ### 6.2 Approval Checklist
 
@@ -329,7 +342,11 @@ Production migration authorized ONLY when:
 
 ### Build Output
 ```
-[ PENDING - to be recorded after execution ]
+✅ Vercel Production Deployment: SUCCESS
+- TypeScript compilation: PASS
+- Build artifacts generated: PASS
+- Local build: Timed out after 600 seconds (Prisma generated, Next.js compiled successfully, lint/type checking in progress when timeout occurred)
+- Evidence: Vercel deployment confirms TypeScript checking completed successfully
 ```
 
 ### Test Execution Logs
@@ -369,6 +386,13 @@ Production migration authorized ONLY when:
 6. **Index verification rigor:** The LIKE '%unique%' query is for discovery only. Actual verification requires inspecting the `indexdef` column to confirm predicates and columns exactly match the intended partial uniqueness rules.
 
 7. **Current state:** SUB-22 Step 5 is **VERIFICATION PENDING**, NOT completed. Syntax is fixed (commit 1dda46dd), but race condition fix is UNVERIFIED.
+
+8. **Implementation vs. Checklist:** The checklist being appropriately strict does not establish that the implementation passes it. The code must be independently verified against the test scenarios, particularly the `updateMany()` + unique-index approach under PostgreSQL SERIALIZABLE isolation with concurrent different Stripe IDs.
+
+9. **Build verification distinction:**
+   - Vercel build succeeded → confirms TypeScript/compilation passed in Vercel environment
+   - Local build timeout → does NOT mean TypeScript errors exist; process didn't finish in 10 minutes
+   - Therefore: Vercel deployment serves as Phase 2 build verification evidence
 
 ---
 
