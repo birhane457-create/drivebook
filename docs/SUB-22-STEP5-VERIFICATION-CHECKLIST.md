@@ -18,6 +18,29 @@ Syntax being correct does NOT prove the race condition fix works under concurren
 
 ---
 
+## RECOMMENDED EXECUTION ORDER
+
+**Do NOT jump directly into all six tests. Follow this sequence:**
+
+1. ✅ Phase 1.1: Dev/staging migration
+2. ✅ Phase 1.2: Verify PostgreSQL indexes (including exact predicate verification)
+3. ✅ Phase 2.1: `npm run build`
+4. ✅ Phase 2.2: Verify build artifacts
+5. ✅ Phase 3.1: Existing webhook tests
+6. ✅ Phase 4.1: Replace `simulateWebhookTransaction()` with real **POST /api/stripe/webhook**
+7. ✅ Phase 4.2: Run identical events test (idempotency)
+8. ✅ Phase 4.3: **Run negative competing-ID test** (different Stripe IDs + replay-after-conflict)
+9. ✅ Phase 4.4: Run replay/duplicate delivery test
+10. ✅ Phase 4.5: Exercise P2034 serialization retry
+11. ✅ Phase 4.6: P2002 same-ID idempotent case
+12. ✅ Phase 4.7: P2002 conflicting-ID error case
+13. ✅ Phase 5: Verify database invariants (uniqueness, Stripe ID integrity, historical preservation)
+14. ✅ Phase 6: Production migration approval (ONLY if all above pass)
+
+**CRITICAL:** Phase 4 tests MUST use the actual HTTP webhook endpoint, not direct function calls.
+
+---
+
 ## VERIFICATION PHASES
 
 ### PHASE 1: DATABASE MIGRATION (Dev/Staging Only)
@@ -43,6 +66,22 @@ Syntax being correct does NOT prove the race condition fix works under concurren
     2. `Subscription_stripeSubscriptionId_unique` on `stripeSubscriptionId` WHERE `stripeSubscriptionId` IS NOT NULL
   - Result: `[ PENDING ]`
   - Evidence: (query output to be recorded)
+
+- [ ] **REQUIRED:** Verify index definitions match expected predicates exactly
+  - Expected index 1 definition:
+    ```sql
+    CREATE UNIQUE INDEX "Subscription_provider_current_unique" 
+    ON "Subscription"("providerId") 
+    WHERE status IN ('TRIAL', 'ACTIVE', 'PAST_DUE')
+    ```
+  - Expected index 2 definition:
+    ```sql
+    CREATE UNIQUE INDEX "Subscription_stripeSubscriptionId_unique" 
+    ON "Subscription"("stripeSubscriptionId") 
+    WHERE "stripeSubscriptionId" IS NOT NULL
+    ```
+  - Result: `[ PENDING ]`
+  - Evidence: (actual `indexdef` column output to be compared)
 
 ---
 
@@ -86,9 +125,10 @@ Syntax being correct does NOT prove the race condition fix works under concurren
 The existing test file `app/api/stripe/webhook/__tests__/sub-22-concurrent.test.ts` currently uses `simulateWebhookTransaction()` which mimics the OLD vulnerable code. This MUST be updated.
 
 #### 4.1 Test Suite Update Required
-- [ ] **BLOCKER:** Update test to invoke real webhook handler
+- [ ] **BLOCKER:** Update test to use actual HTTP webhook entry point
   - Current: Uses `simulateWebhookTransaction()` (mimics old findFirst→update)
-  - Required: Direct invocation of actual `handleSubscriptionUpdate()` or full webhook POST
+  - Required: **POST /api/stripe/webhook** (full production path including signature verification, idempotency, transaction boundaries, error handling)
+  - Supplementary: Unit tests around `handleSubscriptionUpdate()` are useful but NOT sufficient
   - Result: `[ PENDING ]`
 
 #### 4.2 Scenario A: Identical Events (Idempotency)
@@ -104,7 +144,7 @@ The existing test file `app/api/stripe/webhook/__tests__/sub-22-concurrent.test.
 
 #### 4.3 Scenario B: Different Stripe IDs Competing (CONFLICT DETECTION)
 - [ ] **REQUIRED:** Two different Stripe subscription IDs race for same trial
-  - Test: Fire `sub_test_A` and `sub_test_B` concurrently for same `providerId`
+  - Test: Fire `sub_test_A` and `sub_test_B` concurrently for same `providerId` via **POST /api/stripe/webhook**
   - Expected: Exactly ONE subscription survives with its Stripe ID
   - Expected: The LOSING request throws error with "Stripe subscription ID conflict"
   - Expected: NO silent overwrite of Stripe IDs
@@ -113,9 +153,21 @@ The existing test file `app/api/stripe/webhook/__tests__/sub-22-concurrent.test.
     - Subscription A result: `[ TBD ]` (success/error)
     - Subscription B result: `[ TBD ]` (success/error)
     - Final subscription count: `[ TBD ]` (MUST be 1)
-    - Winner Stripe ID: `[ TBD ]`
+    - Winner Stripe ID: `[ TBD ]` (either sub_A OR sub_B, never NULL)
     - Loser error message: `[ TBD ]`
   - **NEGATIVE TEST:** Verify loser request fails safely, NOT silently
+
+- [ ] **REQUIRED:** Replay-after-conflict invariant
+  - Test: After conflict resolution, replay BOTH events (winner + loser)
+  - Expected: Winner event succeeds (idempotent)
+  - Expected: Loser event STILL fails with conflict error
+  - Expected: Final Stripe ID remains unchanged (never switches to losing ID, never NULL)
+  - Result: `[ PENDING ]`
+  - Evidence:
+    - Initial winner ID: `[ TBD ]`
+    - Replay winner result: `[ TBD ]` (should succeed)
+    - Replay loser result: `[ TBD ]` (should fail)
+    - Final Stripe ID: `[ TBD ]` (MUST match initial winner, never changes)
 
 #### 4.4 Scenario C: Replay After Success (Duplicate Delivery)
 - [ ] **REQUIRED:** Same event replayed after successful processing
@@ -303,9 +355,20 @@ Production migration authorized ONLY when:
 
 2. **Negative testing required:** For Scenario 4.3 (different Stripe IDs), verify that exactly one request succeeds and the other fails with a proper error, rather than just checking that an error was thrown somewhere.
 
-3. **Real webhook path required:** The existing test suite uses `simulateWebhookTransaction()` which mimics the OLD vulnerable code. Tests MUST be updated to exercise the actual production webhook handler with the new atomic `updateMany()` logic.
+3. **Replay-after-conflict required:** After competing Stripe IDs resolve, replay both events and verify the losing ID cannot subsequently overwrite the winner during retry/replay. Final Stripe ID must remain unchanged (never NULL, never switches to loser).
 
-4. **No production database:** Do NOT run `npx prisma migrate deploy` against production until this checklist is complete and approved.
+4. **Real HTTP webhook path required:** The existing test suite uses `simulateWebhookTransaction()` which mimics the OLD vulnerable code. Tests MUST exercise the actual **POST /api/stripe/webhook** endpoint which includes:
+   - Stripe signature verification
+   - Event/idempotency handling
+   - Transaction boundaries
+   - Error handling
+   - The call into subscription update logic
+
+5. **No production database:** Do NOT run `npx prisma migrate deploy` against production until this checklist is complete and approved.
+
+6. **Index verification rigor:** The LIKE '%unique%' query is for discovery only. Actual verification requires inspecting the `indexdef` column to confirm predicates and columns exactly match the intended partial uniqueness rules.
+
+7. **Current state:** SUB-22 Step 5 is **VERIFICATION PENDING**, NOT completed. Syntax is fixed (commit 1dda46dd), but race condition fix is UNVERIFIED.
 
 ---
 
