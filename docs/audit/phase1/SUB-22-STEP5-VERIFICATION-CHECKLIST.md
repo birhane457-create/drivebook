@@ -93,9 +93,9 @@ Syntax being correct does NOT prove the race condition fix works under concurren
   - Expected: Zero TypeScript errors
   - Result: `✅ PASS` (via Vercel deployment)
   - TypeScript Error Count: `0`
-  - Build Output: Vercel production deployment succeeded
-  - Evidence: Vercel deployment logs show successful build completion
-  - Note: Local build timed out after 10 minutes, but Vercel build completed successfully, confirming TypeScript/compilation passed
+  - Build Output: Vercel production deployment completed successfully; build and configured TypeScript validation completed without errors
+  - Evidence: Vercel deployment logs show normal next build process completed
+  - Note: Local build timed out after 10 minutes. Vercel build provides stronger evidence that the configured TypeScript validation completed.
 
 #### 2.2 Build Artifacts
 - [x] **REQUIRED:** Verify `.next` directory created successfully
@@ -126,10 +126,38 @@ Syntax being correct does NOT prove the race condition fix works under concurren
 
 The existing test file `app/api/stripe/webhook/__tests__/sub-22-concurrent.test.ts` currently uses `simulateWebhookTransaction()` which mimics the OLD vulnerable code. This MUST be updated.
 
-#### 4.1 Test Suite Update Required
+#### 4.1 Webhook Route Inspection (PREREQUISITE)
+- [ ] **REQUIRED:** Inspect actual webhook route before modifying tests
+  - File: `app/api/stripe/webhook/route.ts`
+  - Understand: How Stripe signatures are generated/validated in tests
+  - Understand: How event IDs and idempotency are handled
+  - Document: The production sequence that tests must exercise:
+    ```
+    POST /api/stripe/webhook
+            ↓
+    Stripe signature verification
+            ↓
+    event-id/idempotency handling
+            ↓
+    event dispatch
+            ↓
+    subscription handler
+            ↓
+    transaction / updateMany()
+            ↓
+    PostgreSQL unique constraints
+            ↓
+    P2002 / P2034 handling
+            ↓
+    HTTP response
+    ```
+  - Result: `[ PENDING ]`
+  - Evidence: (document how to construct valid webhook requests for tests)
+
+#### 4.2 Test Suite Update Required
 - [ ] **BLOCKER:** Update test to use actual HTTP webhook entry point
   - Current: Uses `simulateWebhookTransaction()` (mimics old findFirst→update)
-  - Required: **POST /api/stripe/webhook** (full production path including signature verification, idempotency, transaction boundaries, error handling)
+  - Required: **POST /api/stripe/webhook** (full production path)
   - Supplementary: Unit tests around `handleSubscriptionUpdate()` are useful but NOT sufficient
   - Result: `[ PENDING ]`
 
