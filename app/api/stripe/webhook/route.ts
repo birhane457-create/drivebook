@@ -1503,47 +1503,75 @@ async function handleSubscriptionUpdate(
           });
         } else {
           // Look for an existing trial subscription record without a stripeSubscriptionId
-          const trialRow = await tx.subscription.findFirst({
-            where: {
-              providerId,
-              stripeSubscriptionId: null,
-              status: { in: ['TRIAL', 'ACTIVE'] },
-            },
-            orderBy: { createdAt: 'desc' },
-          });
-    
-          if (trialRow) {
-            // Link the Stripe subscription to the existing trial row â€” prevents duplicate rows
-            logger.info(`ðŸ”— Linking Stripe subscription ${subscription.id} to existing trial row ${trialRow.id} for instructor ${providerId}`);
-            await tx.subscription.update({
-              where: { id: trialRow.id },
-              data: {
-                tier: tier as any,
-                status: normalizeStatus(status) as any,
-                monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
-                billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
-                currentPeriodEnd: new Date(current_period_end * 1000),
-                stripeSubscriptionId: subscription.id,
-                stripeCustomerId: subscription.customer as string,
-              }
-            });
-          } else {
-            const current_period_start = (subscription as any).current_period_start;
-            await tx.subscription.create({
-              data: {
+          // Atomically claim an existing trial subscription without a stripeSubscriptionId.
+          // Use updateMany() with affected-row count to prevent race conditions (SUB-22 Step 5).
+          try {
+            const updateResult = await tx.subscription.updateMany({
+              where: {
                 providerId,
+                stripeSubscriptionId: null,
+                status: { in: ['TRIAL', 'ACTIVE'] },
+              },
+              data: {
                 tier: tier as any,
                 status: normalizeStatus(status) as any,
                 monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
                 billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
-                currentPeriodStart: new Date(current_period_start * 1000),
                 currentPeriodEnd: new Date(current_period_end * 1000),
-                stripeCustomerId: subscription.customer as string,
                 stripeSubscriptionId: subscription.id,
+                stripeCustomerId: subscription.customer as string,
               }
             });
+
+            if (updateResult.count === 1) {
+              // Successfully claimed trial row
+              logger.info(`Linked Stripe subscription ${subscription.id} to existing trial row for instructor ${providerId}`);
+            } else if (updateResult.count === 0) {
+              // No trial row found - create new subscription record
+              const current_period_start = (subscription as any).current_period_start;
+              await tx.subscription.create({
+                data: {
+                  providerId,
+                  tier: tier as any,
+                  status: normalizeStatus(status) as any,
+                  monthlyAmount: subscription.items.data[0].price.unit_amount! / 100,
+                  billingCycle: subscription.items.data[0].price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+                  currentPeriodStart: new Date(current_period_start * 1000),
+                  currentPeriodEnd: new Date(current_period_end * 1000),
+                  stripeCustomerId: subscription.customer as string,
+                  stripeSubscriptionId: subscription.id,
+                }
+              });
+            } else {
+              // count > 1: Multiple trial rows updated (should never happen with proper data)
+              logger.error(`SUB-22 CRITICAL: updateMany affected ${updateResult.count} rows for providerId ${providerId} - expected 0 or 1`);
+              throw new Error(`Multiple trial subscriptions found for provider ${providerId}`);
+            }
+          } catch (err: any) {
+            // Handle unique constraint violations (PostgreSQL 23505 / Prisma P2002)
+            if (err.code === 'P2002' || err.code === '23505') {
+              // Another webhook won the race - verify Stripe subscription ID matches
+              const existingRow = await tx.subscription.findFirst({
+                where: {
+                  providerId,
+                  status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] }
+                },
+                select: { id: true, stripeSubscriptionId: true }
+              });
+
+              if (existingRow?.stripeSubscriptionId === subscription.id) {
+                // Same Stripe ID - idempotent success
+                logger.info(`Idempotent: Stripe subscription ${subscription.id} already linked for instructor ${providerId}`);
+              } else {
+                // Different Stripe ID - conflict must not be silently accepted
+                logger.error(`SUB-22 CONFLICT: Provider ${providerId} already has subscription ${existingRow?.stripeSubscriptionId}, cannot overwrite with ${subscription.id}`);
+                throw new Error(`Stripe subscription ID conflict for provider ${providerId}: existing=${existingRow?.stripeSubscriptionId}, incoming=${subscription.id}`);
+              }
+            } else {
+              // Re-throw other errors (including serialization failures)
+              throw err;
+            }
           }
-        }
     
         // Audit log
         await logSubscriptionAction({
