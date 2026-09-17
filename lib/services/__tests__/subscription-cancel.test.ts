@@ -11,8 +11,6 @@
  *     6. No active subscription: returns gracefully
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
 // ── Mock Prisma ─────────────────────────────────────────────────────────────
 // vi.mock() is hoisted to the top of the file by Vitest.
 // Variables used inside the factory must be created with vi.hoisted() so they

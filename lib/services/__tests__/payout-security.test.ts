@@ -5,7 +5,6 @@
  * Service-level integration test in pay-01-executePayout-security.test.ts
  */
 
-import { describe, it, expect, vi } from 'vitest';
 import { verifyPayoutDestinationOwnership } from '../payout-security';
 import type Stripe from 'stripe';
 

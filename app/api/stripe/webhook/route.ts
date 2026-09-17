@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { sendSingleLessonReceipt, sendPackagePurchaseReceipt, sendWalletTopUpReceipt } from '@/lib/services/receipt-email';
@@ -2340,7 +2340,7 @@ async function handleChargeRefunded(
         const existingRefunds = await tx.ledgerEntry.findMany({
           where: {
             referenceId: bookingId,
-            type: { in: ['REFUND_ISSUED', 'REFUND_SYNCED'] },
+            type: { in: ['REFUND_ISSUED', 'REFUND_SYNCED', 'DISPUTE_LOST'] },
           },
           select: { amount: true },
         });
@@ -2441,53 +2441,72 @@ async function handleTransferFailed(
   const providerId = transfer.metadata?.providerId ?? null;
   const payoutId = transfer.metadata?.payoutId ?? null;
 
-  await recordWebhookEvent(prisma, idempotencyKey, 'transfer.failed', transferId, {
-    transferId,
-    amount,
-    providerId,
-    payoutId,
-    failureCode: (transfer as any).failure_code,
-    failureMessage: (transfer as any).failure_message,
-  });
+  // MM-15-B FIX: recordWebhookEvent moved inside the SERIALIZABLE transaction so the
+  // idempotency key is only committed if the full financial reversal also commits.
+  // Previously the key was committed outside the transaction; a crash mid-reversal
+  // consumed the key permanently, leaving the ledger inconsistent with no retry possible.
+  //
+  // MM-15-A FIX: stripeTransferId added to WHERE clause so a late transfer.failed event
+  // for an original transfer cannot reverse a payout that was subsequently retried and
+  // re-PAID with a different stripeTransferId.
+  let reverted = { count: 0 };
 
-  // Revert the Payout record back to FAILED
-  if (payoutId) {
-    const reverted = await prisma.payout.updateMany({
-      where: { id: payoutId, status: 'PAID' },
-      data: {
-        status: 'FAILED',
-        failureReason: `Transfer ${transferId} failed: ${(transfer as any).failure_message ?? 'unknown'}`,
-        stripeTransferId: null,
-      },
-    });
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(async (tx) => {
+      // Claim this event atomically with the financial operations (MM-15-B)
+      await recordWebhookEvent(tx, idempotencyKey, 'transfer.failed', transferId, {
+        transferId,
+        amount,
+        providerId,
+        payoutId,
+        failureCode: (transfer as any).failure_code,
+        failureMessage: (transfer as any).failure_message,
+      });
 
-    if (reverted.count > 0) {
-      // Reverse the PAYOUT_PAID ledger entry â€” re-credit the platform balance
-      await appendLedgerEntry({
-        type: 'ADJUSTMENT',
-        amount: amount, // positive = re-crediting the platform
-        referenceId: payoutId,
-        referenceType: 'PAYOUT',
-        providerId: providerId ?? undefined,
-        description: `Transfer ${transferId} FAILED â€” reversing PAYOUT_PAID for payout ${payoutId}`,
-        metadata: {
-          stripeTransferId: transferId,
-          payoutId,
-          failureCode: (transfer as any).failure_code,
-          failureMessage: (transfer as any).failure_message,
+      if (!payoutId) return;
+
+      // MM-15-A: Filter on stripeTransferId so late events for superseded transfers
+      // cannot reverse a payout that was successfully retried with a new transfer.
+      reverted = await tx.payout.updateMany({
+        where: { id: payoutId, status: 'PAID', stripeTransferId: transferId },
+        data: {
+          status: 'FAILED',
+          failureReason: `Transfer ${transferId} failed: ${(transfer as any).failure_message ?? 'unknown'}`,
+          stripeTransferId: null,
         },
       });
 
-      await incrementLedger({
-        totalPaidOut: -amount,  // reverse the payout
-        totalReserved: amount,  // return to reserved â€” still owed to instructor
-      });
+      if (reverted.count > 0) {
+        // Reverse the PAYOUT_PAID ledger entry — re-credit the platform balance
+        await appendLedgerEntry({
+          type: 'ADJUSTMENT',
+          amount: amount, // positive = re-crediting the platform
+          referenceId: payoutId,
+          referenceType: 'PAYOUT',
+          providerId: providerId ?? undefined,
+          description: `Transfer ${transferId} FAILED — reversing PAYOUT_PAID for payout ${payoutId}`,
+          metadata: {
+            stripeTransferId: transferId,
+            payoutId,
+            failureCode: (transfer as any).failure_code,
+            failureMessage: (transfer as any).failure_message,
+          },
+        });
 
-      logger.info(`ðŸ”ƒ [TRANSFER FAILED] Payout ${payoutId} reverted to FAILED â€” $${amount.toFixed(2)} re-credited to platform`);
-    }
-  }
+        await incrementLedger({
+          totalPaidOut: -amount,  // reverse the payout
+          totalReserved: amount,  // return to reserved — still owed to instructor
+        });
 
-  // Audit log
+        logger.info(`[TRANSFER FAILED] Payout ${payoutId} reverted to FAILED — $${amount.toFixed(2)} re-credited to platform`);
+      } else {
+        // stripeTransferId did not match current PAID payout — late event for superseded transfer
+        logger.info(`[TRANSFER FAILED] Transfer ${transferId} — no matching PAID payout with this transferId. No reversal applied (payout likely superseded by successful retry).`);
+      }
+    }, SERIALIZABLE_TX);
+  }, { operationName: 'webhook-transfer-failed' });
+
+  // Audit log (outside transaction — best-effort, non-critical)
   try {
     await prisma.auditLog.create({
       data: {
@@ -2504,6 +2523,7 @@ async function handleTransferFailed(
           providerId,
           amount,
           failureCode: (transfer as any).failure_code,
+          reversalApplied: reverted.count > 0,
         },
       },
     });
@@ -2513,45 +2533,47 @@ async function handleTransferFailed(
     });
   }
 
-  // Alert operations â€” this needs immediate human action
-  void sendAlert({
-    type: 'TRANSFER_FAILED',
-    severity: 'CRITICAL',
-    message: `Stripe Connect transfer FAILED: $${amount.toFixed(2)} to instructor ${providerId ?? 'unknown'}. Payout ${payoutId ?? transferId} reverted to FAILED. Retry required.`,
-    entityId: payoutId ?? transferId,
-    metadata: {
-      stripeTransferId: transferId,
-      payoutId,
-      providerId,
-      amount,
-      failureCode: (transfer as any).failure_code,
-      failureMessage: (transfer as any).failure_message,
-    },
-  });
+  // Alert and instructor notification only when reversal was actually applied (MM-15-A)
+  if (reverted.count > 0) {
+    void sendAlert({
+      type: 'TRANSFER_FAILED',
+      severity: 'CRITICAL',
+      message: `Stripe Connect transfer FAILED: $${amount.toFixed(2)} to instructor ${providerId ?? 'unknown'}. Payout ${payoutId ?? transferId} reverted to FAILED. Retry required.`,
+      entityId: payoutId ?? transferId,
+      metadata: {
+        stripeTransferId: transferId,
+        payoutId,
+        providerId,
+        amount,
+        failureCode: (transfer as any).failure_code,
+        failureMessage: (transfer as any).failure_message,
+      },
+    });
 
-  // Notify the instructor their payout failed
-  if (providerId) {
-    try {
-      const instructor = await prisma.provider.findUnique({
-        where: { id: providerId },
-        select: { phone: true, userId: true },
-      });
-      if (instructor?.phone) {
-        const { smsService } = await import('@/lib/services/sms');
-        await smsService.sendSMS({
-          to: instructor.phone,
-          message: `DriveBook: Your payout of $${amount.toFixed(2)} could not be processed. Our team has been alerted and will contact you shortly. Ref: ${payoutId ?? transferId}`,
+    if (providerId) {
+      try {
+        const instructor = await prisma.provider.findUnique({
+          where: { id: providerId },
+          select: { phone: true, userId: true },
+        });
+        if (instructor?.phone) {
+          const { smsService } = await import('@/lib/services/sms');
+          await smsService.sendSMS({
+            to: instructor.phone,
+            message: `DriveBook: Your payout of $${amount.toFixed(2)} could not be processed. Our team has been alerted and will contact you shortly. Ref: ${payoutId ?? transferId}`,
+          });
+        }
+      } catch (notifErr) {
+        logger.error('[TRANSFER FAILED] Instructor notification failed', {
+          error: notifErr instanceof Error ? notifErr.message : String(notifErr),
         });
       }
-    } catch (notifErr) {
-      logger.error('[TRANSFER FAILED] Instructor notification failed', {
-        error: notifErr instanceof Error ? notifErr.message : String(notifErr),
-      });
     }
   }
 
-  logger.info(`ðŸš¨ [TRANSFER FAILED] Transfer ${transferId} â€” $${amount.toFixed(2)} â€” instructor: ${providerId}`);
+  logger.info(`[TRANSFER FAILED] Transfer ${transferId} — $${amount.toFixed(2)} — instructor: ${providerId} — reversal: ${reverted.count > 0}`);
 }
+
 
 // ============================================================================
 

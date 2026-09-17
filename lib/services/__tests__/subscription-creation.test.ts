@@ -15,8 +15,6 @@
  *      (both are inside the same transaction callback).
  */
 
-import { describe, it, expect, vi } from 'vitest';
-
 /**
  * The atomic creation logic extracted for unit testing.
  *
