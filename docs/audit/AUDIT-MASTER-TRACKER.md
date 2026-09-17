@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 2.3 (MM-05-D fix-verified)  
+**Version:** 2.4 (MM-05-D corrected and re-verified)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -170,7 +170,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-05-A | Concurrent admin refund race — `approveCancellation()` | HIGH | CONFIRMED | VERIFIED — `booking-service.ts` ~659: no idempotency key; `cancellationStatus` check not atomic with Stripe call (TOCTOU) | `dc13c7b0` — CAS `PENDING→APPROVING` via `updateMany`; idempotency key `approve-cancel-${bookingId}`; `APPROVING→PENDING` revert on error; `REFUND_ISSUED` written in tx | 7 MM-integrity tests, exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-B | Lost-refund / no-retry gap — public cancel route | MEDIUM | CONFIRMED | VERIFIED — `public/bookings/[id]/cancel` ~250: atomic CAS exists (prevents double-cancel); Stripe call outside transaction; no idempotency key means no safe retry | `dc13c7b0` — idempotency key `cancel-refund-${id}` added to Stripe call | 5 MM-05-B tests (B1–B3), exit 0 — `mm-05b-cancel-route.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-C | Concurrent admin transaction refund | HIGH | CONFIRMED | VERIFIED — `admin/transactions/[id]/refund` ~99: no atomic gate, no idempotency key; `transaction.status` check not atomic with Stripe call | `dc13c7b0` + hardened in follow-up — CAS `COMPLETED→REFUNDING`; idempotency key `admin-refund-${transactionId}`; `REFUND_ISSUED` now atomic inside `prisma.$transaction` via `tx.ledgerEntry.create`; revert on error | 7 MM-integrity tests, exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
-| MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~392: no idempotency key, no `recordWebhookEvent()` call on this path | This commit — `recordWebhookEvent()` called BEFORE `stripe.refunds.create()`; `DuplicateWebhookEventError` caught for early return; idempotency key `checkout-refund-block-${sessionId}` added | 7 MM-05-D tests (D1–D5), exit 0 — `mm-05d-webhook-3ds-refund.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~392: no idempotency key, no `recordWebhookEvent()` call on this path | This commit (corrected) — `stripe.refunds.create()` with `idempotencyKey=checkout-refund-block-{sessionId}` called FIRST; `recordWebhookEvent()` written AFTER Stripe confirms; Stripe failure throws (no WebhookEvent written, retry safe) | 7 MM-05-D tests (D1–D6 incl. I1/I2 invariants), exit 0 — `mm-05d-webhook-3ds-refund.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-E | WebhookEvent rolls back on expired-booking refund (Site B) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~1084: `ExpiredBookingError` inside `$transaction` rolls back `recordWebhookEvent` INSERT; Stripe key correct but Stripe retries indefinitely | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
 
 ### 3.4 — MM-06 / MM-07 / MM-12 / MM-14 / MM-15
@@ -282,7 +282,7 @@ The following CLOSED findings have tests recorded:
 | PAY-01 | 28 (7 unit + 5 service + 16 state) | 0 | `b9c2f0ff` |
 | MM-05-A / MM-05-C / MM-07 / MM-14 / MM-15-A / MM-15-B | 7 (T1–T7 cross-path invariants in `mm-financial-integrity.test.ts`) | 0 | `dc13c7b0` (fix) + local hardening of MM-05-C |
 | MM-05-B | 5 (B1–B3 idempotency/CAS/non-fatal in `mm-05b-cancel-route.test.ts`) | 0 | follow-up to `dc13c7b0` |
-| MM-05-D | 7 (D1–D5 call-order/key/dedup/concurrent in `mm-05d-webhook-3ds-refund.test.ts`) | 0 | this commit |
+| MM-05-D | 7 (D1–D6 ordering/key/I1/I2/concurrent in `mm-05d-webhook-3ds-refund.test.ts`) | 0 | this commit (corrected) |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 
