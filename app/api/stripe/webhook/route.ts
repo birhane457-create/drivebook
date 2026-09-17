@@ -388,16 +388,41 @@ async function handleCheckoutCompleted(
               threeDSecureResult: threeDSecure?.result,
             });
 
-            // Refund
-            await stripe.refunds.create({
-              payment_intent: paymentIntentId as string,
-              metadata: {
-                drivebookReason: isPrepaid
-                  ? 'prepaid_card_not_supported'
-                  : 'required_3ds_authentication_failed',
-                drivebookCheckoutSessionId: checkoutSession.id,
+            // MM-05-D FIX: Claim the idempotency key BEFORE issuing the refund so that
+            // Stripe webhook retries are deduplicated. Without this, each retry would
+            // call stripe.refunds.create() again, potentially issuing multiple refunds.
+            // DuplicateWebhookEventError from a concurrent retry is swallowed — the
+            // refund was already (or is being) issued by the first delivery.
+            try {
+              await recordWebhookEvent(prisma, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
+                type: 'wallet_credit_blocked',
+                userId,
+                reason: isPrepaid ? 'prepaid_card_not_supported' : 'required_3ds_authentication_failed',
+              });
+            } catch (idemErr: any) {
+              if (idemErr?.name === 'DuplicateWebhookEventError') {
+                logger.info('[3DS-BLOCK] Duplicate webhook delivery — refund already issued, skipping', {
+                  sessionId: checkoutSession.id,
+                });
+                return;
+              }
+              throw idemErr;
+            }
+
+            // MM-05-D FIX: Idempotency key prevents duplicate refunds on Stripe retries.
+            // Key is stable per session: same checkout session always produces the same key.
+            await stripe.refunds.create(
+              {
+                payment_intent: paymentIntentId as string,
+                metadata: {
+                  drivebookReason: isPrepaid
+                    ? 'prepaid_card_not_supported'
+                    : 'required_3ds_authentication_failed',
+                  drivebookCheckoutSessionId: checkoutSession.id,
+                },
               },
-            });
+              { idempotencyKey: `checkout-refund-block-${checkoutSession.id}` },
+            );
 
             // Send email
             const customerEmail = metadata?.accountEmail || checkoutSession.customer_email;
