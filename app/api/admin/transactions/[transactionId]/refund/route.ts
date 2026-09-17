@@ -121,49 +121,55 @@ export async function POST(
     );
     const refund = { refundId: rawRefundResult.id, amount: rawRefundResult.amount / 100, status: rawRefundResult.status };
 
-    // Create refund transaction record
-    const refundTransaction = await (prisma as any).transaction.create({
-      data: {
-        bookingId: transaction.bookingId,
-        providerId: transaction.providerId,
-        type: 'REFUND',
-        amount: -refundAmount,
-        platformFee: 0,
-        providerPayout: 0,
-        status: 'COMPLETED',
-        stripeRefundId: refund.refundId,
-        description: reason || 'Refund processed by admin',
-        metadata: {
-          originalTransactionId: transactionId,
-          deductFromInstructor: deductFromInstructor || false
-        }
-      }
-    });
-
-    // Update original transaction status
-    await (prisma as any).transaction.update({
-      where: { id: transactionId },
-      data: { status: 'REFUNDED' }
-    });
-
-    // MM-07/MM-05-C: Write REFUND_ISSUED so handleChargeRefunded() detects this
-    // application-initiated refund and skips writing a duplicate REFUND_SYNCED.
-    try {
-      const { appendLedgerEntry } = await import('@/lib/services/ledger-service');
-      if (transaction.bookingId) {
-        await appendLedgerEntry({
-          type: 'REFUND_ISSUED',
+    // MM-05-C / MM-07: Wrap all post-Stripe DB writes atomically.
+    // REFUND_ISSUED must commit with the status change — if it fails, the whole
+    // block fails together and the catch handler reverts REFUNDING→COMPLETED so
+    // the admin can retry safely (Stripe will return the same refund via idempotency key).
+    let refundTransaction: any;
+    await prisma.$transaction(async (tx) => {
+      // Create refund transaction record
+      refundTransaction = await (tx as any).transaction.create({
+        data: {
+          bookingId: transaction.bookingId,
+          providerId: transaction.providerId,
+          type: 'REFUND',
           amount: -refundAmount,
-          referenceId: transaction.bookingId,
-          referenceType: 'BOOKING',
-          providerId: transaction.providerId ?? undefined,
-          description: `Admin transaction refund — $${refundAmount.toFixed(2)} (ref: ${refund.refundId})`,
-          metadata: { stripeRefundId: refund.refundId, transactionId, adminId: session!.user!.id, source: 'adminTransactionRefund' },
+          platformFee: 0,
+          providerPayout: 0,
+          status: 'COMPLETED',
+          stripeRefundId: refund.refundId,
+          description: reason || 'Refund processed by admin',
+          metadata: {
+            originalTransactionId: transactionId,
+            deductFromInstructor: deductFromInstructor || false,
+          },
+        },
+      });
+
+      // Update original transaction status
+      await (tx as any).transaction.update({
+        where: { id: transactionId },
+        data: { status: 'REFUNDED' },
+      });
+
+      // MM-07/MM-05-C: Write REFUND_ISSUED atomically so handleChargeRefunded()
+      // is guaranteed to see this marker and skip writing a duplicate REFUND_SYNCED.
+      // Uses tx directly (not appendLedgerEntry) to stay inside this transaction.
+      if (transaction.bookingId) {
+        await tx.ledgerEntry.create({
+          data: {
+            type: 'REFUND_ISSUED',
+            amount: -refundAmount,
+            currency: 'AUD',
+            referenceId: transaction.bookingId,
+            referenceType: 'BOOKING',
+            providerId: transaction.providerId ?? undefined,
+            description: `Admin transaction refund — $${refundAmount.toFixed(2)} (ref: ${refund.refundId})`,
+            metadata: { stripeRefundId: refund.refundId, transactionId, adminId: session!.user!.id, source: 'adminTransactionRefund' } as any,
+          },
         });
       }
-    } catch (ledgerIssuedErr) {
-      console.error('[REFUND] REFUND_ISSUED ledger entry failed (non-fatal but requires investigation):', ledgerIssuedErr);
-    }
+    });
 
     // CRITICAL FIX #1 CONTINUED: Record refund in ledger with wallet credit
     // This ensures the client's wallet is credited and all ledger accounts are updated
