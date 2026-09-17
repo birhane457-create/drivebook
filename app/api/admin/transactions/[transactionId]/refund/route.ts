@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { stripeService } from '@/lib/services/stripe';
+import { stripeService, stripe } from '@/lib/services/stripe';
 import { smsService } from '@/lib/services/sms';
 import { recordFullRefund } from '@/lib/services/ledger-operations';
 import { checkPermission } from '@/lib/rbac/checkPermission';
@@ -65,6 +65,19 @@ export async function POST(
       return NextResponse.json({ error: 'No payment intent found' }, { status: 400 });
     }
 
+    // MM-05-C FIX: Atomic gate — CAS prevents concurrent admin refund requests both
+    // passing the status check and both calling Stripe.
+    const claimed = await (prisma as any).transaction.updateMany({
+      where: { id: transactionId, status: 'COMPLETED' },
+      data: { status: 'REFUNDING' },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json(
+        { error: 'Transaction is not in a refundable state (may already be processing)' },
+        { status: 409 }
+      );
+    }
+
     // Determine refund amount (full or partial)
     const refundAmount = amount || transaction.amount;
 
@@ -95,11 +108,18 @@ export async function POST(
       }
     }
 
-    // Process refund through Stripe
-    const refund = await stripeService.createRefund(
-      transaction.stripePaymentIntentId,
-      refundAmount
+    // MM-05-C FIX: Use raw stripe client with deterministic idempotency key to prevent
+    // duplicate Stripe refund objects on concurrent or retried admin requests.
+    const rawRefundResult = await stripe.refunds.create(
+      {
+        payment_intent: transaction.stripePaymentIntentId,
+        amount: Math.round(refundAmount * 100),
+        reason: 'requested_by_customer',
+        metadata: { transactionId, adminId: session!.user!.id, reason: reason || 'Admin refund' },
+      },
+      { idempotencyKey: `admin-refund-${transactionId}` }
     );
+    const refund = { refundId: rawRefundResult.id, amount: rawRefundResult.amount / 100, status: rawRefundResult.status };
 
     // Create refund transaction record
     const refundTransaction = await (prisma as any).transaction.create({
@@ -125,6 +145,25 @@ export async function POST(
       where: { id: transactionId },
       data: { status: 'REFUNDED' }
     });
+
+    // MM-07/MM-05-C: Write REFUND_ISSUED so handleChargeRefunded() detects this
+    // application-initiated refund and skips writing a duplicate REFUND_SYNCED.
+    try {
+      const { appendLedgerEntry } = await import('@/lib/services/ledger-service');
+      if (transaction.bookingId) {
+        await appendLedgerEntry({
+          type: 'REFUND_ISSUED',
+          amount: -refundAmount,
+          referenceId: transaction.bookingId,
+          referenceType: 'BOOKING',
+          providerId: transaction.providerId ?? undefined,
+          description: `Admin transaction refund — $${refundAmount.toFixed(2)} (ref: ${refund.refundId})`,
+          metadata: { stripeRefundId: refund.refundId, transactionId, adminId: session!.user!.id, source: 'adminTransactionRefund' },
+        });
+      }
+    } catch (ledgerIssuedErr) {
+      console.error('[REFUND] REFUND_ISSUED ledger entry failed (non-fatal but requires investigation):', ledgerIssuedErr);
+    }
 
     // CRITICAL FIX #1 CONTINUED: Record refund in ledger with wallet credit
     // This ensures the client's wallet is credited and all ledger accounts are updated
@@ -195,6 +234,14 @@ export async function POST(
       message: 'Refund processed successfully'
     });
   } catch (error) {
+    // MM-05-C FIX: Revert REFUNDING → COMPLETED so the refund remains retryable
+    // Only revert if the Stripe call hasn't already succeeded (no rawRefundResult in scope).
+    await (prisma as any).transaction.updateMany({
+      where: { id: params.transactionId, status: 'REFUNDING' },
+      data: { status: 'COMPLETED' },
+    }).catch((revertErr: unknown) =>
+      console.error('[REFUND] Failed to revert REFUNDING→COMPLETED:', revertErr)
+    );
     console.error('Error processing refund:', error);
     return NextResponse.json(
       { error: 'Failed to process refund' },

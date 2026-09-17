@@ -11,7 +11,6 @@
  * 4. TOCTOU: the verified account ID is the exact value used in the transfer
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type Stripe from 'stripe';
 
 // ─── Module mocks (hoisted before any imports) ────────────────────────────────

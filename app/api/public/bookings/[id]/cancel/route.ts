@@ -257,7 +257,7 @@ export async function POST(
               cancelledBy: 'voice_agent',
               reason: data.reason ?? 'student_request',
             },
-          })
+          }, { idempotencyKey: `cancel-refund-${params.id}` })
           stripeRefundId = refund.id
           console.log(`✅ Stripe refund issued: ${refund.id} — $${refundAmount} for booking ${params.id}`)
 
