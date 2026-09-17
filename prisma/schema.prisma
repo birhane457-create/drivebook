@@ -942,6 +942,11 @@ model Quote {
   stripeSessionId       String? @unique
   /// Stripe PaymentIntent ID â€” set after checkout completes
   stripePaymentIntentId String?
+  /// Checkout attempt generation — incremented atomically each time a session expires
+  /// and a new one is needed. Forms the Stripe idempotency key: scs-{quoteId}-{gen}.
+  /// Only advances via advanceCheckoutGeneration() which CAS-guards on
+  /// (stripeSessionId, checkoutGeneration) to prevent concurrent double-advance.
+  checkoutGeneration    Int     @default(1)
 
   /// Optional deposit (e.g. 30% upfront, remainder on completion)
   depositPercent Decimal? @db.Decimal(5, 2)
