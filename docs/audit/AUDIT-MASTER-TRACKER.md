@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 2.4 (MM-05-D corrected and re-verified)  
+**Version:** 2.5 (MM-05-E superseded; revised finding + consumer audit recorded)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -171,7 +171,9 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-05-B | Lost-refund / no-retry gap — public cancel route | MEDIUM | CONFIRMED | VERIFIED — `public/bookings/[id]/cancel` ~250: atomic CAS exists (prevents double-cancel); Stripe call outside transaction; no idempotency key means no safe retry | `dc13c7b0` — idempotency key `cancel-refund-${id}` added to Stripe call | 5 MM-05-B tests (B1–B3), exit 0 — `mm-05b-cancel-route.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-C | Concurrent admin transaction refund | HIGH | CONFIRMED | VERIFIED — `admin/transactions/[id]/refund` ~99: no atomic gate, no idempotency key; `transaction.status` check not atomic with Stripe call | `dc13c7b0` + hardened in follow-up — CAS `COMPLETED→REFUNDING`; idempotency key `admin-refund-${transactionId}`; `REFUND_ISSUED` now atomic inside `prisma.$transaction` via `tx.ledgerEntry.create`; revert on error | 7 MM-integrity tests, exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~392: no idempotency key, no `recordWebhookEvent()` call on this path | This commit (corrected) — `stripe.refunds.create()` with `idempotencyKey=checkout-refund-block-{sessionId}` called FIRST; `recordWebhookEvent()` written AFTER Stripe confirms; Stripe failure throws (no WebhookEvent written, retry safe) | 7 MM-05-D tests (D1–D6 incl. I1/I2 invariants), exit 0 — `mm-05d-webhook-3ds-refund.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
-| MM-05-E | WebhookEvent rolls back on expired-booking refund (Site B) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~1084: `ExpiredBookingError` inside `$transaction` rolls back `recordWebhookEvent` INSERT; Stripe key correct but Stripe retries indefinitely | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-E | WebhookEvent rolls back on expired-booking refund (Site B) | LOW | **SUPERSEDED** | VERIFIED — original claim "Stripe retries indefinitely" does not match production code. See revised finding MM-05-E-R and secondary finding MM-05-E-S below. | N/A | N/A | **SUPERSEDED → MM-05-E-R** | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-E-R | Expired-booking path leaves no WebhookEvent row — audit/observability gap | LOW | CONFIRMED | VERIFIED (this commit) — see full execution trace and consumer audit below | NOT-STARTED | PENDING | ⚠️ OPEN — FIX DECISION PENDING | this commit |
+| MM-05-E-S | `tx.booking.update(CANCELLED)` rolls back with transaction — booking stays EXPIRED | LOW | CONFIRMED | VERIFIED (this commit) — comment says "mark as CANCELLED INSIDE transaction" but throw immediately after rolls both writes back; booking remains EXPIRED after expired-booking path completes | NOT-STARTED | PENDING | ⚠️ OPEN — FIX DECISION PENDING | this commit |
 
 ### 3.4 — MM-06 / MM-07 / MM-12 / MM-14 / MM-15
 
@@ -224,7 +226,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | 6 | MM-10-C | `applicationFeeAmount` always zero | ⚠️ OPEN |
 | 7 | MM-10-A | Complete SaaS Connect destination routing | ⚠️ OPEN |
 | 8 | MM-05-D | 3DS/prepaid auto-refund idempotency key + `recordWebhookEvent()` | ✅ FIXED this commit |
-| 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path | ⚠️ OPEN |
+| 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path | SUPERSEDED → MM-05-E-R (observability gap, FIX DECISION PENDING) |
 | 10 | MM-15-A | Late `transfer.failed` reverses retried payout | ✅ FIXED `dc13c7b0` |
 | 11 | MM-15-B | `handleTransferFailed()` non-atomic | ✅ FIXED `dc13c7b0` |
 | 12 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron | ⚠️ OPEN |
@@ -255,7 +257,9 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 |---|---|---|
 | MM-05-B | Fix present in `dc13c7b0`; targeted test added in follow-up commit | ✅ RESOLVED — `mm-05b-cancel-route.test.ts` 5/5 exit 0 |
 | MM-05-D | Finding CONFIRMED, Verification VERIFIED — fix NOT-STARTED | ✅ RESOLVED — fixed this commit; `mm-05d-webhook-3ds-refund.test.ts` 7/7 exit 0 |
-| MM-05-E | Finding CONFIRMED, Verification VERIFIED — fix NOT-STARTED | Implement fix (separate WebhookEvent commit from booking tx) |
+| MM-05-E | Finding CONFIRMED, Verification VERIFIED — fix NOT-STARTED | ✅ SUPERSEDED — original "Stripe retries indefinitely" claim refuted; revised as MM-05-E-R/MM-05-E-S; FIX DECISION PENDING |
+| MM-05-E-R | New finding — no WebhookEvent row on expired-booking path | ⚠️ OPEN — consumer audit complete; FIX DECISION PENDING |
+| MM-05-E-S | New finding — booking.status stays EXPIRED (not CANCELLED) after expired-booking path | ⚠️ OPEN — FIX DECISION PENDING |
 | AUDIT-04 | Finding CONFIRMED but Verification UNVERIFIED | Read retention policy (or absence of one) before advancing |
 | PAY-H-01 | Finding CONFIRMED, Verification VERIFIED, but Fix and Fix-Verified both PENDING | Blocked behind MM-07/MM-05 (same refund reconciliation concern) — MM-07/MM-05 now fixed; PAY-H-01 can proceed |
 
@@ -285,6 +289,115 @@ The following CLOSED findings have tests recorded:
 | MM-05-D | 7 (D1–D6 ordering/key/I1/I2/concurrent in `mm-05d-webhook-3ds-refund.test.ts`) | 0 | this commit (corrected) |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
+
+---
+
+## Section 5.1 — MM-05-E Investigation Evidence (this commit)
+
+### Production execution trace — expired-booking webhook path
+
+**File:** `app/api/stripe/webhook/route.ts`  
+**Function:** `handleBookingPaymentSuccess()` lines ~927–1190  
+**Trigger:** Stripe delivers `payment_intent.succeeded` for a booking whose slot expired before Stripe confirmed payment.
+
+```
+withSerializableRetry(() =>
+  prisma.$transaction(async (tx) => {           ← SERIALIZABLE transaction opens
+    [L963] recordWebhookEvent(tx, ...)           ← INSERT WebhookEvent (uses tx)
+    [L971] booking = tx.booking.findUnique(...)
+    [L986] booking.status === 'EXPIRED':
+      [L990]  tx.booking.update(EXPIRED→CANCELLED)  ← UPDATE booking (uses tx)
+      [L998]  throw new ExpiredBookingError(...)     ← ROLLS BACK entire tx
+  })                                            ← WebhookEvent INSERT rolled back
+)                                               ← booking stays EXPIRED (update rolled back too)
+                                                ← comment "mark as CANCELLED INSIDE tx" is incorrect
+↓ ExpiredBookingError propagates out of withSerializableRetry
+↓
+catch (err) at line ~1133:
+  [L1137] stripe.refunds.create({              ← OUTSIDE transaction
+            idempotencyKey: `expired-booking-refund-${bookingId}-${paymentIntentId}`
+          })
+  → success: sendAlert (fire-and-forget), return
+  → failure: throw → outer handler returns HTTP 500 → Stripe retries
+↓
+handleBookingPaymentSuccess() returns normally
+↓
+Top-level POST handler: return NextResponse.json({ received: true }) → HTTP 200
+```
+
+**HTTP status returned on each path:**
+
+| Path | HTTP status | Stripe retries? |
+|---|---|---|
+| Normal (refund succeeds) | 200 | No |
+| Refund fails transiently | 500 | Yes |
+| Duplicate delivery (DuplicateWebhookEventError) | 200 | No — but this path is NOT reachable for expired-booking since no WebhookEvent row was ever written |
+
+**On Stripe retry (refund previously failed):**
+- `recordWebhookEvent(tx, ...)` attempts INSERT again — succeeds (no prior row, it was rolled back)
+- Booking still `EXPIRED` — `ExpiredBookingError` thrown again
+- Transaction rolls back again — WebhookEvent INSERT rolled back again
+- `stripe.refunds.create()` called again with same deterministic idempotency key
+- Stripe returns existing refund object (no new charge)
+- Handler returns 200
+
+**Stripe idempotency key:** `` `expired-booking-refund-${bookingId}-${paymentIntentId}` ``  
+Deterministic per (booking, paymentIntent) pair. Stable across retries. Verified at line ~1137.
+
+### Secondary finding MM-05-E-S
+
+The comment at line ~990 says "Mark booking as cancelled INSIDE transaction", and `tx.booking.update(status → CANCELLED)` executes. But `throw new ExpiredBookingError()` immediately after causes the transaction to roll back entirely — **including the booking update**. The booking's status remains `EXPIRED` after the entire path completes, not `CANCELLED`. The comment is wrong; the intent is not achieved.
+
+**Observable consequence:** The booking record in the DB provides no evidence that the expired-payment event was received and the refund was issued. The only durable side effects are:
+- The Stripe refund (confirmed by Stripe's API)
+- The `sendAlert()` calls (fire-and-forget, non-durable)
+- The logger output (non-durable)
+
+### WebhookEvent consumer audit — complete
+
+**Files inspected:**
+- `app/api/stripe/webhook/route.ts` — all `recordWebhookEvent` calls and `WebhookEvent` writes
+- `app/admin/audit-log/page.tsx` + `app/api/admin/audit-log/route.ts` — admin UI
+- `app/api/cron/reconcile-stripe/route.ts` — daily Stripe reconciliation
+- `app/api/cron/reconciliation/route.ts` + `lib/cron/daily-reconciliation.ts` — financial reconciliation
+- All 15 other cron routes — confirmed none read `WebhookEvent`
+- `monitor-production-sub22.sql` — manual monitoring SQL
+- `prisma/schema.prisma` — `WebhookEvent` model definition
+
+**Consumer audit results:**
+
+| Consumer | Reads WebhookEvent? | Impact if expired-booking row absent |
+|---|---|---|
+| Admin audit-log UI (`/admin/audit-log`) | No — reads `AuditLog` table | **None** |
+| Reconcile-Stripe cron | No — uses Stripe API + `LedgerEntry`/`FinancialLedger` | **None** |
+| Daily reconciliation cron | No — uses Stripe API + `Transaction`/`WalletTransaction` | **None** |
+| `monitor-production-sub22.sql` (manual ops tool) | Yes — 6 SELECT queries | **Degraded visibility** — monitoring query shows no evidence expired-booking path ran; false-clean for this event type |
+| Duplicate suppression | No pre-check — relies on DB unique constraint only | **Correct behaviour** — no row means retry can re-enter, Stripe idempotency key prevents duplicate refund |
+| Test suite | Only in test teardown (`sub-22-concurrent.test.ts`) | Not a production concern |
+| Recovery tooling | None found | **None** |
+| Compliance/reporting | None found | **None** |
+
+**`WebhookEvent` schema — confirmed no status/state field:**
+```
+id             String   @id @default(cuid())
+idempotencyKey String   @unique
+eventType      String
+stripeEventId  String
+metadata       Json?
+processedAt    DateTime @default(now())
+```
+No `status`, `retriedAt`, `refundId`, or `retriable` field. Absence of a row is indistinguishable from "event never received".
+
+### FIX DECISION REQUIRED
+
+**Question for decision:** Is the degraded visibility in `monitor-production-sub22.sql` and the absence of a durable booking-status update (`CANCELLED` intent not achieved) sufficient reason to implement a fix?
+
+**Options:**
+1. **Accept as LOW / observability gap** — financial invariant is intact (Stripe idempotency key), no reconciliation or compliance consumer is affected. Add a `sendAlert` call with structured metadata as a lightweight compensating control.
+2. **Fix** — write `recordWebhookEvent` and `booking.update(CANCELLED)` **outside** the transaction (after the refund succeeds at line ~1137), similar to the MM-05-D pattern. This would produce a permanent audit trail and correct the booking status.
+3. **Supersede with new finding** — create MM-05-E-R as the authoritative finding, reclassify as LOW observability/correctness gap, and schedule the fix in a future sprint alongside audit hardening work (AUDIT-01/02).
+
+**Do not implement a fix until a decision is made.**
 
 ---
 
