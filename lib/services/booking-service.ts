@@ -616,10 +616,19 @@ export async function approveCancellation(
   }) as any
   
   if (!booking) throw makeError('BOOKING_NOT_FOUND', 'Booking not found')
-  if (booking.cancellationStatus !== 'PENDING') {
-    throw new Error('Booking is not pending cancellation approval')
+
+  // MM-05-A FIX: Atomic gate — CAS on cancellationStatus prevents concurrent admin approvals
+  // from both reading PENDING and both proceeding to stripe.refunds.create().
+  const claimed = await prisma.booking.updateMany({
+    where: { id: bookingId, cancellationStatus: 'PENDING' },
+    data: { cancellationStatus: 'APPROVING' },
+  })
+  if (claimed.count === 0) {
+    // Either already APPROVING (concurrent request), APPROVED, or REJECTED
+    const current = await prisma.booking.findUnique({ where: { id: bookingId }, select: { cancellationStatus: true } })
+    throw new Error(`Booking cancellation is not in PENDING state (current: ${current?.cancellationStatus ?? 'unknown'})`)
   }
-  
+
   // Calculate refund amount (use override if provided, else recalculate)
   let refundAmount: number
   if (overrideAmount !== undefined && overrideAmount !== null) {
@@ -655,7 +664,7 @@ export async function approveCancellation(
   let walletDebitId: string | null = null
   
   try {
-    // Step 1: Issue Stripe refund
+    // Step 1: Issue Stripe refund with deterministic idempotency key (MM-05-A)
     stripeRefund = await stripe.refunds.create({
       payment_intent: paymentIntentId,
       amount: Math.round(refundAmount * 100),
@@ -666,9 +675,11 @@ export async function approveCancellation(
         calculatedRefund: refundAmount.toString(),
         adminNote: adminNote || '',
       },
-    })
+    }, { idempotencyKey: `approve-cancel-${bookingId}` })
     
-    // Step 2: Debit wallet + update booking (atomic)
+    // Step 2: Debit wallet + update booking + write REFUND_ISSUED ledger entry (atomic)
+    // MM-07: REFUND_ISSUED entry here allows handleChargeRefunded() to detect this
+    // refund and skip writing a duplicate REFUND_SYNCED when charge.refunded fires.
     await prisma.$transaction(async (tx) => {
       if (booking.customer?.userId) {
         const wallet = await tx.clientWallet.findUnique({
@@ -702,6 +713,19 @@ export async function approveCancellation(
           stripeRefundId: stripeRefund.id,
         },
       })
+
+      // MM-07/MM-05-A: Write REFUND_ISSUED so handleChargeRefunded() detects this
+      // application-initiated refund and skips the duplicate REFUND_SYNCED write.
+      const { appendLedgerEntry } = await import('@/lib/services/ledger-service')
+      await appendLedgerEntry({
+        type: 'REFUND_ISSUED',
+        amount: -refundAmount,
+        referenceId: bookingId,
+        referenceType: 'BOOKING',
+        providerId: booking.provider?.id ?? undefined,
+        description: `Admin-approved cancellation refund — $${refundAmount.toFixed(2)} (ref: ${stripeRefund.id})`,
+        metadata: { stripeRefundId: stripeRefund.id, bookingId, adminId, source: 'approveCancellation' },
+      })
     })
     
     await writeAudit('CANCELLATION_APPROVED', adminId, 'ADMIN', bookingId, {
@@ -732,7 +756,18 @@ export async function approveCancellation(
       stripeRefundId: stripeRefund.id,
     }
   } catch (error) {
-    if (stripeRefund?.id) {
+    // MM-05-A: If Stripe call or the transaction failed, revert APPROVING → PENDING
+    // so the booking is retryable (only if we haven't already committed APPROVED).
+    if (!stripeRefund?.id) {
+      // Stripe was never called or failed — safe to revert to PENDING
+      await prisma.booking.updateMany({
+        where: { id: bookingId, cancellationStatus: 'APPROVING' },
+        data: { cancellationStatus: 'PENDING' },
+      }).catch((revertErr) =>
+        console.error('[BookingService] Failed to revert APPROVING→PENDING:', revertErr)
+      )
+    } else {
+      // Stripe refund succeeded but the DB transaction failed — critical partial failure
       console.error('[CRITICAL] Stripe refund succeeded but wallet debit failed:', {
         bookingId,
         stripeRefundId: stripeRefund.id,

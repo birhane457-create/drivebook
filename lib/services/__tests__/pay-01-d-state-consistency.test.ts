@@ -31,7 +31,6 @@
  *     check or the transfer call.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type Stripe from 'stripe';
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
