@@ -1,7 +1,7 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 2.0 (lifecycle state machine)  
-**Last Updated:** 2026-09-16  
+**Version:** 2.1 (dc13c7b0 fix evidence recorded)  
+**Last Updated:** 2026-09-11  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -167,9 +167,9 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| MM-05-A | Concurrent admin refund race — `approveCancellation()` | HIGH | CONFIRMED | VERIFIED — `booking-service.ts` ~659: no idempotency key; `cancellationStatus` check not atomic with Stripe call (TOCTOU) | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
-| MM-05-B | Lost-refund / no-retry gap — public cancel route | MEDIUM | CONFIRMED | VERIFIED — `public/bookings/[id]/cancel` ~250: atomic CAS exists (prevents double-cancel); Stripe call outside transaction; no idempotency key means no safe retry | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
-| MM-05-C | Concurrent admin transaction refund | HIGH | CONFIRMED | VERIFIED — `admin/transactions/[id]/refund` ~99: no atomic gate, no idempotency key; `transaction.status` check not atomic with Stripe call | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-A | Concurrent admin refund race — `approveCancellation()` | HIGH | CONFIRMED | VERIFIED — `booking-service.ts` ~659: no idempotency key; `cancellationStatus` check not atomic with Stripe call (TOCTOU) | `dc13c7b0` — CAS `PENDING→APPROVING` via `updateMany`; idempotency key `approve-cancel-${bookingId}`; `APPROVING→PENDING` revert on error; `REFUND_ISSUED` written in tx | 7 MM-integrity tests, exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-B | Lost-refund / no-retry gap — public cancel route | MEDIUM | CONFIRMED | VERIFIED — `public/bookings/[id]/cancel` ~250: atomic CAS exists (prevents double-cancel); Stripe call outside transaction; no idempotency key means no safe retry | `dc13c7b0` — idempotency key `cancel-refund-${id}` added to Stripe call | SOURCE VERIFIED — no dedicated test yet | ⚠️ FIX — awaiting targeted test | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-05-C | Concurrent admin transaction refund | HIGH | CONFIRMED | VERIFIED — `admin/transactions/[id]/refund` ~99: no atomic gate, no idempotency key; `transaction.status` check not atomic with Stripe call | `dc13c7b0` + hardened in follow-up — CAS `COMPLETED→REFUNDING`; idempotency key `admin-refund-${transactionId}`; `REFUND_ISSUED` now atomic inside `prisma.$transaction` via `tx.ledgerEntry.create`; revert on error | 7 MM-integrity tests, exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~392: no idempotency key, no `recordWebhookEvent()` call on this path | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-E | WebhookEvent rolls back on expired-booking refund (Site B) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~1084: `ExpiredBookingError` inside `$transaction` rolls back `recordWebhookEvent` INSERT; Stripe key correct but Stripe retries indefinitely | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
 
@@ -178,12 +178,12 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|
 | MM-06 | Duplicate-charge auto-refund — missing idempotency key | MEDIUM | CONFIRMED | VERIFIED — same class as MM-05-D; same webhook path; no key, no WebhookEvent record | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
-| MM-07 | Refund ledger reconciliation defect | MEDIUM | CONFIRMED | VERIFIED — Sites C/D/E write no `REFUND_ISSUED` ledger entry; `handleChargeRefunded()` sees `alreadyRecordedRefund=0` → writes duplicate `REFUND_SYNCED`; no wallet double-credit; ledger `totalRefunded` systematically over-counted | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-07 | Refund ledger reconciliation defect | MEDIUM | CONFIRMED | VERIFIED — Sites C/D/E write no `REFUND_ISSUED` ledger entry; `handleChargeRefunded()` sees `alreadyRecordedRefund=0` → writes duplicate `REFUND_SYNCED`; no wallet double-credit; ledger `totalRefunded` systematically over-counted | `dc13c7b0` — both `approveCancellation()` and admin transaction refund now write `REFUND_ISSUED` atomically; `handleChargeRefunded()` guard already queries this type | 7 MM-integrity tests (T1/T3 directly verify guard), exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-09 | Subscription cancellation — no internal ownership guard | LOW | CONFIRMED | VERIFIED — `subscription-cancel.ts` takes `stripeSubId` from caller with no internal check | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
 | MM-12 | Admin wallet credit/debit — no idempotency | MEDIUM | CONFIRMED | VERIFIED — `add-credit/route.ts` no duplicate-submit protection | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
-| MM-14 | Dispute handling — `charge.refunded` double-count after lost dispute | MEDIUM | CONFIRMED | VERIFIED — `handleChargeRefunded()` type guard only checks `REFUND_ISSUED`/`REFUND_SYNCED`; `DISPUTE_LOST` entries not included; Stripe fires `charge.refunded` automatically after a lost chargeback; results in spurious `REFUND_SYNCED` written on top of existing `DISPUTE_LOST` | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM14-MM15-VERIFICATION.md` |
-| MM-15-A | Late `transfer.failed` reverses a successfully-retried payout | MEDIUM | CONFIRMED | VERIFIED — `payout.updateMany WHERE status='PAID'` does NOT filter on `stripeTransferId`; late event for original failed transfer matches payout re-PAID via retry; reversal incorrectly applied to completed payout | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM14-MM15-VERIFICATION.md` |
-| MM-15-B | `handleTransferFailed()` non-atomic: idempotency key consumed before financial reversal | MEDIUM | CONFIRMED | VERIFIED — `recordWebhookEvent(prisma, ...)` called outside `$transaction`; if `appendLedgerEntry`/`incrementLedger` fail after webhook record is committed, idempotency key prevents retry but reversal never completes | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM14-MM15-VERIFICATION.md` |
+| MM-14 | Dispute handling — `charge.refunded` double-count after lost dispute | MEDIUM | CONFIRMED | VERIFIED — `handleChargeRefunded()` type guard only checks `REFUND_ISSUED`/`REFUND_SYNCED`; `DISPUTE_LOST` entries not included; Stripe fires `charge.refunded` automatically after a lost chargeback; results in spurious `REFUND_SYNCED` written on top of existing `DISPUTE_LOST` | `dc13c7b0` — `DISPUTE_LOST` added to `type: { in: [...] }` filter in `handleChargeRefunded()` | 7 MM-integrity tests (T2 directly verifies DISPUTE_LOST guard), exit 0 | ✅ FIX-VERIFIED | `phase2/MM14-MM15-VERIFICATION.md` |
+| MM-15-A | Late `transfer.failed` reverses a successfully-retried payout | MEDIUM | CONFIRMED | VERIFIED — `payout.updateMany WHERE status='PAID'` does NOT filter on `stripeTransferId`; late event for original failed transfer matches payout re-PAID via retry; reversal incorrectly applied to completed payout | `dc13c7b0` — `stripeTransferId: transferId` added to `payout.updateMany` WHERE clause in `handleTransferFailed()` | 7 MM-integrity tests (T4/T5 directly verify transferId guard), exit 0 | ✅ FIX-VERIFIED | `phase2/MM14-MM15-VERIFICATION.md` |
+| MM-15-B | `handleTransferFailed()` non-atomic: idempotency key consumed before financial reversal | MEDIUM | CONFIRMED | VERIFIED — `recordWebhookEvent(prisma, ...)` called outside `$transaction`; if `appendLedgerEntry`/`incrementLedger` fail after webhook record is committed, idempotency key prevents retry but reversal never completes | `dc13c7b0` — `recordWebhookEvent(tx, ...)` now inside `withSerializableRetry(prisma.$transaction(...))` atomically with payout reversal and ledger ops | 7 MM-integrity tests (T6/T7 directly verify atomicity and concurrency), exit 0 | ✅ FIX-VERIFIED | `phase2/MM14-MM15-VERIFICATION.md` |
 
 ### 3.5 — Dead Code
 
@@ -207,29 +207,29 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 
 ### P0 — Fix before next release (all VERIFIED, awaiting fix)
 
-| # | ID | Title | Key risk | Note |
+> All P0 items have been fixed in `dc13c7b0`. Status updated below.
+
+| # | ID | Title | Key risk | Status |
 |---|---|---|---|---|
-| 1 | MM-07 | Refund ledger reconciliation defect | Ledger `totalRefunded` over-counted on every admin cancellation | **Ship in same commit as P0 items 2–4** — the `REFUND_ISSUED` write must exist before the keyed refund calls, or there is a gap window |
-| 2 | MM-05-A | Concurrent admin refund race in `approveCancellation()` | Two admins can double-refund same booking | Idempotency key `approve-cancel-${bookingId}` + `updateMany` CAS on `cancellationStatus` |
-| 3 | MM-05-C | Concurrent admin transaction refund | Fully unprotected — no gate, no key | Idempotency key `admin-refund-${transactionId}` + atomic gate |
-| 4 | MM-05-B | Lost-refund gap on public cancel route | Stripe failure after DB commit leaves booking cancelled but no refund issued | Idempotency key `cancel-refund-${bookingId}` (CAS gate already correct) |
+| 1 | MM-07 | Refund ledger reconciliation defect | Ledger `totalRefunded` over-counted on every admin cancellation | ✅ FIXED `dc13c7b0` |
+| 2 | MM-05-A | Concurrent admin refund race in `approveCancellation()` | Two admins can double-refund same booking | ✅ FIXED `dc13c7b0` |
+| 3 | MM-05-C | Concurrent admin transaction refund | Fully unprotected — no gate, no key | ✅ FIXED `dc13c7b0` + REFUND_ISSUED atomicity hardened in follow-up |
+| 4 | MM-05-B | Lost-refund gap on public cancel route | Stripe failure after DB commit leaves booking cancelled but no refund issued | ✅ FIXED `dc13c7b0` (idempotency key added) — targeted test pending |
 
 ### P1 — Next sprint (all VERIFIED, awaiting fix)
 
-| # | ID | Title |
-|---|---|---|
-| 5 | MM-10-B | Concurrent checkout session creation — double-charge |
-| 6 | MM-10-C | `applicationFeeAmount` always zero |
-| 7 | MM-10-A | Complete SaaS Connect destination routing (apply PAY-01 ownership check when implemented) |
-| 8 | MM-05-D | 3DS/prepaid auto-refund idempotency key + `recordWebhookEvent()` |
-| 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path |
-| 10 | MM-15-A | Late `transfer.failed` reverses retried payout — add `stripeTransferId` to WHERE clause | Prevents silent reversal of valid payout |
-| 11 | MM-15-B | `handleTransferFailed()` non-atomic — wrap `recordWebhookEvent` + financial ops in single `$transaction` | Same class as MM-05-E |
-| 11 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron |
-| 12 | PAY-H-02 | Booking reschedule price recalculation |
-| 13 | MM-14 | `charge.refunded` double-count after lost dispute — fix `handleChargeRefunded()` guard to include `DISPUTE_LOST` in already-accounted types | **Directly affects MM-07 fix scope** — must be in same commit |
-| 14 | MM-15-A | Late `transfer.failed` reverses retried payout — add `stripeTransferId` to WHERE clause | Prevents silent reversal of valid payout |
-| 15 | MM-15-B | `handleTransferFailed()` non-atomic — wrap `recordWebhookEvent` + financial ops in single `$transaction` | Same class as MM-05-E |
+| # | ID | Title | Status |
+|---|---|---|---|
+| 5 | MM-10-B | Concurrent checkout session creation — double-charge | ⚠️ OPEN |
+| 6 | MM-10-C | `applicationFeeAmount` always zero | ⚠️ OPEN |
+| 7 | MM-10-A | Complete SaaS Connect destination routing | ⚠️ OPEN |
+| 8 | MM-05-D | 3DS/prepaid auto-refund idempotency key + `recordWebhookEvent()` | ⚠️ OPEN |
+| 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path | ⚠️ OPEN |
+| 10 | MM-15-A | Late `transfer.failed` reverses retried payout | ✅ FIXED `dc13c7b0` |
+| 11 | MM-15-B | `handleTransferFailed()` non-atomic | ✅ FIXED `dc13c7b0` |
+| 12 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron | ⚠️ OPEN |
+| 13 | PAY-H-02 | Booking reschedule price recalculation | ⚠️ OPEN |
+| 14 | MM-14 | `charge.refunded` double-count after lost dispute | ✅ FIXED `dc13c7b0` |
 
 ### P2 — Follow-up
 
@@ -253,22 +253,34 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 
 | ID | Gap | Action required |
 |---|---|---|
-| MM-14 | Finding CONFIRMED, Verification VERIFIED — `ba61c154` is verification evidence commit, not a fix commit | Implement fix alongside MM-07 |
-| MM-15-A | Finding CONFIRMED, Verification VERIFIED — `ba61c154` is verification evidence commit | Implement fix alongside MM-07 |
-| MM-15-B | Finding CONFIRMED, Verification VERIFIED — `ba61c154` is verification evidence commit | Implement fix alongside MM-07 |
+| MM-05-B | Fix present in `dc13c7b0`; no dedicated targeted test yet | Add targeted test for idempotency key path |
+| MM-05-D | Finding CONFIRMED, Verification VERIFIED — fix NOT-STARTED | Implement fix (idempotency key + recordWebhookEvent on 3DS path) |
+| MM-05-E | Finding CONFIRMED, Verification VERIFIED — fix NOT-STARTED | Implement fix (separate WebhookEvent commit from booking tx) |
 | AUDIT-04 | Finding CONFIRMED but Verification UNVERIFIED | Read retention policy (or absence of one) before advancing |
-| PAY-H-01 | Finding CONFIRMED, Verification VERIFIED, but Fix and Fix-Verified both PENDING | Blocked behind MM-07/MM-05 (same refund reconciliation concern) |
+| PAY-H-01 | Finding CONFIRMED, Verification VERIFIED, but Fix and Fix-Verified both PENDING | Blocked behind MM-07/MM-05 (same refund reconciliation concern) — MM-07/MM-05 now fixed; PAY-H-01 can proceed |
+
+**Resolved discrepancies (previously listed here):**
+
+| ID | Previous gap | Resolution |
+|---|---|---|
+| MM-14 | Verification evidence was `ba61c154`; fix not started | Fixed in `dc13c7b0`; verified by mm-financial-integrity T2 |
+| MM-15-A | Verification evidence was `ba61c154`; fix not started | Fixed in `dc13c7b0`; verified by mm-financial-integrity T4/T5 |
+| MM-15-B | Verification evidence was `ba61c154`; fix not started | Fixed in `dc13c7b0`; verified by mm-financial-integrity T6/T7 |
+| MM-05-A | Fix not started | Fixed in `dc13c7b0`; verified by mm-financial-integrity T1/T3 |
+| MM-05-C | Fix not started; REFUND_ISSUED was non-fatal try/catch | Fixed in `dc13c7b0`; REFUND_ISSUED atomicity hardened post-commit (`tx.ledgerEntry.create` inside `prisma.$transaction`) |
+| MM-07 | Fix not started | Fixed in `dc13c7b0`; verified by mm-financial-integrity T1/T3 |
 
 ### Findings with no targeted tests (closure not yet possible)
 
 All OPEN findings have no targeted tests by definition — tests are part of FIX-VERIFIED stage.  
 The following CLOSED findings have tests recorded:
 
-| ID | Tests | Exit code |
-|---|---|---|
-| P0-01A | 12 (ownership + concurrent) | 0 |
-| P0-01B | 12 (ownership + concurrent) | 0 |
-| PAY-01 | 28 (7 unit + 5 service + 16 state) | 0 |
+| ID | Tests | Exit code | Commit |
+|---|---|---|---|
+| P0-01A | 12 (ownership + concurrent) | 0 | `b9c2f0ff` |
+| P0-01B | 12 (ownership + concurrent) | 0 | `b9c2f0ff` |
+| PAY-01 | 28 (7 unit + 5 service + 16 state) | 0 | `b9c2f0ff` |
+| MM-05-A / MM-05-C / MM-07 / MM-14 / MM-15-A / MM-15-B | 7 (T1–T7 cross-path invariants in `mm-financial-integrity.test.ts`) | 0 | `dc13c7b0` (fix) + local hardening of MM-05-C |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 
