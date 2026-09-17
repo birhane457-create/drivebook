@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 2.5 (MM-05-E superseded; revised finding + consumer audit recorded)  
+**Version:** 2.6 (MM-05-E-R and MM-05-E-S fix-verified)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -172,8 +172,8 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-05-C | Concurrent admin transaction refund | HIGH | CONFIRMED | VERIFIED — `admin/transactions/[id]/refund` ~99: no atomic gate, no idempotency key; `transaction.status` check not atomic with Stripe call | `dc13c7b0` + hardened in follow-up — CAS `COMPLETED→REFUNDING`; idempotency key `admin-refund-${transactionId}`; `REFUND_ISSUED` now atomic inside `prisma.$transaction` via `tx.ledgerEntry.create`; revert on error | 7 MM-integrity tests, exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-D | No app-level guard on 3DS/prepaid auto-refund (Site A) | LOW | CONFIRMED | VERIFIED — `webhook/route.ts` ~392: no idempotency key, no `recordWebhookEvent()` call on this path | This commit (corrected) — `stripe.refunds.create()` with `idempotencyKey=checkout-refund-block-{sessionId}` called FIRST; `recordWebhookEvent()` written AFTER Stripe confirms; Stripe failure throws (no WebhookEvent written, retry safe) | 7 MM-05-D tests (D1–D6 incl. I1/I2 invariants), exit 0 — `mm-05d-webhook-3ds-refund.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-05-E | WebhookEvent rolls back on expired-booking refund (Site B) | LOW | **SUPERSEDED** | VERIFIED — original claim "Stripe retries indefinitely" does not match production code. See revised finding MM-05-E-R and secondary finding MM-05-E-S below. | N/A | N/A | **SUPERSEDED → MM-05-E-R** | `phase2/MM10-MM05-INVESTIGATION.md` |
-| MM-05-E-R | Expired-booking path leaves no WebhookEvent row — audit/observability gap | LOW | CONFIRMED | VERIFIED (this commit) — see full execution trace and consumer audit below | NOT-STARTED | PENDING | ⚠️ OPEN — FIX DECISION PENDING | this commit |
-| MM-05-E-S | `tx.booking.update(CANCELLED)` rolls back with transaction — booking stays EXPIRED | LOW | CONFIRMED | VERIFIED (this commit) — comment says "mark as CANCELLED INSIDE transaction" but throw immediately after rolls both writes back; booking remains EXPIRED after expired-booking path completes | NOT-STARTED | PENDING | ⚠️ OPEN — FIX DECISION PENDING | this commit |
+| MM-05-E-R | Expired-booking path leaves no WebhookEvent row — audit/observability gap | LOW | CONFIRMED | VERIFIED (cfadf3c9) — see full execution trace and consumer audit in Section 5.1 | This commit — `recordWebhookEvent(tx, ...)` written inside SERIALIZABLE `$transaction` **after** Stripe refund confirms; DuplicateWebhookEventError only swallowed **after** booking state verified correct | 11 MM-05-E tests (E1–E8 incl. all INV), exit 0 — `mm-05e-expired-booking-refund.test.ts` | ✅ FIX-VERIFIED | this commit |
+| MM-05-E-S | `tx.booking.update(CANCELLED)` rolls back with transaction — booking stays EXPIRED | LOW | CONFIRMED | VERIFIED (cfadf3c9) — `tx.booking.update` inside rolled-back tx; booking stays EXPIRED after entire path | This commit — `prisma.booking.updateMany WHERE status='EXPIRED'` with CAS semantics outside the inner tx (in post-refund SERIALIZABLE tx); count=0 triggers state-verification branch: idempotent / repair / integrity-error / unexpected-status | 11 MM-05-E tests (E4–E6 directly verify state-verification branch), exit 0 | ✅ FIX-VERIFIED | this commit |
 
 ### 3.4 — MM-06 / MM-07 / MM-12 / MM-14 / MM-15
 
@@ -258,8 +258,8 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-05-B | Fix present in `dc13c7b0`; targeted test added in follow-up commit | ✅ RESOLVED — `mm-05b-cancel-route.test.ts` 5/5 exit 0 |
 | MM-05-D | Finding CONFIRMED, Verification VERIFIED — fix NOT-STARTED | ✅ RESOLVED — fixed this commit; `mm-05d-webhook-3ds-refund.test.ts` 7/7 exit 0 |
 | MM-05-E | Finding CONFIRMED, Verification VERIFIED — fix NOT-STARTED | ✅ SUPERSEDED — original "Stripe retries indefinitely" claim refuted; revised as MM-05-E-R/MM-05-E-S; FIX DECISION PENDING |
-| MM-05-E-R | New finding — no WebhookEvent row on expired-booking path | ⚠️ OPEN — consumer audit complete; FIX DECISION PENDING |
-| MM-05-E-S | New finding — booking.status stays EXPIRED (not CANCELLED) after expired-booking path | ⚠️ OPEN — FIX DECISION PENDING |
+| MM-05-E-R | New finding — no WebhookEvent row on expired-booking path | ✅ FIX-VERIFIED this commit — 11 tests E1–E8 exit 0 |
+| MM-05-E-S | New finding — booking.status stays EXPIRED (not CANCELLED) after expired-booking path | ✅ FIX-VERIFIED this commit — 11 tests E1–E8 exit 0 |
 | AUDIT-04 | Finding CONFIRMED but Verification UNVERIFIED | Read retention policy (or absence of one) before advancing |
 | PAY-H-01 | Finding CONFIRMED, Verification VERIFIED, but Fix and Fix-Verified both PENDING | Blocked behind MM-07/MM-05 (same refund reconciliation concern) — MM-07/MM-05 now fixed; PAY-H-01 can proceed |
 
