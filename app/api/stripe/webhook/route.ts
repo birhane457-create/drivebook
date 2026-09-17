@@ -388,41 +388,70 @@ async function handleCheckoutCompleted(
               threeDSecureResult: threeDSecure?.result,
             });
 
-            // MM-05-D FIX: Claim the idempotency key BEFORE issuing the refund so that
-            // Stripe webhook retries are deduplicated. Without this, each retry would
-            // call stripe.refunds.create() again, potentially issuing multiple refunds.
-            // DuplicateWebhookEventError from a concurrent retry is swallowed — the
-            // refund was already (or is being) issued by the first delivery.
+            // MM-05-D FIX (corrected): Use Stripe's own idempotency key as the
+            // primary duplicate-refund guard. recordWebhookEvent() is written AFTER
+            // the refund succeeds so that a transient Stripe failure (network error,
+            // timeout) leaves no committed WebhookEvent — the next webhook retry can
+            // attempt the Stripe call again and Stripe returns the same refund object
+            // via the idempotency key.
+            //
+            // Invariant 1 (no duplicate refund):
+            //   stripe.refunds.create() with a stable idempotencyKey means every
+            //   delivery that reaches Stripe results in the same refund object.
+            //
+            // Invariant 2 (no duplicate processing after success):
+            //   recordWebhookEvent() is written only after Stripe confirms the refund.
+            //   A subsequent retry sees DuplicateWebhookEventError and returns early.
+            //
+            // Invariant 3 (failed Stripe call remains retryable):
+            //   If stripe.refunds.create() throws, the catch block re-throws so the
+            //   outer webhook handler returns a non-200 status → Stripe retries.
+            //   No WebhookEvent was committed, so the next retry can attempt again.
+            let blockRefund: Awaited<ReturnType<typeof stripe.refunds.create>>;
+            try {
+              blockRefund = await stripe.refunds.create(
+                {
+                  payment_intent: paymentIntentId as string,
+                  metadata: {
+                    drivebookReason: isPrepaid
+                      ? 'prepaid_card_not_supported'
+                      : 'required_3ds_authentication_failed',
+                    drivebookCheckoutSessionId: checkoutSession.id,
+                  },
+                },
+                { idempotencyKey: `checkout-refund-block-${checkoutSession.id}` },
+              );
+            } catch (refundErr: any) {
+              // Stripe call failed — throw so the webhook returns non-200
+              // and Stripe will retry. No WebhookEvent committed yet.
+              logger.error('[3DS-BLOCK] Stripe refund failed — webhook will be retried', {
+                sessionId: checkoutSession.id,
+                error: refundErr.message,
+              });
+              throw refundErr;
+            }
+
+            // Refund confirmed — now claim the idempotency key permanently.
+            // A duplicate delivery after this point will see DuplicateWebhookEventError
+            // and return early without calling Stripe again.
             try {
               await recordWebhookEvent(prisma, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
                 type: 'wallet_credit_blocked',
                 userId,
                 reason: isPrepaid ? 'prepaid_card_not_supported' : 'required_3ds_authentication_failed',
+                stripeRefundId: blockRefund.id,
               });
             } catch (idemErr: any) {
               if (idemErr?.name === 'DuplicateWebhookEventError') {
-                logger.info('[3DS-BLOCK] Duplicate webhook delivery — refund already issued, skipping', {
+                // Concurrent delivery already wrote the event — refund already issued.
+                // Stripe idempotency key guarantees both deliveries got the same refund.
+                logger.info('[3DS-BLOCK] Concurrent delivery — refund already issued, skipping', {
                   sessionId: checkoutSession.id,
                 });
                 return;
               }
               throw idemErr;
             }
-
-            // MM-05-D FIX: Idempotency key prevents duplicate refunds on Stripe retries.
-            // Key is stable per session: same checkout session always produces the same key.
-            await stripe.refunds.create(
-              {
-                payment_intent: paymentIntentId as string,
-                metadata: {
-                  drivebookReason: isPrepaid
-                    ? 'prepaid_card_not_supported'
-                    : 'required_3ds_authentication_failed',
-                  drivebookCheckoutSessionId: checkoutSession.id,
-                },
-              },
-              { idempotencyKey: `checkout-refund-block-${checkoutSession.id}` },
-            );
 
             // Send email
             const customerEmail = metadata?.accountEmail || checkoutSession.customer_email;

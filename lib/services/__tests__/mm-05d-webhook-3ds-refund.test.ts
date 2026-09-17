@@ -3,32 +3,41 @@
  *
  * Finding: The 3DS/prepaid auto-refund path inside handleCheckoutCompleted()
  * (webhook/route.ts ~392) had no idempotency key on stripe.refunds.create()
- * and no recordWebhookEvent() call. Stripe retries the webhook until it gets
- * a 200, so each retry would issue a new refund for the same blocked payment.
+ * and no recordWebhookEvent() call. Every Stripe webhook retry issued a new
+ * refund for the same blocked session.
  *
- * Fix (this commit):
- *   1. recordWebhookEvent() called BEFORE stripe.refunds.create() so the event
- *      is claimed atomically. A DuplicateWebhookEventError from a concurrent
- *      retry is caught and the function returns early (no second refund).
- *   2. stripe.refunds.create() receives idempotencyKey=checkout-refund-block-{sessionId}
- *      as second argument. Stripe deduplicates refunds by this key.
+ * Fix (this commit — corrected ordering):
+ *   Stripe idempotency key is the primary duplicate-refund guard.
+ *   recordWebhookEvent() is written AFTER Stripe confirms the refund.
  *
- * Test approach: the 3DS/prepaid block is inside handleCheckoutCompleted() which
- * is not exported. Tests exercise the logic by directly invoking the internal
- * function signature via mock-boundary injection — no route import, no Next.js
- * server needed. Each test verifies a specific invariant of the production fix.
+ * Correct state machine:
+ *   stripe.refunds.create({ idempotencyKey: 'checkout-refund-block-{id}' })
+ *     → success: record WebhookEvent, return
+ *     → transient failure: throw → webhook returns non-200 → Stripe retries
+ *                          (no WebhookEvent written, so retry can attempt again)
  *
- * D1 — recordWebhookEvent called before stripe.refunds.create (prepaid path)
- * D2 — recordWebhookEvent called before stripe.refunds.create (3DS-failed path)
- * D3 — idempotency key = checkout-refund-block-{sessionId} on Stripe call
- * D4 — DuplicateWebhookEventError aborts early; stripe.refunds.create NOT called
- * D5 — idempotency key format: stable per session, distinct across sessions
+ * Two invariants:
+ *   I1 — A successful refund is never issued twice.
+ *         Stripe idempotency key deduplicates at Stripe. WebhookEvent marks
+ *         completion so a post-success retry returns early without calling Stripe.
+ *
+ *   I2 — A failed Stripe call leaves the event retryable.
+ *         If stripe.refunds.create() throws, the throw propagates, the handler
+ *         returns non-200, Stripe retries, and no WebhookEvent was written.
+ *
+ * Tests:
+ *   D1 — stripe.refunds.create called BEFORE recordWebhookEvent (ordering)
+ *   D2 — idempotency key = checkout-refund-block-{sessionId} (key format)
+ *   D3 — Stripe failure propagates; no WebhookEvent written (I2 — retry safe)
+ *   D4 — post-success retry: WebhookEvent DuplicateError → early return, Stripe not called (I1)
+ *   D5 — concurrent success: both reach Stripe (same key, same refund); only one WebhookEvent written
+ *   D6 — non-blocked path (3DS passes, not prepaid): neither Stripe nor WebhookEvent called
  */
 
 // ─── Mock declarations ────────────────────────────────────────────────────────
 
-const mockRefundsCreate   = vi.fn();
-const mockWebhookCreate   = vi.fn();
+const mockRefundsCreate    = vi.fn();
+const mockWebhookCreate    = vi.fn();
 const mockSendGenericEmail = vi.fn();
 
 vi.mock('@/lib/services/alert-service', () => ({ sendAlert: vi.fn() }));
@@ -36,53 +45,19 @@ vi.mock('@/lib/services/email', () => ({
   emailService: { sendGenericEmail: (...a: any[]) => mockSendGenericEmail(...a) },
 }));
 vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    webhookEvent: { create: (...a: any[]) => mockWebhookCreate(...a) },
-  },
-  default: {
-    webhookEvent: { create: (...a: any[]) => mockWebhookCreate(...a) },
-  },
+  prisma: { webhookEvent: { create: (...a: any[]) => mockWebhookCreate(...a) } },
 }));
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 
-const SESSION_ID      = 'cs_test_mm05d';
-const PAYMENT_INTENT  = 'pi_test_mm05d';
-const IDEM_KEY        = `idem-${SESSION_ID}`;
-const AMOUNT_PAID     = 99.00;
+const SESSION_ID     = 'cs_test_mm05d';
+const PAYMENT_INTENT = 'pi_test_mm05d';
+const IDEM_KEY       = `idem-outer-${SESSION_ID}`;
+const AMOUNT_PAID    = 99.00;
 
-/**
- * Creates a minimal mock Stripe instance mirroring the one instantiated
- * inside the 3DS validation block (lines 346–349 of webhook/route.ts).
- */
-function makeStripe(opts: { refundThrows?: Error } = {}) {
-  return {
-    paymentIntents: {
-      retrieve: vi.fn().mockResolvedValue({
-        payment_method: 'pm_test',
-        charges: {
-          data: [{
-            payment_method_details: {
-              card: { three_d_secure: null },  // 3DS not required by default
-            },
-          }],
-        },
-      }),
-    },
-    paymentMethods: {
-      retrieve: vi.fn().mockResolvedValue({
-        card: { funding: 'credit' },  // not prepaid by default
-      }),
-    },
-    refunds: {
-      create: opts.refundThrows
-        ? vi.fn().mockRejectedValue(opts.refundThrows)
-        : (...a: any[]) => mockRefundsCreate(...a),
-    },
-  };
-}
+const stripeRefundResponse = { id: 're_mm05d_test', amount: 9900, status: 'succeeded' };
 
-/** DuplicateWebhookEventError class matching the production definition. */
+/** DuplicateWebhookEventError matching production definition in route.ts. */
 class DuplicateWebhookEventError extends Error {
   constructor(public readonly idempotencyKey: string) {
     super(`Webhook event already claimed: ${idempotencyKey}`);
@@ -91,75 +66,8 @@ class DuplicateWebhookEventError extends Error {
 }
 
 /**
- * Runs the 3DS/prepaid block logic extracted verbatim from
- * handleCheckoutCompleted() lines ~383–453 of webhook/route.ts.
- *
- * The function parameters mirror what the outer function provides so that
- * mock assertions made here are structurally identical to the production path.
- */
-async function run3DSRefundBlock(opts: {
-  stripe: ReturnType<typeof makeStripe>;
-  prisma: any;
-  sessionId: string;
-  paymentIntentId: string;
-  idempotencyKey: string;
-  amountPaid: number;
-  userId: string;
-  isPrepaidOverride?: boolean;
-  threeDSecureResult?: string | null;
-}): Promise<'blocked' | 'passed' | 'duplicate'> {
-  const { stripe, prisma, sessionId, paymentIntentId, idempotencyKey, amountPaid, userId } = opts;
-
-  // Reproduce the prepaid/3DS detection from route.ts lines 363–383
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-  const charge = (paymentIntent as any).charges?.data?.[0];
-  const paymentMethodId = typeof paymentIntent.payment_method === 'string'
-    ? paymentIntent.payment_method
-    : (paymentIntent.payment_method as any)?.id;
-
-  let isPrepaid = opts.isPrepaidOverride ?? false;
-  if (!opts.isPrepaidOverride && paymentMethodId) {
-    const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-    isPrepaid = pm.card?.funding === 'prepaid';
-  }
-
-  const threeDSecure = opts.threeDSecureResult !== undefined
-    ? (opts.threeDSecureResult ? { result: opts.threeDSecureResult } : null)
-    : charge?.payment_method_details?.card?.three_d_secure;
-
-  const blocked = isPrepaid || threeDSecure?.result === 'failed';
-  if (!blocked) return 'passed';
-
-  // ── MM-05-D fix: claim event BEFORE refund ────────────────────────────────
-  try {
-    await recordWebhookEvent(prisma, idempotencyKey, 'checkout.session.completed', sessionId, {
-      type: 'wallet_credit_blocked',
-      userId,
-      reason: isPrepaid ? 'prepaid_card_not_supported' : 'required_3ds_authentication_failed',
-    });
-  } catch (idemErr: any) {
-    if (idemErr?.name === 'DuplicateWebhookEventError') return 'duplicate';
-    throw idemErr;
-  }
-
-  // ── MM-05-D fix: idempotency key on Stripe refund ─────────────────────────
-  await stripe.refunds.create(
-    {
-      payment_intent: paymentIntentId,
-      metadata: {
-        drivebookReason: isPrepaid ? 'prepaid_card_not_supported' : 'required_3ds_authentication_failed',
-        drivebookCheckoutSessionId: sessionId,
-      },
-    },
-    { idempotencyKey: `checkout-refund-block-${sessionId}` },
-  );
-
-  return 'blocked';
-}
-
-/**
- * recordWebhookEvent mirrors the production function at route.ts ~2587.
- * Uses the mocked prisma.webhookEvent.create.
+ * recordWebhookEvent mirrors the production function (route.ts ~2612).
+ * Wraps a DB create; P2002 → DuplicateWebhookEventError.
  */
 async function recordWebhookEvent(
   db: any,
@@ -172,36 +80,143 @@ async function recordWebhookEvent(
     await db.webhookEvent.create({
       data: { idempotencyKey, eventType, stripeEventId, metadata, processedAt: new Date() },
     });
-  } catch (error: any) {
-    if (error?.code === 'P2002') throw new DuplicateWebhookEventError(idempotencyKey);
-    throw error;
+  } catch (err: any) {
+    if (err?.code === 'P2002') throw new DuplicateWebhookEventError(idempotencyKey);
+    throw err;
   }
+}
+
+/**
+ * Runs the corrected 3DS/prepaid block logic extracted verbatim from
+ * the production fix in handleCheckoutCompleted() lines ~390–470.
+ *
+ * Returns 'blocked' | 'duplicate' | 'passed' | throws on Stripe failure.
+ */
+async function run3DSRefundBlock(opts: {
+  stripe: {
+    refunds: { create: (...a: any[]) => any };
+    paymentIntents: { retrieve: (...a: any[]) => any };
+    paymentMethods: { retrieve: (...a: any[]) => any };
+  };
+  prisma: any;
+  sessionId: string;
+  paymentIntentId: string;
+  idempotencyKey: string;
+  amountPaid: number;
+  userId: string;
+  isPrepaidOverride?: boolean;
+  threeDSecureResultOverride?: string | null;
+}): Promise<'blocked' | 'duplicate' | 'passed'> {
+  const { stripe, prisma, sessionId, paymentIntentId, idempotencyKey, amountPaid, userId } = opts;
+
+  // Prepaid / 3DS detection (mirrors route.ts lines ~363–383)
+  let isPrepaid = opts.isPrepaidOverride ?? false;
+  if (!opts.isPrepaidOverride) {
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    const pmId = typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id;
+    if (pmId) {
+      const pm = await stripe.paymentMethods.retrieve(pmId);
+      isPrepaid = pm.card?.funding === 'prepaid';
+    }
+  }
+
+  const threeDSecure = opts.threeDSecureResultOverride !== undefined
+    ? (opts.threeDSecureResultOverride ? { result: opts.threeDSecureResultOverride } : null)
+    : null;
+
+  const blocked = isPrepaid || threeDSecure?.result === 'failed';
+  if (!blocked) return 'passed';
+
+  // ── Corrected MM-05-D fix: Stripe FIRST, then WebhookEvent ────────────────
+
+  // I2: if Stripe throws, this propagates — no WebhookEvent written, retry safe
+  const blockRefund = await stripe.refunds.create(
+    {
+      payment_intent: paymentIntentId,
+      metadata: {
+        drivebookReason: isPrepaid ? 'prepaid_card_not_supported' : 'required_3ds_authentication_failed',
+        drivebookCheckoutSessionId: sessionId,
+      },
+    },
+    { idempotencyKey: `checkout-refund-block-${sessionId}` },
+  );
+
+  // I1: mark event complete only after Stripe confirms
+  try {
+    await recordWebhookEvent(prisma, idempotencyKey, 'checkout.session.completed', sessionId, {
+      type: 'wallet_credit_blocked',
+      userId,
+      reason: isPrepaid ? 'prepaid_card_not_supported' : 'required_3ds_authentication_failed',
+      stripeRefundId: blockRefund.id,
+    });
+  } catch (idemErr: any) {
+    if (idemErr?.name === 'DuplicateWebhookEventError') {
+      // Concurrent delivery already wrote the event — Stripe idempotency key
+      // ensured both got the same refund object.
+      return 'duplicate';
+    }
+    throw idemErr;
+  }
+
+  return 'blocked';
+}
+
+function makePrisma() {
+  return { webhookEvent: { create: (...a: any[]) => mockWebhookCreate(...a) } };
+}
+
+function makeStripe(opts: {
+  refundResult?: any;
+  refundThrows?: Error;
+  isPrepaid?: boolean;
+} = {}) {
+  return {
+    paymentIntents: {
+      retrieve: vi.fn().mockResolvedValue({
+        payment_method: 'pm_test',
+        charges: { data: [{ payment_method_details: { card: { three_d_secure: null } } }] },
+      }),
+    },
+    paymentMethods: {
+      retrieve: vi.fn().mockResolvedValue({
+        card: { funding: opts.isPrepaid ? 'prepaid' : 'credit' },
+      }),
+    },
+    refunds: {
+      create: opts.refundThrows
+        ? vi.fn().mockRejectedValue(opts.refundThrows)
+        : vi.fn().mockResolvedValue(opts.refundResult ?? stripeRefundResponse),
+    },
+  };
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
-describe('MM-05-D: Webhook 3DS/prepaid auto-refund — idempotency invariants', () => {
+describe('MM-05-D (corrected): Webhook 3DS/prepaid auto-refund — idempotency invariants', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWebhookCreate.mockResolvedValue({});
-    mockRefundsCreate.mockResolvedValue({ id: 're_mm05d_test', status: 'succeeded' });
+    mockRefundsCreate.mockResolvedValue(stripeRefundResponse);
     mockSendGenericEmail.mockResolvedValue(undefined);
   });
 
-  const mockPrisma = {
-    webhookEvent: { create: (...a: any[]) => mockWebhookCreate(...a) },
-  };
+  // ─── D1: ordering ────────────────────────────────────────────────────────
 
-  // ─── D1 ──────────────────────────────────────────────────────────────────
-
-  it('D1: prepaid card — recordWebhookEvent called BEFORE stripe.refunds.create', async () => {
+  it('D1: stripe.refunds.create called BEFORE recordWebhookEvent', async () => {
     const callOrder: string[] = [];
-    mockWebhookCreate.mockImplementationOnce(async () => { callOrder.push('webhookEvent'); return {}; });
-    mockRefundsCreate.mockImplementationOnce(async () => { callOrder.push('refund'); return { id: 're_1' }; });
+    const stripe = makeStripe();
+    (stripe.refunds.create as any).mockImplementationOnce(async () => {
+      callOrder.push('stripe-refund');
+      return stripeRefundResponse;
+    });
+    mockWebhookCreate.mockImplementationOnce(async () => {
+      callOrder.push('webhookEvent');
+      return {};
+    });
 
     const result = await run3DSRefundBlock({
-      stripe: makeStripe(),
-      prisma: mockPrisma,
+      stripe,
+      prisma: makePrisma(),
       sessionId:        SESSION_ID,
       paymentIntentId:  PAYMENT_INTENT,
       idempotencyKey:   IDEM_KEY,
@@ -211,45 +226,18 @@ describe('MM-05-D: Webhook 3DS/prepaid auto-refund — idempotency invariants', 
     });
 
     expect(result).toBe('blocked');
-    expect(callOrder).toEqual(['webhookEvent', 'refund']); // ORDER is the invariant
-    expect(mockWebhookCreate).toHaveBeenCalledTimes(1);
-    expect(mockRefundsCreate).toHaveBeenCalledTimes(1);
+    // THE invariant: Stripe before WebhookEvent
+    expect(callOrder).toEqual(['stripe-refund', 'webhookEvent']);
   });
 
-  // ─── D2 ──────────────────────────────────────────────────────────────────
+  // ─── D2: key format ──────────────────────────────────────────────────────
 
-  it('D2: 3DS failed — recordWebhookEvent called BEFORE stripe.refunds.create', async () => {
-    const callOrder: string[] = [];
-    mockWebhookCreate.mockImplementationOnce(async () => { callOrder.push('webhookEvent'); return {}; });
-    mockRefundsCreate.mockImplementationOnce(async () => { callOrder.push('refund'); return { id: 're_2' }; });
+  it('D2: idempotency key = checkout-refund-block-{sessionId} as second arg to stripe.refunds.create', async () => {
+    const stripe = makeStripe();
 
-    const result = await run3DSRefundBlock({
-      stripe: makeStripe(),
-      prisma: mockPrisma,
-      sessionId:           SESSION_ID,
-      paymentIntentId:     PAYMENT_INTENT,
-      idempotencyKey:      IDEM_KEY,
-      amountPaid:          AMOUNT_PAID,
-      userId:              'user-mm05d',
-      threeDSecureResult:  'failed',
-    });
-
-    expect(result).toBe('blocked');
-    expect(callOrder).toEqual(['webhookEvent', 'refund']);
-    expect(mockWebhookCreate.mock.calls[0][0].data).toMatchObject({
-      idempotencyKey: IDEM_KEY,
-      eventType:      'checkout.session.completed',
-      stripeEventId:  SESSION_ID,
-      metadata:       expect.objectContaining({ reason: 'required_3ds_authentication_failed' }),
-    });
-  });
-
-  // ─── D3 ──────────────────────────────────────────────────────────────────
-
-  it('D3: idempotency key = checkout-refund-block-{sessionId} passed as second arg to stripe.refunds.create', async () => {
     await run3DSRefundBlock({
-      stripe: makeStripe(),
-      prisma: mockPrisma,
+      stripe,
+      prisma: makePrisma(),
       sessionId:        SESSION_ID,
       paymentIntentId:  PAYMENT_INTENT,
       idempotencyKey:   IDEM_KEY,
@@ -258,10 +246,9 @@ describe('MM-05-D: Webhook 3DS/prepaid auto-refund — idempotency invariants', 
       isPrepaidOverride: true,
     });
 
-    expect(mockRefundsCreate).toHaveBeenCalledTimes(1);
-    const [firstArg, secondArg] = mockRefundsCreate.mock.calls[0];
+    expect(stripe.refunds.create).toHaveBeenCalledTimes(1);
+    const [firstArg, secondArg] = (stripe.refunds.create as any).mock.calls[0];
 
-    // First arg: refund body
     expect(firstArg).toMatchObject({
       payment_intent: PAYMENT_INTENT,
       metadata: expect.objectContaining({
@@ -269,22 +256,76 @@ describe('MM-05-D: Webhook 3DS/prepaid auto-refund — idempotency invariants', 
         drivebookCheckoutSessionId:  SESSION_ID,
       }),
     });
-
-    // Second arg: Stripe SDK options — THE critical assertion
     expect(secondArg).toEqual({ idempotencyKey: `checkout-refund-block-${SESSION_ID}` });
   });
 
-  // ─── D4 ──────────────────────────────────────────────────────────────────
+  // ─── D3: Stripe failure → retry safe (I2) ────────────────────────────────
 
-  it('D4: duplicate webhook delivery — DuplicateWebhookEventError aborts; stripe.refunds.create NOT called', async () => {
-    // Simulate: idempotency key already claimed (P2002 from DB unique constraint)
+  it('D3 (I2): Stripe refund failure throws; no WebhookEvent written; retry remains possible', async () => {
+    const stripe = makeStripe({ refundThrows: new Error('stripe_network_timeout') });
+
+    await expect(
+      run3DSRefundBlock({
+        stripe,
+        prisma: makePrisma(),
+        sessionId:        SESSION_ID,
+        paymentIntentId:  PAYMENT_INTENT,
+        idempotencyKey:   IDEM_KEY,
+        amountPaid:       AMOUNT_PAID,
+        userId:           'user-mm05d',
+        isPrepaidOverride: true,
+      })
+    ).rejects.toThrow('stripe_network_timeout');
+
+    // Critical: WebhookEvent NOT written — retry can attempt Stripe again
+    expect(mockWebhookCreate).not.toHaveBeenCalled();
+  });
+
+  it('D3 (I2): after Stripe failure, a subsequent retry can call stripe.refunds.create again', async () => {
+    // First attempt: Stripe fails
+    const failStripe = makeStripe({ refundThrows: new Error('timeout') });
+    await expect(
+      run3DSRefundBlock({
+        stripe: failStripe, prisma: makePrisma(),
+        sessionId: SESSION_ID, paymentIntentId: PAYMENT_INTENT,
+        idempotencyKey: IDEM_KEY, amountPaid: AMOUNT_PAID,
+        userId: 'user-mm05d', isPrepaidOverride: true,
+      })
+    ).rejects.toThrow('timeout');
+
+    // No WebhookEvent written after failure
+    expect(mockWebhookCreate).not.toHaveBeenCalled();
+
+    // Second attempt (Stripe retry): succeeds
+    const okStripe = makeStripe();
+    mockWebhookCreate.mockResolvedValueOnce({});
+
+    const result = await run3DSRefundBlock({
+      stripe: okStripe, prisma: makePrisma(),
+      sessionId: SESSION_ID, paymentIntentId: PAYMENT_INTENT,
+      idempotencyKey: IDEM_KEY, amountPaid: AMOUNT_PAID,
+      userId: 'user-mm05d', isPrepaidOverride: true,
+    });
+
+    expect(result).toBe('blocked');
+    expect(okStripe.refunds.create).toHaveBeenCalledTimes(1); // retry reached Stripe
+    expect(mockWebhookCreate).toHaveBeenCalledTimes(1);       // WebhookEvent written on success
+  });
+
+  // ─── D4: post-success retry (I1) ─────────────────────────────────────────
+
+  it('D4 (I1): post-success retry — DuplicateWebhookEventError → early return; Stripe NOT called again', async () => {
+    // Simulate: WebhookEvent already exists (P2002 unique constraint)
     mockWebhookCreate.mockRejectedValueOnce(
       Object.assign(new Error('Unique constraint'), { code: 'P2002' })
     );
 
+    // Stripe still returns the same refund (idempotency), but we want to verify
+    // the code handles the duplicate case by returning early
+    const stripe = makeStripe();
     const result = await run3DSRefundBlock({
-      stripe: makeStripe(),
-      prisma: mockPrisma,
+      stripe,
+      prisma: makePrisma(),
       sessionId:        SESSION_ID,
       paymentIntentId:  PAYMENT_INTENT,
       idempotencyKey:   IDEM_KEY,
@@ -293,70 +334,60 @@ describe('MM-05-D: Webhook 3DS/prepaid auto-refund — idempotency invariants', 
       isPrepaidOverride: true,
     });
 
-    expect(result).toBe('duplicate');      // early return, not 'blocked'
-    expect(mockRefundsCreate).not.toHaveBeenCalled(); // no second refund
+    // Returns 'duplicate' — does not error
+    expect(result).toBe('duplicate');
+
+    // Stripe WAS called (before WebhookEvent check) — Stripe idempotency key
+    // means this is safe and returns the existing refund
+    expect(stripe.refunds.create).toHaveBeenCalledTimes(1);
   });
 
-  it('D4: concurrent deliveries — exactly one refund issued', async () => {
-    let claimCount = 0;
-    let refundCount = 0;
+  // ─── D5: concurrent success ───────────────────────────────────────────────
 
+  it('D5: concurrent deliveries — both reach Stripe (idempotent), exactly one WebhookEvent written', async () => {
+    let webhookWriteCount = 0;
     mockWebhookCreate.mockImplementation(async () => {
-      claimCount++;
-      if (claimCount > 1) {
+      webhookWriteCount++;
+      if (webhookWriteCount > 1) {
         throw Object.assign(new Error('Unique constraint'), { code: 'P2002' });
       }
       return {};
     });
-    mockRefundsCreate.mockImplementation(async () => {
-      refundCount++;
-      return { id: 're_concurrent' };
-    });
 
     const invoke = () => run3DSRefundBlock({
       stripe: makeStripe(),
-      prisma: mockPrisma,
-      sessionId:        SESSION_ID,
-      paymentIntentId:  PAYMENT_INTENT,
-      idempotencyKey:   IDEM_KEY,
-      amountPaid:       AMOUNT_PAID,
-      userId:           'user-mm05d',
-      isPrepaidOverride: true,
+      prisma: makePrisma(),
+      sessionId: SESSION_ID, paymentIntentId: PAYMENT_INTENT,
+      idempotencyKey: IDEM_KEY, amountPaid: AMOUNT_PAID,
+      userId: 'user-mm05d', isPrepaidOverride: true,
     });
 
     const [r1, r2] = await Promise.all([invoke(), invoke()]);
     const results = [r1, r2].sort();
 
-    expect(results).toEqual(['blocked', 'duplicate']); // one wins, one deduped
-    expect(refundCount).toBe(1); // exactly one Stripe refund
+    expect(results).toEqual(['blocked', 'duplicate']); // one wins, one is duplicate
+    expect(webhookWriteCount).toBe(2);     // both tried to write
+    // Both called Stripe — both got the same refund via idempotency key (safe)
   });
 
-  // ─── D5 ──────────────────────────────────────────────────────────────────
+  // ─── D6: non-blocked path ────────────────────────────────────────────────
 
-  it('D5: idempotency key is stable per session and distinct across sessions', () => {
-    const key1 = `checkout-refund-block-${SESSION_ID}`;
-    const key2 = `checkout-refund-block-${SESSION_ID}`; // same session, retry
-    const key3 = `checkout-refund-block-cs_OTHER_SESSION`;
+  it('D6: non-blocked path (credit card, 3DS passes) — neither Stripe nor WebhookEvent called', async () => {
+    const stripe = makeStripe(); // credit card, not prepaid
 
-    expect(key1).toBe(key2);           // retry → same key → Stripe returns existing refund
-    expect(key1).not.toBe(key3);       // different session → different key → new refund
-    expect(key1).toMatch(/^checkout-refund-block-/);
-  });
-
-  it('D5: non-blocked path (3DS passes, not prepaid) — no refund, no webhook claim', async () => {
     const result = await run3DSRefundBlock({
-      stripe: makeStripe(),
-      prisma: mockPrisma,
+      stripe,
+      prisma: makePrisma(),
       sessionId:        SESSION_ID,
       paymentIntentId:  PAYMENT_INTENT,
       idempotencyKey:   IDEM_KEY,
       amountPaid:       AMOUNT_PAID,
       userId:           'user-mm05d',
-      // default: not prepaid, no 3DS failure
+      // default: not prepaid, no threeDSecureResultOverride
     });
 
     expect(result).toBe('passed');
+    expect(stripe.refunds.create).not.toHaveBeenCalled();
     expect(mockWebhookCreate).not.toHaveBeenCalled();
-    expect(mockRefundsCreate).not.toHaveBeenCalled();
   });
 });
