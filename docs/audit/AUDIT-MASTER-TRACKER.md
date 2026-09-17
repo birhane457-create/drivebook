@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 2.7 (MM-06 reclassified SUPERSEDED → MM-05-D)  
+**Version:** 2.8 (direct production-path test infrastructure added; MM-05-D/E-R/S remain FIX-VERIFIED)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -400,6 +400,25 @@ No `status`, `retriedAt`, `refundId`, or `retriable` field. Absence of a row is 
 **Do not implement a fix until a decision is made.**
 
 ---
+
+### Direct production-path verification gap (MM-05-D, MM-05-E-R/S)
+
+Both findings are FIX-VERIFIED based on extracted-logic tests. Direct production-path verification requires `SUB22_TEST_DATABASE_URL` pointing to an isolated Postgres — not available in this environment.
+
+**Infrastructure created this commit** (two new test files in `app/api/stripe/webhook/__tests__/`):
+
+| File | Tests | Status |
+|---|---|---|
+| `mm-05d-direct-handler.test.ts` | D-P1–D-P6: prepaid/3DS-failed/Stripe-fail/duplicate/concurrent/non-blocked via real `POST` | ⏳ PENDING EXECUTION — requires isolated Postgres |
+| `mm-05e-direct-handler.test.ts` | E-P1–E-P7: EXPIRED→CANCELLED/Stripe-fail/repair/duplicate/null-refundId/concurrent/CONFIRMED via real `POST` | ⏳ PENDING EXECUTION — requires isolated Postgres |
+
+Both files use the real exported `POST` handler, real Stripe signature verification, real Prisma against the isolated DB, and mock only `stripe.refunds.create` + non-critical side-effect services. Skip guards throw `[MM-05-D SKIP]` / `[MM-05-E-R/S SKIP]` when `SUB22_TEST_DATABASE_URL` is absent.
+
+**To advance MM-05-D and MM-05-E-R/S to CLOSED:**
+1. Provision an isolated Postgres DB (not Supabase production).
+2. Set `SUB22_TEST_DATABASE_URL=<isolated-url>` and `STRIPE_WEBHOOK_SECRET=<any-string>`.
+3. Run both test files; record exit codes.
+4. Update this tracker with the exit codes and advance status to CLOSED.
 
 ## Section 6 — Document Map
 
