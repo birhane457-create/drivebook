@@ -1132,59 +1132,186 @@ async function handleBookingPaymentSuccess(
   } catch (err) {
     // Handle expired booking error - issue refund OUTSIDE transaction (P2034 retry-safe)
     if (err instanceof ExpiredBookingError) {
-      logger.info(`ðŸ"„ Handling expired booking refund outside transaction for ${err.bookingId}`);
-      
+      const { bookingId: expiredBookingId, paymentIntentId: expiredPaymentIntentId } = err;
+      logger.info(`Handling expired booking refund outside transaction for ${expiredBookingId}`);
+
+      // ── Step 1: Stripe refund — external side effect first ──────────────────
+      // Stable idempotency key means retries get the same refund object.
+      // If this throws, the catch block below returns non-200 → Stripe retries.
+      // No DB state is written yet so the retry is safe to attempt Stripe again.
+      let expiredRefund: Awaited<ReturnType<typeof stripe.refunds.create>>;
       try {
-        await stripe.refunds.create({
-          payment_intent: err.paymentIntentId,
+        expiredRefund = await stripe.refunds.create({
+          payment_intent: expiredPaymentIntentId,
           reason: 'duplicate', // closest Stripe reason code
           metadata: {
-            bookingId: err.bookingId,
+            bookingId: expiredBookingId,
             reason: 'Booking expired before payment confirmed — automatic refund',
           },
         }, {
-          idempotencyKey: `expired-booking-refund-${err.bookingId}-${err.paymentIntentId}`
+          idempotencyKey: `expired-booking-refund-${expiredBookingId}-${expiredPaymentIntentId}`
         });
-        logger.info(`✅ Auto-refund issued for expired booking ${err.bookingId}`);
-
-        // Alert ops â€" admin should know a payment hit an expired slot even when refund succeeded
-        void sendAlert({
-          type: 'RECONCILIATION_ISSUES',
-          severity: 'WARNING',
-          message: `Delayed payment on expired booking ${err.bookingId} â€" auto-refund issued successfully. Student was charged after slot expired. Admin review recommended.`,
-          entityId: err.bookingId,
-          metadata: {
-            bookingId: err.bookingId,
-            stripePaymentIntentId: err.paymentIntentId,
-            outcome: 'auto_refund_succeeded',
-          },
-        });
+        logger.info(`Auto-refund issued for expired booking ${expiredBookingId}: ${expiredRefund.id}`);
       } catch (refundErr) {
-        // Refund failed â€" must flag for manual admin action
-        logger.error(`ðŸš¨ CRITICAL: Auto-refund FAILED for expired booking ${err.bookingId}. Manual action required.`, {
+        // Refund failed — must flag for manual admin action
+        logger.error(`CRITICAL: Auto-refund FAILED for expired booking ${expiredBookingId}. Manual action required.`, {
           error: refundErr instanceof Error ? refundErr.message : String(refundErr),
         });
-
-        // Alert ops â€" this requires immediate manual intervention via Stripe Dashboard
         void sendAlert({
           type: 'RECONCILIATION_ISSUES',
           severity: 'CRITICAL',
-          message: `Auto-refund FAILED for expired booking ${err.bookingId}. Student was charged but refund could not be issued. MANUAL REFUND REQUIRED via Stripe Dashboard. PaymentIntent: ${err.paymentIntentId}`,
-          entityId: err.bookingId,
+          message: `Auto-refund FAILED for expired booking ${expiredBookingId}. Student was charged but refund could not be issued. MANUAL REFUND REQUIRED via Stripe Dashboard. PaymentIntent: ${expiredPaymentIntentId}`,
+          entityId: expiredBookingId,
           metadata: {
-            bookingId: err.bookingId,
-            stripePaymentIntentId: err.paymentIntentId,
+            bookingId: expiredBookingId,
+            stripePaymentIntentId: expiredPaymentIntentId,
             error: refundErr instanceof Error ? refundErr.message : String(refundErr),
             outcome: 'auto_refund_failed',
             action: 'Manual refund required via Stripe Dashboard',
           },
         });
+        // Re-throw so the outer handler returns HTTP 500 → Stripe retries
+        throw refundErr;
       }
-      
-      // Expired booking handled, return early
+
+      // ── Step 2: Durable DB state — SERIALIZABLE transaction ─────────────────
+      // MM-05-E-R / MM-05-E-S FIX:
+      // Refund is confirmed. Now write durable application state atomically.
+      //
+      // The booking transition uses updateMany with status='EXPIRED' guard (CAS).
+      // We then inspect the booking to verify correctness:
+      //
+      //   EXPIRED → CANCELLED  (count=1): normal path — write succeeded.
+      //   count=0 → booking is not EXPIRED. Read current state and verify:
+      //     CANCELLED + same refund ID  → already complete; idempotent.
+      //     CANCELLED + null refund ID  → prior partial write; repair refundId.
+      //     CANCELLED + different ID    → integrity error; alert, do not overwrite.
+      //     any other status            → unexpected; alert and fail.
+      //
+      // WebhookEvent is written inside the same tx. DuplicateWebhookEventError
+      // is only safe to ignore after the booking state is verified as correct.
+      try {
+        await withSerializableRetry(async () => {
+          await prisma.$transaction(async (tx) => {
+            // CAS: only transition if still EXPIRED
+            const transitioned = await tx.booking.updateMany({
+              where: { id: expiredBookingId, status: 'EXPIRED' },
+              data: {
+                status: 'CANCELLED',
+                stripeRefundId: expiredRefund.id,
+                notes: `EXPIRED_PAYMENT_REFUNDED: Auto-refund ${expiredRefund.id} issued. Original payment expired before confirmation.`,
+              },
+            });
+
+            if (transitioned.count === 0) {
+              // Booking not EXPIRED — inspect current state before deciding
+              const current = await tx.booking.findUnique({
+                where: { id: expiredBookingId },
+                select: { status: true, stripeRefundId: true },
+              });
+
+              if (!current) {
+                throw new Error(`[MM-05-E] Booking ${expiredBookingId} not found during post-refund state repair`);
+              }
+
+              if (current.status === 'CANCELLED') {
+                if (current.stripeRefundId === expiredRefund.id) {
+                  // Already in the correct terminal state — this is an idempotent retry
+                  logger.info(`[MM-05-E] Booking ${expiredBookingId} already CANCELLED with correct refundId — idempotent`);
+                  // Continue to WebhookEvent write below (may also be duplicate — handled there)
+                } else if (current.stripeRefundId === null) {
+                  // Partial prior write: CANCELLED but refundId not persisted — repair it
+                  logger.warn(`[MM-05-E] Repairing missing stripeRefundId on CANCELLED booking ${expiredBookingId}`);
+                  await tx.booking.update({
+                    where: { id: expiredBookingId },
+                    data: { stripeRefundId: expiredRefund.id },
+                  });
+                } else {
+                  // CANCELLED with a DIFFERENT refundId — integrity error; do not overwrite
+                  void sendAlert({
+                    type: 'RECONCILIATION_ISSUES',
+                    severity: 'CRITICAL',
+                    message: `[MM-05-E] INTEGRITY ERROR: Booking ${expiredBookingId} is CANCELLED with refundId=${current.stripeRefundId} but incoming refundId=${expiredRefund.id}. Two refunds may exist. Manual investigation required.`,
+                    entityId: expiredBookingId,
+                    metadata: {
+                      bookingId: expiredBookingId,
+                      existingRefundId: current.stripeRefundId,
+                      incomingRefundId: expiredRefund.id,
+                      stripePaymentIntentId: expiredPaymentIntentId,
+                    },
+                  });
+                  throw new Error(`[MM-05-E] Integrity error: booking ${expiredBookingId} CANCELLED with different refundId (${current.stripeRefundId} vs ${expiredRefund.id})`);
+                }
+              } else {
+                // Unexpected status — fail loudly; do not silently accept
+                void sendAlert({
+                  type: 'RECONCILIATION_ISSUES',
+                  severity: 'CRITICAL',
+                  message: `[MM-05-E] Unexpected booking status '${current.status}' for ${expiredBookingId} after refund ${expiredRefund.id}. Expected EXPIRED or CANCELLED. Manual investigation required.`,
+                  entityId: expiredBookingId,
+                  metadata: { bookingId: expiredBookingId, status: current.status, refundId: expiredRefund.id },
+                });
+                throw new Error(`[MM-05-E] Unexpected booking status '${current.status}' for ${expiredBookingId} after successful refund`);
+              }
+            }
+
+            // WebhookEvent — written inside the same tx as the booking transition.
+            // Only safe to treat as duplicate if the booking state above is already correct.
+            await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.succeeded', paymentIntentId, {
+              expiredBooking: true,
+              bookingId: expiredBookingId,
+              stripeRefundId: expiredRefund.id,
+              outcome: 'expired_booking_refunded',
+            });
+          }, SERIALIZABLE_TX);
+        }, { operationName: 'webhook-expired-booking-post-refund' });
+      } catch (dbErr: any) {
+        // DuplicateWebhookEventError is only safe to swallow if we already verified
+        // the booking is in the correct terminal state above (inside the tx).
+        // If the tx itself threw DuplicateWebhookEventError, the booking checks
+        // passed (or the tx rolled back), so the state is consistent.
+        if (dbErr?.name === 'DuplicateWebhookEventError') {
+          logger.info(`[MM-05-E] Duplicate WebhookEvent for expired booking ${expiredBookingId} — booking state already verified consistent`);
+        } else {
+          // DB write failed after Stripe succeeded — throw so webhook returns non-200
+          // and Stripe retries. The retry will use the same Stripe idempotency key
+          // (returns same refund object) and re-attempt this DB transaction.
+          logger.error(`[MM-05-E] Post-refund DB write failed for ${expiredBookingId} — webhook will be retried`, {
+            error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+          });
+          void sendAlert({
+            type: 'RECONCILIATION_ISSUES',
+            severity: 'CRITICAL',
+            message: `[MM-05-E] Stripe refund succeeded (${expiredRefund.id}) but durable DB state write failed for booking ${expiredBookingId}. Stripe will retry. If retries exhausted, manual state repair required.`,
+            entityId: expiredBookingId,
+            metadata: {
+              bookingId: expiredBookingId,
+              stripeRefundId: expiredRefund.id,
+              error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+            },
+          });
+          throw dbErr;
+        }
+      }
+
+      // Alert ops — non-critical, fire-and-forget
+      void sendAlert({
+        type: 'RECONCILIATION_ISSUES',
+        severity: 'WARNING',
+        message: `Delayed payment on expired booking ${expiredBookingId} — auto-refund issued successfully. Student was charged after slot expired. Admin review recommended.`,
+        entityId: expiredBookingId,
+        metadata: {
+          bookingId: expiredBookingId,
+          stripePaymentIntentId: expiredPaymentIntentId,
+          stripeRefundId: expiredRefund.id,
+          outcome: 'auto_refund_succeeded',
+        },
+      });
+
+      // Expired booking fully handled
       return;
     }
-    
+
     // Re-throw other errors
     throw err;
   }
