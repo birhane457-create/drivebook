@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.0 (MM-10-C fix-verified)  
+**Version:** 3.1 (MM-10-A superseded; accepted as intentional architecture)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -157,7 +157,7 @@ Sub-findings from reclassification:
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| MM-10-A | SaaS provider routing absent — no `transfer_data.destination` | ARCHITECTURAL | CONFIRMED | VERIFIED — `saas-payment.ts` confirmed: no `transfer_data` in `sessionParams`; money lands on platform | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-10-A | SaaS provider routing absent — no `transfer_data.destination` | ARCHITECTURAL | **SUPERSEDED** | VERIFIED — `saas-payment.ts` confirmed: no `transfer_data` in `sessionParams`; money lands on platform. Original finding premise was incorrect: this is deliberate `PLATFORM` mode, not an accidentally omitted destination. | N/A | N/A | **SUPERSEDED — Accepted as intentional architecture; no remediation required.** `DIRECT` mode (provider Stripe account routing) is Phase 2, blocked by `assertPlatformPaymentMode()`. Product roadmap tracked in `docs/newplan/PAYMENT-WHITE-LABEL.md`. PAY-01 threat model does not apply. | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-10-B | Concurrent checkout session creation — double-charge | MEDIUM | CONFIRMED | VERIFIED — `Quote.stripeSessionId` write not conditional on null; no Stripe idempotency key; two concurrent accepts → two independently payable sessions | This commit — `Quote.checkoutGeneration Int @default(1)`; Stripe idempotency key `scs-{quoteId}-{generation}`; `advanceCheckoutGeneration()` CAS on (stripeSessionId, checkoutGeneration); `_createAndBindSession()` CAS write WHERE stripeSessionId IS NULL AND checkoutGeneration=N; loser reads winner session; expired→automatic generation advance; lookup error NOT treated as expiry; completed→QuoteAlreadyPaidError; accept route allows PENDING_PAYMENT re-entry | 13 MM-10-B tests (S1–S10), exit 0 — `mm-10b-checkout-session.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-10-C | `applicationFeeAmount` always zero — commission config defect | MEDIUM | CONFIRMED | VERIFIED — `commissionPercent` not a field on `BusinessConfig`; `assembleConfig()` never sets it; `?? 0` fallback makes fee zero | This commit — `commissionPercent: number` added to `BusinessConfig` interface; `assembleConfig()` maps `settings.commissionRate`; `saas-payment.ts` reads `businessConfig.commissionPercent` directly (no `as any`); all three templates updated | 13 MM-10-C tests (C1–C6 + data path), exit 0 — `mm-10c-commission-fee.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 
@@ -224,7 +224,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 |---|---|---|---|
 | 5 | MM-10-B | Concurrent checkout session creation — double-charge | ✅ FIXED this commit |
 | 6 | MM-10-C | `applicationFeeAmount` always zero | ✅ FIXED this commit |
-| 7 | MM-10-A | Complete SaaS Connect destination routing | ⚠️ OPEN |
+| 7 | MM-10-A | SaaS provider routing absent — no `transfer_data.destination` | SUPERSEDED — accepted as intentional PLATFORM-mode architecture |
 | 8 | MM-05-D | 3DS/prepaid auto-refund idempotency key + `recordWebhookEvent()` | ✅ FIXED this commit |
 | 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path | SUPERSEDED → MM-05-E-R (observability gap, FIX DECISION PENDING) |
 | 10 | MM-15-A | Late `transfer.failed` reverses retried payout | ✅ FIXED `dc13c7b0` |
@@ -403,7 +403,15 @@ No `status`, `retriedAt`, `refundId`, or `retriable` field. Absence of a row is 
 
 ---
 
-### Direct production-path verification gap (MM-05-D, MM-05-E-R/S)
+### MM-10-A — Superseded; accepted as intentional architecture
+
+**Evidence:** `lib/services/saas-payment.ts` (no `transfer_data` in `sessionParams`); `.kiro/steering/platform-model.md` (explicitly documents `PLATFORM` mode as default; `DIRECT` mode as Phase 2, runtime-blocked); `docs/newplan/PAYMENT-WHITE-LABEL.md` (lists every incomplete DIRECT-mode component as product roadmap).
+
+**Rationale:** The original finding assumed `transfer_data.destination` was accidentally omitted. Investigation established it is deliberately absent. `PLATFORM` mode — where customer payments land on DriveBook's Stripe account and instructors are paid via weekly payout — is the single active production mode. `DIRECT` mode is implemented behind a hard 503 runtime guard and is not a currently active code path. The PAY-01 account-substitution threat model (attackers substituting `Provider.stripeAccountId` to redirect funds) does not apply to `saas-payment.ts` because `createCheckoutSession()` never reads that field.
+
+**Remaining work:** All incomplete DIRECT-mode components (webhook DIRECT branch, admin activation UI, Connect onboarding gate, PREMIUM enforcement, refund handling, 503 guard removal) are product roadmap items tracked in `docs/newplan/PAYMENT-WHITE-LABEL.md`. They do not constitute audit remediation items.
+
+
 
 Both findings are FIX-VERIFIED based on extracted-logic tests. Direct production-path verification requires `SUB22_TEST_DATABASE_URL` pointing to an isolated Postgres — not available in this environment.
 
