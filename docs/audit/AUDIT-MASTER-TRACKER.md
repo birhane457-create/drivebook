@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.1 (MM-10-A superseded; accepted as intentional architecture)  
+**Version:** 3.2 (PAY-H-01/INT-M-01A fix-verified)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -46,9 +46,9 @@ All other audit documents are evidence records that support this file.
 | SUB-02-A | Subscription creation not atomic | HIGH | CONFIRMED | VERIFIED — Subscription.create and Provider.update were separate | `prisma.$transaction()` wraps both operations | Verified in source | ✅ CLOSED | `phase1/SUB-02_VERIFICATION.md` | SUB-02-A |
 | SUB-02-B | Concurrent trial creation race | HIGH | CONFIRMED | VERIFIED — findFirst before create allowed race | Race check inside SERIALIZABLE transaction | Verified in source | ✅ CLOSED | `phase1/SUB-02_VERIFICATION.md` | SUB-02-B |
 | C-1 | Provider self-upgrade tier without payment | CRITICAL | CONFIRMED | VERIFIED — guard present at subscription route line 199–209 | 403 guard on non-TRIAL tier change | Verified in source | ✅ CLOSED | `phase1/C-1_VERIFICATION.md` | C-1 |
-| PAY-H-01 | Stripe refund outside transaction — no reconciliation | HIGH | CONFIRMED | VERIFIED — F-09 left refund call outside tx by design | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-01 |
+| PAY-H-01 | Stripe refund outside transaction — no reconciliation | HIGH | CONFIRMED | VERIFIED — F-09 left refund call outside tx by design | This commit — Path B: `stripeRefundId` written in same `booking.update` as `notes`; Check 5 in `reconcile-stripe` cron enumerates `stripe.refunds.list()`, repairs missing `stripeRefundId` (CANCELLED bookings), flags financial mismatches, idempotent alerting; no auto ledger entries | 15 PAY-H-01 tests (PH-1–PH-10), exit 0 — `pay-h01-refund-reconciliation.test.ts` | ✅ FIX-VERIFIED | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-01 |
 | PAY-H-02 | Booking reschedule price not recalculated | HIGH | CONFIRMED | VERIFIED — `reschedule/route.ts` no price comparison | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-02 |
-| INT-M-01A | Stripe refund reconciliation gap (inverse of PAY-H-01) | HIGH | CONFIRMED | VERIFIED — no reconciliation cron exists | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-01A |
+| INT-M-01A | Stripe refund reconciliation gap (inverse of PAY-H-01) | HIGH | CONFIRMED | VERIFIED — no reconciliation cron exists | Subsumed by PAY-H-01 fix this commit (Check 5 in reconcile-stripe cron) | Same 15 tests as PAY-H-01 | ✅ FIX-VERIFIED — consolidated with PAY-H-01 | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-01A |
 | INT-M-03A | OAuth tokens stored plaintext | HIGH | CONFIRMED | VERIFIED — `googleAccessToken` plaintext in Provider model | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03A |
 | INT-M-03F | OAuth token not revoked on calendar disconnect | HIGH | CONFIRMED | VERIFIED — no revocation call in disconnect flow | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03F |
 
@@ -229,7 +229,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path | SUPERSEDED → MM-05-E-R (observability gap, FIX DECISION PENDING) |
 | 10 | MM-15-A | Late `transfer.failed` reverses retried payout | ✅ FIXED `dc13c7b0` |
 | 11 | MM-15-B | `handleTransferFailed()` non-atomic | ✅ FIXED `dc13c7b0` |
-| 12 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron | ⚠️ OPEN |
+| 12 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron | ✅ FIXED this commit (Path B + Check 5) |
 | 13 | PAY-H-02 | Booking reschedule price recalculation | ⚠️ OPEN |
 | 14 | MM-14 | `charge.refunded` double-count after lost dispute | ✅ FIXED `dc13c7b0` |
 
@@ -261,7 +261,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-05-E-R | New finding — no WebhookEvent row on expired-booking path | ✅ FIX-VERIFIED this commit — 11 tests E1–E8 exit 0 |
 | MM-05-E-S | New finding — booking.status stays EXPIRED (not CANCELLED) after expired-booking path | ✅ FIX-VERIFIED this commit — 11 tests E1–E8 exit 0 |
 | AUDIT-04 | Finding CONFIRMED but Verification UNVERIFIED | Read retention policy (or absence of one) before advancing |
-| PAY-H-01 | Finding CONFIRMED, Verification VERIFIED, but Fix and Fix-Verified both PENDING | Blocked behind MM-07/MM-05 (same refund reconciliation concern) — MM-07/MM-05 now fixed; PAY-H-01 can proceed |
+| PAY-H-01 | Finding CONFIRMED, Verification VERIFIED — fix complete this commit | ✅ FIX-VERIFIED — Path B + Check 5; 15 tests exit 0 |
 
 **Resolved discrepancies (previously listed here):**
 
@@ -288,7 +288,8 @@ The following CLOSED findings have tests recorded:
 | MM-05-B | 5 (B1–B3 idempotency/CAS/non-fatal in `mm-05b-cancel-route.test.ts`) | 0 | follow-up to `dc13c7b0` |
 | MM-05-D | 7 (D1–D6 ordering/key/I1/I2/concurrent in `mm-05d-webhook-3ds-refund.test.ts`) | 0 | this commit (corrected) |
 | MM-10-B | 13 (S1–S10 + 2 advanceCheckoutGeneration unit tests in `mm-10b-checkout-session.test.ts`) | 0 | `6e3211c2` |
-| MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | this commit |
+| MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | `9fd2893d` |
+| PAY-H-01 / INT-M-01A | 15 (PH-1–PH-10 + edge cases in `pay-h01-refund-reconciliation.test.ts`) | 0 | this commit |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 

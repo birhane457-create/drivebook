@@ -261,10 +261,14 @@ export async function POST(
           stripeRefundId = refund.id
           console.log(`✅ Stripe refund issued: ${refund.id} — $${refundAmount} for booking ${params.id}`)
 
-          // Record refund in audit log
+          // PAY-H-01 FIX (Path B): persist stripeRefundId to the booking row so
+          // the DB record of the refund is durable and the reconciliation cron can
+          // verify Stripe state against DB state. Previously only booking.notes was
+          // updated; booking.stripeRefundId was always left null after a public cancel.
           await prisma.booking.update({
             where: { id: params.id },
             data: {
+              stripeRefundId: refund.id,
               notes: `${updated.notes}\n[Stripe refund: ${refund.id}]`,
             } as any,
           })
