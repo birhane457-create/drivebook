@@ -65,6 +65,9 @@ export const drivingDefaultConfig: BusinessConfig = {
     commission: true,            // platform takes commission per lesson
   },
 
+  // MM-10-C: driving is a marketplace model — platform takes commission.
+  commissionPercent: 15,
+
   services: [
     {
       id: 'driving-lesson-60',

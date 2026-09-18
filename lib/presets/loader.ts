@@ -230,6 +230,8 @@ function createGenericTradeConfig(
       payouts: false,
       commission: false,
     },
+    // MM-10-C: saas preset uses no platform commission.
+    commissionPercent: 0,
     services: [
       {
         id: `${id}-standard`,

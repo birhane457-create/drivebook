@@ -1,15 +1,20 @@
 /**
  * Cron: Daily Stripe Reconciliation
  *
- * Detection-only — never auto-fixes. Flags issues for admin review.
+ * Runs five checks per run. Checks 1–4 are detection-only; Check 5 also
+ * auto-repairs the narrow case of a missing booking.stripeRefundId.
  *
- * Three checks per run:
  *   1. Missing payments  — Stripe payment_intent.succeeded with no LedgerEntry(PAYMENT_COLLECTED)
  *   2. Missing transfers — PAID payout with stripeTransferId not found in Stripe
  *   3. Stuck payouts     — status = PROCESSING for > 10 minutes
+ *   4. FinancialLedger gaps — confirmed bookings missing double-entry records
+ *   5. Refund discrepancies — Stripe refunds vs booking.stripeRefundId and LedgerEntry coverage
+ *      AUTO-REPAIR: writes missing stripeRefundId when booking is CANCELLED and mapping
+ *                   is unambiguous. No ledger entries, wallet changes, or status changes.
+ *      FLAG ONLY: all financial/ledger mismatches go to admin review.
  *
- * Results stored in ReconciliationReport. Warnings logged to console.
- * Alerting (email/Slack) wired in #4.
+ * Results stored in ReconciliationReport. Idempotent alerting suppresses
+ * repeat noise for already-flagged, unresolved discrepancies.
  *
  * Trigger: daily at 03:00 AWST (19:00 UTC) — configure in vercel.json
  * Auth: Bearer CRON_SECRET
@@ -373,9 +378,10 @@ export async function GET(req: NextRequest) {
 
           // Resolve bookingId via PaymentIntent metadata
           let bookingId: string | null = null
+          let resolvedPi: Awaited<ReturnType<typeof stripe.paymentIntents.retrieve>> | null = null
           try {
-            const pi = await stripe.paymentIntents.retrieve(piId, { expand: [] })
-            bookingId = pi.metadata?.bookingId ?? null
+            resolvedPi = await stripe.paymentIntents.retrieve(piId, { expand: [] })
+            bookingId = resolvedPi.metadata?.bookingId ?? null
           } catch {
             // PI retrieval failed — cannot resolve booking; flag but don't repair
             flaggedRefundDiscrepancies.push({
@@ -390,8 +396,28 @@ export async function GET(req: NextRequest) {
           }
 
           if (!bookingId) {
-            // No bookingId in PI metadata — wallet top-up refund, SaaS, or manual
-            // Cannot cross-check against a booking; skip silently
+            // Distinguish: PI has no metadata at all (unrelated Stripe transaction, skip
+            // silently) vs PI has DriveBook metadata but no bookingId (wallet top-up,
+            // SaaS checkout, subscription refund — not a booking refund, skip).
+            // Only flag if PI has metadata keys suggesting a DriveBook booking context
+            // (e.g. type=saas_booking, userId) but is missing bookingId — that signals an
+            // incomplete metadata write worth investigating.
+            const meta = resolvedPi?.metadata ?? {}
+            const hasSuspiciousContext = Object.keys(meta).length > 0 &&
+              !meta.bookingId &&
+              (meta.type === 'saas_booking' || !!meta.userId || !!meta.providerId)
+
+            if (hasSuspiciousContext) {
+              flaggedRefundDiscrepancies.push({
+                stripeRefundId: refund.id,
+                stripePaymentIntentId: piId,
+                stripeAmountAud: refundAmountAud,
+                bookingId: null,
+                issue: 'drivebook_pi_no_booking_id_in_metadata',
+                autoRepaired: false,
+              })
+            }
+            // Otherwise: unrelated PI (no metadata or clearly non-booking) — skip silently
             continue
           }
 
