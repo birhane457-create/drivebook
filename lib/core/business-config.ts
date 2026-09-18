@@ -165,6 +165,12 @@ function assembleConfig(
     aiConfig:         assembledAIConfig,
     branding:         assembledBranding,
     subscriptionTier: business.subscriptionTier as BusinessConfig['subscriptionTier'],
+    // MM-10-C FIX: map BusinessSettings.commissionRate into the typed config so
+    // saas-payment.ts can read it without an unsafe `as any` cast.
+    // Gate: if commission capability is disabled, the value is always 0.
+    commissionPercent: assembledCapabilities.commission
+      ? Number(settings?.commissionRate ?? 15)
+      : 0,
     domainExtension:  needsExtension ? drivingExtension : undefined,
   }
 }

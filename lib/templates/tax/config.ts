@@ -69,6 +69,9 @@ export const taxDefaultConfig: BusinessConfig = {
     commission: false,
   },
 
+  // MM-10-C: tax agents use saas model — no platform commission.
+  commissionPercent: 0,
+
   // ── Service catalogue ────────────────────────────────────────────────────────
   // Same ServiceDefinition interface as driving — different values
   services: [

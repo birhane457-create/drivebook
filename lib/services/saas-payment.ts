@@ -266,8 +266,10 @@ async function _createAndBindSession(
   const amountToChargeDec = toDecimal(amountToCharge)
   const amountInCents = Math.round(toNumber(amountToChargeDec) * 100)
 
+  // MM-10-C FIX: remove unsafe `as any` cast — commissionPercent is now a
+  // typed field on BusinessConfig, mapped from BusinessSettings.commissionRate.
   const commissionPercent = businessConfig.capabilities.commission
-    ? (businessConfig as any).commissionPercent ?? 0
+    ? businessConfig.commissionPercent
     : 0
   const applicationFeeAmount = commissionPercent > 0
     ? Math.round(toNumber(calculatePercentage(toDecimal(amountInCents / 100), commissionPercent)) * 100)
