@@ -218,6 +218,8 @@ function createGenericTradeConfig(
       payouts: false,
       commission: false,
     },
+    // MM-10-C: generic trade template uses saas model — no platform commission.
+    commissionPercent: 0,
     services: [
       {
         id: `${id}-standard`,
