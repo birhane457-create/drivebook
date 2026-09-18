@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 2.9 (MM-10-B fix-verified)  
+**Version:** 3.0 (MM-10-C fix-verified)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -159,7 +159,7 @@ Sub-findings from reclassification:
 |---|---|---|---|---|---|---|---|---|
 | MM-10-A | SaaS provider routing absent — no `transfer_data.destination` | ARCHITECTURAL | CONFIRMED | VERIFIED — `saas-payment.ts` confirmed: no `transfer_data` in `sessionParams`; money lands on platform | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-10-B | Concurrent checkout session creation — double-charge | MEDIUM | CONFIRMED | VERIFIED — `Quote.stripeSessionId` write not conditional on null; no Stripe idempotency key; two concurrent accepts → two independently payable sessions | This commit — `Quote.checkoutGeneration Int @default(1)`; Stripe idempotency key `scs-{quoteId}-{generation}`; `advanceCheckoutGeneration()` CAS on (stripeSessionId, checkoutGeneration); `_createAndBindSession()` CAS write WHERE stripeSessionId IS NULL AND checkoutGeneration=N; loser reads winner session; expired→automatic generation advance; lookup error NOT treated as expiry; completed→QuoteAlreadyPaidError; accept route allows PENDING_PAYMENT re-entry | 13 MM-10-B tests (S1–S10), exit 0 — `mm-10b-checkout-session.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
-| MM-10-C | `applicationFeeAmount` always zero — commission config defect | MEDIUM | CONFIRMED | VERIFIED — `commissionPercent` not a field on `BusinessConfig`; `assembleConfig()` never sets it; `?? 0` fallback makes fee zero | NOT-STARTED | PENDING | ⚠️ OPEN | `phase2/MM10-MM05-INVESTIGATION.md` |
+| MM-10-C | `applicationFeeAmount` always zero — commission config defect | MEDIUM | CONFIRMED | VERIFIED — `commissionPercent` not a field on `BusinessConfig`; `assembleConfig()` never sets it; `?? 0` fallback makes fee zero | This commit — `commissionPercent: number` added to `BusinessConfig` interface; `assembleConfig()` maps `settings.commissionRate`; `saas-payment.ts` reads `businessConfig.commissionPercent` directly (no `as any`); all three templates updated | 13 MM-10-C tests (C1–C6 + data path), exit 0 — `mm-10c-commission-fee.test.ts` | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 
 ### 3.3 — MM-05: Refund Idempotency (5 confirmed sites)
 
@@ -223,7 +223,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | # | ID | Title | Status |
 |---|---|---|---|
 | 5 | MM-10-B | Concurrent checkout session creation — double-charge | ✅ FIXED this commit |
-| 6 | MM-10-C | `applicationFeeAmount` always zero | ⚠️ OPEN |
+| 6 | MM-10-C | `applicationFeeAmount` always zero | ✅ FIXED this commit |
 | 7 | MM-10-A | Complete SaaS Connect destination routing | ⚠️ OPEN |
 | 8 | MM-05-D | 3DS/prepaid auto-refund idempotency key + `recordWebhookEvent()` | ✅ FIXED this commit |
 | 9 | MM-05-E | Fix WebhookEvent rollback in expired-booking path | SUPERSEDED → MM-05-E-R (observability gap, FIX DECISION PENDING) |
@@ -287,7 +287,8 @@ The following CLOSED findings have tests recorded:
 | MM-05-A / MM-05-C / MM-07 / MM-14 / MM-15-A / MM-15-B | 7 (T1–T7 cross-path invariants in `mm-financial-integrity.test.ts`) | 0 | `dc13c7b0` (fix) + local hardening of MM-05-C |
 | MM-05-B | 5 (B1–B3 idempotency/CAS/non-fatal in `mm-05b-cancel-route.test.ts`) | 0 | follow-up to `dc13c7b0` |
 | MM-05-D | 7 (D1–D6 ordering/key/I1/I2/concurrent in `mm-05d-webhook-3ds-refund.test.ts`) | 0 | this commit (corrected) |
-| MM-10-B | 13 (S1–S10 + 2 advanceCheckoutGeneration unit tests in `mm-10b-checkout-session.test.ts`) | 0 | this commit |
+| MM-10-B | 13 (S1–S10 + 2 advanceCheckoutGeneration unit tests in `mm-10b-checkout-session.test.ts`) | 0 | `6e3211c2` |
+| MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | this commit |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 

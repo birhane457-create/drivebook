@@ -279,6 +279,17 @@ export interface BusinessConfig {
   subscriptionTier: 'BASIC' | 'PRO' | 'STUDIO' | 'PREMIUM'
 
   /**
+   * The commission percentage this business charges per SaaS transaction.
+   * Only meaningful when capabilities.commission === true.
+   *
+   * Sourced from BusinessSettings.commissionRate in the DB (default 15).
+   * Set to 0 when commission capability is disabled.
+   *
+   * Used by saas-payment.ts to calculate Stripe application_fee_amount.
+   */
+  commissionPercent: number
+
+  /**
    * Optional domain extension — present only when this business has
    * genuinely unique workflow requirements that cannot be expressed
    * through BusinessConfig or ServiceDefinition.
