@@ -299,11 +299,244 @@ export async function GET(req: NextRequest) {
       console.error('[RECONCILIATION] FinancialLedger gap check failed (non-critical):', ledgerCheckErr);
     }
 
+    // ── Check 5: Refund discrepancies (PAY-H-01 / INT-M-01A) ─────────────────
+    // Enumerates Stripe refunds in the window and verifies each has a
+    // corresponding DriveBook DB record. Two levels of action:
+    //
+    //   AUTO-REPAIR (narrow, safe):
+    //     If booking.stripeRefundId is null but the booking is CANCELLED and
+    //     the Stripe refund maps unambiguously to that booking (via PI metadata),
+    //     write the missing stripeRefundId. This is a data-quality repair — the
+    //     financial event (refund) already happened; we are only fixing a missing
+    //     identifier field.
+    //
+    //   FLAG ONLY (financial mismatches):
+    //     Any case where the ledger entries don't cover the refund amount, the
+    //     booking has an unexpected status, or the Stripe refund is ambiguous.
+    //     No ledger entries are created. No wallet debits/credits.
+    //     No booking-status changes. Flagged for admin review only.
+    //
+    // Idempotency: the same discrepancy appearing in a previous unresolved run
+    // is not re-alerted (compared against last successful run's flagged set).
+
+    interface RefundDiscrepancy {
+      stripeRefundId: string
+      stripePaymentIntentId: string
+      stripeAmountAud: number
+      bookingId: string | null
+      issue: string
+      autoRepaired: boolean
+    }
+
+    const flaggedRefundDiscrepancies: RefundDiscrepancy[] = []
+    let refundsChecked = 0
+    let refundIdsRepaired = 0
+
+    // Load the previous run's flagged refund set for idempotent alerting
+    const prevRun = await (prisma as any).reconciliationReport.findFirst({
+      where: { status: { in: ['WARNING', 'SUCCESS'] } },
+      orderBy: { completedAt: 'desc' },
+      select: { metadata: true },
+    })
+    const prevFlaggedRefundIds = new Set<string>(
+      (prevRun?.metadata as any)?.flaggedRefundDiscrepancies?.map((d: RefundDiscrepancy) => d.stripeRefundId) ?? []
+    )
+
+    try {
+      let refundHasMore = true
+      let refundStartingAfter: string | undefined
+
+      while (refundHasMore) {
+        const refundParams: Stripe.RefundListParams = {
+          limit: 100,
+          created: {
+            gte: Math.floor(windowStart.getTime() / 1000),
+            lte: Math.floor(windowEnd.getTime() / 1000),
+          },
+          ...(refundStartingAfter ? { starting_after: refundStartingAfter } : {}),
+        }
+
+        const refundPage = await stripe.refunds.list(refundParams)
+
+        for (const refund of refundPage.data) {
+          // Only process succeeded refunds denominated in AUD
+          if (refund.status !== 'succeeded') continue
+          if (refund.currency !== 'aud') continue
+          refundsChecked++
+
+          const piId = typeof refund.payment_intent === 'string'
+            ? refund.payment_intent
+            : (refund.payment_intent as any)?.id
+          if (!piId) continue  // no PI attached — cannot resolve to booking
+
+          const refundAmountAud = refund.amount / 100
+
+          // Resolve bookingId via PaymentIntent metadata
+          let bookingId: string | null = null
+          try {
+            const pi = await stripe.paymentIntents.retrieve(piId, { expand: [] })
+            bookingId = pi.metadata?.bookingId ?? null
+          } catch {
+            // PI retrieval failed — cannot resolve booking; flag but don't repair
+            flaggedRefundDiscrepancies.push({
+              stripeRefundId: refund.id,
+              stripePaymentIntentId: piId,
+              stripeAmountAud: refundAmountAud,
+              bookingId: null,
+              issue: 'pi_retrieval_failed',
+              autoRepaired: false,
+            })
+            continue
+          }
+
+          if (!bookingId) {
+            // No bookingId in PI metadata — wallet top-up refund, SaaS, or manual
+            // Cannot cross-check against a booking; skip silently
+            continue
+          }
+
+          // Load booking
+          const booking = await prisma.booking.findUnique({
+            where: { id: bookingId },
+            select: { id: true, status: true, stripeRefundId: true },
+          })
+
+          if (!booking) {
+            flaggedRefundDiscrepancies.push({
+              stripeRefundId: refund.id,
+              stripePaymentIntentId: piId,
+              stripeAmountAud: refundAmountAud,
+              bookingId,
+              issue: 'booking_not_found',
+              autoRepaired: false,
+            })
+            continue
+          }
+
+          // Check ledger: sum of all REFUND_ISSUED + REFUND_SYNCED entries for this booking
+          const ledgerEntries = await prisma.ledgerEntry.findMany({
+            where: {
+              referenceId: bookingId,
+              type: { in: ['REFUND_ISSUED', 'REFUND_SYNCED'] },
+            },
+            select: { amount: true, type: true },
+          })
+          // Amounts are stored as negative (money out); take absolute values
+          const totalLedgerRefundAud = ledgerEntries.reduce(
+            (sum, e) => sum + Math.abs(Number(e.amount)), 0
+          )
+
+          // ── Case 1: stripeRefundId matches — check ledger coverage ─────────
+          if (booking.stripeRefundId === refund.id) {
+            // Refund ID is already persisted. Check ledger coverage.
+            // Allow 2 cent tolerance for rounding.
+            if (refundAmountAud > totalLedgerRefundAud + 0.02) {
+              flaggedRefundDiscrepancies.push({
+                stripeRefundId: refund.id,
+                stripePaymentIntentId: piId,
+                stripeAmountAud: refundAmountAud,
+                bookingId,
+                issue: `ledger_undercounts_refund: stripe=${refundAmountAud} db=${totalLedgerRefundAud.toFixed(2)}`,
+                autoRepaired: false,
+              })
+            }
+            // If ledger covers it or exceeds it (partial refund represented): OK
+            continue
+          }
+
+          // ── Case 2: stripeRefundId is null — possible auto-repair ──────────
+          if (booking.stripeRefundId === null) {
+            // AUTO-REPAIR: only when booking is already CANCELLED and the PI
+            // maps unambiguously to this booking. We are writing a missing
+            // identifier, not creating a financial record.
+            if (booking.status === 'CANCELLED') {
+              try {
+                await prisma.booking.update({
+                  where: { id: bookingId },
+                  data: { stripeRefundId: refund.id } as any,
+                })
+                refundIdsRepaired++
+                console.log(
+                  `[RECONCILIATION] Repaired missing stripeRefundId on booking ${bookingId} ← ${refund.id}`
+                )
+
+                // If ledger also undercounts, flag it — financial entries require
+                // manual review; we only auto-repair the identifier field
+                if (refundAmountAud > totalLedgerRefundAud + 0.02) {
+                  flaggedRefundDiscrepancies.push({
+                    stripeRefundId: refund.id,
+                    stripePaymentIntentId: piId,
+                    stripeAmountAud: refundAmountAud,
+                    bookingId,
+                    issue: `refund_id_repaired_but_ledger_gap: stripe=${refundAmountAud} db=${totalLedgerRefundAud.toFixed(2)}`,
+                    autoRepaired: true,
+                  })
+                }
+              } catch (repairErr) {
+                console.error(
+                  `[RECONCILIATION] Failed to repair stripeRefundId on booking ${bookingId}:`, repairErr
+                )
+                flaggedRefundDiscrepancies.push({
+                  stripeRefundId: refund.id,
+                  stripePaymentIntentId: piId,
+                  stripeAmountAud: refundAmountAud,
+                  bookingId,
+                  issue: 'refund_id_repair_failed',
+                  autoRepaired: false,
+                })
+              }
+            } else {
+              // Booking not CANCELLED — cannot safely determine if this is the
+              // right refund; flag for admin
+              flaggedRefundDiscrepancies.push({
+                stripeRefundId: refund.id,
+                stripePaymentIntentId: piId,
+                stripeAmountAud: refundAmountAud,
+                bookingId,
+                issue: `refund_id_null_booking_not_cancelled: status=${booking.status}`,
+                autoRepaired: false,
+              })
+            }
+            continue
+          }
+
+          // ── Case 3: stripeRefundId is a DIFFERENT value ────────────────────
+          // Two distinct Stripe refund IDs for the same booking. Could be a
+          // partial refund followed by another, or an integrity error.
+          // Never auto-repair — flag for manual review.
+          flaggedRefundDiscrepancies.push({
+            stripeRefundId: refund.id,
+            stripePaymentIntentId: piId,
+            stripeAmountAud: refundAmountAud,
+            bookingId,
+            issue: `different_refund_id_on_booking: db=${booking.stripeRefundId}`,
+            autoRepaired: false,
+          })
+        }
+
+        refundHasMore = refundPage.has_more
+        if (refundPage.data.length > 0) {
+          refundStartingAfter = refundPage.data[refundPage.data.length - 1].id
+        } else {
+          refundHasMore = false
+        }
+      }
+    } catch (check5Err) {
+      console.error('[RECONCILIATION] Check 5 (refund discrepancies) failed (non-critical):', check5Err)
+    }
+
+    // Suppress alerts for discrepancies that were already flagged in the previous run
+    // and remain unresolved — prevents alert fatigue from repeat noise.
+    const newRefundDiscrepancies = flaggedRefundDiscrepancies.filter(
+      d => !prevFlaggedRefundIds.has(d.stripeRefundId) || d.autoRepaired
+    )
+
     // ── Determine status ──────────────────────────────────────────────────
     const hasIssues =
       flaggedMissingPayments.length > 0 ||
       flaggedMissingTransfers.length > 0 ||
-      flaggedStuckPayouts.length > 0;
+      flaggedStuckPayouts.length > 0 ||
+      newRefundDiscrepancies.filter(d => !d.autoRepaired).length > 0;
 
     const finalStatus = hasIssues ? 'WARNING' : 'SUCCESS';
 
@@ -325,45 +558,64 @@ export async function GET(req: NextRequest) {
           autoConfirmed,
           financialLedgerGapsFound:       ledgerGapsFound,
           financialLedgerGapsBackfilled:  ledgerGapsBackfilled,
+          // Check 5 — refund discrepancies
+          refundsChecked,
+          refundIdsRepaired,
+          flaggedRefundDiscrepancies,      // full set including suppressed repeats
+          newRefundDiscrepancies,          // only new/newly-repaired (used for alert)
         },
       },
     });
 
     // ── Console summary (picked up by Vercel logs) ────────────────────────
     if (hasIssues) {
+      const unresolvedRefundCount = newRefundDiscrepancies.filter(d => !d.autoRepaired).length
       console.warn(
         `[RECONCILIATION WARNING] Run ${report.id}: ` +
         `missingPayments=${flaggedMissingPayments.length}, ` +
         `missingTransfers=${flaggedMissingTransfers.length}, ` +
         `stuckPayouts=${flaggedStuckPayouts.length}` +
+        (unresolvedRefundCount > 0 ? `, refundDiscrepancies=${unresolvedRefundCount}` : '') +
+        (refundIdsRepaired > 0 ? `, refundIdsRepaired=${refundIdsRepaired}` : '') +
         (autoConfirmed > 0 ? `, autoConfirmed=${autoConfirmed}` : '') +
         (ledgerGapsBackfilled > 0 ? `, ledgerBackfilled=${ledgerGapsBackfilled}` : ''),
       );
 
-      // Alert — non-blocking
+      // Alert — non-blocking; only new discrepancies to avoid alert fatigue
       void sendAlert({
         type: 'RECONCILIATION_ISSUES',
         severity: 'WARNING',
-        message: `Reconciliation issues detected — ${flaggedMissingPayments.length} missing payments, ${flaggedMissingTransfers.length} missing transfers, ${flaggedStuckPayouts.length} stuck payouts${ledgerGapsFound > 0 ? `, ${ledgerGapsFound} FinancialLedger gaps (${ledgerGapsBackfilled} backfilled)` : ''}`,
+        message:
+          `Reconciliation issues detected — ` +
+          `${flaggedMissingPayments.length} missing payments, ` +
+          `${flaggedMissingTransfers.length} missing transfers, ` +
+          `${flaggedStuckPayouts.length} stuck payouts` +
+          (unresolvedRefundCount > 0 ? `, ${unresolvedRefundCount} refund discrepancies (new/unresolved)` : '') +
+          (refundIdsRepaired > 0 ? `, ${refundIdsRepaired} refund IDs auto-repaired` : '') +
+          (ledgerGapsFound > 0 ? `, ${ledgerGapsFound} FinancialLedger gaps (${ledgerGapsBackfilled} backfilled)` : ''),
         entityId: report.id,
         metadata: {
           reportId: report.id,
           missingPayments: flaggedMissingPayments.length,
           missingTransfers: flaggedMissingTransfers.length,
           stuckPayouts: flaggedStuckPayouts.length,
+          refundDiscrepancies: unresolvedRefundCount,
+          refundIdsRepaired,
           financialLedgerGapsFound:      ledgerGapsFound,
           financialLedgerGapsBackfilled: ledgerGapsBackfilled,
           windowStart: windowStart.toISOString(),
           windowEnd: windowEnd.toISOString(),
+          newRefundDiscrepancies,
         },
       });
     } else {
       console.log(
         `[RECONCILIATION OK] Run ${report.id}: ` +
-        `${paymentsChecked} payments checked, ${transfersChecked} transfers checked` +
+        `${paymentsChecked} payments, ${transfersChecked} transfers, ${refundsChecked} refunds checked` +
         (autoConfirmed > 0 ? `, ${autoConfirmed} auto-confirmed` : '') +
         (ledgerGapsBackfilled > 0 ? `, ${ledgerGapsBackfilled} ledger gaps backfilled` : '') +
-        ' — no issues',
+        (refundIdsRepaired > 0 ? `, ${refundIdsRepaired} refund IDs repaired` : '') +
+        ' — no new issues',
       );
     }
 
@@ -380,6 +632,9 @@ export async function GET(req: NextRequest) {
       autoConfirmed,
       financialLedgerGapsFound:      ledgerGapsFound,
       financialLedgerGapsBackfilled: ledgerGapsBackfilled,
+      refundsChecked,
+      refundIdsRepaired,
+      refundDiscrepancies: newRefundDiscrepancies.filter(d => !d.autoRepaired).length,
     });
   } catch (error) {
     // Mark report FAILED so the lock is released
