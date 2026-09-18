@@ -55,6 +55,9 @@ export const beautyDefaultConfig: BusinessConfig = {
     commission: false,
   },
 
+  // MM-10-C: beauty studios use saas model — no platform commission.
+  commissionPercent: 0,
+
   services: [
     {
       id: 'facial-60',
