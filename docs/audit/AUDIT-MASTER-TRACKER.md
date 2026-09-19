@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.2 (PAY-H-01/INT-M-01A fix-verified)  
+**Version:** 3.3 (Vercel SUCCESS recorded for MM-10-C and PAY-H-01/INT-M-01A; PAY-H-02 investigation begun)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -288,10 +288,19 @@ The following CLOSED findings have tests recorded:
 | MM-05-B | 5 (B1–B3 idempotency/CAS/non-fatal in `mm-05b-cancel-route.test.ts`) | 0 | follow-up to `dc13c7b0` |
 | MM-05-D | 7 (D1–D6 ordering/key/I1/I2/concurrent in `mm-05d-webhook-3ds-refund.test.ts`) | 0 | this commit (corrected) |
 | MM-10-B | 13 (S1–S10 + 2 advanceCheckoutGeneration unit tests in `mm-10b-checkout-session.test.ts`) | 0 | `6e3211c2` |
-| MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | `9fd2893d` |
-| PAY-H-01 / INT-M-01A | 15 (PH-1–PH-10 + edge cases in `pay-h01-refund-reconciliation.test.ts`) | 0 | this commit |
+| MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | `9fd2893d` | `899929c4` ✅ Vercel SUCCESS |
+| PAY-H-01 / INT-M-01A | 15 (PH-1–PH-10 + edge cases in `pay-h01-refund-reconciliation.test.ts`) | 0 | `71dc11ad` | `899929c4` ✅ Vercel SUCCESS |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
+
+**Vercel deployment evidence:**
+
+| Finding(s) | Fix commit | Vercel deployment commit | Vercel status |
+|---|---|---|---|
+| MM-10-B | `6e3211c2` | `6e3211c2` | ✅ SUCCESS (confirmed by independent review) |
+| MM-10-C | `9fd2893d` | `899929c4` (TS fix: missing constructors) | ✅ SUCCESS — confirmed `899929c4` |
+| PAY-H-01 / INT-M-01A | `71dc11ad` | `899929c4` (TS fix) | ✅ SUCCESS — confirmed `899929c4` |
+| MM-05-D / MM-05-E-R/S / MM-05-A–C / MM-07 / MM-14 / MM-15 | various | — | ⏳ Pending isolated-Postgres direct-path execution |
 
 ---
 
