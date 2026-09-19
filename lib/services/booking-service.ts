@@ -28,6 +28,9 @@ import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import type { DomainExtension } from '@/lib/core/types'
 import { enqueueNotification } from '@/lib/services/notificationRetry'
+import { withSerializableRetry } from '@/lib/utils/transaction-retry'
+
+const SERIALIZABLE_TX_RESCHEDULE = { isolationLevel: 'Serializable' as const, maxWait: 5000, timeout: 10000 }
 import { emailService } from '@/lib/services/email'
 import { recordBookingPayment, recordFullRefund, recordPartialRefund } from '@/lib/services/ledger-operations'
 import { toDecimal, toNumber, multiplyAmount, subtractAmounts, roundAmount, addAmounts, calculatePercentage, isLessThan, isGreaterThanOrEqual } from '@/lib/utils/decimal-helpers'
@@ -75,7 +78,9 @@ export interface BookingServiceError extends Error {
   code: 'SLOT_CONFLICT' | 'INSUFFICIENT_BALANCE' | 'ALREADY_CANCELLED' |
         'ALREADY_COMPLETED' | 'BOOKING_NOT_FOUND' | 'UNAUTHORIZED' |
         'REQUIRES_PENALTY_WAIVER' | 'ALREADY_CHECKED_IN' | 'ALREADY_CHECKED_OUT' |
-        'CHECK_IN_TOO_EARLY' | 'CHECK_IN_TOO_LATE' | 'CHECK_OUT_TOO_SOON'
+        'CHECK_IN_TOO_EARLY' | 'CHECK_IN_TOO_LATE' | 'CHECK_OUT_TOO_SOON' |
+        'STRIPE_PAID_PRICE_CHANGE' | 'PACKAGE_DURATION_LOCKED' |
+        'CONCURRENT_RESCHEDULE' | 'INVALID_DURATION'
   detail?: string
 }
 
@@ -140,6 +145,290 @@ export interface PricingResult {
   providerPayout: number
   commissionRate:   number
   isFirstBooking:   boolean
+}
+
+// ── PAY-H-02: computeRescheduleFinancials ─────────────────────────────────────
+//
+// Pure function — no DB queries. Derives all financial terms from the booking's
+// own locked financial contract + the new duration.
+//
+// Rate authority (priority):
+//   1. booking.lockedHourlyRate  — explicitly locked at booking time
+//   2. booking.price / oldDurationHours — back-computed from stored agreement
+// → Provider's current hourlyRate is NEVER used. A rate change after booking
+//   cannot silently reprice an existing booking on reschedule.
+//
+// Fee/commission authority:
+//   Original booking.platformFee / booking.price  — the locked fee ratio
+//   booking.commissionRate                         — stored at booking-creation time
+// → PlatformSettings is NEVER re-queried.
+//
+export interface RescheduleFinancials {
+  newPrice:        number
+  newPlatformFee:  number
+  newProviderPayout: number
+  commissionRate:  number   // unchanged — locked at booking-creation time
+  priceDiff:       number
+}
+
+export function computeRescheduleFinancials(
+  booking: {
+    price:          any  // Decimal | number
+    platformFee:    any  // Decimal | number
+    providerPayout: any  // Decimal | number
+    commissionRate: any  // Decimal | number
+    duration:       any  // minutes (number | null)
+    startTime:      any
+    endTime:        any
+    lockedHourlyRate: any  // Decimal | number | null
+  },
+  newDurationHours: number,
+): RescheduleFinancials {
+  const currentPrice   = toNumber(toDecimal(booking.price))
+  const currentFee     = toNumber(toDecimal(booking.platformFee ?? 0))
+  const commissionRate = toNumber(toDecimal(booking.commissionRate ?? 0))
+
+  const oldDurationHours = booking.duration
+    ? Number(booking.duration) / 60
+    : (booking.startTime && booking.endTime
+        ? (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3_600_000
+        : 1)
+
+  // Authoritative rate: locked at booking time, or back-computed from stored price/duration
+  const authoritativeRate = booking.lockedHourlyRate
+    ? toNumber(toDecimal(booking.lockedHourlyRate))
+    : (oldDurationHours > 0 ? currentPrice / oldDurationHours : 0)
+
+  const newPriceDec       = roundAmount(multiplyAmount(toDecimal(authoritativeRate), newDurationHours), 2)
+  const newPrice          = toNumber(newPriceDec)
+
+  // Fee proportion from original booking contract
+  const feeRatio          = currentPrice > 0 ? currentFee / currentPrice : 0
+  const newPlatformFeeDec = roundAmount(multiplyAmount(newPriceDec, toDecimal(feeRatio)), 2)
+  const newPlatformFee    = toNumber(newPlatformFeeDec)
+  const newProviderPayout = toNumber(roundAmount(subtractAmounts(newPriceDec, newPlatformFeeDec), 2))
+  const priceDiff         = toNumber(roundAmount(subtractAmounts(newPriceDec, toDecimal(currentPrice)), 2))
+
+  return { newPrice, newPlatformFee, newProviderPayout, commissionRate, priceDiff }
+}
+
+// ── rescheduleBooking (PAY-H-02 FIX) ─────────────────────────────────────────
+
+/**
+ * Shared reschedule implementation — used by all four entry points.
+ *
+ * Financial invariants:
+ *   Authoritative rate: lockedHourlyRate ?? price/duration (never live provider rate)
+ *   All four fields updated atomically: price, platformFee, providerPayout, commissionRate
+ *   BOOKING_PAYMENT Transaction updated in same SERIALIZABLE transaction
+ *   Stripe-paid + price change → STRIPE_PAID_PRICE_CHANGE (no mutation)
+ *   Wallet-paid + price change → atomic wallet debit/credit
+ *   Package booking + duration change → PACKAGE_DURATION_LOCKED
+ *   rescheduleCount CAS prevents concurrent double-reschedule
+ *   Slot conflict inside SERIALIZABLE transaction (TOCTOU-safe)
+ */
+export async function rescheduleBooking(
+  bookingId: string,
+  input: RescheduleInput,
+  actorId: string,
+  actorRole: ActorRole,
+): Promise<any | { requiresConfirmation: true; hoursUntil: number; warning: string }> {
+  const { newStartTime, newEndTime, reason, confirmedPenaltyWaiver } = input
+
+  if (newEndTime <= newStartTime) throw makeError('INVALID_DURATION', 'End time must be after start time')
+  const newDurationHours = (newEndTime.getTime() - newStartTime.getTime()) / 3_600_000
+  if (newDurationHours <= 0) throw makeError('INVALID_DURATION', 'Duration must be positive')
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { provider: true, customer: true },
+  }) as any
+  if (!booking)                       throw makeError('BOOKING_NOT_FOUND',  'Booking not found')
+  if (booking.status === 'COMPLETED') throw makeError('ALREADY_COMPLETED',  'Cannot reschedule a completed booking')
+  if (booking.status === 'CANCELLED') throw makeError('ALREADY_CANCELLED',  'Cannot reschedule a cancelled booking')
+
+  const now = new Date()
+  if (newStartTime < now) throw makeError('SLOT_CONFLICT', 'Cannot reschedule to a time in the past')
+
+  const HOURS_24_MS   = 24 * 3_600_000
+  const currentStart  = booking.startTime ? new Date(booking.startTime) : null
+  const isInsidePenaltyWindow = currentStart
+    ? (currentStart.getTime() - now.getTime()) < HOURS_24_MS
+    : false
+
+  if (isInsidePenaltyWindow && !confirmedPenaltyWaiver) {
+    const hoursUntil = currentStart
+      ? Math.round((currentStart.getTime() - now.getTime()) / 3_600_000 * 10) / 10
+      : 0
+    return {
+      requiresConfirmation: true, hoursUntil,
+      warning: `Booking starts in ${hoursUntil} hours. Rescheduling now will mark it non-refundable.`,
+    }
+  }
+
+  // Package booking: duration changes are blocked (package hour accounting requires separate workflow)
+  if (booking.isPackageBooking) {
+    const oldDurationHours = booking.duration
+      ? Number(booking.duration) / 60
+      : (booking.startTime && booking.endTime
+          ? (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3_600_000
+          : newDurationHours)
+    if (Math.abs(newDurationHours - oldDurationHours) > 0.001) {
+      throw makeError('PACKAGE_DURATION_LOCKED',
+        'Duration changes are not allowed for package bookings. Only the date and time may be rescheduled.')
+    }
+  }
+
+  // Compute new financial terms from the booking's own locked contract
+  const { newPrice, newPlatformFee, newProviderPayout, commissionRate, priceDiff } =
+    computeRescheduleFinancials(booking, newDurationHours)
+  const priceChanged = Math.abs(priceDiff) > 0.01
+
+  // Payment method detection
+  const isStripePaid  = booking.isPaid && !!booking.paymentIntentId
+  const isWalletPaid  = booking.isPaid && !booking.paymentIntentId && !booking.offlineAmountPaid
+  const isOfflinePaid = booking.isPaid && !!booking.offlineAmountPaid
+  const isUnpaid      = !booking.isPaid
+
+  // Stripe-paid: block if price would change
+  if (isStripePaid && priceChanged) {
+    throw makeError('STRIPE_PAID_PRICE_CHANGE',
+      `This booking was paid via Stripe for $${Number(booking.price).toFixed(2)}. ` +
+      `Rescheduling to this duration would change the price to $${newPrice.toFixed(2)}. ` +
+      `To change the duration, please cancel and rebook.`)
+  }
+
+  // Pre-flight wallet check (informational — re-checked authoritatively inside tx)
+  if (isWalletPaid && priceChanged && priceDiff > 0 && booking.customer?.userId) {
+    const { getWalletBalance } = await import('@/lib/services/wallet-helpers')
+    const wb = await getWalletBalance(booking.customer.userId)
+    if (wb.balance < priceDiff) {
+      throw makeError('INSUFFICIENT_BALANCE',
+        `Insufficient wallet balance. Need $${priceDiff.toFixed(2)} more for this duration change.`)
+    }
+  }
+
+  const historyEntry = {
+    previousStart: booking.startTime,
+    previousEnd:   booking.endTime,
+    rescheduledAt: now.toISOString(),
+    rescheduledBy: actorId,
+    role:          actorRole.toLowerCase(),
+    reason:        reason ?? null,
+    wasInsidePenaltyWindow: isInsidePenaltyWindow,
+  }
+  const existingHistory: any[] = (booking.rescheduledFrom as any[]) || []
+  const currentRescheduleCount: number = (booking as any).rescheduleCount ?? 0
+
+  let updated: any
+  await withSerializableRetry(async () => {
+    updated = await prisma.$transaction(async (tx) => {
+      // CAS on rescheduleCount — prevents concurrent double-reschedule
+      const casResult = await (tx as any).booking.updateMany({
+        where: { id: bookingId, rescheduleCount: currentRescheduleCount },
+        data:  { rescheduleCount: { increment: 1 } },
+      })
+      if (casResult.count === 0)
+        throw makeError('CONCURRENT_RESCHEDULE', 'Booking was modified concurrently. Please reload and try again.')
+
+      // Slot conflict — inside SERIALIZABLE tx (TOCTOU-safe)
+      const conflict = await tx.booking.findFirst({
+        where: slotConflictWhere(booking.providerId, newStartTime, newEndTime, bookingId),
+      })
+      if (conflict) throw makeError('SLOT_CONFLICT', 'New time slot conflicts with an existing booking')
+
+      // Financial field update payload (when price changes or booking is unpaid)
+      const financialUpdate: any = {}
+      if (priceChanged || isUnpaid) {
+        financialUpdate.price          = newPrice
+        financialUpdate.platformFee    = newPlatformFee
+        financialUpdate.providerPayout = newProviderPayout
+        financialUpdate.commissionRate = commissionRate
+        financialUpdate.duration       = Math.round(newDurationHours * 60)
+      }
+
+      // Wallet adjustment (wallet-paid only)
+      if (isWalletPaid && priceChanged && booking.customer?.userId) {
+        const wallet = await tx.clientWallet.findUnique({ where: { userId: booking.customer.userId } })
+        if (wallet) {
+          if (priceDiff > 0) {
+            const [cr, db] = await Promise.all([
+              tx.walletTransaction.aggregate({ where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' }, _sum: { amount: true } }),
+              tx.walletTransaction.aggregate({ where: { walletId: wallet.id, status: 'CONFIRMED', type: 'DEBIT'  }, _sum: { amount: true } }),
+            ])
+            const txBalance = Number(cr._sum.amount ?? 0) - Number(db._sum.amount ?? 0)
+            if (txBalance < priceDiff)
+              throw makeError('INSUFFICIENT_BALANCE', `Insufficient wallet balance — need $${priceDiff.toFixed(2)} more`)
+            await tx.walletTransaction.create({
+              data: { walletId: wallet.id, type: 'DEBIT',  amount: priceDiff,
+                      description: `Duration increase — reschedule`, status: 'CONFIRMED', bookingId } as any,
+            })
+          } else {
+            await tx.walletTransaction.create({
+              data: { walletId: wallet.id, type: 'CREDIT', amount: Math.abs(priceDiff),
+                      description: `Duration reduction — reschedule`, status: 'CONFIRMED', bookingId } as any,
+            })
+          }
+        }
+      }
+
+      // Offline-paid + price change: preserve payment state, write admin-review signal
+      if (isOfflinePaid && priceChanged) {
+        await tx.auditLog.create({
+          data: {
+            action: 'OFFLINE_PAID_RESCHEDULE_PRICE_CHANGE', actorId, actorRole,
+            targetType: 'BOOKING', targetId: bookingId, success: true,
+            metadata: { oldPrice: Number(booking.price), newPrice, priceDiff,
+                        offlinePaymentMethod: booking.offlinePaymentMethod } as any,
+          },
+        })
+      }
+
+      // Build and apply booking update
+      const updateData: any = {
+        startTime: newStartTime, endTime: newEndTime,
+        rescheduledFrom: [...existingHistory, historyEntry],
+        // rescheduleCount already incremented by CAS above
+        ...financialUpdate,
+      }
+      if (!booking.originalStartTime && booking.startTime) updateData.originalStartTime = booking.startTime
+      if (isInsidePenaltyWindow) updateData.isNonRefundable = true
+
+      const result = await tx.booking.update({
+        where: { id: bookingId },
+        data:  updateData,
+        include: { customer: true, provider: { include: { user: true } } },
+      })
+
+      // Update authoritative BOOKING_PAYMENT Transaction when financials change
+      if (priceChanged || isUnpaid) {
+        const txUpdateResult = await (tx as any).transaction.updateMany({
+          where: { bookingId, type: 'BOOKING_PAYMENT', status: { notIn: ['REFUNDED', 'CANCELLED'] } },
+          data:  { amount: newPrice, platformFee: newPlatformFee, providerPayout: newProviderPayout,
+                   commissionRate, updatedAt: new Date() },
+        })
+        if (txUpdateResult.count > 1) {
+          console.warn(`[PAY-H-02] ${txUpdateResult.count} eligible BOOKING_PAYMENT transactions for booking ${bookingId}`)
+        }
+      }
+
+      return result
+    }, SERIALIZABLE_TX_RESCHEDULE)
+  }, { operationName: 'reschedule-booking' })
+
+  await writeAudit('BOOKING_RESCHEDULED', actorId, actorRole, bookingId, {
+    oldStart: booking.startTime?.toISOString() ?? null,
+    oldEnd:   booking.endTime?.toISOString() ?? null,
+    newStart: newStartTime.toISOString(),
+    newEnd:   newEndTime.toISOString(),
+    priceDiff: priceChanged ? priceDiff : 0,
+    reason: reason ?? null, isInsidePenaltyWindow,
+    rescheduledBy: actorRole.toLowerCase(),
+    paymentMethod: isStripePaid ? 'stripe' : isWalletPaid ? 'wallet' : isOfflinePaid ? 'offline' : 'unpaid',
+    newPrice: priceChanged ? newPrice : undefined,
+  })
+
+  return updated
 }
 
 export async function computePricing(
@@ -976,139 +1265,6 @@ export async function cancelBooking(
   return { booking: updated, refundPercentage, refundAmount, hoursNotice: Math.floor(hoursNotice) }
 }
 
-// â”€â”€ reschedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-/**
- * Reschedule a booking to a new time slot.
- * Works for both instructor and client â€” unified 24h penalty window.
- * Returns { requiresConfirmation: true } when inside penalty window and
- * `confirmedPenaltyWaiver` is not set.
- */
-export async function rescheduleBooking(
-  bookingId: string,
-  input: RescheduleInput,
-  actorId: string,
-  actorRole: ActorRole
-): Promise<any | { requiresConfirmation: true; hoursUntil: number; warning: string }> {
-  const { newStartTime, newEndTime, reason, confirmedPenaltyWaiver } = input
-
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    include: { provider: true, customer: true },
-  }) as any
-  if (!booking)  throw makeError('BOOKING_NOT_FOUND', 'Booking not found')
-  if (booking.status === 'COMPLETED') throw makeError('ALREADY_COMPLETED', 'Cannot reschedule a completed booking')
-  if (booking.status === 'CANCELLED') throw makeError('ALREADY_CANCELLED', 'Cannot reschedule a cancelled booking')
-
-  const now = new Date()
-  if (newStartTime < now) throw makeError('SLOT_CONFLICT', 'Cannot reschedule to a time in the past')
-
-  const HOURS_24_MS = 24 * 3_600_000
-  const currentStart = booking.startTime ? new Date(booking.startTime) : null
-  const isInsidePenaltyWindow = currentStart
-    ? (currentStart.getTime() - now.getTime()) < HOURS_24_MS
-    : false
-
-  if (isInsidePenaltyWindow && !confirmedPenaltyWaiver) {
-    const hoursUntil = currentStart
-      ? Math.round((currentStart.getTime() - now.getTime()) / 3_600_000 * 10) / 10
-      : 0
-    return {
-      requiresConfirmation: true,
-      hoursUntil,
-      warning: `Booking starts in ${hoursUntil} hours. Rescheduling now will mark it non-refundable. Confirm to proceed.`,
-    }
-  }
-
-  // Compute price change (if duration changes)
-  const oldDurationHours = booking.startTime && booking.endTime
-    ? (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3_600_000
-    : 1
-  const newDurationHours = (newEndTime.getTime() - newStartTime.getTime()) / 3_600_000
-  const lockedRate = (booking as any).lockedHourlyRate ?? booking.provider?.hourlyRate ?? 0
-  const newPriceDec = roundAmount(multiplyAmount(toDecimal(lockedRate), newDurationHours), 2)
-  const priceDiffDec = subtractAmounts(newPriceDec, toDecimal(booking.price))
-  
-  const newPrice = toNumber(newPriceDec)
-  const priceDiff = toNumber(roundAmount(priceDiffDec, 2))
-
-  const historyEntry = {
-    previousStart: booking.startTime,
-    previousEnd:   booking.endTime,
-    rescheduledAt: now.toISOString(),
-    rescheduledBy: actorId,
-    role:          actorRole.toLowerCase(),
-    reason:        reason ?? null,
-    wasInsidePenaltyWindow: isInsidePenaltyWindow,
-  }
-  const existingHistory = ((booking as any).rescheduledFrom as any[]) || []
-
-  let updated: any
-  try {
-    updated = await prisma.$transaction(async (tx) => {
-      // Slot conflict (TOCTOU-safe)
-      const conflict = await tx.booking.findFirst({
-        where: slotConflictWhere(booking.providerId, newStartTime, newEndTime, bookingId),
-      })
-      if (conflict) throw makeError('SLOT_CONFLICT', 'New time slot conflicts with an existing booking')
-
-      // Wallet adjustment for price change
-      if (Math.abs(priceDiff) > 0.01 && booking.customer?.userId) {
-        const wallet = await tx.clientWallet.findUnique({ where: { userId: booking.customer.userId } })
-        if (wallet) {
-          if (priceDiff > 0) {
-            const txBalance = await getWalletBalanceTx(tx, wallet.id)
-            if (txBalance < priceDiff) throw makeError('INSUFFICIENT_BALANCE', `Insufficient wallet balance for duration increase â€” need $${priceDiff.toFixed(2)} more`)
-            await tx.walletTransaction.create({
-              data: { walletId: wallet.id, type: 'DEBIT', amount: priceDiff, description: `Duration increase â€” reschedule`, status: 'CONFIRMED' },
-            })
-          } else {
-            await tx.walletTransaction.create({
-              data: { walletId: wallet.id, type: 'CREDIT', amount: Math.abs(priceDiff), description: `Duration reduction â€” reschedule`, status: 'CONFIRMED' },
-            })
-          }
-        }
-      }
-
-      const updateData: any = {
-        startTime: newStartTime,
-        endTime:   newEndTime,
-        rescheduledFrom: [...existingHistory, historyEntry],
-        rescheduleCount: { increment: 1 },
-        ...(priceDiff !== 0 ? { price: newPrice, duration: newDurationHours * 60 } : {}),
-      }
-
-      // Preserve originalStartTime on first reschedule only
-      if (!booking.originalStartTime && booking.startTime) {
-        updateData.originalStartTime = booking.startTime
-      }
-
-      if (isInsidePenaltyWindow) {
-        updateData.isNonRefundable = true
-      }
-
-      return tx.booking.update({
-        where: { id: bookingId },
-        data: updateData,
-        include: { customer: true, provider: { include: { user: true } } },
-      })
-    })
-  } catch (e: any) {
-    if (e?.code === 'SLOT_CONFLICT' || e?.code === 'INSUFFICIENT_BALANCE') throw e
-    throw e
-  }
-
-  await writeAudit('BOOKING_RESCHEDULED', actorId, actorRole, bookingId, {
-    oldStart: booking.startTime?.toISOString() ?? null,
-    oldEnd:   booking.endTime?.toISOString() ?? null,
-    newStart: newStartTime.toISOString(),
-    newEnd:   newEndTime.toISOString(),
-    priceDiff, reason: reason ?? null, isInsidePenaltyWindow,
-    rescheduledBy: actorRole.toLowerCase(),
-  })
-
-  return updated
-}
 
 // â”€â”€ checkIn â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
