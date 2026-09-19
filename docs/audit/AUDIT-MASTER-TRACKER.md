@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.4 (PAY-H-02 fix-verified)  
+**Version:** 3.5 (PAY-H-02 Vercel SUCCESS recorded; Transaction multiplicity note added)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -262,6 +262,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-05-E-S | New finding — booking.status stays EXPIRED (not CANCELLED) after expired-booking path | ✅ FIX-VERIFIED this commit — 11 tests E1–E8 exit 0 |
 | AUDIT-04 | Finding CONFIRMED but Verification UNVERIFIED | Read retention policy (or absence of one) before advancing |
 | PAY-H-01 | Finding CONFIRMED, Verification VERIFIED — fix complete this commit | ✅ FIX-VERIFIED — Path B + Check 5; 15 tests exit 0 |
+| PAY-H-02 | Finding CONFIRMED, Verification VERIFIED — fix complete `a2fa69fc` | ✅ FIX-VERIFIED — 35 tests exit 0; Vercel SUCCESS `a2fa69fc`. **Open note:** `Transaction.updateMany` logs a warning if count > 1 eligible BOOKING_PAYMENT row exists but does not treat it as an error. Transaction multiplicity is not independently proven to be impossible. Until the invariant is directly verified (e.g., via isolated-Postgres test), treat count > 1 as a gap to watch. |
 
 **Resolved discrepancies (previously listed here):**
 
@@ -290,7 +291,7 @@ The following CLOSED findings have tests recorded:
 | MM-10-B | 13 (S1–S10 + 2 advanceCheckoutGeneration unit tests in `mm-10b-checkout-session.test.ts`) | 0 | `6e3211c2` |
 | MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | `9fd2893d` | `899929c4` ✅ Vercel SUCCESS |
 | PAY-H-01 / INT-M-01A | 15 (PH-1–PH-10 + edge cases in `pay-h01-refund-reconciliation.test.ts`) | 0 | `71dc11ad` | `899929c4` ✅ Vercel SUCCESS |
-| PAY-H-02 | 35 (F1–F9 pure + R1–R26 service in `pay-h02-reschedule-financials.test.ts`) | 0 | this commit | pending Vercel |
+| PAY-H-02 | 35 (F1–F9 pure + R1–R26 service in `pay-h02-reschedule-financials.test.ts`) | 0 | `a2fa69fc` | `a2fa69fc` ✅ Vercel SUCCESS |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 
