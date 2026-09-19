@@ -80,71 +80,20 @@ export async function PATCH(
       }, { status: 200 })
     }
 
-    // Note: slot conflict check is performed inside the $transaction below (TOCTOU-safe)
+    // Delegate to the shared service (PAY-H-02 FIX: financial invariants enforced there)
+    const { rescheduleBooking } = await import('@/lib/services/booking-service')
+    const result = await rescheduleBooking(
+      params.id,
+      { newStartTime: newStart, newEndTime: newEnd, reason: data.reason, confirmedPenaltyWaiver: data.confirmedPenaltyWaiver },
+      session!.user!.id,
+      'provider',
+    )
 
-    // Build reschedule history entry
-    const historyEntry = {
-      previousStart: booking.startTime,
-      previousEnd: booking.endTime,
-      rescheduledAt: now.toISOString(),
-      rescheduledBy: session!.user!.id,
-      reason: data.reason || null,
-      wasInsidePenaltyWindow: isInsidePenaltyWindow,
+    if ('requiresConfirmation' in result) {
+      return NextResponse.json(result, { status: 200 })
     }
 
-    const existingHistory = ((booking as any).rescheduledFrom as any[]) || []
-
-    // If rescheduled inside penalty window: mark non-refundable + increment instructor exception count
-    const updateData: any = {
-      startTime: newStart,
-      endTime: newEnd,
-      rescheduledFrom: [...existingHistory, historyEntry],
-      rescheduleCount: { increment: 1 },
-    }
-
-    // Track original start time on first reschedule
-    if (!booking.originalStartTime && booking.startTime) {
-      updateData.originalStartTime = booking.startTime
-    }
-
-    if (isInsidePenaltyWindow) {
-      updateData.isNonRefundable = true
-    }
-
-    // ── TOCTOU-safe availability check inside the transaction ────────────────
-    const updated = await prisma.$transaction(async (tx) => {
-      // Re-check for conflicts inside the transaction — prevents race conditions
-      // where two concurrent reschedules to the same slot both pass the pre-check
-      const slotConflict = await tx.booking.findFirst({
-        where: {
-          id: { not: params.id },
-          providerId: session!.user!.providerId,
-          status: { in: ['PENDING', 'CONFIRMED', 'PENDING_PAYMENT'] },
-          deletedAt: null,
-          startTime: { lt: newEnd },
-          endTime: { gt: newStart },
-        } as any,
-      })
-      if (slotConflict) throw new Error('SLOT_TAKEN')
-
-      const updatedBooking = await tx.booking.update({
-        where: { id: params.id },
-        data: updateData,
-        include: { customer: true, provider: { include: { user: true } } }
-      })
-
-      if (isInsidePenaltyWindow) {
-        await tx.provider.update({
-          where: { id: session!.user!.providerId },
-          data: { policyExceptionCount: { increment: 1 } } as any
-        })
-      }
-
-      return updatedBooking
-    }).catch((err: Error) => {
-      if (err.message === 'SLOT_TAKEN') throw err
-      throw err
-    })
+    const updated = result
 
     // Update Google Calendar if connected
     if ((booking as any).googleCalendarEventId && booking.provider.syncGoogleCalendar) {
@@ -215,8 +164,18 @@ export async function PATCH(
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })
     }
-    if (error instanceof Error && error.message === 'SLOT_TAKEN') {
+    const code = (error as any)?.code
+    if (code === 'SLOT_CONFLICT' || (error instanceof Error && error.message === 'SLOT_TAKEN')) {
       return NextResponse.json({ error: 'New time slot conflicts with another booking' }, { status: 409 })
+    }
+    if (code === 'STRIPE_PAID_PRICE_CHANGE') {
+      return NextResponse.json({ error: (error as Error).message, code }, { status: 409 })
+    }
+    if (code === 'PACKAGE_DURATION_LOCKED') {
+      return NextResponse.json({ error: (error as Error).message, code }, { status: 400 })
+    }
+    if (code === 'CONCURRENT_RESCHEDULE') {
+      return NextResponse.json({ error: (error as Error).message, code }, { status: 409 })
     }
     console.error('Reschedule error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

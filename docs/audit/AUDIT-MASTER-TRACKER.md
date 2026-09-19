@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.3 (Vercel SUCCESS recorded for MM-10-C and PAY-H-01/INT-M-01A; PAY-H-02 investigation begun)  
+**Version:** 3.4 (PAY-H-02 fix-verified)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -47,7 +47,7 @@ All other audit documents are evidence records that support this file.
 | SUB-02-B | Concurrent trial creation race | HIGH | CONFIRMED | VERIFIED — findFirst before create allowed race | Race check inside SERIALIZABLE transaction | Verified in source | ✅ CLOSED | `phase1/SUB-02_VERIFICATION.md` | SUB-02-B |
 | C-1 | Provider self-upgrade tier without payment | CRITICAL | CONFIRMED | VERIFIED — guard present at subscription route line 199–209 | 403 guard on non-TRIAL tier change | Verified in source | ✅ CLOSED | `phase1/C-1_VERIFICATION.md` | C-1 |
 | PAY-H-01 | Stripe refund outside transaction — no reconciliation | HIGH | CONFIRMED | VERIFIED — F-09 left refund call outside tx by design | This commit — Path B: `stripeRefundId` written in same `booking.update` as `notes`; Check 5 in `reconcile-stripe` cron enumerates `stripe.refunds.list()`, repairs missing `stripeRefundId` (CANCELLED bookings), flags financial mismatches, idempotent alerting; no auto ledger entries | 15 PAY-H-01 tests (PH-1–PH-10), exit 0 — `pay-h01-refund-reconciliation.test.ts` | ✅ FIX-VERIFIED | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-01 |
-| PAY-H-02 | Booking reschedule price not recalculated | HIGH | CONFIRMED | VERIFIED — `reschedule/route.ts` no price comparison | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-02 |
+| PAY-H-02 | Booking reschedule price not recalculated | HIGH | CONFIRMED | VERIFIED — `reschedule/route.ts` no price comparison; all four routes left `platformFee`, `providerPayout`, `commissionRate`, `Transaction` stale after duration change; Route C had no transaction wrapper; Stripe-paid bookings not blocked on price change | This commit — `computeRescheduleFinancials()` pure helper (locked rate, never live provider rate); `rescheduleBooking()` rewritten as single SERIALIZABLE source of truth: `rescheduleCount` CAS, Stripe-paid price-change block, package duration block, full four-field financial update, `Transaction` `updateMany`, atomic wallet debit/credit; Routes A/B/C delegate entirely; Route C conflict check inside transaction | 35 PAY-H-02 tests (F1–F9 pure, R1–R26 service), exit 0 — `pay-h02-reschedule-financials.test.ts` | ✅ FIX-VERIFIED | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-02 |
 | INT-M-01A | Stripe refund reconciliation gap (inverse of PAY-H-01) | HIGH | CONFIRMED | VERIFIED — no reconciliation cron exists | Subsumed by PAY-H-01 fix this commit (Check 5 in reconcile-stripe cron) | Same 15 tests as PAY-H-01 | ✅ FIX-VERIFIED — consolidated with PAY-H-01 | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-01A |
 | INT-M-03A | OAuth tokens stored plaintext | HIGH | CONFIRMED | VERIFIED — `googleAccessToken` plaintext in Provider model | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03A |
 | INT-M-03F | OAuth token not revoked on calendar disconnect | HIGH | CONFIRMED | VERIFIED — no revocation call in disconnect flow | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03F |
@@ -230,7 +230,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | 10 | MM-15-A | Late `transfer.failed` reverses retried payout | ✅ FIXED `dc13c7b0` |
 | 11 | MM-15-B | `handleTransferFailed()` non-atomic | ✅ FIXED `dc13c7b0` |
 | 12 | PAY-H-01 / INT-M-01A | Stripe refund reconciliation cron | ✅ FIXED this commit (Path B + Check 5) |
-| 13 | PAY-H-02 | Booking reschedule price recalculation | ⚠️ OPEN |
+| 13 | PAY-H-02 | Booking reschedule price recalculation | ✅ FIXED this commit |
 | 14 | MM-14 | `charge.refunded` double-count after lost dispute | ✅ FIXED `dc13c7b0` |
 
 ### P2 — Follow-up
@@ -290,6 +290,7 @@ The following CLOSED findings have tests recorded:
 | MM-10-B | 13 (S1–S10 + 2 advanceCheckoutGeneration unit tests in `mm-10b-checkout-session.test.ts`) | 0 | `6e3211c2` |
 | MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | `9fd2893d` | `899929c4` ✅ Vercel SUCCESS |
 | PAY-H-01 / INT-M-01A | 15 (PH-1–PH-10 + edge cases in `pay-h01-refund-reconciliation.test.ts`) | 0 | `71dc11ad` | `899929c4` ✅ Vercel SUCCESS |
+| PAY-H-02 | 35 (F1–F9 pure + R1–R26 service in `pay-h02-reschedule-financials.test.ts`) | 0 | this commit | pending Vercel |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 
