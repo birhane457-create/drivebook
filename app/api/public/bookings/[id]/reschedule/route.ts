@@ -21,7 +21,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { availabilityService } from '@/lib/services/availability'
 import { z } from 'zod'
 import {
   notifyBookingRescheduled,
@@ -234,55 +233,26 @@ export async function POST(
       )
     }
 
-    // ── 4. Check slot availability ───────────────────────────────────────────
-    const hasConflict = await availabilityService.checkDoubleBooking(
-      booking.providerId,
-      newStart,
-      newEnd,
-      params.id // exclude current booking from conflict check
+    // ── 4–6. Delegate to shared service (PAY-H-02 FIX) ─────────────────────
+    // The shared rescheduleBooking() performs the slot-conflict check INSIDE a
+    // SERIALIZABLE transaction (eliminating the previous TOCTOU gap where the
+    // conflict check and booking write were separated). All financial invariants
+    // are enforced there: Stripe-paid price-change block, wallet adjustment,
+    // package duration guard, Transaction update, CAS on rescheduleCount.
+    const { rescheduleBooking } = await import('@/lib/services/booking-service')
+    const result = await rescheduleBooking(
+      params.id,
+      { newStartTime: newStart, newEndTime: newEnd, reason: data.reason },
+      'voice_agent',
+      'CLIENT',
     )
 
-    if (hasConflict) {
-      return NextResponse.json(
-        { error: 'The requested time slot conflicts with another booking for this instructor' },
-        { status: 409 }
-      )
+    if ('requiresConfirmation' in result) {
+      return NextResponse.json(result, { status: 200 })
     }
 
-    // ── 5. Build history entry ───────────────────────────────────────────────
-    const historyEntry = {
-      previousStart: booking.startTime,
-      previousEnd: booking.endTime,
-      rescheduledAt: now.toISOString(),
-      rescheduledBy: 'client_voice',
-      reason: data.reason ?? null,
-      tokenVerified: !!data.verificationToken,
-    }
-
-    const existingHistory = ((booking as any).rescheduledFrom as any[]) ?? []
-
-    const updateData: Record<string, unknown> = {
-      startTime: newStart,
-      endTime: newEnd,
-      rescheduledFrom: [...existingHistory, historyEntry],
-      rescheduleCount: { increment: 1 },
-    }
-
-    // Preserve original start time on first reschedule
-    if (!(booking as any).originalStartTime && booking.startTime) {
-      updateData.originalStartTime = booking.startTime
-    }
-
-    // ── 6. Persist ───────────────────────────────────────────────────────────
+    const updated    = result
     const oldStartTime = booking.startTime
-
-    const updated = await prisma.booking.update({
-      where: { id: params.id },
-      data: updateData as any,
-      include: { customer: true,
-        provider: { include: { user: true } },
-      },
-    })
 
     // ── 7. Notifications ─────────────────────────────────────────────────────
     try {
@@ -320,6 +290,13 @@ export async function POST(
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 })
     }
+    const code = (error as any)?.code
+    if (code === 'SLOT_CONFLICT')            return NextResponse.json({ error: 'The requested time slot is not available', code }, { status: 409 })
+    if (code === 'STRIPE_PAID_PRICE_CHANGE') return NextResponse.json({ error: (error as Error).message, code }, { status: 409 })
+    if (code === 'PACKAGE_DURATION_LOCKED')  return NextResponse.json({ error: (error as Error).message, code }, { status: 400 })
+    if (code === 'CONCURRENT_RESCHEDULE')    return NextResponse.json({ error: (error as Error).message, code }, { status: 409 })
+    if (code === 'INSUFFICIENT_BALANCE')     return NextResponse.json({ error: (error as Error).message, code }, { status: 400 })
+    if (code === 'INVALID_DURATION')         return NextResponse.json({ error: (error as Error).message, code }, { status: 400 })
     console.error('Public reschedule error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
