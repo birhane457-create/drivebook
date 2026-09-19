@@ -33,16 +33,36 @@ export class GoogleCalendarService {
     return tokens
   }
 
-  // Save tokens to instructor record
-  async saveTokens(providerId: string, tokens: any) {
+  // Save tokens to instructor record.
+  //
+  // INT-M-03F FIX — two distinct modes:
+  //   enableSync=true  → OAuth callback: store credentials AND enable calendar sync
+  //   enableSync=false → Token refresh:  update credentials ONLY; never touch syncGoogleCalendar
+  //
+  // This invariant prevents a background token refresh from silently re-enabling
+  // calendar sync after an instructor has deliberately disconnected.
+  //
+  // Callers:
+  //   1. OAuth callback (app/api/calendar/callback/route.ts) — enableSync=true  (default)
+  //   2. getCalendarClient token-refresh path (below)         — enableSync=false (explicit)
+  async saveTokens(providerId: string, tokens: any, enableSync = true) {
+    const data: Record<string, any> = {
+      googleAccessToken: tokens.access_token,
+      googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+    }
+    // Only update refresh token when Google actually returns one (not undefined).
+    // Google omits refresh_token on non-consent refreshes.
+    if (tokens.refresh_token !== undefined) {
+      data.googleRefreshToken = tokens.refresh_token
+    }
+    // Only the OAuth authorization callback should enable sync.
+    // Token refreshes must not override the instructor's sync preference.
+    if (enableSync) {
+      data.syncGoogleCalendar = true
+    }
     await prisma.provider.update({
       where: { id: providerId },
-      data: {
-        googleAccessToken: tokens.access_token,
-        googleRefreshToken: tokens.refresh_token,
-        googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-        syncGoogleCalendar: true
-      }
+      data,
     })
   }
 
@@ -68,10 +88,10 @@ export class GoogleCalendarService {
       expiry_date: instructor.googleTokenExpiry?.getTime()
     })
 
-    // Refresh token if expired
+    // Refresh token if expired — pass enableSync=false so refresh never re-enables sync
     if (instructor.googleTokenExpiry && new Date() > instructor.googleTokenExpiry) {
       const { credentials } = await oauth2Client.refreshAccessToken()
-      await this.saveTokens(providerId, credentials)
+      await this.saveTokens(providerId, credentials, false)
       oauth2Client.setCredentials(credentials)
     }
 
@@ -186,7 +206,64 @@ export class GoogleCalendarService {
   }
 
   // Disconnect Google Calendar
+  //
+  // INT-M-03F FIX:
+  //   1. Read the current refresh token.
+  //   2. Attempt Google OAuth revocation (revokeToken) so the credential is
+  //      invalidated at Google's authorization server.
+  //   3. Handle all Google API failure cases — revocation failure MUST NOT
+  //      prevent local credential deletion (user's disconnect intent is honoured).
+  //   4. Null all credential fields and disable sync locally.
+  //   5. Never log or expose OAuth tokens.
   async disconnect(providerId: string) {
+    // Step 1: Read the refresh token BEFORE clearing it
+    const provider = await prisma.provider.findUnique({
+      where: { id: providerId },
+      select: { googleRefreshToken: true },
+    })
+
+    // Step 2: Attempt remote revocation
+    if (provider?.googleRefreshToken) {
+      try {
+        oauth2Client.setCredentials({ refresh_token: provider.googleRefreshToken })
+        await oauth2Client.revokeToken(provider.googleRefreshToken)
+        // Revocation succeeded — credential is invalidated at Google
+      } catch (revokeErr: any) {
+        // Categorise the failure for audit logging without exposing the token
+        const errMsg = revokeErr?.message ?? String(revokeErr)
+        const isAlreadyInvalid =
+          errMsg.includes('token_revoked') ||
+          errMsg.includes('invalid_token') ||
+          errMsg.includes('Token has been expired')
+
+        if (isAlreadyInvalid) {
+          // Token was already revoked or expired — local cleanup is still correct
+          console.info('[GoogleCalendar] disconnect: token was already invalid at Google (proceeding with local cleanup)')
+        } else {
+          // Unexpected revocation failure — log for ops investigation (no token in log)
+          console.error('[GoogleCalendar] disconnect: remote revocation failed (proceeding with local cleanup)', {
+            providerId,
+            error: errMsg,
+          })
+          // Best-effort alert — non-blocking; does not prevent local disconnect
+          try {
+            const { sendAlert } = await import('@/lib/services/alert-service')
+            void sendAlert({
+              type: 'RECONCILIATION_ISSUES',
+              severity: 'WARNING',
+              message: `Google Calendar OAuth revocation failed for provider ${providerId}. Local credentials have been cleared. The previously issued refresh token may remain valid at Google until it expires naturally. Manual revocation via Google Account settings may be required.`,
+              entityId: providerId,
+              metadata: { providerId, error: errMsg, action: 'google_oauth_revocation_failed' },
+            })
+          } catch {
+            // Alert failure is non-fatal
+          }
+        }
+        // Fall through to local cleanup regardless of revocation outcome
+      }
+    }
+
+    // Step 3: Clear all local credentials — always executes regardless of revocation result
     await prisma.provider.update({
       where: { id: providerId },
       data: {
@@ -194,16 +271,16 @@ export class GoogleCalendarService {
         googleRefreshToken: null,
         googleTokenExpiry: null,
         googleCalendarId: null,
-        syncGoogleCalendar: false
-      }
+        syncGoogleCalendar: false,
+      },
     })
 
-    // Optionally delete all google calendar exceptions
+    // Step 4: Delete calendar-derived availability exceptions
     await prisma.availabilityException.deleteMany({
       where: {
         providerId,
-        reason: 'google_calendar_event'
-      }
+        reason: 'google_calendar_event',
+      },
     })
   }
 

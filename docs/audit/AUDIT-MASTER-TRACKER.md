@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.5 (PAY-H-02 Vercel SUCCESS recorded; Transaction multiplicity note added)  
+**Version:** 3.6 (INT-M-03F fix-verified)  
 **Last Updated:** 2026-09-11 (this commit)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -50,7 +50,7 @@ All other audit documents are evidence records that support this file.
 | PAY-H-02 | Booking reschedule price not recalculated | HIGH | CONFIRMED | VERIFIED — `reschedule/route.ts` no price comparison; all four routes left `platformFee`, `providerPayout`, `commissionRate`, `Transaction` stale after duration change; Route C had no transaction wrapper; Stripe-paid bookings not blocked on price change | This commit — `computeRescheduleFinancials()` pure helper (locked rate, never live provider rate); `rescheduleBooking()` rewritten as single SERIALIZABLE source of truth: `rescheduleCount` CAS, Stripe-paid price-change block, package duration block, full four-field financial update, `Transaction` `updateMany`, atomic wallet debit/credit; Routes A/B/C delegate entirely; Route C conflict check inside transaction | 35 PAY-H-02 tests (F1–F9 pure, R1–R26 service), exit 0 — `pay-h02-reschedule-financials.test.ts` | ✅ FIX-VERIFIED | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-02 |
 | INT-M-01A | Stripe refund reconciliation gap (inverse of PAY-H-01) | HIGH | CONFIRMED | VERIFIED — no reconciliation cron exists | Subsumed by PAY-H-01 fix this commit (Check 5 in reconcile-stripe cron) | Same 15 tests as PAY-H-01 | ✅ FIX-VERIFIED — consolidated with PAY-H-01 | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-01A |
 | INT-M-03A | OAuth tokens stored plaintext | HIGH | CONFIRMED | VERIFIED — `googleAccessToken` plaintext in Provider model | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03A |
-| INT-M-03F | OAuth token not revoked on calendar disconnect | HIGH | CONFIRMED | VERIFIED — no revocation call in disconnect flow | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03F |
+| INT-M-03F | OAuth token not revoked on calendar disconnect | HIGH | CONFIRMED | VERIFIED — no revocation call in disconnect flow | This commit — `disconnect()` reads `googleRefreshToken`, calls `oauth2Client.revokeToken()`, handles all failure cases (already-revoked, invalid, network/5xx) with local cleanup always running regardless of remote result; `saveTokens()` rewritten with `enableSync` param (default `true`): callback passes `true`, token-refresh passes `false` so `syncGoogleCalendar` is never re-enabled by a background refresh; both sync endpoints guard on `syncGoogleCalendar === true` before calling `syncCalendarEvents()`; no token appears in logs or alerts | 18 INT-M-03F tests (T1–T11 + T1b/T4b/T5b/T7b/T6b/Security), exit 0 | ✅ FIX-VERIFIED | `PHASE1_REMEDIATION_REGISTER.md` | INT-M-03F |
 
 ### 1.3 — P2 Medium Priority
 
@@ -292,6 +292,7 @@ The following CLOSED findings have tests recorded:
 | MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | `9fd2893d` | `899929c4` ✅ Vercel SUCCESS |
 | PAY-H-01 / INT-M-01A | 15 (PH-1–PH-10 + edge cases in `pay-h01-refund-reconciliation.test.ts`) | 0 | `71dc11ad` | `899929c4` ✅ Vercel SUCCESS |
 | PAY-H-02 | 35 (F1–F9 pure + R1–R26 service in `pay-h02-reschedule-financials.test.ts`) | 0 | `a2fa69fc` | `a2fa69fc` ✅ Vercel SUCCESS |
+| INT-M-03F | 18 (T1–T11 + variants in `int-m03f-oauth-revocation.test.ts`) | 0 | this commit | pending Vercel |
 
 All other CLOSED Phase 1 findings were closed by source verification without dedicated targeted tests. This is an acknowledged gap from Phase 1 methodology — fixing it is out of scope while open P0 items exist.
 
