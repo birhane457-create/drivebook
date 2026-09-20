@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
     const providerId = verified.providerId
     const tokens = await googleCalendarService.getTokensFromCode(code)
-    await googleCalendarService.saveTokens(providerId, tokens)
+    await googleCalendarService.saveTokens(providerId, tokens, true)  // INT-M-03F: explicit enableSync=true (OAuth authorization)
     await googleCalendarService.syncCalendarEvents(providerId)
 
     return NextResponse.redirect(appUrl('/dashboard/settings?success=calendar_connected'))
