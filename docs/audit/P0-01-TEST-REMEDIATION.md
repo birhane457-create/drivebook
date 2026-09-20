@@ -38,79 +38,92 @@ After complete source trace of Checkout Session creation flow, the initially rep
 
 **However:** Test evidence still has gaps that must be addressed before P0-01 closure.
 
-### Gap 1: Test File Internal Inconsistency
+### Gap 1: Test Classification Issue ✅ PARTIALLY ADDRESSED
 
 **File:** `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts`
 
-**Issue:**
-Test labeled "Nonexistent wallet" actually tests **successful** automatic wallet creation:
-
+**Current State (as of latest main):**
+Test is still labeled in test suite summary as:
 ```typescript
-it('creates wallet if user exists but wallet missing', async () => {
-  // ... test setup ...
-  expect(response.status).toBe(200); // SUCCESS, not rejection
+describe('❌ NEGATIVE PATH: Nonexistent wallet', () => {
+  it('creates wallet if user exists but wallet missing', async () => {
+    // ... test setup ...
+    expect(response.status).toBe(200); // SUCCESS
+  });
 });
 ```
 
-**Impact:** Test summary claims "8 negative-path scenarios" but this test validates a **positive path** (auto-creation). The test suite misrepresents its coverage.
+**Issue:**
+- Test is functionally correct (validates auto-creation behavior)
+- Classification is incorrect: labeled "NEGATIVE PATH" but expects success
+- Should be reclassified as "POSITIVE PATH" or "EDGE CASE"
 
 **Required Fix:**
-1. Relabel test as positive-path validation: `"Auto-creates missing wallet for authenticated user"`
-2. Add actual negative-path test: Attempt to credit nonexistent *other user's* wallet → should fail
-3. Update test suite summary to accurately reflect negative vs. positive test counts
+Change test suite label from:
+```typescript
+describe('❌ NEGATIVE PATH: Nonexistent wallet', () => {
+```
+
+To:
+```typescript
+describe('✅ EDGE CASE: Auto-create missing wallet', () => {
+```
+
+**Impact:** LOW - Test logic is correct, only labeling/documentation needs update
 
 ---
 
-### Gap 2: Destructive Global Database Operations
+### Gap 2: Database Cleanup ✅ ALREADY FIXED IN SOURCE
 
-**File:** `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts`  
-**Lines:** beforeAll hook
+**Status:** RESOLVED - Current source uses scoped cleanup
 
-**Issue:**
+**Previous Concern (now outdated):**
+Documentation initially reported global `deleteMany({})` in beforeAll hook as a safety risk.
+
+**Current State (verified in latest main):**
+File: `app/api/client/wallet-add/__tests__/p0-01-ownership.test.ts`
+
+**Cleanup Implementation:**
 ```typescript
 beforeAll(async () => {
-  await prisma.walletTransaction.deleteMany({});
-  await prisma.clientWallet.deleteMany({});
+  // Clean slate — scoped to test emails only (no full-table deletes)
+  const TEST_EMAILS = ['user-a-p001@test.com', 'user-b-p001@test.com'];
+  for (const email of TEST_EMAILS) {
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      include: { wallet: { include: { transactions: true } } }
+    });
+    if (existing?.wallet) {
+      await prisma.walletTransaction.deleteMany({ where: { walletId: existing.wallet.id } });
+      await prisma.clientWallet.delete({ where: { id: existing.wallet.id } });
+    }
+    if (existing) {
+      await prisma.user.delete({ where: { id: existing.id } });
+    }
+  }
+  // ... create test users ...
+});
+
+afterAll(async () => {
+  // Cleanup test records only
+  await prisma.walletTransaction.deleteMany({
+    where: { walletId: { in: [userA.walletId, userB.walletId] } }
+  });
+  await prisma.clientWallet.deleteMany({
+    where: { id: { in: [userA.walletId, userB.walletId] } }
+  });
+  await prisma.user.deleteMany({
+    where: { id: { in: [userA.id, userB.id] } }
+  });
 });
 ```
 
-**Impact:** 
-- Global destructive operation with NO record-scoped cleanup
-- Unsafe for shared/staging databases
-- Cannot run in parallel with other tests
-- Risk of data loss if pointed at wrong database
+**Verification:**
+- ✅ No global `deleteMany({})` without WHERE clause
+- ✅ Test-scoped cleanup using specific test user IDs
+- ✅ Safe for shared test databases
 
-**Required Fix:**
-1. **Immediate:** Add database environment validation
-   ```typescript
-   if (process.env.NODE_ENV !== 'test' || !process.env.DATABASE_URL?.includes('test')) {
-     throw new Error('FATAL: Test database not configured');
-   }
-   ```
-
-2. **Production-ready:** Replace global deleteMany with test-scoped cleanup:
-   ```typescript
-   const testUserIds = []; // Track created test users
-   afterEach(async () => {
-     await prisma.walletTransaction.deleteMany({
-       where: { wallet: { userId: { in: testUserIds } } }
-     });
-     await prisma.clientWallet.deleteMany({
-       where: { userId: { in: testUserIds } }
-     });
-   });
-   ```
-
-3. **Best practice:** Use database transactions with rollback:
-   ```typescript
-   let tx;
-   beforeEach(async () => {
-     tx = await prisma.$begin();
-   });
-   afterEach(async () => {
-     await tx.$rollback();
-   });
-   ```
+**Required Action:** None - source is correct, documentation needs update
 
 ---
 
@@ -317,13 +330,33 @@ Tests prove the route's ownership logic works, but do NOT prove:
 ```
 
 #### Scenario E: Concurrent Duplicate Attempts (Idempotency)
-```bash
-1. User A creates PaymentIntent, completes payment
-2. Call /api/client/wallet-add twice simultaneously with same paymentIntentId
-3. EXPECT: One 200 OK, one 409 Conflict (already processed)
-4. VERIFY DB: Exactly ONE WalletTransaction created
-5. VERIFY: Idempotency key prevented double-credit
+
+**Status:** ✅ Test file exists: `app/api/client/wallet-add/__tests__/p0-01b-concurrent.test.ts`
+
+**Test Implementation:**
+```typescript
+// Concurrent test uses Promise.all() for true parallel execution
+const [response1, response2, response3] = await Promise.all([
+  POST(createRequest()),
+  POST(createRequest()),
+  POST(createRequest())
+]);
+
+// Verifications:
+- Exactly ONE WalletTransaction created
+- Database uniqueness constraint enforced
+- Clean 409 handling for duplicates
+- Triple-concurrent requests handled gracefully
 ```
+
+**Required for TEST VERIFIED:**
+- Execute concurrent test suite against staging database
+- Verify database state after concurrent attempts
+- Confirm only one credit applied despite multiple simultaneous requests
+- Document test execution results
+
+**Note:** Main test file (p0-01-ownership.test.ts) includes SEQUENTIAL idempotency test,  
+but true concurrency test requires separate execution via p0-01b-concurrent.test.ts
 
 ---
 

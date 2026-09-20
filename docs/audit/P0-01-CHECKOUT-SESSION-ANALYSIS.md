@@ -314,4 +314,6 @@ The webhook defense-in-depth enhancement can be:
 7. Webhook receives signed session, extracts `metadata.userId`
 8. Wallet credited to user matching metadata
 
-**No client input influences userId assignment at any step.**
+**No client input directly influences userId assignment at any step.**
+
+The client supplies `accountHolderEmail`, which the server uses to query the database. The server then assigns `userId` based on the database result (either existing user ID or newly created ID). The client cannot directly supply or override the internal `userId` value.
