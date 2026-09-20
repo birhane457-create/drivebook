@@ -15,7 +15,7 @@
  *   1. disconnect() reads googleRefreshToken, calls oauth2Client.revokeToken(),
  *      handles all failure cases (already-revoked, invalid, network error), and
  *      always clears local credentials regardless of revocation outcome.
- *   2. saveTokens() accepts enableSync param (default true). Token refresh path
+ *   2. saveTokens() accepts enableSync param (NO default — required). Token refresh path
  *      passes enableSync=false — never touches syncGoogleCalendar.
  *   3. Both sync endpoints check syncGoogleCalendar before calling syncCalendarEvents.
  *
@@ -348,7 +348,7 @@ describe('INT-M-03F: Google Calendar OAuth revocation and disconnect hardening',
       access_token:  ACCESS_TOKEN,
       refresh_token: REFRESH_TOKEN,
       expiry_date:   Date.now() + 3_600_000,
-    }, true)
+    }, true)  // explicit OAuth callback intent
 
     // Disconnect
     mockProviderFindUnique.mockResolvedValueOnce({ googleRefreshToken: REFRESH_TOKEN })
@@ -359,7 +359,7 @@ describe('INT-M-03F: Google Calendar OAuth revocation and disconnect hardening',
       access_token:  NEW_ACCESS,
       refresh_token: NEW_REFRESH,
       expiry_date:   Date.now() + 3_600_000,
-    }, true)
+    }, true)  // explicit OAuth callback intent
 
     const lastUpdateCall = mockProviderUpdate.mock.calls[mockProviderUpdate.mock.calls.length - 1][0]
     expect(lastUpdateCall.data.googleAccessToken).toBe(NEW_ACCESS)

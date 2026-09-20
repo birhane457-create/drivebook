@@ -43,9 +43,12 @@ export class GoogleCalendarService {
   // calendar sync after an instructor has deliberately disconnected.
   //
   // Callers:
-  //   1. OAuth callback (app/api/calendar/callback/route.ts) — enableSync=true  (default)
+  //   1. OAuth callback (app/api/calendar/callback/route.ts) — enableSync=true  (explicit)
   //   2. getCalendarClient token-refresh path (below)         — enableSync=false (explicit)
-  async saveTokens(providerId: string, tokens: any, enableSync = true) {
+  //
+  // enableSync has NO default — every caller must state intent explicitly.
+  // This prevents a future caller from accidentally re-enabling sync by omitting the flag.
+  async saveTokens(providerId: string, tokens: any, enableSync: boolean) {
     const data: Record<string, any> = {
       googleAccessToken: tokens.access_token,
       googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
