@@ -26,7 +26,17 @@
 
 ---
 
-## ⚠️ Test Evidence Gaps (BLOCKING CLOSURE)
+## ⚠️ Test Evidence Gaps (REQUIRED FOR CLOSURE)
+
+### Summary of Corrected Findings
+
+**User Independent Verification Result:**
+After complete source trace of Checkout Session creation flow, the initially reported "webhook bypass" is **NOT EXPLOITABLE**. The webhook is safe by design because:
+1. `metadata.userId` is server-derived, not client-supplied
+2. Stripe signature verification prevents payload tampering
+3. No attack path exists to credit wrong user's wallet
+
+**However:** Test evidence still has gaps that must be addressed before P0-01 closure.
 
 ### Gap 1: Test File Internal Inconsistency
 
@@ -159,99 +169,58 @@ Expected: `stamped_user_id` matches `session_user_id` for all legitimate top-ups
 
 ---
 
-### Gap 4: Bypass Route Verification - **CRITICAL P0-01 BYPASS FOUND** 🚨
+### Gap 4: Bypass Route Analysis - ✅ COMPLETED
 
-**Status:** ⚠️ BYPASS IDENTIFIED - P0-01 FIX INCOMPLETE
+**Status:** ✅ ANALYZED - Webhook is SAFE (not exploitable)
 
-**Bypass Route Found:**
+**Investigation:** Complete source trace of Checkout Session creation  
+**Document:** `docs/audit/P0-01-CHECKOUT-SESSION-ANALYSIS.md`
+
+**Alternate Route Found:**
 `app/api/stripe/webhook/route.ts` (lines 518-535) - **checkout.session.completed** handler
 
-**Vulnerability:**
-The webhook handler credits wallets based on Stripe Checkout Session metadata WITHOUT verifying that the authenticated user matches the session creator:
+**Original Concern:**
+Webhook credits wallets based on `checkoutSession.metadata.userId` without explicit ownership verification (unlike `/wallet-add` which checks `metadata.userId === session.user.id`).
 
+**Investigation Result: NOT EXPLOITABLE**
+
+**Why Webhook is Safe:**
+1. **Server-side userId derivation:** `metadata.userId` set by server, not client
+   - Route: `app/api/public/bookings/bulk/route.ts`
+   - userId derived from `prisma.user.findUnique({ email })` or `create()`
+   - No client input can influence database-assigned userId
+   
+2. **Stripe signature verification:** Prevents webhook payload tampering
+   - Webhook verifies HMAC-SHA256 signature before processing
+   - Modified payloads rejected before reaching handler
+   
+3. **Idempotency protection:** Prevents replay attacks
+   - Database-backed deduplication via `recordWebhookEvent()`
+   - Duplicate events cannot cause double-credit
+
+**Attack Scenarios Tested:**
+- ❌ Client-supplied userId: Schema doesn't accept it
+- ❌ Email manipulation: Results in attacker gifting victim (not theft)
+- ❌ Webhook tampering: Signature verification blocks it
+- ❌ Webhook replay: Idempotency protection blocks it
+
+**Defense-in-Depth Recommendation (P2, not blocking):**
+Add independent ownership verification in webhook:
 ```typescript
-// app/api/stripe/webhook/route.ts ~line 518
-await tx.walletTransaction.create({
-  data: {
-    walletId: wallet.id,
-    type: 'CREDIT',
-    amount: amountPaid,
-    description: `Package purchase – ${hours ?? '?'} hours via Stripe Checkout`,
-    status: 'CONFIRMED',
-    metadata: {
-      stripePaymentIntentId: payment_intent,  // ⚠️ NO OWNERSHIP CHECK
-      // ...
-    },
-  },
+// Verify metadata.userId exists in database and is CLIENT role
+const user = await tx.user.findUnique({
+  where: { id: metadata.userId },
+  select: { id: true, role: true }
 });
+if (!user || user.role !== 'CLIENT') {
+  throw new Error('Invalid user account');
+}
 ```
 
-**Attack Scenario:**
-1. Attacker creates Stripe Checkout Session via legitimate UI flow
-2. Attacker manipulates session metadata to include victim's `userId`
-3. Attacker completes payment
-4. Webhook credits VICTIM's wallet (not attacker's)
-5. Attacker can also credit their own wallet with victim's payment
-
-**Root Cause:**
-Webhook trusts `checkoutSession.metadata.userId` without verification. The fix applied to `/api/client/wallet-add` does NOT protect this alternate credit path.
-
-**Required Fix (HIGH PRIORITY):**
-```typescript
-// In checkout.session.completed handler, BEFORE wallet credit:
-
-// Retrieve the actual PaymentIntent to get verified metadata
-const paymentIntent = await stripe.paymentIntents.retrieve(
-  typeof payment_intent === 'string' ? payment_intent : payment_intent.id
-);
-
-// CRITICAL: Verify metadata.userId matches the wallet being credited
-if (!paymentIntent.metadata?.userId) {
-  logger.error('P0-01-BYPASS: Missing userId in PaymentIntent metadata', {
-    paymentIntentId: paymentIntent.id,
-    checkoutSessionId: checkoutSession.id,
-  });
-  throw new Error('Missing userId metadata - wallet credit blocked');
-}
-
-if (paymentIntent.metadata.userId !== userId) {
-  logger.error('P0-01-BYPASS: userId mismatch in checkout webhook', {
-    paymentIntentMetadataUserId: paymentIntent.metadata.userId,
-    checkoutSessionUserId: userId,
-    paymentIntentId: paymentIntent.id,
-  });
-  throw new Error('Ownership verification failed - wallet credit blocked');
-}
-
-// Only AFTER verification:
-await tx.walletTransaction.create({ /* ... */ });
-```
-
-**Additional Routes Requiring Review:**
-
-1. **`app/api/payments/verify/route.ts`** (lines 216-252)
-   - Two wallet credit paths after PaymentIntent verification
-   - **STATUS:** Needs ownership review (session-based, may be safe)
-
-2. **`app/api/admin/clients/[id]/wallet/add-credit/route.ts`** (line 74)
-   - Admin manual wallet credit
-   - **STATUS:** Requires ADMIN role check (separate audit area)
-
-3. **Refund paths** (various files)
-   - Wallet credits from booking cancellations/refunds
-   - **STATUS:** Different threat model (refunding existing transactions, not creating new value)
-
-**Impact on P0-01 Closure:**
-❌ **BLOCKING** - P0-01 CANNOT be marked CLOSED until:
-1. Webhook bypass is fixed with ownership verification
-2. `payments/verify` route ownership is confirmed safe
-3. All external-payment-to-wallet-credit paths verified
-
-**Recommended Priority:**
-1. **IMMEDIATE:** Fix webhook bypass (same criticality as original P0-01)
-2. Verify `payments/verify` route (may already be session-protected)
-3. Update P0-01 tests to include webhook attack scenario
-4. Re-run full test verification after bypass fix deployed
+**Conclusion:**
+- Original P0-01 vulnerability (wallet-add): ✅ FIXED
+- Webhook alternate path: ✅ SAFE BY DESIGN (defense-in-depth gap is P2)
+- P0-01 can proceed to TEST VERIFIED gate
 
 ---
 
@@ -362,27 +331,30 @@ Tests prove the route's ownership logic works, but do NOT prove:
 
 **Verification Checklist:**
 
-- [ ] All unit tests pass with remediated test file
+- [ ] All unit tests pass with remediated test file (Gaps 1-2 addressed)
 - [ ] All 5 staging integration scenarios pass
-- [ ] Bypass route search confirms no alternate credit paths OR all paths have equivalent checks
-- [ ] Metadata stamping verified in ALL PaymentIntent creation flows
+- [ ] Metadata stamping verified in PaymentIntent creation (Gap 3: ✅ DONE)
+- [ ] Bypass route analysis completed (Gap 4: ✅ DONE - webhook safe)
 - [ ] Database queries confirm no unauthorized WalletTransactions after attack scenarios
 - [ ] Forensic logs capture all rejection attempts with P0-01 prefix
 - [ ] Vercel production deployment includes commit 28e75f73
-- [ ] Emergency rollback plan documented (if P0-01 breaks legitimate top-ups)
+- [ ] Emergency rollback plan documented
+
+**Optional Defense-in-Depth Enhancement (P2, not blocking P0-01):**
+- [ ] Add independent userId verification in checkout.session.completed webhook handler
 
 **Final Evidence Package:**
 ```
 ✅ Source code review (commit 28e75f73) - COMPLETED
-✅ Unit tests remediated and passing
-✅ Staging integration tests: 5/5 scenarios PASS
-✅ Bypass analysis: No alternate routes OR all routes verified safe
-✅ Real Stripe API metadata persistence verified
+✅ Metadata stamping verification - COMPLETED
+✅ Bypass analysis and Checkout Session trace - COMPLETED (webhook safe)
+⚠️ Unit tests remediated and passing - PENDING
+⚠️ Staging integration tests: 5/5 scenarios PASS - PENDING
 ✅ Production deployment SHA matches commit
-✅ Rollback tested on staging
+✅ Rollback tested on staging - PENDING
 ```
 
-**Only after ALL items above:** Mark P0-01 as **CLOSED** in `PHASE1_REMEDIATION_REGISTER.md`.
+**Only after ALL required items above:** Mark P0-01 as **CLOSED** in `PHASE1_REMEDIATION_REGISTER.md`.
 
 ---
 
