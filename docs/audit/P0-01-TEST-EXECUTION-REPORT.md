@@ -219,6 +219,61 @@ Several tests require `SUB22_TEST_DATABASE_URL` environment variable pointing to
 
 ---
 
+## Integration Test Suite Created
+
+**Date:** 2026-08-15  
+**Location:** `tests/integration/`
+
+### Files Created:
+
+1. **`p0-01-staging-integration.md`** - Comprehensive manual test plan
+   - 5 test scenarios with detailed steps
+   - Expected results for each scenario
+   - Database verification queries
+   - API request examples (curl + JavaScript)
+   - Success criteria definitions
+
+2. **`run-p0-01-tests.mjs`** - Automated test runner
+   - Node.js script for API testing
+   - Tests Scenarios A, B, C, E automatically
+   - Requires session tokens from browser
+   - Generates JSON results file
+   - Color-coded pass/fail output
+
+3. **`README.md`** - Quick start guide
+   - How to get session tokens
+   - How to run automated tests
+   - How to perform manual testing
+   - Troubleshooting guide
+
+### Usage:
+
+**Automated Testing:**
+```cmd
+set TEST_USER_A_SESSION=<victim_session>
+set TEST_USER_B_SESSION=<attacker_session>
+set STAGING_URL=https://staging.drivebook.com.au
+node tests\integration\run-p0-01-tests.mjs --verbose
+```
+
+**Manual Testing:**
+```cmd
+REM See tests\integration\p0-01-staging-integration.md for detailed steps
+REM Use Postman/curl to test all 5 scenarios
+REM Document results in docs\audit\P0-01-STAGING-TEST-RESULTS.md
+```
+
+### Test Execution Ready
+
+The integration test suite is now ready for execution. Once tests pass:
+1. Document results in `P0-01-STAGING-TEST-RESULTS.md`
+2. Update remediation register
+3. Mark P0-01 as TEST VERIFIED
+4. Get user approval
+5. Mark P0-01 as CLOSED
+
+---
+
 ## Test Infrastructure Issue Tracking
 
 **Issue ID:** TEST-INFRA-01  
