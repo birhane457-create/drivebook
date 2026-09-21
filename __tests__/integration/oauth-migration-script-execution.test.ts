@@ -206,8 +206,8 @@ describe('INT-M-03A: Migration Script Execution', () => {
         }
       );
 
-      expect(stdout2).toContain('already encrypted');
-      expect(stdout2).toContain('0 providers updated'); // Idempotency: no updates on second run
+      expect(stdout2).toContain('Already encrypted (skipped)');
+      expect(stdout2).toContain('Tokens encrypted:            0'); // Idempotency: no new encryptions on second run
 
       // Verify values unchanged after second run
       const afterSecondRun = await prisma.provider.findUnique({
@@ -259,6 +259,25 @@ describe('INT-M-03A: Migration Script Execution', () => {
       `;
 
       expect(encryptedTokens.length).toBeGreaterThan(0);
+
+      // Stronger invariant: Verify no non-null tokens that aren't v1: encrypted
+      const invalidAccessTokens = await prisma.$queryRaw<Array<{ id: string; googleAccessToken: string }>>`
+        SELECT id, "googleAccessToken"
+        FROM "Provider"
+        WHERE "googleAccessToken" IS NOT NULL
+          AND "googleAccessToken" NOT LIKE 'v1:%'
+      `;
+
+      expect(invalidAccessTokens.length).toBe(0);
+
+      const invalidRefreshTokens = await prisma.$queryRaw<Array<{ id: string; googleRefreshToken: string }>>`
+        SELECT id, "googleRefreshToken"
+        FROM "Provider"
+        WHERE "googleRefreshToken" IS NOT NULL
+          AND "googleRefreshToken" NOT LIKE 'v1:%'
+      `;
+
+      expect(invalidRefreshTokens.length).toBe(0);
     }, 30000);
   });
 
@@ -317,8 +336,7 @@ describe('INT-M-03A: Migration Script Execution', () => {
         }
       );
 
-      expect(stdout).toContain('Verification complete');
-      expect(stdout).toContain('encrypted correctly');
+      expect(stdout).toContain('All encrypted tokens verified successfully');
       expect(stdout).not.toContain('plaintext tokens found');
     }, 30000);
   });
