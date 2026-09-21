@@ -51,6 +51,13 @@ function createMockRequest(body: any): NextRequest {
 
 beforeAll(async () => {
   console.log('[MM-12B] Setting up test environment...');
+  
+  // CRITICAL: Verify we're using test database, NOT production
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || !dbUrl.includes('drivebook_test')) {
+    throw new Error(`SAFETY CHECK FAILED: DATABASE_URL must contain 'drivebook_test'. Current: ${dbUrl?.substring(0, 50)}...`);
+  }
+  console.log(`[MM-12B] Database: ${dbUrl.substring(0, 70)}...`);
 
   try {
     execSync('npx prisma db push --skip-generate', {
@@ -67,7 +74,6 @@ beforeAll(async () => {
       email: `${TEST_PREFIX}_customer@example.com`,
       name: 'MM-12B Customer',
       role: 'CUSTOMER',
-      emailVerified: new Date(),
     },
   });
 
@@ -86,7 +92,6 @@ beforeAll(async () => {
       email: `${TEST_PREFIX}_admin@example.com`,
       name: 'MM-12B Admin',
       role: 'SUPER_ADMIN',
-      emailVerified: new Date(),
     },
   });
 
