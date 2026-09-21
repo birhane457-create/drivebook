@@ -153,6 +153,10 @@ describe('INT-M-03A: Migration Script Execution', () => {
         }
       );
 
+      // Capture migration output for evidence
+      console.log('[MSE-1] Migration stdout:', stdout);
+      if (stderr) console.log('[MSE-1] Migration stderr:', stderr);
+
       // Verify migration output
       expect(stdout).toContain('Migration complete');
       expect(stderr).toBe('');
@@ -187,6 +191,7 @@ describe('INT-M-03A: Migration Script Execution', () => {
         }
       );
 
+      console.log('[MSE-2] First migration stdout:', stdout1);
       expect(stdout1).toContain('Migration complete');
 
       // Capture encrypted values after first run
@@ -206,6 +211,7 @@ describe('INT-M-03A: Migration Script Execution', () => {
         }
       );
 
+      console.log('[MSE-2] Second migration stdout:', stdout2);
       expect(stdout2).toContain('Already encrypted (skipped)');
       expect(stdout2).toContain('Tokens encrypted:            0'); // Idempotency: no new encryptions on second run
 
@@ -313,9 +319,9 @@ describe('INT-M-03A: Migration Script Execution', () => {
   });
 
   describe('[MSE-5] Migration --verify-only Mode', () => {
-    it('should verify encrypted tokens without making changes', async () => {
+    it('should verify encrypted tokens without making database changes', async () => {
       // First, run actual migration
-      await execAsync(
+      const { stdout: migrationStdout } = await execAsync(
         `npx tsx "${MIGRATION_SCRIPT}"`,
         {
           env: {
@@ -325,8 +331,25 @@ describe('INT-M-03A: Migration Script Execution', () => {
         }
       );
 
+      // Capture migration output for evidence
+      console.log('[MSE-5] Migration stdout:', migrationStdout);
+
+      // Snapshot database state before --verify-only
+      const beforeVerify = await prisma.provider.findMany({
+        where: {
+          id: { in: [TEST_PROVIDERS[0].id, TEST_PROVIDERS[1].id] },
+        },
+        select: { 
+          id: true,
+          googleAccessToken: true, 
+          googleRefreshToken: true,
+          updatedAt: true,
+        },
+        orderBy: { id: 'asc' },
+      });
+
       // Run --verify-only mode
-      const { stdout } = await execAsync(
+      const { stdout: verifyStdout } = await execAsync(
         `npx tsx "${MIGRATION_SCRIPT}" --verify-only`,
         {
           env: {
@@ -336,13 +359,38 @@ describe('INT-M-03A: Migration Script Execution', () => {
         }
       );
 
-      expect(stdout).toContain('All encrypted tokens verified successfully');
-      expect(stdout).not.toContain('plaintext tokens found');
+      // Capture verify output for evidence
+      console.log('[MSE-5] --verify-only stdout:', verifyStdout);
+
+      // Snapshot database state after --verify-only
+      const afterVerify = await prisma.provider.findMany({
+        where: {
+          id: { in: [TEST_PROVIDERS[0].id, TEST_PROVIDERS[1].id] },
+        },
+        select: { 
+          id: true,
+          googleAccessToken: true, 
+          googleRefreshToken: true,
+          updatedAt: true,
+        },
+        orderBy: { id: 'asc' },
+      });
+
+      // Verify output message
+      expect(verifyStdout).toContain('All encrypted tokens verified successfully');
+      expect(verifyStdout).not.toContain('plaintext tokens found');
+
+      // Verify no database modifications occurred
+      expect(afterVerify).toEqual(beforeVerify);
+      expect(afterVerify[0].googleAccessToken).toBe(beforeVerify[0].googleAccessToken);
+      expect(afterVerify[0].googleRefreshToken).toBe(beforeVerify[0].googleRefreshToken);
+      expect(afterVerify[1].googleAccessToken).toBe(beforeVerify[1].googleAccessToken);
+      expect(afterVerify[1].googleRefreshToken).toBe(beforeVerify[1].googleRefreshToken);
     }, 30000);
   });
 
-  describe('[MSE-6] Post-Migration OAuth Lifecycle', () => {
-    it('should support OAuth operations after migration script execution', async () => {
+  describe('[MSE-6] Post-Migration Token Storage and Retrieval', () => {
+    it('should store and retrieve encrypted tokens via googleCalendarService', async () => {
       // Execute migration
       await execAsync(
         `npx tsx "${MIGRATION_SCRIPT}"`,
