@@ -343,7 +343,6 @@ describe('INT-M-03A: Migration Script Execution', () => {
           id: true,
           googleAccessToken: true, 
           googleRefreshToken: true,
-          updatedAt: true,
         },
         orderBy: { id: 'asc' },
       });
@@ -371,7 +370,6 @@ describe('INT-M-03A: Migration Script Execution', () => {
           id: true,
           googleAccessToken: true, 
           googleRefreshToken: true,
-          updatedAt: true,
         },
         orderBy: { id: 'asc' },
       });
