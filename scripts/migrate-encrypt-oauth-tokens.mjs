@@ -6,11 +6,16 @@
  * 
  * Safety Properties:
  * - Idempotent: Running twice does not double-encrypt
- * - Transactional: Each provider update is atomic
+ * - Per-provider atomic: Each provider update is atomic
+ * - Restartable: Migration can be safely rerun after partial completion
  * - Fail-closed: Encryption errors do not write plaintext back
  * - Key validation: Aborts before modifying records if key invalid
  * - No token disclosure: Tokens never printed in output/errors
  * - Verification: Confirms encrypted values decrypt successfully
+ * 
+ * Note: The migration processes providers individually (not in a single
+ * global transaction). This design allows partial progress and safe restart
+ * if the migration is interrupted. Each individual provider update is atomic.
  * 
  * Fields Encrypted:
  * - googleAccessToken
