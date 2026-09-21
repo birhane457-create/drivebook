@@ -316,7 +316,7 @@ describe('INT-M-03A: Migration Script Execution', () => {
     it('should verify encrypted tokens without making changes', async () => {
       // First, run actual migration
       await execAsync(
-        `node "${MIGRATION_SCRIPT}"`,
+        `npx tsx "${MIGRATION_SCRIPT}"`,
         {
           env: {
             ...process.env,
