@@ -1,0 +1,18 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-1] Execute Migration Script on Plaintext Tokens[2m > [22mshould execute actual migration script and encrypt plaintext tokens
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-1] Execute Migration Script on Plaintext Tokens[2m > [22mshould execute actual migration script and encrypt plaintext tokens[33m 2451[2mms[22m[39m
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-2] Execute Migration Script Twice (Idempotency)[2m > [22mshould detect already-encrypted tokens on second run[33m 4946[2mms[22m[39m
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-3] Database-Wide SQL Scan for Plaintext Patterns[2m > [22mshould perform SQL scan and find zero plaintext tokens after migration[33m 2960[2mms[22m[39m
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-4] Migration Failure Recovery (Invalid Key)[2m > [22mshould fail gracefully with invalid encryption key and not corrupt data[33m 2752[2mms[22m[39m
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-5] Migration --verify-only Mode[2m > [22mshould verify encrypted tokens without making changes[33m 4602[2mms[22m[39m
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-6] Post-Migration OAuth Lifecycle[2m > [22mshould support OAuth operations after migration script execution
+ [32m✓[39m __tests__/integration/oauth-migration-script-execution.test.ts[2m > [22mINT-M-03A: Migration Script Execution[2m > [22m[MSE-6] Post-Migration OAuth Lifecycle[2m > [22mshould support OAuth operations after migration script execution[33m 2258[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m6 passed[39m[22m[90m (6)[39m
+[2m   Start at [22m 20:59:41
+[2m   Duration [22m 24.71s[2m (transform 165ms, setup 28ms, collect 2.77s, tests 20.00s, environment 0ms, prepare 207ms)[22m
+
