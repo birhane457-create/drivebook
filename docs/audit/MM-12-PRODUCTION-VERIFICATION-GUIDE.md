@@ -108,13 +108,35 @@ cd "E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook"
   -AdminPassword        "YOUR_TEST_ADMIN_PASSWORD" `
   -TestCustomerId       "mm12-prod-verify-customer" `
   -TestWalletId         "mm12-prod-verify-wallet" `
-  -ExpectedShaPrefix    "638888f0" `
+  -ExpectedShaPrefix    "FIRST_8_CHARS_OF_DEPLOYED_SHA" `
   -OutputFile           "docs\audit\MM-12-PRODUCTION-VERIFICATION.txt"
 ```
 
-`-ExpectedShaPrefix` causes the script to abort if the deployed SHA does not
-begin with those characters. Set to `"638888f0"` for the verified fix commit,
-or to the first 8 characters of whatever commit was deployed.
+### How to determine `-ExpectedShaPrefix`
+
+Production is typically deployed via a **merge commit** onto `main`, not by deploying `638888f0` directly. The merge commit will have its own SHA. The running application will report that merge-commit SHA via `/api/health`.
+
+Correct procedure:
+
+1. After deployment, open the Vercel dashboard and record the deployed commit SHA
+   (e.g. `a1b2c3d4...`).
+2. Confirm that `638888f0` appears in the ancestry of that commit:
+   ```
+   git log a1b2c3d4 --oneline | grep 638888f0
+   ```
+   or check it on GitHub via the branch's commit graph.
+3. Pass the **deployed** SHA prefix to the script:
+   ```
+   -ExpectedShaPrefix "a1b2c3d4"
+   ```
+
+**Do not** pass `638888f0` as `-ExpectedShaPrefix` unless `638888f0` is literally
+the commit that was deployed to production. If a merge commit was deployed,
+passing the fix-commit SHA will cause the script to abort with a false failure.
+
+The ancestry check (step 2 above) is what proves the fix is present; the
+`-ExpectedShaPrefix` check confirms the application is reporting the expected
+build.
 
 ---
 
