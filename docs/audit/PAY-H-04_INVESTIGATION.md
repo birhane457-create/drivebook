@@ -492,22 +492,66 @@ delete is the critical correctness fix.
 
 ## 13. Design Authorisation Status
 
-All blocking questions answered. **DESIGN IS NOW AUTHORISED** for PAY-H-04.
+All blocking questions answered with one production evidence gap outstanding.
 
 | Q | Question | Status |
 |---|----------|--------|
-| Q1 | btree_gist on production | ANSWERED — not pre-installed; migration must include `CREATE EXTENSION IF NOT EXISTS btree_gist` |
+| Q1 test DB | btree_gist on localhost:5433 | VERIFIED — installed as v1.7; was not pre-installed |
+| Q1 production DB | btree_gist on Supabase production | **PENDING** — must run `SELECT extname FROM pg_extension WHERE extname = 'btree_gist'` via Supabase SQL editor before deployment; migration must include `CREATE EXTENSION IF NOT EXISTS btree_gist` regardless of result |
 | Q2/Q3 | Partial constraint `WHERE (expiresAt > NOW())` | REJECTED (STABLE not IMMUTABLE); all-rows constraint confirmed correct |
-| Q4 | Path B must check SlotReservation | CONFIRMED — fix required in migration scope |
-| Q5 | Prisma error code | ANSWERED — `PrismaClientUnknownRequestError`, code=none, match on `23P01` or constraint name |
-| Expiry gap | Option A vs B | ANSWERED — **Option A required**; expired rows block constraint; must synchronously delete before insert |
+| Q4 | Path B must check SlotReservation | CONFIRMED — required in fix scope |
+| Q5 | Prisma error code | VERIFIED — `PrismaClientUnknownRequestError`, `code=none`, match on `'23P01'` or `'SlotReservation_no_overlap'` in message |
+| Expiry gap | Option A vs B | VERIFIED — **Option A required**; T7 confirmed expired rows block constraint |
 | Hostile baseline | Race confirmed in production route | EXECUTION VERIFIED — fd882fa9 |
 
-**Next gate: PAY-H-04-C — Design document and migration authorisation.**
+**Status: SUBSTANTIVELY AUTHORISED** — production Q1 still pending but does not
+block design or migration writing. It is a pre-deployment verification step.
 
-Migration components required:
+### Required implementation architecture
+
+The constraint and the application code must work in layers. The constraint is
+the final invariant; the application check provides the clean 409 response. The
+synchronous deletion is required so the constraint does not fire on a logically-
+expired slot that the application considers available.
+
+```
+Path A and Path B
+    │
+    ├─ 1. deleteMany expired overlapping rows
+    │      WHERE providerId = X
+    │        AND expiresAt < now
+    │        AND startTime < requestedEnd
+    │        AND endTime   > requestedStart
+    │
+    ├─ 2. Application overlap check (findFirst on active rows)
+    │      Provides clean 409 before hitting the constraint
+    │
+    └─ 3. slotReservation.create()
+               │
+               └── GIST EXCLUSION CONSTRAINT (SlotReservation_no_overlap)
+                         ↓
+                   final concurrency invariant
+                   fires as 23P01 → catch PrismaClientUnknownRequestError
+                   → HTTP 409 (same response as app-level check)
+```
+
+The application overlap check (step 2) provides fast rejection with a clean
+error message before the constraint fires. The constraint (step 3) closes the
+race that the application check cannot close alone. Both are required.
+
+Step 1 (synchronous expiry deletion) is what makes step 3 correct — without it,
+logically-expired rows would block valid reservations for up to 10 minutes.
+
+### PAY-H-04-C requirements (next gate)
+
+Migration components:
 1. `CREATE EXTENSION IF NOT EXISTS btree_gist;`
-2. `EXCLUDE USING GIST ("providerId" WITH =, tsrange("startTime", "endTime", '[)') WITH &&)` — no WHERE clause
-3. Path A code: scoped `deleteMany` (expired, overlapping interval) before `create()`
-4. Path B code: add `SlotReservation` overlap check before `booking.create()`
-5. Error handling: catch `PrismaClientUnknownRequestError` with `23P01`/constraint name → HTTP 409 on both paths
+2. `ALTER TABLE "SlotReservation" ADD CONSTRAINT "SlotReservation_no_overlap" EXCLUDE USING GIST ("providerId" WITH =, tsrange("startTime", "endTime", '[)') WITH &&)` — **no** `WHERE` clause
+3. Path A: scoped `deleteMany` (expired, overlapping interval) before `create()`
+4. Path B: add `SlotReservation` overlap check alongside existing `Booking` check
+5. Both paths: catch `PrismaClientUnknownRequestError` with `23P01`/constraint name → HTTP 409
+6. Pre-deployment: verify btree_gist on production Supabase DB
+
+Hostile post-fix concurrency tests required (PAY-H-04-E equivalent) before CLOSED.
+Migration must be tested against existing production-like reservation data.
+WHERE expiresAt > NOW() must not appear anywhere in the migration.
