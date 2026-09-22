@@ -49,6 +49,9 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$TestWalletId,        # pre-created; needed for SQL queries
 
+    [string]$TestUserId,          # pre-created; defaults to guide's fixed ID
+                                  # (mm12-prod-verify-user); override if different
+
     [string]$ExpectedShaPrefix,   # optional: first 8+ chars of 638888f0 to assert against
 
     [string]$OutputFile = "docs\audit\MM-12-PRODUCTION-VERIFICATION.txt"
@@ -57,6 +60,10 @@ param(
 $ErrorActionPreference = "Stop"
 $RunTimestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $Evidence = [System.Collections.Generic.List[string]]::new()
+
+# Default TestUserId to the fixed ID documented in the guide.
+# Override on the command line if a different user ID was used during fixture creation.
+if (-not $TestUserId) { $TestUserId = "mm12-prod-verify-user" }
 
 function Log {
     param([string]$Line)
@@ -408,6 +415,7 @@ Log "Expected fix SHA prefix:          638888f0"
 Log "Production URL:                   $ProductionUrl"
 Log "Test customer ID:                 $TestCustomerId"
 Log "Test wallet ID:                   $TestWalletId"
+Log "Test user ID:                     $TestUserId"
 Log "Session cookie name used:         $cookieNameUsed"
 Log "Script run timestamp:             $RunTimestamp"
 Log ""
@@ -452,12 +460,13 @@ if ($allPass) {
 
 Log ""
 Log "--- TEST FIXTURE CLEANUP SQL ---"
-Log "Run after independent reviewer has inspected the evidence:"
+Log "Run after independent reviewer has inspected the evidence."
+Log "Order respects foreign-key dependencies: idempotency keys -> transactions -> wallet -> customer -> user."
 Log "  DELETE FROM ""AdminWalletIdempotencyKey"" WHERE ""walletId"" = '$TestWalletId';"
 Log "  DELETE FROM ""WalletTransaction""         WHERE ""walletId"" = '$TestWalletId';"
-Log "  DELETE FROM ""ClientWallet""              WHERE id = '$TestWalletId';"
-Log "  DELETE FROM ""Customer""                  WHERE id = '$TestCustomerId';"
-Log "  DELETE FROM ""User""                      WHERE id = (SELECT ""userId"" FROM ""ClientWallet"" WHERE id = '$TestWalletId' LIMIT 1);"
+Log "  DELETE FROM ""ClientWallet""              WHERE id          = '$TestWalletId';"
+Log "  DELETE FROM ""Customer""                  WHERE id          = '$TestCustomerId';"
+Log "  DELETE FROM ""User""                      WHERE id          = '$TestUserId';"
 
 # Write evidence file
 $Evidence | Out-File -FilePath $OutputFile -Encoding UTF8 -Force
