@@ -102,6 +102,10 @@ export default function AdminUserSupportPage() {
   const [creditReason, setCreditReason] = useState('');
   const [deductAmount, setDeductAmount] = useState('');
   const [deductReason, setDeductReason] = useState('');
+  // MM-12-D: Per-operation idempotency keys. Generated once on mount; refreshed
+  // after each successful submission so the next distinct operation gets a fresh key.
+  const [creditIdempotencyKey, setCreditIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [deductIdempotencyKey, setDeductIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Edit profile
   const [editMode, setEditMode] = useState(false);
@@ -156,11 +160,11 @@ export default function AdminUserSupportPage() {
     setBusy('credit');
     try {
       const res = await fetch(`/api/admin/clients/${customerId}/wallet/add-credit`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': creditIdempotencyKey },
         body: JSON.stringify({ amount: parseFloat(creditAmount), reason: creditReason }),
       });
       const d = await res.json();
-      if (res.ok) { showToast(`$${creditAmount} credit added`, 'success'); setCreditAmount(''); setCreditReason(''); loadUser(); }
+      if (res.ok) { showToast(`$${creditAmount} credit added`, 'success'); setCreditAmount(''); setCreditReason(''); setCreditIdempotencyKey(crypto.randomUUID()); loadUser(); }
       else showToast(d.error || 'Failed', 'error');
     } catch { showToast('Failed', 'error'); }
     finally { setBusy(null); }
@@ -174,11 +178,11 @@ export default function AdminUserSupportPage() {
     setBusy('deduct');
     try {
       const res = await fetch(`/api/admin/clients/${customerId}/wallet/deduct-credit`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': deductIdempotencyKey },
         body: JSON.stringify({ amount: parseFloat(deductAmount), reason: deductReason }),
       });
       const d = await res.json();
-      if (res.ok) { showToast(`$${deductAmount} deducted`, 'success'); setDeductAmount(''); setDeductReason(''); loadUser(); }
+      if (res.ok) { showToast(`$${deductAmount} deducted`, 'success'); setDeductAmount(''); setDeductReason(''); setDeductIdempotencyKey(crypto.randomUUID()); loadUser(); }
       else showToast(d.error || 'Failed', 'error');
     } catch { showToast('Failed', 'error'); }
     finally { setBusy(null); }
