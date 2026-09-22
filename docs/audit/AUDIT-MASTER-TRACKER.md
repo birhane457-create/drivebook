@@ -1,7 +1,7 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.7 (INT-M-03A test-verified)  
-**Last Updated:** 2026-08-15 (commit a81c2aa6)  
+**Version:** 3.8 (MM-12 ready for production verification)
+**Last Updated:** 2026-09-22 (commit 788503b1)  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -182,7 +182,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | MM-06 | Duplicate-charge auto-refund — missing idempotency key | MEDIUM | **SUPERSEDED** | VERIFIED — alleged production call site does not constitute a distinct finding. Source-verified `handleBookingPaymentFailed` contains no `stripe.refunds.create()` call. The only 3DS/prepaid auto-refund path in the webhook route is already tracked and remediated under MM-05-D. Two attributions found in audit documents, both unsupported as distinct from MM-05-D: (1) `handleBookingPaymentFailed` attribution in MONEY-MOVEMENT-INVENTORY.md is not corroborated by source; (2) investigation doc explicitly identifies MM-06 as "Site A, 3DS/prepaid" which is MM-05-D's exact path. `grep refunds.create` over entire route confirms exactly two call sites, both now fixed. | Subsumed by MM-05-D (`7f839694`) | MM-05-D targeted evidence, 7/7 exit 0 | **SUPERSEDED → MM-05-D** | `phase2/MM10-MM05-INVESTIGATION.md` (historical); source grep this commit |
 | MM-07 | Refund ledger reconciliation defect | MEDIUM | CONFIRMED | VERIFIED — Sites C/D/E write no `REFUND_ISSUED` ledger entry; `handleChargeRefunded()` sees `alreadyRecordedRefund=0` → writes duplicate `REFUND_SYNCED`; no wallet double-credit; ledger `totalRefunded` systematically over-counted | `dc13c7b0` — both `approveCancellation()` and admin transaction refund now write `REFUND_ISSUED` atomically; `handleChargeRefunded()` guard already queries this type | 7 MM-integrity tests (T1/T3 directly verify guard), exit 0 | ✅ FIX-VERIFIED | `phase2/MM10-MM05-INVESTIGATION.md` |
 | MM-09 | Subscription cancellation — no internal ownership guard | LOW | CONFIRMED | VERIFIED — `subscription-cancel.ts` takes `stripeSubId` from caller with no internal check | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
-| MM-12 | Admin wallet credit/debit — no idempotency | MEDIUM | CONFIRMED | VERIFIED — `add-credit/route.ts` no duplicate-submit protection | NOT-STARTED | PENDING | ⚠️ OPEN | `MONEY-MOVEMENT-INVENTORY.md` |
+| MM-12 | Admin wallet credit/debit — no idempotency | MEDIUM | CONFIRMED | VERIFIED — `add-credit/route.ts` no duplicate-submit protection | `638888f0` — `AdminWalletIdempotencyKey` table; claim-first `INSERT ON CONFLICT` inside `prisma.$transaction`; `SELECT FOR UPDATE` on deduction path | 10 MM-12-E HTTP tests (E1–E6 + E1-seq), exit 0 — `mm-12e-admin-wallet-idempotency-verification.test.ts` (2026-09-22) | ✅ READY FOR PRODUCTION VERIFICATION | `docs/audit/MM-12-E_EXECUTION_LOG.txt` |
 | MM-14 | Dispute handling — `charge.refunded` double-count after lost dispute | MEDIUM | CONFIRMED | VERIFIED — `handleChargeRefunded()` type guard only checks `REFUND_ISSUED`/`REFUND_SYNCED`; `DISPUTE_LOST` entries not included; Stripe fires `charge.refunded` automatically after a lost chargeback; results in spurious `REFUND_SYNCED` written on top of existing `DISPUTE_LOST` | `dc13c7b0` — `DISPUTE_LOST` added to `type: { in: [...] }` filter in `handleChargeRefunded()` | 7 MM-integrity tests (T2 directly verifies DISPUTE_LOST guard), exit 0 | ✅ FIX-VERIFIED | `phase2/MM14-MM15-VERIFICATION.md` |
 | MM-15-A | Late `transfer.failed` reverses a successfully-retried payout | MEDIUM | CONFIRMED | VERIFIED — `payout.updateMany WHERE status='PAID'` does NOT filter on `stripeTransferId`; late event for original failed transfer matches payout re-PAID via retry; reversal incorrectly applied to completed payout | `dc13c7b0` — `stripeTransferId: transferId` added to `payout.updateMany` WHERE clause in `handleTransferFailed()` | 7 MM-integrity tests (T4/T5 directly verify transferId guard), exit 0 | ✅ FIX-VERIFIED | `phase2/MM14-MM15-VERIFICATION.md` |
 | MM-15-B | `handleTransferFailed()` non-atomic: idempotency key consumed before financial reversal | MEDIUM | CONFIRMED | VERIFIED — `recordWebhookEvent(prisma, ...)` called outside `$transaction`; if `appendLedgerEntry`/`incrementLedger` fail after webhook record is committed, idempotency key prevents retry but reversal never completes | `dc13c7b0` — `recordWebhookEvent(tx, ...)` now inside `withSerializableRetry(prisma.$transaction(...))` atomically with payout reversal and ledger ops | 7 MM-integrity tests (T6/T7 directly verify atomicity and concurrency), exit 0 | ✅ FIX-VERIFIED | `phase2/MM14-MM15-VERIFICATION.md` |
@@ -237,7 +237,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 
 | # | ID | Title |
 |---|---|---|
-| 14 | MM-12 | Admin wallet credit idempotency |
+| 14 | MM-12 | Admin wallet credit idempotency | ✅ FIX-VERIFIED `638888f0` — READY FOR PRODUCTION VERIFICATION |
 | 15 | MM-02 | Delete `StripeService.createPayout()` |
 | 16 | INT-M-03A | Encrypt OAuth tokens at rest |
 | 17 | INT-M-03F | Revoke OAuth token on calendar disconnect |
@@ -288,6 +288,7 @@ The following CLOSED findings have tests recorded:
 | MM-05-A / MM-05-C / MM-07 / MM-14 / MM-15-A / MM-15-B | 7 (T1–T7 cross-path invariants in `mm-financial-integrity.test.ts`) | 0 | `dc13c7b0` (fix) + local hardening of MM-05-C |
 | MM-05-B | 5 (B1–B3 idempotency/CAS/non-fatal in `mm-05b-cancel-route.test.ts`) | 0 | follow-up to `dc13c7b0` |
 | MM-05-D | 7 (D1–D6 ordering/key/I1/I2/concurrent in `mm-05d-webhook-3ds-refund.test.ts`) | 0 | this commit (corrected) |
+| MM-12 | 10 HTTP integration tests (E1–E6 + E1-seq in `mm-12e-admin-wallet-idempotency-verification.test.ts`) — real Next.js server, isolated PostgreSQL, real NextAuth session | 0 | `638888f0` (fix) + `788503b1` (evidence) |
 | MM-10-B | 13 (S1–S10 + 2 advanceCheckoutGeneration unit tests in `mm-10b-checkout-session.test.ts`) | 0 | `6e3211c2` |
 | MM-10-C | 13 (C1–C6 + data path in `mm-10c-commission-fee.test.ts`) | 0 | `9fd2893d` | `899929c4` ✅ Vercel SUCCESS |
 | PAY-H-01 / INT-M-01A | 15 (PH-1–PH-10 + edge cases in `pay-h01-refund-reconciliation.test.ts`) | 0 | `71dc11ad` | `899929c4` ✅ Vercel SUCCESS |
