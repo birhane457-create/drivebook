@@ -384,6 +384,26 @@ model WalletTransaction {
 // See migration: 20260911000000_add_wallet_transaction_payment_intent_unique
 // This prevents P0-01B concurrent double-credit attacks
 
+/// MM-12-D: Admin wallet idempotency key store.
+/// Prevents duplicate financial effects from retries and concurrent requests.
+/// The composite PK (key, walletId, operationType) is the database-level
+/// serialisation point — see docs/audit/MM-12-C_DESIGN_VERIFICATION.md.
+/// transactionId and response are NULL while the operation is in-flight;
+/// both are populated atomically when the financial transaction commits.
+model AdminWalletIdempotencyKey {
+  key           String   @id
+  walletId      String
+  operationType String   // 'CREDIT' | 'DEBIT'
+  transactionId String?  // WalletTransaction.id — null until committed
+  response      Json?    // stored response body — null until committed
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+
+  @@unique([key, walletId, operationType])
+  @@index([expiresAt])
+  @@index([walletId])
+}
+
 model Message {
   id           String   @id @default(cuid())
   callerNumber String
