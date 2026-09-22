@@ -1,19 +1,28 @@
 /**
  * POST /api/admin/clients/[id]/wallet/add-credit
  *
- * MM-12-D: Idempotency implementation.
+ * MM-12-D: Idempotency implementation (fixed in MM-12-D review).
  *
  * Requires header:  Idempotency-Key: <UUID v4>
  *
  * Claim-first flow (see MM-12-C_DESIGN_VERIFICATION.md §Q3):
  *   1. INSERT idempotency row with NULL response (claim key inside $transaction)
  *      ON CONFLICT -> replay completed response, or 409 if in-flight
- *   2. Create WalletTransaction (CREDIT)
- *   3. UPDATE idempotency row with transactionId + response
- *   All three steps are inside the same Prisma $transaction.
+ *   2. Calculate ledger balance using tx (NOT the global prisma client)
+ *   3. Create WalletTransaction (CREDIT) using tx
+ *   4. Update cached ClientWallet.balance using tx (cache only)
+ *   5. Build response body
+ *   6. UPDATE idempotency row with transactionId + response using tx
+ *   All six steps are inside the same Prisma $transaction.
+ *
+ * Balance reads use tx.walletTransaction.findMany inside the transaction —
+ * NOT getWalletBalance() which opens a separate connection on the global
+ * prisma client. This ensures the balance calculation is consistent with
+ * any in-flight writes on this wallet within the same transaction.
  *
  * ClientWallet.balance is a performance cache only — never the source of truth.
- * getWalletBalance() (ledger sum) remains authoritative for all balance reads.
+ * getWalletBalance() (ledger sum) remains authoritative for reads OUTSIDE
+ * this transaction (audit log, receipt email).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -99,21 +108,20 @@ export async function POST(
     const expiresAt = new Date(Date.now() + IDEMPOTENCY_TTL_MS);
 
     // ── Claim-first transaction ───────────────────────────────────────────────
-    // Step 1: INSERT idempotency key row (NULL response = in-flight claim).
-    //   PostgreSQL locks the row on INSERT; concurrent requests with the same
-    //   key block here until this transaction commits or rolls back.
-    // Step 2: Create WalletTransaction (CREDIT).
-    // Step 3: UPDATE idempotency row with transactionId + response.
-    //
-    // If the DB accepts steps 2 and 3 but this block throws before returning,
-    // the whole $transaction rolls back — both the ledger row and the key row
-    // are undone atomically. A retry will find no key and execute cleanly.
+    // All six steps execute inside the same Prisma $transaction so that the
+    // idempotency key and the WalletTransaction row are committed atomically.
+    // A failure at any step rolls back both writes; a retry finds no key and
+    // executes cleanly.
 
     let responseBody: object;
 
     try {
       responseBody = await prisma.$transaction(async (tx) => {
-        // Step 1 — claim idempotency key
+
+        // ── Step 1: Claim idempotency key ─────────────────────────────────────
+        // PostgreSQL locks the row on INSERT. A concurrent INSERT of the same
+        // (key, walletId, operationType) tuple blocks until this tx commits or
+        // rolls back, then observes the committed row and takes the replay branch.
         const claimed = await tx.$queryRaw<Array<{ key: string }>>`
           INSERT INTO "AdminWalletIdempotencyKey"
             ("key", "walletId", "operationType", "createdAt", "expiresAt")
@@ -124,7 +132,7 @@ export async function POST(
         `;
 
         if (claimed.length === 0) {
-          // Key already exists — check state
+          // Key already exists — determine state
           const existing = await tx.$queryRaw<Array<{
             response: object | null;
             expiresAt: Date;
@@ -137,14 +145,14 @@ export async function POST(
           `;
 
           if (!existing.length) {
-            // Race: claimed then deleted between our INSERT and this SELECT — treat as new
+            // Narrow race: claimed then deleted between our INSERT and this SELECT
             throw new Error('IDEMPOTENCY_RETRY');
           }
 
           const row = existing[0];
 
           if (row.expiresAt <= new Date()) {
-            // Expired — delete and re-run as a new request
+            // Expired — delete stale row; caller should retry with same key
             await tx.$executeRaw`
               DELETE FROM "AdminWalletIdempotencyKey"
               WHERE "key" = ${idempotencyKey}
@@ -159,14 +167,26 @@ export async function POST(
             throw Object.assign(new Error('IDEMPOTENCY_REPLAY'), { replay: row.response });
           }
 
-          // response IS NULL — another request is in-flight with this key
+          // response IS NULL — a concurrent request holds the claim in-flight
           throw new Error('IDEMPOTENCY_IN_FLIGHT');
         }
 
-        // Step 2 — read balance before credit (inside transaction for consistency)
-        const balanceBefore = await getWalletBalance(user.id);
+        // ── Step 2: Calculate ledger balance via tx (NOT global prisma) ───────
+        // Using tx.walletTransaction ensures we read from the same transaction
+        // snapshot as the write we are about to make. Using getWalletBalance()
+        // here would open a separate database connection on the global prisma
+        // client, outside this transaction's isolation boundary.
+        const confirmedTxRows = await tx.walletTransaction.findMany({
+          where: { walletId: wallet.id, status: 'CONFIRMED' },
+          select: { type: true, amount: true },
+        });
 
-        // Step 3 — create credit transaction
+        const balanceBefore = confirmedTxRows.reduce((acc, t) => {
+          const v = Number(t.amount);
+          return t.type === 'CREDIT' ? acc + v : acc - v;
+        }, 0);
+
+        // ── Step 3: Create credit transaction via tx ───────────────────────────
         const walletTx = await tx.walletTransaction.create({
           data: {
             walletId: wallet.id,
@@ -177,22 +197,24 @@ export async function POST(
           },
         });
 
-        // Step 4 — update cached balance (cache only — not authoritative)
+        // ── Step 4: Update cached balance via tx (cache only) ─────────────────
         await tx.clientWallet.update({
           where: { id: wallet.id },
           data: { balance: { increment: amount } },
         });
 
-        // Step 5 — build response body
-        const newBalanceRaw = balanceBefore.balance + amount;
+        // ── Step 5: Build response body ───────────────────────────────────────
+        const newBalance = balanceBefore + amount;
         const body = {
           success: true,
           message: `Added ${amount} to ${user.email}'s wallet`,
-          wallet: { id: wallet.id, balance: newBalanceRaw },
+          wallet: { id: wallet.id, balance: newBalance },
           transactionId: walletTx.id,
+          previousBalance: balanceBefore,
+          newBalance,
         };
 
-        // Step 6 — store completed response in idempotency row
+        // ── Step 6: Store completed response in idempotency row via tx ─────────
         await tx.$executeRaw`
           UPDATE "AdminWalletIdempotencyKey"
           SET "transactionId" = ${walletTx.id},
@@ -204,9 +226,9 @@ export async function POST(
 
         return body;
       });
+
     } catch (err: any) {
       if (err?.replay) {
-        // Completed duplicate — return stored result
         return NextResponse.json(err.replay, { status: 200 });
       }
       if (err?.message === 'IDEMPOTENCY_IN_FLIGHT') {
@@ -216,10 +238,6 @@ export async function POST(
         );
       }
       if (err?.message === 'IDEMPOTENCY_EXPIRED' || err?.message === 'IDEMPOTENCY_RETRY') {
-        // Re-enter without idempotency key protection — key was expired/missing.
-        // Fall through to a plain (non-idempotent) execution.
-        // In practice this is a vanishingly rare race; callers should simply retry
-        // with the same key and they will land in the replay path.
         return NextResponse.json(
           { error: 'Idempotency key expired or unavailable — please retry' },
           { status: 409 }
@@ -229,6 +247,8 @@ export async function POST(
     }
 
     // ── Audit log (outside transaction — non-critical) ────────────────────────
+    // getWalletBalance() is correct here: we are outside the transaction and
+    // want the committed ledger state for the audit record.
     try {
       const finalBalance = await getWalletBalance(user.id);
       await prisma.auditLog.create({
@@ -245,6 +265,7 @@ export async function POST(
             amount,
             reason: reason || 'Manual credit added by admin',
             idempotencyKey,
+            balanceBefore: (responseBody as any).previousBalance,
             balanceAfter: finalBalance.balance,
           } as any,
         },
@@ -255,7 +276,6 @@ export async function POST(
 
     // ── Receipt email (outside transaction — non-critical) ────────────────────
     try {
-      const finalBalance = await getWalletBalance(user.id);
       await sendAdminCreditReceipt({
         customerName: user.name || user.email,
         customerEmail: user.email,
@@ -263,8 +283,8 @@ export async function POST(
         creditedAt: new Date(),
         amountAdded: amount,
         reason: reason || 'Manual credit added by admin',
-        walletBalanceBefore: finalBalance.balance - amount,
-        walletBalanceAfter: finalBalance.balance,
+        walletBalanceBefore: (responseBody as any).previousBalance,
+        walletBalanceAfter: (responseBody as any).newBalance,
       });
     } catch (e) {
       console.error('Admin credit receipt email failed:', e);
