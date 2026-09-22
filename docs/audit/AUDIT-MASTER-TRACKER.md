@@ -56,7 +56,7 @@ All other audit documents are evidence records that support this file.
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PAY-H-04 | SlotReservation concurrency — no unique constraint | MEDIUM | CONFIRMED | VERIFIED — no `@@unique([providerId, startTime])` | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | PAY-H-04 |
+| PAY-H-04 | SlotReservation concurrency — no unique constraint | MEDIUM | CONFIRMED | VERIFIED — no `@@unique([providerId, startTime])` | REMEDIATION DESIGN IN PROGRESS — `@@unique([providerId, startTime])` rejected (insufficient: different startTime values can still overlap); PostgreSQL exclusion constraint on `tsrange(startTime, endTime)` is the candidate fix; awaiting btree_gist confirmation and baseline hostile test | PENDING | ⚠️ OPEN — design not yet authorised | `docs/audit/PAY-H-04_INVESTIGATION.md` | PAY-H-04 |
 | SUB-06-A | No tests for subscription event ordering | MEDIUM | CONFIRMED | VERIFIED — zero tests for updated→deleted | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | SUB-06-A |
 | SUB-08-A | Seat limit not enforced in webhook | MEDIUM | CONFIRMED | VERIFIED — no seat count check before subscription.create | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | SUB-08-A |
 | RBAC-M-02 | Admin routes use role check instead of permission check | MEDIUM | CONFIRMED | VERIFIED — `role === 'SUPER_ADMIN'` pattern found | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | RBAC-M-02 |
