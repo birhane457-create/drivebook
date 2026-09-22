@@ -27,12 +27,18 @@ import { prisma } from '@/lib/prisma';
 import { POST as addCreditPOST } from '@/app/api/admin/clients/[id]/wallet/add-credit/route';
 import { POST as deductCreditPOST } from '@/app/api/admin/clients/[id]/wallet/deduct-credit/route';
 import { getWalletBalance } from '@/lib/services/wallet-helpers';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from 'next-auth';
 import { execSync } from 'child_process';
 
-// Mock next-auth/next — reuses pattern from p0-01-ownership.test.ts
-vi.mock('next-auth/next', () => ({
+// Mock next-auth (NOT next-auth/next) — the routes import from 'next-auth'
+vi.mock('next-auth', () => ({
   getServerSession: vi.fn(),
+}));
+
+// Mock next/headers to prevent "headers() called outside request scope" error
+vi.mock('next/headers', () => ({
+  headers: vi.fn(() => new Map()),
+  cookies: vi.fn(() => ({ get: vi.fn(), set: vi.fn() })),
 }));
 
 const TEST_PREFIX = `mm12b_${Date.now()}`;
@@ -73,7 +79,7 @@ beforeAll(async () => {
     data: {
       email: `${TEST_PREFIX}_customer@example.com`,
       name: 'MM-12B Customer',
-      role: 'CUSTOMER',
+      role: 'CLIENT',
     },
   });
 
@@ -81,8 +87,8 @@ beforeAll(async () => {
     data: {
       userId: user.id,
       name: user.name!,
+      email: user.email,
       phone: '555-0100',
-      timezone: 'America/New_York',
     },
   });
 
@@ -91,7 +97,7 @@ beforeAll(async () => {
     data: {
       email: `${TEST_PREFIX}_admin@example.com`,
       name: 'MM-12B Admin',
-      role: 'SUPER_ADMIN',
+      role: 'ADMIN',
     },
   });
 
@@ -99,8 +105,9 @@ beforeAll(async () => {
   await prisma.staffMember.create({
     data: {
       userId: admin.id,
-      businessId: 'default',
-      role: 'ADMIN',
+      name: admin.name!,
+      email: admin.email,
+      department: 'ADMIN',
       permissions: ['FINANCE_CREDITS_MANAGE', 'USERS_CUSTOMERS_WALLET_DEDUCT'],
       maxRefundAmount: 1000,
     },
@@ -122,12 +129,26 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // Reset wallet to $0 before each test
-  const wallet = await prisma.clientWallet.findUnique({
+  // Ensure wallet exists and reset to $0 before each test
+  let wallet = await prisma.clientWallet.findUnique({
     where: { userId: testUser.id },
   });
-  if (wallet) {
+  
+  if (!wallet) {
+    // Create wallet if it doesn't exist
+    wallet = await prisma.clientWallet.create({
+      data: {
+        userId: testUser.id,
+        balance: 0,
+      },
+    });
+  } else {
+    // Reset existing wallet
     await prisma.walletTransaction.deleteMany({ where: { walletId: wallet.id } });
+    await prisma.clientWallet.update({
+      where: { id: wallet.id },
+      data: { balance: 0 },
+    });
   }
 });
 
