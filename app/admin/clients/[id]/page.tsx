@@ -128,6 +128,11 @@ export default function AdminClientDetailsPage() {
   const [creditMode, setCreditMode] = useState<'add' | 'deduct' | null>(null);
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
+  // MM-12-D: Idempotency key generated when the credit/deduction form opens.
+  // A fresh key is created each time the form is opened so that retries from
+  // the same form session are idempotent, but a new form open always gets a
+  // distinct key.
+  const [walletIdempotencyKey, setWalletIdempotencyKey] = useState('');
 
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState('');
@@ -193,7 +198,11 @@ export default function AdminClientDetailsPage() {
     setActionLoading(true);
     const endpoint = creditMode === 'add' ? 'add-credit' : 'deduct-credit';
     const res = await fetch(`/api/admin/clients/${params.id}/wallet/${endpoint}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': walletIdempotencyKey,
+      },
       body: JSON.stringify({ amount: parseFloat(amount), reason: reason || `Manual ${creditMode} by admin` }),
     });
     const data = await res.json();
@@ -681,11 +690,11 @@ export default function AdminClientDetailsPage() {
           </div>
         ) : (
           <div className="flex gap-3 mb-6">
-            <button onClick={() => setCreditMode('add')}
+            <button onClick={() => { setCreditMode('add'); setWalletIdempotencyKey(crypto.randomUUID()); }}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-foreground text-sm font-semibold rounded-xl hover:bg-green-700 transition">
               <Plus className="w-4 h-4" />Add Credit
             </button>
-            <button onClick={() => setCreditMode('deduct')}
+            <button onClick={() => { setCreditMode('deduct'); setWalletIdempotencyKey(crypto.randomUUID()); }}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-destructive text-foreground text-sm font-semibold rounded-xl hover:bg-destructive/90 transition">
               <Minus className="w-4 h-4" />Deduct Credit
             </button>
