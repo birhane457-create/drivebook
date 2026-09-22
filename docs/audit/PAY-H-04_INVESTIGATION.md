@@ -392,3 +392,122 @@ The correct invariant for PAY-H-04 remediation:
 > deleted row continues to enforce the invariant. The application must ensure
 > expired rows for the specific target interval are deleted before a new insert
 > is attempted (Option A), or accept the 10-minute expiry window (Option B).
+
+---
+
+## 12. Constraint Prototype Results (2026-09-22)
+
+**Script:** `scripts/payh04-constraint-prototype.mjs`
+**DB:** `postgresql://postgres:testpass@localhost:5433/drivebook_test`
+**Constraint installed:** `EXCLUDE USING GIST ("providerId" WITH =, tsrange("startTime", "endTime", '[)') WITH &&)`
+
+### Q1 — btree_gist availability: ANSWERED
+
+`btree_gist` was **not pre-installed** on the test database (0 rows in pg_extension).
+Installed successfully as version 1.7 via `CREATE EXTENSION btree_gist`.
+
+**Production implication:** `btree_gist` must be explicitly installed on the
+Supabase production database before the migration runs. The migration must include:
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+```
+Verify separately against production via Supabase SQL editor:
+```sql
+SELECT extname, extversion FROM pg_extension WHERE extname = 'btree_gist';
+```
+
+### T1–T7 Test Matrix Results
+
+| Test | Description | Result |
+|------|-------------|--------|
+| T1 | Insert `(X, 10:00, 11:00)` | ✓ SUCCESS |
+| T2 | Insert `(X, 10:30, 11:30)` — overlaps T1 | ✓ CONSTRAINT FIRED |
+| T3 | Insert `(X, 11:00, 12:00)` — adjacent end boundary | ✓ SUCCESS — boundary preserved |
+| T4 | Insert `(X, 09:00, 10:00)` — adjacent start boundary | ✓ SUCCESS — boundary preserved |
+| T5 | Delete T1, re-insert `(X, 10:00, 11:00)` | ✓ SUCCESS — deletion clears constraint |
+| T6 | 3× concurrent inserts of `(X, 14:00, 15:00)` | ✓ Exactly 1/3 succeeded — race-safe |
+| T7 | Expired row `(X, 16:00, 17:00)`, then fresh `(X, 16:00, 17:00)` | **✗ BLOCKED — OPTION A REQUIRED** |
+
+### Q5 — Prisma error code: ANSWERED
+
+Exclusion constraint violations surface as **`PrismaClientUnknownRequestError`**,
+not `PrismaClientKnownRequestError` (P2002). The `code` field is `none`.
+The PostgreSQL error code `23P01` appears in the `message` string.
+
+**Catch pattern for application code:**
+```typescript
+import { Prisma } from '@prisma/client';
+
+function isExclusionConstraintViolation(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientUnknownRequestError &&
+    (err.message.includes('23P01') ||
+     err.message.includes('SlotReservation_no_overlap'))
+  );
+}
+```
+Both the PostgreSQL error code (`23P01`) and the constraint name
+(`SlotReservation_no_overlap`) appear in the message — either can be matched.
+Using the constraint name is more robust against locale-specific error messages.
+
+**T6 concurrent loser error** confirms the same error class for race losers:
+`PrismaClientUnknownRequestError`, PostgreSQL code `23P01`.
+
+### Q2/Q3 and T7 — Option A/B Expiry Decision: ANSWERED — OPTION A REQUIRED
+
+**T7 result:** The fresh insert was **BLOCKED** by the expired-but-not-deleted row.
+
+The all-rows constraint does not distinguish between active and expired rows —
+`tsrange` treats both equally. An expired reservation at `(X, 16:00, 17:00)` with
+`expiresAt` one second in the past still holds the GIST slot until physically deleted.
+
+After deleting the expired row, the fresh insert succeeded immediately.
+
+**Decision: OPTION A is required.**
+
+The application must synchronously delete expired rows for the target interval
+before calling `slotReservation.create()`. Path A already does a broader `deleteMany`
+scoped to `providerId` before the overlap check. This must be tightened to also
+cover the specific interval being reserved:
+
+```typescript
+// Before create(), delete expired rows that overlap the target interval
+await prisma.slotReservation.deleteMany({
+  where: {
+    providerId,
+    expiresAt: { lt: new Date() },
+    AND: [
+      { startTime: { lt: endDateTime } },
+      { endTime:   { gt: startDateTime } },
+    ],
+  },
+});
+```
+
+This ensures no logically-expired row holds the GIST slot at insert time.
+The existing broader `deleteMany` can remain for general cleanup; the scoped
+delete is the critical correctness fix.
+
+---
+
+## 13. Design Authorisation Status
+
+All blocking questions answered. **DESIGN IS NOW AUTHORISED** for PAY-H-04.
+
+| Q | Question | Status |
+|---|----------|--------|
+| Q1 | btree_gist on production | ANSWERED — not pre-installed; migration must include `CREATE EXTENSION IF NOT EXISTS btree_gist` |
+| Q2/Q3 | Partial constraint `WHERE (expiresAt > NOW())` | REJECTED (STABLE not IMMUTABLE); all-rows constraint confirmed correct |
+| Q4 | Path B must check SlotReservation | CONFIRMED — fix required in migration scope |
+| Q5 | Prisma error code | ANSWERED — `PrismaClientUnknownRequestError`, code=none, match on `23P01` or constraint name |
+| Expiry gap | Option A vs B | ANSWERED — **Option A required**; expired rows block constraint; must synchronously delete before insert |
+| Hostile baseline | Race confirmed in production route | EXECUTION VERIFIED — fd882fa9 |
+
+**Next gate: PAY-H-04-C — Design document and migration authorisation.**
+
+Migration components required:
+1. `CREATE EXTENSION IF NOT EXISTS btree_gist;`
+2. `EXCLUDE USING GIST ("providerId" WITH =, tsrange("startTime", "endTime", '[)') WITH &&)` — no WHERE clause
+3. Path A code: scoped `deleteMany` (expired, overlapping interval) before `create()`
+4. Path B code: add `SlotReservation` overlap check before `booking.create()`
+5. Error handling: catch `PrismaClientUnknownRequestError` with `23P01`/constraint name → HTTP 409 on both paths
