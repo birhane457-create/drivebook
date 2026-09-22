@@ -223,7 +223,23 @@ Service-layer extraction remains OFF the table until MM-12-C design is approved.
 
 ---
 
-## 8. Reproducibility
+## 8. Authoritative Evidence Files
+
+The following two files constitute the MM-12-B execution evidence:
+
+| File | Role |
+|------|------|
+| `__tests__/integration/mm-12b-http-admin-wallet-idempotency.test.ts` | **Authoritative** — HTTP integration tests, real server, real auth |
+| `scripts/run-mm-12b-http-tests.ps1` | **Authoritative** — test runner that starts server with isolated DB |
+
+The older file `__tests__/integration/mm-12b-admin-wallet-idempotency.test.ts` uses
+a direct-handler/Vitest mock approach and **was not** the mechanism that established
+the execution evidence. It remains in the repository as a record of the approach
+that was superseded, but it is not the basis for the EXECUTION VERIFIED status.
+
+---
+
+## 9. Reproducibility
 
 ```bat
 cd "E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook"
