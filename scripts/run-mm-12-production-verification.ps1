@@ -1,27 +1,37 @@
-# MM-12 Production Verification Script
+# MM-12 Production Verification Script  (v2)
 #
 # PURPOSE:
 #   Execute the 9-step production verification checklist for MM-12 (admin wallet
 #   idempotency) against the deployed production application.
 #
-# REQUIREMENTS:
-#   - MM-12-D migration applied to production DB
-#     (prisma/migrations/20260815000001_mm12d_admin_wallet_idempotency)
-#   - Commit 638888f0 or later deployed to production
-#   - PRODUCTION_URL set to the deployed application URL
-#   - PRODUCTION_ADMIN_EMAIL / PRODUCTION_ADMIN_PASSWORD: dedicated test admin account
-#     (NOT a real customer account; NOT a real instructor account)
-#   - PRODUCTION_DB_URL: direct connection string for post-check SQL queries
-#     (read-only replica or admin access — only SELECT queries are run)
+# CORRECTIONS FROM v1 (per independent review):
+#   1. SHA verification: read from /api/health (VERCEL_GIT_COMMIT_SHA), not operator input
+#   2. Cookie name: handles both __Secure-next-auth.session-token (production)
+#      and next-auth.session-token (dev) — matched against actual auth.ts config
+#   3. Fixture handling: script does NOT claim to create fixtures automatically;
+#      manual provisioning is explicit and clearly documented
+#   4. DB constraint verification: Step 8 now queries the pg_indexes catalog to
+#      confirm the unique constraint exists, not just that no duplicates happen to exist
+#   5. Step 7/8b separation: Step 7 records HTTP result; Step 8b records DB
+#      result; evidence file clearly labels each as distinct evidence types
+#   6. Reviewer note: guide updated to require independent corroboration, not
+#      self-authenticating operator-supplied values
 #
-# OUTPUTS:
-#   docs/audit/MM-12-PRODUCTION-VERIFICATION.txt — evidence artifact
+# REQUIREMENTS:
+#   - Commit 638888f0 or later deployed to production (verified via /api/health sha field)
+#   - Migration 20260815000001_mm12d_admin_wallet_idempotency applied to production DB
+#   - Dedicated test fixtures pre-created in production DB (see guide)
+#   - PRODUCTION_ADMIN_EMAIL / PRODUCTION_ADMIN_PASSWORD: dedicated test admin account
+#   - DB access for SQL invariant queries (steps 8a-8d)
+#
+# OUTPUT:
+#   docs/audit/MM-12-PRODUCTION-VERIFICATION.txt
 #
 # SAFETY:
-#   - Uses a dedicated test wallet created by this script
+#   - Uses a dedicated test wallet (IDs supplied via parameters)
 #   - No real customer wallet is touched
-#   - All test data is cleaned up after verification
-#   - Financial amounts used: $1 (minimum meaningful, traceable, reversible)
+#   - Financial amounts used: $1 (minimum meaningful, traceable)
+#   - Test data cleanup SQL is printed at the end
 
 param(
     [Parameter(Mandatory=$true)]
@@ -34,19 +44,24 @@ param(
     [string]$AdminPassword,
 
     [Parameter(Mandatory=$true)]
-    [string]$DbConnectionString,
+    [string]$TestCustomerId,      # pre-created; see guide for SQL setup
+
+    [Parameter(Mandatory=$true)]
+    [string]$TestWalletId,        # pre-created; needed for SQL queries
+
+    [string]$ExpectedShaPrefix,   # optional: first 8+ chars of 638888f0 to assert against
 
     [string]$OutputFile = "docs\audit\MM-12-PRODUCTION-VERIFICATION.txt"
 )
 
 $ErrorActionPreference = "Stop"
-$Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$Evidence = @()
+$RunTimestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$Evidence = [System.Collections.Generic.List[string]]::new()
 
 function Log {
     param([string]$Line)
     Write-Host $Line
-    $script:Evidence += $Line
+    $Evidence.Add($Line)
 }
 
 function LogSection {
@@ -55,271 +70,397 @@ function LogSection {
     Log "=== $Title ==="
 }
 
-Log "MM-12 Production Verification"
-Log "Timestamp:      $Timestamp"
+Log "MM-12 Production Verification (script v2)"
+Log "Run timestamp:  $RunTimestamp"
 Log "Production URL: $ProductionUrl"
+Log "Test customer:  $TestCustomerId"
+Log "Test wallet:    $TestWalletId"
 Log "Output:         $OutputFile"
-Log ""
 
-# ── Step 1: Record deployed SHA ───────────────────────────────────────────────
-LogSection "Step 1: Deployed commit SHA"
+# ── Step 1: Read deployed SHA from /api/health ────────────────────────────────
+# The /api/health endpoint exposes process.env.VERCEL_GIT_COMMIT_SHA at runtime.
+# This is read from the running application, not supplied by the operator,
+# making it an independent confirmation of what is actually deployed.
+LogSection "Step 1: Deployed commit SHA (read from application)"
 
 try {
-    $versionRes = Invoke-RestMethod -Uri "$ProductionUrl/api/health" -Method GET -TimeoutSec 10
-    Log "Health check:  $($versionRes | ConvertTo-Json -Compress)"
+    $healthRes = Invoke-RestMethod -Uri "$ProductionUrl/api/health" -Method GET -TimeoutSec 10
 } catch {
-    Log "ERROR: Production server not reachable at $ProductionUrl"
-    Log "       $_"
+    Log "ERROR: Production server not reachable at $ProductionUrl — $_"
     exit 1
 }
 
+$deployedSha   = $healthRes.sha
+$deployedEnv   = $healthRes.env
+$healthTimestamp = $healthRes.timestamp
+
+Log "Health endpoint response:"
+Log "  sha:       $deployedSha"
+Log "  env:       $deployedEnv"
+Log "  timestamp: $healthTimestamp"
+
+if ($deployedSha -eq 'dev') {
+    Log "WARNING: sha = 'dev' — this is a local/development server, not production."
+    Log "         Production verification requires a real Vercel deployment."
+}
+
+if ($ExpectedShaPrefix -and -not $deployedSha.StartsWith($ExpectedShaPrefix)) {
+    Log "ERROR: Deployed SHA '$deployedSha' does not start with expected '$ExpectedShaPrefix'."
+    Log "       The fix commit 638888f0 (or a later commit containing it) must be deployed."
+    exit 1
+} elseif ($ExpectedShaPrefix) {
+    Log "SHA prefix match: OK ($ExpectedShaPrefix)"
+}
+
 Log ""
-Log "MANUAL ACTION REQUIRED: Record the deployed git SHA."
-Log "  On Vercel: Dashboard -> Deployment -> Git Commit SHA"
-Log "  Record below before continuing:"
-$deployedSha = Read-Host "Deployed SHA"
-Log "Deployed SHA:  $deployedSha"
+Log "INDEPENDENT VERIFICATION REQUIRED:"
+Log "  Open the Vercel dashboard for this deployment and confirm that:"
+Log "  $deployedSha matches the Git SHA of the deployed commit."
+Log "  The reviewer must record this independently of this script's output."
 
-# ── Step 2: Authenticate and create test fixtures ─────────────────────────────
-LogSection "Step 2: Authentication and test fixture creation"
+# ── Step 2: Authenticate ──────────────────────────────────────────────────────
+LogSection "Step 2: Authentication"
+Log "Admin email: $AdminEmail"
 
-# Get CSRF token
-$csrfRes = Invoke-RestMethod -Uri "$ProductionUrl/api/auth/csrf" -Method GET -SessionVariable session
-$csrfToken = $csrfRes.csrfToken
+# Get CSRF token and capture the Set-Cookie header
+$csrfResponse = Invoke-WebRequest -Uri "$ProductionUrl/api/auth/csrf" -Method GET -SessionVariable webSession -UseBasicParsing
+$csrfBody = $csrfResponse.Content | ConvertFrom-Json
+$csrfToken = $csrfBody.csrfToken
+$csrfCookies = $csrfResponse.Headers['Set-Cookie']
 Log "CSRF token obtained"
 
-# Sign in
+# Sign in — POST to /api/auth/callback/credentials with CSRF cookie echoed back
+$csrfCookieHeader = ($csrfCookies | ForEach-Object { ($_ -split ";")[0] }) -join "; "
 $signInBody = "csrfToken=$([Uri]::EscapeDataString($csrfToken))&email=$([Uri]::EscapeDataString($AdminEmail))&password=$([Uri]::EscapeDataString($AdminPassword))"
-$signInRes = Invoke-WebRequest -Uri "$ProductionUrl/api/auth/callback/credentials" `
+
+$signInResponse = Invoke-WebRequest `
+    -Uri "$ProductionUrl/api/auth/callback/credentials" `
     -Method POST `
     -Body $signInBody `
     -ContentType "application/x-www-form-urlencoded" `
-    -WebSession $session `
+    -Headers @{ "Cookie" = $csrfCookieHeader } `
     -MaximumRedirection 0 `
+    -UseBasicParsing `
     -ErrorAction SilentlyContinue
 
-$sessionCookie = ($signInRes.Headers['Set-Cookie'] | Where-Object { $_ -match "next-auth.session-token" }) -split ";" | Select-Object -First 1
+# auth.ts sets cookie name based on NODE_ENV:
+#   production:   __Secure-next-auth.session-token
+#   development:  next-auth.session-token
+# Try both — whichever is present is the active session cookie.
+$responseCookies = $signInResponse.Headers['Set-Cookie']
+$sessionCookie = $null
+foreach ($c in $responseCookies) {
+    $nameValue = ($c -split ";")[0]
+    if ($nameValue -match "(__Secure-)?next-auth\.session-token=") {
+        $sessionCookie = $nameValue
+        break
+    }
+}
+
 if (-not $sessionCookie) {
-    Log "ERROR: Authentication failed. Check admin credentials."
+    Log "ERROR: Authentication failed. No session-token cookie found in response."
+    Log "  Cookies received: $responseCookies"
+    Log "  Check admin credentials and that the account has ADMIN role + StaffMember record."
     exit 1
 }
-Log "Admin authenticated. Session cookie obtained."
 
-# Create test user via DB (direct insert — avoids registering a real account)
-Log ""
-Log "MANUAL ACTION REQUIRED: Create a dedicated test wallet for production verification."
-Log "  - Create a test user in production DB with role=CLIENT"
-Log "  - Create ClientWallet with balance=0 for that user"
-Log "  - Create Customer record linked to that user"
-Log "  - Record the customer ID below"
-$testCustomerId = Read-Host "Test customer ID (from production DB)"
-Log "Test customer ID: $testCustomerId"
+$cookieNameUsed = if ($sessionCookie -match "^__Secure-") { "__Secure-next-auth.session-token" } else { "next-auth.session-token" }
+Log "Session cookie obtained: $cookieNameUsed"
+Log "Authentication: OK"
 
-# ── Helper: make authenticated API call ───────────────────────────────────────
+# Helper: make an authenticated wallet API call
 function Invoke-WalletOp {
     param(
-        [string]$Operation,  # add-credit or deduct-credit
+        [string]$Operation,
         [decimal]$Amount,
         [string]$Reason,
         [string]$IdempotencyKey
     )
+    $headers = @{
+        "Content-Type"    = "application/json"
+        "Cookie"          = "$csrfCookieHeader; $sessionCookie"
+        "Idempotency-Key" = $IdempotencyKey
+    }
+    $bodyJson = "{`"amount`":$Amount,`"reason`":`"$Reason`"}"
     try {
-        $headers = @{
-            "Content-Type"    = "application/json"
-            "Idempotency-Key" = $IdempotencyKey
-            "Cookie"          = $sessionCookie
-        }
-        $body = @{ amount = $Amount; reason = $Reason } | ConvertTo-Json
-        $res = Invoke-WebRequest `
-            -Uri "$ProductionUrl/api/admin/clients/$testCustomerId/wallet/$Operation" `
+        $r = Invoke-WebRequest `
+            -Uri "$ProductionUrl/api/admin/clients/$TestCustomerId/wallet/$Operation" `
             -Method POST `
             -Headers $headers `
-            -Body $body `
+            -Body $bodyJson `
+            -UseBasicParsing `
             -ErrorAction SilentlyContinue
-        return @{
-            status = [int]$res.StatusCode
-            body   = $res.Content | ConvertFrom-Json
-        }
+        $parsed = $r.Content | ConvertFrom-Json -ErrorAction SilentlyContinue
+        return @{ status = [int]$r.StatusCode; body = $parsed; raw = $r.Content }
     } catch {
-        $statusCode = [int]$_.Exception.Response.StatusCode
-        $content = $_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue
-        return @{ status = $statusCode; body = $content }
+        $sc = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+        $msg = $_.ErrorDetails.Message
+        return @{ status = $sc; body = ($msg | ConvertFrom-Json -ErrorAction SilentlyContinue); raw = $msg }
     }
 }
 
 # ── Step 3: Same-key concurrent credit → exactly 1 transaction ───────────────
-LogSection "Step 3: Same-key concurrent credit"
+LogSection "Step 3: Concurrent same-key credit (INVARIANT 1)"
 
 $key3 = [System.Guid]::NewGuid().ToString()
 Log "Idempotency key: $key3"
+Log "Sending two concurrent requests..."
 
 $job3a = Start-Job -ScriptBlock {
-    param($url, $cid, $cookie, $key)
-    $headers = @{ "Content-Type"="application/json"; "Idempotency-Key"=$key; "Cookie"=$cookie }
+    param($url, $cid, $csrfCookie, $sessionCookie, $key)
+    $headers = @{ "Content-Type"="application/json"; "Cookie"="$csrfCookie; $sessionCookie"; "Idempotency-Key"=$key }
     try {
-        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/add-credit" -Method POST -Headers $headers -Body '{"amount":1,"reason":"MM-12 prod check 3A"}' -ErrorAction SilentlyContinue
-        return @{ status=[int]$r.StatusCode; txId=($r.Content|ConvertFrom-Json).transactionId }
-    } catch { return @{ status=[int]$_.Exception.Response.StatusCode } }
-} -ArgumentList $ProductionUrl, $testCustomerId, $sessionCookie, $key3
+        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/add-credit" -Method POST -Headers $headers -Body '{"amount":1,"reason":"MM-12 prod 3A"}' -UseBasicParsing -ErrorAction SilentlyContinue
+        $b = $r.Content | ConvertFrom-Json -ErrorAction SilentlyContinue
+        return @{ status=[int]$r.StatusCode; txId=$b.transactionId; raw=$r.Content }
+    } catch {
+        return @{ status=[int]$_.Exception.Response.StatusCode; txId=$null; raw=$_.ErrorDetails.Message }
+    }
+} -ArgumentList $ProductionUrl, $TestCustomerId, $csrfCookieHeader, $sessionCookie, $key3
 
 $job3b = Start-Job -ScriptBlock {
-    param($url, $cid, $cookie, $key)
-    $headers = @{ "Content-Type"="application/json"; "Idempotency-Key"=$key; "Cookie"=$cookie }
+    param($url, $cid, $csrfCookie, $sessionCookie, $key)
+    $headers = @{ "Content-Type"="application/json"; "Cookie"="$csrfCookie; $sessionCookie"; "Idempotency-Key"=$key }
     try {
-        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/add-credit" -Method POST -Headers $headers -Body '{"amount":1,"reason":"MM-12 prod check 3A"}' -ErrorAction SilentlyContinue
-        return @{ status=[int]$r.StatusCode; txId=($r.Content|ConvertFrom-Json).transactionId }
-    } catch { return @{ status=[int]$_.Exception.Response.StatusCode } }
-} -ArgumentList $ProductionUrl, $testCustomerId, $sessionCookie, $key3
+        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/add-credit" -Method POST -Headers $headers -Body '{"amount":1,"reason":"MM-12 prod 3A"}' -UseBasicParsing -ErrorAction SilentlyContinue
+        $b = $r.Content | ConvertFrom-Json -ErrorAction SilentlyContinue
+        return @{ status=[int]$r.StatusCode; txId=$b.transactionId; raw=$r.Content }
+    } catch {
+        return @{ status=[int]$_.Exception.Response.StatusCode; txId=$null; raw=$_.ErrorDetails.Message }
+    }
+} -ArgumentList $ProductionUrl, $TestCustomerId, $csrfCookieHeader, $sessionCookie, $key3
 
 $res3a = Receive-Job -Job $job3a -Wait; $res3b = Receive-Job -Job $job3b -Wait
-Remove-Job $job3a; Remove-Job $job3b
+Remove-Job $job3a -Force; Remove-Job $job3b -Force
 
-Log "Request A: status=$($res3a.status) txId=$($res3a.txId)"
-Log "Request B: status=$($res3b.status) txId=$($res3b.txId)"
-$step3Pass = ($res3a.status -eq 200) -and ($res3b.status -eq 200) -and ($res3a.txId -eq $res3b.txId)
-Log "Step 3 PASS: $step3Pass (both 200, same txId)"
+Log "Request A: HTTP $($res3a.status)  txId=$($res3a.txId)"
+Log "Request B: HTTP $($res3b.status)  txId=$($res3b.txId)"
+Log "Raw A: $($res3a.raw)"
+Log "Raw B: $($res3b.raw)"
 
-# ── Step 4: Same-key replay → same txId ───────────────────────────────────────
-LogSection "Step 4: Same-key replay"
+$step3HttpPass = ($res3a.status -eq 200) -and ($res3b.status -eq 200)
+$step3TxIdMatch = ($res3a.txId -ne $null) -and ($res3a.txId -eq $res3b.txId)
+Log "Step 3 HTTP:   PASS=$step3HttpPass  (both 200)"
+Log "Step 3 txId:   MATCH=$step3TxIdMatch  (both reference same transaction)"
+Log "APPLICATION EVIDENCE: HTTP status + transaction IDs recorded above."
+Log "DB EVIDENCE REQUIRED: Step 8 SQL query will confirm exactly 1 WalletTransaction row."
 
-$replayRes = Invoke-WalletOp -Operation "add-credit" -Amount 1 -Reason "MM-12 prod check 3A" -IdempotencyKey $key3
-Log "Replay status: $($replayRes.status)"
-Log "Replay txId:   $($replayRes.body.transactionId)"
-$step4Pass = ($replayRes.status -eq 200) -and ($replayRes.body.transactionId -eq $res3a.txId)
-Log "Step 4 PASS: $step4Pass (200, same txId as Step 3)"
+# ── Step 4: Replay with same key → same txId ──────────────────────────────────
+LogSection "Step 4: Replay with same key"
+
+$res4 = Invoke-WalletOp -Operation "add-credit" -Amount 1 -Reason "MM-12 prod 3A" -IdempotencyKey $key3
+Log "Replay HTTP:   $($res4.status)"
+Log "Replay txId:   $($res4.body.transactionId)"
+Log "Raw: $($res4.raw)"
+
+$step4Pass = ($res4.status -eq 200) -and ($res4.body.transactionId -eq $res3a.txId)
+Log "Step 4 PASS:   $step4Pass  (HTTP 200, txId matches Step 3)"
 
 # ── Step 5: Distinct keys → distinct transactions ─────────────────────────────
-LogSection "Step 5: Distinct-key credits"
+LogSection "Step 5: Distinct-key credits (legitimate operations)"
 
 $key5a = [System.Guid]::NewGuid().ToString()
 $key5b = [System.Guid]::NewGuid().ToString()
-$res5a = Invoke-WalletOp -Operation "add-credit" -Amount 1 -Reason "MM-12 prod check 5A" -IdempotencyKey $key5a
-$res5b = Invoke-WalletOp -Operation "add-credit" -Amount 1 -Reason "MM-12 prod check 5B" -IdempotencyKey $key5b
-Log "Credit 5A: status=$($res5a.status) txId=$($res5a.body.transactionId)"
-Log "Credit 5B: status=$($res5b.status) txId=$($res5b.body.transactionId)"
-$step5Pass = ($res5a.status -eq 200) -and ($res5b.status -eq 200) -and ($res5a.body.transactionId -ne $res5b.body.transactionId)
-Log "Step 5 PASS: $step5Pass (both 200, distinct txIds)"
+$res5a = Invoke-WalletOp -Operation "add-credit" -Amount 1 -Reason "MM-12 prod 5A" -IdempotencyKey $key5a
+$res5b = Invoke-WalletOp -Operation "add-credit" -Amount 1 -Reason "MM-12 prod 5B" -IdempotencyKey $key5b
+Log "Credit 5A: HTTP $($res5a.status)  txId=$($res5a.body.transactionId)"
+Log "Credit 5B: HTTP $($res5b.status)  txId=$($res5b.body.transactionId)"
+
+$step5Pass = ($res5a.status -eq 200) -and ($res5b.status -eq 200) -and `
+             ($res5a.body.transactionId -ne $res5b.body.transactionId)
+Log "Step 5 PASS:   $step5Pass  (both 200, distinct txIds)"
 
 # ── Step 6: Concurrent deductions → no negative balance ──────────────────────
 LogSection "Step 6: Concurrent deductions — INVARIANT 2"
 
-# Fund with $3 total (steps 3+5 added $3, but we need a known starting point)
-# Add a known $5 credit first to ensure sufficient balance
+# Add a known $5 credit to establish a controlled starting balance
 $fundKey = [System.Guid]::NewGuid().ToString()
-$fundRes = Invoke-WalletOp -Operation "add-credit" -Amount 5 -Reason "MM-12 prod check 6 setup" -IdempotencyKey $fundKey
-Log "Setup credit ($5): status=$($fundRes.status)"
+$fundRes = Invoke-WalletOp -Operation "add-credit" -Amount 5 -Reason "MM-12 prod 6 setup" -IdempotencyKey $fundKey
+Log "Setup credit ($5): HTTP $($fundRes.status)  txId=$($fundRes.body.transactionId)"
+if ($fundRes.status -ne 200) {
+    Log "ERROR: Setup credit failed — cannot proceed with Step 6."
+    exit 1
+}
 
-# Two concurrent $4 debits against the $5 setup credit
-# (earlier credits from steps 3 and 5 will also be in the ledger, but we use
-# a freshly created wallet via Step 2, so only this session's credits exist)
+# Two concurrent $4 debits — only one can succeed given the $5 available from this credit
 $key6a = [System.Guid]::NewGuid().ToString()
 $key6b = [System.Guid]::NewGuid().ToString()
 
 $job6a = Start-Job -ScriptBlock {
-    param($url, $cid, $cookie, $key)
-    $headers = @{ "Content-Type"="application/json"; "Idempotency-Key"=$key; "Cookie"=$cookie }
+    param($url, $cid, $csrfCookie, $sessionCookie, $key)
+    $headers = @{ "Content-Type"="application/json"; "Cookie"="$csrfCookie; $sessionCookie"; "Idempotency-Key"=$key }
     try {
-        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/deduct-credit" -Method POST -Headers $headers -Body '{"amount":4,"reason":"MM-12 prod check 6A"}' -ErrorAction SilentlyContinue
-        return @{ status=[int]$r.StatusCode; txId=($r.Content|ConvertFrom-Json).transactionId }
-    } catch { return @{ status=[int]$_.Exception.Response.StatusCode } }
-} -ArgumentList $ProductionUrl, $testCustomerId, $sessionCookie, $key6a
+        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/deduct-credit" -Method POST -Headers $headers -Body '{"amount":4,"reason":"MM-12 prod 6A"}' -UseBasicParsing -ErrorAction SilentlyContinue
+        return @{ status=[int]$r.StatusCode; raw=$r.Content }
+    } catch {
+        return @{ status=[int]$_.Exception.Response.StatusCode; raw=$_.ErrorDetails.Message }
+    }
+} -ArgumentList $ProductionUrl, $TestCustomerId, $csrfCookieHeader, $sessionCookie, $key6a
 
 $job6b = Start-Job -ScriptBlock {
-    param($url, $cid, $cookie, $key)
-    $headers = @{ "Content-Type"="application/json"; "Idempotency-Key"=$key; "Cookie"=$cookie }
+    param($url, $cid, $csrfCookie, $sessionCookie, $key)
+    $headers = @{ "Content-Type"="application/json"; "Cookie"="$csrfCookie; $sessionCookie"; "Idempotency-Key"=$key }
     try {
-        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/deduct-credit" -Method POST -Headers $headers -Body '{"amount":4,"reason":"MM-12 prod check 6B"}' -ErrorAction SilentlyContinue
-        return @{ status=[int]$r.StatusCode; txId=($r.Content|ConvertFrom-Json).transactionId }
-    } catch { return @{ status=[int]$_.Exception.Response.StatusCode } }
-} -ArgumentList $ProductionUrl, $testCustomerId, $sessionCookie, $key6b
+        $r = Invoke-WebRequest -Uri "$url/api/admin/clients/$cid/wallet/deduct-credit" -Method POST -Headers $headers -Body '{"amount":4,"reason":"MM-12 prod 6B"}' -UseBasicParsing -ErrorAction SilentlyContinue
+        return @{ status=[int]$r.StatusCode; raw=$r.Content }
+    } catch {
+        return @{ status=[int]$_.Exception.Response.StatusCode; raw=$_.ErrorDetails.Message }
+    }
+} -ArgumentList $ProductionUrl, $TestCustomerId, $csrfCookieHeader, $sessionCookie, $key6b
 
 $res6a = Receive-Job -Job $job6a -Wait; $res6b = Receive-Job -Job $job6b -Wait
-Remove-Job $job6a; Remove-Job $job6b
+Remove-Job $job6a -Force; Remove-Job $job6b -Force
 
-Log "Debit 6A: status=$($res6a.status)"
-Log "Debit 6B: status=$($res6b.status)"
-Log "NOTE: Exactly one should be 200; the other 400 (insufficient balance)"
-$step6Pass = (($res6a.status -eq 200 -and $res6b.status -eq 400) -or ($res6a.status -eq 400 -and $res6b.status -eq 200))
-Log "Step 6 PASS: $step6Pass (one 200, one 400)"
+Log "Debit 6A: HTTP $($res6a.status)  Raw: $($res6a.raw)"
+Log "Debit 6B: HTTP $($res6b.status)  Raw: $($res6b.raw)"
 
-# ── Step 7: Failed deduction → no orphan records ─────────────────────────────
-LogSection "Step 7: Failed deduction — no orphan idempotency/ledger records"
+$step6HttpPass = (($res6a.status -eq 200 -and $res6b.status -eq 400) -or `
+                  ($res6a.status -eq 400 -and $res6b.status -eq 200))
+Log "Step 6 HTTP:   PASS=$step6HttpPass  (one 200, one 400)"
+Log "DB EVIDENCE REQUIRED: Step 8 SQL will confirm final ledger balance >= 0."
+
+# ── Step 7: Failed deduction → HTTP 400 ──────────────────────────────────────
+LogSection "Step 7: Failed deduction — HTTP response (application evidence)"
+Log "Note: Step 7 records the HTTP response only."
+Log "      Whether the idempotency row was cleaned up is verified separately by Step 8b (DB evidence)."
+Log "      These are distinct evidence types and are recorded as such."
 
 $key7 = [System.Guid]::NewGuid().ToString()
-# Deduct more than available balance
-$res7 = Invoke-WalletOp -Operation "deduct-credit" -Amount 9999 -Reason "MM-12 prod check 7 insufficient" -IdempotencyKey $key7
-Log "Insufficient deduction: status=$($res7.status)"
-Log "Error: $($res7.body.error)"
-$step7Pass = ($res7.status -eq 400)
-Log "Step 7 HTTP PASS: $step7Pass (400)"
-Log "NOTE: DB query in Step 8 will confirm no orphan idempotency row for key $key7"
+Log "Idempotency key for failed deduction: $key7"
 
-# ── Step 8: SQL invariants ────────────────────────────────────────────────────
-LogSection "Step 8: SQL invariant queries"
+$res7 = Invoke-WalletOp -Operation "deduct-credit" -Amount 9999 -Reason "MM-12 prod 7 insufficient" -IdempotencyKey $key7
+Log "Insufficient deduction HTTP: $($res7.status)"
+Log "Raw: $($res7.raw)"
+$step7HttpPass = ($res7.status -eq 400)
+Log "Step 7 HTTP PASS: $step7HttpPass  (400 — application correctly rejected)"
+Log "DB verification: Requires query 8b below (key7=$key7 should return 0 rows)"
+
+# ── Step 8: SQL invariants — MANUAL, operator-recorded DB evidence ─────────────
+LogSection "Step 8: SQL invariant queries (operator-recorded DB evidence)"
 Log ""
-Log "MANUAL ACTION REQUIRED: Run the following queries against production DB."
-Log "Connect via: psql '$DbConnectionString'"
+Log "NOTE: The following SQL results are entered by the operator after running"
+Log "      queries directly against the production database. They are distinct"
+Log "      from application-layer HTTP evidence (Steps 3-7)."
+Log "      Independent reviewer must verify these results separately against"
+Log "      production DB access or Vercel deployment logs."
 Log ""
-Log "Query 8a — No duplicate idempotency key tuples:"
-Log "  SELECT key, walletId, operationType, COUNT(*) AS cnt"
-Log "  FROM AdminWalletIdempotencyKey"
-Log "  GROUP BY key, walletId, operationType"
+Log "Connect: psql 'PRODUCTION_DB_URL_HERE'"
+Log ""
+Log "--- Query 8a: Unique constraint exists in pg_indexes ---"
+Log "  SELECT indexname, indexdef"
+Log "  FROM pg_indexes"
+Log "  WHERE tablename = 'AdminWalletIdempotencyKey'"
+Log "    AND indexdef LIKE '%key%walletId%operationType%';"
+Log "  Expected: at least 1 row (the unique index from migration)"
+Log ""
+Log "--- Query 8b: No orphan row for failed deduction key ---"
+Log "  SELECT COUNT(*) FROM ""AdminWalletIdempotencyKey"""
+Log "  WHERE key = '$key7';"
+Log "  Expected: 0  (key was deleted because balance check failed)"
+Log ""
+Log "--- Query 8c: No duplicate key tuples ---"
+Log "  SELECT key, ""walletId"", ""operationType"", COUNT(*) AS cnt"
+Log "  FROM ""AdminWalletIdempotencyKey"""
+Log "  GROUP BY key, ""walletId"", ""operationType"""
 Log "  HAVING COUNT(*) > 1;"
 Log "  Expected: 0 rows"
 Log ""
-Log "Query 8b — No orphan row for failed deduction key (Step 7):"
-Log "  SELECT * FROM AdminWalletIdempotencyKey WHERE key = '$key7';"
-Log "  Expected: 0 rows"
-Log ""
-Log "Query 8c — Ledger balance equals cached balance for test wallet:"
+Log "--- Query 8d: Ledger equals cached balance for test wallet ---"
 Log "  SELECT w.id,"
 Log "         w.balance AS cached,"
 Log "         SUM(CASE WHEN t.type='CREDIT' THEN t.amount ELSE -t.amount END) AS ledger"
-Log "  FROM ClientWallet w"
-Log "  JOIN WalletTransaction t ON t.walletId = w.id"
-Log "  WHERE t.status = 'CONFIRMED'"
+Log "  FROM ""ClientWallet"" w"
+Log "  JOIN ""WalletTransaction"" t ON t.""walletId"" = w.id"
+Log "  WHERE w.id = '$TestWalletId' AND t.status = 'CONFIRMED'"
 Log "  GROUP BY w.id, w.balance;"
-Log "  Expected: cached = ledger (within 0.01) for test wallet"
+Log "  Expected: cached = ledger (within 0.01)"
 Log ""
-$sql8aResult  = Read-Host "Query 8a result (row count)"
-$sql8bResult  = Read-Host "Query 8b result (row count)"
-$sql8cCached  = Read-Host "Query 8c: cached balance value"
-$sql8cLedger  = Read-Host "Query 8c: ledger balance value"
-Log "8a row count: $sql8aResult  (expected: 0)"
-Log "8b row count: $sql8bResult  (expected: 0)"
-Log "8c cached:    $sql8cCached"
-Log "8c ledger:    $sql8cLedger"
-$step8Pass = ($sql8aResult -eq "0") -and ($sql8bResult -eq "0") -and ([Math]::Abs([double]$sql8cCached - [double]$sql8cLedger) -le 0.01)
-Log "Step 8 PASS: $step8Pass"
+
+$sql8aIndexFound = Read-Host "8a: index row count (expected >= 1)"
+$sql8bOrphanRows = Read-Host "8b: orphan row count for key7 (expected 0)"
+$sql8cDupRows    = Read-Host "8c: duplicate tuple row count (expected 0)"
+$sql8dCached     = Read-Host "8d: cached balance value"
+$sql8dLedger     = Read-Host "8d: ledger balance value"
+
+Log ""
+Log "DB EVIDENCE (operator-recorded):"
+Log "  8a index row count:  $sql8aIndexFound  (expected: >= 1)"
+Log "  8b orphan rows:      $sql8bOrphanRows  (expected: 0)"
+Log "  8c duplicate tuples: $sql8cDupRows     (expected: 0)"
+Log "  8d cached balance:   $sql8dCached"
+Log "  8d ledger balance:   $sql8dLedger"
+
+$step8aPass = ([int]$sql8aIndexFound -ge 1)
+$step8bPass = ($sql8bOrphanRows -eq "0")
+$step8cPass = ($sql8cDupRows -eq "0")
+$step8dPass = ([Math]::Abs([double]$sql8dCached - [double]$sql8dLedger) -le 0.01)
+Log ""
+Log "  8a constraint exists: PASS=$step8aPass"
+Log "  8b no orphan key:     PASS=$step8bPass"
+Log "  8c no duplicates:     PASS=$step8cPass"
+Log "  8d ledger=cache:      PASS=$step8dPass"
 
 # ── Step 9: Summary ───────────────────────────────────────────────────────────
 LogSection "Step 9: Production verification summary"
 
-Log "Deployed SHA:      $deployedSha"
-Log "Production URL:    $ProductionUrl"
-Log "Test customer ID:  $testCustomerId"
-Log "Executed at:       $Timestamp"
+Log "Deployed SHA (from /api/health):  $deployedSha"
+Log "Expected fix SHA prefix:          638888f0"
+Log "Production URL:                   $ProductionUrl"
+Log "Test customer ID:                 $TestCustomerId"
+Log "Test wallet ID:                   $TestWalletId"
+Log "Session cookie name used:         $cookieNameUsed"
+Log "Script run timestamp:             $RunTimestamp"
 Log ""
-Log "Result summary:"
-Log "  Step 3  Same-key concurrent credit:   PASS=$step3Pass"
-Log "  Step 4  Replay same txId:             PASS=$step4Pass"
-Log "  Step 5  Distinct keys distinct txIds: PASS=$step5Pass"
-Log "  Step 6  Concurrent deductions safe:   PASS=$step6Pass"
-Log "  Step 7  Failed op HTTP 400:           PASS=$step7Pass"
-Log "  Step 8  SQL invariants:               PASS=$step8Pass"
+Log "Evidence type legend:"
+Log "  [APP]  Application HTTP evidence — observed by script from live server"
+Log "  [DB]   Database evidence — operator-recorded SQL results"
+Log "  [SHA]  Deployment evidence — read from running application + requires independent Vercel check"
+Log ""
+Log "Results:"
+Log "  [SHA]  Step 1  Deployed SHA from /api/health:         $deployedSha"
+Log "  [APP]  Step 3  Same-key concurrent credit HTTP:       PASS=$step3HttpPass"
+Log "  [APP]  Step 3  Same-key concurrent credit txId match: PASS=$step3TxIdMatch"
+Log "  [APP]  Step 4  Replay same txId:                      PASS=$step4Pass"
+Log "  [APP]  Step 5  Distinct-key distinct txIds:           PASS=$step5Pass"
+Log "  [APP]  Step 6  Concurrent deductions safe (HTTP):     PASS=$step6HttpPass"
+Log "  [APP]  Step 7  Failed deduction HTTP 400:             PASS=$step7HttpPass"
+Log "  [DB]   Step 8a Unique constraint in pg_indexes:       PASS=$step8aPass"
+Log "  [DB]   Step 8b No orphan key for failed deduction:    PASS=$step8bPass"
+Log "  [DB]   Step 8c No duplicate key tuples:               PASS=$step8cPass"
+Log "  [DB]   Step 8d Ledger = cached balance:               PASS=$step8dPass"
 Log ""
 
-$allPass = $step3Pass -and $step4Pass -and $step5Pass -and $step6Pass -and $step7Pass -and $step8Pass
+$allPass = $step3HttpPass -and $step3TxIdMatch -and $step4Pass -and $step5Pass -and `
+           $step6HttpPass -and $step7HttpPass -and $step8aPass -and $step8bPass -and `
+           $step8cPass -and $step8dPass
+
 if ($allPass) {
     Log "OVERALL: ALL CHECKS PASSED"
-    Log "MM-12 production verification: COMPLETE"
-    Log "MM-12 lifecycle: READY TO CLOSE"
+    Log ""
+    Log "INDEPENDENT REVIEWER ACTIONS REQUIRED BEFORE CLOSING MM-12:"
+    Log "  1. Confirm deployed SHA '$deployedSha' in Vercel deployment dashboard"
+    Log "     and verify it contains commit 638888f0 in its ancestry."
+    Log "  2. Verify DB results (8a-8d) against production DB independently."
+    Log "  3. Review transaction IDs (Step 3 txId, Step 4 txId) are identical."
+    Log "  4. Confirm test fixtures were not real customer wallets."
+    Log ""
+    Log "MM-12 READY TO CLOSE upon independent reviewer confirmation."
 } else {
-    Log "OVERALL: ONE OR MORE CHECKS FAILED — DO NOT CLOSE MM-12"
+    Log "OVERALL: ONE OR MORE CHECKS FAILED"
+    Log "DO NOT CLOSE MM-12 — investigate failed checks before proceeding."
 }
 
-# ── Write evidence file ───────────────────────────────────────────────────────
-$Evidence | Out-File -FilePath $OutputFile -Encoding UTF8
+Log ""
+Log "--- TEST FIXTURE CLEANUP SQL ---"
+Log "Run after independent reviewer has inspected the evidence:"
+Log "  DELETE FROM ""AdminWalletIdempotencyKey"" WHERE ""walletId"" = '$TestWalletId';"
+Log "  DELETE FROM ""WalletTransaction""         WHERE ""walletId"" = '$TestWalletId';"
+Log "  DELETE FROM ""ClientWallet""              WHERE id = '$TestWalletId';"
+Log "  DELETE FROM ""Customer""                  WHERE id = '$TestCustomerId';"
+Log "  DELETE FROM ""User""                      WHERE id = (SELECT ""userId"" FROM ""ClientWallet"" WHERE id = '$TestWalletId' LIMIT 1);"
+
+# Write evidence file
+$Evidence | Out-File -FilePath $OutputFile -Encoding UTF8 -Force
 Write-Host ""
 Write-Host "Evidence written to: $OutputFile"
-Write-Host "Commit this file to the audit branch to record the production gate result."
+Write-Host "Commit this file to the audit branch as the production evidence record."
