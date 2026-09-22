@@ -1,7 +1,7 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 3.8 (MM-12 production gate ready — 534c8ac1)
-**Last Updated:** 2026-09-22 (commit 534c8ac1)  
+**Version:** 3.9 (MM-02 CLOSED)
+**Last Updated:** 2026-09-22  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -191,7 +191,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status |
 |---|---|---|---|---|---|---|---|
-| MM-02 | `StripeService.createPayout()` — unguarded, zero callers | MEDIUM | CONFIRMED | VERIFIED — grep confirms 0 callers; method has no ownership check, no idempotency, no ledger | NOT-STARTED | PENDING | ⚠️ OPEN |
+| MM-02 | `StripeService.createPayout()` — unguarded, zero callers | MEDIUM | CONFIRMED | VERIFIED — grep confirms 0 callers; method has no ownership check, no idempotency, no ledger | Deleted from `lib/services/stripe.ts` | Post-deletion grep: 0 source references; TS build: 0 new errors | ✅ CLOSED |
 | MM-17 | Same as MM-02 (duplicate inventory entry) | — | SUPERSEDED | — | — | — | SUPERSEDED → MM-02 |
 
 ### 3.6 — Minor Open
@@ -238,7 +238,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | # | ID | Title |
 |---|---|---|
 | 14 | MM-12 | Admin wallet credit idempotency | ✅ FIX-VERIFIED `638888f0` — READY FOR PRODUCTION VERIFICATION |
-| 15 | MM-02 | Delete `StripeService.createPayout()` |
+| 15 | MM-02 | Delete `StripeService.createPayout()` | ✅ CLOSED — deleted, 0 source references post-deletion |
 | 16 | INT-M-03A | Encrypt OAuth tokens at rest |
 | 17 | INT-M-03F | Revoke OAuth token on calendar disconnect |
 | 18 | PAY-H-04 | SlotReservation unique constraint |
