@@ -10,6 +10,10 @@ export default defineConfig({
     setupFiles: ['./lib/services/receipt/__tests__/setup.ts'],
     include: ['**/__tests__/**/*.test.ts'],
     exclude: ['node_modules', 'dist', '.next'],
+    env: {
+      // Force test database URL to prevent production database access
+      DATABASE_URL: process.env.TEST_DATABASE_URL || 'postgresql://postgres:testpass@localhost:5433/drivebook_test',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
