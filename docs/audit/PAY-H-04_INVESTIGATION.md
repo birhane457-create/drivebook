@@ -194,114 +194,183 @@ condition has never been exercised in the test suite.
 Before any schema migration or code change is authorised, the following must be
 answered:
 
-### Q1 — Database enforcement strategy
+### Q1 — btree_gist extension availability on Supabase production
 
-Three candidates:
+`btree_gist` is the correct extension for a combined equality + range exclusion
+constraint. Supabase documents it for exactly this range-overlap use case and
+extensions can be enabled via the SQL editor.
 
-**Option A — PostgreSQL exclusion constraint (GIST)**
+**However, documentation does not establish the production state of DriveBook's
+specific database.** Q1 remains:
+
 ```sql
-ALTER TABLE "SlotReservation"
-ADD CONSTRAINT slot_no_overlap
+SELECT extname, extversion
+FROM pg_extension
+WHERE extname = 'btree_gist';
+```
+
+Run this via the Supabase SQL editor and record the result as audit evidence.
+Do not infer production state from general Supabase extension support.
+
+**Status: PENDING — production SQL query required**
+
+### Q2/Q3 — `WHERE (expiresAt > NOW())` predicate: REJECTED
+
+The investigation previously listed this as something to "prototype and verify".
+On reflection, it should be **rejected outright**, not deferred to a prototype.
+
+PostgreSQL requires partial-index predicates to use immutable or stable expressions
+for index maintenance. `NOW()` and `CURRENT_TIMESTAMP` are classified as **STABLE**
+by PostgreSQL, not IMMUTABLE. A partial exclusion constraint whose predicate
+contains `NOW()` is not maintainable as an index — database cannot have an index
+whose membership automatically changes as wall-clock time advances.
+
+**The design:**
+```sql
 EXCLUDE USING GIST (
   "providerId" WITH =,
   tsrange("startTime", "endTime", '[)') WITH &&
 )
-WHERE ("expiresAt" > NOW());
+WHERE ("expiresAt" > NOW())   -- REJECTED
 ```
-- Enforces the invariant at the DB level for all paths simultaneously.
-- Requires `btree_gist` extension. Need to confirm it is available on Supabase.
-- `WHERE (expiresAt > NOW())` makes it a partial exclusion — only active rows
-  participate. Must verify that a predicate referencing `NOW()` is valid on the
-  Supabase/PostgreSQL version in use.
-- Back-to-back slots: `tsrange('[)', '[)')` uses half-open intervals, so `[10:00,11:00)`
-  and `[11:00,12:00)` do not overlap. Preserves the existing boundary semantics.
+is not valid and should not be implemented.
 
-**Option B — SERIALIZABLE transaction on both paths**
-- Wrap Path A's three operations in `prisma.$transaction(fn, { isolationLevel: 'Serializable' })`.
-- Change Path B's transaction to `isolationLevel: 'Serializable'`.
-- Both paths must be in the same serialisation scope.
-- PostgreSQL will detect the phantom-read anomaly and abort one transaction with
-  `ERROR: could not serialize access due to concurrent update`.
-- Requires application-level retry logic (currently absent).
-- Does not produce a permanent DB invariant; relies on application code being correct.
+**Correct design direction — all-rows constraint:**
 
-**Option C — Advisory lock on providerId**
-- `SELECT pg_advisory_xact_lock(hashtext($providerId))` at the start of both paths.
-- Serialises all reservation attempts for the same provider.
-- No schema change required.
-- Performance bottleneck under high booking volume for a popular provider.
-- Does not survive connection failure — advisory lock is released on disconnect.
-  Needs to be inside a transaction to be transaction-scoped.
-
-**Recommended:** Option A (exclusion constraint) as the primary invariant.
-Option B (SERIALIZABLE) as the code-level defence. Both together is belt-and-suspenders.
-
-### Q2 — Supabase extension availability
-
-Must confirm before writing the migration:
 ```sql
-SELECT * FROM pg_extension WHERE extname = 'btree_gist';
+EXCLUDE USING GIST (
+  "providerId" WITH =,
+  tsrange("startTime", "endTime", '[)') WITH &&
+)
 ```
-If not installed:
-```sql
-CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+No WHERE clause. The constraint covers all rows including expired ones.
+
+**Consequence — the expiry gap becomes an explicit design decision:**
+
+An expired reservation that has not yet been physically deleted will block a new
+reservation for the same `(providerId, startTime, endTime)` interval until the
+expired row is removed. The current cron runs every 10 minutes; during that window
+a new reservation for the same slot would fail with a constraint violation even
+though the blocking row is logically expired.
+
+This is not a silent technical detail — it is a user-visible behaviour change.
+The application must either:
+
+**Option A (synchronous pre-delete):** Before calling `slotReservation.create()`,
+delete expired rows for the same `(providerId, interval)` inline. Path A already
+does a broader `deleteMany` scoped to `providerId`; tightening the scope to the
+specific interval before the insert would clear the path synchronously.
+
+**Option B (accept the gap):** Accept that in the 10-minute expiry window a slot
+that became free may still appear blocked. Given reservations expire in 10 minutes,
+a user would need to retry after the cron runs. This may be acceptable for the use
+case but must be a deliberate decision.
+
+**This decision must be explicit in the design document before the migration is
+written.** It is not a default or an implementation detail.
+
+**Status: PARTIAL CONSTRAINT DESIGN REJECTED — expiry gap decision required**
+
+### Q4 — Path B conflict check must include SlotReservation
+
+Path B (`bulk/bookings`) currently checks only the `Booking` table for conflicts.
+An active `SlotReservation` created via Path A is invisible to Path B's check.
+
+**This is a separate application defect from the DB constraint.** The exclusion
+constraint will prevent the DB-level double-insert, but Path B will return an
+opaque error to the caller rather than the clean 409 it currently returns for
+booking conflicts.
+
+After the DB constraint is in place, Path B must also check:
+```typescript
+await tx.slotReservation.findFirst({
+  where: {
+    providerId,
+    expiresAt: { gt: now },
+    AND: [
+      { startTime: { lt: endTime } },
+      { endTime: { gt: startTime } },
+    ],
+  },
+})
 ```
-Need to verify whether Supabase projects allow `btree_gist` and whether it is
-pre-installed on the production database.
+and throw `'SLOT_TAKEN'` if found, before the `slotReservation.create()` call.
+The DB constraint remains the final concurrency invariant; the application check
+provides the clean error response.
 
-### Q3 — Partial exclusion constraint validity
+**Status: FIX REQUIRED — not blocking constraint design, but required before deployment**
 
-The `WHERE (expiresAt > NOW())` predicate in the exclusion constraint uses a
-non-immutable function (`NOW()`). PostgreSQL requires exclusion constraint predicates
-to be immutable or stable. Need to verify the exact PostgreSQL version and Supabase
-behaviour with a partial GIST exclusion using `NOW()`.
+### Q5 — Prisma error code for exclusion constraint violation: prototype required
 
-Alternative: omit the WHERE clause and let expired rows participate in the exclusion
-check (they will be filtered by the application-layer `expiresAt: { gt: now }` check
-anyway). This is simpler and avoids the immutability concern, at the cost of
-expired-but-not-yet-cleaned rows blocking new reservations for the same interval
-for up to 10 minutes.
+Prisma documents:
+- `P2002` — unique constraint violation
+- `P2004` — database constraint failure (generic)
+- `P2010` — raw query error
 
-### Q4 — Path coordination
+A PostgreSQL `EXCLUDE USING GIST` violation is not a unique constraint — it
+will likely surface as `P2004` or a raw error, not `P2002`.
 
-Currently Path A and Path B do not share any locking strategy. If Option A
-(exclusion constraint) is chosen, the DB will enforce the invariant for both paths
-simultaneously regardless of code structure. If Option B (SERIALIZABLE) is chosen,
-both paths must be serialised or the guarantee is incomplete. The design must be
-explicit about which paths are in scope.
+**Q5 is an execution question, not a documentation question.** It requires an
+isolated prototype on `localhost:5433/drivebook_test` with the following test
+matrix:
 
-### Q5 — Error handling for constraint violation
+| Test | Operation | Expected |
+|------|-----------|----------|
+| T1 | Insert `(X, 10:00, 11:00)` | Success |
+| T2 | Insert `(X, 10:30, 11:30)` — overlaps T1 | Constraint violation |
+| T3 | Insert `(X, 11:00, 12:00)` — adjacent to T1 | Success |
+| T4 | Insert `(X, 09:00, 10:00)` — adjacent before T1 | Success |
+| T5 | Delete T1, then insert `(X, 10:00, 11:00)` | Success |
+| T6 | Concurrent inserts of `(X, 10:30, 11:30)` via Promise.all | Exactly one succeeds |
+| **T7** | Insert expired row `(X, 10:00, 11:00, expiresAt=past)` then insert fresh `(X, 10:00, 11:00)` | **Second insert blocked until expired row deleted** |
 
-When the exclusion constraint fires, PostgreSQL raises an error that Prisma surfaces
-as `PrismaClientKnownRequestError` with code `P2002` (for unique constraints) or
-a raw DB error for exclusion constraints. The application must handle this gracefully:
-- Path A: return 409 Conflict (current behaviour for "slot taken" — preserve it)
-- Path B: throw `'SLOT_TAKEN'` (current behaviour — preserve it)
+T7 is the critical test for the expiry-gap decision above. Its outcome determines
+whether Option A (synchronous pre-delete) or Option B (accept gap) is viable.
 
-Must confirm how Prisma surfaces exclusion constraint errors vs unique constraint
-errors and write appropriate catch logic.
+For T2, capture the exact Prisma exception:
+```
+error.constructor
+error.code
+error.message
+error.meta
+```
+This is the error code the application must catch and map to HTTP 409.
+
+**Status: EXECUTION PROTOTYPE REQUIRED — use localhost:5433/drivebook_test**
 
 ---
 
-## 10. Recommended Next Steps
+## 10. Recommended Sequence
 
-1. **Confirm `btree_gist` availability on the Supabase production instance.**
-   Run: `SELECT * FROM pg_extension WHERE extname = 'btree_gist';`
-   If absent, determine whether `CREATE EXTENSION btree_gist` is permitted.
+The sequence follows the MM-12 methodology: hostile baseline first, then
+constraint prototype, then design authorisation.
 
-2. **Prototype the exclusion constraint on the isolated test DB (localhost:5433)**
-   to confirm it blocks the concurrent reservation race before writing the
-   production migration.
+**Step 1 — Hostile baseline test (PAY-H-04-B)**
+Write an HTTP integration test that fires two concurrent POST requests to
+`/api/availability/check-and-reserve` with overlapping intervals. Confirm:
+- Both requests return 200 (demonstrating the race exists)
+- Two overlapping `SlotReservation` rows in the database
 
-3. **Write the PAY-H-04 hostile baseline test** (equivalent to MM-12-B):
-   Two concurrent POST requests to `check-and-reserve` with overlapping intervals.
-   Confirm the race exists without the fix, then confirm the fix prevents it.
-   Verify back-to-back slots still succeed.
+This is the PAY-H-04 equivalent of MM-12-B. Required before any schema change.
 
-4. **Unify Path B's conflict check** to include `SlotReservation` in addition to
-   `Booking`, so that a Path A reservation blocks a concurrent Path B booking.
+**Step 2 — btree_gist query on production** (Q1)
+Run `SELECT extname, extversion FROM pg_extension WHERE extname = 'btree_gist'`
+via Supabase SQL editor. Record as audit evidence.
 
-5. **Authorise the schema migration** only after steps 1–4 are complete.
+**Step 3 — Exclusion constraint prototype on isolated test DB** (Q5)
+Apply `btree_gist` and the all-rows exclusion constraint to `drivebook_test`.
+Run the T1–T7 test matrix above. Capture the Prisma error code from T2.
+Observe T7 to make the Option A / Option B expiry-gap decision.
+
+**Step 4 — Design authorisation**
+With Q1–Q5 answered and baseline evidence recorded, write the formal remediation
+design (PAY-H-04-C equivalent). Get authorisation before writing the migration.
+
+**Step 5 — Migration + code fix**
+Write migration, fix Path B conflict check, implement error handling.
+
+**Step 6 — Independent verification**
 
 ---
 
@@ -309,13 +378,17 @@ errors and write appropriate catch logic.
 
 The correct invariant for PAY-H-04 remediation:
 
-> For a given `providerId`, no two active `SlotReservation` rows may have
-> overlapping `[startTime, endTime)` intervals.
->
-> "Active" means `expiresAt > NOW()`.
+> For a given `providerId`, no two `SlotReservation` rows (regardless of expiry
+> state, pending deletion by cron) may have overlapping `[startTime, endTime)`
+> intervals.
 >
 > "Overlapping" uses strict open-interval semantics:
 > `A.startTime < B.endTime AND B.startTime < A.endTime`.
 >
 > Adjacent intervals sharing an exact boundary point are NOT considered overlapping
 > (10:00–11:00 and 11:00–12:00 must both be creatable).
+>
+> **Note on expired rows:** The all-rows constraint means an expired-but-not-yet-
+> deleted row continues to enforce the invariant. The application must ensure
+> expired rows for the specific target interval are deleted before a new insert
+> is attempted (Option A), or accept the 10-minute expiry window (Option B).
