@@ -232,7 +232,7 @@ async function main() {
   log('');
 
   const dbChecks = btree.length > 0 && constraint.length > 0;
-  const allPass = dbChecks && check4Pass && check5Pass && check6Pass && check7Pass;
+  const allPass = dbChecks && check4Pass && check5Pass && check6Pass && check7Pass && ancestryVerified;
 
   if (allPass) {
     log('VERDICT: All checks passed — PAY-H-04 production verification COMPLETE');
