@@ -1,70 +1,55 @@
-PAY-H-04 Production Verification - PARTIAL (updated 2026-09-23T15:00Z)
+PAY-H-04 Production Verification
+Timestamp: 2026-09-23T15:52:11.725Z
 Production URL: https://drivebook-wheat.vercel.app
-Test provider: cmt2qxp97000ggup1aj4rgimi (Test Electrician, state=WA)
+Test provider: cmt2qxp97000ggup1aj4rgimi
 
-=== DB State (COMPLETE) ===
-btree_gist:                 INSTALLED version 1.7
-SlotReservation_no_overlap: PRESENT (type=x, GiST exclusion constraint)
-Migration 20260922000001:   applied successfully
+=== Check 1: Deployed SHA and ancestry ===
+Health status: 200
+Deployed SHA: 36da38a14cddbe9a56261aa6d57e93770825565f
+Environment: production
+SHA ancestry: VERIFIED — 560a77c2 found in git log of deployed SHA
+[SHA] Deployed SHA: 36da38a14cddbe9a56261aa6d57e93770825565f
+[SHA] PAY-H-04 fix (560a77c2) in ancestry: VERIFIED
 
-=== SHA Verification (COMPLETE) ===
-Deployed SHA at time of diagnosis: d0f3ae27aaf74a478bd5003319c57cc8f81e09b
-  Confirmed via /api/health returning {status, sha, env, timestamp}
-PAY-H-04 fix 560a77c2 ancestry: VERIFIED
-  d0f3ae27 is a commit on main branch descended from 560a77c2
-  git log confirms: 560a77c2 -> ... -> 4412e68e -> ... -> d0f3ae27
+=== Check 2: btree_gist extension ===
+btree_gist: INSTALLED (version 1.7)
 
-Current main HEAD after diagnostic cleanup: eb007214
-  Diagnostic routes removed at eb007214 (security cleanup)
+=== Check 3: SlotReservation_no_overlap constraint ===
+Constraint: PRESENT (type=x)
 
-=== Database Connectivity (FAILED - infrastructure configuration) ===
-Observed at d0f3ae27 (2026-09-23T14:44Z):
-  The Vercel runtime for this deployment could not connect to the configured
-  Supabase database endpoint.
+=== Check 4: Concurrent overlapping reservations — INVARIANT ===
+Request A (10:00-11:00): HTTP 500
+Request B (10:30-11:30): HTTP 500
+Active rows: 0
+Check 4 PASS: false (at most 1 row committed)
 
-Diagnostic error captured from route:
-  "Can't reach database server at 'db.ikhqphbbilrocsghjyda.supabase.co:5432'"
+=== Check 5: Adjacent intervals — boundary semantics ===
+Request A (13:00-14:00): HTTP 500
+Request B (14:00-15:00): HTTP 500
+Rows committed: 0
+Check 5 PASS: false (both adjacent slots accepted)
 
-The deployed Vercel runtime cannot establish a connection to this endpoint.
-This has been observed specifically for this deployment/environment combination.
-Whether other Vercel deployments can reach this endpoint is not established here.
+=== Check 6: Normal reservation creation ===
+Single reservation (15:00-16:00): HTTP 500
+Check 6 PASS: false
 
-Proposed resolution: update the Vercel DATABASE_URL environment variable to
-point to the appropriate Supabase connection endpoint for serverless use.
-This requires checking the Vercel project environment variable configuration
-and identifying the correct connection string for the Supabase project.
+=== Check 7: Constraint violation maps to HTTP 409 ===
+First reservation (11:00-12:00): HTTP 500
+Overlapping reservation (11:30-12:30): HTTP 500
+Check 7 PASS: false (overlap returns 409, not 500)
 
-CAUTION: Do not simply swap to the value named DIRECT_URL in the local .env
-without first verifying what each variable is intended to serve in the
-Prisma/Vercel configuration. The local .env naming may not reflect the
-intended Prisma usage semantics.
+=== Production Verification Summary ===
+[SHA] Deployed SHA:   36da38a14cddbe9a56261aa6d57e93770825565f
+[SHA] 560a77c2 ancestor: VERIFIED
+[DB]  btree_gist:     installed (v1.7)
+[DB]  Constraint:     present
+[HTTP] Check 4 invariant (concurrent overlap <= 1 row): PASS=false
+[HTTP] Check 5 boundary (adjacent both succeed):        PASS=false
+[HTTP] Check 6 normal creation:                         PASS=false
+[HTTP] Check 7 exclusion -> HTTP 409:                   PASS=false
 
-=== Diagnostic Instrumentation Cleanup ===
-Two temporary routes were added for diagnosis and have been removed at eb007214:
-  - app/api/debug-env/route.ts (deleted)
-  - Error detail in 500 response (reverted to generic message)
-
-Production now returns {"error":"Internal server error"} with no database
-details exposed. This has been verified in the committed code at eb007214.
-
-=== HTTP Verification (BLOCKED) ===
-All HTTP checks blocked by database connectivity failure.
-Cannot establish results until Vercel DATABASE_URL is corrected and redeployed.
-Results will be captured in a new run of run-payh04-production-verification.mjs
-after the infrastructure fix.
-
-NOTE: The verification script results are the evidence. The hypothesis that the
-checks will pass is not the evidence. Do not close PAY-H-04 based on the
-infrastructure change alone.
-
-=== Summary ===
-[SHA]  d0f3ae27 -> eb007214 deployed: PAY-H-04 fix VERIFIED in ancestry
-[DB]   btree_gist v1.7:   INSTALLED
-[DB]   SlotReservation_no_overlap: PRESENT
-[INFRA] Vercel runtime cannot reach configured database endpoint
-[HTTP]  All checks: BLOCKED until infrastructure corrected and redeployed
-[DIAG]  Temporary diagnostic routes: REMOVED at eb007214
-
-VERDICT: PAY-H-04 code and DB are in place. HTTP verification blocked by
-  Vercel database connectivity configuration. PAY-H-04 remains OPEN.
-  CLOSED requires: infrastructure fix + redeploy + passing HTTP verification.
+VERDICT: One or more checks failed — DO NOT CLOSE PAY-H-04
+  Invariant: concurrent overlap produced >1 row or HTTP 5xx
+  Boundary: adjacent slots not both accepted
+  Normal: single reservation failed
+  Error mapping: overlap not returning 409
