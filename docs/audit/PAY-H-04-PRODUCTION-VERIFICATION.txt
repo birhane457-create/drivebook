@@ -1,0 +1,40 @@
+PAY-H-04 Production Verification — PARTIAL
+Timestamp: 2026-09-23T11:26:23.630Z
+Production URL: https://drivebook.com.au
+Test provider: cmt2gnh39000s14mii13kr7kh (Test Plumber)
+
+=== DB State (verified at migration time) ===
+btree_gist:              INSTALLED (version 1.7)
+SlotReservation_no_overlap: PRESENT (type=x, GiST exclusion)
+
+=== Application Deployment State ===
+/api/health response: {"status":"ok","timestamp":"2026-08-30T...","service":"DriveBook API"}
+SHA field: NOT PRESENT
+
+CONCLUSION: Production application is running a version predating the
+audit branch (deployed before 2026-09-22). The merge commit 641a52be
+has not yet been picked up by Vercel.
+
+Evidence: The health route added in this audit returns {status, sha, env, timestamp}.
+The production route returns {status, timestamp, service} — a different schema
+consistent with the pre-audit codebase.
+
+This means:
+  DB constraint: INSTALLED (migration ran directly via prisma migrate deploy)
+  Application code: NOT DEPLOYED (PAY-H-04 fix code not yet live)
+
+=== HTTP Verification — DEFERRED ===
+Checks 4-7 could not be completed because the production server returns 400
+for check-and-reserve requests with {providerId: ...} — the old version
+still expects {instructorId: ...}.
+
+These checks will be re-run once Vercel deploys 641a52be.
+
+=== Summary ===
+DB invariant: VERIFIED (constraint installed, preflight passed)
+Application fix: PENDING DEPLOYMENT
+Production concurrency test: PENDING — requires deployed 641a52be
+SHA verification: PENDING — requires Vercel deployment
+
+VERDICT: Verification INCOMPLETE — rerun after Vercel deploys 641a52be
+PAY-H-04 remains OPEN — do not close.
