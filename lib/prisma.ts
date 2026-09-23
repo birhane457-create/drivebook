@@ -10,24 +10,24 @@ const globalForPrisma = globalThis as unknown as {
  * (db.*.supabase.co:5432). It requires the connection pooler endpoint
  * (*.pooler.supabase.com:5432).
  *
- * When DATABASE_URL points to the direct endpoint and DIRECT_URL points to
- * the pooler endpoint, prefer DIRECT_URL for the runtime connection.
- * This is a Prisma-for-Vercel pattern when the local .env naming is inverted.
+ * Strategy: check for SUPABASE_POOLER_URL env var first (explicit pooler).
+ * If not set, fall back to the Prisma default (DATABASE_URL from env).
+ * Set SUPABASE_POOLER_URL on Vercel to the pooler connection string.
  */
 function getDataSourceUrl(): string | undefined {
-  const db     = process.env.DATABASE_URL  ?? '';
-  const direct = process.env.DIRECT_URL    ?? '';
+  // Explicit pooler override — set this on Vercel to the Supabase pooler URL
+  const poolerUrl = process.env.SUPABASE_POOLER_URL ?? '';
+  if (poolerUrl) {
+    return poolerUrl;
+  }
 
-  const dbIsDirect     = db.includes('supabase.co:5432') && !db.includes('pooler');
-  const directIsPooler = direct.includes('pooler.supabase.com');
-
-  // If DATABASE_URL is the direct connection but DIRECT_URL is the pooler,
-  // prefer the pooler for serverless runtime.
-  if (dbIsDirect && directIsPooler) {
+  // Fallback: also try DIRECT_URL if it looks like a pooler endpoint
+  const direct = process.env.DIRECT_URL ?? '';
+  if (direct.includes('pooler.supabase.com')) {
     return direct;
   }
 
-  // Otherwise let Prisma read DATABASE_URL from the environment as normal.
+  // Let Prisma use DATABASE_URL from the environment as normal
   return undefined;
 }
 
