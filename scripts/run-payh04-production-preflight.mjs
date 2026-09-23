@@ -22,7 +22,7 @@ function log(line) {
 async function main() {
   log('PAY-H-04 Production Preflight');
   log(`Timestamp: ${timestamp}`);
-  log(`DB: ${process.env.DATABASE_URL?.substring(0, 60)}...`);
+  log(`DB host: ${process.env.DATABASE_URL?.split('@')[1]?.split('/')[0] ?? 'unknown'} (credentials not logged)`);
   log('');
 
   // Q3: btree_gist extension state
