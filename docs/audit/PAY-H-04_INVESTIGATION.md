@@ -640,15 +640,39 @@ production state for audit evidence.
 ### Migration locking consideration
 
 `ALTER TABLE ... ADD CONSTRAINT ... EXCLUDE` acquires an `ACCESS EXCLUSIVE` lock
-on `SlotReservation` and validates all existing rows in a single pass. This means:
+on `SlotReservation` and validates all existing rows in a single pass.
 
-- No concurrent reads or writes on `SlotReservation` are possible during migration.
-- For DriveBook's short-lived reservation population (10-minute TTL, frequent cron
-  cleanup) the table should be small and the lock window brief.
-- Nonetheless, this migration should be treated as an **operational change** that
-  requires a maintenance window or off-peak deployment, not a routine code push.
-- If zero-downtime deployment is required, investigate `CREATE INDEX CONCURRENTLY`
-  with a separate constraint — but this is beyond the scope of PAY-H-04.
+The `ACCESS EXCLUSIVE` lock conflicts with all other lock modes, but PostgreSQL
+lock acquisition **waits** behind any existing transaction that holds a conflicting
+lock — it does not immediately block or error. The operational sequence is:
+
+```
+existing conflicting transaction (if any)
+        ↓
+  migration waits to acquire ACCESS EXCLUSIVE
+        ↓
+  lock acquired
+        ↓
+  constraint validation (full table scan)
+        ↓
+  normal SlotReservation access resumes
+```
+
+While the migration is waiting to acquire the lock, new read/write operations
+on `SlotReservation` queue behind it. This means a long-running reservation
+transaction could cause the migration to hold up subsequent normal operations.
+
+The operational requirements are:
+
+- Ensure no long-running `SlotReservation` transaction is active at migration time.
+- Deploy off-peak when active booking volume is low.
+- Monitor for lock wait — abort and retry if the migration cannot acquire the lock
+  within an acceptable window.
+- Have a rollback/abort procedure prepared before starting.
+
+For DriveBook's short-lived reservation population (10-minute TTL, frequent cron
+cleanup) the table should be small and the validation scan brief. The lock concern
+is primarily about in-flight booking sessions at the moment of migration.
 
 ### Evidence required
 
