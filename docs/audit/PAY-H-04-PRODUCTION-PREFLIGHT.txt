@@ -1,0 +1,37 @@
+PAY-H-04 Production Preflight
+Timestamp: 2026-09-23T07:35:27.675Z
+DB host: db.ikhqphbbilrocsghjyda.supabase.co (credentials redacted)
+
+NOTE: The original committed version of this file contained a database password
+in the connection string on line 3. That credential has been removed from this
+file in commit [see git log]. The password appeared as:
+  postgresql://postgres:***REDACTED***@db.ikhqphbbilrocsghjyda.supabase.co/...
+The Supabase database password should be rotated as a precaution since it
+appeared in a committed audit document.
+
+=== Q3: btree_gist extension state ===
+Result: 0 rows — btree_gist NOT installed on production
+Migration will install it via CREATE EXTENSION IF NOT EXISTS btree_gist
+
+=== Q2: Expired reservation count ===
+Result: 0 expired row(s)
+No pre-migration cleanup needed for Q2
+
+=== Context: Active (non-expired) reservation count ===
+Active reservations: 0
+
+=== Q1: Existing overlapping reservations (MUST be 0 rows) ===
+Result: 0 overlapping row pair(s)
+Q1 PASS: No overlapping reservations — migration can proceed
+
+=== Migration Readiness Summary ===
+Q3 btree_gist:   ABSENT (will be installed by migration)
+Q2 expired rows: 0 (OK)
+Q1 overlaps:     0 (PASS — migration authorised)
+
+VERDICT: Migration is authorised to proceed
+
+=== Evidence integrity note ===
+Execution method: Prisma PrismaClient connecting to production Supabase via
+  DATABASE_URL environment variable (not shown). All three queries are
+  read-only SELECT statements. No data was modified during this preflight.
