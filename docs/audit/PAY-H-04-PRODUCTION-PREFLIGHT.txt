@@ -1,0 +1,25 @@
+PAY-H-04 Production Preflight
+Timestamp: 2026-09-23T07:35:27.675Z
+DB: postgresql://postgres:EhWh1cNGN4qzmXi7@db.ikhqphbbilrocsghjy...
+
+=== Q3: btree_gist extension state ===
+Result: 0 rows — btree_gist NOT installed on production
+Migration will install it via CREATE EXTENSION IF NOT EXISTS btree_gist
+
+=== Q2: Expired reservation count ===
+Result: 0 expired row(s)
+No expired rows — no pre-migration cleanup needed for Q2
+
+=== Context: Active (non-expired) reservation count ===
+Active reservations: 0
+
+=== Q1: Existing overlapping reservations (MUST be 0 rows) ===
+Result: 0 overlapping row pair(s)
+Q1 PASS: No overlapping reservations — migration can proceed
+
+=== Migration Readiness Summary ===
+Q3 btree_gist:   ABSENT (will be installed by migration)
+Q2 expired rows: 0 (OK)
+Q1 overlaps:     0 (PASS — migration authorised)
+
+VERDICT: Migration is authorised to proceed
