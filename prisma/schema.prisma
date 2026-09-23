@@ -201,6 +201,12 @@ model ProviderExpense {
   provider    Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
 }
 
+/// PAY-H-04 fix: GiST exclusion constraint enforced at DB level.
+/// Migration: 20260922000001_payh04_slot_reservation_no_overlap
+/// Constraint: EXCLUDE USING GIST (providerId WITH =, tsrange(startTime,endTime,'[)') WITH &&)
+/// Layer 1 (app): delete expired overlapping rows before create()
+/// Layer 2 (app): findFirst overlap check for clean 409
+/// Layer 3 (DB):  constraint as final concurrency invariant
 model SlotReservation {
   id         String   @id @default(cuid())
   providerId String
