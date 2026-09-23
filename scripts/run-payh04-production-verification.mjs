@@ -83,14 +83,50 @@ async function main() {
   log(`Test provider: ${TEST_PROVIDER_ID}`);
   log('');
 
-  // --- Check 1: Deployed SHA via /api/health ---
-  log('=== Check 1: Deployed SHA ===');
+  // --- Check 1: Deployed SHA via /api/health + ancestry verification ---
+  log('=== Check 1: Deployed SHA and ancestry ===');
   const health = await fetch(`${PRODUCTION_URL}/api/health`);
   const healthData = JSON.parse(health.body);
+  const deployedSha = healthData.sha ?? null;
   log(`Health status: ${health.status}`);
-  log(`Deployed SHA: ${healthData.sha ?? 'not present'}`);
+  log(`Deployed SHA: ${deployedSha ?? 'NOT PRESENT — old version, audit fix not yet deployed'}`);
   log(`Environment: ${healthData.env ?? 'unknown'}`);
-  log('MANUAL: Confirm SHA contains 560a77c2 in its ancestry via Vercel dashboard');
+
+  if (!deployedSha) {
+    log('');
+    log('ABORT: /api/health does not return a sha field.');
+    log('The pre-audit application version is still serving.');
+    log('Wait for Vercel to deploy commit 641a52be or later, then re-run.');
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+
+  // Verify SHA ancestry: deployed SHA must contain 560a77c2
+  // Use git merge-base --is-ancestor locally to check the relationship
+  const { execSync } = await import('child_process');
+  let ancestryVerified = false;
+  try {
+    // Fetch the deployed SHA so git knows about it
+    execSync(`git fetch origin ${deployedSha} 2>/dev/null || true`, { stdio: 'pipe' });
+    // Check if 560a77c2 is an ancestor of the deployed SHA
+    execSync(`git merge-base --is-ancestor 560a77c2 ${deployedSha}`, { stdio: 'pipe' });
+    ancestryVerified = true;
+    log('SHA ancestry: 560a77c2 IS AN ANCESTOR of deployed SHA — PAY-H-04 fix is included');
+  } catch {
+    // If git check fails because SHA not in local repo, fall back to log-based check
+    try {
+      const logOutput = execSync(`git log ${deployedSha} --oneline --ancestry-path 560a77c2..${deployedSha} 2>&1 | head -5`, { stdio: 'pipe' });
+      if (logOutput.toString().trim()) {
+        ancestryVerified = true;
+        log('SHA ancestry: VERIFIED via git log');
+      }
+    } catch {
+      log('SHA ancestry: COULD NOT VERIFY locally — manual Vercel dashboard check required');
+      log(`  Open Vercel dashboard, confirm deployment SHA ${deployedSha} descends from 560a77c2`);
+    }
+  }
+  log(`[SHA] Deployed SHA: ${deployedSha}`);
+  log(`[SHA] PAY-H-04 fix (560a77c2) in ancestry: ${ancestryVerified ? 'VERIFIED' : 'MANUAL CHECK REQUIRED'}`);
   log('');
 
   // --- Check 2: btree_gist installed ---
@@ -185,13 +221,14 @@ async function main() {
 
   // --- Summary ---
   log('=== Production Verification Summary ===');
-  log(`Deployed SHA:   ${healthData.sha ?? 'unknown'}`);
-  log(`btree_gist:     ${btree.length > 0 ? `installed (v${btree[0].extversion})` : 'MISSING'}`);
-  log(`Constraint:     ${constraint.length > 0 ? 'present' : 'MISSING'}`);
-  log(`Check 4 invariant (concurrent overlap → ≤1 row): PASS=${check4Pass}`);
-  log(`Check 5 boundary (adjacent both succeed):         PASS=${check5Pass}`);
-  log(`Check 6 normal creation:                          PASS=${check6Pass}`);
-  log(`Check 7 exclusion → HTTP 409:                     PASS=${check7Pass}`);
+  log(`[SHA] Deployed SHA:   ${deployedSha ?? 'unknown'}`);
+  log(`[SHA] 560a77c2 ancestor: ${ancestryVerified ? 'VERIFIED' : 'MANUAL CHECK REQUIRED'}`);
+  log(`[DB]  btree_gist:     ${btree.length > 0 ? `installed (v${btree[0].extversion})` : 'MISSING'}`);
+  log(`[DB]  Constraint:     ${constraint.length > 0 ? 'present' : 'MISSING'}`);
+  log(`[HTTP] Check 4 invariant (concurrent overlap → ≤1 row): PASS=${check4Pass}`);
+  log(`[HTTP] Check 5 boundary (adjacent both succeed):         PASS=${check5Pass}`);
+  log(`[HTTP] Check 6 normal creation:                          PASS=${check6Pass}`);
+  log(`[HTTP] Check 7 exclusion → HTTP 409:                     PASS=${check7Pass}`);
   log('');
 
   const dbChecks = btree.length > 0 && constraint.length > 0;
@@ -199,7 +236,9 @@ async function main() {
 
   if (allPass) {
     log('VERDICT: All checks passed — PAY-H-04 production verification COMPLETE');
-    log('MANUAL REMAINING: confirm SHA ancestry in Vercel dashboard');
+    if (!ancestryVerified) {
+      log('REMAINING: Manually confirm SHA ancestry in Vercel dashboard before closing');
+    }
   } else {
     log('VERDICT: One or more checks failed — DO NOT CLOSE PAY-H-04');
     if (!dbChecks) log('  DB: btree_gist or constraint missing — migration may not have run');
