@@ -56,7 +56,7 @@ All other audit documents are evidence records that support this file.
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PAY-H-04 | SlotReservation concurrency — no unique constraint | MEDIUM | CONFIRMED | VERIFIED — no `@@unique([providerId, startTime])` | DESIGN SUBSTANTIVELY AUTHORISED — prototype (0f0b5cf8) verified: btree_gist installed on test DB (v1.7); all-rows GIST exclusion works; boundary semantics correct; 1/3 concurrent succeeded (race-safe); 23P01 = PrismaClientUnknownRequestError code=none; Option A required (expired rows block). Q1 production DB: PENDING (must verify btree_gist on Supabase before deployment). No WHERE expiresAt > NOW() in migration | PENDING — PAY-H-04-C design doc + migration | ⚠️ OPEN — fix not yet started | `docs/audit/PAY-H-04_INVESTIGATION.md` | PAY-H-04 |
+| PAY-H-04 | SlotReservation concurrency — no unique constraint | MEDIUM | CONFIRMED | VERIFIED — no `@@unique([providerId, startTime])` | `560a77c2` — btree_gist + all-rows GIST exclusion constraint; Layer 1 scoped expiry delete in both paths; Path B SlotReservation overlap check; 23P01 → HTTP 409 | 6 PAY-H-04-E HTTP tests (E1–E6), exit 0, 2026-09-22; E1 invariant confirmed: concurrent overlapping → at most 1 row, constraint confirmed present; Q1 production btree_gist: PENDING | ⚠️ OPEN — FIX-VERIFIED, production btree_gist pending, production verification not yet run | `docs/audit/PAY-H-04_INVESTIGATION.md` | PAY-H-04 |
 | SUB-06-A | No tests for subscription event ordering | MEDIUM | CONFIRMED | VERIFIED — zero tests for updated→deleted | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | SUB-06-A |
 | SUB-08-A | Seat limit not enforced in webhook | MEDIUM | CONFIRMED | VERIFIED — no seat count check before subscription.create | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | SUB-08-A |
 | RBAC-M-02 | Admin routes use role check instead of permission check | MEDIUM | CONFIRMED | VERIFIED — `role === 'SUPER_ADMIN'` pattern found | NOT-STARTED | PENDING | ⚠️ OPEN | `PHASE1_REMEDIATION_REGISTER.md` | RBAC-M-02 |
@@ -241,7 +241,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 | 15 | MM-02 | Delete `StripeService.createPayout()` | ✅ CLOSED — deleted, 0 source references post-deletion |
 | 16 | INT-M-03A | Encrypt OAuth tokens at rest |
 | 17 | INT-M-03F | Revoke OAuth token on calendar disconnect |
-| 18 | PAY-H-04 | SlotReservation unique constraint |
+| 18 | PAY-H-04 | SlotReservation unique constraint | ✅ FIX-VERIFIED `560a77c2` — production btree_gist PENDING |
 | 19 | DOC-EXP-01 | Block bookings with expired provider documents |
 | 20 | DATA-EXP-01 | Remove phone from public instructor API |
 | 21 | AUDIT-01/02/05 | Audit logging hardening |
