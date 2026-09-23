@@ -555,3 +555,97 @@ Migration components:
 Hostile post-fix concurrency tests required (PAY-H-04-E equivalent) before CLOSED.
 Migration must be tested against existing production-like reservation data.
 WHERE expiresAt > NOW() must not appear anywhere in the migration.
+
+---
+
+## 14. Migration Preflight — REQUIRED BEFORE PRODUCTION DEPLOYMENT
+
+The exclusion constraint applies to **all existing rows** in `SlotReservation`.
+PostgreSQL will reject `ALTER TABLE ... ADD CONSTRAINT ... EXCLUDE` at migration
+time if any existing rows already overlap. This would fail the deployment (not
+silently skip the constraint), leaving the application deployed without the fix.
+
+Three queries must be run against production via the Supabase SQL editor
+**before** authorising the production migration. All three results must be
+recorded as audit evidence.
+
+### Query 1 — Existing overlap check (MUST return 0 rows)
+
+```sql
+SELECT
+    a.id            AS reservation_a,
+    b.id            AS reservation_b,
+    a."providerId",
+    a."startTime"   AS a_start,
+    a."endTime"     AS a_end,
+    b."startTime"   AS b_start,
+    b."endTime"     AS b_end
+FROM "SlotReservation" a
+JOIN "SlotReservation" b
+  ON a."providerId" = b."providerId"
+ AND a.id < b.id
+ AND a."startTime" < b."endTime"
+ AND b."startTime" < a."endTime";
+```
+
+**Expected: 0 rows.**
+
+If this returns any rows, the migration will fail. The overlapping rows must be
+resolved (manually deleted or expired) before the migration can proceed.
+This is a deployment blocker.
+
+### Query 2 — Expired-row count (informational, guides pre-migration cleanup)
+
+```sql
+SELECT COUNT(*)
+FROM "SlotReservation"
+WHERE "expiresAt" < NOW();
+```
+
+A non-zero result is not necessarily a blocker, but:
+- These expired rows will participate in the exclusion constraint until deleted.
+- If expired rows overlap with each other or with active rows, they will cause
+  the migration to fail (Query 1 catches this case).
+- It is recommended to run the expiry cron or manually delete expired rows
+  before the migration to reduce risk:
+  ```sql
+  DELETE FROM "SlotReservation" WHERE "expiresAt" < NOW();
+  ```
+  Run Query 1 again after deletion to confirm 0 overlapping rows remain.
+
+### Query 3 — btree_gist extension state (production)
+
+```sql
+SELECT extname, extversion
+FROM pg_extension
+WHERE extname = 'btree_gist';
+```
+
+**Expected: 1 row** (if pre-installed) or 0 rows (if absent — `CREATE EXTENSION
+IF NOT EXISTS btree_gist` in the migration will install it).
+
+The migration handles both cases. This query establishes the pre-migration
+production state for audit evidence.
+
+### Migration readiness gate
+
+| Query | Result | Migration proceed? |
+|-------|--------|--------------------|
+| Q1: existing overlaps | 0 rows | YES |
+| Q1: existing overlaps | > 0 rows | NO — resolve overlaps first |
+| Q2: expired rows | 0 rows | YES |
+| Q2: expired rows | > 0 | Run expiry delete, re-check Q1, then YES |
+| Q3: btree_gist | present or absent | YES (migration installs if absent) |
+
+### Evidence required
+
+Record the following before deployment:
+- Q1 result (row count and any returned rows)
+- Q2 result (count)
+- Q3 result (extname, extversion or 0 rows)
+- Timestamp of queries
+- Whether pre-migration cleanup was required
+
+These results, combined with the post-deployment production verification
+(same pattern as MM-12 production verification checklist), constitute the
+complete PAY-H-04 closure evidence.
