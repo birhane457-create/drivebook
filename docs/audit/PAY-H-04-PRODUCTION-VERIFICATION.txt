@@ -1,6 +1,5 @@
-PAY-H-04 Production Verification - PARTIAL (updated 2026-09-23T14:44Z)
-Timestamp: 2026-09-23T14:44:19Z
-Production URL: https://drivebook-wheat.vercel.app (SHA d0f3ae27)
+PAY-H-04 Production Verification - PARTIAL (updated 2026-09-23T15:00Z)
+Production URL: https://drivebook-wheat.vercel.app
 Test provider: cmt2qxp97000ggup1aj4rgimi (Test Electrician, state=WA)
 
 === DB State (COMPLETE) ===
@@ -8,54 +7,64 @@ btree_gist:                 INSTALLED version 1.7
 SlotReservation_no_overlap: PRESENT (type=x, GiST exclusion constraint)
 Migration 20260922000001:   applied successfully
 
-=== SHA Verification ===
-Deployed SHA: d0f3ae27aaf74a478bd5003319c57cc8f81e09b (confirmed via /api/health)
+=== SHA Verification (COMPLETE) ===
+Deployed SHA at time of diagnosis: d0f3ae27aaf74a478bd5003319c57cc8f81e09b
+  Confirmed via /api/health returning {status, sha, env, timestamp}
 PAY-H-04 fix 560a77c2 ancestry: VERIFIED
-  d0f3ae27 descends from 4412e68e (4412e68e PAY-H-04: Correct deployment SHA reference)
-  which descends from 560a77c2 (PAY-H-04-C implementation)
-  git log main confirms the chain.
+  d0f3ae27 is a commit on main branch descended from 560a77c2
+  git log confirms: 560a77c2 -> ... -> 4412e68e -> ... -> d0f3ae27
 
-=== Root Cause of HTTP 500 (IDENTIFIED 14:44Z) ===
-Diagnostic added at d0f3ae27 revealed the actual error:
+Current main HEAD after diagnostic cleanup: eb007214
+  Diagnostic routes removed at eb007214 (security cleanup)
+
+=== Database Connectivity (FAILED - infrastructure configuration) ===
+Observed at d0f3ae27 (2026-09-23T14:44Z):
+  The Vercel runtime for this deployment could not connect to the configured
+  Supabase database endpoint.
+
+Diagnostic error captured from route:
   "Can't reach database server at 'db.ikhqphbbilrocsghjyda.supabase.co:5432'"
 
-The Vercel production DATABASE_URL environment variable points to the Supabase
-DIRECT connection URL (db.ikhqphbbilrocsghjyda.supabase.co:5432).
+The deployed Vercel runtime cannot establish a connection to this endpoint.
+This has been observed specifically for this deployment/environment combination.
+Whether other Vercel deployments can reach this endpoint is not established here.
 
-Vercel serverless functions cannot reach this direct Supabase endpoint.
-They require the Supabase CONNECTION POOLER URL:
-  postgresql://postgres.ikhqphbbilrocsghjyda:[PASS]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+Proposed resolution: update the Vercel DATABASE_URL environment variable to
+point to the appropriate Supabase connection endpoint for serverless use.
+This requires checking the Vercel project environment variable configuration
+and identifying the correct connection string for the Supabase project.
 
-This is a Vercel environment variable configuration issue.
-The PAY-H-04 code fix is correctly deployed. The DB constraint is installed.
-This is NOT a defect in the PAY-H-04 fix.
+CAUTION: Do not simply swap to the value named DIRECT_URL in the local .env
+without first verifying what each variable is intended to serve in the
+Prisma/Vercel configuration. The local .env naming may not reflect the
+intended Prisma usage semantics.
 
-=== Fix Required (manual — Vercel dashboard) ===
-1. Vercel dashboard -> drivebook project -> Settings -> Environment Variables
-2. Update DATABASE_URL to the pooler connection string shown above
-3. Redeploy (env var change requires new deployment)
-4. Re-run: PRODUCTION_URL=https://drivebook-wheat.vercel.app
-           TEST_PROVIDER_ID=cmt2qxp97000ggup1aj4rgimi
-           node scripts/run-payh04-production-verification.mjs
+=== Diagnostic Instrumentation Cleanup ===
+Two temporary routes were added for diagnosis and have been removed at eb007214:
+  - app/api/debug-env/route.ts (deleted)
+  - Error detail in 500 response (reverted to generic message)
 
-=== HTTP Verification (BLOCKED - infrastructure config) ===
-[HTTP] Check 4 concurrent overlap: BLOCKED (DATABASE_URL unreachable)
-[HTTP] Check 5 adjacent intervals: BLOCKED
-[HTTP] Check 6 normal creation:    BLOCKED
-[HTTP] Check 7 exclusion -> 409:   BLOCKED
+Production now returns {"error":"Internal server error"} with no database
+details exposed. This has been verified in the committed code at eb007214.
+
+=== HTTP Verification (BLOCKED) ===
+All HTTP checks blocked by database connectivity failure.
+Cannot establish results until Vercel DATABASE_URL is corrected and redeployed.
+Results will be captured in a new run of run-payh04-production-verification.mjs
+after the infrastructure fix.
+
+NOTE: The verification script results are the evidence. The hypothesis that the
+checks will pass is not the evidence. Do not close PAY-H-04 based on the
+infrastructure change alone.
 
 === Summary ===
-[SHA]  d0f3ae27 deployed: VERIFIED (contains 560a77c2 in ancestry)
+[SHA]  d0f3ae27 -> eb007214 deployed: PAY-H-04 fix VERIFIED in ancestry
 [DB]   btree_gist v1.7:   INSTALLED
 [DB]   SlotReservation_no_overlap: PRESENT
-[INFRA] DATABASE_URL on Vercel: MISCONFIGURED (direct URL, must be pooler URL)
-[HTTP]  All checks: BLOCKED until DATABASE_URL corrected and redeployed
+[INFRA] Vercel runtime cannot reach configured database endpoint
+[HTTP]  All checks: BLOCKED until infrastructure corrected and redeployed
+[DIAG]  Temporary diagnostic routes: REMOVED at eb007214
 
-VERDICT: PAY-H-04 code + DB are correct. HTTP verification blocked by Vercel
-  DATABASE_URL misconfiguration. PAY-H-04 remains OPEN.
-  CLOSED requires successful HTTP verification after infrastructure fix.
-
-=== Temp diagnostic routes to remove ===
-app/api/debug-env/route.ts        (committed at 55ca3871)
-Error detail in 500 response     (committed at d0f3ae27)
-Both should be reverted once verification passes.
+VERDICT: PAY-H-04 code and DB are in place. HTTP verification blocked by
+  Vercel database connectivity configuration. PAY-H-04 remains OPEN.
+  CLOSED requires: infrastructure fix + redeploy + passing HTTP verification.
