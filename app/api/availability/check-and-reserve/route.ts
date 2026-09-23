@@ -221,7 +221,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.errors }, { status: 400 });
     }
     console.error('Reserve slot error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    // Temporary: expose error detail for production diagnosis (PAY-H-04 verification)
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: 'Internal server error', detail: errMsg.substring(0, 200) }, { status: 500 });
   }
 }
 
