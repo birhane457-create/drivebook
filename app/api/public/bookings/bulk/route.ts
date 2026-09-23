@@ -705,6 +705,36 @@ export async function POST(req: NextRequest) {
           });
           if (conflict) throw new Error('SLOT_TAKEN');
 
+          // PAY-H-04 Layer 1: Delete expired rows overlapping this interval before
+          // the slot create, so the GiST constraint does not fire on logically-
+          // expired slots that the application considers available.
+          const now = new Date();
+          await tx.slotReservation.deleteMany({
+            where: {
+              providerId: resolvedInstructorId,
+              expiresAt: { lt: now },
+              AND: [
+                { startTime: { lt: endTime } },
+                { endTime:   { gt: startTime } },
+              ],
+            },
+          });
+
+          // PAY-H-04 Path B fix: also check active SlotReservation rows.
+          // The previous code only checked the Booking table, making a Path A
+          // reservation invisible to Path B concurrent callers.
+          const reservationConflict = await tx.slotReservation.findFirst({
+            where: {
+              providerId: resolvedInstructorId,
+              expiresAt: { gt: now },
+              AND: [
+                { startTime: { lt: endTime } },
+                { endTime:   { gt: startTime } },
+              ],
+            },
+          });
+          if (reservationConflict) throw new Error('SLOT_TAKEN');
+
           // Create slot reservation to hold during payment
           await tx.slotReservation.create({
             data: {
@@ -793,6 +823,15 @@ export async function POST(req: NextRequest) {
       });
     } catch (err: any) {
       if (err.message === 'SLOT_TAKEN') {
+        return NextResponse.json({ error: 'This time slot is no longer available. Please choose another.' }, { status: 409 });
+      }
+      // PAY-H-04 Layer 3: GiST exclusion constraint fired (PostgreSQL 23P01).
+      // Catches races that slipped past the application overlap check.
+      // Surface as the same 409 conflict response so callers behave identically.
+      if (
+        err.message?.includes('23P01') ||
+        err.message?.includes('SlotReservation_no_overlap')
+      ) {
         return NextResponse.json({ error: 'This time slot is no longer available. Please choose another.' }, { status: 409 });
       }
       if (err.code === 'P2002' && err.meta?.target?.includes('key')) {

@@ -175,34 +175,6 @@ export class StripeService {
   }
 
   /**
-   * Create a payout to instructor's Stripe Connect account
-   */
-  async createPayout(accountId: string, amount: number | Decimal, description: string) {
-    // Convert to Decimal for exact calculation, then to cents
-    const amountDecimal = toDecimal(amount);
-    const amountNum = toNumber(amountDecimal);
-    const amountInCents = Math.round(amountNum * 100);
-
-    try {
-      const transfer = await stripe.transfers.create({
-        amount: amountInCents,
-        currency: 'aud',
-        destination: accountId,
-        description,
-      });
-
-      return {
-        transferId: transfer.id,
-        amount: amountNum,
-        status: 'completed', // Transfers are immediate
-      };
-    } catch (error) {
-      console.error('Error creating payout:', error);
-      throw new Error('Failed to create payout');
-    }
-  }
-
-  /**
    * Retrieve payment intent
    */
   async getPaymentIntent(paymentIntentId: string) {

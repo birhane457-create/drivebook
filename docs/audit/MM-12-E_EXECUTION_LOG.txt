@@ -1,0 +1,179 @@
+MM-12-E: Admin Wallet Idempotency Verification - Execution Log
+
+TIMESTAMP CORRECTION NOTICE
+The original log header stated "Executed: 2026-08-15". That date was incorrect.
+It was copied from the session's stated date rather than the actual machine clock.
+The machine clock at execution time was 2026-09-22 (confirmed: cmd /c "date /t"
+returns "Tue 22/09/2026"). The vitest output itself records "Start at 15:31:38"
+on 2026-09-22, matching all git commit timestamps on this branch. This correction
+is recorded here rather than rewriting history, in accordance with the audit
+evidence policy of amending rather than deleting.
+
+Executed:    2026-09-22 15:31:38 (machine clock; UTC+8)
+Branch:      audit/int-m03a-test-verified
+Test commit: 638888f0329a24e8c4788dc7c6a19e1767d49570
+Runner:      scripts/run-mm-12e-http-tests.ps1
+Test file:   __tests__/integration/mm-12e-admin-wallet-idempotency-verification.test.ts
+
+Architecture
+  Vitest -> Supertest HTTP -> Next.js (localhost:3001, .env.local override)
+  -> real NextAuth session cookie -> production route handlers
+  -> Prisma -> isolated PostgreSQL (localhost:5433/drivebook_test)
+
+Fixture IDs (this run)
+  Customer ID: cmuccvj7h0002paxjkezh7fig
+  Wallet ID:   cmuccvj7q0004paxj0it0bd44
+
+=== Raw console output ===
+
+MM-12E: Checking drivebook-test-db container...
+MM-12E: PostgreSQL running on port 5433
+MM-12E: Applying schema to test DB...
+MM-12E: Schema ready
+MM-12E: .env.local written
+MM-12E: Starting Next.js on port 3001...
+MM-12E: Server PID 20324
+MM-12E: Waiting for readiness (max 90s)...
+  3s...
+  6s...
+MM-12E: Server ready at http://localhost:3001
+
+RUN  v1.6.1
+
+[MM-12E] DB: postgresql://postgres:testpass@localhost:5433/drivebook_test...
+[MM-12E] Server: http://localhost:3001
+[MM-12E] Admin authenticated. Customer: cmuccvj7h0002paxjkezh7fig, Wallet: cmuccvj7q0004paxj0it0bd44
+
+--- E1: Concurrent identical credits (same key) ---
+[E1] Request A: 200
+[E1] Request B: 200
+[E1] Transactions committed: 1
+[E1] Ledger balance: $100
+
+--- E2: Concurrent distinct credits (different keys) ---
+[E2] Credit A ($75): 200
+[E2] Credit B ($50): 200
+[E2] Transactions committed: 2
+[E2] Ledger balance: $125
+
+--- E3: Concurrent deductions (INVARIANT 2) ---
+[E3] Starting balance: $60
+[E3] Debit A: 200
+[E3] Debit B: 400
+[E3] DEBIT transactions committed: 1
+[E3] Ledger balance after: $10
+[E3] PASS SELECT FOR UPDATE serialised: one debit committed, one rejected
+
+--- E4: Concurrent credit + deduction ---
+[E4] Credit (+$30): 200
+[E4] Debit (-$40):  200
+[E4] CREDIT txns: 2, DEBIT txns: 1
+[E4] Ledger balance: $40
+[E4] Cached balance: $40
+
+--- E5: Replay (credit) ---
+[E5] First request: 200, txId: cmuccwwiw0010s1etvce3ye0u
+[E5] Replay request: 200, txId: cmuccwwiw0010s1etvce3ye0u
+[E5] Transactions committed: 1
+[E5] Ledger balance: $200
+
+--- E5: Replay (deduction) ---
+[E5-debit] Replay: 200, txId: cmuccx75y0019s1etn4uwpwxk
+
+--- E6: Failure rollback ---
+[E6] No-key response: 400
+[E6] Insufficient-balance response: 400
+[E6] Idempotency row persisted after failure: false
+[E6] Retry after funding: 200
+[E6] Invalid-amount response: 400
+
+--- E1-seq: Sequential duplicate regression guard ---
+[E1-seq] First: 200, Second: 200
+[E1-seq] txId first: cmuccxloo001ns1etizz9j1x8, second: cmuccxloo001ns1etizz9j1x8
+
+[MM-12E] Cleanup complete.
+
+=== Vitest summary ===
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  15:31:38
+   Duration  106.61s
+
+MM-12E: Server stopped
+MM-12E: .env.local removed
+MM-12E: PASSED
+
+=== Acceptance invariants confirmed ===
+
+INVARIANT 1 (idempotency):
+  For any (Idempotency-Key, walletId, operationType), exactly one financial
+  effect may be committed, regardless of sequential retries or concurrent
+  first requests.
+  -> Proven by E1 (concurrent, 1 tx), E5 (replay, same txId), E1-seq (sequential, 1 tx)
+
+INVARIANT 2 (deduction atomicity):
+  No committed debit may cause the authoritative ledger-derived balance to
+  fall below zero when the balance was non-negative and sufficient.
+  -> Proven by E3: Debit A 200, Debit B 400, 1 DEBIT tx, balance $10 (not negative)
+
+=== Evidence completeness ===
+
+Source evidence:   MM-12-A route source at 638888f0
+Baseline evidence: MM-12-B_EXECUTION_EVIDENCE.md (duplicates confirmed pre-fix)
+Design evidence:   MM-12-C_DESIGN_VERIFICATION.md (v2)
+Fix evidence:      b7736603 (MM-12-D) + 638888f0 (MM-12-D fix)
+Verification:      This file (MM-12-E execution log, 10/10, 2026-09-22)
+
+Remaining gate:    Production verification (9-step checklist below)
+
+=== Production verification checklist ===
+
+After deployment of commit 638888f0 (or merged equivalent):
+
+1. Apply migration 20260815000001_mm12d_admin_wallet_idempotency to production DB
+   Verify: AdminWalletIdempotencyKey table exists with correct constraints
+
+2. Create a controlled test account (do NOT use real customer wallets)
+   Record: test user ID, wallet ID, deployment SHA, environment URL
+
+3. Same-key concurrent credit
+   Action:  Two identical requests, same Idempotency-Key
+   Expect:  Exactly one WalletTransaction row; both responses reference same txId
+   Query:   SELECT COUNT(*) FROM "WalletTransaction" WHERE "walletId"=$walletId AND status='CONFIRMED'
+
+4. Same-key replay
+   Action:  Same Idempotency-Key after confirmed success
+   Expect:  HTTP 200, identical transactionId, COUNT(*) unchanged
+
+5. Distinct-key credits
+   Action:  Two credits, different keys
+   Expect:  Two WalletTransaction rows, balance = sum of both amounts
+
+6. Concurrent deductions exceeding balance
+   Action:  Fund wallet $60, two concurrent $50 debits with different keys
+   Expect:  One HTTP 200, one HTTP 400; ledger balance >= 0
+
+7. Failed deduction cleanup
+   Action:  Deduct with insufficient balance
+   Expect:  No DEBIT row; no AdminWalletIdempotencyKey row for that key
+
+8. Database invariant queries (run after checks 3-7)
+
+   -- No duplicate key tuples:
+   SELECT "key", "walletId", "operationType", COUNT(*) AS cnt
+   FROM "AdminWalletIdempotencyKey"
+   GROUP BY "key", "walletId", "operationType"
+   HAVING COUNT(*) > 1;
+   Expect: zero rows
+
+   -- Ledger equals cache:
+   SELECT w.id, w.balance AS cached,
+          SUM(CASE WHEN t.type='CREDIT' THEN t.amount ELSE -t.amount END) AS ledger
+   FROM "ClientWallet" w
+   JOIN "WalletTransaction" t ON t."walletId" = w.id
+   WHERE w.id = $walletId AND t.status = 'CONFIRMED'
+   GROUP BY w.id, w.balance;
+   Expect: cached = ledger (within 0.01)
+
+9. Record deployment SHA and DB postconditions in production verification note

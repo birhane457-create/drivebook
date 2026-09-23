@@ -55,13 +55,29 @@ async function isSlotAvailable(
 ): Promise<{ available: boolean; reason?: string }> {
   const { startDateTime, endDateTime } = await parseInstructorDateTime(providerId, date, time, duration);
 
-  // Clean up any expired reservations for this time slot
   const now = new Date();
+
+  // PAY-H-04 Layer 1: Delete expired rows that overlap the target interval.
+  // Scoped to (providerId, expiredAt, overlapping range) so the all-rows
+  // GiST exclusion constraint does not fire on logically-expired rows.
+  // The broader provider-scoped cleanup that follows handles the rest.
   await prisma.slotReservation.deleteMany({
     where: {
       providerId,
-      expiresAt: { lt: now }
-    }
+      expiresAt: { lt: now },
+      AND: [
+        { startTime: { lt: endDateTime } },
+        { endTime:   { gt: startDateTime } },
+      ],
+    },
+  });
+
+  // Also clean up other expired reservations for this provider (general hygiene)
+  await prisma.slotReservation.deleteMany({
+    where: {
+      providerId,
+      expiresAt: { lt: now },
+    },
   });
 
   // Check if another session has an active reservation overlapping this slot
@@ -161,15 +177,37 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-    const reservation = await prisma.slotReservation.create({
-      data: {
-        providerId: data.providerId,
-        startTime: startDateTime,
-        endTime: endDateTime,
-        sessionId: data.sessionId,
-        expiresAt
+    let reservation;
+    try {
+      reservation = await prisma.slotReservation.create({
+        data: {
+          providerId: data.providerId,
+          startTime: startDateTime,
+          endTime: endDateTime,
+          sessionId: data.sessionId,
+          expiresAt
+        }
+      });
+    } catch (createError: any) {
+      // PAY-H-04 Layer 3: GiST exclusion constraint fired (PostgreSQL 23P01).
+      // This catches races that slipped through the application overlap check —
+      // the constraint is the final concurrency invariant.
+      // Note: exclusion constraint violations surface as PrismaClientUnknownRequestError
+      // (not P2002). We match on the PostgreSQL error code 23P01 and/or the constraint
+      // name in the message, which is more robust than checking constructor name
+      // (which can be minified in production bundles).
+      if (
+        createError.message?.includes('23P01') ||
+        createError.message?.includes('SlotReservation_no_overlap')
+      ) {
+        return NextResponse.json({
+          success: false,
+          available: false,
+          reason: 'Slot is temporarily reserved by another user',
+        }, { status: 409 });
       }
-    });
+      throw createError;
+    }
 
     return NextResponse.json({
       success: true,
