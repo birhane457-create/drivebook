@@ -3,6 +3,7 @@ import { prisma } from '../prisma'
 import { resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 import { addMinutes, parseISO } from 'date-fns'
 import { signOAuthState } from '../oauth-state'
+import { encryptToken, decryptToken } from '../encryption/oauth-tokens' // INT-M-03A
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -42,6 +43,11 @@ export class GoogleCalendarService {
   // This invariant prevents a background token refresh from silently re-enabling
   // calendar sync after an instructor has deliberately disconnected.
   //
+  // INT-M-03A FIX — OAuth tokens encrypted before storage:
+  //   - Prevents plaintext exposure in database dumps/backups
+  //   - Uses AES-256-GCM with unique 12-byte nonce per encryption
+  //   - Format: v1:<base64(nonce)>:<base64(ciphertext+tag)>
+  //
   // Callers:
   //   1. OAuth callback (app/api/calendar/callback/route.ts) — enableSync=true  (explicit)
   //   2. getCalendarClient token-refresh path (below)         — enableSync=false (explicit)
@@ -50,13 +56,13 @@ export class GoogleCalendarService {
   // This prevents a future caller from accidentally re-enabling sync by omitting the flag.
   async saveTokens(providerId: string, tokens: any, enableSync: boolean) {
     const data: Record<string, any> = {
-      googleAccessToken: tokens.access_token,
+      googleAccessToken: encryptToken(tokens.access_token),   // INT-M-03A: Encrypt before storage
       googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
     }
     // Only update refresh token when Google actually returns one (not undefined).
     // Google omits refresh_token on non-consent refreshes.
     if (tokens.refresh_token !== undefined) {
-      data.googleRefreshToken = tokens.refresh_token
+      data.googleRefreshToken = encryptToken(tokens.refresh_token)  // INT-M-03A: Encrypt before storage
     }
     // Only the OAuth authorization callback should enable sync.
     // Token refreshes must not override the instructor's sync preference.
@@ -70,12 +76,13 @@ export class GoogleCalendarService {
   }
 
   // Get calendar client for instructor
+  // INT-M-03A: Decrypts OAuth tokens before passing to Google API client
   async getCalendarClient(providerId: string) {
     const instructor = await prisma.provider.findUnique({
       where: { id: providerId },
       select: {
-        googleAccessToken: true,
-        googleRefreshToken: true,
+        googleAccessToken: true,        // INT-M-03A: Encrypted in database
+        googleRefreshToken: true,       // INT-M-03A: Encrypted in database
         googleTokenExpiry: true,
         googleCalendarId: true
       }
@@ -85,16 +92,26 @@ export class GoogleCalendarService {
       throw new Error('Google Calendar not connected')
     }
 
+    // INT-M-03A: Decrypt tokens before passing to Google OAuth client
+    const accessToken = decryptToken(instructor.googleAccessToken);
+    const refreshToken = decryptToken(instructor.googleRefreshToken);
+
+    // Fail closed if decryption fails
+    if (!accessToken || !refreshToken) {
+      console.error('[INT-M-03A] Failed to decrypt OAuth tokens for provider:', providerId);
+      throw new Error('Failed to decrypt calendar credentials');
+    }
+
     oauth2Client.setCredentials({
-      access_token: instructor.googleAccessToken,
-      refresh_token: instructor.googleRefreshToken,
+      access_token: accessToken,        // INT-M-03A: Decrypted plaintext
+      refresh_token: refreshToken,      // INT-M-03A: Decrypted plaintext
       expiry_date: instructor.googleTokenExpiry?.getTime()
     })
 
     // Refresh token if expired — pass enableSync=false so refresh never re-enables sync
     if (instructor.googleTokenExpiry && new Date() > instructor.googleTokenExpiry) {
       const { credentials } = await oauth2Client.refreshAccessToken()
-      await this.saveTokens(providerId, credentials, false)
+      await this.saveTokens(providerId, credentials, false)  // INT-M-03A: saveTokens encrypts new token
       oauth2Client.setCredentials(credentials)
     }
 
@@ -218,51 +235,65 @@ export class GoogleCalendarService {
   //      prevent local credential deletion (user's disconnect intent is honoured).
   //   4. Null all credential fields and disable sync locally.
   //   5. Never log or expose OAuth tokens.
+  //
+  // INT-M-03A FIX:
+  //   - Decrypt refresh token before passing to revokeToken()
+  //   - Fail closed if decryption fails (treat as already-invalid token)
+  //   - Never log plaintext or encrypted token in error messages
   async disconnect(providerId: string) {
-    // Step 1: Read the refresh token BEFORE clearing it
+    // Step 1: Read the encrypted refresh token BEFORE clearing it
     const provider = await prisma.provider.findUnique({
       where: { id: providerId },
-      select: { googleRefreshToken: true },
+      select: { googleRefreshToken: true },  // INT-M-03A: Encrypted in database
     })
 
     // Step 2: Attempt remote revocation
     if (provider?.googleRefreshToken) {
-      try {
-        oauth2Client.setCredentials({ refresh_token: provider.googleRefreshToken })
-        await oauth2Client.revokeToken(provider.googleRefreshToken)
-        // Revocation succeeded — credential is invalidated at Google
-      } catch (revokeErr: any) {
-        // Categorise the failure for audit logging without exposing the token
-        const errMsg = revokeErr?.message ?? String(revokeErr)
-        const isAlreadyInvalid =
-          errMsg.includes('token_revoked') ||
-          errMsg.includes('invalid_token') ||
-          errMsg.includes('Token has been expired')
+      // INT-M-03A: Decrypt refresh token before revoking
+      const refreshToken = decryptToken(provider.googleRefreshToken);
 
-        if (isAlreadyInvalid) {
-          // Token was already revoked or expired — local cleanup is still correct
-          console.info('[GoogleCalendar] disconnect: token was already invalid at Google (proceeding with local cleanup)')
-        } else {
-          // Unexpected revocation failure — log for ops investigation (no token in log)
-          console.error('[GoogleCalendar] disconnect: remote revocation failed (proceeding with local cleanup)', {
-            providerId,
-            error: errMsg,
-          })
-          // Best-effort alert — non-blocking; does not prevent local disconnect
-          try {
-            const { sendAlert } = await import('@/lib/services/alert-service')
-            void sendAlert({
-              type: 'RECONCILIATION_ISSUES',
-              severity: 'WARNING',
-              message: `Google Calendar OAuth revocation failed for provider ${providerId}. Local credentials have been cleared. The previously issued refresh token may remain valid at Google until it expires naturally. Manual revocation via Google Account settings may be required.`,
-              entityId: providerId,
-              metadata: { providerId, error: errMsg, action: 'google_oauth_revocation_failed' },
+      if (!refreshToken) {
+        // Decryption failed — treat as already-invalid token
+        console.warn('[INT-M-03A] Failed to decrypt refresh token for revocation (provider:', providerId, '). Treating as already invalid. Proceeding with local cleanup.');
+        // Fall through to local cleanup
+      } else {
+        try {
+          oauth2Client.setCredentials({ refresh_token: refreshToken })  // INT-M-03A: Decrypted plaintext
+          await oauth2Client.revokeToken(refreshToken)                  // INT-M-03A: Decrypted plaintext
+          // Revocation succeeded — credential is invalidated at Google
+        } catch (revokeErr: any) {
+          // Categorise the failure for audit logging without exposing the token
+          const errMsg = revokeErr?.message ?? String(revokeErr)
+          const isAlreadyInvalid =
+            errMsg.includes('token_revoked') ||
+            errMsg.includes('invalid_token') ||
+            errMsg.includes('Token has been expired')
+
+          if (isAlreadyInvalid) {
+            // Token was already revoked or expired — local cleanup is still correct
+            console.info('[GoogleCalendar] disconnect: token was already invalid at Google (proceeding with local cleanup)')
+          } else {
+            // Unexpected revocation failure — log for ops investigation (no token in log)
+            console.error('[GoogleCalendar] disconnect: remote revocation failed (proceeding with local cleanup)', {
+              providerId,
+              error: errMsg,
             })
-          } catch {
-            // Alert failure is non-fatal
+            // Best-effort alert — non-blocking; does not prevent local disconnect
+            try {
+              const { sendAlert } = await import('@/lib/services/alert-service')
+              void sendAlert({
+                type: 'RECONCILIATION_ISSUES',
+                severity: 'WARNING',
+                message: `Google Calendar OAuth revocation failed for provider ${providerId}. Local credentials have been cleared. The previously issued refresh token may remain valid at Google until it expires naturally. Manual revocation via Google Account settings may be required.`,
+                entityId: providerId,
+                metadata: { providerId, error: errMsg, action: 'google_oauth_revocation_failed' },
+              })
+            } catch {
+              // Alert failure is non-fatal
+            }
           }
+          // Fall through to local cleanup regardless of revocation outcome
         }
-        // Fall through to local cleanup regardless of revocation outcome
       }
     }
 
