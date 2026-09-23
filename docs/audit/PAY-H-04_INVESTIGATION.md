@@ -602,16 +602,16 @@ FROM "SlotReservation"
 WHERE "expiresAt" < NOW();
 ```
 
-A non-zero result is not necessarily a blocker, but:
-- These expired rows will participate in the exclusion constraint until deleted.
-- If expired rows overlap with each other or with active rows, they will cause
-  the migration to fail (Query 1 catches this case).
-- It is recommended to run the expiry cron or manually delete expired rows
-  before the migration to reduce risk:
-  ```sql
-  DELETE FROM "SlotReservation" WHERE "expiresAt" < NOW();
-  ```
-  Run Query 1 again after deletion to confirm 0 overlapping rows remain.
+A non-zero result **requires** pre-migration cleanup. Expired rows participate in
+the all-rows exclusion constraint until physically deleted, and any that overlap
+with other rows (active or expired) will cause Q1 to return rows — blocking the
+migration. The correct procedure is:
+
+1. Delete all expired rows:
+   ```sql
+   DELETE FROM "SlotReservation" WHERE "expiresAt" < NOW();
+   ```
+2. Re-run Query 1 to confirm 0 overlapping rows remain before proceeding.
 
 ### Query 3 — btree_gist extension state (production)
 
@@ -636,6 +636,19 @@ production state for audit evidence.
 | Q2: expired rows | 0 rows | YES |
 | Q2: expired rows | > 0 | Run expiry delete, re-check Q1, then YES |
 | Q3: btree_gist | present or absent | YES (migration installs if absent) |
+
+### Migration locking consideration
+
+`ALTER TABLE ... ADD CONSTRAINT ... EXCLUDE` acquires an `ACCESS EXCLUSIVE` lock
+on `SlotReservation` and validates all existing rows in a single pass. This means:
+
+- No concurrent reads or writes on `SlotReservation` are possible during migration.
+- For DriveBook's short-lived reservation population (10-minute TTL, frequent cron
+  cleanup) the table should be small and the lock window brief.
+- Nonetheless, this migration should be treated as an **operational change** that
+  requires a maintenance window or off-peak deployment, not a routine code push.
+- If zero-downtime deployment is required, investigate `CREATE INDEX CONCURRENTLY`
+  with a separate constraint — but this is beyond the scope of PAY-H-04.
 
 ### Evidence required
 
