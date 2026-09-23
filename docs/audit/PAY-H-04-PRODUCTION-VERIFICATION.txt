@@ -24,11 +24,20 @@ Additional blocker: drivebook.com.au returns HTTP 403 (Vercel DDoS challenge)
 === Required manual actions ===
 1. Open Vercel dashboard
 2. Navigate to the drivebook project
-3. Manually trigger a deployment from main branch (commit 94096c60)
-   OR connect the GitHub integration to enable auto-deploy
-4. Once deployed, verify /api/health returns the new JSON schema with sha field
-5. If the DDoS challenge persists on drivebook.com.au, use the Vercel preview URL
-   (*.vercel.app) for the verification script, which bypasses the challenge
+3. Manually trigger a deployment from main branch.
+   IMPORTANT: Verify in the Vercel dashboard that the deployment is created from
+   12d66476 (current main HEAD) or a descendant — NOT from older SHAs such as
+   641a52be that appear in earlier audit documentation.
+   OR connect the GitHub integration to enable auto-deploy from main.
+4. Once deployed, get the Vercel PREVIEW URL (*.vercel.app) — do NOT use
+   drivebook.com.au which returns HTTP 403 to non-browser clients.
+5. Run: PRODUCTION_URL=<preview-url> TEST_PROVIDER_ID=cmt2gnh39000s14mii13kr7kh
+        node scripts/run-payh04-production-verification.mjs
+6. Verify the script reports:
+   - Deployed SHA is 12d66476 or a descendant
+   - git merge-base confirms 560a77c2 is an ancestor
+   - btree_gist installed, constraint present
+   - HTTP checks 4-7 all pass
 
 === HTTP Verification — DEFERRED ===
 All HTTP checks deferred until the new application code is deployed.
