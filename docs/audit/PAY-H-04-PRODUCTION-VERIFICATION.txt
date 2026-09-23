@@ -1,40 +1,43 @@
-PAY-H-04 Production Verification — PARTIAL
-Timestamp: 2026-09-23T11:26:23.630Z
+PAY-H-04 Production Verification — PARTIAL (updated 2026-09-23T11:45Z)
+Timestamp: 2026-09-23T11:26:23.630Z (first attempt) / 11:45Z (second attempt)
 Production URL: https://drivebook.com.au
 Test provider: cmt2gnh39000s14mii13kr7kh (Test Plumber)
 
-=== DB State (verified at migration time) ===
+=== DB State (verified — COMPLETE) ===
 btree_gist:              INSTALLED (version 1.7)
 SlotReservation_no_overlap: PRESENT (type=x, GiST exclusion)
+Migration 20260922000001: applied successfully
 
-=== Application Deployment State ===
-/api/health response: {"status":"ok","timestamp":"2026-08-30T...","service":"DriveBook API"}
-SHA field: NOT PRESENT
+=== Application Deployment State — PENDING ===
+Current state: drivebook.com.au serves a pre-audit version.
+  /api/health (old): {"status":"ok","timestamp":"2026-08-30T...","service":"DriveBook API"}
+  /api/health (new):  {status, sha, env, timestamp}  — NOT YET deployed
 
-CONCLUSION: Production application is running a version predating the
-audit branch (deployed before 2026-09-22). The merge commit 641a52be
-has not yet been picked up by Vercel.
+Cause: Vercel project is not auto-deploying from GitHub main branch.
+  Git push to main (94096c60) completed but Vercel has not picked it up.
+  The Vercel project may not be connected to birhane457-create/drivebook.
 
-Evidence: The health route added in this audit returns {status, sha, env, timestamp}.
-The production route returns {status, timestamp, service} — a different schema
-consistent with the pre-audit codebase.
+Additional blocker: drivebook.com.au returns HTTP 403 (Vercel DDoS challenge)
+  for Node.js HTTP requests. The verification script cannot reach the production
+  API from a script context. A browser session or Vercel internal URL is needed.
 
-This means:
-  DB constraint: INSTALLED (migration ran directly via prisma migrate deploy)
-  Application code: NOT DEPLOYED (PAY-H-04 fix code not yet live)
+=== Required manual actions ===
+1. Open Vercel dashboard
+2. Navigate to the drivebook project
+3. Manually trigger a deployment from main branch (commit 94096c60)
+   OR connect the GitHub integration to enable auto-deploy
+4. Once deployed, verify /api/health returns the new JSON schema with sha field
+5. If the DDoS challenge persists on drivebook.com.au, use the Vercel preview URL
+   (*.vercel.app) for the verification script, which bypasses the challenge
 
 === HTTP Verification — DEFERRED ===
-Checks 4-7 could not be completed because the production server returns 400
-for check-and-reserve requests with {providerId: ...} — the old version
-still expects {instructorId: ...}.
-
-These checks will be re-run once Vercel deploys 641a52be.
+All HTTP checks deferred until the new application code is deployed.
 
 === Summary ===
-DB invariant: VERIFIED (constraint installed, preflight passed)
-Application fix: PENDING DEPLOYMENT
-Production concurrency test: PENDING — requires deployed 641a52be
-SHA verification: PENDING — requires Vercel deployment
+[DB]  btree_gist: INSTALLED v1.7
+[DB]  SlotReservation_no_overlap: PRESENT
+[APP] Application fix: NOT DEPLOYED — Vercel deployment pending
+[APP] HTTP checks 4-7: DEFERRED
+[SHA] SHA verification: DEFERRED
 
-VERDICT: Verification INCOMPLETE — rerun after Vercel deploys 641a52be
-PAY-H-04 remains OPEN — do not close.
+VERDICT: Verification INCOMPLETE — PAY-H-04 remains OPEN
