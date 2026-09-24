@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 import { z } from 'zod';
 import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation';
 import { availabilityService } from '@/lib/services/availability';
@@ -90,6 +91,17 @@ export async function POST(req: NextRequest) {
         error: 'Your account is pending approval. You can schedule PDA tests once an admin approves your application.',
         requiresApproval: true,
       }, { status: 403 });
+    }
+
+    // DOC-EXP-01: document expiry gate — runs after approvalStatus/subscription checks above
+    {
+      const eligibility = await checkProviderEligible(session!.user!.providerId, prisma)
+      if (!eligibility.allowed && eligibility.code === 'INSTRUCTOR_DOCUMENT_EXPIRED') {
+        return NextResponse.json(
+          { error: 'You cannot schedule bookings while compliance documents are expired. Please upload updated documents.', code: eligibility.code },
+          { status: 403 },
+        )
+      }
     }
 
     const body = await req.json();
