@@ -85,8 +85,8 @@ instructor-risk migrations). Both counts reflect exit 0, all green.
 | Criterion | Test in tool-contracts.test.ts |
 |---|---|
 | ToolResult<T> contract available | `toolSuccess / toolError / toolPartial type tests` |
-| safeQuery returns null on DB error | `safeQuery: catch returns null` |
-| unwrapOr behaviour correct | `unwrapOr returns fallback on ERROR` |
+| safeQuery returns `ToolResult<T>` with `status: 'ERROR'` on DB failure | `safeQuery: catch returns toolError(...)` — never returns null |
+| unwrapOr returns fallback for EMPTY/UNKNOWN, throws on ERROR | `unwrapOr: fallback on EMPTY/UNKNOWN; throws when given ERROR result` |
 | collectErrors accumulates | `collectErrors captures all ERROR results` |
 
 ---
