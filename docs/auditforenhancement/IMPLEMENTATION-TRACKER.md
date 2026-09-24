@@ -68,7 +68,7 @@ Current state: `FIX-VERIFIED`; do not close P1-03 until the project closure gate
 
 **Finding:** `getDailySummary()` used an empty `OR: [{}, {}]` filter on `Provider`, so `expiringDocs` was not an expiry metric.
 
-**Implementation status:** FIX — implementation and focused tests complete. Independent audit pending.
+**Implementation status:** FIX-VERIFIED — implementation, focused tests, and independent GPT audit complete. Closure remains pending the project closure gate.
 
 ### Changes
 
@@ -91,4 +91,38 @@ Current state: `FIX-VERIFIED`; do not close P1-03 until the project closure gate
 
 `FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `COPILOT TESTS`; do not close P1-04 until independent verification of the exact commit is complete.
+Current state: `FIX-VERIFIED`; do not close P1-04 until the project closure gate is satisfied.
+
+### Independent verification
+
+- GPT audited exact commit `88a6c8349ae01ed213cab51b43b3b399e80d64df` against the previous P1-03 commit.
+- GPT result: `FIX-VERIFIED`.
+- GPT confirmed removal of the no-op filter, typed `DrivingProviderProfile` access, approved-provider scoping, explicit error/partial handling, stable `missing[]` labels, `3/3` focused tests, and `117/117` regression tests.
+- GPT noted the intentional inclusion of already-expired documents in the operational 30-day compliance metric; this remains a separate semantics decision.
+- P1-04 is intentionally not marked `CLOSED`.
+
+## P1-05 — Suburb Demand Sampling
+
+**Finding:** `getSuburbDemand()` silently limited the input to 500 bookings and calculated demand from that incomplete sample.
+
+**Implementation status:** FIX — implementation and focused tests complete; independent audit pending.
+
+### Changes
+
+- Removed the silent `take: 500` sample cap.
+- Fetch the complete qualifying booking set with deterministic creation-time ordering.
+- Preserve the existing address-based suburb extraction because `Booking` has no canonical suburb field.
+- Return `ToolResult<SuburbDemandData>` with `totalBookings`, `sampleSize`, and `truncated: false` metadata.
+- Return `EMPTY` when no qualifying bookings exist and `ERROR` when the booking query fails.
+
+### Verification
+
+- Focused tests: `3/3` passed in `lib/admin/__tests__/suburb-demand.test.ts`.
+- Combined regression suite: `120/120` passed across 7 files.
+- Touched-file TypeScript diagnostics: none reported. Repository-wide `tsc --noEmit` remains affected by pre-existing test-global typing errors.
+
+### Lifecycle
+
+`FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
+
+Current state: `FIX`; do not close P1-05 before focused tests and independent verification.

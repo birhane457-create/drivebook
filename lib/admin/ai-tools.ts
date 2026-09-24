@@ -570,15 +570,33 @@ export async function getStudentRetention(): Promise<LegacyToolResult> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. getSuburbDemand — top suburbs by booking count
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getSuburbDemand(args: { limit?: number }): Promise<LegacyToolResult> {
+export type SuburbDemandData = {
+  period: string
+  topSuburbs: Array<{ suburb: string; bookings: number }>
+  totalBookings: number
+  sampleSize: number
+  truncated: false
+}
+
+export async function getSuburbDemand(args: { limit?: number }): Promise<ToolResult<SuburbDemandData>> {
   const limit = Math.min(20, args.limit ?? 10)
   const last30 = new Date(Date.now() - 30 * 86400000)
 
-  const bookings = await (prisma.booking.findMany({
-    where: { createdAt: { gte: last30 }, pickupAddress: { not: null }, deletedAt: null } as any,
-    select: { pickupAddress: true },
-    take: 500,
-  }) as any).catch(() => [])
+  const bookingsResult = await safeQuery(
+    () => prisma.booking.findMany({
+      where: { createdAt: { gte: last30 }, pickupAddress: { not: null }, deletedAt: null } as any,
+      select: { pickupAddress: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+    'suburb demand bookings',
+  )
+
+  if (bookingsResult.status === 'ERROR') return bookingsResult
+  if (bookingsResult.status === 'EMPTY' || bookingsResult.status === 'UNKNOWN') return bookingsResult
+  if (bookingsResult.status === 'PARTIAL') return { status: 'ERROR', error: 'Suburb demand booking query returned partial data' }
+
+  const bookings = bookingsResult.data
+  if (bookings.length === 0) return { status: 'EMPTY', reason: 'No bookings with pickup addresses found in the last 30 days' }
 
   const suburbCount: Record<string, number> = {}
   for (const b of bookings) {
@@ -596,7 +614,13 @@ export async function getSuburbDemand(args: { limit?: number }): Promise<LegacyT
     .slice(0, limit)
     .map(([suburb, count]) => ({ suburb, bookings: count }))
 
-  return { period: 'Last 30 days', topSuburbs: sorted }
+  return ok({
+    period: 'Last 30 days',
+    topSuburbs: sorted,
+    totalBookings: bookings.length,
+    sampleSize: bookings.length,
+    truncated: false,
+  })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
