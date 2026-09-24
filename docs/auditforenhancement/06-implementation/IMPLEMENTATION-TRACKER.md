@@ -11,12 +11,12 @@
 
 | Participant | Role |
 |---|---|
-| **GPT** | Primary implementation lead — analysis, code changes, tests, documentation, verification |
-| **Kiro** | Engineering co-pilot — repository inspection, implementation review, test execution, independent challenge |
+| **Kiro** | Primary implementer — code changes, tests, fixes, commits to audit branch |
+| **GPT** | Independent auditor — inspect Kiro's commits, verify evidence, audit for regressions, final verification |
 | **Claude** | Observer — review completed work, identify missed risks or regressions |
 | **Kimi** | Observer — architectural/logic critique, independent sanity checks |
 
-**Principle:** GPT implements, Kiro verifies independently, Claude/Kimi observe and challenge where useful.
+**Principle:** Kiro implements and tests, GPT audits Kiro's exact commits independently, Claude/Kimi observe and challenge where useful.
 
 ---
 
@@ -29,9 +29,9 @@ FINDING
   ↓
 BASELINE VERIFIED ← Read current state, document evidence
   ↓
-IMPLEMENT ← GPT makes changes with tests
+KIRO IMPLEMENTS ← Kiro makes changes with tests
   ↓
-KIRO VERIFICATION ← Independent review/test execution
+GPT AUDIT ← Independent inspection of Kiro's exact commit
   ↓
 CLAUDE/KIMI OBSERVATION ← Optional challenge if material risk
   ↓
@@ -39,6 +39,8 @@ FIX-VERIFIED ← All acceptance criteria met
   ↓
 CLOSED
 ```
+
+**Critical:** GPT audits Kiro's commit SHA, not branch name. Kiro provides exact commit after pushing.
 
 **No shortcuts. No "quick fixes" without tests. No weakening of read-only boundary.**
 
@@ -80,31 +82,42 @@ CLOSED
 ---
 
 ### P0-02: Middleware S-7 Defence-in-Depth Fix
-**Status:** NOT STARTED  
+**Status:** READY FOR KIRO IMPLEMENTATION  
 **Decision:** D-20  
-**Owner:** GPT + Kiro  
+**Owner:** Kiro (implement) + GPT (audit)  
 **Estimate:** 1 day
 
 **Baseline verified:** Kiro Phase 4 confirmed MEDIUM severity defence-in-depth gap in `middleware.ts` lines 84-101. Public `/api/auth` path too broad, could overlap with protected paths.
 
-**Implementation approach:**
+**Implementation approach (Kiro to choose):**
 - **Option A:** Narrow `/api/auth` to specific NextAuth routes
 - **Option B:** Reorder checks (protected paths evaluated before public short-circuit)
 
-**Acceptance criteria:**
-- [ ] Baseline evidence captured (current middleware behavior)
-- [ ] Fix approach chosen and documented
-- [ ] Implementation complete
+**Acceptance criteria for Kiro's implementation:**
+- [ ] `/api/auth` must not act as wildcard
+- [ ] Arbitrary `/api/auth/*` routes must not inherit public access
+- [ ] Protected API checks remain effective
+- [ ] Existing NextAuth routes continue working (login, logout, session, etc.)
 - [ ] Regression test added: protected path under public prefix blocked
-- [ ] NextAuth flows verified (login, logout, session)
-- [ ] Kiro verification complete
+- [ ] No unrelated application changes
+- [ ] Tests pass
+
+**Handoff to GPT for audit:**
+- [ ] Kiro provides exact commit SHA after push
+- [ ] GPT inspects Kiro's commit diff
+- [ ] GPT audits middleware logic
+- [ ] GPT reviews test coverage
+- [ ] GPT checks for auth regressions
+- [ ] GPT verifies evidence
 - [ ] D-20 closed
 
-**Commits:**
+**Commits (Kiro):**
 - `P0-02: verify middleware S-7 baseline`
 - `P0-02: [fix approach] implementation`
 - `P0-02: add middleware regression tests`
-- `P0-02: verify S-7 fix complete`
+
+**Audit commit (GPT after Kiro's SHA provided):**
+- `P0-02: audit Kiro implementation - FIX-VERIFIED`
 
 ---
 
