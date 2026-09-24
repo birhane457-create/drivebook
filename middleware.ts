@@ -72,24 +72,9 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Public routes must use path-boundary matching. In particular, '/' must
+  // Public routes use path-boundary matching. In particular, '/' must
   // never be treated as a prefix for every request.
-  const publicPaths = [
-    '/', '/login', '/register', '/instructors', '/auth/forgot-password',
-    '/reset-password', '/set-password',
-    '/about', '/contact', '/blog', '/privacy', '/terms',
-    '/teach-with-drivebook', '/book', '/maintenance',
-    '/sitemap.xml', '/robots.txt', '/rss.xml',
-    '/learn-to-drive', '/pda-guide', '/for-instructors', '/platform',
-    '/features', '/compare',
-  ]
-
-  // NextAuth owns the known /api/auth endpoints. Do not expose arbitrary
-  // /api/auth/* paths through a broad prefix exemption.
-  const isPublicAuthPath = isNextAuthPublicPath(url.pathname)
-  const isPublicPath =
-    publicPaths.some(path => url.pathname === path || (path !== '/' && url.pathname.startsWith(`${path}/`))) ||
-    isPublicAuthPath
+  const isPublicPath = isPublicMiddlewarePath(url.pathname)
 
   // P0-7/S-7: determine protected API paths before the public short-circuit.
   // Individual handlers still call getServerSession(); this is defence-in-depth.
