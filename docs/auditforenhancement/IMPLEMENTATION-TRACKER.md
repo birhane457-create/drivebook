@@ -33,7 +33,7 @@
 
 **Finding:** `getInstructorRisk()` read legacy document-expiry fields from `Provider`, masking a schema mismatch with `as any`.
 
-**Implementation status:** FIX — implementation and focused tests complete. Final lifecycle closure remains pending independent audit of the exact commit SHA.
+**Implementation status:** FIX-VERIFIED — implementation, focused tests, and independent GPT audit complete. Closure remains pending the project closure gate.
 
 ### Changes
 
@@ -55,4 +55,40 @@
 
 `FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `COPILOT TESTS`; do not close P1-03 until the independent exact-SHA audit is complete.
+Current state: `FIX-VERIFIED`; do not close P1-03 until the project closure gate is satisfied.
+
+### Independent verification
+
+- GPT audited exact commit `a31066ee7ea5d4f8b1af5e96998e7475d503d121` against `3846d6a9`.
+- GPT result: `FIX-VERIFIED`.
+- GPT confirmed typed `DrivingProviderProfile` access, explicit unknown evidence states, error/partial handling, preserved scoring, `13/13` focused tests, and `114/114` regression tests.
+- P1-03 is intentionally not marked `CLOSED`.
+
+## P1-04 — Daily Summary Expiring Documents
+
+**Finding:** `getDailySummary()` used an empty `OR: [{}, {}]` filter on `Provider`, so `expiringDocs` was not an expiry metric.
+
+**Implementation status:** FIX — implementation and focused tests complete. Independent audit pending.
+
+### Changes
+
+- Read approved provider IDs through the typed Prisma `Provider` client.
+- Count matching `DrivingProviderProfile` rows using licence, insurance, police-check, and WWCC expiry fields.
+- Preserve the existing 30-day look-ahead while removing the no-op filter.
+- Return the shared `ToolResult<DailySummaryData>` contract.
+- Return `PARTIAL` with stable signal labels in `missing[]` when independent summary queries fail.
+- Return `ERROR` when every summary signal fails.
+- Represent unavailable counts as `null`, never as business zeroes.
+
+### Verification
+
+- Focused tests: `3/3` passed in `lib/admin/__tests__/daily-summary.test.ts`.
+- Combined regression suite before the final missing-label refinement: `117/117` passed across 6 files.
+- Final focused suite after the refinement: `3/3` passed.
+- Touched-file TypeScript diagnostics: none reported. Repository-wide `tsc --noEmit` remains affected by pre-existing test-global typing errors.
+
+### Lifecycle
+
+`FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
+
+Current state: `COPILOT TESTS`; do not close P1-04 until independent verification of the exact commit is complete.

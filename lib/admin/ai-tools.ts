@@ -33,37 +33,97 @@ type LegacyToolResult = Record<string, any>
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. getDailySummary
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getDailySummary(): Promise<LegacyToolResult> {
+export type DailySummaryData = {
+  yesterday: {
+    completed: number | null
+    cancelled: number | null
+    newBookings: number | null
+    newStudents: number | null
+  }
+  weekRevenue: number | null
+  openIssues: {
+    stuckPayments: number | null
+    openDisputes: number | null
+    pendingApprovals: number | null
+    expiringDocs: number | null
+  }
+}
+
+export async function getDailySummary(): Promise<ToolResult<DailySummaryData>> {
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yesterdayStart = new Date(todayStart.getTime() - 86400000)
   const last7 = new Date(now.getTime() - 7 * 86400000)
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000)
 
-  const [completed, cancelled, newBookings, newStudents, stuckCount, disputeCount, pendingCount, expiringCount] =
-    await Promise.all([
-      (prisma.booking.count({ where: { status: 'COMPLETED', updatedAt: { gte: yesterdayStart, lt: todayStart }, deletedAt: null } as any }) as any).catch(() => 0),
-      (prisma.booking.count({ where: { status: 'CANCELLED', updatedAt: { gte: yesterdayStart, lt: todayStart }, deletedAt: null } as any }) as any).catch(() => 0),
-      (prisma.booking.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart }, deletedAt: null } as any }) as any).catch(() => 0),
-      (prisma.customer.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart } } }) as any).catch(() => 0),
-      (prisma.booking.count({ where: { status: 'PENDING_PAYMENT', createdAt: { lt: yesterdayStart }, deletedAt: null } as any }) as any).catch(() => 0),
-      (prisma.stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }) as any).catch(() => 0),
-      (prisma.provider.count({ where: { approvalStatus: 'PENDING' } }) as any).catch(() => 0),
-      (prisma.provider.count({
-        where: { approvalStatus: 'APPROVED', OR: [{ /* licenseExpiry moved to DrivingProviderProfile */ }, { /* insuranceExpiry moved to DrivingProviderProfile */ }] },
-      }) as any).catch(() => 0),
-    ])
+  const results = await safeQueryAll([
+    () => prisma.booking.count({ where: { status: 'COMPLETED', updatedAt: { gte: yesterdayStart, lt: todayStart }, deletedAt: null } as any }),
+    () => prisma.booking.count({ where: { status: 'CANCELLED', updatedAt: { gte: yesterdayStart, lt: todayStart }, deletedAt: null } as any }),
+    () => prisma.booking.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart }, deletedAt: null } as any }),
+    () => prisma.customer.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart } } }),
+    () => prisma.booking.count({ where: { status: 'PENDING_PAYMENT', createdAt: { lt: yesterdayStart }, deletedAt: null } as any }),
+    () => prisma.stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }),
+    () => prisma.provider.count({ where: { approvalStatus: 'PENDING' } }),
+    () => prisma.walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }),
+    () => prisma.provider.findMany({ where: { approvalStatus: 'APPROVED' }, select: { id: true } }),
+  ] as const, [
+    'completed', 'cancelled', 'new bookings', 'new students', 'stuck payments',
+    'disputes', 'pending approvals', 'week revenue', 'approved providers',
+  ])
 
-  const weekRevAgg = await (prisma.walletTransaction.aggregate({
-    where: { createdAt: { gte: last7 }, type: 'CREDIT' },
-    _sum: { amount: true },
-  }) as any).catch(() => ({ _sum: { amount: 0 } }))
+  const approvedProvidersResult = results[8]
+  const expiringResult: ToolResult<number> = approvedProvidersResult.status === 'SUCCESS'
+    ? await safeQuery(
+        () => prisma.drivingProviderProfile.count({
+          where: {
+            providerId: { in: approvedProvidersResult.data.map((provider) => provider.id) },
+            OR: [
+              { licenseExpiry: { lte: thirtyDaysFromNow } },
+              { insuranceExpiry: { lte: thirtyDaysFromNow } },
+              { policeCheckExpiry: { lte: thirtyDaysFromNow } },
+              { wwcCheckExpiry: { lte: thirtyDaysFromNow } },
+            ],
+          },
+        }),
+        'expiring documents',
+      )
+    : { status: 'ERROR', error: 'expiring documents: approved providers unavailable' }
 
-  return {
-    yesterday: { completed, cancelled, newBookings, newStudents },
-    weekRevenue: Number(weekRevAgg._sum?.amount ?? 0),
-    openIssues: { stuckPayments: stuckCount, openDisputes: disputeCount, pendingApprovals: pendingCount, expiringDocs: expiringCount },
+  const allResults: ToolResult<unknown>[] = [...results, expiringResult]
+  const missingLabels = [
+    'completed', 'cancelled', 'new bookings', 'new students', 'stuck payments',
+    'disputes', 'pending approvals', 'week revenue', 'approved providers',
+    'expiring documents',
+  ]
+  const missing = allResults
+    .map((result, index) => result.status === 'ERROR' ? missingLabels[index] : null)
+    .filter((label): label is string => label !== null)
+
+  if (allResults.every((result) => result.status === 'ERROR')) {
+    return toolError(`getDailySummary: all queries failed — ${missing.join(', ')}`)
   }
+
+  const value = <T,>(result: ToolResult<T>): T | null => result.status === 'SUCCESS' ? result.data : null
+  const data: DailySummaryData = {
+    yesterday: {
+      completed: value(results[0]),
+      cancelled: value(results[1]),
+      newBookings: value(results[2]),
+      newStudents: value(results[3]),
+    },
+    weekRevenue: (() => {
+      const aggregate = value(results[7]) as { _sum?: { amount?: unknown } } | null
+      return aggregate ? Number(aggregate._sum?.amount ?? 0) : null
+    })(),
+    openIssues: {
+      stuckPayments: value(results[4]),
+      openDisputes: value(results[5]),
+      pendingApprovals: value(results[6]),
+      expiringDocs: value(expiringResult),
+    },
+  }
+
+  return missing.length > 0 ? partial(data, missing) : ok(data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
