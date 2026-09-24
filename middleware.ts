@@ -159,6 +159,41 @@ export async function middleware(req: NextRequest) {
   return NextResponse.next()
 }
 
+export function isPublicMiddlewarePath(pathname: string): boolean {
+  const publicPaths = [
+    '/',
+    '/login',
+    '/register',
+    '/instructors',
+    '/auth/forgot-password',
+    '/reset-password',
+    '/set-password',
+    '/about',
+    '/contact',
+    '/blog',
+    '/privacy',
+    '/terms',
+    '/teach-with-drivebook',
+    '/book',
+    '/maintenance',
+    '/sitemap.xml',
+    '/robots.txt',
+    '/rss.xml',
+    '/learn-to-drive',
+    '/pda-guide',
+    '/for-instructors',
+    '/platform',
+    '/features',
+    '/compare',
+  ]
+
+  const isPublicAuthPath = isNextAuthPublicPath(pathname)
+  return (
+    publicPaths.some(path => pathname === path || (path !== '/' && pathname.startsWith(`${path}/`))) ||
+    isPublicAuthPath
+  )
+}
+
 // Only these NextAuth endpoints are intentionally public. This prevents
 // arbitrary future /api/auth/* routes from inheriting the public exemption.
 function isNextAuthPublicPath(pathname: string): boolean {
