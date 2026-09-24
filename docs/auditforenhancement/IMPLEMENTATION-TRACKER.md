@@ -139,7 +139,7 @@ Current state: `FIX`; do not close P1-05 before focused tests and independent ve
 
 **Finding:** Weekly report, revenue breakdown, student retention, and operations timeline still use legacy `LegacyToolResult` returns and silent `.catch(() => 0/[])` fallbacks.
 
-**Implementation status:** FIX — all four P1-06 tools migrated and tested; independent audit pending.
+**Implementation status:** FIX-VERIFIED — all four P1-06 tools migrated, tested, and independently audited. Closure remains pending the project closure gate.
 
 ### Completed migrations
 
@@ -165,4 +165,38 @@ Current state: `FIX`; do not close P1-05 before focused tests and independent ve
 
 `FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `FIX`; all implementation work is complete, but do not close P1-06 until the independent exact-SHA audit is complete.
+Current state: `FIX-VERIFIED`; all implementation work and independent verification are complete, but do not close P1-06 until the project closure gate is satisfied.
+
+### Independent verification
+
+- GPT audited exact commit `b6b7593d60fec49da9ca909ee6ba4b3fa1e3b806`.
+- GPT result: `FIX-VERIFIED` for the complete P1-06 migration.
+- GPT confirmed all four tools use `ToolResult<T>`, the bridge and silent fallbacks are gone, unavailable metrics remain null, derived metrics avoid incomplete inputs, `6/6` focused tests passed, and `129/129` regression tests passed.
+- GPT noted remaining `as any` casts and the duplicate retention query as separate non-blocking follow-up findings.
+- P1-06 is intentionally not marked `CLOSED`.
+
+## P1-07 — Untrusted Data Separation
+
+**Finding:** Raw tool results and database-derived text reach model context without an explicit untrusted-evidence boundary.
+
+**Implementation status:** FIX — implementation in progress; adversarial staging and independent audit pending.
+
+### Lifecycle
+
+`FINDING → VERIFIED → FIX → COPILOT TESTS → ADVERSARIAL STAGING → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
+
+Current state: `FIX`; structural boundary slice complete, but do not close P1-07 before adversarial staging evidence and independent verification.
+
+### Structural boundary slice
+
+- Added `createUntrustedEvidenceEnvelope()` with explicit `source`, `tool`, `untrusted: true`, and preserved payload fields.
+- Wrapped OpenAI tool messages as untrusted evidence instead of sending raw tool JSON.
+- Wrapped Anthropic fallback context in the same evidence envelope.
+- Added system-prompt rules that database, tool, and user text are untrusted data, not instructions.
+- Preserved provider/tool error states instead of converting fallback errors to `{}`.
+
+### Verification
+
+- Focused tests: `2/2` passed in `lib/admin/__tests__/evidence-envelope.test.ts`.
+- Touched-file TypeScript diagnostics: none reported.
+- Adversarial staging exploitability tests: pending.
