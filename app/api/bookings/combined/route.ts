@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkProviderEligible } from '@/lib/booking/checkProviderEligible'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -102,14 +103,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Verify instructor exists
-    const instructor = await prisma.provider.findUnique({
-      where: { id: data.providerId }
-    })
-
-    if (!instructor) {
-      return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
+    // Verify instructor exists — full eligibility gate (DOC-EXP-01)
+    // Checks: approvalStatus=APPROVED, isActive, subscription, acceptingBookings, document expiry.
+    // Note: combined route accepts providerId from request body — ownership is NOT asserted here
+    // (the client picks their instructor). The eligibility gate ensures the chosen instructor
+    // is currently authorised to deliver lessons.
+    const eligible = await checkProviderEligible(data.providerId, prisma)
+    if (!eligible.allowed) {
+      return NextResponse.json(
+        { error: eligible.error, code: eligible.code },
+        { status: eligible.status },
+      )
     }
+    const instructor = eligible.provider
 
     const bookings: any = {}
     let subtotal = 0
