@@ -109,16 +109,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
   
-  // P0-7 FIX: Protect admin and instructor API routes at the edge.
-  // Individual API handlers still call getServerSession(), but this provides
-  // defence-in-depth: a missing session check in a new route cannot leak data.
-  const isProtectedApiPath =
-    url.pathname.startsWith('/api/admin/') ||
-    url.pathname.startsWith('/api/instructor/') ||
-    url.pathname.startsWith('/api/client/') ||
-    url.pathname.startsWith('/api/bookings/')
-
-  // For protected routes, check authentication only — layouts handle role-based access
+  // P0-7 FIX: Protect admin and instructor API routes at the edge.\n  // Individual API handlers still call getServerSession(), but this provides\n  // defence-in-depth: a missing session check in a new route cannot leak data.\n  // For protected routes, check authentication only — layouts handle role-based access
   if (
     url.pathname.startsWith('/dashboard') ||
     url.pathname.startsWith('/admin') ||
