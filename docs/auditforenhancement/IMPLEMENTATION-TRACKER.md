@@ -139,31 +139,30 @@ Current state: `FIX`; do not close P1-05 before focused tests and independent ve
 
 **Finding:** Weekly report, revenue breakdown, student retention, and operations timeline still use legacy `LegacyToolResult` returns and silent `.catch(() => 0/[])` fallbacks.
 
-**Implementation status:** FIX — first migration slice complete (`getWeeklyReport`); remaining legacy tools still open.
+**Implementation status:** FIX — all four P1-06 tools migrated and tested; independent audit pending.
 
-### Completed slice: `getWeeklyReport`
+### Completed migrations
 
 - Migrated weekly report to `ToolResult<WeeklyReportData>`.
 - Replaced seven silent zero/aggregate fallbacks with `safeQueryAll`.
 - Returns `PARTIAL` with stable missing signal labels and `null` unavailable metrics.
 - Returns `ERROR` when every weekly query fails.
 - Focused tests: `3/3` passed in `lib/admin/__tests__/weekly-report.test.ts`.
-
-### Remaining P1-06 tools
-
-- `getRevenueBreakdown`
-- `getStudentRetention`
-- `getOperationsTimeline`
-
-These remain on the `LegacyToolResult` bridge and must be migrated before P1-06 can reach independent audit.
+- Migrated revenue breakdown to `ToolResult<RevenueBreakdownData>` with null unavailable revenue/loss/earner data.
+- Migrated student retention to `ToolResult<StudentRetentionData>` with derived return rate null when source cohorts are unavailable.
+- Migrated operations timeline to `ToolResult<OperationsTimelineData>` with null unavailable summaries and counts.
+- Removed the `LegacyToolResult` bridge from `ai-tools.ts` and the dispatcher.
+- Removed all silent `.catch(() => 0/[])` and aggregate fallback patterns from `ai-tools.ts`.
 
 ### Verification
 
-- Combined regression suite after the weekly-report slice: `123/123` passed across 8 files.
+- Focused remaining-tool tests: `6/6` passed in `lib/admin/__tests__/remaining-tools.test.ts`.
+- Combined final regression suite: `129/129` passed across 9 files.
+- Static search: no `LegacyToolResult` or silent `.catch(() => 0/[])` patterns remain in `ai-tools.ts`.
 - Touched-file TypeScript diagnostics: none reported. Repository-wide `tsc --noEmit` remains affected by pre-existing test-global typing errors.
 
 ### Lifecycle
 
 `FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `FIX`; do not close P1-06 until all remaining tools are migrated and independently verified.
+Current state: `FIX`; all implementation work is complete, but do not close P1-06 until the independent exact-SHA audit is complete.

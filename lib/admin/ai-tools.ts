@@ -25,11 +25,6 @@ import {
   collectErrors,
 } from './tool-contracts'
 
-// Temporary alias for tools not yet migrated to ToolResult<T>.
-// Replaced one-by-one in P1-03 through P1-06.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type LegacyToolResult = Record<string, any>
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. getDailySummary
 // ─────────────────────────────────────────────────────────────────────────────
@@ -517,92 +512,143 @@ export async function getWeeklyReport(): Promise<ToolResult<WeeklyReportData>> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. getRevenueBreakdown — cancellation losses + top earners
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getRevenueBreakdown(args: { days?: number }): Promise<LegacyToolResult> {
+export type RevenueBreakdownData = {
+  period: string
+  totalRevenue: number | null
+  cancellationLoss: { amount: number | null; count: number | null }
+  topEarners: Array<{ name: string; revenue: number; lessons: number }> | null
+}
+
+export async function getRevenueBreakdown(args: { days?: number }): Promise<ToolResult<RevenueBreakdownData>> {
   const days = Math.min(90, args.days ?? 30)
   const since = new Date(Date.now() - days * 86400000)
 
-  const [totalRevAgg, cancelledBookings, topInstructors] = await Promise.all([
-    (prisma.walletTransaction.aggregate({
+  const results = await safeQueryAll([
+    () => prisma.walletTransaction.aggregate({
       where: { createdAt: { gte: since }, type: 'CREDIT' },
       _sum: { amount: true },
-    }) as any).catch(() => ({ _sum: { amount: 0 } })),
-
-    (prisma.booking.aggregate({
+    }),
+    () => prisma.booking.aggregate({
       where: { status: 'CANCELLED', updatedAt: { gte: since }, deletedAt: null, price: { gt: 0 } } as any,
       _sum: { price: true },
       _count: { id: true },
-    }) as any).catch(() => ({ _sum: { price: 0 }, _count: { id: 0 } })),
-
-    (prisma.booking.groupBy({
+    }),
+    () => prisma.booking.groupBy({
       by: ['providerId'],
       where: { status: 'COMPLETED', updatedAt: { gte: since }, deletedAt: null } as any,
       _sum: { price: true },
       _count: { id: true },
       orderBy: { _sum: { price: 'desc' } },
       take: 5,
-    }) as any).catch(() => []),
-  ])
+    }),
+  ] as const, ['total revenue', 'cancellation loss', 'top instructors'])
 
-  const ids = (topInstructors as any[]).map((r: any) => r.providerId).filter(Boolean)
-  const names = ids.length > 0
-    ? await (prisma as any).provider.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }).catch(() => [])
-    : []
-
-  const topEarners = (topInstructors as any[]).map((r: any) => ({
-    name: names.find((n: any) => n.id === r.providerId)?.name ?? 'Unknown',
-    revenue: Number(r._sum?.price ?? 0),
-    lessons: r._count.id,
-  }))
-
-  return {
-    period: `Last ${days} days`,
-    totalRevenue: Number(totalRevAgg._sum?.amount ?? 0),
-    cancellationLoss: { amount: Number(cancelledBookings._sum?.price ?? 0), count: cancelledBookings._count?.id ?? 0 },
-    topEarners,
+  const missing = results
+    .map((result, index) => result.status === 'ERROR' ? ['total revenue', 'cancellation loss', 'top instructors'][index] : null)
+    .filter((label): label is string => label !== null)
+  if (results.every((result) => result.status === 'ERROR')) {
+    return toolError(`getRevenueBreakdown: all queries failed — ${missing.join(', ')}`)
   }
+
+  const value = <T,>(result: ToolResult<T>): T | null => result.status === 'SUCCESS' ? result.data : null
+  const totalRevenueAgg = value(results[0]) as { _sum?: { amount?: unknown } } | null
+  const cancellationAgg = value(results[1]) as { _sum?: { price?: unknown }; _count?: { id?: number } } | null
+  const topInstructors = value(results[2]) as Array<{ providerId: string; _sum: { price: unknown }; _count: { id: number } }> | null
+  let names: Array<{ id: string; name: string }> | null = null
+  let namesMissing = false
+
+  if (topInstructors) {
+    const ids = topInstructors.map((row) => row.providerId).filter(Boolean)
+    if (ids.length === 0) {
+      names = []
+    } else {
+      const namesResult = await safeQuery(
+        () => prisma.provider.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+        'instructor names',
+      )
+      if (namesResult.status === 'SUCCESS') names = namesResult.data
+      else namesMissing = true
+    }
+  }
+
+  const data: RevenueBreakdownData = {
+    period: `Last ${days} days`,
+    totalRevenue: totalRevenueAgg ? Number(totalRevenueAgg._sum?.amount ?? 0) : null,
+    cancellationLoss: {
+      amount: cancellationAgg ? Number(cancellationAgg._sum?.price ?? 0) : null,
+      count: cancellationAgg?._count?.id ?? null,
+    },
+    topEarners: topInstructors && names
+      ? topInstructors.map((row) => ({
+          name: names?.find((name) => name.id === row.providerId)?.name ?? 'Unknown',
+          revenue: Number(row._sum?.price ?? 0),
+          lessons: row._count.id,
+        }))
+      : null,
+  }
+
+  if (namesMissing) missing.push('instructor names')
+  return missing.length > 0 ? partial(data, missing) : ok(data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. getStudentRetention
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getStudentRetention(): Promise<LegacyToolResult> {
+export type StudentRetentionData = {
+  totalStudents: number | null
+  activeStudents30d: number | null
+  repeatBookers60d: number | null
+  returnRatePercent: number | null
+}
+
+export async function getStudentRetention(): Promise<ToolResult<StudentRetentionData>> {
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 86400000)
   const last60 = new Date(now.getTime() - 60 * 86400000)
 
-  const [recentBookers, repeatBookers, totalStudents, activeStudents] = await Promise.all([
-    (prisma.booking.findMany({
+  const results = await safeQueryAll([
+    () => prisma.booking.findMany({
       where: { createdAt: { gte: last30 }, deletedAt: null } as any,
       select: { customerId: true },
       distinct: ['customerId'],
-    }) as any).catch(() => []),
-
-    (prisma.booking.groupBy({
+    }),
+    () => prisma.booking.groupBy({
       by: ['customerId'],
       where: { createdAt: { gte: last60 }, deletedAt: null } as any,
       _count: { id: true },
       having: { id: { _count: { gt: 1 } } },
-    }) as any).catch(() => []),
-
-    (prisma.customer.count() as any).catch(() => 0),
-
-    (prisma.booking.findMany({
+    }),
+    () => prisma.customer.count(),
+    () => prisma.booking.findMany({
       where: { createdAt: { gte: last30 }, deletedAt: null } as any,
       select: { customerId: true },
       distinct: ['customerId'],
-    }) as any).then((r: any) => r.length).catch(() => 0),
-  ])
+    }),
+  ] as const, ['recent bookers', 'repeat bookers', 'total students', 'active students'])
 
-  const returnRate = recentBookers.length > 0
-    ? Math.round((repeatBookers.length / recentBookers.length) * 100)
-    : 0
-
-  return {
-    totalStudents,
-    activeStudents30d: activeStudents,
-    repeatBookers60d: repeatBookers.length,
-    returnRatePercent: returnRate,
+  const missing = results
+    .map((result, index) => result.status === 'ERROR' ? ['recent bookers', 'repeat bookers', 'total students', 'active students'][index] : null)
+    .filter((label): label is string => label !== null)
+  if (results.every((result) => result.status === 'ERROR')) {
+    return toolError(`getStudentRetention: all queries failed — ${missing.join(', ')}`)
   }
+
+  const value = <T,>(result: ToolResult<T>): T | null => result.status === 'SUCCESS' ? result.data : null
+  const recentBookers = value(results[0])
+  const repeatBookers = value(results[1])
+  const activeStudents = value(results[3])
+  const recentCount = recentBookers?.length ?? null
+  const repeatCount = repeatBookers?.length ?? null
+  const data: StudentRetentionData = {
+    totalStudents: value(results[2]),
+    activeStudents30d: activeStudents?.length ?? null,
+    repeatBookers60d: repeatCount,
+    returnRatePercent: recentCount != null && repeatCount != null
+      ? recentCount > 0 ? Math.round((repeatCount / recentCount) * 100) : 0
+      : null,
+  }
+
+  return missing.length > 0 ? partial(data, missing) : ok(data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -664,51 +710,64 @@ export async function getSuburbDemand(args: { limit?: number }): Promise<ToolRes
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. getOperationsTimeline — recent events summary
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getOperationsTimeline(args: { hours?: number }): Promise<LegacyToolResult> {
+export type OperationsTimelineData = {
+  period: string
+  bookings: Record<string, number> | null
+  payouts: Record<string, number> | null
+  disputeActivity: number | null
+  auditEvents: number | null
+}
+
+export async function getOperationsTimeline(args: { hours?: number }): Promise<ToolResult<OperationsTimelineData>> {
   const hours = Math.min(168, args.hours ?? 24)
   const since = new Date(Date.now() - hours * 3600000)
 
-  const [recentBookings, recentPayouts, recentDisputes, recentAudit] = await Promise.all([
-    (prisma.booking.groupBy({
+  const results = await safeQueryAll([
+    () => prisma.booking.groupBy({
       by: ['status'],
       where: { updatedAt: { gte: since }, deletedAt: null } as any,
       _count: { id: true },
-    }) as any).catch(() => []),
-
-    (prisma.payout.groupBy({
+    }),
+    () => prisma.payout.groupBy({
       by: ['status'],
       where: { updatedAt: { gte: since } },
       _count: { id: true },
-    }) as any).catch(() => []),
-
-    (prisma.stripeDispute.count({
+    }),
+    () => prisma.stripeDispute.count({
       where: { updatedAt: { gte: since } },
-    }) as any).catch(() => 0),
-
-    (prisma.auditLog.count({
+    }),
+    () => prisma.auditLog.count({
       where: { createdAt: { gte: since } },
-    }) as any).catch(() => 0),
-  ])
+    }),
+  ] as const, ['booking activity', 'payout activity', 'dispute activity', 'audit events'])
 
-  const bookingSummary: Record<string, number> = {}
-  for (const r of recentBookings as any[]) bookingSummary[r.status] = r._count.id
+  const missing = results
+    .map((result, index) => result.status === 'ERROR' ? ['booking activity', 'payout activity', 'dispute activity', 'audit events'][index] : null)
+    .filter((label): label is string => label !== null)
+  if (results.every((result) => result.status === 'ERROR')) {
+    return toolError(`getOperationsTimeline: all queries failed — ${missing.join(', ')}`)
+  }
 
-  const payoutSummary: Record<string, number> = {}
-  for (const r of recentPayouts as any[]) payoutSummary[r.status] = r._count.id
+  const value = <T,>(result: ToolResult<T>): T | null => result.status === 'SUCCESS' ? result.data : null
+  const bookingRows = value(results[0]) as Array<{ status: string; _count: { id: number } }> | null
+  const payoutRows = value(results[1]) as Array<{ status: string; _count: { id: number } }> | null
+  const bookingSummary = bookingRows ? Object.fromEntries(bookingRows.map((row) => [row.status, row._count.id])) : null
+  const payoutSummary = payoutRows ? Object.fromEntries(payoutRows.map((row) => [row.status, row._count.id])) : null
 
-  return {
+  const data: OperationsTimelineData = {
     period: `Last ${hours} hours`,
     bookings: bookingSummary,
     payouts: payoutSummary,
-    disputeActivity: recentDisputes,
-    auditEvents: recentAudit,
+    disputeActivity: value(results[2]),
+    auditEvents: value(results[3]),
   }
+  return missing.length > 0 ? partial(data, missing) : ok(data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool dispatcher — called by the API route
 // ─────────────────────────────────────────────────────────────────────────────
-export async function callTool(name: string, args: Record<string, unknown>): Promise<LegacyToolResult> {
+export async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResult<unknown>> {
   switch (name) {
     case 'getDailySummary':       return getDailySummary()
     case 'getHealthScore':        return getHealthScore()
