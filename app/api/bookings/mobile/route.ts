@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 import jwt from 'jsonwebtoken';
 import { availabilityService } from '@/lib/services/availability';
 import { googleCalendarService } from '@/lib/services/googleCalendar';
@@ -147,7 +148,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get instructor to calculate price
+    // Get instructor — full eligibility gate (DOC-EXP-01)
+    const eligible = await checkProviderEligible(decoded.providerId, prisma)
+    if (!eligible.allowed) {
+      return NextResponse.json(
+        { error: eligible.error, code: eligible.code },
+        { status: eligible.status },
+      )
+    }
     const instructor = await prisma.provider.findUnique({
       where: { id: decoded.providerId },
       include: { user: true }

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
+import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 
 
 export const dynamic = 'force-dynamic';
@@ -163,6 +164,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Create package booking from packageId (which is actually booking or instructor package)
+    // NOTE: packageId is used as providerId — deeper validation tracked in INT-M-PKG-01
+    // Minimum safety gate: verify the provider exists and is eligible (DOC-EXP-01)
+    const eligible = await checkProviderEligible(packageId, prisma)
+    if (!eligible.allowed) {
+      return NextResponse.json(
+        { error: eligible.error, code: eligible.code },
+        { status: eligible.status },
+      )
+    }
+
     // For now, just create a basic package booking
     const booking = await prisma.booking.create({
       data: {

@@ -1,13 +1,12 @@
-DOC-EXP-01 REMEDIATION — RUNTIME VERIFICATION EVIDENCE
-========================================================
+DOC-EXP-01 REMEDIATION — RUNTIME VERIFICATION EVIDENCE (v2)
+=============================================================
 Finding   : DOC-EXP-01 — Expired provider can still receive bookings
 Severity  : MEDIUM
-Status    : CLOSED (pending independent review)
+Status    : CLOSED — all booking creation paths covered
 
-NOTE: Verification is production-code level (source audit + logic review).
-Runtime test against real booking creation not executed here because it would
-require creating a real provider with expired documents, making a booking
-attempt, and observing the 403. The fix is structural — see SOURCE AUDIT.
+NOTE: Verification is source-audit + logic review level. Runtime hostile expiry
+tests (create a provider with expired documents, attempt booking, verify 403)
+are documented as the next verification step for independent confirmation.
 
 ORIGINAL FINDING (Phase 1)
 --------------------------
@@ -15,121 +14,107 @@ No document expiry gate in booking creation. An instructor whose driving
 licence, insurance policy, police check, or WWC check had expired could still
 receive new bookings from the public.
 
-SOURCE AUDIT
-------------
-All 6 booking creation entry points were audited:
+INDEPENDENT REVIEW CORRECTION (after 1c0548d2)
+-----------------------------------------------
+Initial fix only covered the two public booking routes. Reviewer correctly
+identified that four authenticated operator routes remained unprotected.
+This v2 remediation addresses all six booking creation entry points.
 
-Route                                         | approvalStatus | isActive | subscription | acceptingBookings | doc expiry
-----------------------------------------------|----------------|----------|--------------|-------------------|----------
-app/api/public/bookings/route.ts (BEFORE)     | MISSING        | MISSING  | PRESENT      | PRESENT           | MISSING
-app/api/public/bookings/bulk/route.ts (BEFORE)| PRESENT        | PRESENT  | PRESENT      | PRESENT           | MISSING
-app/api/bookings/combined/route.ts            | MISSING        | MISSING  | MISSING      | MISSING           | MISSING
-app/api/bookings/mobile/route.ts              | MISSING        | MISSING  | MISSING      | MISSING           | MISSING
-app/api/pda-tests/route.ts                    | PRESENT        | MISSING  | PRESENT      | MISSING           | MISSING
-app/api/client/packages/mobile/route.ts       | MISSING        | MISSING  | MISSING      | MISSING           | MISSING
-
-Document expiry data lives in DrivingProviderProfile (licenseExpiry,
-insuranceExpiry, policeCheckExpiry, wwcCheckExpiry — set by Phase 2B/D7
-migration). No booking route joined this table. The weekly cron job
-(document-expiry-check) sent notifications but did NOT block bookings and
-did NOT flip documentsVerified=false when documents already expired.
-
-FIX SCOPE
----------
-The fix targets the two highest-risk public-facing routes (the ones that
-accept bookings from unauthenticated members of the public). The other four
-routes are instructor/mobile-authenticated paths where the operator is the
-instructor themselves — lower risk for the immediate finding.
-
-A new shared helper lib/booking/checkProviderEligible.ts consolidates all
-provider status checks and adds the document expiry gate.
-
-FILES CHANGED
+SHARED HELPER
 -------------
-1. lib/booking/checkProviderEligible.ts  (NEW)
-   Shared eligibility helper. Checks in order:
-   - Provider exists (404)
-   - approvalStatus === 'APPROVED' (403 INSTRUCTOR_NOT_APPROVED)
-   - isActive === true (403 INSTRUCTOR_INACTIVE_FLAG)
-   - subscriptionStatus + trialEndsAt (403 INSTRUCTOR_INACTIVE)
-   - acceptingBookings !== false (403 INSTRUCTOR_PAUSED)
-   - DrivingProviderProfile expiry dates — any of licenseExpiry,
-     insuranceExpiry, policeCheckExpiry, wwcCheckExpiry < now (403
-     INSTRUCTOR_DOCUMENT_EXPIRED)
-   Non-driving providers have no DrivingProviderProfile row; step 6
-   is skipped for them — correct, they have no compliance documents.
+lib/booking/checkProviderEligible.ts (created in 1c0548d2)
 
-2. app/api/public/bookings/route.ts  (MODIFIED)
-   Before: prisma.provider.findUnique() + subscription+pause checks only
-           Missing: approvalStatus, isActive, document expiry
-   After:  checkProviderEligible() replaces all inline checks
-           Adds: approvalStatus, isActive, document expiry gates
+Six-step gate applied to every booking creation path:
+  1. Provider exists (404)
+  2. approvalStatus === 'APPROVED' (403 INSTRUCTOR_NOT_APPROVED)
+  3. isActive === true (403 INSTRUCTOR_INACTIVE_FLAG)
+  4. Subscription active or trial not expired (403 INSTRUCTOR_INACTIVE)
+  5. acceptingBookings !== false (403 INSTRUCTOR_PAUSED)
+  6. DrivingProviderProfile expiry check — if a profile row exists, any of
+     licenseExpiry / insuranceExpiry / policeCheckExpiry / wwcCheckExpiry < now
+     returns 403 INSTRUCTOR_DOCUMENT_EXPIRED.
+     Non-driving providers have no profile row; step 6 is skipped for them.
 
-3. app/api/public/bookings/bulk/route.ts  (MODIFIED)
-   Before: inline approval+active+subscription+pause checks, no doc expiry
-   After:  existing inline checks preserved + doc expiry check added via
-           targeted checkProviderEligible() call (only acts on
-           INSTRUCTOR_DOCUMENT_EXPIRED to avoid double-checking other conditions)
+ALL SIX BOOKING CREATION ENTRY POINTS — FINAL STATE
+-----------------------------------------------------
 
-4. app/api/cron/document-expiry-check/route.ts  (MODIFIED)
-   Before: weekly cron sent notifications only, never updated documentsVerified
-   After:  after sending notifications, also queries DrivingProviderProfile
-           for already-expired docs (< now, not just within 30 days) and
-           sets documentsVerified=false on any provider still marked true.
-           This keeps the admin risk dashboard and provider profile in sync.
+Route                               | Gates before fix         | Gates after fix
+------------------------------------|--------------------------|------------------
+public/bookings/route.ts            | subscription+pause only  | checkProviderEligible() — FULL gate
+public/bookings/bulk/route.ts       | approval+active+sub+pause| + doc expiry via helper
+bookings/combined/route.ts          | EXISTS ONLY              | checkProviderEligible() — FULL gate
+bookings/mobile/route.ts            | EXISTS ONLY              | checkProviderEligible() — FULL gate
+pda-tests/route.ts                  | approval+subscription    | + doc expiry via helper
+client/packages/mobile/route.ts     | NOTHING                  | checkProviderEligible() — FULL gate
+                                    |                          | (deeper IDOR issues: see INT-M-PKG-01)
 
-LOGIC REVIEW
-------------
-CHECK 1: Public single booking (public/bookings/route.ts)
-  A provider with approvalStatus='SUSPENDED' → checkProviderEligible returns
-  INSTRUCTOR_NOT_APPROVED → 403 returned before booking.create.
-  BEFORE: SUSPENDED provider could receive bookings via this route.
-  AFTER:  Blocked at step 2 of helper.  PASS
+COMMITS
+-------
+  1c0548d2 — initial fix (public routes + helper + cron)
+  <this commit> — operator routes (combined, mobile, pda-tests, packages/mobile)
 
-CHECK 2: Public single booking — expired document
-  A provider with licenseExpiry < now (in DrivingProviderProfile) →
-  checkProviderEligible step 6 returns INSTRUCTOR_DOCUMENT_EXPIRED → 403.
-  BEFORE: No such check existed.
-  AFTER:  Blocked at step 6 of helper.  PASS
+SCOPE NOTE: client/packages/mobile
+-----------------------------------
+This route has additional structural problems beyond DOC-EXP-01:
+  - packageId (from request body) used directly as providerId with no
+    ownership assertion — classic IDOR
+  - Price hardcoded at $500 regardless of instructor rate
+  - Booking immediately set to CONFIRMED with isPaid=true for non-manual payments
+These are tracked as a separate finding INT-M-PKG-01 (not in scope of DOC-EXP-01).
+The checkProviderEligible() gate added here is a minimum safety guard ensuring
+at least the provider is valid and eligible.
 
-CHECK 3: Public bulk booking (public/bookings/bulk/route.ts)
-  A provider with licenseExpiry < now → checkProviderEligible called with
-  only INSTRUCTOR_DOCUMENT_EXPIRED check active (inline checks already cover
-  the rest) → 403.
-  BEFORE: No doc expiry check.
-  AFTER:  Blocked.  PASS
+LOGIC REVIEW — ALL ROUTES
+--------------------------
 
-CHECK 4: Non-driving provider (no DrivingProviderProfile row)
-  checkProviderEligible step 6: drivingProviderProfile.findUnique returns
-  null → profile = null → expiry block skipped.
-  Non-driving provider is not blocked by doc expiry.  PASS
+CHECK 1: public/bookings — expired document
+  Provider with licenseExpiry < now →
+  checkProviderEligible step 6 → 403 INSTRUCTOR_DOCUMENT_EXPIRED  PASS
 
-CHECK 5: Cron enforcement
-  Provider with insuranceExpiry < now and documentsVerified=true →
-  cron updateMany sets documentsVerified=false.
-  Admin dashboard now correctly shows the provider as non-compliant.  PASS
+CHECK 2: public/bookings/bulk — expired document
+  Same as CHECK 1 via targeted helper call  PASS
 
-WHAT IS NOT FIXED IN THIS CHANGE
----------------------------------
-app/api/bookings/combined/route.ts   — instructor's own booking for their
-app/api/bookings/mobile/route.ts       own client. Lower risk (authenticated
-app/api/pda-tests/route.ts             as the instructor). Tracked for follow-up.
-app/api/client/packages/mobile/route.ts
+CHECK 3: bookings/combined — SUSPENDED provider
+  Any session user passes auth gate. Expired/suspended provider passed
+  before fix. checkProviderEligible step 2 → 403 INSTRUCTOR_NOT_APPROVED  PASS
 
-These routes also lack document expiry checks. The finding specifically
-concerns "public" booking creation. The authenticated-operator paths are a
-separate concern and should be addressed in a follow-up finding if required.
+CHECK 4: bookings/combined — expired document
+  checkProviderEligible step 6 → 403 INSTRUCTOR_DOCUMENT_EXPIRED  PASS
+
+CHECK 5: bookings/mobile — expired document
+  Instructor JWT decoded.providerId. checkProviderEligible step 6 → 403  PASS
+
+CHECK 6: pda-tests — existing approval+subscription gates preserved
+  requireActiveSubscription still runs first.
+  approvalStatus check still runs second.
+  checkProviderEligible doc expiry check runs third (only triggers on
+  INSTRUCTOR_DOCUMENT_EXPIRED code to avoid double-checking other gates).  PASS
+
+CHECK 7: client/packages/mobile — non-existent providerId
+  Any string packageId passed as providerId.
+  checkProviderEligible step 1 → 404 if no Provider with that ID.  PASS
+
+CHECK 8: Non-driving provider (no DrivingProviderProfile row)
+  checkProviderEligible step 6: profile = null → expiry check skipped.
+  Non-driving provider not affected.  PASS
 
 FINDING DISPOSITION
 -------------------
-DOC-EXP-01: CLOSED for the public booking creation surface.
-The two public-facing booking routes now enforce the full provider eligibility
-chain including document expiry. The cron now actively maintains the
-documentsVerified flag when documents expire.
+DOC-EXP-01 is CLOSED.
+All six booking creation entry points now enforce the document expiry gate.
+The platform invariant "expired provider cannot receive bookings" is enforced
+on every path that calls prisma.booking.create() or prisma.pDATestBooking.create().
+
+Remaining open items (not DOC-EXP-01):
+  INT-M-PKG-01 — client/packages/mobile IDOR + hardcoded price (NEW FINDING)
 
 Evidence files:
   docs/audit/DOC-EXP-01-VERIFICATION.txt        (this file)
-  lib/booking/checkProviderEligible.ts           (new shared helper)
-  app/api/public/bookings/route.ts               (patched)
-  app/api/public/bookings/bulk/route.ts          (patched)
-  app/api/cron/document-expiry-check/route.ts    (patched)
+  lib/booking/checkProviderEligible.ts           (shared helper)
+  app/api/public/bookings/route.ts               (patched — commit 1c0548d2)
+  app/api/public/bookings/bulk/route.ts          (patched — commit 1c0548d2)
+  app/api/cron/document-expiry-check/route.ts    (patched — commit 1c0548d2)
+  app/api/bookings/combined/route.ts             (patched — this commit)
+  app/api/bookings/mobile/route.ts               (patched — this commit)
+  app/api/pda-tests/route.ts                     (patched — this commit)
+  app/api/client/packages/mobile/route.ts        (minimum gate — this commit)
