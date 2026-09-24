@@ -28,3 +28,31 @@
 - [ ] D-20 marked CLOSED.
 
 **Rule:** Source changes alone do not close a finding. Test and independent verification evidence are required.
+
+## P1-03 — Instructor Risk
+
+**Finding:** `getInstructorRisk()` read legacy document-expiry fields from `Provider`, masking a schema mismatch with `as any`.
+
+**Implementation status:** FIX — implementation and focused tests complete. Final lifecycle closure remains pending independent audit of the exact commit SHA.
+
+### Changes
+
+- Read provider identity and Stripe fields through the typed Prisma `Provider` client.
+- Read `licenseExpiry`, `insuranceExpiry`, and `wwcCheckExpiry` from typed `DrivingProviderProfile` rows keyed by `providerId`.
+- Preserve existing cancellation, dispute, Stripe, and 14/30-day expiry scoring semantics.
+- Return the shared `ToolResult<T>` contract.
+- Return `ERROR` when the required provider query fails.
+- Return `PARTIAL` with `missing[]` when an independent profile, cancellation, or dispute query fails.
+- Represent missing profiles and unavailable document data explicitly; affected providers receive `riskLevel: 'unknown'` and `riskScore: null` rather than clean risk.
+
+### Verification
+
+- Focused tests: `13/13` passed in `lib/admin/__tests__/instructor-risk.test.ts`.
+- Required regression command: passed the discovered Admin Copilot suite, `13/13` tests.
+- `npx tsc --noEmit`: exits `2` because of pre-existing test typing errors across 24 repository test files (`vi`, `expect`, `describe`, and related globals). No diagnostics remain in the P1-03 implementation, shared contract, or focused test file.
+
+### Lifecycle
+
+`FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
+
+Current state: `COPILOT TESTS`; do not close P1-03 until the independent exact-SHA audit is complete.

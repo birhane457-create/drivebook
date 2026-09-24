@@ -20,6 +20,7 @@ import {
   ok,
   partial,
   toolError,
+  safeQuery,
   safeQueryAll,
   collectErrors,
 } from './tool-contracts'
@@ -227,78 +228,160 @@ export async function getHealthScore(): Promise<ToolResult<HealthScoreData>> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. getInstructorRisk — top N at-risk instructors
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getInstructorRisk(args: { limit?: number; minScore?: number }): Promise<LegacyToolResult> {
-  const limit = Math.min(20, args.limit ?? 5)
-  const minScore = args.minScore ?? 30
+type DocumentStatus = 'valid' | 'expiring' | 'expired' | 'unavailable' | 'no_profile'
 
+type InstructorRiskProvider = {
+  name: string
+  riskScore: number | null
+  riskLevel: 'high' | 'medium' | 'low' | 'unknown'
+  flags: string[]
+  documents: {
+    profile: 'present' | 'missing' | 'unavailable'
+    licence: DocumentStatus
+    insurance: DocumentStatus
+    wwcCheck: DocumentStatus
+  }
+}
+
+export type InstructorRiskData = {
+  providers: InstructorRiskProvider[]
+  summary: { high: number; medium: number; unknown: number }
+}
+
+function getDocumentStatus(expiry: Date | null | undefined, now: Date): DocumentStatus {
+  if (!expiry) return 'unavailable'
+  const days = Math.ceil((expiry.getTime() - now.getTime()) / 86400000)
+  if (days <= 0) return 'expired'
+  if (days <= 30) return 'expiring'
+  return 'valid'
+}
+
+export async function getInstructorRisk(args: { limit?: number; minScore?: number }): Promise<ToolResult<InstructorRiskData>> {
+  const limit = Math.min(20, Math.max(1, args.limit ?? 5))
+  const minScore = Math.max(0, args.minScore ?? 30)
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 86400000)
-  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000)
 
-  const instructors = await (prisma as any).provider.findMany({
-    where: { approvalStatus: 'APPROVED' },
-    select: { id: true, name: true, stripeAccountId: true, chargesEnabled: true, insuranceExpiry: true, wwcCheckExpiry: true },
-  })
+  const instructorsResult = await safeQuery(
+    () => prisma.provider.findMany({
+      where: { approvalStatus: 'APPROVED' },
+      select: { id: true, name: true, stripeAccountId: true, chargesEnabled: true },
+    }),
+    'approved providers',
+  )
 
-  const [cancellations, disputes] = await Promise.all([
-    (prisma.booking.groupBy({
+  if (instructorsResult.status === 'ERROR') return instructorsResult
+  if (instructorsResult.status === 'EMPTY' || instructorsResult.status === 'UNKNOWN') return instructorsResult
+  if (instructorsResult.status === 'PARTIAL') return { status: 'ERROR', error: 'Approved provider query returned partial data' }
+  if (instructorsResult.data.length === 0) return { status: 'EMPTY', reason: 'No approved providers found' }
+
+  const providerIds = instructorsResult.data.map((instructor) => instructor.id)
+  const [profilesResult, cancellationsResult, disputesResult] = await safeQueryAll([
+    () => prisma.drivingProviderProfile.findMany({
+      where: { providerId: { in: providerIds } },
+      select: { providerId: true, licenseExpiry: true, insuranceExpiry: true, wwcCheckExpiry: true },
+    }),
+    () => prisma.booking.groupBy({
       by: ['providerId'],
-      where: { status: 'CANCELLED', updatedAt: { gte: last30 }, deletedAt: null } as any,
+      where: { status: 'CANCELLED', updatedAt: { gte: last30 }, deletedAt: null },
       _count: { id: true },
-    }) as any).catch(() => []),
-    (prisma.stripeDispute.groupBy({
+    }),
+    () => prisma.stripeDispute.groupBy({
       by: ['providerId'],
-      where: { providerId: { in: instructors.map((i: any) => i.id) }, status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } },
+      where: { providerId: { in: providerIds }, status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } },
       _count: { id: true },
-    }) as any).catch(() => []),
-  ])
+    }),
+  ] as const, ['driving profiles', 'cancellations', 'disputes'])
 
-  const cancelMap: Record<string, number> = {}
-  for (const r of cancellations as any[]) cancelMap[r.providerId] = r._count.id
-  const disputeMap: Record<string, number> = {}
-  for (const r of disputes as any[]) if (r.providerId) disputeMap[r.providerId] = r._count.id
+  const missing = [
+    profilesResult.status === 'ERROR' ? 'driving profiles' : null,
+    cancellationsResult.status === 'ERROR' ? 'cancellations' : null,
+    disputesResult.status === 'ERROR' ? 'disputes' : null,
+  ].filter((label): label is string => label !== null)
 
-  const scored = instructors.map((inst: any) => {
+  const profileMap = profilesResult.status === 'SUCCESS'
+    ? new Map(profilesResult.data.map((profile) => [profile.providerId, profile]))
+    : new Map()
+  const cancelMap = cancellationsResult.status === 'SUCCESS'
+    ? new Map(cancellationsResult.data.map((row) => [row.providerId, row._count.id]))
+    : new Map<string, number>()
+  const disputeMap = disputesResult.status === 'SUCCESS'
+    ? new Map(disputesResult.data.filter((row) => row.providerId).map((row) => [row.providerId as string, row._count.id]))
+    : new Map<string, number>()
+
+  const scored = instructorsResult.data.map((instructor): InstructorRiskProvider => {
     let score = 0
     const flags: string[] = []
-    const cancels = cancelMap[inst.id] ?? 0
-    const dispCount = disputeMap[inst.id] ?? 0
+    const profile = profileMap.get(instructor.id)
+    const profileUnavailable = profilesResult.status === 'ERROR'
+    const cancellationsUnavailable = cancellationsResult.status === 'ERROR'
+    const disputesUnavailable = disputesResult.status === 'ERROR'
 
-    if (cancels >= 4) { score += 20; flags.push(`${cancels} cancellations in 30 days`) }
-    else if (cancels >= 2) { score += 12; flags.push(`${cancels} cancellations in 30 days`) }
-
-    if (dispCount >= 2) { score += 20; flags.push(`${dispCount} open disputes`) }
-    else if (dispCount === 1) { score += 12; flags.push('1 open dispute') }
-
-    if (!inst.stripeAccountId) { score += 15; flags.push('Stripe not connected') }
-    else if (!inst.chargesEnabled) { score += 8; flags.push('Stripe onboarding incomplete') }
-
-    const checks = [
-      { label: 'Licence', date: inst.licenseExpiry },
-      { label: 'Insurance', date: inst.insuranceExpiry },
-      { label: 'WWC Check', date: inst.wwcCheckExpiry },
-    ]
-    for (const c of checks) {
-      if (!c.date) continue
-      const days = Math.ceil((c.date.getTime() - now.getTime()) / 86400000)
-      if (days <= 0) { score += 15; flags.push(`${c.label} expired`) }
-      else if (days <= 14) { score += 12; flags.push(`${c.label} expires in ${days} days`) }
-      else if (days <= 30) { score += 8; flags.push(`${c.label} expires in ${days} days`) }
+    if (cancellationsUnavailable) flags.push('Cancellation data unavailable')
+    else {
+      const cancels = cancelMap.get(instructor.id) ?? 0
+      if (cancels >= 4) { score += 20; flags.push(`${cancels} cancellations in 30 days`) }
+      else if (cancels >= 2) { score += 12; flags.push(`${cancels} cancellations in 30 days`) }
     }
 
-    return { name: inst.name, riskScore: Math.min(100, score), riskLevel: score >= 60 ? 'high' : score >= 30 ? 'medium' : 'low', flags }
-  })
-    .filter((r: any) => r.riskScore >= minScore)
-    .sort((a: any, b: any) => b.riskScore - a.riskScore)
+    if (disputesUnavailable) flags.push('Dispute data unavailable')
+    else {
+      const dispCount = disputeMap.get(instructor.id) ?? 0
+      if (dispCount >= 2) { score += 20; flags.push(`${dispCount} open disputes`) }
+      else if (dispCount === 1) { score += 12; flags.push('1 open dispute') }
+    }
+
+    if (!instructor.stripeAccountId) { score += 15; flags.push('Stripe not connected') }
+    else if (!instructor.chargesEnabled) { score += 8; flags.push('Stripe onboarding incomplete') }
+
+    const documents = profileUnavailable
+      ? { profile: 'unavailable' as const, licence: 'unavailable' as const, insurance: 'unavailable' as const, wwcCheck: 'unavailable' as const }
+      : !profile
+        ? { profile: 'missing' as const, licence: 'no_profile' as const, insurance: 'no_profile' as const, wwcCheck: 'no_profile' as const }
+        : { profile: 'present' as const, licence: getDocumentStatus(profile.licenseExpiry, now), insurance: getDocumentStatus(profile.insuranceExpiry, now), wwcCheck: getDocumentStatus(profile.wwcCheckExpiry, now) }
+
+    if (documents.profile === 'unavailable') flags.push('Driving profile data unavailable')
+    else if (documents.profile === 'missing') flags.push('Driving profile missing')
+
+    if (documents.profile === 'present') {
+      const checks = [
+        { label: 'Licence', status: documents.licence, date: profile.licenseExpiry },
+        { label: 'Insurance', status: documents.insurance, date: profile.insuranceExpiry },
+        { label: 'WWC Check', status: documents.wwcCheck, date: profile.wwcCheckExpiry },
+      ]
+      for (const check of checks) {
+        if (check.status === 'unavailable') flags.push(`${check.label} expiry unavailable`)
+        else if (check.status === 'expired') { score += 15; flags.push(`${check.label} expired`) }
+        else if (check.status === 'expiring' && check.date) {
+          const days = Math.ceil((check.date.getTime() - now.getTime()) / 86400000)
+          if (days <= 14) { score += 12; flags.push(`${check.label} expires in ${days} days`) }
+          else { score += 8; flags.push(`${check.label} expires in ${days} days`) }
+        }
+      }
+    }
+
+    const evidenceUnavailable = profileUnavailable || !profile || Object.values(documents).includes('unavailable') || Object.values(documents).includes('no_profile') || cancellationsUnavailable || disputesUnavailable
+    return {
+      name: instructor.name,
+      riskScore: evidenceUnavailable ? null : Math.min(100, score),
+      riskLevel: evidenceUnavailable ? 'unknown' : score >= 60 ? 'high' : score >= 30 ? 'medium' : 'low',
+      flags,
+      documents,
+    }
+  }).filter((provider) => provider.riskLevel === 'unknown' || (provider.riskScore !== null && provider.riskScore >= minScore))
+    .sort((a, b) => (b.riskScore ?? -1) - (a.riskScore ?? -1))
     .slice(0, limit)
 
-  return {
+  const data = {
     providers: scored,
     summary: {
-      high: scored.filter((r: any) => r.riskLevel === 'high').length,
-      medium: scored.filter((r: any) => r.riskLevel === 'medium').length,
+      high: scored.filter((provider) => provider.riskLevel === 'high').length,
+      medium: scored.filter((provider) => provider.riskLevel === 'medium').length,
+      unknown: scored.filter((provider) => provider.riskLevel === 'unknown').length,
     },
   }
+
+  return missing.length > 0 ? partial(data, missing) : ok(data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
