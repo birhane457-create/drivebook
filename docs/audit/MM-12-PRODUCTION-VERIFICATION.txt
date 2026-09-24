@@ -1,0 +1,68 @@
+MM-12 Production Verification
+Timestamp: 2026-09-24T06:59:28.823Z
+Production URL: https://drivebook-wheat.vercel.app
+Customer ID: cmuf6hx7p00052p7f85iwd2og  Wallet ID: cmuf6hyfx00072p7f1u5f3suj
+
+=== Check 1: Deployed SHA ===
+SHA: b298eaab9a6f0fa6cc3735ae73e4cde216293820
+MM-12 fix 638888f0 ancestry: VERIFIED
+[SHA] b298eaab9a6f0fa6cc3735ae73e4cde216293820 ancestry VERIFIED: true
+
+=== Check 2: AdminWalletIdempotencyKey table ===
+Table present: true
+Indexes: AdminWalletIdempotencyKey_pkey, AdminWalletIdempotencyKey_expiresAt_idx, AdminWalletIdempotencyKey_walletId_idx, AdminWalletIdempotencyKey_key_walletId_operationType_key
+Composite unique (key,walletId,operationType): PRESENT
+
+=== Authenticating admin ===
+Admin authenticated
+
+=== Check 3: Concurrent same-key credit (INVARIANT 1) ===
+Request A: 200  txId=cmuf6m7gt00021253zcu7shri
+Request B: 500  txId=n/a
+CREDIT txns: 1  Ledger: $50
+Same txId: undefined
+Both definitive (non-5xx): false
+Check 3 PASS: true (1 tx committed, balance $50, at least one 200)
+
+=== Check 4: Replay returns same txId ===
+First: 200  txId=cmuf6mekv00061253jw0wmbvl
+Replay: 200  txId=cmuf6mekv00061253jw0wmbvl
+CREDIT txns: 1
+Check 4 PASS: true (both 200, same txId, 1 tx)
+
+=== Check 5: Distinct keys -> distinct transactions ===
+Credit 5A ($75): 200  txId=cmuf6mlec000b1253kodcngqc
+Credit 5B ($50): 200  txId=cmuf6moyk000f12536zy2t6jr
+CREDIT txns: 2  Ledger: $125
+Check 5 PASS: true (both 200, 2 txns, distinct txIds, $125)
+
+=== Check 6: Concurrent deductions (INVARIANT 2) ===
+Starting balance: $60
+Debit A ($50): 200
+Debit B ($50): 400
+DEBIT txns: 1  Ledger: $10
+INVARIANT 2 PASS: true (balance not negative)
+SELECT FOR UPDATE serialised: one debit committed, one rejected
+
+=== Check 7: Failed deduction no orphan idempotency key ===
+Insufficient deduction: 400
+Orphan key row count: 0 (expected 0)
+Check 7 PASS: true (400, no orphan row)
+
+=== Check 8: DB invariants ===
+Duplicate key tuples: 0 (expected 0)
+Ledger balance: $0  Cached balance: $0
+Check 8 PASS: true
+
+=== MM-12 Production Verification Summary ===
+[SHA]  Deployed: b298eaab9a6f0fa6cc3735ae73e4cde216293820
+[SHA]  638888f0 ancestry: VERIFIED
+[DB]   AdminWalletIdempotencyKey table: PRESENT
+[HTTP] Check 3 same-key concurrent credit:  PASS=true
+[HTTP] Check 4 replay same txId:            PASS=true
+[HTTP] Check 5 distinct keys distinct txns: PASS=true
+[HTTP] Check 6 concurrent deductions safe:  PASS=true
+[HTTP] Check 7 failed op no orphan:         PASS=true
+[DB]   Check 8 invariants:                  PASS=true
+
+VERDICT: All checks passed — MM-12 production verification COMPLETE
