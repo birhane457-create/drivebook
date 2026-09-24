@@ -1,14 +1,14 @@
 PAY-H-04 Production Verification
-Timestamp: 2026-09-23T15:52:11.725Z
+Timestamp: 2026-09-24T03:47:54.252Z
 Production URL: https://drivebook-wheat.vercel.app
 Test provider: cmt2qxp97000ggup1aj4rgimi
 
 === Check 1: Deployed SHA and ancestry ===
 Health status: 200
-Deployed SHA: 36da38a14cddbe9a56261aa6d57e93770825565f
+Deployed SHA: 3e7a6ebe75e3151c298fba3cc9196971599e4a77
 Environment: production
 SHA ancestry: VERIFIED — 560a77c2 found in git log of deployed SHA
-[SHA] Deployed SHA: 36da38a14cddbe9a56261aa6d57e93770825565f
+[SHA] Deployed SHA: 3e7a6ebe75e3151c298fba3cc9196971599e4a77
 [SHA] PAY-H-04 fix (560a77c2) in ancestry: VERIFIED
 
 === Check 2: btree_gist extension ===
@@ -18,38 +18,34 @@ btree_gist: INSTALLED (version 1.7)
 Constraint: PRESENT (type=x)
 
 === Check 4: Concurrent overlapping reservations — INVARIANT ===
-Request A (10:00-11:00): HTTP 500
-Request B (10:30-11:30): HTTP 500
+Request A (10:00-11:00): HTTP 409
+Request B (10:30-11:30): HTTP 409
 Active rows: 0
-Check 4 PASS: false (at most 1 row committed)
+Check 4 PASS: true (at most 1 row committed)
 
 === Check 5: Adjacent intervals — boundary semantics ===
-Request A (13:00-14:00): HTTP 500
-Request B (14:00-15:00): HTTP 500
-Rows committed: 0
-Check 5 PASS: false (both adjacent slots accepted)
+Request A (13:00-14:00): HTTP 200
+Request B (14:00-15:00): HTTP 200
+Rows committed: 2
+Check 5 PASS: true (both adjacent slots accepted)
 
 === Check 6: Normal reservation creation ===
-Single reservation (15:00-16:00): HTTP 500
-Check 6 PASS: false
+Single reservation (15:00-16:00): HTTP 200
+Check 6 PASS: true
 
 === Check 7: Constraint violation maps to HTTP 409 ===
-First reservation (11:00-12:00): HTTP 500
-Overlapping reservation (11:30-12:30): HTTP 500
-Check 7 PASS: false (overlap returns 409, not 500)
+First reservation (11:00-12:00): HTTP 200
+Overlapping reservation (11:30-12:30): HTTP 409
+Check 7 PASS: true (overlap returns 409, not 500)
 
 === Production Verification Summary ===
-[SHA] Deployed SHA:   36da38a14cddbe9a56261aa6d57e93770825565f
+[SHA] Deployed SHA:   3e7a6ebe75e3151c298fba3cc9196971599e4a77
 [SHA] 560a77c2 ancestor: VERIFIED
 [DB]  btree_gist:     installed (v1.7)
 [DB]  Constraint:     present
-[HTTP] Check 4 invariant (concurrent overlap <= 1 row): PASS=false
-[HTTP] Check 5 boundary (adjacent both succeed):        PASS=false
-[HTTP] Check 6 normal creation:                         PASS=false
-[HTTP] Check 7 exclusion -> HTTP 409:                   PASS=false
+[HTTP] Check 4 invariant (concurrent overlap <= 1 row): PASS=true
+[HTTP] Check 5 boundary (adjacent both succeed):        PASS=true
+[HTTP] Check 6 normal creation:                         PASS=true
+[HTTP] Check 7 exclusion -> HTTP 409:                   PASS=true
 
-VERDICT: One or more checks failed — DO NOT CLOSE PAY-H-04
-  Invariant: concurrent overlap produced >1 row or HTTP 5xx
-  Boundary: adjacent slots not both accepted
-  Normal: single reservation failed
-  Error mapping: overlap not returning 409
+VERDICT: All checks passed — PAY-H-04 production verification COMPLETE
