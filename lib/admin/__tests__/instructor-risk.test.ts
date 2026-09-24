@@ -172,4 +172,25 @@ describe('getInstructorRisk - P1-03', () => {
       expect.objectContaining({ name: 'Sam', riskLevel: 'unknown', riskScore: null }),
     ]))
   })
+
+  it('flags an expired policeCheckExpiry (C-2: all four documents scored)', async () => {
+    // policeCheckExpiry was the missing fourth document in the original C-2 finding.
+    // This test verifies it is now selected from DrivingProviderProfile and scored.
+    setSuccessfulQueries([{
+      providerId: 'provider-1',
+      licenseExpiry:     new Date(NOW.getTime() + 31 * 86400000),
+      insuranceExpiry:   new Date(NOW.getTime() + 31 * 86400000),
+      wwcCheckExpiry:    new Date(NOW.getTime() + 31 * 86400000),
+      policeCheckExpiry: new Date(NOW.getTime() - 86400000), // expired yesterday
+    }])
+
+    const result = await getInstructorRisk({ minScore: 0 })
+
+    expect(result.status).toBe('SUCCESS')
+    if (result.status !== 'SUCCESS') return
+    const provider = result.data.providers[0]
+    expect(provider.documents.policeCheck).toBe('expired')
+    expect(provider.riskScore).toBe(15)   // +15 for one expired document
+    expect(provider.flags).toContain('Police Check expired')
+  })
 })
