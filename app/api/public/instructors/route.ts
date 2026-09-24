@@ -20,16 +20,14 @@ export async function GET() {
         hourlyRate: true,
         baseAddress: true,
         languages: true,
-        phone: true,
+        // DATA-EXP-01: phone removed — not required by any public booking flow
+        // averageRating and totalReviews are pre-aggregated on the Provider row;
+        // there is no separate Review model — ratings live on Booking.customerRating
+        averageRating: true,
+        totalReviews: true,
         _count: {
           select: {
             bookings: true,
-            reviews: true,
-          },
-        },
-        reviews: {
-          select: {
-            rating: true,
           },
         },
       },
@@ -38,13 +36,8 @@ export async function GET() {
       },
     });
 
-    // Calculate average rating and format response
+    // Format response — shape matches what mobile and web booking flows expect
     const formattedInstructors = instructors.map((instructor: any) => {
-      const avgRating =
-        instructor.reviews.length > 0
-          ? instructor.reviews.reduce((sum: any, r: any) => sum + r.rating, 0) / instructor.reviews.length
-          : null;
-
       return {
         id: instructor.id,
         name: instructor.name,
@@ -53,10 +46,9 @@ export async function GET() {
         hourlyRate: instructor.hourlyRate,
         baseAddress: instructor.baseAddress,
         languages: instructor.languages,
-        phone: instructor.phone,
-        vehicleTypes: instructor.vehicleTypes,
-        rating: avgRating ? Number(avgRating.toFixed(1)) : null,
-        reviews: instructor._count.reviews,
+        // DATA-EXP-01: phone intentionally omitted from public response
+        rating: instructor.averageRating ? Number(instructor.averageRating.toFixed(1)) : null,
+        reviews: instructor.totalReviews,
         totalBookings: instructor._count.bookings,
       };
     });
