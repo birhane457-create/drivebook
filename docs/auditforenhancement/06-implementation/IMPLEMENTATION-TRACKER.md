@@ -1,7 +1,7 @@
 # IMPLEMENTATION TRACKER — DriveBook Admin Copilot Remediation
 
 **Branch:** `audit/ai-enhancement-multimodel`  
-**Status:** Implementation in progress  
+**Status:** Reconciled implementation state — P1-01 through P1-07 independently FIX-VERIFIED; P1-08 PARTIAL
 **Started:** September 24, 2026  
 **Basis:** DECISIONS.md (D-01 through D-21) and PRIORITY-BACKLOG.md
 
@@ -184,7 +184,7 @@ CLOSED
 ## NEXT PHASE: P1 FOUNDATION
 
 ### P1-01: Define Tool Result Contract
-**Status:** NOT STARTED  
+**Status:** ✅ FIX-VERIFIED
 **Decision:** D-01  
 **Owner:** GPT + Kiro  
 **Estimate:** 2-3 days
@@ -201,9 +201,9 @@ CLOSED
 ---
 
 ### P1-02: Migrate Health-Score Tool (C-1, C-1a)
-**Status:** ✅ TEST-VERIFIED (FIX-VERIFIED) — pending independent CLOSED
+**Status:** ✅ FIX-VERIFIED — pending project closure gate
 **Decision:** D-01, D-02  
-**Fix commit:** `3846d6a9`  
+**Fix commit:** `f127dfe7` (type-integration correction: `3846d6a9`)
 **Verification date:** September 25, 2026
 
 **Lifecycle:**
@@ -211,8 +211,9 @@ CLOSED
 | Step | SHA | Notes |
 |---|---|---|
 | P1-01 contract | `df01d43a` | ToolResult<T>, safeQuery, helpers — GPT FIX-VERIFIED |
-| P1-02 fix | `3846d6a9` | getHealthScore migrated, C-1/C-1a addressed, 101 tests |
-| **TEST-VERIFIED** | `3846d6a9` | Independent reviewer: TEST-VERIFIED pending execution evidence |
+| P1-02 fix | `f127dfe7` | getHealthScore migrated, C-1/C-1a addressed |
+| Type correction | `3846d6a9` | ToolResult type integration corrected |
+| **FIX-VERIFIED** | `f127dfe7` | Independent verification recorded in the remediation lifecycle |
 | Execution evidence | this commit | P1-02-EXECUTION-EVIDENCE.md added, 120 tests confirmed |
 
 **Scope boundary (per independent reviewer):**
@@ -245,67 +246,37 @@ Does NOT require migration of the 7 remaining tools (those are P1-03 through P1-
 | Touched-file TS errors | ✅ 0 |
 | Entire tool layer migrated | ⏳ P1-03 through P1-06 |
 
-**P1-02 STATUS: TEST-VERIFIED ✅ — independent CLOSED requires reviewer to run:**
-```
-npm test -- lib/admin/__tests__/get-health-score.test.ts lib/admin/__tests__/tool-contracts.test.ts
-```
+**P1-02 STATUS: ✅ CLOSED — independently verified by GPT at `24f5cc50`**
 
 ---
 
-### P1-03: Fix Instructor-Risk Schema Alignment (C-2)
-**Status:** NOT STARTED  
-**Decision:** D-03  
-**Owner:** GPT + Kiro  
-**Estimate:** 2 days
+### P1-03 through P1-08: Reconciled Current State
 
-**Dependencies:** P1-01
+| Item | Status | Verified implementation / audit evidence |
+|---|---|---|
+| P1-03 Instructor Risk | **FIX-VERIFIED** | `a31066ee`; GPT exact-SHA audit; 13 focused / 114 regression tests |
+| P1-04 Daily Summary Expiry | **FIX-VERIFIED** | `88a6c834`; GPT exact-SHA audit; 3 focused / 117 regression tests |
+| P1-05 Suburb Demand | **FIX-VERIFIED** | `4d4bc303`; GPT exact-SHA audit; 3 focused / 120 regression tests |
+| P1-06 Remaining Tools | **FIX-VERIFIED** | `b6b7593d`; GPT exact-SHA audit; 6 focused / 129 regression tests |
+| P1-07 Untrusted Evidence | **FIX-VERIFIED** | `cb654164`; GPT exact-SHA audit; 2 structural + 2 route staging / 133 regression tests |
+| P1-08 Adversarial Coverage | **PARTIAL** | Route-level OpenAI/Anthropic staging complete; 10+ matrix, tool-argument injection, read-only bypass, and final evidence remain |
 
-**Acceptance criteria:**
-- [ ] Baseline verified: Query targets wrong table
-- [ ] Production coverage measured (% approved providers with profiles)
-- [ ] Query updated to read from `DrivingProviderProfile`
-- [ ] Returns `ToolResult<InstructorRisk>` with PARTIAL if profile missing
-- [ ] Tests cover various profile completeness levels
-- [ ] Kiro verification complete
-- [ ] D-03 verified
+P1-03 through P1-07 remain open only for the project closure gate. P1-08 is the current engineering gate.
 
----
+## RECONCILED P1 SEQUENCE
 
-### P1-04: Fix Expiring-Document Filter (C-3)
-**Status:** NOT STARTED  
-**Decision:** D-04  
-**Owner:** GPT + Kiro  
-**Estimate:** 1 day
+| Item | Implementation SHA | Current status |
+|---|---|---|
+| P1-01 Tool Result Contract | `df01d43a` | **FIX-VERIFIED** |
+| P1-02 Health Score | `f127dfe7` | **FIX-VERIFIED** |
+| P1-03 Instructor Risk | `a31066ee` | **FIX-VERIFIED** |
+| P1-04 Daily Summary | `88a6c834` | **FIX-VERIFIED** |
+| P1-05 Suburb Demand | `4d4bc303` | **FIX-VERIFIED** |
+| P1-06 Remaining Tools | `b6b7593d` | **FIX-VERIFIED** |
+| P1-07 Untrusted Evidence | `cb654164` | **FIX-VERIFIED** |
+| P1-08 Adversarial Coverage | pending | **PARTIAL** |
 
-**Dependencies:** P1-01
-
-**Acceptance criteria:**
-- [ ] Baseline verified: No-op `OR: [{}, {}]` filter documented
-- [ ] Filter fixed (correct expiry date range logic)
-- [ ] Returns `ToolResult<Document[]>`
-- [ ] Boundary-date fixture tests (today, tomorrow, next week, expired)
-- [ ] Kiro verification complete
-- [ ] D-04 verified
-
----
-
-## TRACKING STATUS
-
-**Completed:** 2/32 tasks  
-**In Progress:** 1/32 tasks  
-**Not Started:** 29/32 tasks
-
-**P0 Blockers:** 1/3 complete  
-- P0-01: NOT STARTED (external stakeholder)
-- **P0-02: ✅ CLOSED** (D-20, verified `9ff8da95`)
-- P0-03: NOT STARTED (external stakeholder)
-
-**P1 Foundation:** 2/10 complete  
-- **P1-01: ✅ FIX-VERIFIED** (D-01 contract, `df01d43a`, GPT audit confirmed)
-  - C-1 finding remains OPEN — production tools not yet migrated
-- **P1-02: ✅ TEST-VERIFIED** (C-1/C-1a, `3846d6a9`, execution evidence in P1-02-EXECUTION-EVIDENCE.md)
-  - Scope: getHealthScore() only. LegacyToolResult on 7 tools is intentional (P1-03 through P1-06)
-- P1-03 through P1-10: NOT STARTED
+Independent audit evidence is recorded in the auditforenhancement lifecycle documents. No item above is marked CLOSED by this tracker.
 
 ---
 
@@ -400,10 +371,12 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 2. ~~P1-01 (Tool Result Contract)~~ — **FIX-VERIFIED** ✅ C-1 still OPEN pending tool migration
 3. ~~P1-02 (getHealthScore migration, C-1/C-1a)~~ — **TEST-VERIFIED** ✅ independent CLOSED pending test run
 4. Route P0-01 and P0-03 to security team (external, parallel)
-5. **NOW: P1-03 — migrate `getInstructorRisk` (C-2, schema alignment)**
+5. **NOW: P1-08 — complete broader adversarial coverage**
+
+**Current focus:** P1-03 `getInstructorRisk` — query targets wrong table, needs `DrivingProviderProfile`
 
 ---
 
-**Implementation Status:** P1-02 TEST-VERIFIED — 3/32 tasks with evidence  
-**Current Branch:** `audit/ai-enhancement-multimodel` at `6e8162ad`  
+**Implementation Status:** P1-01 through P1-07 FIX-VERIFIED; P1-08 PARTIAL
+**Current Branch:** `audit/ai-enhancement-multimodel` at `a33aac70`
 **Last Updated:** September 25, 2026

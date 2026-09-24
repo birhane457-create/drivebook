@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { callTool, TOOL_DEFINITIONS } from '@/lib/admin/ai-tools'
+import { callTool, TOOL_DEFINITIONS, validateToolArguments } from '@/lib/admin/ai-tools'
 import { createUntrustedEvidenceEnvelope } from '@/lib/admin/evidence-envelope'
 import { checkRateLimitStrict, adminActionRateLimit } from '@/lib/ratelimit'
 
@@ -195,11 +195,16 @@ export async function POST(req: NextRequest) {
           try { toolArgs = JSON.parse(tc.function?.arguments ?? '{}') } catch { /* use empty */ }
 
           let toolResult: unknown
-          try {
-            toolResult = await callTool(toolName, toolArgs)
-            if (!toolsUsed.includes(toolName)) toolsUsed.push(toolName)
-          } catch (err: unknown) {
-            toolResult = { error: err instanceof Error ? err.message : 'Tool call failed' }
+          const validation = validateToolArguments(toolName, toolArgs)
+          if (!validation.valid) {
+            toolResult = { status: 'ERROR', error: validation.error }
+          } else {
+            try {
+              toolResult = await callTool(toolName, validation.args)
+              if (!toolsUsed.includes(toolName)) toolsUsed.push(toolName)
+            } catch (err: unknown) {
+              toolResult = { status: 'ERROR', error: err instanceof Error ? err.message : 'Tool call failed' }
+            }
           }
 
           messages.push({

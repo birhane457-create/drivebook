@@ -295,6 +295,7 @@ type InstructorRiskProvider = {
     licence: DocumentStatus
     insurance: DocumentStatus
     wwcCheck: DocumentStatus
+    policeCheck: DocumentStatus
   }
 }
 
@@ -334,7 +335,7 @@ export async function getInstructorRisk(args: { limit?: number; minScore?: numbe
   const [profilesResult, cancellationsResult, disputesResult] = await safeQueryAll([
     () => prisma.drivingProviderProfile.findMany({
       where: { providerId: { in: providerIds } },
-      select: { providerId: true, licenseExpiry: true, insuranceExpiry: true, wwcCheckExpiry: true },
+      select: { providerId: true, licenseExpiry: true, insuranceExpiry: true, wwcCheckExpiry: true, policeCheckExpiry: true },
     }),
     () => prisma.booking.groupBy({
       by: ['providerId'],
@@ -390,10 +391,10 @@ export async function getInstructorRisk(args: { limit?: number; minScore?: numbe
     else if (!instructor.chargesEnabled) { score += 8; flags.push('Stripe onboarding incomplete') }
 
     const documents = profileUnavailable
-      ? { profile: 'unavailable' as const, licence: 'unavailable' as const, insurance: 'unavailable' as const, wwcCheck: 'unavailable' as const }
+      ? { profile: 'unavailable' as const, licence: 'unavailable' as const, insurance: 'unavailable' as const, wwcCheck: 'unavailable' as const, policeCheck: 'unavailable' as const }
       : !profile
-        ? { profile: 'missing' as const, licence: 'no_profile' as const, insurance: 'no_profile' as const, wwcCheck: 'no_profile' as const }
-        : { profile: 'present' as const, licence: getDocumentStatus(profile.licenseExpiry, now), insurance: getDocumentStatus(profile.insuranceExpiry, now), wwcCheck: getDocumentStatus(profile.wwcCheckExpiry, now) }
+        ? { profile: 'missing' as const, licence: 'no_profile' as const, insurance: 'no_profile' as const, wwcCheck: 'no_profile' as const, policeCheck: 'no_profile' as const }
+        : { profile: 'present' as const, licence: getDocumentStatus(profile.licenseExpiry, now), insurance: getDocumentStatus(profile.insuranceExpiry, now), wwcCheck: getDocumentStatus(profile.wwcCheckExpiry, now), policeCheck: getDocumentStatus(profile.policeCheckExpiry, now) }
 
     if (documents.profile === 'unavailable') flags.push('Driving profile data unavailable')
     else if (documents.profile === 'missing') flags.push('Driving profile missing')
@@ -403,6 +404,7 @@ export async function getInstructorRisk(args: { limit?: number; minScore?: numbe
         { label: 'Licence', status: documents.licence, date: profile.licenseExpiry },
         { label: 'Insurance', status: documents.insurance, date: profile.insuranceExpiry },
         { label: 'WWC Check', status: documents.wwcCheck, date: profile.wwcCheckExpiry },
+        { label: 'Police Check', status: documents.policeCheck, date: profile.policeCheckExpiry },
       ]
       for (const check of checks) {
         if (check.status === 'unavailable') flags.push(`${check.label} expiry unavailable`)
@@ -767,6 +769,37 @@ export async function getOperationsTimeline(args: { hours?: number }): Promise<T
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool dispatcher — called by the API route
 // ─────────────────────────────────────────────────────────────────────────────
+export type ToolArgumentValidation =
+  | { valid: true; args: Record<string, unknown> }
+  | { valid: false; error: string }
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+export function validateToolArguments(name: string, args: Record<string, unknown>): ToolArgumentValidation {
+  const numericFields: Record<string, string[]> = {
+    getInstructorRisk: ['limit', 'minScore'],
+    getRevenueBreakdown: ['days'],
+    getSuburbDemand: ['limit'],
+    getOperationsTimeline: ['hours'],
+  }
+  const knownTools = new Set([
+    'getDailySummary', 'getHealthScore', 'getInstructorRisk', 'getWeeklyReport',
+    'getRevenueBreakdown', 'getStudentRetention', 'getSuburbDemand', 'getOperationsTimeline',
+  ])
+
+  if (!knownTools.has(name)) return { valid: false, error: `Unknown or unauthorized tool: ${name}` }
+
+  const allowedFields = numericFields[name] ?? []
+  for (const key of Object.keys(args)) {
+    if (!allowedFields.includes(key)) return { valid: false, error: `Unexpected argument for ${name}: ${key}` }
+    if (!isFiniteNumber(args[key]) || args[key] < 0) return { valid: false, error: `Invalid numeric argument for ${name}: ${key}` }
+  }
+
+  return { valid: true, args }
+}
+
 export async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResult<unknown>> {
   switch (name) {
     case 'getDailySummary':       return getDailySummary()

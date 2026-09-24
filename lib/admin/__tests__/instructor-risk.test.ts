@@ -23,6 +23,7 @@ function profileWithExpiry(days: number | null, providerId = 'provider-1') {
     licenseExpiry: days === null ? null : new Date(NOW.getTime() + days * 86400000),
     insuranceExpiry: new Date(NOW.getTime() + 31 * 86400000),
     wwcCheckExpiry: new Date(NOW.getTime() + 31 * 86400000),
+    policeCheckExpiry: new Date(NOW.getTime() + 31 * 86400000),
   }
 }
 
@@ -84,6 +85,7 @@ describe('getInstructorRisk - P1-03', () => {
       licenseExpiry: new Date(NOW.getTime() - 86400000),
       insuranceExpiry: new Date(NOW.getTime() - 86400000),
       wwcCheckExpiry: new Date(NOW.getTime() - 86400000),
+      policeCheckExpiry: new Date(NOW.getTime() - 86400000),
     }])
 
     const result = await getInstructorRisk({ minScore: 0 })
@@ -91,13 +93,14 @@ describe('getInstructorRisk - P1-03', () => {
     expect(result.status).toBe('SUCCESS')
     if (result.status !== 'SUCCESS') return
     expect(result.data.providers[0]).toMatchObject({
-      riskScore: 45,
-      documents: { licence: 'expired', insurance: 'expired', wwcCheck: 'expired' },
+      riskScore: 60,
+      documents: { licence: 'expired', insurance: 'expired', wwcCheck: 'expired', policeCheck: 'expired' },
     })
     expect(result.data.providers[0].flags).toEqual(expect.arrayContaining([
       'Licence expired',
       'Insurance expired',
       'WWC Check expired',
+      'Police Check expired',
     ]))
   })
 

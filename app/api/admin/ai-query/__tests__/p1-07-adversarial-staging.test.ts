@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   requirePermission: vi.fn(),
   checkRateLimitStrict: vi.fn(),
   callTool: vi.fn(),
+  validateToolArguments: vi.fn(),
   auditCreate: vi.fn(),
   fetch: vi.fn(),
 }))
@@ -22,6 +23,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: { auditLog: { create: mocks.auditCreate
 vi.mock('@/lib/admin/ai-tools', () => ({
   TOOL_DEFINITIONS: [],
   callTool: mocks.callTool,
+  validateToolArguments: mocks.validateToolArguments,
 }))
 
 import { POST } from '../route'
@@ -55,6 +57,7 @@ describe('P1-07 adversarial staging - model-facing paths', () => {
     mocks.getServerSession.mockResolvedValue({ user: { id: 'admin-1', email: 'admin@example.test' } })
     mocks.requirePermission.mockResolvedValue(null)
     mocks.checkRateLimitStrict.mockResolvedValue({ success: true })
+    mocks.validateToolArguments.mockImplementation((_name: string, args: Record<string, unknown>) => ({ valid: true, args }))
     mocks.auditCreate.mockResolvedValue({})
     vi.stubGlobal('fetch', mocks.fetch)
   })
@@ -115,5 +118,38 @@ describe('P1-07 adversarial staging - model-facing paths', () => {
       reply: 'The values were treated as untrusted evidence.',
     })
     expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps malformed tool arguments as ERROR evidence without dispatching', async () => {
+    process.env.OPENAI_API_KEY = 'staging-openai-key'
+    delete process.env.ANTHROPIC_API_KEY
+    mocks.validateToolArguments.mockReturnValueOnce({ valid: false, error: 'Invalid numeric argument' })
+    mocks.fetch
+      .mockResolvedValueOnce(response({ choices: [{ message: {
+        tool_calls: [{ id: 'call-invalid', function: { name: 'getSuburbDemand', arguments: '{"limit":"DROP TABLE"}' } }],
+      } }] }))
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body))
+        const toolMessage = body.messages.find((message: { role: string }) => message.role === 'tool')
+        const envelope = JSON.parse(toolMessage.content)
+        expect(envelope.data).toEqual({ status: 'ERROR', error: 'Invalid numeric argument' })
+        return response({ choices: [{ message: { content: 'The invalid request was rejected.' } }] })
+      })
+
+    const result = await POST(request())
+
+    expect(result.status).toBe(200)
+    expect(mocks.callTool).not.toHaveBeenCalled()
+  })
+
+  it('blocks a permission bypass before any provider request or tool dispatch', async () => {
+    const { NextResponse } = await import('next/server')
+    mocks.requirePermission.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+
+    const result = await POST(request())
+
+    expect(result.status).toBe(403)
+    expect(mocks.fetch).not.toHaveBeenCalled()
+    expect(mocks.callTool).not.toHaveBeenCalled()
   })
 })
