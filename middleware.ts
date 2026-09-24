@@ -84,6 +84,13 @@ export async function middleware(req: NextRequest) {
     url.pathname.startsWith('/api/client/') ||
     url.pathname.startsWith('/api/bookings/')
 
+  // S-7 FIX: Any /api/auth/* route that is NOT on the explicit NextAuth
+  // public whitelist must be treated as an unknown API path and denied.
+  // Without this, an unrecognised /api/auth/anything falls through all
+  // conditions and reaches NextResponse.next() without authentication.
+  const isUnknownAuthApiPath =
+    url.pathname.startsWith('/api/auth/') && !isPublicPath
+
   if (
     isPublicPath &&
     !isProtectedApiPath &&
@@ -94,7 +101,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
   
-  // P0-7 FIX: Protect admin and instructor API routes at the edge.\n  // Individual API handlers still call getServerSession(), but this provides\n  // defence-in-depth: a missing session check in a new route cannot leak data.\n  // For protected routes, check authentication only — layouts handle role-based access
+  // P0-7 FIX: Protect admin and instructor API routes at the edge.
+  // Individual API handlers still call getServerSession(), but this provides
+  // defence-in-depth: a missing session check in a new route cannot leak data.
+  // For protected routes, check authentication only — layouts handle role-based access
   if (
     url.pathname.startsWith('/dashboard') ||
     url.pathname.startsWith('/admin') ||
@@ -102,7 +112,8 @@ export async function middleware(req: NextRequest) {
     url.pathname.startsWith('/business-setup') ||
     url.pathname.startsWith('/onboarding') ||
     url.pathname.startsWith('/staff') ||
-    isProtectedApiPath
+    isProtectedApiPath ||
+    isUnknownAuthApiPath
   ) {
     // On production (https), NextAuth uses __Secure- prefixed cookie name.
     // Pass both names so getToken() can find the cookie regardless of environment.
