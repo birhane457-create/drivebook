@@ -24,10 +24,15 @@ import {
   collectErrors,
 } from './tool-contracts'
 
+// Temporary alias for tools not yet migrated to ToolResult<T>.
+// Replaced one-by-one in P1-03 through P1-06.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LegacyToolResult = Record<string, any>
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. getDailySummary
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getDailySummary(): Promise<ToolResult> {
+export async function getDailySummary(): Promise<LegacyToolResult> {
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yesterdayStart = new Date(todayStart.getTime() - 86400000)
@@ -80,7 +85,21 @@ const HEALTH_SIGNAL_LABELS = [
   'totalPayouts',    // 9
 ] as const
 
-export async function getHealthScore(): Promise<ToolResult> {
+export type HealthScoreData = {
+  score: number
+  status: 'healthy' | 'watch' | 'critical'
+  signals: {
+    completionRate: number | null
+    onboardingRate: number | null
+    openDisputes: number | null
+    revChangePercent: number | null
+    payoutFailRate: number | null
+    failedPayments: number | null
+  }
+  scoringNotes?: string[]
+}
+
+export async function getHealthScore(): Promise<ToolResult<HealthScoreData>> {
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 86400000)
   const last7 = new Date(now.getTime() - 7 * 86400000)
@@ -185,7 +204,7 @@ export async function getHealthScore(): Promise<ToolResult> {
 
   const data = {
     score,
-    status: score >= 90 ? 'healthy' : score >= 70 ? 'watch' : 'critical',
+    status: (score >= 90 ? 'healthy' : score >= 70 ? 'watch' : 'critical') as 'healthy' | 'watch' | 'critical',
     signals: {
       completionRate,
       onboardingRate,
@@ -208,7 +227,7 @@ export async function getHealthScore(): Promise<ToolResult> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. getInstructorRisk — top N at-risk instructors
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getInstructorRisk(args: { limit?: number; minScore?: number }): Promise<ToolResult> {
+export async function getInstructorRisk(args: { limit?: number; minScore?: number }): Promise<LegacyToolResult> {
   const limit = Math.min(20, args.limit ?? 5)
   const minScore = args.minScore ?? 30
 
@@ -285,7 +304,7 @@ export async function getInstructorRisk(args: { limit?: number; minScore?: numbe
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. getWeeklyReport
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getWeeklyReport(): Promise<ToolResult> {
+export async function getWeeklyReport(): Promise<LegacyToolResult> {
   const now = new Date()
   const last7 = new Date(now.getTime() - 7 * 86400000)
   const prev7 = new Date(now.getTime() - 14 * 86400000)
@@ -317,7 +336,7 @@ export async function getWeeklyReport(): Promise<ToolResult> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. getRevenueBreakdown — cancellation losses + top earners
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getRevenueBreakdown(args: { days?: number }): Promise<ToolResult> {
+export async function getRevenueBreakdown(args: { days?: number }): Promise<LegacyToolResult> {
   const days = Math.min(90, args.days ?? 30)
   const since = new Date(Date.now() - days * 86400000)
 
@@ -365,7 +384,7 @@ export async function getRevenueBreakdown(args: { days?: number }): Promise<Tool
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. getStudentRetention
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getStudentRetention(): Promise<ToolResult> {
+export async function getStudentRetention(): Promise<LegacyToolResult> {
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 86400000)
   const last60 = new Date(now.getTime() - 60 * 86400000)
@@ -408,7 +427,7 @@ export async function getStudentRetention(): Promise<ToolResult> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. getSuburbDemand — top suburbs by booking count
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getSuburbDemand(args: { limit?: number }): Promise<ToolResult> {
+export async function getSuburbDemand(args: { limit?: number }): Promise<LegacyToolResult> {
   const limit = Math.min(20, args.limit ?? 10)
   const last30 = new Date(Date.now() - 30 * 86400000)
 
@@ -440,7 +459,7 @@ export async function getSuburbDemand(args: { limit?: number }): Promise<ToolRes
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. getOperationsTimeline — recent events summary
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getOperationsTimeline(args: { hours?: number }): Promise<ToolResult> {
+export async function getOperationsTimeline(args: { hours?: number }): Promise<LegacyToolResult> {
   const hours = Math.min(168, args.hours ?? 24)
   const since = new Date(Date.now() - hours * 3600000)
 
@@ -484,7 +503,7 @@ export async function getOperationsTimeline(args: { hours?: number }): Promise<T
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool dispatcher — called by the API route
 // ─────────────────────────────────────────────────────────────────────────────
-export async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+export async function callTool(name: string, args: Record<string, unknown>): Promise<LegacyToolResult> {
   switch (name) {
     case 'getDailySummary':       return getDailySummary()
     case 'getHealthScore':        return getHealthScore()
