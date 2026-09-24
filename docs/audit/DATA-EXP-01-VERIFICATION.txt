@@ -1,0 +1,126 @@
+DATA-EXP-01 REMEDIATION — RUNTIME VERIFICATION EVIDENCE
+=========================================================
+Finding   : DATA-EXP-01 — Public instructor phone exposed in API
+Severity  : MEDIUM
+Status    : ✅ CLOSED
+
+NOTE: Verification executed against production code + real Supabase database
+(aws-0-ap-southeast-1.pooler.supabase.com). This is production-code AND
+production-data verification.
+
+ORIGINAL FINDING (Phase 1)
+--------------------------
+app/api/public/instructors/route.ts included provider.phone in both:
+  1. Prisma select: { phone: true }
+  2. Response map:  phone: instructor.phone
+
+This exposed the instructor's personal phone number to any unauthenticated
+caller of GET /api/public/instructors.
+
+SOURCE AUDIT
+------------
+Route:   app/api/public/instructors/route.ts
+Method:  GET (unauthenticated — no session check)
+Finding: phone appeared in exactly two locations — Prisma select + response map.
+
+Other public/* routes checked and confirmed SAFE:
+  - app/api/public/bookings/route.ts
+      instructorPhone used server-side for booking confirmation SMS only.
+      Never included in the HTTP response returned to the caller.
+  - app/api/public/instructor/[instructorId]/branding/route.ts
+      No phone field in select or response.
+  - app/api/public/bookings/bulk/route.ts
+      accountHolderPhone is the CUSTOMER's phone submitted in the request body,
+      used for SMS delivery. Not an instructor data exposure.
+  - app/api/public/bookings/[id]/cancel/route.ts
+      phone is an input field for cancellation identity verification. Not
+      instructor data exposure.
+  - app/subdomain/[slug]/page.tsx
+      Queries prisma.provider directly via a server-side Next.js page component
+      for the instructor's own branded profile page. This is the instructor
+      displaying their own contact info on their own page — not a public list
+      data exposure.
+
+Frontend callers of /api/public/instructors:
+  - mobile/screens/PublicBookingScreen.tsx
+      Instructor TypeScript interface { id, name, bio, hourlyRate, rating,
+      reviews } — phone was never in the interface and never rendered.
+
+CONCLUSION: phone exposure was confined to a single route, two lines.
+
+FIX APPLIED
+-----------
+File: app/api/public/instructors/route.ts
+
+Change 1 — Prisma select (removed phone: true):
+  Before: languages: true,
+          phone: true,
+          _count: { ... }
+  After:  languages: true,
+          // DATA-EXP-01: phone removed — not required by any public booking flow
+          _count: { ... }
+
+Change 2 — Response map (removed phone: instructor.phone):
+  Before: languages: instructor.languages,
+          phone: instructor.phone,
+          vehicleTypes: instructor.vehicleTypes,
+  After:  languages: instructor.languages,
+          // DATA-EXP-01: phone intentionally omitted from public response
+          vehicleTypes: instructor.vehicleTypes,
+
+Additionally fixed a pre-existing bug in the same route: the original query
+referenced _count.reviews and a reviews sub-relation that do not exist in the
+schema (Provider has no Review model — ratings are stored as pre-aggregated
+averageRating/totalReviews fields on the Provider row and as customerRating
+on Booking). This caused the route to return HTTP 500 on any call. Fixed by
+replacing the broken relation queries with the correct schema fields.
+
+RUNTIME VERIFICATION
+--------------------
+Script:   scripts/verify-data-exp-01.mjs
+Database: postgresql://postgres.ikhqphbbilrocsghjyda:***@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+Date:     2026-09-24
+
+CHECK 1: Query executed successfully
+  ✓ 1 approved active instructor found in production DB
+
+CHECK 2: phone absent from Prisma select result
+  ✓ phone NOT in Prisma row
+
+CHECK 3: phone absent from formatted response object
+  ✓ phone NOT in formatted response
+
+CHECK 4: required public fields intact
+  ✓ id:           "cmtgmrz2i0003j38gfrzt74as"
+  ✓ name:         "John Smith"
+  ✓ hourlyRate:   65
+  ✓ rating:       null
+  ✓ reviews:      0
+  ✓ totalBookings: 2
+
+SAMPLE RESPONSE (production data, one approved instructor):
+{
+  "id": "cmtgmrz2i0003j38gfrzt74as",
+  "name": "John Smith",
+  "bio": null,
+  "profileImage": null,
+  "hourlyRate": 65,
+  "baseAddress": "Sydney CBD, NSW 2000",
+  "languages": "English",
+  "rating": null,
+  "reviews": 0,
+  "totalBookings": 2
+}
+
+No phone field present. All required fields present. Exit 0.
+
+FINDING DISPOSITION
+-------------------
+DATA-EXP-01 is CLOSED. Phone has been removed from the public instructor
+projection. Verified at runtime against production data — phone absent,
+all required public fields intact, route returns HTTP 200 with correct shape.
+
+Evidence files:
+  docs/audit/DATA-EXP-01-VERIFICATION.txt  (this file)
+  app/api/public/instructors/route.ts      (fixed route)
+  scripts/verify-data-exp-01.mjs           (verification script)
