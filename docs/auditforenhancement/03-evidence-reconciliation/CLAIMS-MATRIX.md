@@ -84,3 +84,16 @@ The server checks the Copilot permission before tool execution, the dispatcher i
 The four-model process has reduced the audit to a smaller set of high-confidence correctness/security issues and a separate architecture backlog. The strongest evidence comes from source-proven defects, not model agreement.
 
 No application code is changed by this matrix. Findings enter implementation only through FINDING → VERIFIED → FIX → FIX-VERIFIED → CLOSED.
+
+
+## H. Phase 4 challenge resolution — Kiro `ff6cd372`
+
+Kiro independently challenged this consolidation. The challenge accepted the core dispositions and added specificity rather than changing the overall conclusion.
+
+**S-7 is resolved:** Kiro's second read verified the middleware public-path defence-in-depth gap. It is now **VERIFIED, MEDIUM**, rather than awaiting another read. The current handler-level authentication checks mean the audit does not classify this as a demonstrated active takeover. Remediation should narrow the `/api/auth` public prefix or ensure protected API checks take precedence, with a regression test for overlapping paths.
+
+**Test requirements strengthened:** blocking tests should cover C-1/C-1a failure semantics, C-2 profile/expiry states, C-3 expiry boundaries, A-6 untrusted-data injection attempts, and S-7 path overlap.
+
+**Monitoring requirements strengthened:** surface tool/database failures and degraded provider states rather than silently absorbing them; monitor Copilot rate/resource-limit behavior.
+
+**Coordinator resolution:** Kiro's challenge does not overturn any core disposition. It strengthens S-7 from "needs second read" to verified and adds implementation evidence requirements.
