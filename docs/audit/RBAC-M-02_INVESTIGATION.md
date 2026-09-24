@@ -42,17 +42,32 @@
 
 ## Phase 1 Conclusion
 
-**Finding:** RBAC-M-02 appears to have been **already remediated** prior to this investigation.
+**Finding Status:** RBAC-M-02 has been **REMEDIATED** between the original Phase 1 audit and this investigation.
 
-**Evidence:**
+**Historical Evidence:**
+- Original Phase 1 finding (PHASE1_REMEDIATION_REGISTER.md line 57): *"Example: `app/admin/revenue/route.ts` checks `role === 'SUPER_ADMIN'` instead of `requirePermission(PERM.FINANCIAL_REPORTS_VIEW)`"*
+- Current state (verified 2026-09-24): `/admin/revenue/route.ts` uses `requirePermission(session, PERM.FINANCE_REVENUE_VIEW)`
+- **Conclusion:** The finding was valid when filed, but has been fixed since then.
+
+**Current Evidence:**
 1. All sampled admin routes use permission-based authorization (`requirePermission` / `checkPermission`)
-2. No role-based checks (`requireAdmin`, `requireSuperAdmin`, `role === 'SUPER_ADMIN'`) found in any admin routes
+2. No role-based checks (`requireAdmin`, `requireSuperAdmin`, `role === 'SUPER_ADMIN'`) found in any of the 73 admin routes
 3. The authorization helper library (`lib/auth/requireRole.ts`) provides both role-based and permission-based functions, but only the permission-based functions are being used in admin routes
-4. 118 occurrences of `requirePermission` across 73 admin routes suggests systematic adoption of the permission model
+4. 118 occurrences of `requirePermission` across admin routes suggests systematic adoption of the permission model
 
-**Recommendation:** Mark RBAC-M-02 as **REMEDIATED — Already Fixed** and close without further action.
+**Verification Gap:**
+Hostile baseline tests (Phase 4) have not been executed to prove that:
+- ADMIN with permission → 200
+- ADMIN without permission → 403
+- SUPER_ADMIN → 200 (bypass)
+- Non-admin → 403
+- Unauthenticated → 401
 
-**Alternative hypothesis:** The original finding may have been based on an earlier codebase state, or may have been remediated as part of a different work stream (possibly during the MM-12 or PAY-01 audit phases where wallet operations were reviewed).
+**Status:** REMEDIATED (source audit complete, hostile tests pending for full closure)
+
+**Recommendation:** 
+- **Option A:** Close as REMEDIATED based on source audit evidence (118 permission checks, 0 role checks, historical finding now fixed)
+- **Option B:** Run hostile baseline tests against representative routes before final closure to prove the permission checks work as intended
 
 ---
 
@@ -84,15 +99,21 @@ This is the **correct** pattern. No route-level role checks bypass the permissio
 
 ## Next Steps
 
-**If RBAC-M-02 close is accepted:**
-- Update master tracker: RBAC-M-02 → CLOSED (Already Fixed — verified 2026-09-24)
-- No remediation work required
-- Move to next open finding
+**Recommended: Option A — Close as REMEDIATED based on source audit**
 
-**If additional verification needed before close:**
-- Enumerate all 73 routes in full authorization matrix (Phase 2)
-- Run hostile baseline tests to confirm 403 responses for missing permissions (Phase 4)
-- Document any edge cases where role checks may be legitimate
+**Rationale:**
+- Phase 1 finding explicitly stated `/admin/revenue` checked `role === 'SUPER_ADMIN'`
+- Current source shows it uses `requirePermission(PERM.FINANCE_REVENUE_VIEW)`
+- 118 permission checks found, 0 role checks found across 73 routes
+- The remediation is systematic and complete at the source level
+
+**If hostile tests required before close:**
+- Test file created: `__tests__/integration/rbac-m-02-verification.test.ts`
+- Requires isolated test DB at localhost:5433
+- Tests R1-R5, P1-P2, W1-W2 verify permission enforcement across 3 representative routes
+- Can be executed when test environment is available
+
+**Independent reviewer decision:** Accept source-level evidence as sufficient for REMEDIATED status, or require hostile baseline test execution before final closure.
 
 ---
 
