@@ -105,7 +105,7 @@ Current state: `FIX-VERIFIED`; do not close P1-04 until the project closure gate
 
 **Finding:** `getSuburbDemand()` silently limited the input to 500 bookings and calculated demand from that incomplete sample.
 
-**Implementation status:** FIX — implementation and focused tests complete; independent audit pending.
+**Implementation status:** FIX-VERIFIED — implementation, focused tests, and independent GPT audit complete. Closure remains pending the project closure gate.
 
 ### Changes
 
@@ -126,3 +126,44 @@ Current state: `FIX-VERIFIED`; do not close P1-04 until the project closure gate
 `FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
 Current state: `FIX`; do not close P1-05 before focused tests and independent verification.
+
+### Independent verification
+
+- GPT audited exact commit `4d4bc303b5ee8568101698d87e4cf10ced03e329` against `88a6c834`.
+- GPT result: `FIX-VERIFIED`.
+- GPT confirmed complete aggregation beyond 500 rows, deterministic ordering, explicit result metadata, `EMPTY`/`ERROR` separation, `3/3` focused tests, and `120/120` regression tests.
+- GPT noted the remaining `where: ... as any` cast as non-blocking follow-up work.
+- P1-05 is intentionally not marked `CLOSED`.
+
+## P1-06 — Remaining Tool Contract Migration
+
+**Finding:** Weekly report, revenue breakdown, student retention, and operations timeline still use legacy `LegacyToolResult` returns and silent `.catch(() => 0/[])` fallbacks.
+
+**Implementation status:** FIX — first migration slice complete (`getWeeklyReport`); remaining legacy tools still open.
+
+### Completed slice: `getWeeklyReport`
+
+- Migrated weekly report to `ToolResult<WeeklyReportData>`.
+- Replaced seven silent zero/aggregate fallbacks with `safeQueryAll`.
+- Returns `PARTIAL` with stable missing signal labels and `null` unavailable metrics.
+- Returns `ERROR` when every weekly query fails.
+- Focused tests: `3/3` passed in `lib/admin/__tests__/weekly-report.test.ts`.
+
+### Remaining P1-06 tools
+
+- `getRevenueBreakdown`
+- `getStudentRetention`
+- `getOperationsTimeline`
+
+These remain on the `LegacyToolResult` bridge and must be migrated before P1-06 can reach independent audit.
+
+### Verification
+
+- Combined regression suite after the weekly-report slice: `123/123` passed across 8 files.
+- Touched-file TypeScript diagnostics: none reported. Repository-wide `tsc --noEmit` remains affected by pre-existing test-global typing errors.
+
+### Lifecycle
+
+`FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
+
+Current state: `FIX`; do not close P1-06 until all remaining tools are migrated and independently verified.

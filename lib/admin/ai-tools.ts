@@ -447,33 +447,71 @@ export async function getInstructorRisk(args: { limit?: number; minScore?: numbe
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. getWeeklyReport
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getWeeklyReport(): Promise<LegacyToolResult> {
+export type WeeklyReportData = {
+  revenue: { thisWeek: number | null; lastWeek: number | null; changePercent: number | null }
+  bookings: {
+    thisWeek: number | null
+    lastWeek: number | null
+    changePercent: number | null
+    completed: number | null
+    cancelled: number | null
+    completionRate: number | null
+  }
+  newStudents: number | null
+}
+
+export async function getWeeklyReport(): Promise<ToolResult<WeeklyReportData>> {
   const now = new Date()
   const last7 = new Date(now.getTime() - 7 * 86400000)
   const prev7 = new Date(now.getTime() - 14 * 86400000)
 
-  const [twRev, lwRev, twBookings, lwBookings, completed, cancelled, newStudents] = await Promise.all([
-    (prisma.walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }) as any).catch(() => ({ _sum: { amount: 0 } })),
-    (prisma.walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }) as any).catch(() => ({ _sum: { amount: 0 } })),
-    (prisma.booking.count({ where: { createdAt: { gte: last7 }, deletedAt: null } as any }) as any).catch(() => 0),
-    (prisma.booking.count({ where: { createdAt: { gte: prev7, lt: last7 }, deletedAt: null } as any }) as any).catch(() => 0),
-    (prisma.booking.count({ where: { status: 'COMPLETED', updatedAt: { gte: last7 }, deletedAt: null } as any }) as any).catch(() => 0),
-    (prisma.booking.count({ where: { status: 'CANCELLED', updatedAt: { gte: last7 }, deletedAt: null } as any }) as any).catch(() => 0),
-    (prisma.customer.count({ where: { createdAt: { gte: last7 } } }) as any).catch(() => 0),
-  ])
+  const results = await safeQueryAll([
+    () => prisma.walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }),
+    () => prisma.walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }),
+    () => prisma.booking.count({ where: { createdAt: { gte: last7 }, deletedAt: null } as any }),
+    () => prisma.booking.count({ where: { createdAt: { gte: prev7, lt: last7 }, deletedAt: null } as any }),
+    () => prisma.booking.count({ where: { status: 'COMPLETED', updatedAt: { gte: last7 }, deletedAt: null } as any }),
+    () => prisma.booking.count({ where: { status: 'CANCELLED', updatedAt: { gte: last7 }, deletedAt: null } as any }),
+    () => prisma.customer.count({ where: { createdAt: { gte: last7 } } }),
+  ] as const, ['this-week revenue', 'last-week revenue', 'this-week bookings', 'last-week bookings', 'completed bookings', 'cancelled bookings', 'new students'])
 
-  const tw = Number(twRev._sum?.amount ?? 0)
-  const lw = Number(lwRev._sum?.amount ?? 0)
-  const revChange = lw > 0 ? Math.round(((tw - lw) / lw) * 100) : null
-  const bookingChange = lwBookings > 0 ? Math.round(((twBookings - lwBookings) / lwBookings) * 100) : null
-  const finalized = completed + cancelled
-  const completionRate = finalized > 0 ? Math.round((completed / finalized) * 100) : null
+  const missing = results
+    .map((result, index) => result.status === 'ERROR' ? ['this-week revenue', 'last-week revenue', 'this-week bookings', 'last-week bookings', 'completed bookings', 'cancelled bookings', 'new students'][index] : null)
+    .filter((label): label is string => label !== null)
 
-  return {
-    revenue: { thisWeek: tw, lastWeek: lw, changePercent: revChange },
-    bookings: { thisWeek: twBookings, lastWeek: lwBookings, changePercent: bookingChange, completed, cancelled, completionRate },
-    newStudents,
+  if (results.every((result) => result.status === 'ERROR')) {
+    return toolError(`getWeeklyReport: all queries failed — ${missing.join(', ')}`)
   }
+
+  const value = <T,>(result: ToolResult<T>): T | null => result.status === 'SUCCESS' ? result.data : null
+  const thisWeekAggregate = value(results[0]) as { _sum?: { amount?: unknown } } | null
+  const lastWeekAggregate = value(results[1]) as { _sum?: { amount?: unknown } } | null
+  const thisWeek = thisWeekAggregate ? Number(thisWeekAggregate._sum?.amount ?? 0) : null
+  const lastWeek = lastWeekAggregate ? Number(lastWeekAggregate._sum?.amount ?? 0) : null
+  const thisWeekBookings = value(results[2])
+  const lastWeekBookings = value(results[3])
+  const completed = value(results[4])
+  const cancelled = value(results[5])
+  const finalized = completed != null && cancelled != null ? completed + cancelled : null
+
+  const data: WeeklyReportData = {
+    revenue: {
+      thisWeek,
+      lastWeek,
+      changePercent: thisWeek != null && lastWeek != null && lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : null,
+    },
+    bookings: {
+      thisWeek: thisWeekBookings,
+      lastWeek: lastWeekBookings,
+      changePercent: thisWeekBookings != null && lastWeekBookings != null && lastWeekBookings > 0 ? Math.round(((thisWeekBookings - lastWeekBookings) / lastWeekBookings) * 100) : null,
+      completed,
+      cancelled,
+      completionRate: finalized != null && finalized > 0 && completed != null ? Math.round((completed / finalized) * 100) : null,
+    },
+    newStudents: value(results[6]),
+  }
+
+  return missing.length > 0 ? partial(data, missing) : ok(data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
