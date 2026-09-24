@@ -1,5 +1,9 @@
-RBAC-M-02 HOSTILE BASELINE VERIFICATION — PRODUCTION EVIDENCE
-==============================================================
+RBAC-M-02 HOSTILE BASELINE VERIFICATION — RUNTIME VERIFICATION EVIDENCE
+========================================================================
+NOTE: Execution environment is production code + isolated test database
+(localhost:5433/drivebook_test), NOT the live production database.
+This verifies the production code path and authorization logic at runtime.
+========================================================================
 Finding   : RBAC-M-02 — Admin routes use role check instead of permission check
 Severity  : MEDIUM
 Status    : ✅ CLOSED
