@@ -72,18 +72,40 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Skip middleware for public routes (non-subdomain)
+  // Public routes must use path-boundary matching. In particular, '/' must
+  // never be treated as a prefix for every request.
   const publicPaths = [
     '/', '/login', '/register', '/instructors', '/auth/forgot-password',
-    '/reset-password', '/set-password', '/api/auth',
+    '/reset-password', '/set-password',
     '/about', '/contact', '/blog', '/privacy', '/terms',
     '/teach-with-drivebook', '/book', '/maintenance',
     '/sitemap.xml', '/robots.txt', '/rss.xml',
     '/learn-to-drive', '/pda-guide', '/for-instructors', '/platform',
     '/features', '/compare',
-  ];  const isPublicPath = publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path))
+  ]
 
-  if (isPublicPath && !url.pathname.startsWith('/dashboard') && !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/client-dashboard')) {
+  // NextAuth owns the known /api/auth endpoints. Do not expose arbitrary
+  // /api/auth/* paths through a broad prefix exemption.
+  const isPublicAuthPath = isNextAuthPublicPath(url.pathname)
+  const isPublicPath =
+    publicPaths.some(path => url.pathname === path || (path !== '/' && url.pathname.startsWith(`${path}/`))) ||
+    isPublicAuthPath
+
+  // P0-7/S-7: determine protected API paths before the public short-circuit.
+  // Individual handlers still call getServerSession(); this is defence-in-depth.
+  const isProtectedApiPath =
+    url.pathname.startsWith('/api/admin/') ||
+    url.pathname.startsWith('/api/instructor/') ||
+    url.pathname.startsWith('/api/client/') ||
+    url.pathname.startsWith('/api/bookings/')
+
+  if (
+    isPublicPath &&
+    !isProtectedApiPath &&
+    !url.pathname.startsWith('/dashboard') &&
+    !url.pathname.startsWith('/admin') &&
+    !url.pathname.startsWith('/client-dashboard')
+  ) {
     return NextResponse.next()
   }
   
@@ -135,6 +157,27 @@ export async function middleware(req: NextRequest) {
   }
   
   return NextResponse.next()
+}
+
+// Only these NextAuth endpoints are intentionally public. This prevents
+// arbitrary future /api/auth/* routes from inheriting the public exemption.
+function isNextAuthPublicPath(pathname: string): boolean {
+  if (pathname === '/api/auth') return true
+
+  const match = pathname.match(/^\/api\/auth\/([^/]+)(?:\/.*)?$/)
+  if (!match) return false
+
+  const endpoint = match[1]
+  return [
+    'signin',
+    'signout',
+    'callback',
+    'session',
+    'csrf',
+    'providers',
+    'verify-request',
+    'error',
+  ].includes(endpoint)
 }
 
 // Extract subdomain from hostname
