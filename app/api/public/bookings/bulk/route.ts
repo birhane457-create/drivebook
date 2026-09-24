@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -240,6 +241,20 @@ export async function POST(req: NextRequest) {
     }
 
     // â”€â”€ Payment mode guard (phase 2 safety net) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // DOC-EXP-01 fix: driving document expiry gate.
+    // The inline checks above (approvalStatus/isActive/subscription/pause) are preserved.
+    // This adds the missing DrivingProviderProfile expiry check via the shared helper.
+    {
+      const eligibility = await checkProviderEligible(resolvedInstructorId, prisma)
+      if (!eligibility.allowed && eligibility.code === 'INSTRUCTOR_DOCUMENT_EXPIRED') {
+        return NextResponse.json(
+          { error: eligibility.error, code: eligibility.code },
+          { status: eligibility.status },
+        )
+      }
+    }
+
+    // Payment mode guard (phase 2 safety net)
     // DIRECT payment mode (school pays directly to their own Stripe) is not yet implemented.
     // This guard prevents any account accidentally set to DIRECT from breaking the payment flow.
     // Remove this block in phase 2 when Direct Charges are implemented.

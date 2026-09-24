@@ -86,8 +86,42 @@ export async function GET(req: NextRequest) {
     }
 
     console.log(`✅ Document expiry check: ${sent} reminders sent, ${failed} failed`);
+
+    // DOC-EXP-01 fix: flip documentsVerified=false for providers with ALREADY-expired docs.
+    // The cron above only notifies for docs expiring within 30 days. This block handles
+    // docs that have already passed their expiry date — it marks the provider's
+    // documentsVerified flag false so admin dashboards and future checks reflect reality.
+    const now2 = new Date();
+    const alreadyExpired = await (prisma as any).drivingProviderProfile.findMany({
+      where: {
+        OR: [
+          { licenseExpiry:     { lt: now2 } },
+          { insuranceExpiry:   { lt: now2 } },
+          { policeCheckExpiry: { lt: now2 } },
+          { wwcCheckExpiry:    { lt: now2 } },
+        ],
+      },
+      select: { providerId: true },
+    });
+
+    let flagged = 0;
+    for (const p of alreadyExpired) {
+      try {
+        await (prisma as any).provider.updateMany({
+          where: { id: p.providerId, documentsVerified: true },
+          data:  { documentsVerified: false },
+        });
+        flagged++;
+      } catch (e) {
+        console.error(`Failed to flag expired docs for provider ${p.providerId}:`, e);
+      }
+    }
+    if (flagged > 0) {
+      console.log(`⚠️  Flagged ${flagged} provider(s) with expired documents (documentsVerified → false)`);
+    }
+
     await pingCronHealth('document-expiry-check');
-    return NextResponse.json({ success: true, sent, failed, instructorsChecked: instructors.length });
+    return NextResponse.json({ success: true, sent, failed, instructorsChecked: instructors.length, flagged });
   } catch (error) {
     console.error('Document expiry cron error:', error);
     await failCronHealth('document-expiry-check', error);

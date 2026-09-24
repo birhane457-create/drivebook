@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { checkProviderEligible } from '@/lib/booking/checkProviderEligible'
 import { emailService } from '@/lib/services/email'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { calculateTravelTimeToNextBooking } from '@/lib/services/travelTime'
@@ -40,10 +41,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = publicBookingSchema.parse(body)
 
-    //  Idempotency-Key deduplication 
+    // Idempotency-Key deduplication
     // Callers (browser double-click, Twilio retry, AI retry) may send the same
     // request multiple times. If we already processed this key + email pair,
-    // replay the stored response  no duplicate booking, no double-charge.
+    // replay the stored response — no duplicate booking, no double-charge.
     const idempotencyKey = req.headers.get('Idempotency-Key')?.trim() ?? null
     if (idempotencyKey) {
       if (idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
@@ -65,43 +66,40 @@ export async function POST(req: NextRequest) {
     const endTime = new Date(data.endTime)
 
     // Basic sanity check on times
-    if (!(startTime instanceof Date) || isNaN(startTime.getTime()) || !(endTime instanceof Date) || isNaN(endTime.getTime()) || endTime <= startTime) {
+    if (
+      !(startTime instanceof Date) || isNaN(startTime.getTime()) ||
+      !(endTime instanceof Date)   || isNaN(endTime.getTime())   ||
+      endTime <= startTime
+    ) {
       return NextResponse.json({ error: 'Invalid start or end time' }, { status: 400 })
     }
 
-    // Check if instructor exists
-    const instructor = await prisma.provider.findUnique({
-      where: { id: data.providerId },
-      include: { user: true }
-    })
-
-    if (!instructor) {
-      return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
+    // ── Provider eligibility gate (DOC-EXP-01 fix) ───────────────────────────
+    // Checks: exists, approvalStatus=APPROVED, isActive, subscription,
+    // acceptingBookings, and driving document expiry dates.
+    // Replaces the previous inline subscription+pause-only gate which was missing
+    // approvalStatus, isActive, and all document expiry checks.
+    const eligible = await checkProviderEligible(data.providerId, prisma)
+    if (!eligible.allowed) {
+      return NextResponse.json(
+        { error: eligible.error, code: eligible.code },
+        { status: eligible.status },
+      )
     }
+    const instructor = eligible.provider
 
-    // â”€â”€ Subscription gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Inactive instructors cannot accept new bookings from the public.
-    const subStatus = instructor.subscriptionStatus as string;
-    const trialEndsAt = instructor.trialEndsAt ? new Date(instructor.trialEndsAt) : null;
-    const trialExpired = trialEndsAt && trialEndsAt < new Date();
-    const isAcceptingBookings =
-      subStatus === 'ACTIVE' ||
-      (subStatus === 'TRIAL' && !trialExpired);
-
-    if (!isAcceptingBookings) {
-      return NextResponse.json({
-        error: 'This instructor is not currently accepting bookings.',
-        code: 'INSTRUCTOR_INACTIVE',
-      }, { status: 403 });
-    }
-
-    // FIX #14: Instructor self-service pause check.
-    if ((instructor as any).acceptingBookings === false) {
-      return NextResponse.json({
-        error: 'This instructor is not currently accepting new bookings.',
-        code: 'INSTRUCTOR_PAUSED',
-      }, { status: 403 });
-    }
+    // Fetch user email + phone for booking confirmation notification only
+    const instructorContact = instructor.userId
+      ? await prisma.user.findUnique({
+          where:  { id: instructor.userId },
+          select: { email: true },
+        })
+      : null
+    // Phone lives on Provider — fetch it separately for the confirmation email
+    const instructorPhone = await prisma.provider.findUnique({
+      where:  { id: instructor.id },
+      select: { phone: true },
+    }).then(r => r?.phone ?? '')
 
     // Rate limiting: limit bookings per client/instructor/IP
     const ip = req.headers.get('x-forwarded-for') || req.ip || 'unknown'
@@ -129,13 +127,11 @@ export async function POST(req: NextRequest) {
     // Create user account if requested
     let userId: string | undefined;
     if (data.createAccount && data.password) {
-      // Check if user already exists
       const existingUser = await prisma.user.findUnique({
         where: { email: data.customerEmail }
       });
 
       if (!existingUser) {
-        // Create new user account
         const hashedPassword = await bcrypt.hash(data.password, 10);
         const newUser = await prisma.user.create({
           data: {
@@ -151,14 +147,12 @@ export async function POST(req: NextRequest) {
         });
         userId = newUser.id;
 
-        // Send welcome email with mobile app instructions
         await emailService.sendWelcomeEmail({
           customerName: data.customerName,
           customerEmail: data.customerEmail,
         });
       } else {
         userId = existingUser.id;
-        // Update terms acceptance if not yet recorded
         if (data.termsAccepted && !(existingUser as any).termsAcceptedAt) {
           await prisma.user.update({
             where: { id: existingUser.id },
@@ -191,14 +185,12 @@ export async function POST(req: NextRequest) {
         }
       })
     } else if (userId && !client.userId) {
-      // Update existing client with user ID
       client = await prisma.customer.update({
         where: { id: client.id },
         data: { userId }
       });
     }
 
-    // Calculate travel time and commission before the transaction (read-only operations)
     const travelTime = await calculateTravelTimeToNextBooking(
       data.providerId,
       startTime,
@@ -212,12 +204,6 @@ export async function POST(req: NextRequest) {
       bookingPrice
     )
 
-    // FIX #3: Wrap conflict check + create inside a $transaction.
-    // Previously: findFirst ran outside the transaction, leaving a race window where
-    // two concurrent requests could both pass the read check before either write lands.
-    // Now the conflict check and booking.create are serialized in a single DB operation.
-    // P2-8 FIX: Idempotency key upsert also moved inside the transaction so a crash
-    // between booking.create and the key store cannot create duplicate bookings on retry.
     let booking: any
     try {
       booking = await prisma.$transaction(async (tx) => {
@@ -258,7 +244,6 @@ export async function POST(req: NextRequest) {
           } as any,
         })
 
-        // P2-8 FIX: Persist idempotency key atomically with booking creation.
         if (idempotencyKey) {
           await (tx as any).bookingIdempotencyKey.upsert({
             where: { key: idempotencyKey },
@@ -288,8 +273,6 @@ export async function POST(req: NextRequest) {
       throw err
     }
 
-    // Note: Transaction will be created automatically when booking is completed (checked out)
-
     // Push to Google Calendar if connected
     if (instructor.syncGoogleCalendar) {
       try {
@@ -302,50 +285,47 @@ export async function POST(req: NextRequest) {
           pickupAddress: data.pickupAddress,
           notes: data.notes
         })
-
-        // Save the Google Calendar event ID
         if (calendarResult.eventId) {
           await prisma.booking.update({
             where: { id: booking.id },
-            data: { googleCalendarEventId: calendarResult.eventId } as any // Type assertion for new field
+            data: { googleCalendarEventId: calendarResult.eventId } as any
           })
         }
       } catch (error) {
         console.error('Failed to push to Google Calendar:', error)
-        // Don't fail the booking if calendar push fails
       }
     }
 
-    // Send emails
+    // Send booking confirmation emails
     await emailService.sendBookingConfirmation({
-      customerName: data.customerName,
-      customerEmail: data.customerEmail,
-      customerPhone: data.customerPhone,
-      instructorName: instructor.name,
-      instructorEmail: instructor.user?.email || '',
-      instructorPhone: instructor.phone,
+      customerName:   data.customerName,
+      customerEmail:  data.customerEmail,
+      customerPhone:  data.customerPhone,
+      instructorName:  instructor.name,
+      instructorEmail: instructorContact?.email || '',
+      instructorPhone: instructorPhone,
       startTime,
       endTime,
       pickupAddress: data.pickupAddress
     })
 
-    // Audit log â€” dispute evidence for "I never made that booking"
+    // Audit log
     try {
       await prisma.auditLog.create({
         data: {
-          action: 'BOOKING_CREATED',
-          actorId: userId ?? 'GUEST',
+          action:    'BOOKING_CREATED',
+          actorId:   userId ?? 'GUEST',
           actorRole: 'CLIENT',
           targetType: 'BOOKING',
-          targetId: booking.id,
-          success: true,
+          targetId:   booking.id,
+          success:    true,
           metadata: {
-            providerId: data.providerId,
-            customerName: data.customerName,
+            providerId:    data.providerId,
+            customerName:  data.customerName,
             customerPhone: data.customerPhone,
-            startTime: startTime.toISOString(),
-            price: bookingPrice,
-            source: 'public_single',
+            startTime:     startTime.toISOString(),
+            price:         bookingPrice,
+            source:        'public_single',
           },
         },
       })
@@ -354,11 +334,10 @@ export async function POST(req: NextRequest) {
     }
 
     const responsePayload = {
-      success: true,
+      success:    true,
       booking,
       redirectTo: `/booking/${booking.id}/payment`,
     }
-    // (Idempotency key was already persisted inside the $transaction above)
 
     return NextResponse.json(responsePayload, { status: 201 })
   } catch (error) {
