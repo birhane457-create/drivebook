@@ -250,18 +250,18 @@ Does NOT require migration of the 7 remaining tools (those are P1-03 through P1-
 
 ---
 
-### P1-03 through P1-08: Reconciled Current State
+### P1-03 through P1-08: Final Verified State
 
 | Item | Status | Verified implementation / audit evidence |
 |---|---|---|
-| P1-03 Instructor Risk | **FIX-VERIFIED** | `a31066ee`; GPT exact-SHA audit; 13 focused / 114 regression tests |
-| P1-04 Daily Summary Expiry | **FIX-VERIFIED** | `88a6c834`; GPT exact-SHA audit; 3 focused / 117 regression tests |
-| P1-05 Suburb Demand | **FIX-VERIFIED** | `4d4bc303`; GPT exact-SHA audit; 3 focused / 120 regression tests |
-| P1-06 Remaining Tools | **FIX-VERIFIED** | `b6b7593d`; GPT exact-SHA audit; 6 focused / 129 regression tests |
-| P1-07 Untrusted Evidence | **FIX-VERIFIED** | `cb654164`; GPT exact-SHA audit; 2 structural + 2 route staging / 133 regression tests |
-| P1-08 Adversarial Coverage | **PARTIAL** | Route-level OpenAI/Anthropic staging complete; 10+ matrix, tool-argument injection, read-only bypass, and final evidence remain |
+| P1-03 Instructor Risk | **FIX-VERIFIED** | `a31066ee` + policeCheck regression; exact-SHA GPT audit; 14 focused / 147 full-regression tests |
+| P1-04 Daily Summary Expiry | **FIX-VERIFIED** | `88a6c834`; exact-SHA GPT audit; 3 focused / 117 regression tests |
+| P1-05 Suburb Demand | **FIX-VERIFIED** | `4d4bc303`; exact-SHA GPT audit; 3 focused / 120 regression tests |
+| P1-06 Remaining Tools | **FIX-VERIFIED** | `b6b7593d`; exact-SHA GPT audit; 6 focused / 129 regression tests |
+| P1-07 Untrusted Evidence | **FIX-VERIFIED** | `cb654164`; exact-SHA GPT audit; 2 structural + 2 route staging / 133 regression tests |
+| P1-08 Adversarial Coverage | **FIX-VERIFIED** | `5d4a6bac`; exact-SHA GPT audit; 12-file / 147-test full regression, server-side read-only allowlist, argument validation, and adversarial route coverage |
 
-P1-03 through P1-07 remain open only for the project closure gate. P1-08 is the current engineering gate.
+P1-03 through P1-08 remain open only for the project closure gate. This tracker reflects the verified final implementation state.
 
 ## RECONCILED P1 SEQUENCE
 
@@ -269,12 +269,12 @@ P1-03 through P1-07 remain open only for the project closure gate. P1-08 is the 
 |---|---|---|
 | P1-01 Tool Result Contract | `df01d43a` | **FIX-VERIFIED** |
 | P1-02 Health Score | `f127dfe7` | **FIX-VERIFIED** |
-| P1-03 Instructor Risk | `a31066ee` | **FIX-VERIFIED** |
+| P1-03 Instructor Risk | `a31066ee` + policeCheck regression | **FIX-VERIFIED** |
 | P1-04 Daily Summary | `88a6c834` | **FIX-VERIFIED** |
 | P1-05 Suburb Demand | `4d4bc303` | **FIX-VERIFIED** |
 | P1-06 Remaining Tools | `b6b7593d` | **FIX-VERIFIED** |
 | P1-07 Untrusted Evidence | `cb654164` | **FIX-VERIFIED** |
-| P1-08 Adversarial Coverage | pending | **PARTIAL** |
+| P1-08 Adversarial Coverage | `5d4a6bac` | **FIX-VERIFIED** |
 
 Independent audit evidence is recorded in the auditforenhancement lifecycle documents. No item above is marked CLOSED by this tracker.
 
@@ -373,10 +373,10 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 4. Route P0-01 and P0-03 to security team (external, parallel)
 5. **NOW: P1-08 — complete broader adversarial coverage**
 
-**Current focus:** P1-03 `getInstructorRisk` — query targets wrong table, needs `DrivingProviderProfile`
+**Current focus:** project closure gate / final rebase-merge verification
 
 ---
 
-**Implementation Status:** P1-01 through P1-07 FIX-VERIFIED; P1-08 PARTIAL
-**Current Branch:** `audit/ai-enhancement-multimodel` at `a33aac70`
+**Implementation Status:** P1-01 through P1-08 FIX-VERIFIED; closure gate pending
+**Current Branch:** `audit/ai-enhancement-multimodel` at `5d4a6bac`
 **Last Updated:** September 25, 2026
