@@ -15,11 +15,14 @@
  */
 
 import { prisma } from '@/lib/prisma'
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tool result type
-// ─────────────────────────────────────────────────────────────────────────────
-export type ToolResult = Record<string, unknown>
+import {
+  type ToolResult,
+  ok,
+  partial,
+  toolError,
+  safeQueryAll,
+  collectErrors,
+} from './tool-contracts'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. getDailySummary
@@ -60,47 +63,146 @@ export async function getDailySummary(): Promise<ToolResult> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. getHealthScore
 // ─────────────────────────────────────────────────────────────────────────────
+// 2. getHealthScore
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Signal labels — used in PARTIAL missing[] and ERROR messages
+const HEALTH_SIGNAL_LABELS = [
+  'completed',       // 0
+  'finalized',       // 1
+  'failedPayments',  // 2  ← C-1a: if this fails, old code added +20 bonus points
+  'approved',        // 3
+  'stripeComplete',  // 4
+  'openDisputes',    // 5
+  'thisWeekRev',     // 6
+  'lastWeekRev',     // 7
+  'failedPayouts',   // 8
+  'totalPayouts',    // 9
+] as const
+
 export async function getHealthScore(): Promise<ToolResult> {
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 86400000)
   const last7 = new Date(now.getTime() - 7 * 86400000)
   const prev7 = new Date(now.getTime() - 14 * 86400000)
 
-  const [completed, finalized, failedPayments, approved, stripeComplete, openDisputes, tw, lw, failedPayouts, totalPayouts] =
-    await Promise.all([
-      (prisma.booking.count({ where: { status: 'COMPLETED', updatedAt: { gte: last30 }, deletedAt: null } as any }) as any).catch(() => 0),
-      (prisma.booking.count({ where: { status: { in: ['COMPLETED', 'CANCELLED', 'NO_SHOW'] }, updatedAt: { gte: last30 }, deletedAt: null } as any }) as any).catch(() => 0),
-      (prisma.booking.count({ where: { status: 'PENDING_PAYMENT', createdAt: { gte: last30 }, deletedAt: null } as any }) as any).catch(() => 0),
-      (prisma.provider.count({ where: { approvalStatus: 'APPROVED' } }) as any).catch(() => 0),
-      (prisma.provider.count({ where: { approvalStatus: 'APPROVED', stripeAccountId: { not: null }, chargesEnabled: true } }) as any).catch(() => 0),
-      (prisma.stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }) as any).catch(() => 0),
-      (prisma.walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }) as any).catch(() => ({ _sum: { amount: 0 } })),
-      (prisma.walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }) as any).catch(() => ({ _sum: { amount: 0 } })),
-      (prisma.payout.count({ where: { status: 'FAILED', createdAt: { gte: last30 } } }) as any).catch(() => 0),
-      (prisma.payout.count({ where: { createdAt: { gte: last30 } } }) as any).catch(() => 0),
-    ])
+  const results = await safeQueryAll([
+    () => prisma.booking.count({ where: { status: 'COMPLETED', updatedAt: { gte: last30 }, deletedAt: null } as any }),
+    () => prisma.booking.count({ where: { status: { in: ['COMPLETED', 'CANCELLED', 'NO_SHOW'] }, updatedAt: { gte: last30 }, deletedAt: null } as any }),
+    () => prisma.booking.count({ where: { status: 'PENDING_PAYMENT', createdAt: { gte: last30 }, deletedAt: null } as any }),
+    () => prisma.provider.count({ where: { approvalStatus: 'APPROVED' } }),
+    () => prisma.provider.count({ where: { approvalStatus: 'APPROVED', stripeAccountId: { not: null }, chargesEnabled: true } }),
+    () => prisma.stripeDispute.count({ where: { status: { in: ['needs_response', 'warning_needs_response', 'under_review'] } } }),
+    () => prisma.walletTransaction.aggregate({ where: { createdAt: { gte: last7 }, type: 'CREDIT' }, _sum: { amount: true } }),
+    () => prisma.walletTransaction.aggregate({ where: { createdAt: { gte: prev7, lt: last7 }, type: 'CREDIT' }, _sum: { amount: true } }),
+    () => prisma.payout.count({ where: { status: 'FAILED', createdAt: { gte: last30 } } }),
+    () => prisma.payout.count({ where: { createdAt: { gte: last30 } } }),
+  ], [...HEALTH_SIGNAL_LABELS])
 
-  const completionRate = finalized > 0 ? Math.round((completed / finalized) * 100) : 100
-  const onboardingRate = approved > 0 ? Math.round((stripeComplete / approved) * 100) : 100
-  const thisWeek = Number(tw._sum?.amount ?? 0)
-  const lastWeek = Number(lw._sum?.amount ?? 0)
-  const revChange = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : 0
-  const payoutFailRate = totalPayouts > 0 ? Math.round((failedPayouts / totalPayouts) * 100) : 0
+  // Collect any failed queries
+  const errors = collectErrors(results)
+  const missingSignals = HEALTH_SIGNAL_LABELS.filter((_, i) => results[i].status === 'ERROR')
 
-  const score = Math.min(100, Math.max(0,
-    Math.round(completionRate * 0.25) +
-    Math.round(Math.max(0, 20 - (failedPayments > 0 ? 20 : 0))) +
-    Math.round(Math.max(0, 20 - openDisputes * 5)) +
-    Math.round(onboardingRate * 0.15) +
-    Math.min(10, Math.max(0, 5 + revChange * 0.25)) +
-    Math.round(Math.max(0, 10 - payoutFailRate * 0.5))
-  ))
+  // If all queries failed, return a hard error — no score is meaningful
+  if (errors.length === results.length) {
+    return toolError(`getHealthScore: all ${results.length} queries failed — ${errors[0]}`)
+  }
 
-  return {
+  // C-1a: if failedPayments query failed, we must not treat it as zero
+  // (which would add +20 bonus points to the score).
+  // Instead, mark it as a missing signal and exclude it from scoring.
+  const failedPaymentsResult = results[2]
+  const failedPayments = failedPaymentsResult.status === 'SUCCESS'
+    ? (failedPaymentsResult.data as number)
+    : null  // null = unknown, not zero
+
+  // Extract values, using null for any failed signal
+  const completed      = results[0].status === 'SUCCESS' ? (results[0].data as number) : null
+  const finalized      = results[1].status === 'SUCCESS' ? (results[1].data as number) : null
+  const approved       = results[3].status === 'SUCCESS' ? (results[3].data as number) : null
+  const stripeComplete = results[4].status === 'SUCCESS' ? (results[4].data as number) : null
+  const openDisputes   = results[5].status === 'SUCCESS' ? (results[5].data as number) : null
+  const twAgg          = results[6].status === 'SUCCESS' ? (results[6].data as { _sum: { amount: unknown } }) : null
+  const lwAgg          = results[7].status === 'SUCCESS' ? (results[7].data as { _sum: { amount: unknown } }) : null
+  const failedPayouts  = results[8].status === 'SUCCESS' ? (results[8].data as number) : null
+  const totalPayouts   = results[9].status === 'SUCCESS' ? (results[9].data as number) : null
+
+  // Compute signals only from available data
+  const completionRate  = (finalized != null && finalized > 0 && completed != null)
+    ? Math.round((completed / finalized) * 100) : null
+  const onboardingRate  = (approved != null && approved > 0 && stripeComplete != null)
+    ? Math.round((stripeComplete / approved) * 100) : null
+  const thisWeek        = twAgg != null ? Number(twAgg._sum?.amount ?? 0) : null
+  const lastWeek        = lwAgg != null ? Number(lwAgg._sum?.amount ?? 0) : null
+  const revChange       = (lastWeek != null && lastWeek > 0 && thisWeek != null)
+    ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : null
+  const payoutFailRate  = (totalPayouts != null && totalPayouts > 0 && failedPayouts != null)
+    ? Math.round((failedPayouts / totalPayouts) * 100) : null
+
+  // Build score from available components only.
+  // Missing signals are excluded — they do not contribute 0 or a bonus.
+  let score = 0
+  const scoringNotes: string[] = []
+
+  if (completionRate != null) {
+    score += Math.round(completionRate * 0.25)
+  } else {
+    scoringNotes.push('completionRate excluded (data unavailable)')
+  }
+
+  if (failedPayments != null) {
+    score += Math.round(Math.max(0, 20 - (failedPayments > 0 ? 20 : 0)))
+  } else {
+    // C-1a: do NOT add bonus points when failedPayments is unknown
+    scoringNotes.push('failedPayments excluded (query failed — no bonus or penalty applied)')
+  }
+
+  if (openDisputes != null) {
+    score += Math.round(Math.max(0, 20 - openDisputes * 5))
+  } else {
+    scoringNotes.push('openDisputes excluded (data unavailable)')
+  }
+
+  if (onboardingRate != null) {
+    score += Math.round(onboardingRate * 0.15)
+  } else {
+    scoringNotes.push('onboardingRate excluded (data unavailable)')
+  }
+
+  if (revChange != null) {
+    score += Math.min(10, Math.max(0, 5 + revChange * 0.25))
+  } else {
+    scoringNotes.push('revChange excluded (data unavailable)')
+  }
+
+  if (payoutFailRate != null) {
+    score += Math.round(Math.max(0, 10 - payoutFailRate * 0.5))
+  } else {
+    scoringNotes.push('payoutFailRate excluded (data unavailable)')
+  }
+
+  score = Math.min(100, Math.max(0, Math.round(score)))
+
+  const data = {
     score,
     status: score >= 90 ? 'healthy' : score >= 70 ? 'watch' : 'critical',
-    signals: { completionRate, onboardingRate, openDisputes, revChangePercent: revChange, payoutFailRate },
+    signals: {
+      completionRate,
+      onboardingRate,
+      openDisputes,
+      revChangePercent: revChange,
+      payoutFailRate,
+      failedPayments,
+    },
+    ...(scoringNotes.length > 0 && { scoringNotes }),
   }
+
+  // Return PARTIAL if some queries failed but we could still compute a score
+  if (missingSignals.length > 0) {
+    return partial(data, missingSignals)
+  }
+
+  return ok(data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

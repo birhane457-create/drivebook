@@ -201,25 +201,32 @@ CLOSED
 ---
 
 ### P1-02: Migrate Health-Score Tool (C-1, C-1a)
-**Status:** NOT STARTED  
+**Status:** IN PROGRESS  
 **Decision:** D-01, D-02  
-**Owner:** GPT + Kiro  
+**Owner:** Kiro (implement) + GPT (audit)  
 **Estimate:** 2-3 days
 
-**Critical:** Fixes error-masking pattern and health-score failure inversion
+**Critical:** Fixes error-masking pattern and health-score failure inversion (C-1a)
 
-**Dependencies:** P1-01 (tool contract)
+**Dependencies:** P1-01 ✅ FIX-VERIFIED at `df01d43a`
+
+**Carry-forward notes from GPT P1-01 audit:**
+- `collectErrors()` only captures ERROR, not UNKNOWN — callers must check PARTIAL/UNKNOWN separately before treating results as fully valid
+- `unwrapOr(PARTIAL)` returns data — P1-02 must preserve `missing[]` when presenting health signals to the model, to avoid overconfident output from partial evidence
 
 **Acceptance criteria:**
-- [ ] Baseline verified: Document current `.catch(() => 0)` pattern
-- [ ] `.catch(() => 0)` removed, replaced with explicit error handling
-- [ ] Failed payments query returns ERROR on failure (not +20 points)
-- [ ] Returns `ToolResult<HealthScore>`
-- [ ] Test: DB failure returns ERROR status
-- [ ] Test: Failed payments query failure returns ERROR
-- [ ] Business impact of health score confirmed (CRITICAL vs HIGH)
-- [ ] Kiro verification complete
-- [ ] D-01, D-02 verified
+- [ ] Baseline verified: all `.catch(() => 0)` instances in `getHealthScore` documented
+- [ ] All `.catch(() => 0)` replaced with `safeQuery` / `safeQueryAll`
+- [ ] Returns `ToolResult<HealthScoreData>` — not a raw object
+- [ ] On any query ERROR: tool returns `toolError(...)` — never silently computes a score from failures
+- [ ] C-1a specifically: `failedPayments` query failure does NOT add +20 points
+- [ ] PARTIAL response used when some signals succeed and some fail, with `missing[]` populated
+- [ ] Test: all queries fail → tool returns ERROR (not a score of 0)
+- [ ] Test: `failedPayments` fails → health score not inflated
+- [ ] Test: all queries succeed → score computed correctly
+- [ ] Test: some queries fail → PARTIAL with missing signals listed
+- [ ] Business impact of health score confirmed and documented (CRITICAL vs HIGH severity)
+- [ ] D-01, D-02 verified at tool level (not just contract level)
 
 ---
 
@@ -262,14 +269,20 @@ CLOSED
 
 ## TRACKING STATUS
 
-**Completed:** 1/32 tasks  
-**In Progress:** 0/32 tasks  
-**Not Started:** 31/32 tasks
+**Completed:** 2/32 tasks  
+**In Progress:** 1/32 tasks  
+**Not Started:** 29/32 tasks
 
 **P0 Blockers:** 1/3 complete  
 - P0-01: NOT STARTED (external stakeholder)
 - **P0-02: ✅ CLOSED** (D-20, verified `9ff8da95`)
 - P0-03: NOT STARTED (external stakeholder)
+
+**P1 Foundation:** 1/10 complete  
+- **P1-01: ✅ FIX-VERIFIED** (D-01 contract, `df01d43a`, GPT audit confirmed)
+  - C-1 finding remains OPEN — production tools not yet migrated
+- P1-02: IN PROGRESS (C-1/C-1a, `getHealthScore`)
+- P1-03 through P1-10: NOT STARTED
 
 ---
 
@@ -361,14 +374,14 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 ## NEXT ACTIONS
 
 1. ~~P0-02 (Middleware S-7)~~ — **CLOSED** ✅
-2. Route P0-01 and P0-03 to security team (external, parallel)
-3. Begin **P1-01: Define Tool Result Contract** — next engineering task
-4. P1-01 unblocks all tool migration work (P1-02 through P1-06)
+2. ~~P1-01 (Tool Result Contract)~~ — **FIX-VERIFIED** ✅ C-1 still OPEN pending tool migration
+3. Route P0-01 and P0-03 to security team (external, parallel)
+4. **NOW: P1-02 — migrate `getHealthScore` to ToolResult contract**
 
-**Current focus:** P1-01 Tool Result Contract
+**Current focus:** P1-02 `getHealthScore` migration (C-1, C-1a)
 
 ---
 
-**Implementation Status:** IN PROGRESS — 1/32 complete  
-**Current Branch:** `audit/ai-enhancement-multimodel` at `9ff8da95`  
+**Implementation Status:** IN PROGRESS — 2/32 complete  
+**Current Branch:** `audit/ai-enhancement-multimodel` at `df01d43a`  
 **Last Updated:** September 24, 2026
