@@ -185,7 +185,7 @@ Current state: `FIX-VERIFIED`; all implementation work and independent verificat
 
 `FINDING → VERIFIED → FIX → COPILOT TESTS → ADVERSARIAL STAGING → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `FIX`; structural boundary slice complete, but do not close P1-07 before adversarial staging evidence and independent verification.
+Current state: `FIX-VERIFIED`; structural boundary and route-level staging evidence are independently verified, but do not close P1-07 until the project closure gate is satisfied.
 
 ### Structural boundary slice
 
@@ -202,3 +202,23 @@ Current state: `FIX`; structural boundary slice complete, but do not close P1-07
 - Route-level adversarial staging tests: `2/2` passed in `app/api/admin/ai-query/__tests__/p1-07-adversarial-staging.test.ts` for OpenAI and Anthropic model-facing paths.
 - Hostile values covered provider names, pickup addresses, booking notes, payment errors, and instructor data.
 - The staging harness verifies provider-facing request construction and evidence separation without live credentials; live-provider exploitability remains unclaimed.
+
+### Independent verification
+
+- GPT audited exact commit `cb65416450eb4b1126749b4e7bc4bc4c56e1feae` against `99a1c5a2`.
+- GPT result: `FIX-VERIFIED` for the structural boundary and route-level staging slice.
+- GPT confirmed both provider paths, hostile evidence preservation, `untrusted: true`, system-prompt rules, `2/2` adversarial tests, and `133/133` regression tests.
+- GPT explicitly did not claim live-provider prompt-injection immunity.
+- P1-07 is intentionally not marked `CLOSED`.
+
+## P1-08 — Adversarial Coverage Expansion
+
+**Finding:** The route-level staging boundary is verified, but the backlog acceptance target calls for 10+ adversarial cases and explicit read-only-boundary attempts.
+
+**Implementation status:** PARTIAL — two provider-path staging cases complete; broader adversarial matrix remains open.
+
+### Lifecycle
+
+`FINDING → VERIFIED → FIX → STRUCTURAL TESTS → ADVERSARIAL STAGING → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
+
+Current state: `PARTIAL`; do not close P1-08 until the 10+ case matrix, read-only bypass attempts, and documented results are complete.
