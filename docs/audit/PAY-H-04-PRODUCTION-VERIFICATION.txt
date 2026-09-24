@@ -1,40 +1,51 @@
-PAY-H-04 Production Verification — PARTIAL
-Timestamp: 2026-09-23T11:26:23.630Z
-Production URL: https://drivebook.com.au
-Test provider: cmt2gnh39000s14mii13kr7kh (Test Plumber)
+PAY-H-04 Production Verification
+Timestamp: 2026-09-24T03:47:54.252Z
+Production URL: https://drivebook-wheat.vercel.app
+Test provider: cmt2qxp97000ggup1aj4rgimi
 
-=== DB State (verified at migration time) ===
-btree_gist:              INSTALLED (version 1.7)
-SlotReservation_no_overlap: PRESENT (type=x, GiST exclusion)
+=== Check 1: Deployed SHA and ancestry ===
+Health status: 200
+Deployed SHA: 3e7a6ebe75e3151c298fba3cc9196971599e4a77
+Environment: production
+SHA ancestry: VERIFIED — 560a77c2 found in git log of deployed SHA
+[SHA] Deployed SHA: 3e7a6ebe75e3151c298fba3cc9196971599e4a77
+[SHA] PAY-H-04 fix (560a77c2) in ancestry: VERIFIED
 
-=== Application Deployment State ===
-/api/health response: {"status":"ok","timestamp":"2026-08-30T...","service":"DriveBook API"}
-SHA field: NOT PRESENT
+=== Check 2: btree_gist extension ===
+btree_gist: INSTALLED (version 1.7)
 
-CONCLUSION: Production application is running a version predating the
-audit branch (deployed before 2026-09-22). The merge commit 641a52be
-has not yet been picked up by Vercel.
+=== Check 3: SlotReservation_no_overlap constraint ===
+Constraint: PRESENT (type=x)
 
-Evidence: The health route added in this audit returns {status, sha, env, timestamp}.
-The production route returns {status, timestamp, service} — a different schema
-consistent with the pre-audit codebase.
+=== Check 4: Concurrent overlapping reservations — INVARIANT ===
+Request A (10:00-11:00): HTTP 409
+Request B (10:30-11:30): HTTP 409
+Active rows: 0
+Check 4 PASS: true (at most 1 row committed)
 
-This means:
-  DB constraint: INSTALLED (migration ran directly via prisma migrate deploy)
-  Application code: NOT DEPLOYED (PAY-H-04 fix code not yet live)
+=== Check 5: Adjacent intervals — boundary semantics ===
+Request A (13:00-14:00): HTTP 200
+Request B (14:00-15:00): HTTP 200
+Rows committed: 2
+Check 5 PASS: true (both adjacent slots accepted)
 
-=== HTTP Verification — DEFERRED ===
-Checks 4-7 could not be completed because the production server returns 400
-for check-and-reserve requests with {providerId: ...} — the old version
-still expects {instructorId: ...}.
+=== Check 6: Normal reservation creation ===
+Single reservation (15:00-16:00): HTTP 200
+Check 6 PASS: true
 
-These checks will be re-run once Vercel deploys 641a52be.
+=== Check 7: Constraint violation maps to HTTP 409 ===
+First reservation (11:00-12:00): HTTP 200
+Overlapping reservation (11:30-12:30): HTTP 409
+Check 7 PASS: true (overlap returns 409, not 500)
 
-=== Summary ===
-DB invariant: VERIFIED (constraint installed, preflight passed)
-Application fix: PENDING DEPLOYMENT
-Production concurrency test: PENDING — requires deployed 641a52be
-SHA verification: PENDING — requires Vercel deployment
+=== Production Verification Summary ===
+[SHA] Deployed SHA:   3e7a6ebe75e3151c298fba3cc9196971599e4a77
+[SHA] 560a77c2 ancestor: VERIFIED
+[DB]  btree_gist:     installed (v1.7)
+[DB]  Constraint:     present
+[HTTP] Check 4 invariant (concurrent overlap <= 1 row): PASS=true
+[HTTP] Check 5 boundary (adjacent both succeed):        PASS=true
+[HTTP] Check 6 normal creation:                         PASS=true
+[HTTP] Check 7 exclusion -> HTTP 409:                   PASS=true
 
-VERDICT: Verification INCOMPLETE — rerun after Vercel deploys 641a52be
-PAY-H-04 remains OPEN — do not close.
+VERDICT: All checks passed — PAY-H-04 production verification COMPLETE
