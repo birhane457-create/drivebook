@@ -199,4 +199,6 @@ Current state: `FIX`; structural boundary slice complete, but do not close P1-07
 
 - Focused tests: `2/2` passed in `lib/admin/__tests__/evidence-envelope.test.ts`.
 - Touched-file TypeScript diagnostics: none reported.
-- Adversarial staging exploitability tests: pending.
+- Route-level adversarial staging tests: `2/2` passed in `app/api/admin/ai-query/__tests__/p1-07-adversarial-staging.test.ts` for OpenAI and Anthropic model-facing paths.
+- Hostile values covered provider names, pickup addresses, booking notes, payment errors, and instructor data.
+- The staging harness verifies provider-facing request construction and evidence separation without live credentials; live-provider exploitability remains unclaimed.
