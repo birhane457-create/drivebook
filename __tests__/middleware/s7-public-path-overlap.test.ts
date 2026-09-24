@@ -57,40 +57,74 @@ describe('S-7 Public Path Overlap Defence', () => {
       expect(isPublicMiddlewarePath('/api/auth')).toBe(true)
     })
 
-    it('allows /api/auth/signin', () => {
+    it('allows /api/auth/signin (exact)', () => {
       expect(isPublicMiddlewarePath('/api/auth/signin')).toBe(true)
     })
 
-    it('allows /api/auth/signout', () => {
+    it('allows /api/auth/signout (exact)', () => {
       expect(isPublicMiddlewarePath('/api/auth/signout')).toBe(true)
     })
 
-    it('allows /api/auth/callback/google', () => {
+    it('allows /api/auth/callback/google (one provider segment)', () => {
       expect(isPublicMiddlewarePath('/api/auth/callback/google')).toBe(true)
     })
 
-    it('allows /api/auth/callback/credentials', () => {
+    it('allows /api/auth/callback/credentials (one provider segment)', () => {
       expect(isPublicMiddlewarePath('/api/auth/callback/credentials')).toBe(true)
     })
 
-    it('allows /api/auth/session', () => {
+    it('allows /api/auth/session (exact)', () => {
       expect(isPublicMiddlewarePath('/api/auth/session')).toBe(true)
     })
 
-    it('allows /api/auth/csrf', () => {
+    it('allows /api/auth/csrf (exact)', () => {
       expect(isPublicMiddlewarePath('/api/auth/csrf')).toBe(true)
     })
 
-    it('allows /api/auth/providers', () => {
+    it('allows /api/auth/providers (exact)', () => {
       expect(isPublicMiddlewarePath('/api/auth/providers')).toBe(true)
     })
 
-    it('allows /api/auth/verify-request', () => {
+    it('allows /api/auth/verify-request (exact)', () => {
       expect(isPublicMiddlewarePath('/api/auth/verify-request')).toBe(true)
     })
 
-    it('allows /api/auth/error', () => {
+    it('allows /api/auth/error (exact)', () => {
       expect(isPublicMiddlewarePath('/api/auth/error')).toBe(true)
+    })
+  })
+
+  describe('Whitelist boundary — sub-paths of exact endpoints must be BLOCKED', () => {
+    it('rejects /api/auth/signin/anything', () => {
+      expect(isPublicMiddlewarePath('/api/auth/signin/anything')).toBe(false)
+    })
+
+    it('rejects /api/auth/session/anything', () => {
+      expect(isPublicMiddlewarePath('/api/auth/session/anything')).toBe(false)
+    })
+
+    it('rejects /api/auth/providers/anything', () => {
+      expect(isPublicMiddlewarePath('/api/auth/providers/anything')).toBe(false)
+    })
+
+    it('rejects /api/auth/error/anything', () => {
+      expect(isPublicMiddlewarePath('/api/auth/error/anything')).toBe(false)
+    })
+
+    it('rejects /api/auth/csrf/anything', () => {
+      expect(isPublicMiddlewarePath('/api/auth/csrf/anything')).toBe(false)
+    })
+
+    it('rejects /api/auth/signout/anything', () => {
+      expect(isPublicMiddlewarePath('/api/auth/signout/anything')).toBe(false)
+    })
+
+    it('rejects /api/auth/callback/google/extra (too many segments)', () => {
+      expect(isPublicMiddlewarePath('/api/auth/callback/google/extra')).toBe(false)
+    })
+
+    it('rejects /api/auth/callback (no provider segment)', () => {
+      expect(isPublicMiddlewarePath('/api/auth/callback')).toBe(false)
     })
   })
 

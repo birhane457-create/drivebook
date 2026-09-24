@@ -72,38 +72,35 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Public routes use path-boundary matching. In particular, '/' must
-  // never be treated as a prefix for every request.
+  // Skip middleware for public routes (non-subdomain)
   const isPublicPath = isPublicMiddlewarePath(url.pathname)
 
-  // P0-7/S-7: determine protected API paths before the public short-circuit.
-  // Individual handlers still call getServerSession(); this is defence-in-depth.
+  // P0-7/S-7: classify all protected path types before any early return.
   const isProtectedApiPath =
     url.pathname.startsWith('/api/admin/') ||
     url.pathname.startsWith('/api/instructor/') ||
     url.pathname.startsWith('/api/client/') ||
     url.pathname.startsWith('/api/bookings/')
 
-  // S-7 FIX: Any /api/auth/* route that is NOT on the explicit NextAuth
-  // public whitelist must be treated as an unknown API path and denied.
-  // Without this, an unrecognised /api/auth/anything falls through all
-  // conditions and reaches NextResponse.next() without authentication.
+  // S-7 FIX: /api/auth/* routes not on the explicit NextAuth whitelist must
+  // require authentication. Without this gate they fall through to
+  // NextResponse.next() because they are neither public nor in isProtectedApiPath.
   const isUnknownAuthApiPath =
     url.pathname.startsWith('/api/auth/') && !isPublicPath
 
+  // Public short-circuit — only when the path is public AND not overridden by
+  // a protected classifier above.
   if (
     isPublicPath &&
     !isProtectedApiPath &&
+    !isUnknownAuthApiPath &&
     !url.pathname.startsWith('/dashboard') &&
     !url.pathname.startsWith('/admin') &&
     !url.pathname.startsWith('/client-dashboard')
   ) {
     return NextResponse.next()
   }
-  
-  // P0-7 FIX: Protect admin and instructor API routes at the edge.
-  // Individual API handlers still call getServerSession(), but this provides
-  // defence-in-depth: a missing session check in a new route cannot leak data.
+
   // For protected routes, check authentication only — layouts handle role-based access
   if (
     url.pathname.startsWith('/dashboard') ||
@@ -147,8 +144,10 @@ export async function middleware(req: NextRequest) {
 }
 
 export function isPublicMiddlewarePath(pathname: string): boolean {
-  const publicPaths = [
-    '/',
+  // '/' is exact-only — it must never act as a prefix for every request.
+  if (pathname === '/') return true
+
+  const publicPrefixes = [
     '/login',
     '/register',
     '/instructors',
@@ -163,9 +162,6 @@ export function isPublicMiddlewarePath(pathname: string): boolean {
     '/teach-with-drivebook',
     '/book',
     '/maintenance',
-    '/sitemap.xml',
-    '/robots.txt',
-    '/rss.xml',
     '/learn-to-drive',
     '/pda-guide',
     '/for-instructors',
@@ -174,32 +170,56 @@ export function isPublicMiddlewarePath(pathname: string): boolean {
     '/compare',
   ]
 
-  const isPublicAuthPath = isNextAuthPublicPath(pathname)
-  return (
-    publicPaths.some(path => pathname === path || (path !== '/' && pathname.startsWith(`${path}/`))) ||
-    isPublicAuthPath
-  )
+  if (publicPrefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))) {
+    return true
+  }
+
+  // Static files
+  if (
+    pathname === '/sitemap.xml' ||
+    pathname === '/robots.txt' ||
+    pathname === '/rss.xml'
+  ) {
+    return true
+  }
+
+  return isNextAuthPublicPath(pathname)
 }
 
-// Only these NextAuth endpoints are intentionally public. This prevents
-// arbitrary future /api/auth/* routes from inheriting the public exemption.
+// Only these exact NextAuth endpoints are intentionally public.
+// This prevents arbitrary future /api/auth/* routes from inheriting
+// the public exemption.
+//
+// Rules:
+//   - All endpoints except `callback` are matched exactly (no sub-paths).
+//   - `callback` allows exactly one provider segment: /api/auth/callback/:provider
+//     but NOT /api/auth/callback/:provider/anything
+//
+// Correct:  /api/auth/signin
+//           /api/auth/callback/google
+// Rejected: /api/auth/signin/anything
+//           /api/auth/callback/google/extra
+//           /api/auth/admin
 function isNextAuthPublicPath(pathname: string): boolean {
+  // Bare base path
   if (pathname === '/api/auth') return true
 
-  const match = pathname.match(/^\/api\/auth\/([^/]+)(?:\/.*)?$/)
-  if (!match) return false
+  // Exact-match endpoints (no sub-path allowed)
+  const exactEndpoints = [
+    '/api/auth/signin',
+    '/api/auth/signout',
+    '/api/auth/session',
+    '/api/auth/csrf',
+    '/api/auth/providers',
+    '/api/auth/verify-request',
+    '/api/auth/error',
+  ]
+  if (exactEndpoints.includes(pathname)) return true
 
-  const endpoint = match[1]
-  return [
-    'signin',
-    'signout',
-    'callback',
-    'session',
-    'csrf',
-    'providers',
-    'verify-request',
-    'error',
-  ].includes(endpoint)
+  // callback: /api/auth/callback/:provider — exactly one non-empty provider segment, nothing after
+  if (/^\/api\/auth\/callback\/[^/]+$/.test(pathname)) return true
+
+  return false
 }
 
 // Extract subdomain from hostname

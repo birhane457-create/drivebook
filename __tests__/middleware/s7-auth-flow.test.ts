@@ -199,9 +199,42 @@ describe('S-7 Request-Level Authentication Flow', () => {
 
   describe('Unknown /api/auth/* — valid session → passes through', () => {
     it('/api/auth/admin-backdoor passes WITH valid session', async () => {
-      // Edge middleware blocks unauthenticated only; handler must authorise further.
       mockGetToken.mockResolvedValue({ sub: 'user-123' })
       await middleware(makeRequest('/api/auth/admin-backdoor'))
+      expectPassThrough()
+    })
+  })
+
+  // ── Whitelist boundary — sub-paths of exact endpoints must return 401 ────
+
+  describe('Whitelist boundary — sub-paths of whitelisted endpoints → 401', () => {
+    it('/api/auth/signin/anything returns 401', async () => {
+      await middleware(makeRequest('/api/auth/signin/anything'))
+      expectBlocked401()
+    })
+
+    it('/api/auth/session/anything returns 401', async () => {
+      await middleware(makeRequest('/api/auth/session/anything'))
+      expectBlocked401()
+    })
+
+    it('/api/auth/providers/anything returns 401', async () => {
+      await middleware(makeRequest('/api/auth/providers/anything'))
+      expectBlocked401()
+    })
+
+    it('/api/auth/error/anything returns 401', async () => {
+      await middleware(makeRequest('/api/auth/error/anything'))
+      expectBlocked401()
+    })
+
+    it('/api/auth/callback/google/x returns 401 (too many segments)', async () => {
+      await middleware(makeRequest('/api/auth/callback/google/x'))
+      expectBlocked401()
+    })
+
+    it('/api/auth/callback/google passes through (valid one-provider form)', async () => {
+      await middleware(makeRequest('/api/auth/callback/google'))
       expectPassThrough()
     })
   })
