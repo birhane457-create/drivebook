@@ -82,6 +82,48 @@ CLOSED
 ---
 
 ### P0-02: Middleware S-7 Defence-in-Depth Fix
+**Status:** ✅ CLOSED  
+**Decision:** D-20  
+**FIX-VERIFIED by:** GPT at commit `9ff8da95a874a2362d6fbde931bb54e163c1d78d`  
+**Verification date:** September 24, 2026
+
+**Lifecycle:**
+
+| Step | SHA | Notes |
+|---|---|---|
+| Baseline verified | `9c4c0a55` | Kiro Phase 4 confirmed MEDIUM gap |
+| First fix attempt | `9c4c0a55` | Unit tests only — GPT found auth-flow gap |
+| Auth-flow fix | `d0594b6c` | Added `isUnknownAuthApiPath` — GPT found whitelist boundary gap |
+| Whitelist + flow fix | `9ff8da95` | `isNextAuthPublicPath`, exact match + callback rule, correct short-circuit ordering |
+| **FIX-VERIFIED** | `9ff8da95` | GPT independent audit confirmed. 65/65 tests. |
+
+**What was fixed:**
+
+1. **`isPublicMiddlewarePath()`** — Replaced flat `startsWith('/api/auth')` with function using explicit `isNextAuthPublicPath()` whitelist
+2. **`isNextAuthPublicPath()`** — Exact match for 7 endpoints, controlled one-provider regex for `callback`, bare `/api/auth` only
+3. **`isUnknownAuthApiPath`** — Any `/api/auth/*` not on whitelist becomes `true`
+4. **Short-circuit ordering** — Protected classifiers computed before the public return; short-circuit explicitly excludes `isUnknownAuthApiPath`
+
+**Test evidence (65/65):**
+- 5 attack vectors → 401 ✅
+- 10 whitelisted NextAuth endpoints → pass ✅
+- 8 whitelist boundary (sub-paths) → 401 ✅
+- 4 standard protected → 401 ✅
+- 3 wildcard edge cases ✅
+- 7 public app routes ✅
+- 3 future-developer-mistake regressions ✅
+- 19 request-level auth-flow tests ✅
+- 6 boundary request-level tests ✅
+
+**GPT audit scope:** Diff limited to S-7 middleware and test files only. No unrelated changes found.
+
+**D-20 STATUS: CLOSED ✅**
+
+---
+
+---
+
+### P0-02: Middleware S-7 Defence-in-Depth Fix
 **Status:** READY FOR KIRO IMPLEMENTATION  
 **Decision:** D-20  
 **Owner:** Kiro (implement) + GPT (audit)  
@@ -220,14 +262,14 @@ CLOSED
 
 ## TRACKING STATUS
 
-**Completed:** 0/32 tasks  
+**Completed:** 1/32 tasks  
 **In Progress:** 0/32 tasks  
-**Not Started:** 32/32 tasks
+**Not Started:** 31/32 tasks
 
-**P0 Blockers:** 0/3 complete  
-**P1 Foundation:** 0/10 complete  
-**P2 Capability:** 0/9 complete  
-**P3 Optimization:** 0/5 complete
+**P0 Blockers:** 1/3 complete  
+- P0-01: NOT STARTED (external stakeholder)
+- **P0-02: ✅ CLOSED** (D-20, verified `9ff8da95`)
+- P0-03: NOT STARTED (external stakeholder)
 
 ---
 
@@ -318,18 +360,15 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 
 ## NEXT ACTIONS
 
-1. Start P0-02 (Middleware S-7 fix)
-2. Verify baseline in `middleware.ts`
-3. Choose fix approach (Option A or B)
-4. Implement with regression test
-5. Kiro independent verification
-6. Close P0-02
-7. Move to P1-01 (Tool Result Contract)
+1. ~~P0-02 (Middleware S-7)~~ — **CLOSED** ✅
+2. Route P0-01 and P0-03 to security team (external, parallel)
+3. Begin **P1-01: Define Tool Result Contract** — next engineering task
+4. P1-01 unblocks all tool migration work (P1-02 through P1-06)
 
-**Current focus:** P0-02 Middleware S-7 defence-in-depth fix
+**Current focus:** P1-01 Tool Result Contract
 
 ---
 
-**Implementation Status:** READY TO BEGIN  
-**Current Branch:** `audit/ai-enhancement-multimodel` at `cb63f340`  
+**Implementation Status:** IN PROGRESS — 1/32 complete  
+**Current Branch:** `audit/ai-enhancement-multimodel` at `9ff8da95`  
 **Last Updated:** September 24, 2026
