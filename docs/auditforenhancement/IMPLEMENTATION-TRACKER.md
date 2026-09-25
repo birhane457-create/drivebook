@@ -125,7 +125,7 @@ Current state: `FIX-VERIFIED`; do not close P1-04 until the project closure gate
 
 `FINDING → VERIFIED → FIX → COPILOT TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `FIX`; do not close P1-05 before focused tests and independent verification.
+Current state: `FIX-VERIFIED`; do not close P1-05 until the project closure gate is satisfied.
 
 ### Independent verification
 
@@ -179,13 +179,13 @@ Current state: `FIX-VERIFIED`; all implementation work and independent verificat
 
 **Finding:** Raw tool results and database-derived text reach model context without an explicit untrusted-evidence boundary.
 
-**Implementation status:** FIX — implementation in progress; adversarial staging and independent audit pending.
+**Implementation status:** FIX-VERIFIED — source-level fix and route-level staging evidence are independently verified. Closure remains pending the project closure gate.
 
 ### Lifecycle
 
 `FINDING → VERIFIED → FIX → COPILOT TESTS → ADVERSARIAL STAGING → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `FIX-VERIFIED`; structural boundary and route-level staging evidence are independently verified, but do not close P1-07 until the project closure gate is satisfied.
+Current state: `FIX-VERIFIED`; do not close P1-07 until the project closure gate is satisfied.
 
 ### Structural boundary slice
 
@@ -213,12 +213,86 @@ Current state: `FIX-VERIFIED`; structural boundary and route-level staging evide
 
 ## P1-08 — Adversarial Coverage Expansion
 
-**Finding:** The route-level staging boundary is verified, but the backlog acceptance target calls for 10+ adversarial cases and explicit read-only-boundary attempts.
+**Finding:** The route-level staging boundary is verified, but the broader assurance target requires server-side validation, malicious-argument rejection, and a wider adversarial matrix.
 
-**Implementation status:** PARTIAL — two provider-path staging cases complete; broader adversarial matrix remains open.
+**Implementation status:** FIX-VERIFIED — the final P1-08 assurance slice passed independent GPT audit and regression verification. Closure remains pending the project closure gate.
 
 ### Lifecycle
 
-`FINDING → VERIFIED → FIX → STRUCTURAL TESTS → ADVERSARIAL STAGING → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
+`FINDING → VERIFIED → FIX → STRUCTURAL TESTS → ADVERSARIAL STAGING → SERVER-SIDE BOUNDARY TESTS → GPT INDEPENDENT AUDIT → FIX-VERIFIED → CLOSED`
 
-Current state: `PARTIAL`; do not close P1-08 until the 10+ case matrix, read-only bypass attempts, and documented results are complete.
+Current state: `FIX-VERIFIED`; do not close P1-08 until the project closure gate is satisfied.
+
+### Verification
+
+- OpenAI adversarial route path: passed.
+- Anthropic route path: passed.
+- Hostile provider names, addresses, booking notes, payment errors, and tool-result fields: covered.
+- Malicious tool names and unavailable tools: rejected.
+- Unexpected arguments, string arguments, negative numbers, and `NaN`: rejected.
+- Permission bypass: rejected with `403` before provider request and tool dispatch.
+- Full regression suite: `147/147` passed across 12 files.
+- Touched-file TypeScript diagnostics: none reported.
+
+### Independent verification
+
+- GPT audited exact commit `5d4a6bac8b984bd44ad781f7033126f376cbf1b4`.
+- GPT result: `FIX-VERIFIED` for the final P1-08 assurance slice.
+- GPT confirmed the allowlist, server-side validation, read-only dispatch invariants, adversarial coverage, and the police-check regression.
+- GPT explicitly preserved the correct limitation: the tests prove application-side boundary enforcement, not empirical live-model prompt-injection immunity.
+- P1-08 is intentionally not marked `CLOSED`.
+
+### Final P1 foundation state
+
+| Item | SHA | Status |
+|---|---|---|
+| P1-01 Tool Result Contract | `df01d43a` | FIX-VERIFIED |
+| P1-02 Health Score | `f127dfe7` | FIX-VERIFIED |
+| P1-03 Instructor Risk | `a31066ee` + policeCheck regression | FIX-VERIFIED |
+| P1-04 Daily Summary | `88a6c834` | FIX-VERIFIED |
+| P1-05 Suburb Demand | `4d4bc303` | FIX-VERIFIED |
+| P1-06 Remaining Tools | `b6b7593d` | FIX-VERIFIED |
+| P1-07 Untrusted Evidence | `cb654164` | FIX-VERIFIED |
+| P1-08 Adversarial Coverage | `5d4a6bac` | FIX-VERIFIED |
+
+This is the authoritative P1 remediation sequence to be carried forward to the final closure gate and rebase/merge review.
+
+## Next engineering stage
+
+### P1-09 — Health-Score Semantics Clarification
+
+**Status:** READY
+**Decision:** D-06
+**Dependencies:** P1-02
+
+**Scope:**
+- document the health-score formula and semantics
+- define zero vs missing vs error behaviour
+- define edge cases for empty, partial, and failed data
+- surface the underlying signals in Copilot output without reintroducing silent fallbacks
+
+**Acceptance:**
+- [ ] semantics documented
+- [ ] edge cases defined
+- [ ] underlying signals surfaced
+- [ ] D-06 verified
+
+### P1-10 — Copilot Evaluation Suite Foundation
+
+**Status:** READY
+**Decision:** D-15
+**Dependencies:** P1-06, P1-08
+
+**Scope:**
+- create the evaluation suite scaffold under tests/copilot-evaluation/
+- add tool-selection, failure-handling, permission-boundary, representative, and prompt-injection cases
+- run in CI and require 100% pass before deployment
+
+**Acceptance:**
+- [ ] evaluation suite framework created
+- [ ] 50+ cases implemented
+- [ ] CI integration complete
+- [ ] 100% pass rate achieved
+- [ ] D-15 verified
+
+P1-09 is the next architecture item after the verified P1 foundation. P1-10 is unblocked because the ToolResult migration and adversarial boundary work are complete.

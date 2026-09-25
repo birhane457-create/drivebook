@@ -138,6 +138,25 @@ describe('getHealthScore() — P1-02 (D-01, D-02)', () => {
         expect(signals).toHaveProperty('failedPayments')
       }
     })
+
+    it('exposes the score semantics and null-vs-zero policy to the Copilot', async () => {
+      setupAllSuccess()
+      const result = await getHealthScore()
+      expect(result.status).toBe('SUCCESS')
+      if (result.status !== 'SUCCESS') return
+
+      expect(result.data.semantics).toMatchObject({
+        formula: expect.stringMatching(/weighted|sum/i),
+        allSignalsFail: 'ERROR',
+        partialPolicy: expect.stringMatching(/missing|PARTIAL/i),
+        nullMeans: 'unavailable, not zero',
+      })
+      expect(result.data.signalDefinitions).toEqual(expect.objectContaining({
+        completionRate: expect.stringContaining('completion'),
+        onboardingRate: expect.stringContaining('onboarding'),
+        openDisputes: expect.stringContaining('disputes'),
+      }))
+    })
   })
 
   // ── ERROR path — all queries fail ────────────────────────────────────────

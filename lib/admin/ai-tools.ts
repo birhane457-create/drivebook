@@ -152,6 +152,14 @@ export type HealthScoreData = {
     payoutFailRate: number | null
     failedPayments: number | null
   }
+  semantics: {
+    formula: string
+    weightSummary: Record<string, number>
+    allSignalsFail: 'ERROR'
+    partialPolicy: string
+    nullMeans: 'unavailable, not zero'
+  }
+  signalDefinitions: Record<string, string>
   scoringNotes?: string[]
 }
 
@@ -258,6 +266,30 @@ export async function getHealthScore(): Promise<ToolResult<HealthScoreData>> {
 
   score = Math.min(100, Math.max(0, Math.round(score)))
 
+  const semantics = {
+    formula: 'Weighted sum of available signals, capped to 0-100; unavailable signals are excluded from the calculation and are represented as null instead of zero.',
+    weightSummary: {
+      completionRate: 25,
+      onboardingRate: 15,
+      openDisputes: 20,
+      revChangePercent: 10,
+      payoutFailRate: 10,
+      failedPayments: 20,
+    },
+    allSignalsFail: 'ERROR' as const,
+    partialPolicy: 'If any signal fails, return PARTIAL with missing[] and keep the score based only on available evidence.',
+    nullMeans: 'unavailable, not zero' as const,
+  }
+
+  const signalDefinitions = {
+    completionRate: 'Booking completion rate over the last 30 days; a valid 0% completion is real data, while null means data was unavailable.',
+    onboardingRate: 'Approved providers with active Stripe onboarding over the last 30 days.',
+    openDisputes: 'Open Stripe disputes currently awaiting response; 0 means none, null means unavailable.',
+    revChangePercent: 'Revenue change versus the previous 7-day window; a negative value is real data, null means unavailable.',
+    payoutFailRate: 'Failed payout rate over the last 30 days; null means unavailable, not zero.',
+    failedPayments: 'Pending-payment failures; null means the query failed, not that there were zero failed payments.',
+  }
+
   const data = {
     score,
     status: (score >= 90 ? 'healthy' : score >= 70 ? 'watch' : 'critical') as 'healthy' | 'watch' | 'critical',
@@ -269,6 +301,8 @@ export async function getHealthScore(): Promise<ToolResult<HealthScoreData>> {
       payoutFailRate,
       failedPayments,
     },
+    semantics,
+    signalDefinitions,
     ...(scoringNotes.length > 0 && { scoringNotes }),
   }
 
