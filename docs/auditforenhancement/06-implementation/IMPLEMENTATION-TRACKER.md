@@ -66,6 +66,8 @@ CLOSED
 
 ## CURRENT PHASE: P0 BLOCKERS
 
+**P0 disposition record:** [`P0-DISPOSITION.md`](P0-DISPOSITION.md) is the evidence-based inventory for every P0 item. It must be completed before the latest-main rebase or any P2 implementation.
+
 ### P0-01: Security Track — Credential Verification
 **Status:** NOT STARTED  
 **Decision:** S-1, S-8, S-9  
