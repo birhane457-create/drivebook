@@ -47,3 +47,25 @@ The same evidence package should record the legitimate User A path, missing meta
 Docker evidence is now recorded in [P0-DOCKER-LOCAL-EVIDENCE.md](P0-DOCKER-LOCAL-EVIDENCE.md). The actual route tests passed `12/12`, including the required User B -> User A ownership scenario and PostgreSQL `Promise.all()` concurrency checks. This strengthens, but does not complete, P0-01A/B disposition: both remain `OPEN` until isolated staging reproduces the HTTP, database, migration, and deployment evidence.
 
 No rebase, P2 implementation, or application change is authorized by this record. After P0 disposition is complete, follow the sequence in [POST-P1-CLOSURE-AND-ROADMAP.md](../05-planning/POST-P1-CLOSURE-AND-ROADMAP.md).
+
+## Staging Checkpoint: Incomplete
+
+The deployed Vercel prerequisite was checked from the terminal:
+
+- `GET /` returned HTTP `200` from Vercel.
+- `POST /api/client/wallet-add` without authentication returned HTTP `401`.
+- The wallet endpoint is present and authentication enforcement is active.
+- No credentials, sessions, real payment information, or fabricated PaymentIntent records were used.
+- Authenticated NextAuth sessions, a succeeded Stripe test-mode PaymentIntent, and read-only staging database access are not yet available.
+
+This is deployment-level prerequisite evidence only. P0-01A and P0-01B remain `OPEN`; authenticated staging evidence is deferred, and rebase remains blocked.
+
+## S-1 / S-8 / S-9 Repository Disposition
+
+| Finding | Repository evidence | Current status | External evidence required | Disposition |
+| --- | --- | --- | --- | --- |
+| S-1 credential liveness | [CREDENTIAL_ROTATION_CHECKLIST.md](../../pr/CREDENTIAL_ROTATION_CHECKLIST.md) is tracked and explicitly marked `NOT ROTATED`, with credential-looking values recorded. Values are intentionally not reproduced here. | `OPEN` | Security/DevOps and each provider dashboard must confirm rotation, revocation, history handling, and replacement configuration. Suspected credentials must never be tested by authentication. | Remain open; security owner disposition required. Closure blocker: Yes |
+| S-8 root `.credentials` | A local `.credentials` file exists, is ignored by `.gitignore`, and is not tracked by Git. Repository evidence supports local dev-only handling but does not prove historical exposure, removal from all machines, or safe contents. | `OPEN` | Repository-owner/security confirmation of local cleanup, history status, and developer-machine handling. Do not inspect or authenticate with values. | Remain open pending security/dev-hygiene disposition. Closure blocker: Yes |
+| S-9 `CRON_SECRET` configuration | `CRON_SECRET` is absent from [.env.example](../../../.env.example); cron routes require a bearer secret in deployed configuration. Deployed Vercel secret state was not inspected. | `OPEN` | DevOps must confirm the deployed secret exists, is rotated/managed, and all protected cron routes use the intended auth path. | Remain open pending example/configuration and deployment evidence. Closure blocker: Yes |
+
+S-1/S-8/S-9 repository disposition is complete as an inventory, not as a resolution. No application or configuration fix is authorized by this record. After these external dispositions and the remaining S-2 through S-6 disposition are complete, follow the closure sequence.
