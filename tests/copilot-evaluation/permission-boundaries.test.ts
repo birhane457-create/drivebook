@@ -1,62 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  getServerSession: vi.fn(),
-  requirePermission: vi.fn(),
-  checkRateLimitStrict: vi.fn(),
-  fetch: vi.fn(),
-  callTool: vi.fn(),
-  validateToolArguments: vi.fn(),
-  auditCreate: vi.fn(),
+const mockPrisma = vi.hoisted(() => ({
+  user: { findUnique: vi.fn() },
+  staffMember: { findUnique: vi.fn() },
 }))
 
-vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
-vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/auth/requireRole', () => ({ requirePermission: mocks.requirePermission }))
-vi.mock('@/lib/rbac/permissions', () => ({ PERM: { PLATFORM_COPILOT_VIEW: 'platform_copilot_view' } }))
-vi.mock('@/lib/ratelimit', () => ({ checkRateLimitStrict: mocks.checkRateLimitStrict, adminActionRateLimit: {} }))
-vi.mock('@/lib/prisma', () => ({ prisma: { auditLog: { create: mocks.auditCreate } } }))
-vi.mock('@/lib/admin/ai-tools', () => ({ TOOL_DEFINITIONS: [], callTool: mocks.callTool, validateToolArguments: mocks.validateToolArguments }))
+vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }))
 
-import { POST } from '@/app/api/admin/ai-query/route'
+import { checkPermission } from '@/lib/rbac/checkPermission'
+import { PERM } from '@/lib/rbac/permissions'
 
-const denials = [
-  ['anonymous session', null],
-  ['client role', { user: { id: 'client-1', email: 'client@example.test', role: 'CLIENT' } }],
-  ['provider role', { user: { id: 'provider-1', email: 'provider@example.test', role: 'PROVIDER' } }],
-  ['staff without Copilot permission', { user: { id: 'staff-1', email: 'staff@example.test', role: 'STAFF' } }],
-  ['expired session', { user: { id: 'expired-1', email: 'expired@example.test' } }],
-  ['missing user id', { user: { email: 'missing-id@example.test' } }],
-  ['missing email', { user: { id: 'missing-email' } }],
-  ['empty session', {}],
-  ['suspended admin', { user: { id: 'suspended-1', email: 'suspended@example.test', role: 'ADMIN' } }],
-  ['unapproved provider', { user: { id: 'unapproved-1', email: 'unapproved@example.test', role: 'PROVIDER' } }],
+const ADMIN = { id: 'admin-1', role: 'ADMIN' }
+const SUPER_ADMIN = { id: 'super-admin-1', role: 'SUPER_ADMIN' }
+const STAFF = { id: 'staff-1', permissions: [PERM.PLATFORM_COPILOT_VIEW], maxRefundAmount: 500 }
+
+const cases = [
+  ['anonymous session', null, null, null, 'unauthenticated'],
+  ['session without user id', { user: {} }, null, null, 'unauthenticated'],
+  ['client role', { user: { id: 'client-1' } }, { id: 'client-1', role: 'CLIENT' }, null, 'not_admin'],
+  ['provider role', { user: { id: 'provider-1' } }, { id: 'provider-1', role: 'provider' }, null, 'not_admin'],
+  ['deleted admin user', { user: { id: 'deleted-1' } }, null, null, 'not_admin'],
+  ['admin without staff record', { user: { id: ADMIN.id } }, ADMIN, null, 'no_staff_record'],
+  ['admin missing Copilot permission', { user: { id: ADMIN.id } }, ADMIN, { ...STAFF, permissions: [] }, 'missing_permission'],
+  ['admin with unrelated permission', { user: { id: ADMIN.id } }, ADMIN, { ...STAFF, permissions: ['platform.dashboard.view'] }, 'missing_permission'],
+  ['admin with Copilot permission', { user: { id: ADMIN.id } }, ADMIN, STAFF, null],
+  ['super admin wildcard', { user: { id: SUPER_ADMIN.id } }, SUPER_ADMIN, null, null],
 ] as const
 
-function request() {
-  return new NextRequest('http://localhost/api/admin/ai-query', {
-    method: 'POST',
-    body: JSON.stringify({ messages: [{ role: 'user', content: 'Show me platform activity' }] }),
-    headers: { 'content-type': 'application/json' },
-  })
-}
-
-describe('P1-10 permission boundary', () => {
+describe('P1-10 permission boundary matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    delete process.env.OPENAI_API_KEY
-    delete process.env.ANTHROPIC_API_KEY
-    mocks.checkRateLimitStrict.mockResolvedValue({ success: true })
-    mocks.auditCreate.mockResolvedValue({})
-    mocks.requirePermission.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
   })
 
-  it.each(denials)('%s is denied before provider request or tool dispatch', async (_case, session) => {
-    mocks.getServerSession.mockResolvedValue(session)
-    const result = await POST(request())
-    expect(result.status).toBe(403)
-    expect(mocks.fetch).not.toHaveBeenCalled()
-    expect(mocks.callTool).not.toHaveBeenCalled()
+  it.each(cases)('%s evaluates the real permission function', async (_case, session, user, staff, expectedReason) => {
+    mockPrisma.user.findUnique.mockResolvedValue(user)
+    mockPrisma.staffMember.findUnique.mockResolvedValue(staff)
+
+    const result = await checkPermission(session as any, PERM.PLATFORM_COPILOT_VIEW)
+
+    if (expectedReason) {
+      expect(result.allowed).toBe(false)
+      if (result.allowed) return
+      expect(result.reason).toBe(expectedReason)
+      expect(result.response.status).toBe(expectedReason === 'unauthenticated' ? 401 : 403)
+    } else {
+      expect(result.allowed).toBe(true)
+    }
   })
 })
