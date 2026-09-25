@@ -4,6 +4,7 @@ import { emailService } from '@/lib/services/email';
 import { sendSingleLessonReceipt, sendPackagePurchaseReceipt, sendWalletTopUpReceipt } from '@/lib/services/receipt-email';
 import { SUBSCRIPTION_PLANS } from '@/lib/config/subscriptions';
 import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
+import { writeAuditLogSafe } from '@/lib/services/audit';
 import { webhookRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 import { notifyPaymentReceived } from '@/lib/services/notifications';
 import { getNotifChannels } from '@/lib/config/platform-settings';
@@ -143,16 +144,16 @@ export async function POST(req: NextRequest) {
 
     // Log security events
     if (error.message?.includes('signature')) {
-      try {
-        await logSubscriptionAction({
-          subscriptionId: 'unknown',
-          providerId: 'unknown',
-          action: AuditAction.WEBHOOK_VERIFICATION_FAILED,
-          ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
-          success: false,
-          errorMessage: error.message
-        });
-      } catch { /* audit log failure is non-fatal */ }
+      await writeAuditLogSafe({
+        action:       AuditAction.WEBHOOK_VERIFICATION_FAILED,
+        actorId:      'unknown',
+        actorRole:    'SYSTEM',
+        targetType:   'TRANSACTION',
+        targetId:     'unknown',
+        ipAddress:    req.headers.get('x-forwarded-for') ?? null,
+        success:      false,
+        errorMessage: error.message,
+      });
     }
 
     return NextResponse.json(
@@ -703,17 +704,25 @@ async function handleCheckoutCompleted(
           });
         }
     
-        // Audit log
-        await logSubscriptionAction({
-          subscriptionId: checkoutSession.id,
-          providerId,
-          action: AuditAction.SUBSCRIPTION_UPDATED,
-          metadata: {
-            event: 'checkout_completed',
-            customerId: customer,
-            tier: tier ?? 'unknown',
-            stripeSubscriptionId: checkoutSession.subscription ?? null,
-          }
+        // AUDIT-01/02 fix (Tier 3): replace logSubscriptionAction (used module-level prisma)
+        // with tx.auditLog.create — now actually atomic with the subscription state change.
+        await tx.auditLog.create({
+          data: {
+            action:     AuditAction.SUBSCRIPTION_UPDATED,
+            actorId:    providerId,
+            actorRole:  'SYSTEM',
+            targetType: 'TRANSACTION',
+            targetId:   checkoutSession.id,
+            ipAddress:  'stripe-webhook',
+            userAgent:  'stripe-webhook',
+            metadata:   {
+              event: 'checkout_completed',
+              customerId: customer,
+              tier: tier ?? 'unknown',
+              stripeSubscriptionId: checkoutSession.subscription ?? null,
+            },
+            success:    true,
+          },
         });
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-checkout-session-subscription' });
@@ -846,18 +855,18 @@ async function handleWalletPaymentSuccess(
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-wallet-payment' });
 
-  // Send wallet top-up receipt (non-critical)
-  try {
-    const { logFinancialAction, AuditAction, ActorRole } = await import('@/lib/services/auditLogger');
+  // AUDIT-01/02 fix (Tier 4): wallet payment — financial tx already committed above.
+  // writeAuditLogSafe documents this as explicitly non-critical (receipt/notification path).
+  {
     const confirmedTx = confirmedTransactions[0];
     if (confirmedTx) {
-      await logFinancialAction({
-        transactionId: confirmedTx.id,
-        action: AuditAction.WALLET_PAYMENT_SUCCEEDED,
-        actorId: 'SYSTEM',
-        actorRole: ActorRole.SYSTEM,
-        amount: paymentIntent.amount_received / 100,
-        metadata: {
+      await writeAuditLogSafe({
+        action:     AuditAction.WALLET_PAYMENT_SUCCEEDED,
+        actorId:    'SYSTEM',
+        actorRole:  'SYSTEM',
+        targetType: 'TRANSACTION',
+        targetId:   confirmedTx.id,
+        metadata:   {
           stripePaymentIntentId: paymentIntent.id,
           walletId: confirmedTx.walletId,
           transactionCount: confirmedTransactions.length,
@@ -865,10 +874,6 @@ async function handleWalletPaymentSuccess(
         },
       });
     }
-  } catch (auditErr) {
-    logger.error('AuditLog for wallet payment (non-critical)', {
-      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-    });
   }
 
   try {
@@ -1320,27 +1325,23 @@ async function handleBookingPaymentSuccess(
 
   // â”€â”€ Audit log: Stripe payment event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // This closes the audit blind spot â€” Stripe payment events are now in AuditLog
-  try {
-    const { logFinancialAction, AuditAction, ActorRole } = await import('@/lib/services/auditLogger');
+  // AUDIT-01/02 fix (Tier 4): payment success — financial tx already committed.
+  {
     const txRecord = await prisma.transaction.findFirst({
       where: { stripePaymentIntentId: paymentIntent.id },
-      select: { id: true, amount: true },
+      select: { id: true },
     });
-    await logFinancialAction({
-      transactionId: txRecord?.id ?? bookingId,
-      action: AuditAction.PAYMENT_SUCCEEDED,
-      actorId: 'SYSTEM',
-      actorRole: ActorRole.SYSTEM,
-      amount: paymentIntent.amount_received / 100,
-      metadata: {
+    await writeAuditLogSafe({
+      action:     AuditAction.PAYMENT_SUCCEEDED,
+      actorId:    'SYSTEM',
+      actorRole:  'SYSTEM',
+      targetType: 'TRANSACTION',
+      targetId:   txRecord?.id ?? bookingId,
+      metadata:   {
         stripePaymentIntentId: paymentIntent.id,
         bookingId,
         amountCents: paymentIntent.amount_received,
       },
-    });
-  } catch (auditErr) {
-    logger.error('AuditLog for payment_succeeded failed (non-critical)', {
-      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
     });
   }
 
@@ -1545,27 +1546,21 @@ async function handleBookingPaymentFailed(
 
   logger.info(`âŒ Booking payment failed: ${bookingId}`);
 
-  // Audit log: Stripe payment failure
-  try {
-    const { logFinancialAction, AuditAction, ActorRole } = await import('@/lib/services/auditLogger');
-    await logFinancialAction({
-      transactionId: bookingId,
-      action: AuditAction.PAYMENT_FAILED,
-      actorId: 'SYSTEM',
-      actorRole: ActorRole.SYSTEM,
-      amount: paymentIntent.amount / 100,
-      metadata: {
-        stripePaymentIntentId: paymentIntent.id,
-        bookingId,
-        failureMessage: paymentIntent.last_payment_error?.message,
-        failureCode: paymentIntent.last_payment_error?.code,
-      },
-    });
-  } catch (auditErr) {
-    logger.error('AuditLog for payment_failed (non-critical)', {
-      error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-    });
-  }
+  // AUDIT-01/02 fix (Tier 4): payment failed — informational, booking state already reverted.
+  await writeAuditLogSafe({
+    action:     AuditAction.PAYMENT_FAILED,
+    actorId:    'SYSTEM',
+    actorRole:  'SYSTEM',
+    targetType: 'TRANSACTION',
+    targetId:   bookingId,
+    metadata:   {
+      stripePaymentIntentId: paymentIntent.id,
+      bookingId,
+      failureMessage: paymentIntent.last_payment_error?.message,
+      failureCode:    paymentIntent.last_payment_error?.code,
+    },
+    success: false,
+  });
 }
 
 // ============================================================================
@@ -1737,17 +1732,24 @@ async function handleSubscriptionUpdate(
           }
         }
     
-        // Audit log
-        await logSubscriptionAction({
-          subscriptionId: subscription.id,
-          providerId,
-          action: AuditAction.SUBSCRIPTION_UPDATED,
-          metadata: {
-            tier,
-            status,
-            commissionRate: plan.commissionRate,
-            amount: subscription.items.data[0].price.unit_amount! / 100
-          }
+        // AUDIT-01/02 fix (Tier 3): atomic with subscription update
+        await tx.auditLog.create({
+          data: {
+            action:     AuditAction.SUBSCRIPTION_UPDATED,
+            actorId:    providerId,
+            actorRole:  'SYSTEM',
+            targetType: 'TRANSACTION',
+            targetId:   subscription.id,
+            ipAddress:  'stripe-webhook',
+            userAgent:  'stripe-webhook',
+            metadata:   {
+              tier,
+              status,
+              commissionRate: plan.commissionRate,
+              amount: subscription.items.data[0].price.unit_amount! / 100,
+            },
+            success:    true,
+          },
         });
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-subscription-updated' });
@@ -1849,10 +1851,19 @@ async function handleSubscriptionCancelled(
           }
         });
     
-        await logSubscriptionAction({
-          subscriptionId: subscription.id,
-          providerId,
-          action: AuditAction.SUBSCRIPTION_CANCELLED
+        // AUDIT-01/02 fix (Tier 3): atomic with cancellation state change
+        await tx.auditLog.create({
+          data: {
+            action:     AuditAction.SUBSCRIPTION_CANCELLED,
+            actorId:    providerId,
+            actorRole:  'SYSTEM',
+            targetType: 'TRANSACTION',
+            targetId:   subscription.id,
+            ipAddress:  'stripe-webhook',
+            userAgent:  'stripe-webhook',
+            metadata:   {},
+            success:    true,
+          },
         });
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-subscription-cancelled' });
@@ -1898,11 +1909,14 @@ async function handleTrialEnding(
       `
     });
 
-    await logSubscriptionAction({
-      subscriptionId: subscription.id,
-      providerId,
-      action: AuditAction.SUBSCRIPTION_TRIAL_ENDING,
-      metadata: { daysLeft }
+    // AUDIT-01/02 fix (Tier 4): trial-ending is informational, not a financial state change.
+    await writeAuditLogSafe({
+      action:     AuditAction.SUBSCRIPTION_TRIAL_ENDING,
+      actorId:    providerId,
+      actorRole:  'SYSTEM',
+      targetType: 'TRANSACTION',
+      targetId:   subscription.id,
+      metadata:   { daysLeft },
     });
   }
 

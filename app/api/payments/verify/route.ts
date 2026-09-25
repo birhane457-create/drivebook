@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 import { resolveTimezone, timezoneFromState, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 import { logFinancialAction, ActorRole } from '@/lib/services/auditLogger';
+import { writeAuditLog } from '@/lib/services/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -259,28 +260,21 @@ export async function GET(req: NextRequest) {
             metadata: { idempotencyKey, adminUserId: session.user.id }
           },
         });
+        // AUDIT-01/02 fix (Tier 2): audit written atomically with wallet credit/debit.
+        await writeAuditLog(tx, {
+          action:     'ADMIN_WALLET_CREDIT_MANUAL',
+          actorId:    session.user.id,
+          actorRole:  'ADMIN',
+          targetType: 'WALLET',
+          targetId:   wallet.id,
+          ipAddress:  req.headers.get('x-forwarded-for') ?? null,
+          userAgent:  req.headers.get('user-agent') ?? null,
+          metadata:   { bookingId, creditAmount: Number(booking.price), isPackage, idempotencyKey },
+          success:    true,
+        });
       });
       creditAmount = Number(booking.price);
       debitAmount = Number(booking.price);
-    }
-
-    // ✅ SECURITY FIX: Audit logging for manual admin wallet credit
-    await logFinancialAction({
-      transactionId: wallet.id,
-      action: 'ADMIN_WALLET_CREDIT_MANUAL',
-      actorId: session.user.id,
-      actorRole: ActorRole.ADMIN,
-      amount: creditAmount,
-      ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
-      userAgent: req.headers.get('user-agent') || 'unknown',
-      metadata: {
-        bookingId,
-        creditAmount,
-        debitAmount,
-        isPackage,
-        idempotencyKey
-      }
-    });
 
     return NextResponse.json({ 
       status: 'credited', 

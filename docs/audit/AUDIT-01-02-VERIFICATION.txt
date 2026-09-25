@@ -1,0 +1,168 @@
+AUDIT-01 / AUDIT-02 REMEDIATION — VERIFICATION EVIDENCE
+=========================================================
+Findings  : AUDIT-01 (audit logging fails open) + AUDIT-02 (not atomic with state change)
+Severity  : MEDIUM (both)
+Status    : CLOSED
+
+NOTE: Verification is source-audit + unit test level (no Docker required for unit tests).
+Runtime hostile tests require the test DB and are not included in this evidence set.
+
+ORIGINAL FINDINGS
+-----------------
+AUDIT-01: lib/services/auditLogger.ts logAuditEvent() catch block explicitly swallows
+failures — "Don't throw - we don't want to break the main operation." This means every
+call site that uses logAuditEvent() (or any wrapper: logBookingAction, logFinancialAction,
+logSubscriptionAction) has silent audit failure with no propagation.
+
+AUDIT-02: logAuditEvent() accepts no transaction client parameter. Every call site that
+mutates state inside a $transaction and then calls logAuditEvent() outside the transaction
+has a non-atomic audit write. Wallet debits, booking confirmations, subscription overrides,
+and Stripe webhook handlers all had this pattern.
+
+An existing correct implementation existed in lib/services/audit.ts (logAuditAction(tx))
+but was never imported anywhere in the codebase.
+
+CALLER AUDIT (22 CALL SITES ACROSS 8 FILES)
+--------------------------------------------
+All 22 call sites had AUDIT-01. All call sites that mutated state inside $transaction
+also had AUDIT-02. The worst cases:
+
+CRITICAL (Tier 1 — financial, wallet debited + booking confirmed):
+  app/api/bookings/route.ts         confirmed booking path
+  app/api/bookings/batch/route.ts   confirmed booking path
+  app/api/payments/verify/route.ts  admin manual wallet credit
+
+SECURITY-SENSITIVE (Tier 2 — admin mutations):
+  app/api/admin/instructors/[id]/subscription/route.ts  (5 call sites)
+    - force_sync, override_tier, cancel, cancel_immediately, link_stripe_sub
+
+WEBHOOK MUTATIONS (Tier 3 — inside $transaction but wrong client):
+  app/api/stripe/webhook/route.ts
+    - handleCheckoutCompleted (subscription path)
+    - handleSubscriptionUpdate
+    - handleSubscriptionCancelled
+
+NON-CRITICAL (Tier 4 — post-transaction informational):
+  app/api/stripe/webhook/route.ts
+    - handleTrialEnding
+    - handleBookingPaymentSuccess
+    - handleBookingPaymentFailed
+    - handleWalletPaymentSuccess
+    - webhook signature verification failure
+  lib/services/subscription-cancel.ts
+
+REMEDIATION DESIGN
+------------------
+Rather than changing logAuditEvent() globally (which would break legitimate
+non-critical callers), the fix is tiered per operation type:
+
+Tier 1/2/3 — writeAuditLog(tx, data)
+  New function in lib/services/audit.ts. Requires a Prisma transaction client.
+  Writes via tx.auditLog.create(). If the write fails, the error propagates
+  and the caller's $transaction rolls back — state change never commits without
+  its audit record. Never catches errors.
+
+Tier 4 — writeAuditLogSafe(data)
+  New function in lib/services/audit.ts. Uses module-level prisma (no tx).
+  Does NOT throw on failure. Logs at ERROR level with explicit documentation
+  that this specific call site has been reviewed and accepts non-atomic
+  audit failure. Replaces silent catch blocks.
+
+FILES CHANGED
+-------------
+lib/services/audit.ts
+  + writeAuditLog(tx, data)       — Tier 1/2/3, throws on failure
+  + writeAuditLogSafe(data)       — Tier 4, explicit non-throwing
+  + AuditEntryData interface      — typed schema-level write params
+  + Tier guarantee documentation  — explains each tier's failure policy
+
+app/api/bookings/route.ts
+  BEFORE: try { await logBookingAction(...) } catch { } after $transaction
+  AFTER:  writeAuditLog(tx, ...) inside $transaction (confirmed booking)
+          writeAuditLogSafe(...)  for PENDING_PAYMENT path (not yet financial)
+
+app/api/bookings/batch/route.ts
+  Same pattern as bookings/route.ts
+
+app/api/bookings/[id]/route.ts
+  BEFORE: await logBookingAction(...) after $transaction (no try/catch — would throw)
+  AFTER:  await tx.auditLog.create(...) inside $transaction
+
+app/api/payments/verify/route.ts
+  BEFORE: await logFinancialAction(...) after $transaction
+  AFTER:  writeAuditLog(tx, ...) inside $transaction
+
+app/api/admin/instructors/[id]/subscription/route.ts
+  5 actions — sync, override_tier, cancel, cancel_immediately, link_stripe_sub
+  sync/override_tier/cancel_immediately/link_stripe_sub: writeAuditLog(tx) inside $tx
+  cancel (no $tx, Stripe call already committed): writeAuditLogSafe(...)
+
+app/api/stripe/webhook/route.ts
+  Tier 3 (3 handlers already structurally inside $transaction):
+    BEFORE: logSubscriptionAction(...) using module-level prisma — NOT atomic
+    AFTER:  tx.auditLog.create(...) using tx client — NOW atomic
+  Tier 4 (4 post-tx handlers):
+    BEFORE: try { logFinancialAction(...) } catch { logger.error(...) }
+    AFTER:  writeAuditLogSafe(...) — explicit non-critical policy documented
+
+lib/services/subscription-cancel.ts
+  BEFORE: try { logSubscriptionAction(...) } catch { /* non-critical */ }
+  AFTER:  writeAuditLogSafe(...) — explicit non-critical policy documented
+
+F09 COMPATIBILITY
+-----------------
+F09 explicitly treated audit logs as non-critical inside webhook transactions.
+The Tier 3 fix replaces this with atomicity:
+  - On serialization retry (P2034), the audit write now rolls back with the tx
+  - The retry re-writes the audit entry — exactly once, no duplicates
+  - The idempotency key (also inside the same $transaction) prevents double-processing
+  - No duplicate financial state from retries
+
+app/api/stripe/webhook/__tests__/f09-retry.test.ts updated to reflect
+that audit logs are now atomic on retry (previously documented as a
+"known trade-off" for duplicate audit entries on P2034 retry).
+
+UNIT TESTS
+----------
+File: lib/services/__tests__/audit-01-02-guarantees.test.ts
+Tests: 8/8 pass
+
+  writeAuditLog (Tier 1/2/3):
+    1. succeeds — writes via tx client
+    2. failure propagates — tx.auditLog.create throws → writeAuditLog throws
+    2b. simulated $transaction: audit failure prevents state change from committing
+    uses tx client, NOT module-level prisma (AUDIT-02 atomicity)
+
+  writeAuditLogSafe (Tier 4):
+    3. succeeds — writes via module-level prisma
+    3b. failure does NOT throw, logs at ERROR level (AUDIT-01 fix)
+    3c. caller continues after writeAuditLogSafe failure
+
+  Retry atomicity:
+    4. audit rolls back with tx — retry produces exactly one audit entry
+
+EXECUTION EVIDENCE
+------------------
+Command: npx vitest run lib/services/__tests__/audit-01-02-guarantees.test.ts
+
+Output:
+  ✓ lib/services/__tests__/audit-01-02-guarantees.test.ts (8 tests)
+  Test Files  1 passed (1)
+  Tests       8 passed (8)
+  Duration    2.13s
+
+FINDING DISPOSITION
+-------------------
+AUDIT-01: CLOSED. The swallowing catch in logAuditEvent() is replaced by:
+  - writeAuditLog (throws, used for all critical paths)
+  - writeAuditLogSafe (explicit non-throwing with ERROR-level log, used only
+    where the failure policy has been reviewed and documented)
+
+AUDIT-02: CLOSED. All Tier 1/2/3 critical call sites now write the audit
+entry inside the same Prisma $transaction as the state change. If the audit
+write fails, the transaction rolls back and the state change is not committed.
+
+Evidence files:
+  docs/audit/AUDIT-01-02-VERIFICATION.txt          (this file)
+  lib/services/audit.ts                            (writeAuditLog + writeAuditLogSafe)
+  lib/services/__tests__/audit-01-02-guarantees.test.ts  (8 unit tests)

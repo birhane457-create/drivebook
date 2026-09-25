@@ -6,6 +6,7 @@ import type { Prisma } from '@prisma/client'
 import { emailService } from '@/lib/services/email'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
+import { writeAuditLog, writeAuditLogSafe } from '@/lib/services/audit'
 import { getWalletBalance } from '@/lib/services/wallet-helpers'
 import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { getCommissionRate, getPlatformFeeRate } from '@/lib/services/platform-pricing'
@@ -552,17 +553,15 @@ async function createPendingBooking(ctx: {
     console.error('Top-up email failed:', e)
   }
 
-  try {
-    await logBookingAction({
-      bookingId: pendingBooking.id,
-      action: AuditAction.BOOKING_CREATED,
-      actorId: providerId,
-      actorRole: "PROVIDER",
-      metadata: { customerId: bookingData.customerId, price: pendingBooking.price, pendingPayment: true },
-    })
-  } catch {
-    /* non-critical */
-  }
+  // AUDIT-01/02 fix (Tier 4): pending-payment — not yet financial, wallet not debited.
+  await writeAuditLogSafe({
+    action:     'BOOKING_CREATED',
+    actorId:    providerId,
+    actorRole:  'provider',
+    targetType: 'BOOKING',
+    targetId:   pendingBooking.id,
+    metadata:   { customerId: bookingData.customerId, price: pendingBooking.price, pendingPayment: true },
+  })
 
   return {
     ok: true,
@@ -692,8 +691,21 @@ async function createConfirmedBooking(ctx: {
           providerPayout,
           commissionRate,
           status: 'COMPLETED',
-          description: `Booking payment ï¿½ ${isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
+          description: `Booking payment — ${isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
           metadata: { isFirstBooking },
+        },
+      })
+
+      // AUDIT-01/02 fix (Tier 1): audit written atomically with financial state change.
+      await (tx as any).auditLog.create({
+        data: {
+          action:     'BOOKING_CREATED',
+          actorId:    providerId,
+          actorRole:  'provider',
+          targetType: 'BOOKING',
+          targetId:   newBooking.id,
+          metadata:   { customerId: bookingData.customerId, price: lessonPrice, durationHours, isPaid: true },
+          success:    true,
         },
       })
 
@@ -709,17 +721,7 @@ async function createConfirmedBooking(ctx: {
     throw txError
   }
 
-  try {
-    await logBookingAction({
-      bookingId: booking.id,
-      action: AuditAction.BOOKING_CREATED,
-      actorId: providerId,
-      actorRole: "PROVIDER",
-      metadata: { customerId: bookingData.customerId, price: booking.price, durationHours },
-    })
-  } catch (auditErr) {
-    console.error('Audit log failed:', auditErr)
-  }
+  // Audit is now written atomically inside the $transaction above (AUDIT-01/02 fix).
 
   // FinancialLedger ï¿½ deterministic idempotency key per booking
   try {

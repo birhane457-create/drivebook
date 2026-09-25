@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
+import { writeAuditLog } from '@/lib/services/audit'
 import { emailService } from '@/lib/services/email'
 import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 import { bookingActionRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
@@ -261,18 +262,22 @@ export async function PATCH(
         }
       }
 
-      return updatedBooking
-    })
+      // AUDIT-01/02 fix (Tier 2): audit written atomically with booking update + wallet adjustment.
+      await tx.auditLog.create({
+        data: {
+          action:     'BOOKING_UPDATED',
+          actorId:    session!.user.id!,
+          actorRole:  isAdmin ? 'ADMIN' : 'provider',
+          targetType: 'BOOKING',
+          targetId:   params.id,
+          ipAddress:  req.headers.get('x-forwarded-for') ?? null,
+          userAgent:  req.headers.get('user-agent') ?? null,
+          metadata:   { changes },
+          success:    true,
+        },
+      })
 
-    // FIXED: Add audit logging
-    await logBookingAction({
-      bookingId: params.id,
-      action: AuditAction.BOOKING_UPDATED,
-      actorId: session!.user.id!,
-      actorRole: (isAdmin ? 'ADMIN' : 'provider') as ActorRole,
-      ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
-      userAgent: req.headers.get('user-agent') || 'unknown',
-      metadata: { changes }
+      return updatedBooking
     })
 
     // Update Google Calendar event if exists and calendar is connected
