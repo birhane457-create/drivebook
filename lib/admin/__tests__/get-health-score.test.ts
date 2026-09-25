@@ -152,10 +152,22 @@ describe('getHealthScore() — P1-02 (D-01, D-02)', () => {
         nullMeans: 'unavailable, not zero',
       })
       expect(result.data.signalDefinitions).toEqual(expect.objectContaining({
-        completionRate: expect.stringContaining('completion'),
-        onboardingRate: expect.stringContaining('onboarding'),
-        openDisputes: expect.stringContaining('disputes'),
+        completionRate: expect.stringMatching(/completion/i),
+        onboardingRate: expect.stringMatching(/current approved providers|not time-windowed/i),
+        openDisputes: expect.stringMatching(/disputes/i),
+        revChangePercent: expect.stringMatching(/revenue change/i),
+        payoutFailRate: expect.stringMatching(/failed payout rate/i),
+        failedPayments: expect.stringMatching(/pending-payment failures/i),
       }))
+      expect(result.data.signalDefinitions.onboardingRate).not.toMatch(/30 days|last 30 days|over the last 30 days/i)
+      expect(Object.keys(result.data.signalDefinitions)).toEqual([
+        'completionRate',
+        'onboardingRate',
+        'openDisputes',
+        'revChangePercent',
+        'payoutFailRate',
+        'failedPayments',
+      ])
     })
   })
 

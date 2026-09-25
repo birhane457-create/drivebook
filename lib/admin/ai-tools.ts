@@ -283,7 +283,7 @@ export async function getHealthScore(): Promise<ToolResult<HealthScoreData>> {
 
   const signalDefinitions = {
     completionRate: 'Booking completion rate over the last 30 days; a valid 0% completion is real data, while null means data was unavailable.',
-    onboardingRate: 'Approved providers with active Stripe onboarding over the last 30 days.',
+    onboardingRate: 'Current approved providers with active Stripe onboarding; this is not time-windowed and reflects the current provider set.',
     openDisputes: 'Open Stripe disputes currently awaiting response; 0 means none, null means unavailable.',
     revChangePercent: 'Revenue change versus the previous 7-day window; a negative value is real data, null means unavailable.',
     payoutFailRate: 'Failed payout rate over the last 30 days; null means unavailable, not zero.',

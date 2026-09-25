@@ -261,7 +261,7 @@ This is the authoritative P1 remediation sequence to be carried forward to the f
 
 ### P1-09 — Health-Score Semantics Clarification
 
-**Status:** READY
+**Status:** IMPLEMENTATION COMPLETE — pending independent verification
 **Decision:** D-06
 **Dependencies:** P1-02
 
@@ -270,12 +270,13 @@ This is the authoritative P1 remediation sequence to be carried forward to the f
 - define zero vs missing vs error behaviour
 - define edge cases for empty, partial, and failed data
 - surface the underlying signals in Copilot output without reintroducing silent fallbacks
+- correct the onboarding definition to match the actual current-approved-provider calculation
 
 **Acceptance:**
-- [ ] semantics documented
-- [ ] edge cases defined
-- [ ] underlying signals surfaced
-- [ ] D-06 verified
+- [x] semantics documented
+- [x] edge cases defined
+- [x] underlying signals surfaced
+- [ ] D-06 verified by independent GPT audit
 
 ### P1-10 — Copilot Evaluation Suite Foundation
 

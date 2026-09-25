@@ -254,22 +254,22 @@ Does NOT require migration of the 7 remaining tools (those are P1-03 through P1-
 
 | Item | Status | Verified implementation / audit evidence |
 |---|---|---|
-| P1-03 Instructor Risk | **FIX-VERIFIED** | `a31066ee` + policeCheck regression; exact-SHA GPT audit; 14 focused / 144 full-regression tests; evidence: `P1-03-EXECUTION-EVIDENCE.md` |
+| P1-03 Instructor Risk | **✅ CLOSED** | `a31066ee` + policeCheck regression; GPT independently closed at `435c4fcd`; 14 focused / 144 full-regression tests; evidence: `P1-03-EXECUTION-EVIDENCE.md` |
 | P1-04 Daily Summary Expiry | **FIX-VERIFIED** | `88a6c834`; exact-SHA GPT audit; 3 focused / 117 regression tests |
 | P1-05 Suburb Demand | **FIX-VERIFIED** | `4d4bc303`; exact-SHA GPT audit; 3 focused / 120 regression tests |
 | P1-06 Remaining Tools | **FIX-VERIFIED** | `b6b7593d`; exact-SHA GPT audit; 6 focused / 129 regression tests |
 | P1-07 Untrusted Evidence | **FIX-VERIFIED** | `cb654164`; exact-SHA GPT audit; 2 structural + 2 route staging / 133 regression tests |
-| P1-08 Adversarial Coverage | **FIX-VERIFIED** | `5d4a6bac`; exact-SHA GPT audit; 12-file / 147-test full regression, server-side read-only allowlist, argument validation, and adversarial route coverage |
+| P1-08 Adversarial Coverage | **FIX-VERIFIED** | `5d4a6bac`; exact-SHA GPT audit; 12-file / 144-test full regression, server-side read-only allowlist, argument validation, and adversarial route coverage |
 
-P1-03 through P1-08 remain open only for the project closure gate. This tracker reflects the verified final implementation state.
+P1-04 through P1-08 remain open only for the project closure gate. P1-02 and P1-03 have been independently CLOSED by GPT audit. This tracker reflects the verified final implementation state.
 
 ## RECONCILED P1 SEQUENCE
 
 | Item | Implementation SHA | Current status |
 |---|---|---|
 | P1-01 Tool Result Contract | `df01d43a` | **FIX-VERIFIED** |
-| P1-02 Health Score | `f127dfe7` | **FIX-VERIFIED** |
-| P1-03 Instructor Risk | `a31066ee` + policeCheck regression | **FIX-VERIFIED** |
+| P1-02 Health Score | `f127dfe7` (impl) / `24f5cc50` (evidence) | **✅ CLOSED** — GPT independently verified |
+| P1-03 Instructor Risk | `a31066ee` + policeCheck regression / `435c4fcd` (count fix) | **✅ CLOSED** — GPT independently verified |
 | P1-04 Daily Summary | `88a6c834` | **FIX-VERIFIED** |
 | P1-05 Suburb Demand | `4d4bc303` | **FIX-VERIFIED** |
 | P1-06 Remaining Tools | `b6b7593d` | **FIX-VERIFIED** |
@@ -385,7 +385,7 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 
 ### P1-09 — Health-Score Semantics Clarification
 
-**Status:** READY
+**Status:** IMPLEMENTATION COMPLETE — pending independent verification
 **Decision:** D-06
 **Dependencies:** P1-02
 
@@ -394,12 +394,13 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 - define zero vs missing vs error behaviour
 - define edge cases for empty, partial, and failed data
 - expose the underlying signals in Copilot output without reintroducing silent fallbacks
+- correct the onboarding definition to match the actual current-approved-provider calculation
 
 **Acceptance:**
-- [ ] semantics documented
-- [ ] edge cases defined
-- [ ] underlying signals surfaced
-- [ ] D-06 verified
+- [x] semantics documented
+- [x] edge cases defined
+- [x] underlying signals surfaced
+- [ ] D-06 verified by independent GPT audit
 
 ### P1-10 — Copilot Evaluation Suite Foundation
 
