@@ -6,6 +6,7 @@ import { emailService } from '@/lib/services/email';
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry';
+import { writeAuditLog } from '@/lib/services/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,17 +59,38 @@ export async function POST(
     }
 
     // All required documents present - proceed with approval
-    const approvedInstructor = await (prisma as any).provider.update({
-      where: { id: params.id },
-      data: {
-        approvalStatus: 'APPROVED',
-        isActive: true,
-        documentsVerified: true,
-        documentsVerifiedAt: new Date(),
-      },
-      include: {
-        user: true,
-      },
+    // AUDIT-05 fix: Wrap Provider state change + audit in same transaction
+    const approvedInstructor = await prisma.$transaction(async (tx) => {
+      const updated = await tx.provider.update({
+        where: { id: params.id },
+        data: {
+          approvalStatus: 'APPROVED',
+          isActive: true,
+          documentsVerified: true,
+          documentsVerifiedAt: new Date(),
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      // AUDIT-05: Write audit log atomically with state change
+      await writeAuditLog(tx, {
+        action:     'APPROVE_INSTRUCTOR',
+        actorId:    session!.user!.id!,
+        actorRole:  'ADMIN',
+        targetType: 'provider',
+        targetId:   params.id,
+        ipAddress:  req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
+        userAgent:  req.headers.get('user-agent'),
+        metadata:   {
+          instructorName: updated.name,
+          instructorEmail: updated.user?.email,
+        },
+        success:    true,
+      });
+
+      return updated;
     });
 
     // Send approval email

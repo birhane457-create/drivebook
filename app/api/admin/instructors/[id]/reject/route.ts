@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry';
+import { writeAuditLog } from '@/lib/services/audit';
 
 export const dynamic = 'force-dynamic';
 // FIXED: Add input validation
@@ -31,7 +32,7 @@ export async function POST(
     const body = await req.json();
     const { reason } = rejectSchema.parse(body);
 
-    // FIXED: Use transaction wrapper
+    // AUDIT-05 fix: Provider state mutation + audit log atomic
     const instructor = await prisma.$transaction(async (tx) => {
       // Get current state
       const currentInstructor = await tx.provider.findUnique({
@@ -55,8 +56,22 @@ export async function POST(
         },
       }) as any;
 
-      // Note: Audit logging removed - AuditLog model not in schema
-      // Consider adding AuditLog model if audit trail is needed
+      // AUDIT-05: Write audit log atomically with state change
+      await writeAuditLog(tx, {
+        action:     'REJECT_INSTRUCTOR',
+        actorId:    session!.user!.id!,
+        actorRole:  'ADMIN',
+        targetType: 'provider',
+        targetId:   params.id,
+        ipAddress:  req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
+        userAgent:  req.headers.get('user-agent'),
+        metadata:   {
+          reason,
+          instructorName: updatedInstructor.name,
+          instructorEmail: updatedInstructor.user?.email,
+        },
+        success:    true,
+      });
 
       return updatedInstructor;
     });
