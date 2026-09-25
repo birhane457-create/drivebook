@@ -1,7 +1,7 @@
 # IMPLEMENTATION TRACKER — DriveBook Admin Copilot Remediation
 
 **Branch:** `audit/ai-enhancement-multimodel`  
-**Status:** Reconciled implementation state — P1-01 through P1-07 independently FIX-VERIFIED; P1-08 PARTIAL
+**Status:** Reconciled implementation state — P1-01 through P1-10 independently FIX-VERIFIED; project closure deferred
 **Started:** September 24, 2026  
 **Basis:** DECISIONS.md (D-01 through D-21) and PRIORITY-BACKLOG.md
 
@@ -371,21 +371,21 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 2. ~~P1-01 (Tool Result Contract)~~ — **FIX-VERIFIED** ✅ C-1 still OPEN pending tool migration
 3. ~~P1-02 (getHealthScore migration, C-1/C-1a)~~ — **TEST-VERIFIED** ✅ independent CLOSED pending test run
 4. Route P0-01 and P0-03 to security team (external, parallel)
-5. **NOW: P1-08 — complete broader adversarial coverage**
+5. ~~P1-08 (broader adversarial coverage)~~ — **FIX-VERIFIED** ✅ 144-test authoritative baseline
 
-**Current focus:** P1-09 health-score semantics, then P1-10 evaluation suite foundation
+**Current focus:** Closure gate deferred; live-model tool-selection quality remains outside P1-10 scope
 
 ---
 
-**Implementation Status:** P1-01 through P1-08 FIX-VERIFIED; closure gate pending
-**Current Branch:** `audit/ai-enhancement-multimodel` at `5d4a6bac`
+**Implementation Status:** P1-01 through P1-10 FIX-VERIFIED; closure gate pending
+**Current Branch:** `audit/ai-enhancement-multimodel` at `366bbbd3`
 **Last Updated:** September 25, 2026
 
 ## NEXT ENGINEERING STAGE
 
 ### P1-09 — Health-Score Semantics Clarification
 
-**Status:** IMPLEMENTATION COMPLETE — pending independent verification
+**Status:** ✅ FIX-VERIFIED — closure remains deferred
 **Decision:** D-06
 **Dependencies:** P1-02
 
@@ -400,11 +400,11 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 - [x] semantics documented
 - [x] edge cases defined
 - [x] underlying signals surfaced
-- [ ] D-06 verified by independent GPT audit
+- [x] D-06 independently verified
 
 ### P1-10 — Copilot Evaluation Suite Foundation
 
-**Status:** READY
+**Status:** ✅ FIX-VERIFIED — closure remains deferred
 **Decision:** D-15
 **Dependencies:** P1-06, P1-08
 
@@ -414,10 +414,17 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 - run in CI and require 100% pass before deployment
 
 **Acceptance:**
-- [ ] evaluation suite framework created
-- [ ] 50+ cases implemented
-- [ ] CI integration complete
-- [ ] 100% pass rate achieved
-- [ ] D-15 verified
+- [x] evaluation suite framework created
+- [x] 67 meaningful cases implemented (66 named cases + 1 cross-query invariant)
+- [x] CI integration complete
+- [x] 100% pass rate achieved (`67/67`)
+- [x] D-15 independently verified
 
-P1-09 is the next architecture item after the verified P1 foundation. P1-10 is unblocked because the ToolResult migration and adversarial boundary work are complete.
+**Evidence:**
+- Initial implementation: `dced35d61184f2e62af9bc9061846318f335a203`
+- Selection and permission remediation: `3d747a5faed7e2de86733bcd27bdf008e795d061`
+- Conservative ambiguity policy: `13eac0b652564f569ff3d5218fecabe8d67b7b33`
+- Final evidence record: `366bbbd396061ae45b9d119cfcf4a5ae13841fa7`
+- Live OpenAI/Anthropic tool-selection accuracy is intentionally unverified and belongs to a future model evaluation stage.
+
+P1-01 through P1-10 are FIX-VERIFIED. FIX-VERIFIED does not mean CLOSED; project closure remains deferred.
