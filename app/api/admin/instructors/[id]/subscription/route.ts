@@ -10,6 +10,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS } from '@/lib/config/subscriptions';
 import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
+import { writeAuditLog, writeAuditLogSafe } from '@/lib/services/audit';
 import { logger } from '@/lib/logger';
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
@@ -197,13 +198,15 @@ export async function POST(
               },
             });
           }
-        });
-
-        await logSubscriptionAction({
-          subscriptionId: instructor.stripeSubscriptionId,
-          providerId: params.id,
-          action: AuditAction.SUBSCRIPTION_UPDATED,
-          metadata: { adminAction: 'force_sync', adminEmail, tier, status: normalStatus, reason },
+          // AUDIT-01/02 fix (Tier 2): atomic with state change
+          await writeAuditLog(tx, {
+            action:     'SUBSCRIPTION_UPDATED',
+            actorId:    session!.user.id!,
+            actorRole:  'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId:   instructor.stripeSubscriptionId ?? params.id,
+            metadata:   { adminAction: 'force_sync', adminEmail, tier, status: normalStatus, reason },
+          });
         });
 
         return NextResponse.json({ success: true, message: `Synced: tier=${tier}, status=${normalStatus}`, tier, status: normalStatus });
@@ -235,13 +238,15 @@ export async function POST(
             where: { providerId: params.id, status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] } },
             data: { tier: tier as any, status: newStatus as any },
           });
-        });
-
-        await logSubscriptionAction({
-          subscriptionId: `admin-override-${params.id}`,
-          providerId: params.id,
-          action: AuditAction.SUBSCRIPTION_UPDATED,
-          metadata: { adminAction: 'override_tier', adminEmail, tier, status: newStatus, reason },
+          // AUDIT-01/02 fix (Tier 2): atomic with tier override — security-sensitive
+          await writeAuditLog(tx, {
+            action:     'SUBSCRIPTION_UPDATED',
+            actorId:    session!.user.id!,
+            actorRole:  'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId:   `admin-override-${params.id}`,
+            metadata:   { adminAction: 'override_tier', adminEmail, tier, status: newStatus, reason },
+          });
         });
 
         return NextResponse.json({ success: true, message: `Override applied: tier=${tier}, status=${newStatus}` });
@@ -278,11 +283,15 @@ export async function POST(
           data: { cancelAtPeriodEnd: true, cancelledAt: new Date() },
         });
 
-        await logSubscriptionAction({
-          subscriptionId: instructor.stripeSubscriptionId,
-          providerId: params.id,
-          action: AuditAction.SUBSCRIPTION_CANCELLED,
-          metadata: { adminAction: 'cancel_at_period_end', adminEmail, reason },
+        // AUDIT-01/02: cancel case has no $transaction (Stripe call already committed).
+        // Use writeAuditLogSafe — Tier 4 treatment, failure does not affect outcome.
+        await writeAuditLogSafe({
+          action:     'SUBSCRIPTION_CANCELLED',
+          actorId:    session!.user.id!,
+          actorRole:  'ADMIN',
+          targetType: 'TRANSACTION',
+          targetId:   instructor.stripeSubscriptionId ?? params.id,
+          metadata:   { adminAction: 'cancel_at_period_end', adminEmail, reason },
         });
 
         return NextResponse.json({ success: true, message: 'Subscription set to cancel at period end' });
@@ -311,13 +320,15 @@ export async function POST(
             where: { providerId: params.id, stripeSubscriptionId: instructor.stripeSubscriptionId },
             data: { status: 'CANCELLED', cancelledAt: new Date() },
           });
-        });
-
-        await logSubscriptionAction({
-          subscriptionId: instructor.stripeSubscriptionId,
-          providerId: params.id,
-          action: AuditAction.SUBSCRIPTION_CANCELLED,
-          metadata: { adminAction: 'cancel_immediately', adminEmail, reason },
+          // AUDIT-01/02 fix (Tier 2): immediate cancellation is access-termination — must be atomic
+          await writeAuditLog(tx, {
+            action:     'SUBSCRIPTION_CANCELLED',
+            actorId:    session!.user.id!,
+            actorRole:  'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId:   instructor.stripeSubscriptionId ?? params.id,
+            metadata:   { adminAction: 'cancel_immediately', adminEmail, reason },
+          });
         });
 
         return NextResponse.json({ success: true, message: 'Subscription cancelled immediately' });
@@ -379,13 +390,15 @@ export async function POST(
               });
             }
           }
-        });
-
-        await logSubscriptionAction({
-          subscriptionId: newSubId,
-          providerId: params.id,
-          action: AuditAction.SUBSCRIPTION_UPDATED,
-          metadata: { adminAction: 'link_stripe_sub', adminEmail, stripeSubscriptionId: newSubId, reason },
+          // AUDIT-01/02 fix (Tier 2): atomic with Stripe link — security-sensitive
+          await writeAuditLog(tx, {
+            action:     'SUBSCRIPTION_UPDATED',
+            actorId:    session!.user.id!,
+            actorRole:  'ADMIN',
+            targetType: 'TRANSACTION',
+            targetId:   newSubId,
+            metadata:   { adminAction: 'link_stripe_sub', adminEmail, stripeSubscriptionId: newSubId, reason },
+          });
         });
 
         return NextResponse.json({ success: true, message: `Linked Stripe subscription ${newSubId}` });
