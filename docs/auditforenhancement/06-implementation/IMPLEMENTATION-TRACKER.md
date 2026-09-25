@@ -276,7 +276,7 @@ P1-04 through P1-08 remain open only for the project closure gate. P1-02 and P1-
 | P1-07 Untrusted Evidence | `cb654164` | **FIX-VERIFIED** |
 | P1-08 Adversarial Coverage | `5d4a6bac` | **FIX-VERIFIED** |
 
-Independent audit evidence is recorded in the auditforenhancement lifecycle documents. No item above is marked CLOSED by this tracker.
+P1-02 and P1-03 are marked CLOSED following GPT independent verification. P1-01 and P1-04 through P1-08 remain FIX-VERIFIED, awaiting the project closure gate.
 
 ---
 
