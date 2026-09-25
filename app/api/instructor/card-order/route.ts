@@ -8,7 +8,7 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { logAuditEvent } from '@/lib/services/auditLogger'
+import { writeAuditLogSafe } from '@/lib/services/audit'
 
 const CreateOrderSchema = z.object({
   quantity: z.number().int().min(50).max(500),
@@ -56,13 +56,15 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  await logAuditEvent({
-    actorId:      session!.user!.id,
-    actorRole:    'provider',
-    action:       'CARD_ORDER_REQUESTED',
-    resourceType: 'BOOKING', // closest available type
-    req,
-  } as any)
+  // AUDIT-01/02 fix (Tier 4): card order — no financial state change, low-risk.
+  // writeAuditLogSafe replaces the old logAuditEvent swallowing catch.
+  await writeAuditLogSafe({
+    action:     'CARD_ORDER_REQUESTED',
+    actorId:    session!.user!.id,
+    actorRole:  'provider',
+    targetType: 'BOOKING', // closest available type
+    targetId:   order.id,  // was missing in original — malformed entry fixed
+  })
 
   // Notify admin — best-effort (don't fail the request if email fails)
   try {
