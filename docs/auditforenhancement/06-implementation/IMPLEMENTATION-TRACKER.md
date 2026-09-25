@@ -377,6 +377,8 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 
 **Current focus:** Closure gate deferred; live-model tool-selection quality remains outside P1-10 scope
 
+**Post-P1 planning baseline:** [`POST-P1-CLOSURE-AND-ROADMAP.md`](../05-planning/POST-P1-CLOSURE-AND-ROADMAP.md)
+
 ---
 
 **Implementation Status:** P1-01 through P1-10 FIX-VERIFIED; closure gate pending
