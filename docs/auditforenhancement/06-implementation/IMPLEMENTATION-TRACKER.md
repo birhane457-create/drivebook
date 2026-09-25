@@ -254,7 +254,7 @@ Does NOT require migration of the 7 remaining tools (those are P1-03 through P1-
 
 | Item | Status | Verified implementation / audit evidence |
 |---|---|---|
-| P1-03 Instructor Risk | **FIX-VERIFIED** | `a31066ee` + policeCheck regression; exact-SHA GPT audit; 14 focused / 147 full-regression tests |
+| P1-03 Instructor Risk | **FIX-VERIFIED** | `a31066ee` + policeCheck regression; exact-SHA GPT audit; 14 focused / 144 full-regression tests; evidence: `P1-03-EXECUTION-EVIDENCE.md` |
 | P1-04 Daily Summary Expiry | **FIX-VERIFIED** | `88a6c834`; exact-SHA GPT audit; 3 focused / 117 regression tests |
 | P1-05 Suburb Demand | **FIX-VERIFIED** | `4d4bc303`; exact-SHA GPT audit; 3 focused / 120 regression tests |
 | P1-06 Remaining Tools | **FIX-VERIFIED** | `b6b7593d`; exact-SHA GPT audit; 6 focused / 129 regression tests |
@@ -373,10 +373,50 @@ Before merging `audit/ai-enhancement-multimodel` → `main`:
 4. Route P0-01 and P0-03 to security team (external, parallel)
 5. **NOW: P1-08 — complete broader adversarial coverage**
 
-**Current focus:** project closure gate / final rebase-merge verification
+**Current focus:** P1-09 health-score semantics, then P1-10 evaluation suite foundation
 
 ---
 
 **Implementation Status:** P1-01 through P1-08 FIX-VERIFIED; closure gate pending
 **Current Branch:** `audit/ai-enhancement-multimodel` at `5d4a6bac`
 **Last Updated:** September 25, 2026
+
+## NEXT ENGINEERING STAGE
+
+### P1-09 — Health-Score Semantics Clarification
+
+**Status:** READY
+**Decision:** D-06
+**Dependencies:** P1-02
+
+**Scope:**
+- document the health-score formula and semantics
+- define zero vs missing vs error behaviour
+- define edge cases for empty, partial, and failed data
+- expose the underlying signals in Copilot output without reintroducing silent fallbacks
+
+**Acceptance:**
+- [ ] semantics documented
+- [ ] edge cases defined
+- [ ] underlying signals surfaced
+- [ ] D-06 verified
+
+### P1-10 — Copilot Evaluation Suite Foundation
+
+**Status:** READY
+**Decision:** D-15
+**Dependencies:** P1-06, P1-08
+
+**Scope:**
+- create the evaluation suite scaffold under tests/copilot-evaluation/
+- add tool-selection, failure-handling, permission-boundary, representative, and prompt-injection cases
+- run in CI and require 100% pass before deployment
+
+**Acceptance:**
+- [ ] evaluation suite framework created
+- [ ] 50+ cases implemented
+- [ ] CI integration complete
+- [ ] 100% pass rate achieved
+- [ ] D-15 verified
+
+P1-09 is the next architecture item after the verified P1 foundation. P1-10 is unblocked because the ToolResult migration and adversarial boundary work are complete.
