@@ -288,24 +288,16 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
     });
   });
 
-  describe('B: Atomicity — Audit Failure Rollback', () => {
-    it('B1: audit write failure inside $transaction rolls back Provider mutation', async () => {
-      // This test requires either:
-      // 1. Mocking writeAuditLog to throw (not possible in HTTP test)
-      // 2. Forcing a constraint violation in AuditLog table
-      // 3. A special test-only route that simulates audit failure
-      //
-      // Since this is an HTTP integration test, we cannot mock internal functions.
-      // The transaction-level atomicity is already proven by the database-level tests.
-      //
-      // For HTTP-level evidence, we would need a test-only endpoint that forces
-      // writeAuditLog() to throw, or we accept that this specific property
-      // is covered by the database-level test suite (audit-05-provider-review-atomicity.test.ts).
-      //
-      // Marking as SKIPPED with rationale documented.
-      console.log('[B1] Atomicity rollback property verified at database level (cannot force audit failure via HTTP)');
-    });
-  });
+  // NOTE: B1 (audit failure rollback) is NOT included in this HTTP suite.
+  // 
+  // Rationale:
+  // - Cannot force writeAuditLog() to throw via HTTP without test-only production endpoint
+  // - Creating test-only endpoints increases attack surface unnecessarily
+  // - Atomicity property is proven by database-level tests (audit-05-provider-review-atomicity.test.ts)
+  //
+  // Evidence model:
+  // - HTTP tests prove: route integration, auth, correct enums, metadata
+  // - DB tests prove: transaction atomicity, rollback on audit failure
 
   describe('C: Authorization', () => {
     it('C1: unauthorized request returns 401/403 and performs no Provider mutation or AuditLog write', async () => {
