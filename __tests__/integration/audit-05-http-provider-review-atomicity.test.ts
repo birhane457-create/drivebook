@@ -159,6 +159,7 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
           phone: '555-0001',
           approvalStatus: 'PENDING',
           isActive: false,
+          hourlyRate: 50.0,
         },
       });
 
@@ -212,6 +213,7 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
           phone: '555-0002',
           approvalStatus: 'PENDING',
           isActive: false,
+          hourlyRate: 50.0,
         },
       });
 
@@ -254,6 +256,7 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
           phone: '555-0003',
           approvalStatus: 'APPROVED',
           isActive: true,
+          hourlyRate: 50.0,
         },
       });
 
@@ -309,6 +312,7 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
           phone: '555-0004',
           approvalStatus: 'PENDING',
           isActive: false,
+          hourlyRate: 50.0,
         },
       });
 
@@ -347,6 +351,7 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
           phone: '555-0005',
           approvalStatus: 'PENDING',
           isActive: false,
+          hourlyRate: 50.0,
         },
       });
 
@@ -384,6 +389,7 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
           phone: '555-0006',
           approvalStatus: 'PENDING',
           isActive: false,
+          hourlyRate: 50.0,
         },
       });
 
@@ -423,6 +429,7 @@ describe('AUDIT-05: Provider Review Atomic Audit Coverage (HTTP)', () => {
           phone: '555-0007',
           approvalStatus: 'PENDING',
           isActive: false,
+          hourlyRate: 50.0,
         },
       });
 
