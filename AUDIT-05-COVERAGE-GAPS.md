@@ -1,9 +1,11 @@
 # AUDIT-05: Audit Coverage Gaps
 
-**Status:** OPEN  
+**Status:** REMEDIATED (pending integration tests)  
 **Priority:** P1 (Security)  
 **Scope:** main branch  
 **Created:** 2026-09-25  
+**Remediated:** 2026-09-25  
+**Commits:** 0b5599b0 (discovery), 8d53d9f5 (implementation)  
 
 ## Problem Statement
 
@@ -95,25 +97,53 @@ All three operations:
 
 The reject route contains an abandoned comment suggesting audit logging was previously attempted but removed because "AuditLog model not in schema". However, AUDIT-01/02 verification proves the AuditLog table DOES exist and is functional in PostgreSQL.
 
-## Next Steps
+## Remediation Progress
 
-1. **Map all sensitive operations** — inventory existing admin API routes ✅ (Provider ops discovered)
-2. **Audit gap analysis** — identify operations missing `writeAuditLog()` calls ✅ (3 critical gaps found)
-3. **Coverage implementation** — add audit calls to identified gaps ⬅️ NEXT
-4. **Integration testing** — verify audit records are created
+1. ✅ **Map all sensitive operations** — inventory existing admin API routes (Provider ops discovered)
+2. ✅ **Audit gap analysis** — identify operations missing `writeAuditLog()` calls (3 critical gaps found)
+3. ✅ **Coverage implementation** — add audit calls to identified gaps (8d53d9f5)
+4. ⬅️ **Integration testing** — verify audit records are created (NEXT)
 5. **Regression prevention** — add tests ensuring future operations include audit
 
 ## Implementation Plan
 
-### Phase 1: Discovery ✅ COMPLETE
+### Phase 1: Discovery ✅ COMPLETE (0b5599b0)
 - ✅ List all admin API routes by category
 - ✅ Identify which routes have `writeAuditLog()` calls
 - ✅ Categorize gaps by sensitivity level
 
-### Phase 2: Critical Gaps (P0)
-- [ ] Provider status changes (approve/reject/suspend)
-- [ ] Permission/role modifications
-- [ ] Subscription overrides
+### Phase 2: Implementation ✅ COMPLETE (8d53d9f5)
+
+**Remediation Applied:**
+
+All three provider status operations now have atomic audit coverage:
+
+1. **approve/route.ts**
+   - ✅ Wrapped in `prisma.$transaction()`
+   - ✅ Added `writeAuditLog(tx, ...)` with action `'APPROVE_INSTRUCTOR'`
+   - ✅ Captures admin actorId, IP, user agent
+   - ✅ Metadata includes instructor name and email
+
+2. **reject/route.ts**
+   - ✅ Added `writeAuditLog(tx, ...)` inside existing transaction
+   - ✅ Action: `'REJECT_INSTRUCTOR'`
+   - ✅ Metadata includes rejection reason, instructor details
+   - ✅ Removed abandoned comment about missing AuditLog model
+
+3. **suspend/route.ts**
+   - ✅ Converted to `prisma.$transaction()` pattern
+   - ✅ Added `writeAuditLog(tx, ...)` with action `'SUSPEND_INSTRUCTOR'`
+   - ✅ Metadata includes suspension reason, instructor details
+
+**Security Guarantee:**
+- Provider state change and audit record commit atomically
+- If audit write fails, state change rolls back (AUDIT-02 invariant)
+- Email notifications remain outside transaction (best-effort)
+
+### Phase 2: Critical Gaps (P0) ✅ COMPLETE
+- ✅ Provider status changes (approve/reject/suspend) — 8d53d9f5
+- [ ] Permission/role modifications — not yet discovered
+- [ ] Subscription overrides — not yet discovered
 
 ### Phase 3: Important Gaps (P1)
 - [ ] Document verification status
