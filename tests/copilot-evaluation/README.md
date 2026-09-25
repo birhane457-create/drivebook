@@ -9,6 +9,7 @@ P1-10 evaluates the deterministic safety and evidence boundary around the Admin 
 - P1-08: authoritative 144-test regression baseline.
 - P1-10 implementation commit: `dced35d61184f2e62af9bc9061846318f335a203`.
 - P1-10 audit remediation commit: `3d747a5faed7e2de86733bcd27bdf008e795d061`.
+- P1-10 ambiguity-policy commit: `13eac0b652564f569ff3d5218fecabe8d67b7b33`.
 - Scope: P1-10 evaluation contract, suite, and CI integration only.
 - P1-10 status: `IMPLEMENTED / TESTED`, pending independent GPT audit.
 - P1-10 is not `FIX-VERIFIED` and is not `CLOSED` until that audit is complete.
@@ -26,7 +27,9 @@ The implementation must not change application behavior outside P1-10. Pre-exist
 | Representative scenarios | Natural-language admin workflows exercise the same deterministic selection path and verify the complete tool/argument decision. | 10 |
 | Prompt injection | Hostile evidence is marked untrusted; hostile arguments and mutation tools are rejected. | 10 |
 
-The suite contains 60 named cases plus one cross-query invariant, producing 61 test cases. A case is meaningful when it has a distinct admin intent, failure mode, authorization outcome, or hostile-data path; the count is not produced by repeating one assertion with different labels.
+The suite contains 66 named cases plus one cross-query invariant, producing 67 test cases. A case is meaningful when it has a distinct admin intent, failure mode, authorization outcome, ambiguity, or hostile-data path; the count is not produced by repeating one assertion with different labels.
+
+Selection policy is conservative: no matching intent, multiple distinct matching decisions, hostile instruction-like text, unsupported numeric/time modifiers, and near matches return `null` rather than silently choosing a tool or manufacturing arguments.
 
 ## Pass/fail criteria
 
