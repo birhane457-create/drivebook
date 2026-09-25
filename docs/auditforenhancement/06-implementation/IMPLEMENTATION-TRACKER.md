@@ -66,7 +66,7 @@ CLOSED
 
 ## CURRENT PHASE: P0 BLOCKERS
 
-**P0 disposition record:** [`P0-DISPOSITION.md`](P0-DISPOSITION.md) is the evidence-based inventory for every P0 item. It must be completed before the latest-main rebase or any P2 implementation.
+**P0 disposition record:** [`P0-DISPOSITION.md`](P0-DISPOSITION.md) is the evidence-based inventory for every P0 item. Wallet P0-01A/B staging evidence is delegated to the other team and remains an explicit closure dependency; our active P0 track is S-2 through S-6. The latest-main rebase and any P2 implementation remain blocked.
 
 ### P0-01: Security Track — Credential Verification
 **Status:** NOT STARTED  
