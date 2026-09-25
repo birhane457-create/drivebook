@@ -130,6 +130,35 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // INT-M-PKG-01 CONTAINMENT: This endpoint is disabled pending security remediation.
+  // Three defects require architectural redesign:
+  //   1. IDOR: packageId (caller-supplied) used as providerId with no ownership check
+  //   2. Hardcoded pricing: price, packageHours, duration are server constants
+  //   3. Payment bypass: status='CONFIRMED' regardless of isPaid
+  //
+  // This endpoint will remain disabled until a replacement package catalog + payment
+  // flow is implemented. The replacement must enforce:
+  //   - Server-side package identity/pricing authority (InstructorPackage catalog)
+  //   - Client entitlement verification (ownership/relationship check)
+  //   - Payment-before-activation (Stripe payment intent required)
+  //
+  // To re-enable after proper implementation, set: ENABLE_MOBILE_PACKAGE_PURCHASE=true
+  // See: docs/audit/phase2/INT-M-PKG-01-DISCOVERY.md
+  
+  const enabled = process.env.ENABLE_MOBILE_PACKAGE_PURCHASE === 'true'
+  
+  if (!enabled) {
+    return NextResponse.json(
+      {
+        error: 'Mobile package purchase is temporarily unavailable',
+        message: 'Please visit the web app to purchase lesson packages',
+        code: 'MOBILE_PURCHASE_DISABLED',
+        webUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://drivebook.com.au',
+      },
+      { status: 503 }
+    )
+  }
+
   try {
     // Validate mobile token
     const auth = await validateMobileToken(req);
