@@ -4,26 +4,30 @@
 
 **Finding:** AUDIT-05 — Provider Review Atomic Audit (Missing transaction atomicity in instructor approval/rejection/suspension)
 
-**Status:** ⚠️ **TEST EXECUTION COMPLETE** (awaiting final closure review)
+**Status:** ⚠️ **EVIDENCE CORRECTIONS APPLIED** (awaiting final closure review)
 
-**Test Execution Date:** 2026-08-15 22:02:01 UTC
+**HTTP Test Execution:** 2026-09-25 (local timezone, exact UTC timestamp from preserved terminal output)
 
 **Test Results:**
 - **HTTP Integration Tests:** 7/7 passing (A1-A3, C1-C2, D1, E1)
-- **Database Atomicity Test:** 7/7 passing (B1 - separate suite)
+- **Database Atomicity Test:** Part of original 7-test suite at `dff702ad`
 
 ---
 
 ## Evidence Package Structure
 
-This evidence package contains **two separate test suites:**
+This evidence package documents **two stages of test development:**
 
-| Test Suite | Tests Included | Purpose | Commit |
-|------------|---------------|---------|--------|
-| **HTTP Integration** | A1, A2, A3, C1, C2, D1, E1 | Route-level behavior: real HTTP → auth → route → database flow | Current (completed 2026-08-15) |
-| **Database Atomicity** | B1 | Transaction rollback verification when audit write fails | `dff702ad` |
+| Stage | Tests | Purpose | Commit(s) |
+|-------|-------|---------|-----------|
+| **Initial DB Test Suite** | A1, A2, A3, B1, C1, D1, E1 (7 tests in one file) | Database-level atomicity proof using Prisma directly | `dff702ad` |
+| **HTTP Integration Suite** | A1, A2, A3, C1, C2, D1, E1 (7 tests, B1 excluded) | Route-level behavior: real HTTP → auth → route → database flow | `38237246` → `cfec5efc` → `e64a15e1` |
 
-**Important:** B1 is **not** included in the HTTP suite. It is a separate database-level test that proves the underlying PostgreSQL transaction mechanism.
+**Important Distinction:**
+- **`dff702ad`:** Single test file with 7 tests including B1 (database-level, no HTTP)
+- **`e64a15e1`:** Separate test file with 7 HTTP tests, B1 explicitly removed (HTTP-level, real routes)
+
+**B1 Status:** B1 exists only in the `dff702ad` database test suite. It is intentionally excluded from the HTTP suite because it requires forcing audit failures, which would need test-only production code.
 
 ---
 
@@ -44,12 +48,14 @@ This evidence package contains **two separate test suites:**
 
 **Test File:** `__tests__/integration/audit-05-http-provider-review-atomicity.test.ts`
 
-**Test Creation:** Commit `38237246` (initial structure)  
-**Test Completion:** 2026-08-15 (fixtures fixed, 7/7 passing)
+**Development Chain:**
+- `38237246` — Initial HTTP test structure created
+- `cfec5efc` — Fixed B1 stub removal, documented evidence separation  
+- `e64a15e1` — Final fixes: SUPER_ADMIN auth, CSRF flow, fixture corrections, profileImage setup
 
 **Tests Included:** A1, A2, A3, C1, C2, D1, E1 (7 tests total)
 
-**Test NOT Included:** B1 (transaction rollback) - this is verified separately in database-level suite
+**Test Explicitly Excluded:** B1 (transaction rollback proof exists in `dff702ad` database suite)
 
 **Test Framework:** Vitest + supertest (real HTTP requests against Next.js server)
 
@@ -95,25 +101,27 @@ Test Files  1 passed (1)
 
 ## 4. What Each HTTP Test Proves (7 Tests)
 
-#### **A1: Approve Route Atomicity**
+**Important:** A1–A3 demonstrate successful route-level audit coverage (Provider mutation + AuditLog creation). They do NOT force audit write failures. Transaction rollback under failure is proven separately by B1 in the `dff702ad` database suite.
+
+#### **A1: Approve Route - Successful Audit Coverage**
 - ✅ HTTP 200 response from `/api/admin/instructors/{id}/approve`
 - ✅ Provider.approvalStatus set to `APPROVED`
 - ✅ Provider.isActive set to `true`
 - ✅ AuditLog entry created with action `APPROVE_INSTRUCTOR`
-- ✅ Single atomic transaction (both writes succeed or both fail)
+- ✅ Route uses `$transaction` wrapper (verified in source at `8d53d9f5`)
 
-#### **A2: Reject Route Atomicity**
+#### **A2: Reject Route - Successful Audit Coverage**
 - ✅ HTTP 200 response from `/api/admin/instructors/{id}/reject`
 - ✅ Provider.approvalStatus set to `REJECTED`
 - ✅ AuditLog entry created with action `REJECT_INSTRUCTOR`
-- ✅ Single atomic transaction
+- ✅ Route uses `$transaction` wrapper (verified in source at `8d53d9f5`)
 
-#### **A3: Suspend Route Atomicity**
+#### **A3: Suspend Route - Successful Audit Coverage**
 - ✅ HTTP 200 response from `/api/admin/instructors/{id}/suspend`
 - ✅ Provider.approvalStatus set to `SUSPENDED`
 - ✅ Provider.isActive set to `false`
 - ✅ AuditLog entry created with action `SUSPEND_INSTRUCTOR`
-- ✅ Single atomic transaction
+- ✅ Route uses `$transaction` wrapper (verified in source at `8d53d9f5`)
 
 #### **C1: Unauthorized Access Control**
 - ✅ Non-admin user (role: `INSTRUCTOR`) receives HTTP 403
@@ -143,30 +151,31 @@ Test Files  1 passed (1)
 
 ---
 
-## 5. Database-Level Atomicity Test (Separate Suite)
+## 5. Database-Level Atomicity Test (Original Suite at dff702ad)
 
-**Test File:** `__tests__/integration/audit-05-db-transaction-rollback.test.ts`
+**Test File:** `__tests__/integration/audit-05-provider-review-atomicity.test.ts` (at commit `dff702ad`)
 
-**Test Commit:** `dff702ad`
+**Test Suite:** 7 tests total (A1, A2, A3, B1, C1, D1, E1)
 
 **Result:** 7/7 passing
 
-**Test Included:** B1 only
-
-**What B1 Proves:**
+**B1 Specifically Proves:**
 - Simulated audit write failure causes Provider mutation rollback
 - PostgreSQL transaction isolation verified
 - `prisma.$transaction()` rollback mechanism works correctly
 
-**Why Separate:**
-- HTTP tests prove route integration (auth → route → database)
-- DB test proves underlying transaction mechanism (rollback on failure)
-- Combined: complete AUDIT-05 coverage without test-only production endpoints
+**Why B1 is Separate from HTTP Suite:**
+- HTTP tests prove route integration (auth → route → database) with successful audit writes
+- B1 proves underlying transaction mechanism (rollback on failure) at database level
+- B1 requires forcing audit failures, which would need test-only production code
+- Combined: complete AUDIT-05 coverage without compromising production code
 
-**Execution Command:**
+**Test Command (at dff702ad):**
 ```bash
-npx vitest run audit-05-db-transaction-rollback
+npx vitest run audit-05-provider-review-atomicity
 ```
+
+**Evidence:** Commit message at `dff702ad` states "7/7 pass — atomic audit proof"
 
 ---
 
@@ -205,28 +214,29 @@ npx vitest run audit-05-db-transaction-rollback
 ## 8. Reviewer Requirements Met
 
 ✅ **Requirement 1:** Authorized admin can perform all three operations
-- **Verified by:** A1, A2, A3 (HTTP 200, correct state changes, audit entries created)
+- **Verified by:** HTTP tests A1, A2, A3 (HTTP 200, correct state changes, audit entries created)
 
 ✅ **Requirement 2:** Correct Provider state is written
-- **Verified by:** A1 (APPROVED), A2 (REJECTED), A3 (SUSPENDED) with database queries
+- **Verified by:** HTTP tests A1 (APPROVED), A2 (REJECTED), A3 (SUSPENDED) with database queries
 
 ✅ **Requirement 3:** Exactly one corresponding AuditLog is created
-- **Verified by:** A1, A2, A3 query `prisma.auditLog.findMany()` returning single entries
+- **Verified by:** HTTP tests A1, A2, A3 query `prisma.auditLog.findMany()` returning single entries
 
 ✅ **Requirement 4:** Audit contains correct actor/provider/action
-- **Verified by:** D1 (checks actorId, actorRole, action enum, targetId, metadata)
+- **Verified by:** HTTP test D1 (checks actorId, actorRole, action enum, targetId, metadata)
 
 ✅ **Requirement 5:** Forced audit failure rolls back Provider mutation
-- **Verified by:** B1 in separate database-level test suite (commit `dff702ad`, 7/7 passing)
+- **Verified by:** B1 in original database test suite (commit `dff702ad`, part of 7/7 passing suite)
+- **Note:** B1 tests database-level rollback, not included in HTTP suite to avoid test-only production code
 
 ✅ **Requirement 6:** Unauthorized/no-permission request performs neither mutation nor audit
-- **Verified by:** C1 (403 for non-admin) and C2 (401 for unauthenticated)
+- **Verified by:** HTTP tests C1 (403 for non-admin) and C2 (401 for unauthenticated)
 
 ✅ **Requirement 7:** Reject/suspend reason is captured correctly
-- **Verified by:** D1 (AuditLog.metadata.reason matches HTTP request body)
+- **Verified by:** HTTP test D1 (AuditLog.metadata.reason matches HTTP request body)
 
 ✅ **Requirement 8:** Sequential operations create distinct audit entries
-- **Verified by:** E1 (approve→suspend creates two AuditLog entries with correct actions)
+- **Verified by:** HTTP test E1 (approve→suspend creates two AuditLog entries with correct actions)
 
 ---
 
@@ -264,30 +274,38 @@ npx vitest run audit-05-http --reporter=verbose
 | Stage | Commit | Date | Status | Evidence |
 |-------|--------|------|--------|----------|
 | Discovery | `0b5599b0` | — | ✅ VERIFIED | Initial finding documented |
-| Implementation | `8d53d9f5` | — | ✅ FIX-VERIFIED | All three routes use `$transaction` + `writeAuditLog` |
-| DB Atomicity Test (B1) | `dff702ad` | — | ✅ VERIFIED | 7/7 database rollback tests passing |
-| HTTP Integration Tests (A1-A3, C1-C2, D1, E1) | `38237246` + fixes | 2026-08-15 22:02:01 | ✅ VERIFIED | 7/7 HTTP route tests passing |
-| **AUDIT-05 Overall** | — | — | ⚠️ **AWAITING CLOSURE REVIEW** | All 8 requirements met with execution evidence |
+| Implementation | `8d53d9f5` | 2026-09-25 | ✅ FIX-VERIFIED | All three routes use `$transaction` + `writeAuditLog` |
+| Initial DB Test Suite | `dff702ad` | 2026-09-25 | ✅ VERIFIED | 7/7 tests pass (A1-A3, B1, C1, D1, E1) - database level |
+| HTTP Integration Tests | `38237246` → `e64a15e1` | 2026-09-25 | ✅ VERIFIED | 7/7 HTTP route tests pass (A1-A3, C1-C2, D1, E1) |
+| **AUDIT-05 Overall** | — | — | ⚠️ **AWAITING CLOSURE REVIEW** | All 8 requirements met; evidence corrections applied |
 
 ---
 
 ## 11. Summary
 
-**AUDIT-05 test execution is complete.**
+**AUDIT-05 test execution is complete with evidence corrections applied.**
 
 Evidence package provides:
 - ✅ Source-level fix verification (atomic transactions in all three routes at `8d53d9f5`)
-- ✅ Real PostgreSQL HTTP integration tests (7/7 passing: A1-A3, C1-C2, D1, E1)
-- ✅ Database-level rollback verification (7/7 passing: B1 at `dff702ad`)
-- ✅ All 8 reviewer-specified conditions verified with timestamps
+- ✅ Real PostgreSQL HTTP integration tests (7/7 passing: A1-A3, C1-C2, D1, E1 at `e64a15e1`)
+- ✅ Database-level rollback verification (B1 within 7-test suite at `dff702ad`)
+- ✅ All 8 reviewer-specified conditions verified
+- ✅ Clear distinction between successful-path testing (HTTP) and failure-path testing (B1)
 
-**Two separate test suites:**
-1. **HTTP Integration:** Proves route/auth/audit behavior (7 tests)
-2. **Database Atomicity:** Proves transaction rollback mechanism (1 test)
+**Test Development Stages:**
+1. **Database Suite (`dff702ad`):** 7 tests including B1 rollback proof
+2. **HTTP Suite (`e64a15e1`):** 7 tests proving real route behavior, B1 intentionally excluded
+
+**Key Corrections Applied:**
+- B1 test count corrected: part of original 7-test database suite, not separate "7/7 B1-only" suite
+- HTTP commit chain documented: `38237246` → `cfec5efc` → `e64a15e1`
+- Date reconciled: 2026-09-25 (not 2026-08-15)
+- A1-A3 wording corrected: "successful audit coverage" not "atomicity proof"
+- Rollback guarantee attributed to B1 database test, not HTTP tests
 
 **No outstanding test failures. No test-only production code.**
 
-**Status:** Ready for final closure gate review.
+**Status:** Awaiting final closure gate review with corrected evidence.
 
 ---
 
@@ -295,9 +313,11 @@ Evidence package provides:
 
 **HTTP Integration Test:**
 - `__tests__/integration/audit-05-http-provider-review-atomicity.test.ts` (A1-A3, C1-C2, D1, E1)
+- Final version at commit `e64a15e1`
 
 **Database Atomicity Test:**
-- `__tests__/integration/audit-05-db-transaction-rollback.test.ts` (B1)
+- `__tests__/integration/audit-05-provider-review-atomicity.test.ts` (A1-A3, B1, C1, D1, E1)
+- At commit `dff702ad` (7-test suite including B1)
 
 **Route Implementations:**
 - `app/api/admin/instructors/[id]/approve/route.ts`
@@ -310,7 +330,8 @@ Evidence package provides:
 ---
 
 **Evidence Package Prepared By:** Kiro AI Agent  
-**HTTP Test Execution:** 2026-08-15 22:02:01 UTC  
+**HTTP Test Execution:** 2026-09-25 (local timezone)  
+**Evidence Corrections Applied:** 2026-09-25  
 **Test Framework:** Vitest 1.6.1 + supertest  
 **Database:** PostgreSQL 13+ (dockerized test instance)  
 **Application:** Next.js 14.2.35 + Prisma 5.22.0  
