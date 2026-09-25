@@ -199,7 +199,7 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
       // Verify NO wallet transaction created for User B
       const txB = await prisma.walletTransaction.findFirst({
         where: { 
-          walletId: userB.walletId, 
+          walletId: userB.walletId,
           type: 'CREDIT',
           metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentA }
         }
