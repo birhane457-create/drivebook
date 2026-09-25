@@ -19,6 +19,7 @@
         "seed:test-centres": "node seed-test-centres.js",
         "seed:learning-content": "node seed-learning-content.js",
         "test": "vitest run",
+        "test:copilot-evaluation": "vitest run tests/copilot-evaluation",
         "test:watch": "vitest",
         "test:ui": "vitest --ui"
     },

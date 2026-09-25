@@ -8,7 +8,7 @@ export default defineConfig({
     hookTimeout: 30000,   // allow 30s for beforeAll/afterAll against cloud DB
     testTimeout: 60000,   // allow 60s per test (cloud DB + concurrent ops need headroom)
     setupFiles: ['./lib/services/receipt/__tests__/setup.ts'],
-    include: ['**/__tests__/**/*.test.ts'],
+    include: ['**/__tests__/**/*.test.ts', 'tests/copilot-evaluation/**/*.test.ts'],
     exclude: ['node_modules', 'dist', '.next'],
     env: {
       // Force test database URL to prevent production database access
