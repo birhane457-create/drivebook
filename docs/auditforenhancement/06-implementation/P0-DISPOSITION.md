@@ -42,4 +42,8 @@ The same evidence package should record the legitimate User A path, missing meta
 - P0-02 S-7: `FIX-VERIFIED` — post-rebase re-verification still belongs to the closure gate.
 - P0-03 S-2 through S-6: `OPEN` — separate platform-security disposition required.
 
+## Local Evidence Update
+
+Docker evidence is now recorded in [P0-DOCKER-LOCAL-EVIDENCE.md](P0-DOCKER-LOCAL-EVIDENCE.md). The actual route tests passed `12/12`, including the required User B -> User A ownership scenario and PostgreSQL `Promise.all()` concurrency checks. This strengthens, but does not complete, P0-01A/B disposition: both remain `OPEN` until isolated staging reproduces the HTTP, database, migration, and deployment evidence.
+
 No rebase, P2 implementation, or application change is authorized by this record. After P0 disposition is complete, follow the sequence in [POST-P1-CLOSURE-AND-ROADMAP.md](../05-planning/POST-P1-CLOSURE-AND-ROADMAP.md).

@@ -163,20 +163,20 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
   });
 
   describe('❌ NEGATIVE PATH: Cross-user PaymentIntent theft', () => {
-    it('rejects User A attempting to credit wallet with User B PaymentIntent', async () => {
-      // Mock User A session (attacker)
+    it('rejects User B attempting to credit wallet with User A PaymentIntent', async () => {
+      // Mock User B session (attacker)
       vi.mocked(getServerSession).mockResolvedValue({
-        user: { id: userA.id, email: userA.email, role: 'CLIENT' }
+        user: { id: userB.id, email: userB.email, role: 'CLIENT' }
       } as any);
 
-      // Mock Stripe: User B's PaymentIntent (victim)
+      // Mock Stripe: User A's PaymentIntent (victim)
       mockStripeService.retrievePaymentIntent.mockResolvedValue({
-        id: paymentIntentB,
+        id: paymentIntentA,
         status: 'succeeded',
         amount_received: 10000, // $100.00
         metadata: {
-          userId: userB.id,      // ← OWNERSHIP: PaymentIntent belongs to User B
-          walletId: userB.walletId
+          userId: userA.id,      // ← OWNERSHIP: PaymentIntent belongs to User A
+          walletId: userA.walletId
         }
       });
 
@@ -185,7 +185,7 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: 100,
-          paymentIntentId: paymentIntentB  // ← User A supplies User B's payment
+          paymentIntentId: paymentIntentA  // ← User B supplies User A's payment
         })
       });
 
@@ -196,25 +196,25 @@ describe('P0-01: Wallet Ownership Bypass Remediation', () => {
       expect(response.status).toBe(403);
       expect(data.error).toContain('different account');
 
-      // Verify NO wallet transaction created for User A
-      const txA = await prisma.walletTransaction.findFirst({
+      // Verify NO wallet transaction created for User B
+      const txB = await prisma.walletTransaction.findFirst({
         where: { 
-          walletId: userA.walletId, 
+          walletId: userB.walletId, 
           type: 'CREDIT',
-          metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentB }
+          metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentA }
         }
       });
-      expect(txA).toBeNull();
+      expect(txB).toBeNull();
 
-      // Verify User A's balance unchanged
-      const walletA = await prisma.clientWallet.findUnique({
-        where: { id: userA.walletId },
+      // Verify User B's balance unchanged
+      const walletB = await prisma.clientWallet.findUnique({
+        where: { id: userB.walletId },
         include: { transactions: true }
       });
-      const balanceA = walletA!.transactions
+      const balanceB = walletB!.transactions
         .filter(t => t.status === 'CONFIRMED')
         .reduce((sum, t) => sum + (t.type === 'CREDIT' ? Number(t.amount) : -Number(t.amount)), 0);
-      expect(balanceA).toBe(100); // Only the legitimate $100 from happy path test
+      expect(balanceB).toBe(0); // User B received no unauthorized credit
     });
   });
 
