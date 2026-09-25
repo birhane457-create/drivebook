@@ -1,0 +1,12 @@
+{
+    "name": "cyber-study",
+    "version": "1.0.0",
+    "description": "stady-plan",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "init": "^0.1.2"
+    }
+}
