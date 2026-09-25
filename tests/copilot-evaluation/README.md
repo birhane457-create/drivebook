@@ -2,6 +2,19 @@
 
 P1-10 evaluates the deterministic safety and evidence boundary around the Admin Copilot. It is an offline suite: it does not call OpenAI or Anthropic, and it does not claim that a live third-party model is immune to adversarial input.
 
+## Authoritative Audit Context
+
+- Accepted baseline: `373fa770983ed533d66f8ddb98cff2b8c50fd49a`.
+- P1-01 through P1-09: `FIX-VERIFIED`.
+- P1-08: authoritative 144-test regression baseline.
+- P1-10 implementation commit: `dced35d61184f2e62af9bc9061846318f335a203`.
+- Scope: P1-10 evaluation contract, suite, and CI integration only.
+- P1-10 status: `IMPLEMENTED / TESTED`, pending independent GPT audit.
+- P1-10 is not `FIX-VERIFIED` and is not `CLOSED` until that audit is complete.
+- `FIX-VERIFIED` and `CLOSED` are separate lifecycle states.
+
+The implementation must not change application behavior outside P1-10. Pre-existing worktree changes, including booking and audit changes and `tmp_old.ts`, must remain untouched and must not be included in a P1-10 commit. A fresh agent must inspect the exact commit and current worktree before making further changes; conversational history is not an authority.
+
 ## Taxonomy
 
 | Category | Contract | Minimum cases |
@@ -12,7 +25,7 @@ P1-10 evaluates the deterministic safety and evidence boundary around the Admin 
 | Representative scenarios | Common admin workflows use the intended tool and bounded arguments. | 10 |
 | Prompt injection | Hostile evidence is marked untrusted; hostile arguments and mutation tools are rejected. | 10 |
 
-The suite contains 60 named cases. A case is meaningful when it has a distinct admin intent, failure mode, authorization outcome, or hostile-data path; the count is not produced by repeating one assertion with different labels.
+The suite contains 60 named cases plus one cross-query invariant, producing 61 test cases. A case is meaningful when it has a distinct admin intent, failure mode, authorization outcome, or hostile-data path; the count is not produced by repeating one assertion with different labels.
 
 ## Pass/fail criteria
 
