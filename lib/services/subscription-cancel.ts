@@ -22,6 +22,7 @@
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { logSubscriptionAction, AuditAction } from '@/lib/services/auditLogger';
+import { writeAuditLogSafe } from '@/lib/services/audit';
 import Stripe from 'stripe';
 
 // Lazy-initialised so tests can import this module without STRIPE_SECRET_KEY set.
@@ -163,23 +164,23 @@ export async function cancelSubscription(
     }
   });
 
-  // --- 4. Audit log (non-critical — does not affect the result) -----------------
-  try {
-    await logSubscriptionAction({
-      subscriptionId: stripeSubId ?? subscription.id,
-      providerId,
-      action: AuditAction.SUBSCRIPTION_CANCELLED,
-      metadata: {
-        mode,
-        stripeAction,
-        actorEmail,
-        reason: reason ?? null,
-        cancelledAt: now.toISOString(),
-      },
-    });
-  } catch (auditErr) {
-    logger.error('[subscription-cancel] Audit log failed (non-critical)', { error: auditErr });
-  }
+  // AUDIT-01/02 fix (Tier 4): cancellation service — Stripe + DB already committed.
+  // writeAuditLogSafe documents that this specific audit failure is non-critical
+  // and that the cancellation itself is unaffected.
+  await writeAuditLogSafe({
+    action:     AuditAction.SUBSCRIPTION_CANCELLED,
+    actorId:    providerId,
+    actorRole:  'SYSTEM',
+    targetType: 'TRANSACTION',
+    targetId:   stripeSubId ?? subscription.id,
+    metadata:   {
+      mode,
+      stripeAction,
+      actorEmail,
+      reason:      reason ?? null,
+      cancelledAt: now.toISOString(),
+    },
+  });
 
   const endsAt = mode === 'period_end'
     ? (subscription.currentPeriodEnd ?? null)

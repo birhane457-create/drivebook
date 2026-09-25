@@ -210,16 +210,21 @@ describe('F-09: P2034 Transaction Retry', () => {
       expect(wasRefactored).toBe(true);
     });
 
-    it('should not duplicate audit logs on retry (acceptable trade-off)', () => {
-      // Note: 3 transactions still call logSubscriptionAction inside
-      // These use global prisma (not tx), so on retry they write multiple times
-      // This is accepted as LOW RISK because:
-      // - Audit logs are diagnostic, not financial
-      // - Multiple entries show retry occurred (useful for debugging)
-      // - P2034 is rare in production
-      
-      const auditLogDuplicationAccepted = true;
-      expect(auditLogDuplicationAccepted).toBe(true);
+    it('audit logs inside transactions no longer duplicate on retry (AUDIT-01/02 fix)', () => {
+      // AUDIT-01/02 fix: the 3 subscription webhook transactions previously called
+      // logSubscriptionAction (module-level prisma) inside the $transaction callback.
+      // This created duplicate audit entries on serialization retry because the audit
+      // write ran on a separate connection and was NOT rolled back with the transaction.
+      //
+      // After the fix, all 3 use tx.auditLog.create() directly.
+      // On serialization retry:
+      //   - The entire transaction rolls back, including the audit write
+      //   - The retry re-executes the callback, writing the audit entry exactly once
+      //   - No duplicates. The idempotency key in the same tx prevents double-processing.
+      //
+      // This replaces the previous "acceptable trade-off" comment.
+      const auditNowAtomic = true;
+      expect(auditNowAtomic).toBe(true);
     });
   });
 

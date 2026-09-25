@@ -7,6 +7,7 @@ import { emailService } from '@/lib/services/email'
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction } from '@/lib/services/auditLogger'
+import { writeAuditLog, writeAuditLogSafe } from '@/lib/services/audit'
 import { logger } from '@/lib/logger'
 import { sendAlert } from '@/lib/services/alert-service'
 import { paymentService } from '@/lib/services/payment'
@@ -385,15 +386,16 @@ export async function POST(req: NextRequest) {
         void drainRetryQueueAsync()
       }
 
-      try {
-        await logBookingAction({
-          bookingId: pendingBooking.id,
-          action: AuditAction.BOOKING_CREATED,
-          actorId: providerId,
-          actorRole: "PROVIDER",
-          metadata: { customerId: data.customerId, price: pendingBooking.price, pendingPayment: true }
-        })
-      } catch (e) { /* non-critical */ }
+      // AUDIT-01/02 fix (Tier 4): pending-payment booking — not yet financial,
+      // wallet has not been debited. Audit failure here is non-critical.
+      await writeAuditLogSafe({
+        action:     'BOOKING_CREATED',
+        actorId:    providerId,
+        actorRole:  'provider',
+        targetType: 'BOOKING',
+        targetId:   pendingBooking.id,
+        metadata:   { customerId: data.customerId, price: pendingBooking.price, pendingPayment: true },
+      })
 
       return NextResponse.json({
         success: true,
@@ -523,6 +525,17 @@ export async function POST(req: NextRequest) {
           }
         })
 
+        // AUDIT-01/02 fix (Tier 1): audit written atomically with financial state change.
+        // If this write fails the entire transaction rolls back — wallet debit never commits.
+        await writeAuditLog(tx, {
+          action:     'BOOKING_CREATED',
+          actorId:    providerId,
+          actorRole:  'provider',
+          targetType: 'BOOKING',
+          targetId:   newBooking.id,
+          metadata:   { customerId: data.customerId, price: lessonPrice, durationHours, isPaid: true },
+        })
+
         return newBooking
           }, SERIALIZABLE_TX),
         { operationName: 'confirmed-booking' }
@@ -554,21 +567,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
-    // Audit log — record instructor-created booking (non-critical)
-    try {
-      await logBookingAction({
-        bookingId: booking.id,
-        action: AuditAction.BOOKING_CREATED,
-        actorId: providerId,
-        actorRole: "PROVIDER",
-        metadata: { customerId: data.customerId, price: toNumber(booking.price), durationHours }
-      })
-    } catch (auditErr) {
-      logger.error('Audit log failed for booking creation', {
-        error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-        bookingId: booking.id,
-      })
-    }
+    // Audit is now written atomically inside the $transaction above (AUDIT-01/02 fix).
+    // No post-transaction audit needed for the confirmed-booking path.
 
     // Invalidate availability cache for this instructor+date so the next slot
     // query reflects the newly created booking immediately.
