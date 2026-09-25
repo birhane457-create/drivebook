@@ -253,9 +253,9 @@ Current state: `FIX-VERIFIED`; do not close P1-08 until the project closure gate
 | P1-05 Suburb Demand | `4d4bc303` | FIX-VERIFIED |
 | P1-06 Remaining Tools | `b6b7593d` | FIX-VERIFIED |
 | P1-07 Untrusted Evidence | `cb654164` | FIX-VERIFIED |
-| P1-08 Adversarial Coverage | `5d4a6bac` | FIX-VERIFIED |
+| P1-08 Adversarial Coverage | `5d4a6bac` | FIX-VERIFIED (144-test authoritative count) |
 
-This is the authoritative P1 remediation sequence to be carried forward to the final closure gate and rebase/merge review.
+This is the authoritative P1 remediation sequence for the implementation audit baseline. Closure remains a separate lifecycle gate and is not recorded here.
 
 ## Next engineering stage
 

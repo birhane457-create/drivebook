@@ -246,7 +246,7 @@ Does NOT require migration of the 7 remaining tools (those are P1-03 through P1-
 | Touched-file TS errors | ✅ 0 |
 | Entire tool layer migrated | ⏳ P1-03 through P1-06 |
 
-**P1-02 STATUS: ✅ CLOSED — independently verified by GPT at `24f5cc50`**
+**P1-02 STATUS: FIX-VERIFIED**
 
 ---
 
@@ -254,29 +254,29 @@ Does NOT require migration of the 7 remaining tools (those are P1-03 through P1-
 
 | Item | Status | Verified implementation / audit evidence |
 |---|---|---|
-| P1-03 Instructor Risk | **✅ CLOSED** | `a31066ee` + policeCheck regression; GPT independently closed at `435c4fcd`; 14 focused / 144 full-regression tests; evidence: `P1-03-EXECUTION-EVIDENCE.md` |
+| P1-03 Instructor Risk | **FIX-VERIFIED** | `a31066ee` + policeCheck regression; 14 focused / 144 full-regression tests; evidence: `P1-03-EXECUTION-EVIDENCE.md`; the 144-test count was established by the authoritative count correction in `435c4fcd` |
 | P1-04 Daily Summary Expiry | **FIX-VERIFIED** | `88a6c834`; exact-SHA GPT audit; 3 focused / 117 regression tests |
 | P1-05 Suburb Demand | **FIX-VERIFIED** | `4d4bc303`; exact-SHA GPT audit; 3 focused / 120 regression tests |
 | P1-06 Remaining Tools | **FIX-VERIFIED** | `b6b7593d`; exact-SHA GPT audit; 6 focused / 129 regression tests |
 | P1-07 Untrusted Evidence | **FIX-VERIFIED** | `cb654164`; exact-SHA GPT audit; 2 structural + 2 route staging / 133 regression tests |
-| P1-08 Adversarial Coverage | **FIX-VERIFIED** | `5d4a6bac`; exact-SHA GPT audit; 12-file / 144-test full regression, server-side read-only allowlist, argument validation, and adversarial route coverage |
+| P1-08 Adversarial Coverage | **FIX-VERIFIED** | `5d4a6bac`; exact-SHA GPT audit; 12-file / 144-test authoritative regression count, server-side read-only allowlist, argument validation, and adversarial route coverage |
 
-P1-04 through P1-08 remain open only for the project closure gate. P1-02 and P1-03 have been independently CLOSED by GPT audit. This tracker reflects the verified final implementation state.
+P1-02 through P1-08 remain FIX-VERIFIED; closure remains a separate lifecycle gate. This tracker reflects the verified final implementation state and preserves the authoritative 144-test count established by `435c4fcd`.
 
 ## RECONCILED P1 SEQUENCE
 
 | Item | Implementation SHA | Current status |
 |---|---|---|
 | P1-01 Tool Result Contract | `df01d43a` | **FIX-VERIFIED** |
-| P1-02 Health Score | `f127dfe7` (impl) / `24f5cc50` (evidence) | **✅ CLOSED** — GPT independently verified |
-| P1-03 Instructor Risk | `a31066ee` + policeCheck regression / `435c4fcd` (count fix) | **✅ CLOSED** — GPT independently verified |
+| P1-02 Health Score | `f127dfe7` (impl) / `24f5cc50` (evidence) | **FIX-VERIFIED** |
+| P1-03 Instructor Risk | `a31066ee` + policeCheck regression / `435c4fcd` (count fix) | **FIX-VERIFIED** |
 | P1-04 Daily Summary | `88a6c834` | **FIX-VERIFIED** |
 | P1-05 Suburb Demand | `4d4bc303` | **FIX-VERIFIED** |
 | P1-06 Remaining Tools | `b6b7593d` | **FIX-VERIFIED** |
 | P1-07 Untrusted Evidence | `cb654164` | **FIX-VERIFIED** |
-| P1-08 Adversarial Coverage | `5d4a6bac` | **FIX-VERIFIED** |
+| P1-08 Adversarial Coverage | `5d4a6bac` | **FIX-VERIFIED** (144-test authoritative count) |
 
-P1-02 and P1-03 are marked CLOSED following GPT independent verification. P1-01 and P1-04 through P1-08 remain FIX-VERIFIED, awaiting the project closure gate.
+P1-01 through P1-08 remain FIX-VERIFIED; the closure gate is separate and not recorded here. P1-08 retains the authoritative 144-test count established by the count-correction commit.
 
 ---
 
