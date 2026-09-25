@@ -2,6 +2,8 @@
 
 **Branch:** `audit/ai-enhancement-multimodel`
 
+> **Current-state notice:** This file is a historical implementation record. For the authoritative current lifecycle of P1-01 through P1-10, use `06-implementation/IMPLEMENTATION-TRACKER.md`. Do not interpret older `PENDING`, `READY`, or intermediate entries here as current status; `FIX-VERIFIED` remains distinct from `CLOSED`.
+
 ## P0-02 — Middleware S-7 Defence-in-Depth
 
 | Stage | Status | Evidence |

@@ -5,6 +5,8 @@
 **Started:** September 24, 2026  
 **Basis:** DECISIONS.md (D-01 through D-21) and PRIORITY-BACKLOG.md
 
+> **Current-state notice:** The reconciled P1-01 through P1-10 status recorded in the `NEXT ENGINEERING STAGE` section below is authoritative. Earlier lifecycle sections in this document are historical implementation records and may contain superseded `READY`, `PENDING`, or intermediate states. `FIX-VERIFIED` remains distinct from `CLOSED`; project closure is deferred.
+
 ---
 
 ## IMPLEMENTATION ROLES
