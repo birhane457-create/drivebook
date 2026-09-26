@@ -4,13 +4,13 @@
 **Title:** Seat limit not enforced in webhook  
 **Claimed Severity:** MEDIUM  
 **Current Status:** CONFIRMED / OPEN (per AUDIT-MASTER-TRACKER.md)  
-**Discovery Date:** 2026-08-15
+**Discovery Date:** 2026-09-26
 
 ---
 
 ## Executive Summary
 
-⚠️ **FINDING APPEARS INVALID OR OUTDATED**
+⚠️ **FINDING CLAIM IS INVALID FOR CURRENT CODEBASE**
 
 The SUB-08-A finding claims that the Stripe webhook handler does not enforce seat limits for "Enterprise" tier subscriptions with a maximum of 50 seats. However, comprehensive code inspection reveals:
 
@@ -20,7 +20,9 @@ The SUB-08-A finding claims that the Stripe webhook handler does not enforce sea
 4. **BUSINESS tier exists but is marked "COMING SOON"** and has no seat-related configuration
 5. **Current DriveBook model is single-provider** (maxProviders:1 for all tiers)
 
-**Conclusion:** Either the finding is based on an outdated codebase version, refers to planned but unimplemented features, or there is a fundamental misunderstanding of what "seats" means in DriveBook's context.
+**The claimed Enterprise/50-seat invariant does not exist in the current main revision.**
+
+**However:** The webhook does receive Stripe's `subscription.quantity` field (which could be attacker-influenced via Stripe API manipulation) and ignores it. Additionally, `maxProviders` exists in the Provider model but is not enforced. These are not current vulnerabilities because DriveBook does not implement seat-based billing or multi-provider functionality, but they represent unused external inputs and unenforced configuration fields.
 
 ---
 
@@ -369,56 +371,69 @@ grep -r "maxProviders" --include="*.ts" --include="*.tsx"
 
 **Impact Analysis:**
 
-| Scenario | Risk Level | Rationale |
-|----------|------------|-----------|
-| Attacker sets quantity=99 in Stripe | ⚠️ LOW | Quantity is ignored; they pay 1x price, get 1 provider account |
-| Platform charges per-seat but doesn't provision | ❌ NONE | Platform doesn't charge per-seat |
-| School bypasses seat limits | ❌ NONE | Multi-provider feature not implemented |
-| Revenue loss from unlimited seats | ❌ NONE | No seat-based pricing model |
+| Scenario | Current Security/Financial Impact |
+|----------|-----------------------------------|
+| Attacker sets quantity=99 in Stripe | No current impact: quantity is ignored in pricing and not stored; they pay 1x price, get 1 provider account. However, this represents an unused external input that could become relevant if seat-based billing is implemented. |
+| Platform charges per-seat but doesn't provision | Not applicable: platform doesn't charge per-seat |
+| School bypasses seat limits | Not applicable: multi-provider feature not implemented |
+| Revenue loss from unlimited seats | Not applicable: no seat-based pricing model exists |
 
-**Conclusion:** There is NO financial impact because DriveBook does not use seat-based billing.
+**Conclusion:** No current security or financial impact has been established. The application does not implement seat-based billing or an Enterprise seat entitlement, so no violated seat-limit invariant was identified. The ignored `quantity` field and unenforced `maxProviders` configuration represent potential future concerns if those features are implemented, but are not current vulnerabilities.
 
 ---
 
 ### 10. Security Conclusion
 
-**Finding Status:** ❌ **INVALID / NOT APPLICABLE**
+**Finding Status:** ❌ **REJECTED - INVALID CURRENT FINDING / STALE AUDIT CLAIM**
 
 **Reasoning:**
 
-1. **No intended invariant:** No seat limits are defined in the application
-2. **No attacker-controlled input:** Quantity field is not read or used
-3. **No missing enforcement:** Nothing to enforce (feature doesn't exist)
-4. **No observable impact:** Current model is single-provider, no per-seat billing
+1. **Claimed invariant does not exist:** The "Enterprise tier with 50-seat limit" is not implemented in the current codebase
+2. **Finding is demonstrably stale:** The tracker describes an invariant (Enterprise/50-seat) that the current product does not contain
+3. **No current security/financial impact established:** The application does not implement seat-based billing, multi-provider functionality, or Enterprise tier entitlements
 
-**Root Cause of Finding:**
+**Important Clarifications:**
+
+The discovery does establish:
+- The webhook receives `subscription.quantity` from Stripe (external input) and ignores it
+- The `maxProviders` field exists in the Provider model but is not enforced
+- These represent unused external inputs and unenforced configuration fields
+
+However, these are not current vulnerabilities because:
+- DriveBook does not use quantity-based billing
+- Multi-provider functionality is marked "future/unimplemented"
+- No demonstrated security or financial invariant is violated by ignoring quantity
+
+**Disposition:** REJECTED - not applicable to current main revision
+
+**Root Cause of Original Finding:**
 
 The finding appears to be based on:
-- A planned future feature (BUSINESS tier with multi-provider support)
-- Speculation about seat limits that were never implemented
-- Confusion between `maxProviders` (future school feature) and Stripe `quantity` (per-seat billing)
-- Possibly an outdated audit against a different codebase version
+- A planned future feature (BUSINESS/ENTERPRISE tier with multi-provider support)
+- An audit against a different codebase version or planned specifications
+- The tracker itself is stale and references non-existent Enterprise tier configuration
 
 ---
 
 ## Recommended Actions
 
-### Option 1: REJECT Finding (Recommended)
+### Recommended: REJECT Finding
 
 **Rationale:**
-- No seat limits exist in the current application
-- No seat-based billing is configured
+- The claimed Enterprise/50-seat invariant does not exist in the current main revision
+- No seat limits are configured in the application
+- No seat-based billing is implemented
 - Feature is marked "COMING SOON" and not implemented
-- No security or financial risk
+- No current security or financial impact has been established
 
 **Tracker Update:**
 ```markdown
-| SUB-08-A | Seat limit not enforced in webhook | N/A | REJECTED | No seat limits exist in current codebase. BUSINESS tier is marked "COMING SOON" and not implemented. DriveBook uses single-provider model with no per-seat billing. | N/A | N/A | ✅ REJECTED | docs/audit/SUB-08-A_DISCOVERY.md |
+| SUB-08-A | Seat limit not enforced in webhook | N/A | REJECTED | Finding is not applicable to current main revision. Claimed Enterprise/50-seat invariant is not implemented. No maxSeats or seat-based billing exists. BUSINESS/multi-provider functionality is future/unimplemented. No current security or financial impact from ignored quantity has been established. Webhook does receive Stripe quantity but ignores it; maxProviders field exists but is not enforced. Neither constitutes a current vulnerability. | N/A | N/A | ✅ REJECTED | docs/audit/SUB-08-A_DISCOVERY.md | SUB-08-A |
 ```
 
 ---
 
-### Option 2: Reframe as Future Feature Requirement
+### Alternative: Reframe as Future Feature Requirement (Not Recommended)
 
 If seat-based billing is planned for a future BUSINESS tier:
 
@@ -436,17 +451,6 @@ If seat-based billing is planned for a future BUSINESS tier:
 - Implement webhook validation
 - Add Stripe quantity handling
 - Test enforcement
-
----
-
-### Option 3: Investigate Historical Context
-
-**Questions for code owner/auditor:**
-
-1. Was this finding based on a different codebase version?
-2. Was an "Enterprise" tier removed from the code after the audit?
-3. Is there a separate repository or branch with multi-provider features?
-4. Was the finding speculative (anticipating a future feature)?
 
 ---
 
@@ -478,9 +482,11 @@ If seat-based billing is planned for a future BUSINESS tier:
 ## Discovery Team Notes
 
 **Performed by:** Kiro (Autonomous Agent)  
-**Date:** 2026-08-15  
+**Date:** 2026-09-26  
 **Method:** Comprehensive code search, schema inspection, webhook trace analysis  
-**Confidence:** HIGH - No evidence of seat limits or quantity handling found  
+**Confidence:** HIGH - No evidence of Enterprise tier or 50-seat limit found in current main revision
+
+**Important Note:** The webhook does receive `subscription.quantity` from Stripe (which could be manipulated via Stripe API) and ignores it. The `maxProviders` field exists in the Provider model but is not enforced. However, these do not constitute current vulnerabilities because DriveBook does not implement seat-based billing or multi-provider functionality. They represent unused external inputs that could become relevant if those features are implemented in the future.
 
 **Search Commands Executed:**
 ```bash
@@ -497,10 +503,10 @@ grep -r "seat.*limit"                                    # 0 relevant results
 - ✅ All subscription-related service files
 - ✅ All pricing/billing UI components
 
-**Conclusion:** Finding appears to be invalid or based on outdated/different codebase.
+**Conclusion:** Finding claim is invalid for current main revision - claimed Enterprise/50-seat invariant does not exist.
 
 ---
 
-**Status:** Discovery complete - Awaiting decision on finding validity  
-**Recommendation:** REJECT finding (no security or business risk identified)
+**Status:** Discovery complete - Recommend REJECT (not applicable to current codebase)  
+**Recommendation:** REJECT finding - claim is demonstrably stale/mis-specified for current main revision
 
