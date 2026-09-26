@@ -275,6 +275,7 @@ export async function GET(req: NextRequest) {
       });
       creditAmount = Number(booking.price);
       debitAmount = Number(booking.price);
+    }
 
     return NextResponse.json({ 
       status: 'credited', 
