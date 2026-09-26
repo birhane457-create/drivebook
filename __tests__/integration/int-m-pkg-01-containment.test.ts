@@ -193,9 +193,43 @@ describe('INT-M-PKG-01 Containment Verification', () => {
 
       expect(response.status).toBe(503)
       
+      // STRONGER VERIFICATION: Check database state
       // Verify no booking was created (defensive check)
-      // In a proper test environment, we'd have a test database to verify this
-      // For now, verify we got 503 before any business logic
+      const bookings = await prisma.booking.findMany({
+        where: {
+          providerId: 'malicious-provider-id',
+          createdAt: { gte: new Date(Date.now() - 10000) }, // Last 10 seconds
+        },
+      })
+      
+      expect(bookings).toHaveLength(0)  // ← No booking created
+    })
+
+    it('should not create booking even with valid credentials', async () => {
+      // Even if auth were to pass, kill switch should prevent booking creation
+      
+      // Count bookings before
+      const countBefore = await prisma.booking.count()
+      
+      const response = await fetch(`${BASE_URL}/api/client/packages/mobile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer fake-jwt-token',
+        },
+        body: JSON.stringify({
+          packageId: 'test-provider-id',
+          paymentMethod: 'stripe',
+        }),
+      })
+
+      expect(response.status).toBe(503)
+      
+      // Count bookings after
+      const countAfter = await prisma.booking.count()
+      
+      // No new bookings should have been created
+      expect(countAfter).toBe(countBefore)
     })
   })
 

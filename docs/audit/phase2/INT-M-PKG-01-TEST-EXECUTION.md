@@ -156,15 +156,16 @@ export async function POST(req: NextRequest) {
 
 ### What These Tests Prove ✅
 
-1. **Fail Closed by Default**
-   - Environment variable undefined → endpoint disabled
-   - Environment variable not explicitly 'true' → endpoint disabled
+1. **Kill Switch Logic Is Correct**
+   - JavaScript comparison `=== 'true'` behaves as expected
+   - Environment variable undefined → disabled
+   - Environment variable not explicitly 'true' → disabled
    - Only exact string 'true' enables endpoint
 
-2. **Kill Switch Implemented**
+2. **Kill Switch Implemented in Source**
    - Code contains containment logic at commit `80c31f97`
    - Kill switch positioned before vulnerable code path
-   - Vulnerable code (`checkProviderEligible(packageId)`) unreachable when disabled
+   - Vulnerable code (`checkProviderEligible(packageId)`) follows kill switch
 
 3. **Documentation Present**
    - INT-M-PKG-01 reference in code comments
@@ -177,6 +178,8 @@ export async function POST(req: NextRequest) {
    - Default value is `false` (fail closed)
    - Warning about not enabling until replacement complete
 
+**IMPORTANT LIMITATION:** These unit tests verify the **JavaScript logic and source structure** but do NOT prove that an actual HTTP POST to the deployed route returns 503. They test the expression `process.env.ENABLE_MOBILE_PACKAGE_PURCHASE === 'true'` in isolation rather than executing the actual POST() route handler.
+
 ### What These Tests Do NOT Prove ❌
 
 These unit tests verify the **containment logic** but do not verify:
@@ -185,9 +188,12 @@ These unit tests verify the **containment logic** but do not verify:
 2. ❌ **Response body structure** (JSON format, fields)
 3. ❌ **GET endpoint still works** (viewing existing packages)
 4. ❌ **Mobile app handling** (503 → web redirect)
-5. ❌ **Production deployment** (live environment verification)
+5. ❌ **No database writes occur** (requires before/after DB state verification)
+6. ❌ **Production deployment** (live environment verification)
 
 **Note:** Integration tests in `__tests__/integration/int-m-pkg-01-containment.test.ts` (C1-C7) would verify HTTP-level behavior but require a running Next.js server.
+
+**Important:** Even the HTTP integration test C6 ("vulnerable code unreachable") only verifies HTTP 503 response. A stronger regression test would verify database state before/after an attempted attack to prove no booking was created. This is logically implied by the early return in source code, but not independently proven by HTTP status alone.
 
 ---
 
