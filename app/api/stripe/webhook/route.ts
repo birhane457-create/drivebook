@@ -717,9 +717,9 @@ async function handleCheckoutCompleted(
             userAgent:  'stripe-webhook',
             metadata:   {
               event: 'checkout_completed',
-              customerId: customer,
+              customerId: typeof customer === 'string' ? customer : customer.id,
               tier: tier ?? 'unknown',
-              stripeSubscriptionId: checkoutSession.subscription ?? null,
+              stripeSubscriptionId: typeof checkoutSession.subscription === 'string' ? checkoutSession.subscription : checkoutSession.subscription?.id ?? null,
             },
             success:    true,
           },
