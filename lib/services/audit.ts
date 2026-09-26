@@ -106,7 +106,7 @@ export async function writeAuditLogSafe(data: AuditEntryData): Promise<void> {
         targetId:     data.targetId,
         ipAddress:    data.ipAddress   ?? null,
         userAgent:    data.userAgent   ?? null,
-        metadata:     data.metadata    ?? {},
+        metadata:     (data.metadata ?? {}) as any,
         success:      data.success     ?? true,
         errorMessage: data.errorMessage ?? null,
       },
