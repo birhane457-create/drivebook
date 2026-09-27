@@ -239,23 +239,23 @@ model PlatformRateChange {
 }
 
 model Booking {
-  id                    String        @id @default(cuid())
+  id                    String    @id @default(cuid())
   providerId            String
   customerId            String?
   customerName          String?
   customerPhone         String?
   bookingType           String?
-  status                String        @default("PENDING")
+  status                String    @default("PENDING")
   startTime             DateTime?
   endTime               DateTime?
   duration              Float?
-  price                 Decimal       @default(0) @db.Decimal(12, 2)
-  platformFee           Decimal       @default(0) @db.Decimal(12, 2)
-  providerPayout        Decimal       @default(0) @db.Decimal(12, 2)
-  commissionRate        Decimal       @default(0) @db.Decimal(5, 4)
-  isPaid                Boolean       @default(false)
+  price                 Decimal   @default(0) @db.Decimal(12, 2)
+  platformFee           Decimal   @default(0) @db.Decimal(12, 2)
+  providerPayout        Decimal   @default(0) @db.Decimal(12, 2)
+  commissionRate        Decimal   @default(0) @db.Decimal(5, 4)
+  isPaid                Boolean   @default(false)
   paidAt                DateTime?
-  paymentCaptured       Boolean       @default(false)
+  paymentCaptured       Boolean   @default(false)
   paymentCapturedAt     DateTime?
   paymentIntentId       String?
   pickupAddress         String?
@@ -265,20 +265,20 @@ model Booking {
   dropoffLatitude       Float?
   dropoffLongitude      Float?
   notes                 String?
-  isFirstBooking        Boolean       @default(false)
-  isPackageBooking      Boolean       @default(false)
+  isFirstBooking        Boolean   @default(false)
+  isPackageBooking      Boolean   @default(false)
   parentBookingId       String?
-  packageHours          Decimal?      @db.Decimal(8, 2)
-  packageHoursUsed      Decimal       @default(0) @db.Decimal(8, 2)
-  packageHoursRemaining Decimal?      @db.Decimal(8, 2)
-  packageTotalPaid      Decimal?      @db.Decimal(12, 2)
+  packageHours          Decimal?  @db.Decimal(8, 2)
+  packageHoursUsed      Decimal   @default(0) @db.Decimal(8, 2)
+  packageHoursRemaining Decimal?  @db.Decimal(8, 2)
+  packageTotalPaid      Decimal?  @db.Decimal(12, 2)
   packageExpiryDate     DateTime?
   packageStatus         String?
   createdBy             String?
   originalStartTime     DateTime?
-  isNonRefundable       Boolean       @default(false)
+  isNonRefundable       Boolean   @default(false)
   rescheduledFrom       Json?
-  rescheduleCount       Int           @default(0)
+  rescheduleCount       Int       @default(0)
   deletedAt             DateTime?
   deletedBy             String?
   noShowParty           String?
@@ -286,14 +286,14 @@ model Booking {
   customerRating        Int?
   customerReview        String?
   reviewGivenAt         DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
   customerEmail         String?
-  lockedDiscountPct     Decimal?      @db.Decimal(5, 2)
-  lockedHourlyRate      Decimal?      @db.Decimal(10, 2)
-  offlineAmountPaid     Decimal?      @db.Decimal(12, 2)
+  lockedDiscountPct     Decimal?  @db.Decimal(5, 2)
+  lockedHourlyRate      Decimal?  @db.Decimal(10, 2)
+  offlineAmountPaid     Decimal?  @db.Decimal(12, 2)
   offlinePaymentMethod  String?
-  source                String        @default("platform")
+  source                String    @default("platform")
   cancelledAt           DateTime?
   actualDuration        Int?
   checkInBy             String?
@@ -304,34 +304,34 @@ model Booking {
   checkOutLocation      String?
   checkOutPhoto         String?
   checkOutTime          DateTime?
-  smsCheckOutSent       Boolean       @default(false)
+  smsCheckOutSent       Boolean   @default(false)
 
   // Package cancellation approval workflow (PKG-3)
-  cancellationStatus        String?
-  cancellationRequestedAt   DateTime?
-  cancellationRequestedBy   String?
-  cancellationReason        String?       @db.Text
-  adminReviewedAt           DateTime?
-  adminReviewedBy           String?
-  adminReviewNote           String?       @db.Text
-  adminOverrideAmount       Decimal?      @db.Decimal(10, 2)
-  stripeRefundId            String?
-  paymentToken          String?
-  timezone              String?
+  cancellationStatus      String?
+  cancellationRequestedAt DateTime?
+  cancellationRequestedBy String?
+  cancellationReason      String?       @db.Text
+  adminReviewedAt         DateTime?
+  adminReviewedBy         String?
+  adminReviewNote         String?       @db.Text
+  adminOverrideAmount     Decimal?      @db.Decimal(10, 2)
+  stripeRefundId          String?
+  paymentToken            String?
+  timezone                String?
   // â”€â”€ Request/Quote mode fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // These are populated when bookingMode='request' (plumber, electrician, etc.)
   // startTime/endTime are null until the provider confirms a time in the quote.
-  serviceId             String? // FK to BusinessService.id (which service was requested)
-  requestDescription    String?       @db.Text // customer's description of the job
-  requestedAt           DateTime? // when the customer submitted the request
-  preferredDate         String? // customer's preferred date range (free text or ISO date)
-  siteAddress           String? // where the job needs to happen (may differ from pickup)
-  siteAddressLat        Float?
-  siteAddressLng        Float?
-  customer              Customer?     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  provider              Provider      @relation(fields: [providerId], references: [id])
-  transactions          Transaction[]
-  quotes                Quote[]
+  serviceId               String? // FK to BusinessService.id (which service was requested)
+  requestDescription      String?       @db.Text // customer's description of the job
+  requestedAt             DateTime? // when the customer submitted the request
+  preferredDate           String? // customer's preferred date range (free text or ISO date)
+  siteAddress             String? // where the job needs to happen (may differ from pickup)
+  siteAddressLat          Float?
+  siteAddressLng          Float?
+  customer                Customer?     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  provider                Provider      @relation(fields: [providerId], references: [id])
+  transactions            Transaction[]
+  quotes                  Quote[]
 
   @@index([providerId, customerRating])
 }
@@ -399,9 +399,9 @@ model WalletTransaction {
 model AdminWalletIdempotencyKey {
   key           String   @id
   walletId      String
-  operationType String   // 'CREDIT' | 'DEBIT'
-  transactionId String?  // WalletTransaction.id — null until committed
-  response      Json?    // stored response body — null until committed
+  operationType String // 'CREDIT' | 'DEBIT'
+  transactionId String? // WalletTransaction.id — null until committed
+  response      Json? // stored response body — null until committed
   createdAt     DateTime @default(now())
   expiresAt     DateTime
 
@@ -433,9 +433,18 @@ model Subscription {
   cancelAtPeriodEnd    Boolean   @default(false)
   trialEndsAt          DateTime?
   cancelledAt          DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  provider             Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // SUB-06-A: Event watermark tracking for webhook ordering
+  lastWebhookEventId        String? // Most recent Stripe event.id processed
+  lastWebhookEventTimestamp Int? // Most recent event.created (Unix timestamp)
+
+  // SUB-06-A: Metadata for archived subscription identity preservation
+  // Stores: originalStripeSubscriptionId, archivedReason, archivedAt
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  provider  Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
