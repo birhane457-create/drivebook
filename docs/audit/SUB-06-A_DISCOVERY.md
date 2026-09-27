@@ -85,7 +85,7 @@ DriveBook currently has **7 distinct subscription-state writers:**
 
 #### Writer 6: Manual Subscription Sync
 - **Endpoint:** `/api/instructor/subscription/sync`
-- **File:** `app/api/instructor/subscription/route.ts`
+- **File:** `app/api/instructor/subscription/sync/route.ts`
 - **Mutations:** Retrieves current Stripe Subscription, directly updates Provider + Subscription
 
 #### Writer 7: Registration / Checkout (Initial State Creation)
@@ -152,7 +152,13 @@ Time T2: Admin/Provider triggers manual sync
 ```
 **Evidence:** SOURCE VERIFIED - manual sync implementation performs live Stripe retrieval + direct DB update
 
-#### Path 5: CANCELLED → Inappropriate State (via trial-expiry cron, if applicable)
+---
+
+### 3.1 Potential Cron Interaction (Unverified)
+
+**Evidence Classification:** REQUIRES VERIFICATION
+
+#### Potential Issue: Trial Expiry Cron and CANCELLED State Conflict
 ```
 Scenario: Subscription cancelled while in TRIAL
          → CANCELLED state set
@@ -160,7 +166,13 @@ Scenario: Subscription cancelled while in TRIAL
          → May attempt TRIAL → EXPIRED transition
          → Could conflict with CANCELLED state
 ```
-**Evidence:** DESIGN REQUIREMENT / control flow requires verification
+
+**Status:** 
+- **Not confirmed as resurrection path** - source code inspection has not established that cron mutates CANCELLED subscriptions
+- **Requires verification:** Control-flow analysis needed to determine if cron respects terminal CANCELLED state
+- **File for inspection:** `app/api/cron/check-trial-expiry/route.ts`
+
+**Note:** This is documented as a potential interaction requiring verification, not a confirmed resurrection path. Only Paths 1-4 are confirmed through source or control-flow analysis.
 
 ---
 
@@ -286,7 +298,7 @@ model Subscription {
 
 **Actual Current Behavior:**
 
-File: `app/api/instructor/subscription/route.ts`
+File: `app/api/instructor/subscription/sync/route.ts`
 
 ```typescript
 // Manual sync endpoint
@@ -459,7 +471,7 @@ async function handleSubscriptionCancelled(
 |------|------------|
 | Demonstrated monetary loss | ❌ NOT ESTABLISHED (no production runtime evidence) |
 | Provider tier inconsistency | Possible if stale UPDATE arrives |
-| Commission rate misapplication | Low probability |
+| Commission rate impact | Requires stale event timing |
 
 **Note:** No demonstrated direct monetary loss in production. Severity based on state integrity and lifecycle consistency concerns.
 
@@ -474,13 +486,14 @@ async function handleSubscriptionCancelled(
 **Rationale:**
 - **Subscription entitlement/state integrity:** Cancelled subscriptions can be incorrectly resurrected
 - **Provider access/billing-lifecycle consistency:** Database state can diverge from Stripe source of truth
-- **No demonstrated monetary loss:** No production runtime evidence of financial impact
-- **Occurrence probability:** Requires specific event delivery timing (Stripe does not guarantee order, but typically delivers in order)
+- **Financial impact:** No demonstrated monetary loss (no production runtime evidence)
+- **Condition:** The issue requires an event to be processed after a newer state-changing event
+- **Observed runtime occurrence:** Not established
 
 **Not CRITICAL because:**
-- Requires out-of-order delivery (somewhat rare in practice)
 - No evidence of systematic exploitation
 - No demonstrated direct financial loss
+- Impact limited to subscription state integrity
 
 **Not LOW because:**
 - Real control-flow vulnerability (SOURCE VERIFIED)
@@ -500,7 +513,7 @@ async function handleSubscriptionCancelled(
 | `app/api/stripe/webhook/route.ts` | 1570-1760 | handleSubscriptionUpdate() |
 | `app/api/stripe/webhook/route.ts` | 1820-1870 | handleSubscriptionCancelled() |
 | `app/api/stripe/webhook/route.ts` | 97 | Idempotency key generation |
-| `app/api/instructor/subscription/route.ts` | — | Manual sync implementation |
+| `app/api/instructor/subscription/sync/route.ts` | — | Manual sync implementation |
 | `app/api/cron/check-trial-expiry/route.ts` | — | Trial expiry cron |
 | `__tests__/integration/sub-22-concurrent.test.ts` | All | Existing tests (no ordering coverage) |
 
