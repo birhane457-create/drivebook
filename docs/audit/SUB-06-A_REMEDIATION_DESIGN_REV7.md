@@ -7,7 +7,7 @@
 **Rev 7 Corrections Summary:** `df90a1b4`  
 **Rev 7 Date:** 2026-09-26
 
-**Stripe SDK Version:** `^20.3.1` (compatible with v20.3.x and later v20 releases, declared in package.json)
+**Stripe SDK Version:** `^20.3.1` (from package.json; exact resolved version not verified from lockfile)
 
 ---
 
@@ -1268,7 +1268,10 @@ HAVING COUNT(*) > 1;
 
 -- Step 2: Select canonical row with business-safe priority
 -- Priority order (highest to lowest):
--- 1. Row is referenced by its Provider (Subscription.providerId matches Provider.id)
+-- 1. PRIMARY: Row is actively referenced by its Provider 
+--    (Provider.stripeSubscriptionId = Subscription.stripeSubscriptionId 
+--     AND Provider.id = Subscription.providerId)
+--    → Preserves current business relationship, ensures Provider continuity
 -- 2. Active lifecycle status (ACTIVE > TRIAL > PAST_DUE > CANCELLED > EXPIRED)
 -- 3. Most recent updatedAt
 -- 4. Most recent createdAt
@@ -1518,7 +1521,7 @@ Query: WHERE metadata->>'originalStripeSubscriptionId' = 'sub_123'
 }
 ```
 
-**SDK Compatibility:** Stripe Node.js SDK v20.3.x or later v20 releases (package.json declares `^20.3.1`)
+**SDK Compatibility:** Stripe Node.js SDK declared as `^20.3.1` in package.json (allows v20.3.x and later v20 releases; exact resolved version not verified)
 
 **API Breaking Changes (v12+):**
 - Events list: `type` parameter (singular), not `types` (plural)
