@@ -1103,13 +1103,18 @@ function validateSubscriptionIdentity(
 
 ### 3.5a Provider↔Subscription Ownership Invariant (CRITICAL)
 
+**Universal Invariant:** Provider↔Subscription ownership MUST be guaranteed for both existing rows and new subscription creation.
+
+**For Existing Subscriptions:**
+
 After locking both Provider and Subscription, verify ownership/association:
 
 ```typescript
 /**
  * Validate Provider↔Subscription ownership after locking.
  * 
- * CRITICAL INVARIANT: lockedSubscription.providerId === lockedProvider.id
+ * CRITICAL INVARIANT (Existing Rows): 
+ *   lockedSubscription.providerId === lockedProvider.id
  * 
  * This prevents processing events when database inconsistency exists:
  * - Stripe says subscription belongs to customer A
@@ -1123,7 +1128,7 @@ function validateProviderSubscriptionOwnership(
 ): { valid: boolean; reason?: string } {
   
   if (!lockedSubscription) {
-    // New subscription (will be created), ownership will be established
+    // New subscription (will be created), ownership established in creation path
     return { valid: true };
   }
   
@@ -1138,6 +1143,41 @@ function validateProviderSubscriptionOwnership(
   return { valid: true };
 }
 ```
+
+**For New Subscription Creation:**
+
+**CRITICAL INVARIANT (New Rows):**
+```
+stripeSubscriptionId (from webhook)
+        +
+stripeCustomerId (pre-resolved, validated)
+        ↓
+lockProviderAndSubscription(tx, stripeCustomerId, stripeSubscriptionId)
+        ↓
+lockedProvider (WHERE stripeCustomerId = input)
+        ↓
+CREATE Subscription SET providerId = lockedProvider.id
+```
+
+**Guarantees:**
+
+1. `stripeCustomerId` is resolved from Stripe API BEFORE transaction
+   - Validates: Stripe subscription.customer → stripeCustomerId association
+   
+2. `lockProviderAndSubscription()` locks Provider WHERE `stripeCustomerId = input`
+   - Validates: Database Provider row exists for this Stripe customer
+   
+3. New Subscription row created with `providerId = lockedProvider.id`
+   - Establishes: Subscription.providerId → Provider.id relationship at creation time
+   
+4. Result: Newly created Subscription is owned by the Provider that matches the Stripe customer
+
+**Rejection Path:**
+
+If `lockProviderAndSubscription()` cannot find a Provider with the given `stripeCustomerId`:
+- Transaction fails with "Provider not found"
+- No Subscription row is created
+- Ownership invariant preserved by preventing orphaned Subscriptions
 
 **Why This Matters:**
 
@@ -1161,11 +1201,21 @@ With this check:
 
 **Test Requirement:**
 
-Webhook processing test MUST include scenario:
-- Stripe: sub_X belongs to cus_A (Provider A)
-- Database: Subscription X has providerId pointing to Provider B
-- Expected: Event rejected with ownership-mismatch error
-- Verify: No state mutation occurs
+Webhook processing test MUST include scenarios:
+
+1. **Existing-row ownership mismatch:**
+   - Stripe: sub_X belongs to cus_A (Provider A)
+   - Database: Subscription X has providerId pointing to Provider B
+   - Expected: Event rejected with ownership-mismatch error
+   - Verify: No state mutation occurs
+
+2. **New subscription creation with ownership establishment:**
+   - Stripe webhook: subscription.created for sub_Y with customer = cus_C
+   - Database: Provider C exists with stripeCustomerId = cus_C
+   - Database: No Subscription row exists for sub_Y
+   - Expected: New Subscription created with providerId = Provider C.id
+   - Verify: Created Subscription.providerId === Provider C.id
+   - Verify: Subsequent webhook for sub_Y correctly validates ownership
 
 ### 3.6 Complete Transaction Flow
 
@@ -1279,9 +1329,11 @@ async function processSubscriptionEvent(
     });
   } else {
     // Create new subscription
+    // CRITICAL: Ownership invariant established at creation time
+    // providerId MUST use locked Provider's ID (Stripe customer→Provider validated)
     await tx.subscription.create({
       data: {
-        providerId: provider.id,
+        providerId: provider.id,  // ← Explicit: uses locked Provider's ID
         stripeSubscriptionId: subscription.id,
         status: mapStripeStatus(subscription.status),
         lastWebhookEventId: event.id,
