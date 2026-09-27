@@ -216,14 +216,11 @@ async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): P
       await handleBookingPaymentFailed(event.data.object as Stripe.PaymentIntent, idempotencyKey);
       break;
 
-    // SUBSCRIPTION EVENTS
+    // SUBSCRIPTION EVENTS (SUB-06-A Rev 7 implementation)
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
-      await handleSubscriptionUpdate(event.data.object as Stripe.Subscription, idempotencyKey);
-      break;
-
     case 'customer.subscription.deleted':
-      await handleSubscriptionCancelled(event.data.object as Stripe.Subscription, idempotencyKey);
+      await handleSubscriptionEvent(event, idempotencyKey);
       break;
 
     case 'customer.subscription.trial_will_end':
@@ -1564,10 +1561,106 @@ async function handleBookingPaymentFailed(
 }
 
 // ============================================================================
-// SUBSCRIPTION HANDLERS
+// SUBSCRIPTION EVENT HANDLERS (SUB-06-A Rev 7)
 // ============================================================================
 
-async function handleSubscriptionUpdate(
+/**
+ * Unified subscription event handler
+ * 
+ * Implements SUB-06-A Rev 7 design:
+ * 1. Resolve stripeCustomerId (BEFORE transaction)
+ * 2. BEGIN SERIALIZABLE
+ * 3. processSubscriptionEvent(tx, event, stripeCustomerId)
+ *    ↓ Lock Provider
+ *    ↓ Lock Subscription
+ *    ↓ Validate identity & ownership
+ *    ↓ Policy decision
+ *    ↓ Conditional mutation
+ * 4. Audit
+ * 5. COMMIT
+ */
+async function handleSubscriptionEvent(
+  event: Stripe.Event,
+  idempotencyKey: string
+): Promise<void> {
+  const subscription = event.data.object as Stripe.Subscription;
+  const stripeSubscriptionId = subscription.id;
+
+  // Step 1: Resolve Stripe customer ID (BEFORE transaction - no Stripe API inside transaction)
+  const stripeCustomerId = typeof subscription.customer === 'string'
+    ? subscription.customer
+    : subscription.customer.id;
+
+  logger.info('Processing subscription event', {
+    eventType: event.type,
+    stripeSubscriptionId,
+    stripeCustomerId,
+    eventId: event.id,
+  });
+
+  // Step 2-5: Transaction with subscription lifecycle processing
+  await withSerializableRetry(async () => {
+    await prisma.$transaction(
+      async (tx) => {
+        // Record webhook event for idempotency
+        await recordWebhookEvent(tx, idempotencyKey, event.type, event.id, {
+          stripeSubscriptionId,
+          stripeCustomerId,
+        });
+
+        // Process subscription event with Rev 7 architecture
+        const { processSubscriptionEvent } = await import('@/lib/services/subscription-lifecycle');
+        const result = await processSubscriptionEvent(tx, event, stripeCustomerId);
+
+        if (!result.allowed) {
+          logger.info('Subscription event rejected by policy', {
+            reason: result.reason,
+            stripeSubscriptionId,
+            eventId: event.id,
+          });
+          return;
+        }
+
+        // Audit logging
+        await tx.auditLog.create({
+          data: {
+            action: `subscription.${event.type.split('.').pop()}`,
+            actorId: 'system',
+            actorRole: 'SYSTEM',
+            targetType: 'Subscription',
+            targetId: result.subscriptionId || stripeSubscriptionId,
+            metadata: {
+              stripeEventId: event.id,
+              stripeSubscriptionId,
+              stripeCustomerId,
+              reason: result.reason,
+            },
+            success: true,
+          },
+        });
+
+        logger.info('Subscription event processed successfully', {
+          stripeSubscriptionId,
+          subscriptionId: result.subscriptionId,
+          reason: result.reason,
+        });
+      },
+      {
+        isolationLevel: 'Serializable',
+        maxWait: 5000,
+        timeout: 30000,
+      }
+    );
+  }, { operationName: 'webhook-subscription-event' });
+}
+
+// ============================================================================
+// LEGACY SUBSCRIPTION HANDLERS (Deprecated - kept for reference)
+// ============================================================================
+
+/**
+ * @deprecated Use handleSubscriptionEvent instead (SUB-06-A Rev 7)
+ */
   subscription: Stripe.Subscription,
   idempotencyKey: string
 ): Promise<void> {
@@ -1819,6 +1912,9 @@ async function handleSubscriptionUpdate(
   logger.info(`âœ… Subscription updated: ${subscription.id} (${tier}, ${status})`);
 }
 
+/**
+ * @deprecated Use handleSubscriptionEvent instead (SUB-06-A Rev 7)
+ */
 async function handleSubscriptionCancelled(
   subscription: Stripe.Subscription,
   idempotencyKey: string
