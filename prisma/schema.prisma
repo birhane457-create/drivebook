@@ -97,7 +97,7 @@ model Provider {
   brandColorSecondary       String?
   showBrandingOnBookingPage Boolean            @default(false)
   maxProviders              Int                @default(1)
-  stripeCustomerId          String?
+  stripeCustomerId          String?            @unique
   stripeAccountId           String?
   profileImage              String?
   // documentsVerified â€” used by extension-driven compliance flows (e.g. driving).
@@ -426,7 +426,7 @@ model Subscription {
   status               String    @default("ACTIVE")
   billingCycle         String    @default("monthly")
   monthlyAmount        Decimal   @db.Decimal(10, 2)
-  stripeSubscriptionId String?
+  stripeSubscriptionId String?   @unique
   stripeCustomerId     String?
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
