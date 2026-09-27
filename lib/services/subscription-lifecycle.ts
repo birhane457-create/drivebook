@@ -32,6 +32,64 @@ export interface SubscriptionEventResult {
 }
 
 /**
+ * Lock Provider with FOR UPDATE (universal Writer-7 locking primitive)
+ * 
+ * All writers (registration, webhook, manual sync, etc.) MUST acquire
+ * the Provider lock first to serialize access to the subscription lifecycle.
+ * 
+ * @param tx - Prisma transaction client
+ * @param providerId - Provider ID to lock (when known)
+ * @param stripeCustomerId - Stripe customer ID to lock (when Provider ID not yet known)
+ * @returns Locked and re-read Provider
+ */
+export async function lockProvider(
+  tx: PrismaTransaction,
+  providerId?: string,
+  stripeCustomerId?: string
+): Promise<any> {
+  if (!providerId && !stripeCustomerId) {
+    throw new Error('Either providerId or stripeCustomerId must be provided');
+  }
+
+  let providers: any[];
+
+  if (providerId) {
+    // Lock by Provider ID (registration path)
+    providers = await tx.$queryRaw<any[]>`
+      SELECT * FROM "Provider"
+      WHERE "id" = ${providerId}
+      FOR UPDATE
+    `;
+  } else {
+    // Lock by Stripe customer ID (webhook path)
+    providers = await tx.$queryRaw<any[]>`
+      SELECT * FROM "Provider"
+      WHERE "stripeCustomerId" = ${stripeCustomerId}
+      FOR UPDATE
+    `;
+  }
+
+  if (providers.length === 0) {
+    throw new Error(
+      `Provider not found for ${providerId ? `id: ${providerId}` : `stripeCustomerId: ${stripeCustomerId}`}`
+    );
+  }
+
+  const provider = providers[0];
+
+  // Re-read locked Provider to get authoritative post-lock state
+  const lockedProvider = await tx.provider.findUnique({
+    where: { id: provider.id },
+  });
+
+  if (!lockedProvider) {
+    throw new Error(`Provider disappeared after lock: ${provider.id}`);
+  }
+
+  return lockedProvider;
+}
+
+/**
  * Step 1: Lock Provider and Subscription in universal order
  * 
  * CRITICAL: Uses pre-resolved stripeCustomerId (no Stripe API inside transaction)
@@ -52,19 +110,8 @@ export async function lockProviderAndSubscription(
   provider: any;
   subscription: any | null;
 }> {
-  // Lock Provider first with PostgreSQL FOR UPDATE
-  // This acquires an exclusive row lock, preventing concurrent modifications
-  const providers = await tx.$queryRaw<any[]>`
-    SELECT * FROM "Provider"
-    WHERE "stripeCustomerId" = ${stripeCustomerId}
-    FOR UPDATE
-  `;
-
-  if (providers.length === 0) {
-    throw new Error(`Provider not found for stripeCustomerId: ${stripeCustomerId}`);
-  }
-
-  const provider = providers[0];
+  // Lock Provider first with lockProvider helper
+  const provider = await lockProvider(tx, undefined, stripeCustomerId);
 
   // Lock Subscription second with FOR UPDATE (if exists)
   // Universal locking order prevents deadlocks
@@ -76,23 +123,14 @@ export async function lockProviderAndSubscription(
 
   const subscription = subscriptions.length > 0 ? subscriptions[0] : null;
 
-  // Re-read locked rows to get authoritative post-lock state
-  // This ensures policy decisions use the latest committed data
-  const lockedProvider = await tx.provider.findUnique({
-    where: { id: provider.id },
-  });
-
+  // Re-read locked Subscription to get authoritative post-lock state
   const lockedSubscription = subscription
     ? await tx.subscription.findUnique({
         where: { id: subscription.id },
       })
     : null;
 
-  if (!lockedProvider) {
-    throw new Error(`Provider disappeared after lock: ${provider.id}`);
-  }
-
-  return { provider: lockedProvider, subscription: lockedSubscription };
+  return { provider, subscription: lockedSubscription };
 }
 
 /**
