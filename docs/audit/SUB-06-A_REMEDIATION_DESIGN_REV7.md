@@ -169,14 +169,15 @@ Manual synchronization establishes **Stripe authority** for subscription lifecyc
    - Standard reconciliation: update DB to CANCELLED
    - Audit log: `manual-sync-cancelled`
 
-3. **Webhook processing after manual sync - Complete Lifecycle Rule:**
+3. **Webhook processing after manual sync - Complete Watermark Rule:**
 
-**CRITICAL: Lifecycle Generation Tracking**
+**CRITICAL: Event Watermark Semantics**
 
-To resolve INV-2 vs INV-7 after manual reactivation, the system tracks **lifecycle generation** via `lastWebhookEventTimestamp`:
+To resolve INV-2 vs INV-7 after manual reactivation, the system uses `lastWebhookEventTimestamp` as an **event watermark** (NOT a lifecycle generation identifier):
 
 - When manual sync reactivates from CANCELLED, it updates `lastWebhookEventTimestamp` to the mostRecentEventTimestamp from Stripe event history
-- This establishes a new authoritative baseline watermark
+- This establishes a new authoritative baseline watermark for stale-event comparison
+- The watermark is a timestamp (second precision), not a generation/epoch counter
 
 **Webhook Policy After Manual Reactivation:**
 
@@ -185,13 +186,20 @@ Incoming webhook event E:
 
 IF lockedSubscription.status = CANCELLED:
     IF E.created > lockedSubscription.lastWebhookEventTimestamp:
-        # Event is chronologically after the cancellation watermark
+        # Event timestamp is strictly later than cancellation watermark
         IF E.targetStatus = CANCELLED:
             ACCEPT (idempotent, reinforces terminal state)
         ELSE:
             REJECT (INV-2: terminal CANCELLED cannot be overridden by delayed webhooks)
             
-    IF E.created ≤ lockedSubscription.lastWebhookEventTimestamp:
+    IF E.created = lockedSubscription.lastWebhookEventTimestamp:
+        # Equal timestamp - apply equal-timestamp policy
+        IF E.targetStatus = CANCELLED:
+            ACCEPT (cancellation precedence)
+        ELSE:
+            REJECT (equal-timestamp-ambiguous per INV-5)
+            
+    IF E.created < lockedSubscription.lastWebhookEventTimestamp:
         REJECT (INV-5: stale event)
 
 IF lockedSubscription.status ≠ CANCELLED:
@@ -199,13 +207,12 @@ IF lockedSubscription.status ≠ CANCELLED:
     ...
 ```
 
-**Key Insight:**
+**Equal-Timestamp Behavior After Reactivation:**
 
-- Manual sync reactivation from CANCELLED updates the lastWebhookEventTimestamp watermark to reflect the Stripe event baseline
-- Subsequent webhooks are evaluated against this new watermark
-- If DB shows CANCELLED with watermark T, and a webhook arrives with event.created > T targeting non-CANCELLED, it is rejected (INV-2)
-- If DB shows ACTIVE after manual reactivation with watermark T', webhooks with event.created > T' can proceed per normal policy
-- Manual sync does NOT override INV-2 for webhooks - it establishes a new authoritative watermark from Stripe's event history
+When manual sync establishes watermark T and a webhook arrives with event.created = T:
+- The system CANNOT determine chronological ordering from timestamp alone
+- Apply equal-timestamp policy from INV-5 (CANCELLED accepted, others rejected as ambiguous)
+- This is conservative but consistent with second-precision limitation
 
 **Example Scenario:**
 
@@ -217,16 +224,26 @@ t1050: Manual sync retrieves Stripe object = ACTIVE, event history shows mostRec
 t1080: Delayed webhook subscription.updated (event.created = 1080) arrives
         → 1080 < 1100 (watermark)
         → REJECT per INV-5 (stale)
+t1100: Webhook subscription.updated (event.created = 1100) arrives
+        → 1100 = 1100 (watermark), non-CANCELLED
+        → REJECT per equal-timestamp policy (ambiguous)
 t1150: New webhook subscription.updated (event.created = 1150) arrives
         → 1150 > 1100 (watermark), DB = ACTIVE
         → ACCEPT per standard policy
 ```
 
+**What the System Does NOT Track:**
+
+- Lifecycle generation / epoch identifiers
+- Chronological ordering within the same second
+- Event sequence numbers derived from event IDs
+
 **Rationale:**
 - Manual sync explicitly retrieves Stripe's current authoritative state and event baseline
-- INV-2 applies to webhook event ordering within a lifecycle generation
-- Manual sync can establish a new lifecycle generation with updated watermark
-- Webhooks remain subject to stale-event protection relative to the current watermark
+- The watermark provides stale-event protection via `>`, `<`, `=` comparison
+- INV-2 applies to webhook event ordering: CANCELLED remains terminal for delayed webhooks
+- Manual sync establishes a new authoritative watermark from Stripe's event history
+- Equal-timestamp events remain ambiguous and handled conservatively
 - Production monitoring tracks `subscription-reactivation-from-cancelled` to detect unexpected patterns
 
 ---
