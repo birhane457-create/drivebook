@@ -758,9 +758,16 @@ export async function handleStripeWebhook(
           return;
         }
         
+        // Step 1.5: Resolve Stripe customer ID (BEFORE calling processSubscriptionEvent)
+        const subscription = event.data.object as Stripe.Subscription;
+        const stripeCustomerId = typeof subscription.customer === 'string' 
+          ? subscription.customer 
+          : subscription.customer.id;
+        
         // Step 2: Process subscription state transition
         // (Provider resolution, locking, policy, mutation)
-        const mutationResult = await processSubscriptionEvent(tx, event);
+        // Pass pre-resolved stripeCustomerId per Rev 7 contract
+        const mutationResult = await processSubscriptionEvent(tx, event, stripeCustomerId);
         
         // Step 3: Mark idempotency complete
         await markIdempotencyProcessed(
@@ -1094,6 +1101,72 @@ function validateSubscriptionIdentity(
 }
 ```
 
+### 3.5a Provider↔Subscription Ownership Invariant (CRITICAL)
+
+After locking both Provider and Subscription, verify ownership/association:
+
+```typescript
+/**
+ * Validate Provider↔Subscription ownership after locking.
+ * 
+ * CRITICAL INVARIANT: lockedSubscription.providerId === lockedProvider.id
+ * 
+ * This prevents processing events when database inconsistency exists:
+ * - Stripe says subscription belongs to customer A
+ * - Database Subscription.providerId points to different Provider
+ * 
+ * Fail closed on mismatch.
+ */
+function validateProviderSubscriptionOwnership(
+  lockedProvider: Provider,
+  lockedSubscription: Subscription | null
+): { valid: boolean; reason?: string } {
+  
+  if (!lockedSubscription) {
+    // New subscription (will be created), ownership will be established
+    return { valid: true };
+  }
+  
+  // CRITICAL: Verify Provider owns Subscription
+  if (lockedSubscription.providerId !== lockedProvider.id) {
+    return {
+      valid: false,
+      reason: 'provider-subscription-ownership-mismatch'
+    };
+  }
+  
+  return { valid: true };
+}
+```
+
+**Why This Matters:**
+
+Corrupted/inconsistent database could contain:
+```
+Provider A (stripeCustomerId = cus_A)
+Provider B (stripeCustomerId = cus_B)
+Subscription X (stripeSubscriptionId = sub_X, providerId = B)
+
+Stripe webhook: sub_X.customer = cus_A
+```
+
+Without this check:
+- Lock Provider A (via cus_A)
+- Lock Subscription X (via sub_X)
+- Process event (incorrect: Provider A doesn't own Subscription X)
+
+With this check:
+- Detect mismatch (Subscription.providerId = B, but locked Provider = A)
+- FAIL CLOSED with `provider-subscription-ownership-mismatch`
+
+**Test Requirement:**
+
+Webhook processing test MUST include scenario:
+- Stripe: sub_X belongs to cus_A (Provider A)
+- Database: Subscription X has providerId pointing to Provider B
+- Expected: Event rejected with ownership-mismatch error
+- Verify: No state mutation occurs
+
 ### 3.6 Complete Transaction Flow
 
 **CRITICAL: Transaction Architecture**
@@ -1156,6 +1229,25 @@ async function processSubscriptionEvent(
       allowed: false,
       reason: identityCheck.reason!
     };
+  }
+  
+  // Step 2.5: Validate Provider↔Subscription ownership (CRITICAL INVARIANT)
+  if (lockedSubscription) {
+    if (lockedSubscription.providerId !== provider.id) {
+      // FAIL CLOSED: Subscription is associated with different Provider
+      // This indicates database inconsistency or corruption
+      logger.error('Provider-Subscription ownership mismatch (CRITICAL)', {
+        lockedProviderId: provider.id,
+        subscriptionProviderId: lockedSubscription.providerId,
+        stripeSubscriptionId,
+        stripeCustomerId
+      });
+      
+      return {
+        allowed: false,
+        reason: 'provider-subscription-ownership-mismatch'
+      };
+    }
   }
   
   // Step 3: Policy decision (using post-lock state: lockedSubscription)
