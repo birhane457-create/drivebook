@@ -90,6 +90,81 @@ export async function lockProvider(
 }
 
 /**
+ * Create or reuse current/eligible TRIAL subscription (shared registration helper)
+ * 
+ * CRITICAL INVARIANT: Returns the CURRENT/ELIGIBLE subscription for this Provider.
+ * "Current/eligible" means NOT CANCELLED (per Rev 7: TRIAL, ACTIVE, PAST_DUE are current).
+ * 
+ * Used by:
+ * - Production registration route (app/api/register)
+ * - Integration tests (SUB-06-A concurrency tests)
+ * 
+ * Locking order:
+ * 1. LOCK Provider (via lockProvider)
+ * 2. RE-READ Provider
+ * 3. SELECT current/eligible Subscription WHERE providerId AND status != 'CANCELLED'
+ * 4. If none exists, CREATE TRIAL
+ * 5. If exists, REUSE (webhook may have already attached Stripe ID)
+ * 
+ * @param tx - Prisma transaction client (SERIALIZABLE isolation)
+ * @param providerId - Provider ID to create/reuse subscription for
+ * @returns Current/eligible Subscription (either newly created TRIAL or existing)
+ */
+export async function createOrReuseTrialSubscription(
+  tx: PrismaTransaction,
+  providerId: string
+): Promise<any> {
+  // Step 1: Lock Provider (universal Writer-7 locking primitive)
+  const lockedProvider = await lockProvider(tx, providerId);
+
+  // Step 2: Find CURRENT/ELIGIBLE subscription for this Provider
+  // CRITICAL: Use explicit "NOT CANCELLED" predicate to distinguish current from historical
+  // This prevents findFirst from accidentally returning an archived CANCELLED subscription
+  const existingSubscription = await tx.subscription.findFirst({
+    where: {
+      providerId: lockedProvider.id,
+      status: { not: 'CANCELLED' }, // Current/eligible lifecycle (TRIAL, ACTIVE, PAST_DUE)
+    },
+  });
+
+  if (existingSubscription) {
+    // Current subscription already exists (may be TRIAL awaiting webhook, or ACTIVE if webhook won race)
+    logger.info('Reusing existing subscription for Provider', {
+      providerId: lockedProvider.id,
+      subscriptionId: existingSubscription.id,
+      status: existingSubscription.status,
+      hasStripeId: !!existingSubscription.stripeSubscriptionId,
+    });
+    return existingSubscription;
+  }
+
+  // Step 3: No current subscription exists - create new TRIAL
+  const trialDays = Number(process.env.BASIC_TRIAL_DAYS) || 14;
+  const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
+
+  const newSubscription = await tx.subscription.create({
+    data: {
+      providerId: lockedProvider.id,
+      tier: 'BASIC',
+      status: 'TRIAL',
+      stripeSubscriptionId: null, // Will be attached by first webhook
+      monthlyAmount: 0,
+      billingCycle: 'monthly',
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: trialEndsAt,
+      trialEndsAt,
+    },
+  });
+
+  logger.info('Created new TRIAL subscription for Provider', {
+    providerId: lockedProvider.id,
+    subscriptionId: newSubscription.id,
+  });
+
+  return newSubscription;
+}
+
+/**
  * Step 1: Lock Provider and Subscription in universal order
  * 
  * CRITICAL: Uses pre-resolved stripeCustomerId (no Stripe API inside transaction)
@@ -137,6 +212,17 @@ export async function lockProviderAndSubscription(
  * Step 2: Validate Subscription Identity (INV-6)
  * 
  * After locking, verify exact identity match between locked row and incoming event.
+ * 
+ * CRITICAL NULL → Stripe ID attachment semantics:
+ * - NULL stripeSubscriptionId on TRIAL is legitimate (registration creates TRIAL awaiting first webhook)
+ * - First webhook attachment is SAFE because:
+ *   1. Provider lock ensures single-customer scope (locked by stripeCustomerId)
+ *   2. Business invariant: ONE current/eligible subscription per Provider (enforced by createOrReuseTrialSubscription)
+ *   3. TRIAL status: legitimate initial state awaiting first webhook
+ *   4. Ownership: Provider ↔ Subscription validated separately (Step 2.5)
+ * - Therefore: NULL TRIAL belonging to locked Provider IS the legitimate attachment target
+ * 
+ * Non-TRIAL subscriptions MUST have Stripe ID (database inconsistency if NULL).
  */
 export function validateSubscriptionIdentity(
   lockedSubscription: any | null,

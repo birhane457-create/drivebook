@@ -103,7 +103,7 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
   describe('Scenario 1: Concurrent Creation (Writer 7 Race)', () => {
     it('should handle genuine concurrent registration and webhook with proper convergence', async () => {
       // This test creates a REAL race between registration and webhook
-      // Both paths lock Provider FIRST, then check/create Subscription
+      // Both paths use the PRODUCTION shared helper createOrReuseTrialSubscription
       // CRITICAL: Test verifies proper lifecycle convergence regardless of winner
       
       // Setup: Create base user and provider WITHOUT subscription
@@ -123,8 +123,7 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
           stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
           location: 'Test Location',
           phone: '+61412345678',
-          hourlyRate: 75.0, // Required field
-          // Initially no subscription state
+          hourlyRate: 75.0,
           subscriptionTier: 'BASIC',
           subscriptionStatus: 'TRIAL',
         },
@@ -137,65 +136,79 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
         Math.floor(Date.now() / 1000)
       );
 
-      // Execute CONCURRENT transactions:
-      // Path A: Registration creates TRIAL subscription (models app/api/register)
-      // Path B: Webhook creates/updates subscription from Stripe
-      const results = await Promise.allSettled([
-        // Path A: Registration-style TRIAL creation with Provider lock
-        prisma.$transaction(
-          async (tx) => {
-            const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
-            const lockedProvider = await lockProvider(tx, provider.id);
+      // Helper to wrap transaction with serialization retry (matches production behavior)
+      const withSerializationRetry = async <T>(
+        operation: () => Promise<T>,
+        maxRetries = 3
+      ): Promise<T> => {
+        let lastError: any;
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            return await operation();
+          } catch (error: any) {
+            const isSerializationError =
+              error.code === 'P2034' || // Prisma serialization error
+              error.code === '40001'; // PostgreSQL SQLSTATE 40001
             
-            // Check if subscription exists
-            const existing = await tx.subscription.findFirst({
-              where: { providerId: lockedProvider.id },
-            });
-
-            if (!existing) {
-              // Create TRIAL (registration wins)
-              return await tx.subscription.create({
-                data: {
-                  providerId: lockedProvider.id,
-                  tier: 'TRIAL',
-                  status: 'TRIAL',
-                  stripeSubscriptionId: null, // TRIAL has no Stripe ID initially
-                  monthlyAmount: 0,
-                  billingCycle: 'monthly',
-                  currentPeriodStart: new Date(),
-                  currentPeriodEnd: new Date(Date.now() + 14 * 86400 * 1000),
-                },
-              });
+            if (!isSerializationError || attempt === maxRetries - 1) {
+              throw error;
             }
-            // Subscription exists (webhook won) - return existing
-            return existing;
-          },
-          { isolationLevel: 'Serializable', timeout: 10000 }
+            
+            lastError = error;
+            // Brief backoff before retry
+            await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+          }
+        }
+        throw lastError;
+      };
+
+      // Execute CONCURRENT transactions with production retry behavior:
+      // Path A: Registration using PRODUCTION shared helper
+      // Path B: Webhook with full lifecycle processing
+      const results = await Promise.allSettled([
+        // Path A: Production registration helper (same code as app/api/register)
+        withSerializationRetry(() =>
+          prisma.$transaction(
+            async (tx) => {
+              const { createOrReuseTrialSubscription } = await import('@/lib/services/subscription-lifecycle');
+              return await createOrReuseTrialSubscription(tx, provider.id);
+            },
+            { isolationLevel: 'Serializable', timeout: 10000 }
+          )
         ),
 
         // Path B: Webhook with full lifecycle processing
-        prisma.$transaction(
-          async (tx) => {
-            return await processSubscriptionEvent(tx, event, TEST_STRIPE_CUSTOMER_ID);
-          },
-          { isolationLevel: 'Serializable', timeout: 10000 }
+        withSerializationRetry(() =>
+          prisma.$transaction(
+            async (tx) => {
+              return await processSubscriptionEvent(tx, event, TEST_STRIPE_CUSTOMER_ID);
+            },
+            { isolationLevel: 'Serializable', timeout: 10000 }
+          )
         ),
       ]);
 
-      // BOTH transactions must succeed for proper convergence
-      // One creates, the other either creates or attaches/updates
+      // With serialization retry wrapper, BOTH operations should eventually succeed
+      // One creates the subscription, the other finds it and converges
       const failedResults = results.filter((r) => r.status === 'rejected');
       if (failedResults.length > 0) {
-        console.error('Transaction failures:', failedResults.map((r: any) => r.reason));
+        console.error('Transaction failures after retry:', failedResults.map((r: any) => ({
+          message: r.reason?.message,
+          code: r.reason?.code,
+        })));
       }
       
-      // At least one must succeed to create the subscription
-      const successfulResults = results.filter((r) => r.status === 'fulfilled');
-      expect(successfulResults.length).toBeGreaterThanOrEqual(1);
+      // Both should succeed (with retry mechanism handling serialization conflicts)
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
 
-      // Verify CRITICAL invariant: Exactly ONE subscription exists
+      // Verify CRITICAL invariants:
+      
+      // 1. Exactly ONE current/eligible subscription exists (NOT CANCELLED)
       const subscriptions = await prisma.subscription.findMany({
-        where: { providerId: provider.id },
+        where: { 
+          providerId: provider.id,
+          status: { not: 'CANCELLED' }, // Current lifecycle only
+        },
       });
 
       expect(subscriptions).toHaveLength(1);
@@ -203,23 +216,22 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
       const finalSubscription = subscriptions[0];
       expect(finalSubscription.providerId).toBe(provider.id);
       
-      // CRITICAL CONVERGENCE TEST:
-      // Regardless of transaction order, final state must have Stripe ID attached
-      // This proves the TRIAL → webhook transition works correctly
+      // 2. CRITICAL CONVERGENCE: Stripe ID must be attached (proves TRIAL→webhook transition)
       expect(finalSubscription.stripeSubscriptionId).toBe(TEST_STRIPE_SUBSCRIPTION_ID);
       
-      // Status should be ACTIVE (webhook applied its state)
+      // 3. Status must be ACTIVE (proves webhook was processed and applied state)
       expect(finalSubscription.status).toBe('ACTIVE');
       
-      // Webhook watermark must be present (proves webhook was processed)
+      // 4. Webhook watermark must be present (proves event ordering/watermark system works)
       expect(finalSubscription.lastWebhookEventId).toBe(event.id);
       expect(finalSubscription.lastWebhookEventTimestamp).toBe(event.created);
       
-      // Verify Provider state is synchronized
+      // 5. Provider state synchronized with subscription
       const finalProvider = await prisma.provider.findUnique({
         where: { id: provider.id },
       });
       expect(finalProvider?.subscriptionStatus).toBe('ACTIVE');
+      expect(finalProvider?.subscriptionTier).toBe(finalSubscription.tier);
     });
   });
 

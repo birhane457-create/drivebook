@@ -133,55 +133,19 @@ export async function POST(req: NextRequest) {
       })
 
       // 4. Start trial subscription with Provider-first locking (SUB-06-A Writer-7)
-      const trialDays = Number(process.env.BASIC_TRIAL_DAYS) || 14
-      const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
+      // Uses shared createOrReuseTrialSubscription helper (also used by tests)
+      const { createOrReuseTrialSubscription } = await import('@/lib/services/subscription-lifecycle')
+      const subscription = await createOrReuseTrialSubscription(tx, provider.id)
 
-      // SUB-06-A: Lock Provider FIRST (universal locking order)
-      // This serializes with webhook and prevents duplicate TRIAL creation
-      const { lockProvider } = await import('@/lib/services/subscription-lifecycle')
-      const lockedProvider = await lockProvider(tx, provider.id)
-
-      // Check if Subscription already exists for this Provider
-      // This handles the race where webhook arrived before registration completed
-      const existingSubscription = await tx.subscription.findFirst({
-        where: { providerId: lockedProvider.id },
+      // Sync Provider state with subscription (in case webhook won race and already activated)
+      await tx.provider.update({
+        where: { id: provider.id },
+        data: {
+          subscriptionTier: subscription.tier,
+          subscriptionStatus: subscription.status,
+          trialEndsAt: subscription.trialEndsAt,
+        },
       })
-
-      if (!existingSubscription) {
-        // No existing subscription - safe to create TRIAL
-        await tx.provider.update({
-          where: { id: lockedProvider.id },
-          data: {
-            subscriptionTier: 'BASIC',
-            subscriptionStatus: 'TRIAL',
-            trialEndsAt,
-          },
-        })
-
-        await tx.subscription.create({
-          data: {
-            providerId: lockedProvider.id, // Use locked Provider ID
-            tier: 'BASIC',
-            status: 'TRIAL',
-            monthlyAmount: 0,
-            billingCycle: 'monthly',
-            currentPeriodStart: new Date(),
-            currentPeriodEnd: trialEndsAt,
-            trialEndsAt,
-          },
-        })
-      } else {
-        // Subscription already exists (webhook won the race)
-        // Update Provider to match existing subscription state
-        await tx.provider.update({
-          where: { id: lockedProvider.id },
-          data: {
-            subscriptionTier: existingSubscription.tier,
-            subscriptionStatus: existingSubscription.status,
-            trialEndsAt: existingSubscription.trialEndsAt,
-          },
-        })
-      }
 
       return { user, provider }
     }, {
