@@ -106,8 +106,27 @@ On 40001/P2034: retry entire transaction
 ### INV-5: Stale Webhook Protection
 
 ```
-incomingEvent.timestamp ≤ subscription.lastWebhookEventTimestamp ⇒ reject(incoming)
+incomingEvent.timestamp < subscription.lastWebhookEventTimestamp ⇒ reject(incoming, reason: 'stale')
+
+incomingEvent.timestamp = subscription.lastWebhookEventTimestamp ⇒ apply equal-timestamp policy
 ```
+
+**Equal-Timestamp Policy (Second-Precision Limitation):**
+
+Stripe `event.created` has second precision and cannot distinguish events within the same second.
+
+When `incomingEvent.timestamp = lastWebhookEventTimestamp`:
+
+1. **If incoming event is CANCELLED** → Accept (cancellation precedence, per INV-6)
+2. **Otherwise** → Reject with `reason: 'equal-timestamp-ambiguous'`
+
+**Rationale:**
+- Cancellation events have business priority (subscription termination)
+- Non-cancellation equal-timestamp events cannot be chronologically ordered
+- Accepting ambiguous ordering would violate the stale-event protection intent
+- The system favors consistency over accepting potentially-stale non-terminal mutations
+
+**Note:** This policy treats equal-second non-cancellation events conservatively. Production monitoring should track `equal-timestamp-ambiguous` rejections to assess real-world impact.
 
 ### INV-6: Cancellation Precedence (After Identity Validation)
 
@@ -125,6 +144,37 @@ Stripe baseline → BEGIN → lock → fresh DB read → decide → mutate → C
 ### INV-8: Safe Migration Bootstrap
 
 Migration establishes unique `stripeSubscriptionId` constraint with deterministic business-safe duplicate resolution.
+
+---
+
+## Invariant Reconciliation: INV-2 vs INV-7
+
+**Issue:** INV-2 states CANCELLED is terminal, but INV-7 (manual sync) can retrieve Stripe current object showing ACTIVE after DB shows CANCELLED.
+
+**Reconciliation Policy:**
+
+Manual synchronization establishes **Stripe authority** for subscription lifecycle state:
+
+1. **If Stripe current object status ≠ CANCELLED** AND **DB status = CANCELLED**:
+   - This indicates Stripe subscription was reactivated (rare but legitimate: customer resubscribed, cancellation reversed, admin action)
+   - Manual sync SHALL update DB to match Stripe authority
+   - Audit log SHALL record: `subscription-reactivation-from-cancelled`
+   - This is NOT a violation of INV-2 because it represents Stripe's authoritative current state, not a stale webhook
+
+2. **If Stripe current object status = CANCELLED** AND **DB status ≠ CANCELLED**:
+   - Standard reconciliation: update DB to CANCELLED
+   - Audit log: `manual-sync-cancelled`
+
+3. **Webhook processing after manual sync**:
+   - Webhooks remain subject to INV-2 and INV-5
+   - A webhook targeting non-CANCELLED after CANCELLED is still rejected as stale
+   - Manual sync does NOT override webhook ordering protections
+
+**Rationale:**
+- Manual sync explicitly retrieves Stripe's current authoritative state
+- Stripe subscription object is the source of truth for lifecycle status
+- INV-2 applies to webhook event ordering, not to Stripe object reconciliation
+- Production monitoring tracks `subscription-reactivation-from-cancelled` to detect unexpected patterns
 
 ---
 
@@ -946,7 +996,7 @@ On 40001/P2034: retry entire transaction
  * Rev 7: Follows atomic transaction architecture (INV-7).
  * Stripe baseline fetched outside transaction, decision made inside.
  * 
- * Uses Stripe SDK v20.3.1 Events API with deterministic pagination.
+ * Uses Stripe SDK (^20.3.1 declared) Events API with deterministic pagination.
  */
 async function manualSyncSubscription(
   stripeSubscriptionId: string
@@ -1016,15 +1066,28 @@ async function manualSyncSubscription(
         // Existing subscription - check if DB is current
         const dbTimestamp = freshSubscription.lastWebhookEventTimestamp || 0;
         
-        if (dbTimestamp >= mostRecentEventTimestamp) {
-          // DB is current or ahead of Stripe event baseline
+        if (dbTimestamp > mostRecentEventTimestamp) {
+          // DB is ahead of Stripe event baseline - DB is authoritative
           return {
             synced: false,
-            reason: 'db-current',
+            reason: 'db-ahead',
             dbTimestamp,
             stripeTimestamp: mostRecentEventTimestamp
           };
         }
+        
+        if (dbTimestamp === mostRecentEventTimestamp) {
+          // Equal timestamps - cannot determine authority from event.created alone
+          // Apply convergence policy: trust Stripe current object as authority
+          logger.info('Manual sync: equal timestamp - applying Stripe authority', {
+            timestamp: dbTimestamp,
+            stripeSubscriptionId
+          });
+          // Continue to synchronization below
+        }
+        
+        // dbTimestamp < mostRecentEventTimestamp OR equal-timestamp convergence
+        // Proceed with synchronization
         
         // DB is stale - reconcile
         await tx.subscription.update({
@@ -1123,7 +1186,7 @@ async function manualSyncSubscription(
 /**
  * Fetch relevant event history for subscription.
  * 
- * Rev 7: Uses Stripe SDK v20.3.1 syntax.
+ * Rev 7: Uses Stripe SDK (^20.3.1 declared) syntax.
  * Deterministic pagination until relevant boundary or history exhausted.
  * Acknowledges 30-day Stripe event retention limit.
  */
@@ -1249,6 +1312,18 @@ Naive selection: Keep B (newest) → Provider loses active subscription pointer
 ```
 
 **Rev 7 Solution: Deterministic business-safe selection**
+
+**Provider-Primary Selection:**
+
+The algorithm gives PRIMARY priority to the Provider relationship: the Subscription row that is actively referenced by its Provider (`Provider.id = Subscription.providerId AND Provider.stripeSubscriptionId = Subscription.stripeSubscriptionId`) is preferred as canonical.
+
+**Important:** Provider relationship is a preference, not a uniqueness guarantee. If multiple duplicate rows satisfy the Provider relationship (which should not occur in correct operation but must be handled deterministically), the algorithm continues to secondary tie-breakers (status priority, updatedAt, createdAt, ID) to ensure exactly one canonical row is selected.
+
+**Secondary Tie-Breakers:**
+- Active lifecycle status (ACTIVE > TRIAL > PAST_DUE > CANCELLED > EXPIRED)
+- Most recent updatedAt
+- Most recent createdAt  
+- Stable Subscription.id (lexicographic)
 
 ### 5.2 Canonical Selection Algorithm
 
@@ -1508,7 +1583,7 @@ Query: WHERE metadata->>'originalStripeSubscriptionId' = 'sub_123'
 
 ## Part 6: Stripe API Integration (Rev 7 MEDIUM)
 
-### 6.1 Verified Stripe SDK Version
+### 6.1 Stripe SDK Version Declaration
 
 **Repository:** `e:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook`
 
@@ -1789,7 +1864,7 @@ async function paginateStripeEventsAsync(
 
 ### 6.6 Key Properties
 
-✅ **Verified SDK version** - v20.3.1 from package.json
+✅ **SDK declaration verified** - `^20.3.1` from package.json (exact resolved version not independently verified)
 
 ✅ **Correct v20 syntax** - `type` parameter (singular)
 
