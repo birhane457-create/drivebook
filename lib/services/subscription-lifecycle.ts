@@ -147,7 +147,23 @@ export function validateSubscriptionIdentity(
     return { valid: true };
   }
 
-  // Verify exact match
+  // CRITICAL: Allow NULL → first Stripe ID attachment (registration TRIAL → webhook)
+  // This handles the Writer-7 race where registration creates TRIAL with no Stripe ID,
+  // then webhook arrives with the actual Stripe subscription.
+  if (lockedSubscription.stripeSubscriptionId === null || 
+      lockedSubscription.stripeSubscriptionId === undefined) {
+    // First attachment - valid if subscription is in TRIAL status
+    if (lockedSubscription.status === 'TRIAL') {
+      return { valid: true };
+    }
+    // Non-TRIAL subscription without Stripe ID is invalid state
+    return {
+      valid: false,
+      reason: 'subscription-missing-stripe-id-invalid-state',
+    };
+  }
+
+  // Verify exact match for existing Stripe IDs
   if (lockedSubscription.stripeSubscriptionId !== incomingStripeSubscriptionId) {
     return {
       valid: false,
@@ -329,17 +345,29 @@ export async function processSubscriptionEvent(
 
   if (lockedSubscription) {
     // Update existing subscription
+    // CRITICAL: Attach stripeSubscriptionId if transitioning from TRIAL (NULL → Stripe ID)
+    const updateData: any = {
+      status: newStatus,
+      lastWebhookEventId: event.id,
+      lastWebhookEventTimestamp: event.created,
+      monthlyAmount: priceItem.price.unit_amount ? priceItem.price.unit_amount / 100 : lockedSubscription.monthlyAmount,
+      billingCycle: priceItem.price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+      currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
+      cancelledAt: newStatus === 'CANCELLED' ? new Date() : lockedSubscription.cancelledAt,
+    };
+
+    // Attach Stripe subscription ID if this is the first webhook (TRIAL → ACTIVE)
+    if (!lockedSubscription.stripeSubscriptionId) {
+      updateData.stripeSubscriptionId = stripeSubscriptionId;
+      logger.info('Attaching Stripe subscription ID to TRIAL subscription', {
+        subscriptionId: lockedSubscription.id,
+        stripeSubscriptionId,
+      });
+    }
+
     await tx.subscription.update({
       where: { id: lockedSubscription.id },
-      data: {
-        status: newStatus,
-        lastWebhookEventId: event.id,
-        lastWebhookEventTimestamp: event.created,
-        monthlyAmount: priceItem.price.unit_amount ? priceItem.price.unit_amount / 100 : lockedSubscription.monthlyAmount,
-        billingCycle: priceItem.price.recurring?.interval === 'year' ? 'annual' : 'monthly',
-        currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-        cancelledAt: newStatus === 'CANCELLED' ? new Date() : lockedSubscription.cancelledAt,
-      },
+      data: updateData,
     });
 
     logger.info('Subscription updated', {
