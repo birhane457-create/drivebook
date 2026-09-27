@@ -46,7 +46,7 @@ With whole-transaction retry on 40001/P2034 serialization failures
 3. ✅ **HIGH: Provider.stripeCustomerId uniqueness** - Schema constraint requirement documented
 4. ✅ **HIGH: INV-1 active vs archived distinction** - Clear identity preservation semantics
 5. ✅ **HIGH: Business-safe canonical selection** - Provider relationship preserved in migration
-6. ✅ **MEDIUM: Stripe SDK v20 verification** - Version confirmed from package.json
+6. ✅ **MEDIUM: Stripe SDK dependency declaration** - `^20.3.1` from package.json; exact resolved version not independently verified
 7. ✅ **MEDIUM: Deterministic event pagination** - Exhaustion and insufficient-history handling
 
 **This is the single authoritative implementation specification.**
@@ -117,11 +117,15 @@ Stripe `event.created` has second precision and cannot distinguish events within
 
 When `incomingEvent.timestamp = lastWebhookEventTimestamp`:
 
-1. **If incoming event is CANCELLED** → Accept (cancellation precedence, per INV-6)
-2. **Otherwise** → Reject with `reason: 'equal-timestamp-ambiguous'`
+1. **If incoming event is CANCELLED:**
+   - **AND current DB state is NOT CANCELLED** → Accept (state transition to CANCELLED, cancellation precedence per INV-6)
+   - **AND current DB state IS CANCELLED** → Accept as idempotent (no state change, audit log records duplicate cancellation event)
+   
+2. **Otherwise (non-cancellation event with equal timestamp):** → Reject with `reason: 'equal-timestamp-ambiguous'`
 
 **Rationale:**
 - Cancellation events have business priority (subscription termination)
+- Equal-timestamp cancellation on already-CANCELLED subscription is idempotent (safe to accept)
 - Non-cancellation equal-timestamp events cannot be chronologically ordered
 - Accepting ambiguous ordering would violate the stale-event protection intent
 - The system favors consistency over accepting potentially-stale non-terminal mutations
@@ -674,51 +678,125 @@ Webhook events cannot be trusted to provide authoritative Provider association. 
  * 
  * @throws Error if Provider cannot be deterministically resolved
  */
-async function resolveProviderFromStripeSubscription(
-  tx: PrismaTransaction,
+/**
+ * Step 1: Resolve Stripe Customer ID (OUTSIDE transaction, before locking).
+ * 
+ * This function performs Stripe API I/O to determine the customer identity
+ * associated with a subscription. It MUST be called before entering the 
+ * database transaction to avoid holding locks during network I/O.
+ * 
+ * @returns stripeCustomerId for Provider resolution
+ * @throws Error if Stripe subscription cannot be retrieved
+ */
+async function resolveStripeCustomerId(
   stripeSubscriptionId: string
-): Promise<Provider> {
+): Promise<string> {
   
-  // Option 1: Lookup via existing Subscription association
-  const subscription = await tx.subscription.findUnique({
-    where: { stripeSubscriptionId },
-    include: { provider: true }
-  });
-  
-  if (subscription) {
-    logger.info('Provider resolved via existing subscription', {
-      stripeSubscriptionId,
-      providerId: subscription.provider.id
-    });
-    return subscription.provider;
-  }
-  
-  // Option 2: New subscription, resolve via Stripe customer → Provider mapping
-  // Fetch Stripe subscription to get customer ID
   const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
   const stripeCustomerId = typeof stripeSub.customer === 'string' 
     ? stripeSub.customer 
     : stripeSub.customer.id;
   
-  // Lookup Provider by stripeCustomerId (MUST be unique)
-  const provider = await tx.provider.findUnique({
+  logger.info('Stripe customer ID resolved (pre-transaction)', {
+    stripeSubscriptionId,
+    stripeCustomerId
+  });
+  
+  return stripeCustomerId;
+}
+
+/**
+ * Step 2: Lock Provider and Subscription in universal order (INSIDE transaction).
+ * 
+ * Rev 7 Correction: LOCK → RE-READ → DECIDE → MUTATE
+ * 
+ * This function:
+ * 1. Locks Provider by stripeCustomerId (universal lock order step 1)
+ * 2. Re-reads locked Provider row
+ * 3. Locks Subscription by stripeSubscriptionId (universal lock order step 2)
+ * 4. Re-reads locked Subscription row (if exists)
+ * 5. Returns post-lock authoritative state
+ * 
+ * ALL policy decisions MUST use the returned post-lock values.
+ * 
+ * @param stripeCustomerId - Resolved BEFORE transaction via resolveStripeCustomerId()
+ * @param stripeSubscriptionId - Target subscription for locking
+ * @returns Locked Provider and Subscription (null if subscription doesn't exist)
+ * @throws Error if Provider not found or locking fails
+ */
+async function lockProviderAndSubscription(
+  tx: PrismaTransaction,
+  stripeCustomerId: string,
+  stripeSubscriptionId: string
+): Promise<{ provider: Provider; subscription: Subscription | null }> {
+  
+  // ═══════════════════════════════════════════════════════════════
+  // Step 1: Lock Provider (universal lock order: Provider FIRST)
+  // ═══════════════════════════════════════════════════════════════
+  
+  await tx.$executeRaw`
+    SELECT * FROM "Provider" 
+    WHERE "stripeCustomerId" = ${stripeCustomerId}
+    FOR UPDATE
+  `;
+  
+  // Step 2: Re-read locked Provider row (authoritative post-lock state)
+  const lockedProvider = await tx.provider.findUnique({
     where: { stripeCustomerId }
   });
   
-  if (!provider) {
+  if (!lockedProvider) {
     throw new Error(
       `No Provider found for Stripe customer: ${stripeCustomerId}. ` +
       `Subscription: ${stripeSubscriptionId}`
     );
   }
   
-  logger.info('Provider resolved via Stripe customer mapping', {
-    stripeSubscriptionId,
-    stripeCustomerId,
-    providerId: provider.id
+  logger.info('Provider locked', {
+    providerId: lockedProvider.id,
+    stripeCustomerId
   });
   
-  return provider;
+  // ═══════════════════════════════════════════════════════════════
+  // Step 3: Lock Subscription (universal lock order: Subscription SECOND)
+  // ═══════════════════════════════════════════════════════════════
+  
+  // First, check if subscription exists
+  const subscriptionExists = await tx.subscription.findUnique({
+    where: { stripeSubscriptionId },
+    select: { id: true }
+  });
+  
+  let lockedSubscription: Subscription | null = null;
+  
+  if (subscriptionExists) {
+    // Lock existing subscription
+    await tx.$executeRaw`
+      SELECT * FROM "Subscription" 
+      WHERE "stripeSubscriptionId" = ${stripeSubscriptionId}
+      FOR UPDATE
+    `;
+    
+    // Step 4: Re-read locked Subscription row (authoritative post-lock state)
+    lockedSubscription = await tx.subscription.findUniqueOrThrow({
+      where: { stripeSubscriptionId }
+    });
+    
+    logger.info('Subscription locked', {
+      subscriptionId: lockedSubscription.id,
+      stripeSubscriptionId
+    });
+  } else {
+    logger.info('No existing subscription to lock (will be created)', {
+      stripeSubscriptionId
+    });
+  }
+  
+  // Return authoritative post-lock state
+  return { 
+    provider: lockedProvider, 
+    subscription: lockedSubscription 
+  };
 }
 ```
 
@@ -763,67 +841,23 @@ HAVING COUNT(*) > 1;
 -- Must return 0 rows
 ```
 
-### 3.4 Universal Lock Order (INV-4)
+###3.4 Universal Lock Order (INV-4)
 
-**Provider → Subscription lock order enforced for ALL 7 writers:**
+**Provider → Subscription lock order enforced for ALL subscription state writers.**
 
-1. Webhook: `customer.subscription.created`
-2. Webhook: `customer.subscription.updated`
-3. Webhook: `customer.subscription.deleted`
-4. Manual sync: Admin-triggered reconciliation
-5. Trial expiration: Automated lifecycle transition
-6. Subscription cancellation: User-initiated
-7. Payment failure: Automated status update
+**Complete Writer Inventory (from accepted discovery document SUB-06-A_DISCOVERY.md):**
 
-```typescript
-/**
- * Lock Provider and Subscription in universal order.
- * Rev 7: Provider resolved INSIDE transaction, then locked.
- */
-async function lockProviderAndSubscription(
-  tx: PrismaTransaction,
-  stripeSubscriptionId: string
-): Promise<{ provider: Provider; subscription: Subscription | null }> {
-  
-  // Step 1: Resolve Provider (INSIDE transaction)
-  const provider = await resolveProviderFromStripeSubscription(
-    tx,
-    stripeSubscriptionId
-  );
-  
-  // Step 2: Lock Provider (FOR UPDATE prevents concurrent mutations)
-  const lockedProvider = await tx.provider.findUniqueOrThrow({
-    where: { id: provider.id },
-    // Prisma doesn't support FOR UPDATE, use raw query or rely on transaction isolation
-  });
-  
-  // Alternative: Use raw SQL for explicit locking
-  await tx.$executeRaw`
-    SELECT * FROM "Provider" 
-    WHERE id = ${provider.id} 
-    FOR UPDATE
-  `;
-  
-  // Step 3: Lock Subscription (if exists)
-  const subscription = await tx.subscription.findUnique({
-    where: { stripeSubscriptionId }
-  });
-  
-  if (subscription) {
-    // Lock existing subscription
-    await tx.$executeRaw`
-      SELECT * FROM "Subscription" 
-      WHERE id = ${subscription.id} 
-      FOR UPDATE
-    `;
-  }
-  
-  return { 
-    provider: lockedProvider, 
-    subscription 
-  };
-}
-```
+1. **handleSubscriptionUpdate()** - Webhooks: `customer.subscription.created`, `customer.subscription.updated`
+2. **handleSubscriptionCancelled()** - Webhook: `customer.subscription.deleted`
+3. **handleInvoicePaymentSucceeded()** - Webhook: `invoice.payment_succeeded`
+4. **handleInvoicePaymentFailed()** - Webhook: `invoice.payment_failed`
+5. **Trial Expiry Cron** - Endpoint: `/api/cron/check-trial-expiry`
+6. **Manual Subscription Sync** - Endpoint: `/api/instructor/subscription/sync`
+7. **Registration / Checkout** - Initial TRIAL state creation (not subject to ordering issues per discovery)
+
+**Writers 1-6 mutate existing subscription state** and MUST enforce universal lock order.
+
+**Writer 7 (initial creation)** is NOT subject to ordering/locking requirements as it creates new subscription rows.
 
 ### 3.5 Identity Validation (INV-6)
 
@@ -858,24 +892,50 @@ function validateSubscriptionIdentity(
 
 ### 3.6 Complete Transaction Flow
 
+**CRITICAL: Transaction Architecture**
+
+All Stripe API I/O MUST occur BEFORE entering the database transaction:
+
+```
+1. Stripe API: Resolve stripeCustomerId (via resolveStripeCustomerId())
+2. BEGIN SERIALIZABLE
+3. Lock Provider (using stripeCustomerId from step 1)
+4. Lock Subscription
+5. Re-read locked rows
+6. Policy decisions (using post-lock state)
+7. Conditional mutation
+8. Audit
+9. COMMIT
+```
+
+The following `processSubscriptionEvent` function assumes `stripeCustomerId` is already resolved externally and passed into the transaction.
+
 ```typescript
 /**
  * Process subscription webhook event.
- * Rev 7: Provider resolution → lock → identity validation → policy → mutation
+ * Rev 7 Correction: stripeCustomerId MUST be resolved BEFORE calling this function.
+ * 
+ * Call pattern:
+ *   const stripeCustomerId = await resolveStripeCustomerId(stripeSubscriptionId);
+ *   await prisma.$transaction(async (tx) => {
+ *     return processSubscriptionEvent(tx, event, stripeCustomerId);
+ *   }, { isolationLevel: 'Serializable' });
  */
 async function processSubscriptionEvent(
   tx: PrismaTransaction,
-  event: Stripe.Event
+  event: Stripe.Event,
+  stripeCustomerId: string  // ← Resolved BEFORE transaction
 ): Promise<{ allowed: boolean; reason: string }> {
   
   const subscription = event.data.object as Stripe.Subscription;
   const stripeSubscriptionId = subscription.id;
   
   // Step 1: Lock Provider and Subscription (universal order)
+  //         Uses pre-resolved stripeCustomerId (no Stripe API I/O inside transaction)
   const { provider, subscription: lockedSubscription } = 
-    await lockProviderAndSubscription(tx, stripeSubscriptionId);
+    await lockProviderAndSubscription(tx, stripeCustomerId, stripeSubscriptionId);
   
-  // Step 2: Validate identity
+  // Step 2: Validate identity (using post-lock authoritative state)
   const identityCheck = validateSubscriptionIdentity(
     lockedSubscription,
     stripeSubscriptionId
@@ -894,10 +954,10 @@ async function processSubscriptionEvent(
     };
   }
   
-  // Step 3: Policy decision (stale check, cancellation precedence, etc.)
+  // Step 3: Policy decision (using post-lock state: lockedSubscription)
   const policyResult = await canTransitionSubscriptionState(
     event,
-    lockedSubscription
+    lockedSubscription  // ← Post-lock authoritative state
   );
   
   if (!policyResult.allowed) {
@@ -1251,6 +1311,9 @@ async function fetchRelevantEventHistory(
   }
   
   // Sort by timestamp descending (most recent first)
+  // NOTE: This sort uses event.created which has second precision.
+  // If multiple events share the same timestamp, their relative order is undefined.
+  // This baseline provides timestamp + event ID for watermark tracking, NOT total chronological ordering.
   relevantEvents.sort((a, b) => b.created - a.created);
   
   const mostRecent = relevantEvents[0];
@@ -1271,6 +1334,8 @@ async function fetchRelevantEventHistory(
     };
   }
   
+  // Return baseline watermark (timestamp + event ID)
+  // This is used for stale-event comparison, not as definitive chronological authority
   return {
     success: true,
     mostRecentTimestamp: mostRecent.created,
@@ -2194,7 +2259,7 @@ ORDER BY "createdAt" DESC;
 - [x] **3. HIGH:** Provider.stripeCustomerId uniqueness (schema requirement documented)
 - [x] **4. HIGH:** INV-1 active vs archived distinction (clear identity preservation)
 - [x] **5. HIGH:** Business-safe canonical selection (Provider relationships preserved)
-- [x] **6. MEDIUM:** Stripe SDK v20 verification (package.json confirmed)
+- [x] **6. MEDIUM:** Stripe SDK dependency declaration (`^20.3.1` from package.json; exact resolved version not independently verified)
 - [x] **7. MEDIUM:** Deterministic event pagination (exhaustion + insufficient-history)
 
 **All 8 invariants maintained:**
