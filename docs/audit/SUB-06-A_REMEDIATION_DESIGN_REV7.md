@@ -155,7 +155,7 @@ Migration establishes unique `stripeSubscriptionId` constraint with deterministi
 
 **Issue:** INV-2 states CANCELLED is terminal, but INV-7 (manual sync) can retrieve Stripe current object showing ACTIVE after DB shows CANCELLED.
 
-**Reconciliation Policy:**
+**Reconciliation Policy with Complete Lifecycle Rule:**
 
 Manual synchronization establishes **Stripe authority** for subscription lifecycle state:
 
@@ -169,15 +169,64 @@ Manual synchronization establishes **Stripe authority** for subscription lifecyc
    - Standard reconciliation: update DB to CANCELLED
    - Audit log: `manual-sync-cancelled`
 
-3. **Webhook processing after manual sync**:
-   - Webhooks remain subject to INV-2 and INV-5
-   - A webhook targeting non-CANCELLED after CANCELLED is still rejected as stale
-   - Manual sync does NOT override webhook ordering protections
+3. **Webhook processing after manual sync - Complete Lifecycle Rule:**
+
+**CRITICAL: Lifecycle Generation Tracking**
+
+To resolve INV-2 vs INV-7 after manual reactivation, the system tracks **lifecycle generation** via `lastWebhookEventTimestamp`:
+
+- When manual sync reactivates from CANCELLED, it updates `lastWebhookEventTimestamp` to the mostRecentEventTimestamp from Stripe event history
+- This establishes a new authoritative baseline watermark
+
+**Webhook Policy After Manual Reactivation:**
+
+```
+Incoming webhook event E:
+
+IF lockedSubscription.status = CANCELLED:
+    IF E.created > lockedSubscription.lastWebhookEventTimestamp:
+        # Event is chronologically after the cancellation watermark
+        IF E.targetStatus = CANCELLED:
+            ACCEPT (idempotent, reinforces terminal state)
+        ELSE:
+            REJECT (INV-2: terminal CANCELLED cannot be overridden by delayed webhooks)
+            
+    IF E.created ≤ lockedSubscription.lastWebhookEventTimestamp:
+        REJECT (INV-5: stale event)
+
+IF lockedSubscription.status ≠ CANCELLED:
+    # Standard stale-event and equal-timestamp policies apply (INV-5)
+    ...
+```
+
+**Key Insight:**
+
+- Manual sync reactivation from CANCELLED updates the lastWebhookEventTimestamp watermark to reflect the Stripe event baseline
+- Subsequent webhooks are evaluated against this new watermark
+- If DB shows CANCELLED with watermark T, and a webhook arrives with event.created > T targeting non-CANCELLED, it is rejected (INV-2)
+- If DB shows ACTIVE after manual reactivation with watermark T', webhooks with event.created > T' can proceed per normal policy
+- Manual sync does NOT override INV-2 for webhooks - it establishes a new authoritative watermark from Stripe's event history
+
+**Example Scenario:**
+
+```
+t1000: subscription.deleted → DB = CANCELLED, watermark = 1000
+t1050: Manual sync retrieves Stripe object = ACTIVE, event history shows mostRecent = 1100
+        → DB = ACTIVE, watermark = 1100
+        → Audit: subscription-reactivation-from-cancelled
+t1080: Delayed webhook subscription.updated (event.created = 1080) arrives
+        → 1080 < 1100 (watermark)
+        → REJECT per INV-5 (stale)
+t1150: New webhook subscription.updated (event.created = 1150) arrives
+        → 1150 > 1100 (watermark), DB = ACTIVE
+        → ACCEPT per standard policy
+```
 
 **Rationale:**
-- Manual sync explicitly retrieves Stripe's current authoritative state
-- Stripe subscription object is the source of truth for lifecycle status
-- INV-2 applies to webhook event ordering, not to Stripe object reconciliation
+- Manual sync explicitly retrieves Stripe's current authoritative state and event baseline
+- INV-2 applies to webhook event ordering within a lifecycle generation
+- Manual sync can establish a new lifecycle generation with updated watermark
+- Webhooks remain subject to stale-event protection relative to the current watermark
 - Production monitoring tracks `subscription-reactivation-from-cancelled` to detect unexpected patterns
 
 ---
@@ -1053,23 +1102,34 @@ On 40001/P2034: retry entire transaction
 /**
  * Manual synchronization with Stripe subscription state.
  * 
- * Rev 7: Follows atomic transaction architecture (INV-7).
- * Stripe baseline fetched outside transaction, decision made inside.
+ * Rev 7 Correction: ALL Stripe API I/O occurs BEFORE transaction.
  * 
- * Uses Stripe SDK (^20.3.1 declared) Events API with deterministic pagination.
+ * Architecture:
+ * 1. Stripe API: Retrieve subscription + resolve stripeCustomerId + fetch event baseline
+ * 2. BEGIN SERIALIZABLE
+ * 3. Lock Provider + Subscription (universal order)
+ * 4. Re-read locked state
+ * 5. Policy decision
+ * 6. Conditional mutation
+ * 7. COMMIT
  */
 async function manualSyncSubscription(
   stripeSubscriptionId: string
 ): Promise<{ synced: boolean; reason: string; action?: string }> {
   
   // ═══════════════════════════════════════════════════════════════
-  // PHASE 1: Fetch Stripe Baseline (OUTSIDE transaction)
+  // PHASE 1: Fetch Stripe Baseline (OUTSIDE transaction, no DB locks held)
   // ═══════════════════════════════════════════════════════════════
   
-  // Fetch current Stripe subscription object
+  // Step 1a: Fetch current Stripe subscription object
   const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
   
-  // Fetch relevant event history
+  // Step 1b: Resolve Stripe customer ID (for Provider resolution)
+  const stripeCustomerId = typeof stripeSub.customer === 'string' 
+    ? stripeSub.customer 
+    : stripeSub.customer.id;
+  
+  // Step 1c: Fetch relevant event history
   const eventBaseline = await fetchRelevantEventHistory(stripeSubscriptionId);
   
   if (!eventBaseline.success) {
@@ -1089,42 +1149,14 @@ async function manualSyncSubscription(
   const result = await withSerializableRetry(async () => {
     return await prisma.$transaction(async (tx) => {
       
-      // Step 1: Resolve Provider (inside transaction)
-      const provider = await resolveProviderFromStripeSubscription(
-        tx,
-        stripeSubscriptionId
-      );
+      // Step 2: Lock Provider and Subscription (universal order, using pre-resolved stripeCustomerId)
+      const { provider, subscription: lockedSubscription } = 
+        await lockProviderAndSubscription(tx, stripeCustomerId, stripeSubscriptionId);
       
-      // Step 2: Lock Provider (universal order)
-      await tx.$executeRaw`
-        SELECT * FROM "Provider" 
-        WHERE id = ${provider.id} 
-        FOR UPDATE
-      `;
-      
-      // Step 3: Lock Subscription (if exists)
-      const subscription = await tx.subscription.findUnique({
-        where: { stripeSubscriptionId }
-      });
-      
-      if (subscription) {
-        await tx.$executeRaw`
-          SELECT * FROM "Subscription" 
-          WHERE id = ${subscription.id} 
-          FOR UPDATE
-        `;
-      }
-      
-      // Step 4: Re-read fresh DB state (locked)
-      const freshSubscription = subscription ? 
-        await tx.subscription.findUniqueOrThrow({
-          where: { id: subscription.id }
-        }) : null;
-      
-      // Step 5: Policy decision (compare Stripe baseline vs fresh DB state)
-      if (freshSubscription) {
+      // Step 3: Policy decision (compare Stripe baseline vs locked DB state)
+      if (lockedSubscription) {
         // Existing subscription - check if DB is current
-        const dbTimestamp = freshSubscription.lastWebhookEventTimestamp || 0;
+        const dbTimestamp = lockedSubscription.lastWebhookEventTimestamp || 0;
         
         if (dbTimestamp > mostRecentEventTimestamp) {
           // DB is ahead of Stripe event baseline - DB is authoritative
@@ -1149,9 +1181,9 @@ async function manualSyncSubscription(
         // dbTimestamp < mostRecentEventTimestamp OR equal-timestamp convergence
         // Proceed with synchronization
         
-        // DB is stale - reconcile
+        // Step 4: Reconcile from Stripe
         await tx.subscription.update({
-          where: { id: freshSubscription.id },
+          where: { id: lockedSubscription.id },
           data: {
             status: mapStripeStatus(stripeSub.status),
             currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
@@ -1172,7 +1204,7 @@ async function manualSyncSubscription(
             actorId: 'system',
             actorRole: 'SYSTEM',
             targetType: 'Subscription',
-            targetId: freshSubscription.id,
+            targetId: lockedSubscription.id,
             metadata: {
               stripeSubscriptionId,
               previousTimestamp: dbTimestamp,
@@ -1356,9 +1388,45 @@ async function fetchRelevantEventHistory(
 
 ✅ **Deterministic pagination** - Exhaustion and retention limits handled
 
-✅ **Insufficient history acknowledged** - No invented watermarks for unknow history
+✅ **Insufficient history acknowledged** - No invented watermarks for unknown history
 
 ✅ **Serialization failure safe** - Whole-transaction retry on 40001/P2034
+
+✅ **Event history baseline is NOT total chronological ordering** - Second-precision limitation explicitly acknowledged
+
+### 4.5 Event History Baseline Semantics (CRITICAL)
+
+**What Event History Provides:**
+
+- **Maximum `event.created` timestamp** observed in relevant event set
+- **Event ID** associated with that maximum timestamp (for idempotency tracking)
+
+**What Event History Does NOT Provide:**
+
+- Total chronological ordering of events
+- Deterministic "latest event" when multiple events share the same `event.created` value
+
+**Second-Precision Limitation:**
+
+When multiple relevant events have identical `event.created` timestamps:
+- The sort order between those events is undefined
+- The selected `mostRecent` event is ONE OF the events with maximum timestamp, not necessarily THE chronologically latest
+- This is acceptable because the baseline is used for watermark comparison (`>`, `<`, `=`), not as chronological authority
+
+**Test Requirement:**
+
+Manual-sync test suite MUST include scenario with multiple relevant events having identical `event.created` values to verify the implementation correctly handles equal-second ambiguity.
+
+**Example Test Case:**
+```typescript
+// Two subscription events with same timestamp
+const event1 = { id: 'evt_A', created: 1000, type: 'customer.subscription.updated' };
+const event2 = { id: 'evt_B', created: 1000, type: 'customer.subscription.cancelled' };
+
+// Baseline selection may return either evt_A or evt_B as mostRecent
+// Implementation must use mostRecent.created (1000) for watermark comparison
+// Implementation must NOT assume evt_A or evt_B is chronologically authoritative
+```
 
 ---
 
@@ -1552,18 +1620,17 @@ SET
   "retentionState" = 'ARCHIVED',
   
   -- Preserve historical identity in metadata (INV-1)
+  -- Rev 7 CRITICAL FIX: Chain jsonb_set() calls to preserve all three fields
   metadata = jsonb_set(
-    COALESCE(metadata, '{}'::jsonb),
-    '{originalStripeSubscriptionId}',
-    to_jsonb(duplicates_to_archive."stripeSubscriptionId")
-  ),
-  metadata = jsonb_set(
-    COALESCE(metadata, '{}'::jsonb),
-    '{archivedReason}',
-    '"duplicate-stripe-id-migration"'::jsonb
-  ),
-  metadata = jsonb_set(
-    COALESCE(metadata, '{}'::jsonb),
+    jsonb_set(
+      jsonb_set(
+        COALESCE(metadata, '{}'::jsonb),
+        '{originalStripeSubscriptionId}',
+        to_jsonb(duplicates_to_archive."stripeSubscriptionId")
+      ),
+      '{archivedReason}',
+      '"duplicate-stripe-id-migration"'::jsonb
+    ),
     '{archivedAt}',
     to_jsonb(EXTRACT(EPOCH FROM NOW())::bigint)
   ),
@@ -1579,6 +1646,28 @@ SELECT
 FROM "Subscription"
 WHERE "retentionState" = 'ARCHIVED'
   AND metadata->>'archivedReason' = 'duplicate-stripe-id-migration';
+
+-- MIGRATION TEST: Verify all three metadata fields are preserved
+DO $$
+DECLARE
+  test_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO test_count
+  FROM "Subscription"
+  WHERE "retentionState" = 'ARCHIVED'
+    AND metadata->>'archivedReason' = 'duplicate-stripe-id-migration'
+    AND (
+      metadata->>'originalStripeSubscriptionId' IS NULL
+      OR metadata->>'archivedReason' IS NULL
+      OR metadata->>'archivedAt' IS NULL
+    );
+  
+  IF test_count > 0 THEN
+    RAISE EXCEPTION 'Migration metadata preservation test FAILED: % rows missing required metadata fields', test_count;
+  END IF;
+  
+  RAISE NOTICE 'Migration metadata preservation test PASSED: All archived rows have complete metadata';
+END $$;
 ```
 
 ### 5.4 Verification
