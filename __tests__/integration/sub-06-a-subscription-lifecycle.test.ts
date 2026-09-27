@@ -101,11 +101,10 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
   });
 
   describe('Scenario 1: Concurrent Creation (Writer 7 Race)', () => {
-    it('should handle genuine concurrent registration and webhook creating subscription', async () => {
+    it('should handle genuine concurrent registration and webhook with proper convergence', async () => {
       // This test creates a REAL race between registration and webhook
       // Both paths lock Provider FIRST, then check/create Subscription
-      // The transaction that acquires the Provider lock first wins
-      // The second transaction sees the existing Subscription and reuses it
+      // CRITICAL: Test verifies proper lifecycle convergence regardless of winner
       
       // Setup: Create base user and provider WITHOUT subscription
       const user = await prisma.user.create({
@@ -139,7 +138,7 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
       );
 
       // Execute CONCURRENT transactions:
-      // Path A: Registration creates TRIAL subscription
+      // Path A: Registration creates TRIAL subscription (models app/api/register)
       // Path B: Webhook creates/updates subscription from Stripe
       const results = await Promise.allSettled([
         // Path A: Registration-style TRIAL creation with Provider lock
@@ -160,6 +159,7 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
                   providerId: lockedProvider.id,
                   tier: 'TRIAL',
                   status: 'TRIAL',
+                  stripeSubscriptionId: null, // TRIAL has no Stripe ID initially
                   monthlyAmount: 0,
                   billingCycle: 'monthly',
                   currentPeriodStart: new Date(),
@@ -167,6 +167,7 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
                 },
               });
             }
+            // Subscription exists (webhook won) - return existing
             return existing;
           },
           { isolationLevel: 'Serializable', timeout: 10000 }
@@ -181,11 +182,18 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
         ),
       ]);
 
-      // Both transactions should succeed (one creates, one reuses)
+      // BOTH transactions must succeed for proper convergence
+      // One creates, the other either creates or attaches/updates
+      const failedResults = results.filter((r) => r.status === 'rejected');
+      if (failedResults.length > 0) {
+        console.error('Transaction failures:', failedResults.map((r: any) => r.reason));
+      }
+      
+      // At least one must succeed to create the subscription
       const successfulResults = results.filter((r) => r.status === 'fulfilled');
       expect(successfulResults.length).toBeGreaterThanOrEqual(1);
 
-      // Verify: Exactly ONE subscription exists (Writer-7 race resolved)
+      // Verify CRITICAL invariant: Exactly ONE subscription exists
       const subscriptions = await prisma.subscription.findMany({
         where: { providerId: provider.id },
       });
@@ -195,14 +203,23 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
       const finalSubscription = subscriptions[0];
       expect(finalSubscription.providerId).toBe(provider.id);
       
-      // Either TRIAL (registration won) or ACTIVE (webhook won)
-      expect(['TRIAL', 'ACTIVE']).toContain(finalSubscription.status);
+      // CRITICAL CONVERGENCE TEST:
+      // Regardless of transaction order, final state must have Stripe ID attached
+      // This proves the TRIAL → webhook transition works correctly
+      expect(finalSubscription.stripeSubscriptionId).toBe(TEST_STRIPE_SUBSCRIPTION_ID);
       
-      // If webhook won, should have Stripe ID and watermark
-      if (finalSubscription.status === 'ACTIVE') {
-        expect(finalSubscription.stripeSubscriptionId).toBe(TEST_STRIPE_SUBSCRIPTION_ID);
-        expect(finalSubscription.lastWebhookEventId).toBe(event.id);
-      }
+      // Status should be ACTIVE (webhook applied its state)
+      expect(finalSubscription.status).toBe('ACTIVE');
+      
+      // Webhook watermark must be present (proves webhook was processed)
+      expect(finalSubscription.lastWebhookEventId).toBe(event.id);
+      expect(finalSubscription.lastWebhookEventTimestamp).toBe(event.created);
+      
+      // Verify Provider state is synchronized
+      const finalProvider = await prisma.provider.findUnique({
+        where: { id: provider.id },
+      });
+      expect(finalProvider?.subscriptionStatus).toBe('ACTIVE');
     });
   });
 
