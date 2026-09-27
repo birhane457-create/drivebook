@@ -7,7 +7,7 @@
 **Rev 7 Corrections Summary:** `df90a1b4`  
 **Rev 7 Date:** 2026-09-26
 
-**Stripe SDK Version:** `^20.3.1` (verified from package.json)
+**Stripe SDK Version:** `^20.3.1` (compatible with v20.3.x and later v20 releases, declared in package.json)
 
 ---
 
@@ -1268,27 +1268,21 @@ HAVING COUNT(*) > 1;
 
 -- Step 2: Select canonical row with business-safe priority
 -- Priority order (highest to lowest):
--- 1. Current Provider pointer (Provider.stripeSubscriptionId matches)
+-- 1. Row is referenced by its Provider (Subscription.providerId matches Provider.id)
 -- 2. Active lifecycle status (ACTIVE > TRIAL > PAST_DUE > CANCELLED > EXPIRED)
 -- 3. Most recent updatedAt
 -- 4. Most recent createdAt
--- 5. Stable ID tie-breaker (lexicographic)
+-- 5. Stable Subscription.id tie-breaker (lexicographic)
 
-WITH provider_pointers AS (
-  -- Identify which Subscription rows are currently pointed to by Providers
-  SELECT DISTINCT "stripeSubscriptionId"
-  FROM "Provider"
-  WHERE "stripeSubscriptionId" IS NOT NULL
-),
-status_priority AS (
+WITH status_priority AS (
   -- Assign numeric priority to subscription statuses
   SELECT 
     id,
     "stripeSubscriptionId",
+    providerId,
     status,
     "updatedAt",
     "createdAt",
-    providerId,
     CASE status
       WHEN 'ACTIVE' THEN 1
       WHEN 'TRIAL' THEN 2
@@ -1304,14 +1298,23 @@ canonical_selection AS (
   SELECT
     s.id,
     s."stripeSubscriptionId",
-    s.status,
     s.providerId,
+    s.status,
     -- Canonical flag based on business-safe priority
     ROW_NUMBER() OVER (
       PARTITION BY s."stripeSubscriptionId"
       ORDER BY
-        -- Priority 1: Current Provider pointer (1=is pointed to, 0=not)
-        CASE WHEN pp."stripeSubscriptionId" IS NOT NULL THEN 1 ELSE 0 END DESC,
+        -- Priority 1: Row-level Provider ownership
+        -- (Provider.id matches this Subscription.providerId AND
+        --  Provider.stripeSubscriptionId matches this stripeSubscriptionId)
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM "Provider" p
+            WHERE p.id = s.providerId
+              AND p."stripeSubscriptionId" = s."stripeSubscriptionId"
+          ) THEN 1 
+          ELSE 0 
+        END DESC,
         -- Priority 2: Active lifecycle status (lower number = higher priority)
         s.status_priority ASC,
         -- Priority 3: Most recent update
@@ -1322,13 +1325,12 @@ canonical_selection AS (
         s.id ASC
     ) as row_rank
   FROM status_priority s
-  LEFT JOIN provider_pointers pp ON pp."stripeSubscriptionId" = s."stripeSubscriptionId"
 )
 SELECT
   id,
   "stripeSubscriptionId",
-  status,
   providerId,
+  status,
   CASE WHEN row_rank = 1 THEN 'CANONICAL' ELSE 'DUPLICATE' END as classification
 FROM canonical_selection
 WHERE "stripeSubscriptionId" IN (
@@ -1350,15 +1352,11 @@ ORDER BY "stripeSubscriptionId", row_rank;
 -- Step 3: Archive duplicate rows (non-canonical)
 -- Rev 7: Actually NULL the stripeSubscriptionId (not just mark in metadata)
 
-WITH provider_pointers AS (
-  SELECT DISTINCT "stripeSubscriptionId"
-  FROM "Provider"
-  WHERE "stripeSubscriptionId" IS NOT NULL
-),
-status_priority AS (
+WITH status_priority AS (
   SELECT 
     id,
     "stripeSubscriptionId",
+    providerId,
     status,
     "updatedAt",
     "createdAt",
@@ -1380,14 +1378,21 @@ canonical_selection AS (
     ROW_NUMBER() OVER (
       PARTITION BY s."stripeSubscriptionId"
       ORDER BY
-        CASE WHEN pp."stripeSubscriptionId" IS NOT NULL THEN 1 ELSE 0 END DESC,
+        -- Priority 1: Row-level Provider ownership
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM "Provider" p
+            WHERE p.id = s.providerId
+              AND p."stripeSubscriptionId" = s."stripeSubscriptionId"
+          ) THEN 1 
+          ELSE 0 
+        END DESC,
         s.status_priority ASC,
         s."updatedAt" DESC,
         s."createdAt" DESC,
         s.id ASC
     ) as row_rank
   FROM status_priority s
-  LEFT JOIN provider_pointers pp ON pp."stripeSubscriptionId" = s."stripeSubscriptionId"
 ),
 duplicates_to_archive AS (
   SELECT id, "stripeSubscriptionId"
@@ -1513,7 +1518,7 @@ Query: WHERE metadata->>'originalStripeSubscriptionId' = 'sub_123'
 }
 ```
 
-**SDK Version:** Stripe Node.js SDK v20.3.1 (verified 2026-09-26)
+**SDK Compatibility:** Stripe Node.js SDK v20.3.x or later v20 releases (package.json declares `^20.3.1`)
 
 **API Breaking Changes (v12+):**
 - Events list: `type` parameter (singular), not `types` (plural)
