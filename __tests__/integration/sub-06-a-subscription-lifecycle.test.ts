@@ -233,6 +233,81 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
       expect(finalProvider?.subscriptionStatus).toBe('ACTIVE');
       expect(finalProvider?.subscriptionTier).toBe(finalSubscription.tier);
     });
+
+    it('should reject webhook for new Stripe ID when Provider has existing current subscription (one-current invariant)', async () => {
+      // ADVERSARIAL TEST: Provider has existing ACTIVE subscription with sub_old
+      // Webhook arrives for sub_new → must NOT create second current subscription
+      
+      const user = await prisma.user.create({
+        data: {
+          email: 'test-sub06a-adversarial@example.com',
+          name: 'Test Provider Adversarial',
+          role: 'PROVIDER',
+        },
+      });
+
+      const provider = await prisma.provider.create({
+        data: {
+          id: 'test-provider-adversarial',
+          userId: user.id,
+          name: 'Test Provider',
+          stripeCustomerId: 'cus_adversarial',
+          location: 'Test Location',
+          phone: '+61412345678',
+          hourlyRate: 75.0,
+          subscriptionTier: 'PREMIUM',
+          subscriptionStatus: 'ACTIVE',
+        },
+      });
+
+      // Create existing ACTIVE subscription with sub_old
+      const existingSubscription = await prisma.subscription.create({
+        data: {
+          providerId: provider.id,
+          tier: 'PREMIUM',
+          status: 'ACTIVE',
+          stripeSubscriptionId: 'sub_old_existing',
+          monthlyAmount: 99.0,
+          billingCycle: 'monthly',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
+          lastWebhookEventId: 'evt_old',
+          lastWebhookEventTimestamp: Math.floor(Date.now() / 1000) - 1000,
+        },
+      });
+
+      // Prepare webhook for NEW Stripe subscription ID
+      const event = createMockStripeEvent(
+        'customer.subscription.created',
+        { id: 'sub_new_different', status: 'active' },
+        Math.floor(Date.now() / 1000)
+      );
+
+      // Execute webhook processing
+      const result = await prisma.$transaction(
+        async (tx) => {
+          return await processSubscriptionEvent(tx, event, provider.stripeCustomerId);
+        },
+        { isolationLevel: 'Serializable', timeout: 10000 }
+      );
+
+      // CRITICAL: Webhook must be REJECTED (cannot create second current subscription)
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('one-current-subscription-invariant-violation');
+
+      // Verify: ONLY the original subscription exists (no duplicate created)
+      const subscriptions = await prisma.subscription.findMany({
+        where: {
+          providerId: provider.id,
+          status: { not: 'CANCELLED' },
+        },
+      });
+
+      expect(subscriptions).toHaveLength(1);
+      expect(subscriptions[0].id).toBe(existingSubscription.id);
+      expect(subscriptions[0].stripeSubscriptionId).toBe('sub_old_existing');
+      expect(subscriptions[0].status).toBe('ACTIVE');
+    });
   });
 
   describe('Scenario 2: Metadata Preservation', () => {
