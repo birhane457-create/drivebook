@@ -73,14 +73,72 @@ With whole-transaction retry on 40001/P2034 serialization failures
 ∀ s ∈ ArchivedDuplicates: s.stripeSubscriptionId = NULL ∧ s.metadata.originalStripeSubscriptionId preserves historical identity
 ```
 
-### INV-2: CANCELLED Terminal Per Stripe Subscription
+### INV-2: CANCELLED Terminal for Webhook Events (With Authoritative Reconciliation Exception)
 
 ```
-∀ events e1, e2 where e1.stripeSubscriptionId = e2.stripeSubscriptionId:
-  e1.targetStatus = CANCELLED ⇒ reject(e2) if e2.targetStatus ≠ CANCELLED
+Webhook Event Processing:
+∀ webhook events e1, e2 where e1.stripeSubscriptionId = e2.stripeSubscriptionId:
+  (DB.status = CANCELLED ∧ e2.targetStatus ≠ CANCELLED ∧ e2.created > DB.lastWebhookEventTimestamp)
+    ⇒ reject(e2, reason: 'terminal-cancelled-by-webhook')
+
+Authoritative Manual Reconciliation:
+Manual sync retrieves Stripe.subscription.retrieve() = authoritative current state
+  IF Stripe.status ≠ CANCELLED ∧ DB.status = CANCELLED:
+    Manual sync MAY update DB.status to match Stripe authoritative state
+    Manual sync MUST update DB.lastWebhookEventTimestamp to Stripe event baseline
+    → Establishes new authoritative watermark
+    → Subsequent webhooks evaluated against new watermark per INV-5
 ```
 
-Once any event for a Stripe subscription ID targets CANCELLED, all subsequent non-CANCELLED events for that same Stripe ID are rejected regardless of timestamp.
+**Semantics:**
+
+1. **Webhook-Established CANCELLED is terminal for delayed webhooks:**
+   - Once DB status = CANCELLED (established by webhook), subsequent webhook events targeting non-CANCELLED are rejected
+   - Rationale: Prevents stale/delayed webhooks from resurrecting cancelled subscriptions
+
+2. **Authoritative Manual Reconciliation can override CANCELLED:**
+   - Manual sync explicitly retrieves Stripe's current authoritative state via API
+   - If Stripe shows non-CANCELLED, manual sync updates DB to match
+   - This is NOT a webhook event - it's authoritative reconciliation
+   - Establishes new event watermark from Stripe event history
+
+3. **Subsequent Webhooks After Manual Reactivation:**
+   - Evaluated against new watermark (INV-5 stale-event policy)
+   - Standard equal-timestamp and ordering rules apply
+   - Manual reactivation does NOT exempt subsequent webhooks from INV-5
+
+**Example State Machine:**
+
+```
+t1000: webhook subscription.deleted → DB = CANCELLED, watermark = 1000
+       (INV-2 now active: subsequent non-CANCELLED webhooks rejected)
+
+t1050: Manual sync: Stripe.retrieve() = ACTIVE, event baseline = 1100
+       → DB = ACTIVE, watermark = 1100
+       → Audit: subscription-reactivation-from-cancelled
+       (Authoritative reconciliation, NOT a webhook event)
+
+t1080: webhook subscription.updated (created = 1080, target = ACTIVE)
+       → 1080 < 1100 (watermark)
+       → REJECT per INV-5 (stale event)
+       (INV-2 does not apply - DB is ACTIVE, not CANCELLED)
+
+t1150: webhook subscription.updated (created = 1150, target = ACTIVE)
+       → 1150 > 1100 (watermark), DB = ACTIVE
+       → ACCEPT per standard INV-5 policy
+       (Standard webhook processing, DB not in CANCELLED state)
+
+t1200: webhook subscription.deleted (created = 1200, target = CANCELLED)
+       → 1200 > 1150, DB = ACTIVE
+       → ACCEPT, DB = CANCELLED, watermark = 1200
+       (INV-2 reactivated: subsequent non-CANCELLED webhooks now rejected again)
+```
+
+**Key Distinction:**
+
+- **INV-2 applies to:** Webhook event processing when DB.status = CANCELLED
+- **INV-2 does NOT apply to:** Authoritative manual reconciliation via Stripe API retrieval
+- **After manual reactivation:** INV-2 is NOT active (DB.status ≠ CANCELLED), standard INV-5 applies
 
 ### INV-3: New Stripe ID = New Lifecycle
 
@@ -1663,12 +1721,27 @@ SELECT
 FROM "Subscription"
 WHERE "retentionState" = 'ARCHIVED'
   AND metadata->>'archivedReason' = 'duplicate-stripe-id-migration';
+```
 
--- MIGRATION TEST: Verify all three metadata fields are preserved
+**REQUIRED MIGRATION TEST: Metadata Preservation Verification**
+
+This test MUST be executed immediately after the archival UPDATE to verify all three metadata fields are preserved simultaneously:
+
+```sql
+-- CRITICAL MIGRATION TEST: Verify all three metadata fields preserved together
+-- This test proves the chained jsonb_set() does not overwrite previous assignments
 DO $$
 DECLARE
   test_count INTEGER;
+  total_archived INTEGER;
 BEGIN
+  -- Count archived rows
+  SELECT COUNT(*) INTO total_archived
+  FROM "Subscription"
+  WHERE "retentionState" = 'ARCHIVED'
+    AND metadata->>'archivedReason' = 'duplicate-stripe-id-migration';
+  
+  -- Count rows missing ANY required metadata field
   SELECT COUNT(*) INTO test_count
   FROM "Subscription"
   WHERE "retentionState" = 'ARCHIVED'
@@ -1680,10 +1753,12 @@ BEGIN
     );
   
   IF test_count > 0 THEN
-    RAISE EXCEPTION 'Migration metadata preservation test FAILED: % rows missing required metadata fields', test_count;
+    RAISE EXCEPTION 'Migration metadata preservation test FAILED: %/% rows missing required metadata fields', 
+      test_count, total_archived;
   END IF;
   
-  RAISE NOTICE 'Migration metadata preservation test PASSED: All archived rows have complete metadata';
+  RAISE NOTICE 'Migration metadata preservation test PASSED: All % archived rows have complete metadata (originalStripeSubscriptionId, archivedReason, archivedAt)', 
+    total_archived;
 END $$;
 ```
 
