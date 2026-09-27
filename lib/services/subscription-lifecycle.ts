@@ -37,10 +37,12 @@ export interface SubscriptionEventResult {
  * CRITICAL: Uses pre-resolved stripeCustomerId (no Stripe API inside transaction)
  * 
  * Locking order (universal across all writers):
- * 1. Provider (by stripeCustomerId)
- * 2. Subscription (by stripeSubscriptionId)
+ * 1. Provider (by stripeCustomerId) - SELECT ... FOR UPDATE
+ * 2. Subscription (by stripeSubscriptionId) - SELECT ... FOR UPDATE
  * 
  * Returns locked rows for post-lock policy decisions.
+ * 
+ * Uses $queryRaw to execute explicit PostgreSQL FOR UPDATE row locks.
  */
 export async function lockProviderAndSubscription(
   tx: PrismaTransaction,
@@ -50,22 +52,47 @@ export async function lockProviderAndSubscription(
   provider: any;
   subscription: any | null;
 }> {
-  // Lock Provider first (SELECT FOR UPDATE)
-  const provider = await tx.provider.findFirst({
-    where: { stripeCustomerId },
-    // Prisma doesn't expose FOR UPDATE directly, but SERIALIZABLE isolation provides equivalent guarantees
-  });
+  // Lock Provider first with PostgreSQL FOR UPDATE
+  // This acquires an exclusive row lock, preventing concurrent modifications
+  const providers = await tx.$queryRaw<any[]>`
+    SELECT * FROM "Provider"
+    WHERE "stripeCustomerId" = ${stripeCustomerId}
+    FOR UPDATE
+  `;
 
-  if (!provider) {
+  if (providers.length === 0) {
     throw new Error(`Provider not found for stripeCustomerId: ${stripeCustomerId}`);
   }
 
-  // Lock Subscription second (if exists)
-  const subscription = await tx.subscription.findFirst({
-    where: { stripeSubscriptionId },
+  const provider = providers[0];
+
+  // Lock Subscription second with FOR UPDATE (if exists)
+  // Universal locking order prevents deadlocks
+  const subscriptions = await tx.$queryRaw<any[]>`
+    SELECT * FROM "Subscription"
+    WHERE "stripeSubscriptionId" = ${stripeSubscriptionId}
+    FOR UPDATE
+  `;
+
+  const subscription = subscriptions.length > 0 ? subscriptions[0] : null;
+
+  // Re-read locked rows to get authoritative post-lock state
+  // This ensures policy decisions use the latest committed data
+  const lockedProvider = await tx.provider.findUnique({
+    where: { id: provider.id },
   });
 
-  return { provider, subscription };
+  const lockedSubscription = subscription
+    ? await tx.subscription.findUnique({
+        where: { id: subscription.id },
+      })
+    : null;
+
+  if (!lockedProvider) {
+    throw new Error(`Provider disappeared after lock: ${provider.id}`);
+  }
+
+  return { provider: lockedProvider, subscription: lockedSubscription };
 }
 
 /**
