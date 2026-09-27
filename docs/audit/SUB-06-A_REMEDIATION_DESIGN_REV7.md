@@ -321,7 +321,8 @@ model Provider {
   stripeCustomerId          String?   @unique
   stripeAccountId           String?
   
-  // Webhook event ordering baseline
+  // NOTE: Provider.lastWebhookEvent* fields are NOT authoritative for stale-event protection
+  // See "Webhook Watermark Authority" section below
   lastWebhookEventTimestamp Int?
   lastWebhookEventId        String?
   
@@ -343,7 +344,7 @@ model Subscription {
   status                   SubscriptionStatus
   retentionState           RetentionState  @default(ACTIVE)
   
-  // Webhook event ordering baseline (INV-5)
+  // AUTHORITATIVE webhook event watermark for stale-event protection (INV-5)
   lastWebhookEventId       String?
   lastWebhookEventTimestamp Int?    // Unix timestamp
   
@@ -465,6 +466,37 @@ WHERE tablename = 'WebhookEvent'
   AND indexname = 'WebhookEvent_idempotencyKey_key';
 -- Must return 1 row (unique index exists)
 ```
+
+### 1.2 Webhook Watermark Authority (CRITICAL)
+
+**Single Authoritative Source:**
+
+`Subscription.lastWebhookEventTimestamp` and `Subscription.lastWebhookEventId` are the SOLE authoritative webhook watermark for stale-event protection (INV-5).
+
+**Provider.lastWebhookEvent* Fields:**
+
+These fields exist in the current schema but are NOT used for stale-event protection in this remediation design. Their presence does not affect the correctness of INV-5.
+
+**Why Subscription is Authoritative:**
+
+1. **Subscription is the lifecycle entity** - Status transitions (TRIAL → ACTIVE → CANCELLED) occur at Subscription level
+2. **INV-5 operates on Subscription state** - Stale-event rejection based on Subscription.lastWebhookEventTimestamp
+3. **Watermark must match lifecycle scope** - Each Subscription has independent lifecycle and watermark
+
+**Implementation Requirement:**
+
+ALL webhook handlers and manual-sync operations MUST:
+- Read watermark from: `Subscription.lastWebhookEventTimestamp`
+- Write watermark to: `Subscription.lastWebhookEventTimestamp`
+- IGNORE: `Provider.lastWebhookEventTimestamp` for stale-event decisions
+
+**No Synchronization Invariant Required:**
+
+Provider and Subscription watermarks are NOT required to be kept consistent. Only Subscription watermark is used for correctness.
+
+**Future Consideration:**
+
+If Provider-level watermark tracking is needed for other purposes (e.g., Provider-level state transitions), a separate invariant should be defined. This remediation design does NOT use Provider watermark fields.
 
 ---
 
@@ -981,7 +1013,55 @@ HAVING COUNT(*) > 1;
 
 **Writers 1-6 mutate existing subscription state** and MUST enforce universal lock order.
 
-**Writer 7 (initial creation)** is NOT subject to ordering/locking requirements as it creates new subscription rows.
+**Writer 7 (initial creation) - Special Concurrency Semantics:**
+
+Initial TRIAL creation occurs without existing subscription lifecycle, but MUST handle concurrent webhook race:
+
+**Concurrent Creation Race:**
+```
+Registration/Checkout (Writer 7)          Webhook (Writers 1-6)
+        ↓                                         ↓
+    Lock Provider                             Lock Provider
+        ↓                                         ↓
+    No Subscription exists                    No Subscription exists
+        ↓                                         ↓
+    Create Subscription (TRIAL)               Attempt Create Subscription
+        ↓                                         ↓
+    COMMIT                                    Unique constraint violation
+                                              (stripeSubscriptionId already exists)
+```
+
+**Required Handling:**
+
+1. **Writer 7 (Registration/Checkout):**
+   - Lock Provider FIRST (universal lock order)
+   - Check for existing Subscription with stripeSubscriptionId
+   - If none exists: Create new Subscription (TRIAL)
+   - Unique constraint on stripeSubscriptionId provides final safety
+
+2. **Writers 1-6 (Webhooks) encountering concurrent creation:**
+   - Lock Provider + Subscription (standard pattern)
+   - If Subscription.findUnique() returns null but unique constraint fails on create:
+     - Transaction MUST be retried (serialization failure or unique violation)
+     - Retry WILL discover the newly-created Subscription
+     - Apply standard INV-3/INV-5/INV-6 policies to existing row
+   
+3. **INV-3 Application:**
+   - "New Stripe ID = New Lifecycle" applies AFTER lock acquisition
+   - If Subscription already exists with that Stripe ID (discovered post-lock):
+     - NOT a new lifecycle
+     - Apply mutation to existing row per INV-5/INV-6
+
+**Key Invariant:**
+
+> Initial creation MAY be lock-free only when no existing lifecycle exists for that stripeSubscriptionId. Concurrent webhook discovering creation occurred MUST re-read and apply standard mutation policies (INV-3/INV-5/INV-6), not blindly create duplicate.
+
+**Test Requirement:**
+
+Concurrent creation test MUST verify:
+- Registration + Webhook for same stripeSubscriptionId (simultaneous)
+- Exactly one Subscription row created (unique constraint enforced)
+- Webhook correctly applies mutation to created row (no duplicate attempt)
 
 ### 3.5 Identity Validation (INV-6)
 
@@ -1345,7 +1425,49 @@ async function manualSyncSubscription(
 }
 ```
 
-### 4.3 Event History Baseline (Stripe SDK v20)
+### 4.3 Monotonic Watermark Invariant (CRITICAL)
+
+**Formal Invariant:**
+
+```
+∀ successful manual synchronizations:
+  newWatermark = max(DB.lastWebhookEventTimestamp, Stripe.eventBaseline.mostRecentTimestamp)
+  
+  DB.lastWebhookEventTimestamp MUST be monotonically non-decreasing
+```
+
+**Implementation Semantics:**
+
+The current implementation enforces this implicitly:
+
+1. **If `dbTimestamp > mostRecentEventTimestamp`:**
+   - Return `db-ahead` (no update)
+   - Watermark unchanged (monotonic preserved)
+
+2. **If `dbTimestamp ≤ mostRecentEventTimestamp`:**
+   - Update `lastWebhookEventTimestamp = mostRecentEventTimestamp`
+   - Watermark increases (monotonic preserved)
+
+**Why This Matters:**
+
+- Watermark is the PRIMARY stale-event protection mechanism (INV-5)
+- Non-monotonic watermark could allow stale events to be accepted
+- Example of INCORRECT behavior (if invariant violated):
+  ```
+  DB watermark = 1200
+  Stripe baseline = 1100
+  Incorrect: Update watermark to 1100
+  Result: Future webhook with timestamp 1150 would be accepted (stale!)
+  ```
+
+**Test Requirement:**
+
+Manual-sync test suite MUST verify:
+- Successful sync never decreases watermark
+- `db-ahead` case preserves existing watermark
+- Watermark monotonicity maintained across multiple sync operations
+
+### 4.4 Event History Baseline (Stripe SDK v20)
 
 **Rev 7: Deterministic pagination with exhaustion handling.**
 
