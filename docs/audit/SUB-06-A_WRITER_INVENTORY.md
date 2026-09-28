@@ -1,10 +1,10 @@
 # SUB-06-A Writer Inventory
 
-**Status:** SOURCE-COMPLETE - All lifecycle writers verified in source  
+**Status:** SOURCE-COMPLETE (CORRECTED) - All lifecycle writers verified in source  
 **Created:** 2026-08-15  
-**Last Updated:** 2026-09-28 (source verification completed)  
-**Approved By:** Independent reviewer  
-**Commit:** [pending]
+**Last Updated:** 2026-08-15 (mobile route added to Writer #4)  
+**Approved By:** Pending re-approval after mobile route correction  
+**Commit:** 6338ca92 (Writer #7 Rev 2), inventory correction pending
 
 ## Purpose
 
@@ -132,17 +132,19 @@ await tx.provider.update({
 
 ---
 
-#### 4. Instructor Subscription Route - Create Trial
-**Location:** `app/api/instructor/subscription/route.ts`  
-**Lines:** 246-264 (POST handler, create trial path)  
+#### 4. Instructor Subscription Route - Create Trial (Desktop + Mobile)
+**Location:** 
+- Desktop: `app/api/instructor/subscription/route.ts` lines 246-264
+- Mobile: `app/api/instructor/subscription/mobile/route.ts` lines 90-157
+
 **Lifecycle Fields Mutated:**
 - `Subscription.{status, tier, trialEndsAt}`
 - `Provider.{subscriptionStatus, subscriptionTier, trialEndsAt}`
 
-**Issue:** Does not use `createOrReuseTrialSubscription()` helper, implements own logic  
+**Issue:** Both routes implement their own trial creation logic instead of using `createOrReuseTrialSubscription()` helper  
 **Race Condition:** Can create duplicate trials if concurrent requests arrive
 
-**Code:**
+**Desktop Code:**
 ```typescript
 const existing = await tx.subscription.findFirst({
   where: { providerId, status: { in: ['TRIAL', 'ACTIVE'] } }
@@ -152,7 +154,33 @@ if (!existing) {
 }
 ```
 
-**Remediation Required:** Replace with `createOrReuseTrialSubscription()` call
+**Mobile Code (lines 90-157):**
+```typescript
+const existing = await prisma.subscription.findFirst({
+  where: { providerId: instructor.id, status: { in: ['TRIAL', 'ACTIVE'] } }
+});
+
+if (existing) {
+  // Tier change - direct tx.subscription.update + tx.provider.update
+  subscription = await prisma.$transaction(async (tx) => {
+    const updatedSub = await tx.subscription.update({ ... });
+    await tx.provider.update({ ... });
+    return updatedSub;
+  });
+} else {
+  // New trial - tx.subscription.create + tx.provider.update with race check
+  const result = await prisma.$transaction(async (tx) => {
+    const raceCheck = await tx.subscription.findFirst({ ... });
+    if (raceCheck) return { existing: raceCheck };
+    const newSub = await tx.subscription.create({ ... });
+    await tx.provider.update({ ... });
+    return { created: newSub };
+  }, { isolationLevel: 'Serializable' });
+}
+```
+
+**Note:** Mobile route has SUB-02-B race check but still lacks Provider FOR UPDATE lock  
+**Remediation Required:** Replace both routes with `createOrReuseTrialSubscription()` call
 
 ---
 
@@ -447,12 +475,18 @@ Actions found:
 Status: ✅ VERIFIED - Multiple admin mutations without Provider locks
 ```
 
-**5. Confirmed Absent:**
+**5. Mobile Route:**
+```
+Located: app/api/instructor/subscription/mobile/route.ts
+Status: ✅ VERIFIED - POST creates/updates trial subscriptions without Provider locks
+Disposition: Grouped with Writer #4 (same remediation pattern)
+```
+
+**6. Confirmed Absent:**
 ```
 ❌ No other admin subscription management routes found
 ❌ No background job subscription writers found
 ❌ No CLI subscription writers found
-❌ No mobile-specific subscription writers found
 ```
 
 ---
