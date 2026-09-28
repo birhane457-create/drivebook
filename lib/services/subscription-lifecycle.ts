@@ -172,12 +172,15 @@ export async function createOrReuseTrialSubscription(
  * Locking order (universal across all writers):
  * 1. Provider (by stripeCustomerId) - SELECT ... FOR UPDATE
  * 2. Subscription (by stripeSubscriptionId if exists) - SELECT ... FOR UPDATE
- * 3. Provider's current/eligible subscription (if different from #2)
+ * 3. All current/eligible subscriptions for Provider - SELECT ... FOR UPDATE
  * 
  * Returns:
  * - provider: Locked Provider
  * - subscription: Locked subscription matching incoming Stripe ID (if exists)
- * - currentSubscription: Provider's current/eligible subscription (may be same as subscription, or different, or null)
+ * - currentSubscriptions: ALL current/eligible subscriptions for Provider (0, 1, or >1)
+ * 
+ * CRITICAL INVARIANT: Provider should have EXACTLY ONE current/eligible subscription.
+ * If >1 found, this indicates pre-existing invariant violation → FAIL CLOSED.
  * 
  * Uses $queryRaw to execute explicit PostgreSQL FOR UPDATE row locks.
  */
@@ -188,7 +191,7 @@ export async function lockProviderAndSubscription(
 ): Promise<{
   provider: any;
   subscription: any | null;
-  currentSubscription: any | null;
+  currentSubscriptions: any[];
 }> {
   // Step 1: Lock Provider first with lockProvider helper
   const provider = await lockProvider(tx, undefined, stripeCustomerId);
@@ -210,29 +213,38 @@ export async function lockProviderAndSubscription(
       })
     : null;
 
-  // Step 3: Find Provider's current/eligible subscription (CRITICAL for invariant enforcement)
-  // This may be the same as lockedSubscription, or different, or null
+  // Step 3: Lock ALL current/eligible subscriptions for this Provider (CRITICAL for invariant)
+  // Uses FOR UPDATE to establish database-level row locks per Rev 7 architecture
   // Uses explicit NOT CANCELLED predicate per Rev 7 lifecycle semantics
-  const currentSubscription = await tx.subscription.findFirst({
-    where: {
-      providerId: provider.id,
-      status: { not: 'CANCELLED' }, // Current/eligible: TRIAL, ACTIVE, PAST_DUE, etc.
-    },
-  });
+  const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
+    SELECT * FROM "Subscription"
+    WHERE "providerId" = ${provider.id}
+      AND "status" != 'CANCELLED'
+    FOR UPDATE
+  `;
 
-  // CRITICAL INVARIANT CHECK: Provider should have at most ONE current/eligible subscription
-  // If currentSubscription exists and is different from lockedSubscription, we need to validate
-  // whether the incoming event can legitimately replace/attach to the existing lifecycle
-  if (currentSubscription && lockedSubscription && currentSubscription.id !== lockedSubscription.id) {
-    logger.warn('Provider has current subscription different from incoming Stripe ID', {
+  // Re-read locked current subscriptions to get authoritative post-lock state
+  const currentSubscriptions = await Promise.all(
+    currentSubscriptionsRaw.map(sub =>
+      tx.subscription.findUnique({ where: { id: sub.id } })
+    )
+  );
+
+  // Filter out any nulls (shouldn't happen, but TypeScript safety)
+  const validCurrentSubscriptions = currentSubscriptions.filter((sub): sub is NonNullable<typeof sub> => sub !== null);
+
+  // CRITICAL INVARIANT CHECK: Detect existing multiple-current-subscription violation
+  if (validCurrentSubscriptions.length > 1) {
+    logger.error('CRITICAL INVARIANT VIOLATION: Provider has multiple current subscriptions', {
       providerId: provider.id,
-      currentSubscriptionId: currentSubscription.id,
-      currentStripeId: currentSubscription.stripeSubscriptionId,
-      incomingStripeId: stripeSubscriptionId,
+      currentCount: validCurrentSubscriptions.length,
+      subscriptionIds: validCurrentSubscriptions.map(s => s.id),
+      stripeIds: validCurrentSubscriptions.map(s => s.stripeSubscriptionId),
+      statuses: validCurrentSubscriptions.map(s => s.status),
     });
   }
 
-  return { provider, subscription: lockedSubscription, currentSubscription };
+  return { provider, subscription: lockedSubscription, currentSubscriptions: validCurrentSubscriptions };
 }
 
 /**
@@ -397,24 +409,45 @@ export async function processSubscriptionEvent(
   const subscription = event.data.object as Stripe.Subscription;
   const stripeSubscriptionId = subscription.id;
 
-  // Step 1: Lock Provider, incoming Stripe ID subscription, and Provider's current subscription
+  // Step 1: Lock Provider, incoming Stripe ID subscription, and ALL current subscriptions
   // Uses pre-resolved stripeCustomerId (no Stripe API I/O inside transaction)
-  const { provider, subscription: lockedSubscription, currentSubscription } = await lockProviderAndSubscription(
+  const { provider, subscription: lockedSubscription, currentSubscriptions } = await lockProviderAndSubscription(
     tx,
     stripeCustomerId,
     stripeSubscriptionId
   );
 
-  // CRITICAL INVARIANT ENFORCEMENT: One current/eligible subscription per Provider
-  // If Provider has a current subscription that's different from the incoming Stripe ID,
-  // we need to validate whether this is a legitimate lifecycle transition
+  // CRITICAL INVARIANT ENFORCEMENT: Exactly ONE current/eligible subscription per Provider
+  // Detect: 0 (valid - new subscription), 1 (valid - existing), >1 (VIOLATION)
+  const currentCount = currentSubscriptions.length;
+
+  if (currentCount > 1) {
+    // PRE-EXISTING INVARIANT VIOLATION: Multiple current subscriptions exist
+    // FAIL CLOSED: Cannot safely process webhook when invariant is already violated
+    // Requires manual reconciliation to resolve which subscription is authoritative
+    logger.error('FAIL CLOSED: Multiple current subscriptions detected (invariant violated)', {
+      providerId: provider.id,
+      currentCount,
+      subscriptionIds: currentSubscriptions.map(s => s.id),
+      stripeIds: currentSubscriptions.map(s => s.stripeSubscriptionId),
+      incomingStripeId: stripeSubscriptionId,
+      eventType: event.type,
+    });
+
+    return {
+      allowed: false,
+      reason: 'multiple-current-subscriptions-invariant-violation',
+    };
+  }
+
+  // Determine target subscription for validation/mutation
+  const currentSubscription = currentCount === 1 ? currentSubscriptions[0] : null;
+
+  // CRITICAL: NEW Stripe ID cannot create second lifecycle when current exists
   if (currentSubscription && !lockedSubscription && currentSubscription.status !== 'CANCELLED') {
-    // Provider has an existing current subscription, but incoming Stripe ID is NEW
-    // This could indicate:
-    // 1. Customer created a new subscription in Stripe (legitimate lifecycle replacement)
-    // 2. Webhook ordering issue / data inconsistency
-    
-    logger.error('CRITICAL: Provider has existing current subscription, cannot create second lifecycle', {
+    // Provider has ONE existing current subscription, but incoming Stripe ID is NEW
+    // This would create a SECOND current subscription → violates invariant
+    logger.error('CRITICAL: Cannot create second current subscription (new Stripe ID)', {
       providerId: provider.id,
       existingSubscriptionId: currentSubscription.id,
       existingStripeId: currentSubscription.stripeSubscriptionId,
@@ -423,16 +456,14 @@ export async function processSubscriptionEvent(
       eventType: event.type,
     });
 
-    // FAIL CLOSED: Reject webhook to prevent duplicate current subscriptions
-    // Manual reconciliation required to resolve the lifecycle conflict
     return {
       allowed: false,
-      reason: 'one-current-subscription-invariant-violation',
+      reason: 'one-current-subscription-invariant-new-stripe-id-rejected',
     };
   }
 
-  // Use lockedSubscription for identity/ownership validation if it exists,
-  // otherwise fall back to currentSubscription (handles TRIAL → first webhook attachment)
+  // Use lockedSubscription for validation if it exists (incoming Stripe ID matches existing),
+  // otherwise use currentSubscription (handles TRIAL → first webhook attachment)
   const targetSubscription = lockedSubscription || currentSubscription;
 
   // Step 2: Validate identity (using post-lock authoritative state)

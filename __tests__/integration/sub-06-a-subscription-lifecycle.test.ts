@@ -308,6 +308,97 @@ describe('SUB-06-A: Subscription Lifecycle Identity Remediation', () => {
       expect(subscriptions[0].stripeSubscriptionId).toBe('sub_old_existing');
       expect(subscriptions[0].status).toBe('ACTIVE');
     });
+
+    it('should fail closed when Provider has pre-existing multiple current subscriptions (invariant already violated)', async () => {
+      // ADVERSARIAL TEST: Database already contains MULTIPLE current subscriptions
+      // (This shouldn't happen, but if it does, webhook must fail closed, not silently process one)
+      
+      const user = await prisma.user.create({
+        data: {
+          email: 'test-sub06a-multi-current@example.com',
+          name: 'Test Provider Multi-Current',
+          role: 'PROVIDER',
+        },
+      });
+
+      const provider = await prisma.provider.create({
+        data: {
+          id: 'test-provider-multi-current',
+          userId: user.id,
+          name: 'Test Provider',
+          stripeCustomerId: 'cus_multi_current',
+          location: 'Test Location',
+          phone: '+61412345678',
+          hourlyRate: 75.0,
+          subscriptionTier: 'PREMIUM',
+          subscriptionStatus: 'ACTIVE',
+        },
+      });
+
+      // Create TWO current subscriptions (invariant violation - should never happen in production)
+      await prisma.subscription.create({
+        data: {
+          providerId: provider.id,
+          tier: 'PREMIUM',
+          status: 'ACTIVE',
+          stripeSubscriptionId: 'sub_first_active',
+          monthlyAmount: 99.0,
+          billingCycle: 'monthly',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
+        },
+      });
+
+      await prisma.subscription.create({
+        data: {
+          providerId: provider.id,
+          tier: 'PREMIUM',
+          status: 'ACTIVE',
+          stripeSubscriptionId: 'sub_second_active',
+          monthlyAmount: 99.0,
+          billingCycle: 'monthly',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
+        },
+      });
+
+      // Verify pre-condition: TWO current subscriptions exist (invariant violated)
+      const preCondition = await prisma.subscription.findMany({
+        where: {
+          providerId: provider.id,
+          status: { not: 'CANCELLED' },
+        },
+      });
+      expect(preCondition).toHaveLength(2);
+
+      // Prepare webhook for one of the existing subscriptions
+      const event = createMockStripeEvent(
+        'customer.subscription.updated',
+        { id: 'sub_first_active', status: 'active' },
+        Math.floor(Date.now() / 1000)
+      );
+
+      // Execute webhook processing
+      const result = await prisma.$transaction(
+        async (tx) => {
+          return await processSubscriptionEvent(tx, event, provider.stripeCustomerId);
+        },
+        { isolationLevel: 'Serializable', timeout: 10000 }
+      );
+
+      // CRITICAL: Webhook must be REJECTED (cannot safely process when invariant violated)
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('multiple-current-subscriptions-invariant-violation');
+
+      // Verify: Both subscriptions remain unchanged (no processing occurred)
+      const postCondition = await prisma.subscription.findMany({
+        where: {
+          providerId: provider.id,
+          status: { not: 'CANCELLED' },
+        },
+      });
+      expect(postCondition).toHaveLength(2);
+    });
   });
 
   describe('Scenario 2: Metadata Preservation', () => {
