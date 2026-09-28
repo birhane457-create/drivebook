@@ -7,7 +7,10 @@ export default defineConfig({
     environment: 'node',
     hookTimeout: 30000,   // allow 30s for beforeAll/afterAll against cloud DB
     testTimeout: 60000,   // allow 60s per test (cloud DB + concurrent ops need headroom)
-    setupFiles: ['./lib/services/receipt/__tests__/setup.ts'],
+    setupFiles: [
+      './lib/services/receipt/__tests__/setup.ts',
+      './__tests__/setup/email-mock.ts',
+    ],
     include: ['**/__tests__/**/*.test.ts'],
     exclude: ['node_modules', 'dist', '.next'],
     env: {

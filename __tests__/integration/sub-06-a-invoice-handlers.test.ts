@@ -96,7 +96,7 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       where: { email: 'test-invoice@example.com' },
     });
     await prisma.webhookEvent.deleteMany({
-      where: { eventId: { startsWith: 'evt_test_' } },
+      where: { stripeEventId: { startsWith: 'evt_test_' } },
     });
   });
 
@@ -112,7 +112,7 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       where: { email: 'test-invoice@example.com' },
     });
     await prisma.webhookEvent.deleteMany({
-      where: { eventId: { startsWith: 'evt_test_' } },
+      where: { stripeEventId: { startsWith: 'evt_test_' } },
     });
   });
 
@@ -130,12 +130,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'TRIAL',
         },
@@ -200,12 +200,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'CANCELLED',
         },
@@ -270,12 +270,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'TRIAL',
         },
@@ -336,12 +336,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'TRIAL',
         },
@@ -402,12 +402,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'ACTIVE',
         },
@@ -472,12 +472,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'CANCELLED',
         },
@@ -535,12 +535,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'ACTIVE',
         },
@@ -601,12 +601,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'ACTIVE',
         },
@@ -667,12 +667,12 @@ describe('SUB-06-A Invoice Payment Handlers (Writers #7 + #8)', () => {
       const provider = await prisma.provider.create({
         data: {
           id: TEST_PROVIDER_ID,
-          userId: user.id,
+          user: { connect: { id: user.id } },
           name: 'Test Provider',
-          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
-          location: 'Test Location',
           phone: '+61412345678',
           hourlyRate: 75.0,
+          stripeCustomerId: TEST_STRIPE_CUSTOMER_ID,
+          baseAddress: 'Test Location',
           subscriptionTier: 'PRO',
           subscriptionStatus: 'TRIAL',
         },
