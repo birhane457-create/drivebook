@@ -2162,23 +2162,119 @@ async function handleInvoicePaymentFailed(
         await recordWebhookEvent(tx, idempotencyKey, 'invoice.payment_failed', invoice.id, {
           subscriptionId: subscription
         });
-    
-        await tx.subscription.updateMany({
+
+        // Step 1: Pre-check to obtain stripeCustomerId for lock target selection
+        // This is UNLOCKED but safe because:
+        // - stripeCustomerId is immutable identity (not lifecycle state)
+        // - Post-lock ownership validation establishes authoritative boundary
+        // - Used solely to determine which Provider to lock
+        const preCheckSubscription = await tx.subscription.findFirst({
           where: { stripeSubscriptionId: subscription as string },
+          select: { id: true, providerId: true, stripeCustomerId: true, status: true }
+        });
+
+        if (!preCheckSubscription?.stripeCustomerId) {
+          logger.warn('Invoice payment failed for subscription without stripeCustomerId', {
+            stripeSubscriptionId: subscription,
+            invoiceId: invoice.id
+          });
+          return;
+        }
+
+        // Step 2: Provider-first locking (SUB-06-A Rev 7 architecture)
+        const { lockProviderAndSubscription } = await import('@/lib/services/subscription-lifecycle');
+        const { provider, currentSubscriptions, subscription: lockedSubscription } = 
+          await lockProviderAndSubscription(
+            tx,
+            preCheckSubscription.stripeCustomerId,
+            subscription as string
+          );
+
+        if (!lockedSubscription) {
+          logger.warn('Invoice payment failed but subscription not found after locking', {
+            stripeSubscriptionId: subscription,
+            invoiceId: invoice.id
+          });
+          return;
+        }
+
+        // Step 3: Ownership validation
+        if (lockedSubscription.providerId !== provider.id) {
+          logger.error('Invoice payment failed: subscription/provider ownership mismatch', {
+            subscriptionProviderId: lockedSubscription.providerId,
+            lockedProviderId: provider.id,
+            stripeSubscriptionId: subscription
+          });
+          return;
+        }
+
+        // Step 4: Invariant checks
+        // 4a. Multiple current subscriptions = fail closed
+        if (currentSubscriptions.length > 1) {
+          logger.error('CRITICAL: Provider has multiple current subscriptions during invoice payment failed', {
+            providerId: provider.id,
+            currentCount: currentSubscriptions.length
+          });
+          throw new Error('Multiple current subscriptions detected');
+        }
+
+        // 4b. INV-2: CANCELLED subscriptions cannot be transitioned by webhook events
+        if (lockedSubscription.status === 'CANCELLED') {
+          logger.warn('Invoice payment failed for CANCELLED subscription - rejecting per INV-2', {
+            subscriptionId: lockedSubscription.id,
+            stripeSubscriptionId: subscription,
+            status: lockedSubscription.status
+          });
+          return; // Fail closed - do not transition CANCELLED subscriptions
+        }
+
+        // Step 5: Lifecycle policy validation
+        const { canTransitionSubscriptionState } = await import('@/lib/services/subscription-lifecycle');
+        
+        // Construct a minimal Stripe event for policy validation
+        const syntheticEvent: any = {
+          id: `invoice_${invoice.id}`,
+          type: 'invoice.payment_failed',
+          created: Math.floor(Date.now() / 1000),
+        };
+
+        const syntheticStripeSub: any = {
+          id: subscription,
+          status: 'past_due', // Invoice payment failure implies past_due subscription
+        };
+
+        const policyResult = await canTransitionSubscriptionState(
+          syntheticEvent,
+          syntheticStripeSub,
+          lockedSubscription
+        );
+
+        if (!policyResult.allowed) {
+          logger.warn('Invoice payment failed transition rejected by lifecycle policy', {
+            subscriptionId: lockedSubscription.id,
+            currentStatus: lockedSubscription.status,
+            targetStatus: 'PAST_DUE',
+            reason: policyResult.reason
+          });
+          return;
+        }
+
+        // Step 6: Mutation (locked Provider + locked Subscription)
+        await tx.subscription.update({
+          where: { id: lockedSubscription.id },
           data: { status: 'PAST_DUE' }
         });
-    
-        // Find instructor via subscription
-        const subscriptionRecord = await tx.subscription.findFirst({
-          where: { stripeSubscriptionId: subscription as string }
+
+        await tx.provider.update({
+          where: { id: provider.id },
+          data: { subscriptionStatus: 'PAST_DUE' as any }
         });
-    
-        if (subscriptionRecord) {
-          await tx.provider.update({
-            where: { id: subscriptionRecord.providerId },
-            data: { subscriptionStatus: 'PAST_DUE' as any }
-          });
-        }
+
+        logger.info('Invoice payment failed: subscription marked PAST_DUE', {
+          subscriptionId: lockedSubscription.id,
+          providerId: provider.id,
+          stripeSubscriptionId: subscription
+        });
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-invoice-payment-failed' });
 
