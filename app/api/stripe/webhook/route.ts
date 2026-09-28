@@ -1661,6 +1661,7 @@ async function handleSubscriptionEvent(
 /**
  * @deprecated Use handleSubscriptionEvent instead (SUB-06-A Rev 7)
  */
+async function handleSubscriptionUpdatedLegacy(
   subscription: Stripe.Subscription,
   idempotencyKey: string
 ): Promise<void> {
