@@ -2036,35 +2036,71 @@ async function handleInvoicePaymentSucceeded(
           subscriptionId: subscription
         });
     
-        // Update subscription record
-        await tx.subscription.updateMany({
+        // SUB-06-A Writer #7 FIX: Provider-first locking before lifecycle mutations
+        // Step 1: Find subscription to get stripeCustomerId for Provider lock
+        const preCheckSubscription = await tx.subscription.findFirst({
           where: { stripeSubscriptionId: subscription as string },
+          select: { id: true, providerId: true, stripeCustomerId: true }
+        });
+
+        if (!preCheckSubscription?.stripeCustomerId) {
+          logger.warn(`Invoice payment succeeded but subscription ${subscription} has no stripeCustomerId - skipping`);
+          return;
+        }
+
+        // Step 2: Apply Provider-first locking (Rev 7 architecture)
+        const { lockProviderAndSubscription } = await import('@/lib/services/subscription-lifecycle');
+        const { provider, currentSubscriptions, subscription: lockedSubscription } = await lockProviderAndSubscription(
+          tx,
+          preCheckSubscription.stripeCustomerId,
+          subscription as string
+        );
+
+        // Step 3: Ownership validation
+        if (!lockedSubscription) {
+          logger.error(`Invoice payment succeeded but subscription ${subscription} not found after lock`);
+          return;
+        }
+
+        if (lockedSubscription.providerId !== provider.id) {
+          logger.error('CRITICAL: Subscription ownership mismatch in invoice.payment_succeeded', {
+            subscriptionProviderId: lockedSubscription.providerId,
+            lockedProviderId: provider.id,
+            stripeSubscriptionId: subscription
+          });
+          return;
+        }
+
+        // Step 4: Invariant check (multiple current subscriptions = fail closed)
+        if (currentSubscriptions.length > 1) {
+          logger.error('CRITICAL: Provider has multiple current subscriptions during invoice payment', {
+            providerId: provider.id,
+            currentCount: currentSubscriptions.length
+          });
+          throw new Error('Multiple current subscriptions detected');
+        }
+
+        // Step 5: Mutate with locked state
+        await tx.subscription.update({
+          where: { id: lockedSubscription.id },
           data: { status: 'ACTIVE' }
         });
-    
-        // â”€â”€ Also update instructor.subscriptionStatus â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // This is the critical step that was missing â€” without it, the instructor
-        // stays stuck at TRIAL after their first real payment or monthly renewal.
-        const subscriptionRecord = await tx.subscription.findFirst({
-          where: { stripeSubscriptionId: subscription as string },
-          select: { providerId: true }
+
+        await tx.provider.update({
+          where: { id: provider.id },
+          data: {
+            subscriptionStatus: 'ACTIVE' as any,
+            trialEndsAt: null,
+          }
         });
-    
-        if (subscriptionRecord?.providerId) {
-          await tx.provider.update({
-            where: { id: subscriptionRecord.providerId },
-            data: {
-              subscriptionStatus: 'ACTIVE' as any,
-              trialEndsAt: null, // Clear trial end date â€” they're now a paying customer
-            }
-          });
-          logger.info(`âœ… Instructor ${subscriptionRecord.providerId} status â†’ ACTIVE (invoice paid)`);
-        }
+
+        logger.info(`Invoice payment: Provider ${provider.id} -> ACTIVE (subscription ${subscription})`);
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-invoice-payment-succeeded' });
 
-  logger.info(`âœ… Invoice payment succeeded: ${invoice.id}`);
+  logger.info(`Invoice payment succeeded: ${invoice.id}`);
 }
+
 
 async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
