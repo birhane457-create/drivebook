@@ -2037,10 +2037,13 @@ async function handleInvoicePaymentSucceeded(
         });
     
         // SUB-06-A Writer #7 FIX: Provider-first locking before lifecycle mutations
-        // Step 1: Find subscription to get stripeCustomerId for Provider lock
+        // Step 1: Pre-check (unlocked) to get stripeCustomerId for Provider lock
+        // JUSTIFICATION: stripeCustomerId is immutable Stripe identity used only to
+        // determine which Provider to lock. The authoritative ownership boundary is
+        // established after locking via lockProviderAndSubscription().
         const preCheckSubscription = await tx.subscription.findFirst({
           where: { stripeSubscriptionId: subscription as string },
-          select: { id: true, providerId: true, stripeCustomerId: true }
+          select: { id: true, providerId: true, stripeCustomerId: true, status: true }
         });
 
         if (!preCheckSubscription?.stripeCustomerId) {
@@ -2071,7 +2074,8 @@ async function handleInvoicePaymentSucceeded(
           return;
         }
 
-        // Step 4: Invariant check (multiple current subscriptions = fail closed)
+        // Step 4: Invariant checks
+        // 4a. Multiple current subscriptions = fail closed
         if (currentSubscriptions.length > 1) {
           logger.error('CRITICAL: Provider has multiple current subscriptions during invoice payment', {
             providerId: provider.id,
@@ -2080,7 +2084,47 @@ async function handleInvoicePaymentSucceeded(
           throw new Error('Multiple current subscriptions detected');
         }
 
-        // Step 5: Mutate with locked state
+        // 4b. INV-2: CANCELLED subscriptions cannot be reactivated by webhook events
+        if (lockedSubscription.status === 'CANCELLED') {
+          logger.warn('Invoice payment succeeded for CANCELLED subscription - rejecting per INV-2', {
+            subscriptionId: lockedSubscription.id,
+            stripeSubscriptionId: subscription,
+            status: lockedSubscription.status
+          });
+          return; // Fail closed - do not reactivate CANCELLED subscriptions
+        }
+
+        // Step 5: Lifecycle policy validation
+        const { canTransitionSubscriptionState } = await import('@/lib/services/subscription-lifecycle');
+        
+        // Construct a minimal Stripe event for policy validation
+        const syntheticEvent: any = {
+          id: `invoice_${invoice.id}`,
+          type: 'invoice.payment_succeeded',
+          created: Math.floor(Date.now() / 1000), // Current timestamp
+        };
+
+        const syntheticStripeSub: any = {
+          id: subscription,
+          status: 'active', // Invoice payment success implies active subscription
+        };
+
+        const policyResult = await canTransitionSubscriptionState(
+          syntheticEvent,
+          syntheticStripeSub,
+          lockedSubscription
+        );
+
+        if (!policyResult.allowed) {
+          logger.warn('Invoice payment rejected by lifecycle policy', {
+            subscriptionId: lockedSubscription.id,
+            reason: policyResult.reason,
+            currentStatus: lockedSubscription.status
+          });
+          return; // Respect policy decision
+        }
+
+        // Step 6: Mutate with locked state (policy approved)
         await tx.subscription.update({
           where: { id: lockedSubscription.id },
           data: { status: 'ACTIVE' }
