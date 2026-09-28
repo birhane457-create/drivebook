@@ -1,0 +1,1408 @@
+﻿
+> driving-instructor-platform@0.1.1 test
+> vitest run __tests__/integration/sub-06-a-invoice-handlers.test.ts
+
+npm : [33mThe CJS build of Vite's Node API is deprecated. See 
+https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+At line:1 char:1
++ npm test -- __tests__/integration/sub-06-a-invoice-handlers.test.ts 2 ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([33mThe CJS bu...e details.[39m:String) [], RemoteEx 
+   ception
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+ [33mΓ¥»[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts [2m ([22m[2m9 tests[22m [2m|[22m [31m9 failed[39m[2m)[22m[90m 295[2mms[22m[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment Succeeded[2m > [22mshould transition subscription to ACTIVE using real event timestamp[39m
+[31m     ΓåÆ 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:146:54
+
+  143 
+  144 const eventTimestamp = Math.floor(Date.now() / 1000);
+  145 
+ΓåÆ 146 const subscription = await prisma.subscription.create(
+The column `lastWebhookEventTimestamp` does not exist in the current database.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment Succeeded[2m > [22mshould reject CANCELLED subscription reactivation (INV-2)[39m
+[31m     ΓåÆ 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:200:46
+
+  197   },
+  198 });
+  199 
+ΓåÆ 200 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9af0003zxclq3fjvjwg",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "CANCELLED",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment Succeeded[2m > [22mshould reject older event timestamp (INV-3)[39m
+[31m     ΓåÆ 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:287:54
+
+  284 const currentTimestamp = Math.floor(Date.now() / 1000);
+  285 const olderTimestamp = currentTimestamp - 3600; // 1 hour earlier
+  286 
+ΓåÆ 287 const subscription = await prisma.subscription.create(
+The column `lastWebhookEventId` does not exist in the current database.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment Succeeded[2m > [22mshould reject equal-timestamp event (INV-5)[39m
+[31m     ΓåÆ 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:352:54
+
+  349 
+  350 const timestamp = Math.floor(Date.now() / 1000);
+  351 
+ΓåÆ 352 const subscription = await prisma.subscription.create(
+The column `lastWebhookEventId` does not exist in the current database.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment Failed[2m > [22mshould transition subscription to PAST_DUE using real event timestamp[39m
+[31m     ΓåÆ 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:402:46
+
+  399   },
+  400 });
+  401 
+ΓåÆ 402 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9ci000azxclujned8w5",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "ACTIVE",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment Failed[2m > [22mshould reject CANCELLED subscription transition (INV-2)[39m
+[31m     ΓåÆ 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:472:46
+
+  469   },
+  470 });
+  471 
+ΓåÆ 472 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9d0000bzxclgmzgawct",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "CANCELLED",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment Failed[2m > [22mshould reject older event timestamp (INV-3)[39m
+[31m     ΓåÆ 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:535:46
+
+  532   },
+  533 });
+  534 
+ΓåÆ 535 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9dj000czxclbv61atzj",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "ACTIVE",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment Failed[2m > [22mshould reject equal-timestamp event (INV-5)[39m
+[31m     ΓåÆ 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:601:46
+
+  598   },
+  599 });
+  600 
+ΓåÆ 601 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9e0000dzxclomd2fnsi",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "ACTIVE",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[31m   [33mΓ¥»[31m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > [22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mCross-Handler Scenarios[2m > [22mshould handle concurrent invoice.payment_succeeded + invoice.payment_failed with serialization retry[39m
+[31m     ΓåÆ 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:683:33
+
+  680 
+  681 const baseTimestamp = Math.floor(Date.now() / 1000);
+  682 
+ΓåÆ 683 await prisma.subscription.create(
+The column `lastWebhookEventTimestamp` does not exist in the current database.[39m
+
+[31mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1m[7m Failed Tests 9 [27m[22mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment 
+Succeeded[2m > [22mshould transition subscription to ACTIVE using real event timestamp
+[31m[1mPrismaClientKnownRequestError[22m: 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:146:54
+
+  143 
+  144 const eventTimestamp = Math.floor(Date.now() / 1000);
+  145 
+ΓåÆ 146 const subscription = await prisma.subscription.create(
+The column `lastWebhookEventTimestamp` does not exist in the current database.[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:7315[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m146:28[22m[39m
+    [90m144| [39m      [35mconst[39m eventTimestamp [33m=[39m 
+[33mMath[39m[33m.[39m[34mfloor[39m([33mDate[39m[33m.[39m[34mnow[39m() [33m/[39m 
+[34m1000[39m)[33m;[39m
+    [90m145| [39m
+    [90m146| [39m      [35mconst[39m subscription [33m=[39m [35mawait[39m 
+prisma[33m.[39msubscription[33m.[39m[34mcreate[39m({
+    [90m   | [39m                           [31m^[39m
+    [90m147| [39m        data[33m:[39m {
+    [90m148| [39m          providerId[33m:[39m provider[33m.[39mid[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'P2022', clientVersion: '5.22.0', meta: { 
+modelName: 'Subscription', column: 'lastWebhookEventTimestamp' }, batchRequestIdx: undefined }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment 
+Succeeded[2m > [22mshould reject CANCELLED subscription reactivation (INV-2)
+[31m[1mPrismaClientValidationError[22m: 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:200:46
+
+  197   },
+  198 });
+  199 
+ΓåÆ 200 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9af0003zxclq3fjvjwg",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "CANCELLED",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[90m [2mΓ¥»[22m wn node_modules/@prisma/client/runtime/library.js:[2m29:1363[22m[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6958[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m200:24[22m[39m
+    [90m198| [39m      })[33m;[39m
+    [90m199| [39m
+    [90m200| [39m      [35mconst[39m provider [33m=[39m [35mawait[39m 
+prisma[33m.[39mprovider[33m.[39m[34mcreate[39m({
+    [90m   | [39m                       [31m^[39m
+    [90m201| [39m        data[33m:[39m {
+    [90m202| [39m          id[33m:[39m [33mTEST_PROVIDER_ID[39m[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '5.22.0' }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[2/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment 
+Succeeded[2m > [22mshould reject older event timestamp (INV-3)
+[31m[1mPrismaClientKnownRequestError[22m: 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:287:54
+
+  284 const currentTimestamp = Math.floor(Date.now() / 1000);
+  285 const olderTimestamp = currentTimestamp - 3600; // 1 hour earlier
+  286 
+ΓåÆ 287 const subscription = await prisma.subscription.create(
+The column `lastWebhookEventId` does not exist in the current database.[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:7315[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m287:28[22m[39m
+    [90m285| [39m      [35mconst[39m olderTimestamp [33m=[39m currentTimestamp [33m-[39m 
+[34m3600[39m[33m;[39m [90m// 1 hour earlier[39m
+    [90m286| [39m
+    [90m287| [39m      [35mconst[39m subscription [33m=[39m [35mawait[39m 
+prisma[33m.[39msubscription[33m.[39m[34mcreate[39m({
+    [90m   | [39m                           [31m^[39m
+    [90m288| [39m        data[33m:[39m {
+    [90m289| [39m          providerId[33m:[39m provider[33m.[39mid[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'P2022', clientVersion: '5.22.0', meta: { 
+modelName: 'Subscription', column: 'lastWebhookEventId' }, batchRequestIdx: undefined }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[3/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #7: Invoice Payment 
+Succeeded[2m > [22mshould reject equal-timestamp event (INV-5)
+[31m[1mPrismaClientKnownRequestError[22m: 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:352:54
+
+  349 
+  350 const timestamp = Math.floor(Date.now() / 1000);
+  351 
+ΓåÆ 352 const subscription = await prisma.subscription.create(
+The column `lastWebhookEventId` does not exist in the current database.[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:7315[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m352:28[22m[39m
+    [90m350| [39m      [35mconst[39m timestamp [33m=[39m 
+[33mMath[39m[33m.[39m[34mfloor[39m([33mDate[39m[33m.[39m[34mnow[39m() [33m/[39m 
+[34m1000[39m)[33m;[39m
+    [90m351| [39m
+    [90m352| [39m      [35mconst[39m subscription [33m=[39m [35mawait[39m 
+prisma[33m.[39msubscription[33m.[39m[34mcreate[39m({
+    [90m   | [39m                           [31m^[39m
+    [90m353| [39m        data[33m:[39m {
+    [90m354| [39m          providerId[33m:[39m provider[33m.[39mid[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'P2022', clientVersion: '5.22.0', meta: { 
+modelName: 'Subscription', column: 'lastWebhookEventId' }, batchRequestIdx: undefined }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[4/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment 
+Failed[2m > [22mshould transition subscription to PAST_DUE using real event timestamp
+[31m[1mPrismaClientValidationError[22m: 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:402:46
+
+  399   },
+  400 });
+  401 
+ΓåÆ 402 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9ci000azxclujned8w5",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "ACTIVE",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[90m [2mΓ¥»[22m wn node_modules/@prisma/client/runtime/library.js:[2m29:1363[22m[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6958[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m402:24[22m[39m
+    [90m400| [39m      })[33m;[39m
+    [90m401| [39m
+    [90m402| [39m      [35mconst[39m provider [33m=[39m [35mawait[39m 
+prisma[33m.[39mprovider[33m.[39m[34mcreate[39m({
+    [90m   | [39m                       [31m^[39m
+    [90m403| [39m        data[33m:[39m {
+    [90m404| [39m          id[33m:[39m [33mTEST_PROVIDER_ID[39m[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '5.22.0' }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[5/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment 
+Failed[2m > [22mshould reject CANCELLED subscription transition (INV-2)
+[31m[1mPrismaClientValidationError[22m: 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:472:46
+
+  469   },
+  470 });
+  471 
+ΓåÆ 472 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9d0000bzxclgmzgawct",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "CANCELLED",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[90m [2mΓ¥»[22m wn node_modules/@prisma/client/runtime/library.js:[2m29:1363[22m[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6958[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m472:24[22m[39m
+    [90m470| [39m      })[33m;[39m
+    [90m471| [39m
+    [90m472| [39m      [35mconst[39m provider [33m=[39m [35mawait[39m 
+prisma[33m.[39mprovider[33m.[39m[34mcreate[39m({
+    [90m   | [39m                       [31m^[39m
+    [90m473| [39m        data[33m:[39m {
+    [90m474| [39m          id[33m:[39m [33mTEST_PROVIDER_ID[39m[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '5.22.0' }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[6/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment 
+Failed[2m > [22mshould reject older event timestamp (INV-3)
+[31m[1mPrismaClientValidationError[22m: 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:535:46
+
+  532   },
+  533 });
+  534 
+ΓåÆ 535 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9dj000czxclbv61atzj",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "ACTIVE",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[90m [2mΓ¥»[22m wn node_modules/@prisma/client/runtime/library.js:[2m29:1363[22m[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6958[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m535:24[22m[39m
+    [90m533| [39m      })[33m;[39m
+    [90m534| [39m
+    [90m535| [39m      [35mconst[39m provider [33m=[39m [35mawait[39m 
+prisma[33m.[39mprovider[33m.[39m[34mcreate[39m({
+    [90m   | [39m                       [31m^[39m
+    [90m536| [39m        data[33m:[39m {
+    [90m537| [39m          id[33m:[39m [33mTEST_PROVIDER_ID[39m[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '5.22.0' }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[7/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mWriter #8: Invoice Payment 
+Failed[2m > [22mshould reject equal-timestamp event (INV-5)
+[31m[1mPrismaClientValidationError[22m: 
+Invalid `prisma.provider.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:601:46
+
+  598   },
+  599 });
+  600 
+ΓåÆ 601 const provider = await prisma.provider.create({
+        data: {
+          id: "test-provider-invoice-001",
+          userId: "cmul7a9e0000dzxclomd2fnsi",
+          ~~~~~~
+          name: "Test Provider",
+          stripeCustomerId: "cus_test_invoice_001",
+          location: "Test Location",
+          phone: "+61412345678",
+          hourlyRate: 75,
+          subscriptionTier: "PRO",
+          subscriptionStatus: "ACTIVE",
+      ?   serviceAreas?: String | Null,
+      ?   copilotAgentEndpoint?: String | Null,
+      ?   bio?: String | Null,
+      ?   languages?: String | Null,
+      ?   baseAddress?: String | Null,
+      ?   serviceRadiusKm?: Float | Null,
+      ?   isActive?: Boolean,
+      ?   isVerified?: Boolean,
+      ?   isFeatured?: Boolean,
+      ?   averageRating?: Float | Null,
+      ?   totalReviews?: Int,
+      ?   trialEndsAt?: DateTime | Null,
+      ?   accountType?: String,
+      ?   businessModel?: String,
+      ?   paymentMode?: String,
+      ?   customDomain?: String | Null,
+      ?   brandedBookingPage?: Boolean,
+      ?   brandLogo?: String | Null,
+      ?   brandColorPrimary?: String | Null,
+      ?   brandColorSecondary?: String | Null,
+      ?   showBrandingOnBookingPage?: Boolean,
+      ?   maxProviders?: Int,
+      ?   stripeAccountId?: String | Null,
+      ?   profileImage?: String | Null,
+      ?   documentsVerified?: Boolean,
+      ?   documentsVerifiedAt?: DateTime | Null,
+      ?   approvalStatus?: String,
+      ?   workingHours?: NullableJsonNullValueInput | Json,
+      ?   policyExceptionCount?: Int,
+      ?   allowedDurations?: NullableJsonNullValueInput | Json,
+      ?   bookingBufferMinutes?: Int | Null,
+      ?   enableTravelTime?: Boolean,
+      ?   travelTimeMinutes?: Int | Null,
+      ?   payoutMethod?: String,
+      ?   bankBsb?: String | Null,
+      ?   bankAccount?: String | Null,
+      ?   bankAccountName?: String | Null,
+      ?   abn?: String | Null,
+      ?   abnVerified?: Boolean,
+      ?   abnStatus?: String | Null,
+      ?   abnEntityName?: String | Null,
+      ?   abnVerifiedAt?: DateTime | Null,
+      ?   abnVerifiedBy?: String | Null,
+      ?   gstRegistered?: Boolean,
+      ?   withholdingTaxRate?: Decimal,
+      ?   syncGoogleCalendar?: Boolean,
+      ?   googleAccessToken?: String | Null,
+      ?   googleRefreshToken?: String | Null,
+      ?   googleTokenExpiry?: DateTime | Null,
+      ?   googleCalendarId?: String | Null,
+      ?   calendarBufferMode?: String | Null,
+      ?   whatsapp?: String | Null,
+      ?   instagram?: String | Null,
+      ?   facebook?: String | Null,
+      ?   yearsExperience?: Int | Null,
+      ?   domainVerified?: Boolean,
+      ?   domainVerifiedAt?: DateTime | Null,
+      ?   customSlug?: String | Null,
+      ?   baseAddressLat?: Float | Null,
+      ?   baseAddressLng?: Float | Null,
+      ?   baseLatitude?: Float | Null,
+      ?   baseLongitude?: Float | Null,
+      ?   acceptingBookings?: Boolean,
+      ?   chargesEnabled?: Boolean,
+      ?   payoutHold?: Boolean,
+      ?   payoutHoldReason?: String | Null,
+      ?   payoutsEnabled?: Boolean,
+      ?   videoUrl?: String | Null,
+      ?   specialties?: String | Null,
+      ?   suburb?: String | Null,
+      ?   state?: String | Null,
+      ?   postcode?: String | Null,
+      ?   timezone?: String | Null,
+      ?   businessName?: String | Null,
+      ?   bookings?: BookingCreateNestedManyWithoutProviderInput,
+      ?   user?: UserCreateNestedOneWithoutProviderInput,
+      ?   expenses?: ProviderExpenseCreateNestedManyWithoutProviderInput,
+      ?   pdaBookings?: PDATestBookingCreateNestedManyWithoutProviderInput,
+      ?   pdaConfigs?: PDATestConfigCreateNestedManyWithoutProviderInput,
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m9 failed[39m[22m[90m (9)[39m
+[2m   Start at [22m 20:05:03
+[2m   Duration [22m 2.47s[2m (transform 421ms, setup 21ms, collect 835ms, tests 295ms, environment 0ms, prepare 173ms)[22m
+
+      ?   slotReservations?: SlotReservationCreateNestedManyWithoutProviderInput,
+      ?   subscriptions?: SubscriptionCreateNestedManyWithoutProviderInput,
+      ?   cardOrders?: CardOrderCreateNestedManyWithoutProviderInput,
+      ?   voiceLineRecord?: TwilioPhoneNumberCreateNestedOneWithoutProviderInput,
+      ?   quotes?: QuoteCreateNestedManyWithoutProviderInput
+        }
+      })
+
+Unknown argument `userId`. Did you mean `user`? Available options are marked with ?.[39m
+[90m [2mΓ¥»[22m wn node_modules/@prisma/client/runtime/library.js:[2m29:1363[22m[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6958[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m601:24[22m[39m
+    [90m599| [39m      })[33m;[39m
+    [90m600| [39m
+    [90m601| [39m      [35mconst[39m provider [33m=[39m [35mawait[39m 
+prisma[33m.[39mprovider[33m.[39m[34mcreate[39m({
+    [90m   | [39m                       [31m^[39m
+    [90m602| [39m        data[33m:[39m {
+    [90m603| [39m          id[33m:[39m [33mTEST_PROVIDER_ID[39m[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '5.22.0' }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[8/9]ΓÄ»[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/sub-06-a-invoice-handlers.test.ts[2m > 
+[22mSUB-06-A Invoice Payment Handlers (Writers #7 + #8)[2m > [22mCross-Handler Scenarios[2m > 
+[22mshould handle concurrent invoice.payment_succeeded + invoice.payment_failed with serialization 
+retry
+[31m[1mPrismaClientKnownRequestError[22m: 
+Invalid `prisma.subscription.create()` invocation in
+E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\__tests__\integration\sub-06-a-invoice-handlers.test.ts:683:33
+
+  680 
+  681 const baseTimestamp = Math.floor(Date.now() / 1000);
+  682 
+ΓåÆ 683 await prisma.subscription.create(
+The column `lastWebhookEventTimestamp` does not exist in the current database.[39m
+[90m [2mΓ¥»[22m $n.handleRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:7315[22m[39m
+[90m [2mΓ¥»[22m $n.handleAndLogRequestError 
+node_modules/@prisma/client/runtime/library.js:[2m121:6623[22m[39m
+[90m [2mΓ¥»[22m $n.request node_modules/@prisma/client/runtime/library.js:[2m121:6307[22m[39m
+[90m [2mΓ¥»[22m l node_modules/@prisma/client/runtime/library.js:[2m130:9633[22m[39m
+[36m [2mΓ¥»[22m __tests__/integration/sub-06-a-invoice-handlers.test.ts:[2m683:7[22m[39m
+    [90m681| [39m      [35mconst[39m baseTimestamp [33m=[39m 
+[33mMath[39m[33m.[39m[34mfloor[39m([33mDate[39m[33m.[39m[34mnow[39m() [33m/[39m 
+[34m1000[39m)[33m;[39m
+    [90m682| [39m
+    [90m683| [39m      [35mawait[39m prisma[33m.[39msubscription[33m.[39m[34mcreate[39m({
+    [90m   | [39m      [31m^[39m
+    [90m684| [39m        data[33m:[39m {
+    [90m685| [39m          providerId[33m:[39m provider[33m.[39mid[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'P2022', clientVersion: '5.22.0', meta: { 
+modelName: 'Subscription', column: 'lastWebhookEventTimestamp' }, batchRequestIdx: undefined }[39m
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[9/9]ΓÄ»[22m[39m
+
