@@ -1,10 +1,10 @@
-# SUB-06-A Writer #7 Remediation Evidence (Rev 2)
+# SUB-06-A Writer #7 Remediation Evidence (Rev 3)
 
 **Writer:** Invoice Payment Succeeded Handler  
 **Location:** `app/api/stripe/webhook/route.ts:2022-2130`  
-**Status:** REMEDIATED (Rev 2) - AWAITING SOURCE VERIFICATION  
-**Date:** 2026-09-28  
-**Previous Review:** FAILED - CANCELLED reactivation flaw, missing policy validation
+**Status:** REMEDIATED (Rev 3) - AWAITING SOURCE VERIFICATION  
+**Date:** 2026-08-15  
+**Previous Reviews:** Rev 1 FAILED (CANCELLED flaw), Rev 2 FAILED (watermark defect)
 
 ---
 
@@ -15,18 +15,28 @@
 - Issue 2: Missing lifecycle policy validation
 - Issue 3: Unlocked pre-check lacked justification
 
-**Rev 2 (this commit):** ✅ ALL ISSUES ADDRESSED
-- Added explicit CANCELLED status guard (INV-2 compliance)
-- Added full lifecycle policy validation via `canTransitionSubscriptionState`
-- Documented unlocked pre-check justification
+**Rev 2 (commit 6338ca92):** ❌ FAILED SOURCE VERIFICATION
+- ✅ Fixed: CANCELLED status guard added
+- ✅ Fixed: Lifecycle policy validation added
+- ✅ Fixed: Pre-check justification documented
+- ❌ CRITICAL: Fabricated event timestamp breaks INV-3/INV-5 watermark enforcement
+
+**Rev 3 (this commit):** ✅ WATERMARK DEFECT FIXED
+- Uses actual `event.created` timestamp (not `Date.now()`)
+- Enables proper INV-3 rejection of older events
+- Enables proper INV-5 rejection of equal-timestamp events
+- Signature updated: `handleInvoicePaymentSucceeded(invoice, idempotencyKey, eventCreated)`
 
 ---
 
 ## Files Changed
 
 **Modified:**
-- `app/api/stripe/webhook/route.ts` - Lines 2022-2130 (109 lines, was 82 lines in Rev 1)
-- `docs/audit/SUB-06-A_WRITER-07_EVIDENCE.md` - Updated with Rev 2 analysis
+- `app/api/stripe/webhook/route.ts`:
+  - Line 231: Pass `event.created` to handler
+  - Line 2022-2026: Add `eventCreated` parameter to function signature
+  - Lines 2099-2107: Use `eventCreated` instead of `Date.now()` in synthetic event
+  - Lines 2118-2124: Enhanced logging with watermark timestamps
 
 ---
 
