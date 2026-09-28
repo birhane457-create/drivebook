@@ -8,7 +8,16 @@
 
 Independent source verification revealed that while the SUB-06-A lifecycle helper (`lockProviderAndSubscription`, `processSubscriptionEvent`) correctly implements Rev 7 row-locking architecture, **it has not been universally applied to all subscription lifecycle writers**.
 
-This document inventories ALL code paths that mutate subscription lifecycle state and their current compliance status.
+**Status:** Inventory COMPLETE after comprehensive source-level search.
+
+**Total Writers Found:** 9  
+**Compliant:** 2 (22%)  
+**Non-Compliant:** 7 (78%)
+
+This document inventories ALL code paths that mutate subscription lifecycle state and their current compliance status based on actual source code inspection.
+
+**Commit Analyzed:** 916a9ff7dec1c61139b0607f7f7926b986341d18  
+**Date:** 2026-08-15
 
 ---
 
@@ -31,29 +40,22 @@ Subscription lifecycle is defined by mutations to:
 
 | Writer | Path | Status | Notes |
 |--------|------|--------|-------|
-| **Webhook Handler** | `app/api/stripe/webhook/route.ts` → `processSubscriptionEvent()` | ✅ | Uses `lockProviderAndSubscription()` with correct Provider→Current→Incoming lock order |
+| **Webhook Handler** | `app/api/stripe/webhook/route.ts` → `handleSubscriptionEvent()` | ✅ | Uses `processSubscriptionEvent()` with Provider→Current→Incoming lock order |
 | **Registration** | `app/api/register/route.ts` | ✅ | Uses `createOrReuseTrialSubscription()` with Provider-first locking |
 
 ---
 
 ### ❌ NON-COMPLIANT: Direct Lifecycle Mutation Without Locking
 
-| Writer | Path | Violation | Evidence |
-|--------|------|-----------|----------|
-| **Instructor Subscription Route** | `app/api/instructor/subscription/route.ts` (POST) | ❌ **CRITICAL** | Lines 182-195: Direct `tx.subscription.update()` without Provider FOR UPDATE lock |
-| **Instructor Subscription Route** | `app/api/instructor/subscription/route.ts` (POST) | ❌ **CRITICAL** | Lines 246-264: Direct `tx.subscription.create()` without Provider FOR UPDATE lock |
-| **Manual Subscription Sync** | `app/api/instructor/subscription/sync/route.ts` (POST) | ❌ **HIGH** | Lines 115-139: Direct `tx.subscription.update()` without Provider FOR UPDATE lock |
-
----
-
-### ⚠️ LEGACY/SEPARATE: Requires Investigation
-
-| Writer | Path | Status | Notes |
-|--------|------|--------|-------|
-| **Invoice Succeeded** | `app/api/stripe/webhook/route.ts` (`invoice.payment_succeeded`) | ⚠️ | Original SUB-06-A discovery identified as writer. Uses `tx.subscription.updateMany()`. Not yet migrated to lifecycle helper. |
-| **Invoice Failed** | `app/api/stripe/webhook/route.ts` (`invoice.payment_failed`) | ⚠️ | Original SUB-06-A discovery identified as writer. Uses `tx.subscription.updateMany()`. Not yet migrated to lifecycle helper. |
-| **Trial Expiry Cron** | Search Result: Not Found | ⚠️ | May use existing SUB-12-A CAS protection or may not exist yet. Requires investigation. |
-| **Admin Override** | `app/api/admin/instructors/[id]/subscription/*` | ⚠️ | Search result: No such route found. May not exist or may be in different location. |
+| Writer | Path | Violation | Impact |
+|--------|------|-----------|--------|
+| **Instructor Subscription Route (tier change)** | `app/api/instructor/subscription/route.ts` (POST, lines 182-195) | ❌ **CRITICAL** | Direct `tx.subscription.update()` without Provider FOR UPDATE lock. Can race with webhook. |
+| **Instructor Subscription Route (create trial)** | `app/api/instructor/subscription/route.ts` (POST, lines 246-264) | ❌ **CRITICAL** | Direct `tx.subscription.create()` without Provider FOR UPDATE lock. Does NOT use `createOrReuseTrialSubscription()`. Can create duplicate TRIAL. |
+| **Manual Subscription Sync** | `app/api/instructor/subscription/sync/route.ts` (POST, lines 115-139) | ❌ **HIGH** | Direct `tx.subscription.update()` + `tx.provider.update()` without Provider FOR UPDATE lock. Can race with webhook. |
+| **Subscription Cancellation** | `lib/services/subscription-cancel.ts` (`cancelSubscription()`, lines 98-165) | ❌ **HIGH** | Direct `tx.subscription.update()` + `tx.provider.update()` without Provider FOR UPDATE lock. Delegates from DELETE route. Can race with webhook. |
+| **Invoice Payment Succeeded** | `app/api/stripe/webhook/route.ts` (`handleInvoicePaymentSucceeded()`, lines 2040-2060) | ❌ **HIGH** | Direct `tx.subscription.updateMany()` + `tx.provider.update()` without Provider FOR UPDATE lock. Can race with subscription webhook. |
+| **Invoice Payment Failed** | `app/api/stripe/webhook/route.ts` (`handleInvoicePaymentFailed()`, lines 2086-2101) | ❌ **HIGH** | Direct `tx.subscription.updateMany()` + `tx.provider.update()` without Provider FOR UPDATE lock. Can race with subscription webhook. |
+| **Trial Expiry Cron** | `app/api/cron/check-trial-expiry/route.ts` (GET, lines 74-97) | ⚠️ **MEDIUM** | Uses SUB-12-A CAS (`updateMany` with status condition) but no Provider FOR UPDATE. Can race with webhook if trial converts to ACTIVE simultaneously. |
 
 ---
 
@@ -189,42 +191,203 @@ await prisma.$transaction(async (tx) => {
 
 ---
 
+### ❌ Subscription Cancellation Service
+
+**File:** `lib/services/subscription-cancel.ts`  
+**Lines:** 98-165
+
+**Code:**
+```typescript
+await prisma.$transaction(async (tx) => {
+  await tx.subscription.update({  // ❌ No locks
+    where: { id: subscription.id },
+    data: {
+      cancelAtPeriodEnd: mode === 'period_end' ? true : ...,
+      cancelledAt: now,
+      ...(newStatus ? { status: newStatus } : {}),
+    },
+  });
+
+  if (mode === 'immediate') {
+    await tx.provider.update({  // ❌ No Provider lock
+      where: { id: providerId },
+      data: { subscriptionStatus: 'CANCELLED' as any },
+    });
+  }
+});
+```
+
+**Issues:**
+- Called from `app/api/instructor/subscription/route.ts` DELETE handler
+- No Provider FOR UPDATE before mutation
+- No subscription FOR UPDATE before mutation
+- Can race with webhook updating same subscription state
+- Stripe-first pattern is correct, but locking is missing
+
+---
+
+### ❌ Invoice Payment Succeeded Handler
+
+**File:** `app/api/stripe/webhook/route.ts`  
+**Function:** `handleInvoicePaymentSucceeded()`  
+**Lines:** 2040-2060
+
+**Code:**
+```typescript
+await tx.subscription.updateMany({  // ❌ No locks
+  where: { stripeSubscriptionId: subscription as string },
+  data: { status: 'ACTIVE' }
+});
+
+// Find instructor via subscription
+const subscriptionRecord = await tx.subscription.findFirst({
+  where: { stripeSubscriptionId: subscription as string },
+  select: { providerId: true }
+});
+
+if (subscriptionRecord?.providerId) {
+  await tx.provider.update({  // ❌ No Provider lock
+    where: { id: subscriptionRecord.providerId },
+    data: {
+      subscriptionStatus: 'ACTIVE' as any,
+      trialEndsAt: null,
+    }
+  });
+}
+```
+
+**Issues:**
+- Direct `updateMany()` without Provider FOR UPDATE
+- Can race with `customer.subscription.updated` webhook
+- Should route through `processSubscriptionEvent()` or use Provider-first locking
+
+---
+
+### ❌ Invoice Payment Failed Handler
+
+**File:** `app/api/stripe/webhook/route.ts`  
+**Function:** `handleInvoicePaymentFailed()`  
+**Lines:** 2086-2101
+
+**Code:**
+```typescript
+await tx.subscription.updateMany({  // ❌ No locks
+  where: { stripeSubscriptionId: subscription as string },
+  data: { status: 'PAST_DUE' }
+});
+
+// Find instructor via subscription
+const subscriptionRecord = await tx.subscription.findFirst({
+  where: { stripeSubscriptionId: subscription as string }
+});
+
+if (subscriptionRecord) {
+  await tx.provider.update({  // ❌ No Provider lock
+    where: { id: subscriptionRecord.providerId },
+    data: { subscriptionStatus: 'PAST_DUE' as any }
+  });
+}
+```
+
+**Issues:**
+- Direct `updateMany()` without Provider FOR UPDATE
+- Can race with `customer.subscription.updated` webhook
+- Should route through `processSubscriptionEvent()` or use Provider-first locking
+
+---
+
+### ⚠️ Trial Expiry Cron (SUB-12-A CAS Protection)
+
+**File:** `app/api/cron/check-trial-expiry/route.ts`  
+**Lines:** 74-97
+
+**Code:**
+```typescript
+const result = await prisma.$transaction(async (tx) => {
+  const expireResult = await tx.subscription.updateMany({  // ⚠️ CAS but no locks
+    where: {
+      id: trial.id,
+      status: 'TRIAL',          // Atomic guard: only expire if still TRIAL
+      trialEndsAt: { lt: now },
+    },
+    data: { status: 'EXPIRED' },
+  });
+
+  if (expireResult.count === 0) {
+    // Row was already converted to ACTIVE by webhook - skip
+    return null;
+  }
+
+  // Subscription was still TRIAL — safe to revert provider to BASIC.
+  const updatedInstructor = await tx.provider.update({  // ⚠️ No Provider lock
+    where: { id: trial.providerId },
+    data: {
+      subscriptionTier: 'BASIC',
+      subscriptionStatus: 'EXPIRED',
+    },
+  });
+
+  return { updatedSub: { id: trial.id, status: 'EXPIRED' }, updatedInstructor };
+});
+```
+
+**Issues:**
+- Uses SUB-12-A conditional `updateMany()` with status guard (CAS pattern)
+- CAS prevents overwriting ACTIVE→EXPIRED (good!)
+- But does NOT use Provider FOR UPDATE before Provider mutation
+- Can race with webhook if trial converts at exact same moment
+- Interaction with SUB-06-A locks not formally proven
+
+**Status:** MEDIUM priority - CAS provides partial protection but doesn't fully align with Rev 7 architecture
+
+---
+
 ## Required Remediation
 
-### Phase 1: Fix Direct Mutations
+### Phase 1: Fix Critical Direct Mutations (BLOCKER)
 
-**Priority: CRITICAL**
+**Priority: CRITICAL - Blocks SUB-06-A source verification**
 
 All ❌ non-compliant writers must be refactored to use the SUB-06-A lifecycle architecture:
 
-1. **Instructor Subscription Route (POST)**
-   - Tier change path: Use lifecycle helper or add Provider-first locking
-   - Create trial path: Replace with `createOrReuseTrialSubscription()`
-   
-2. **Manual Subscription Sync (POST)**
+1. **Instructor Subscription Route (POST) - Tier Change**
+   - Add Provider-first locking before subscription mutation
+   - Or route through lifecycle helper function with policy validation
+
+2. **Instructor Subscription Route (POST) - Create Trial**  
+   - **Replace with `createOrReuseTrialSubscription()`** (already exists!)
+   - Remove hand-written lock/check/create logic
+
+3. **Manual Subscription Sync (POST)**
    - Add Provider-first locking before Subscription mutation
    - Consider extracting to lifecycle helper function
+   - Or document as "read Stripe → apply with locks" pattern
 
-### Phase 2: Investigate Legacy Writers
+4. **Subscription Cancellation Service**
+   - Add Provider-first locking before mutations
+   - Keep Stripe-first pattern (correct)
+   - Add FOR UPDATE locks after Stripe succeeds, before DB mutation
 
-**Priority: HIGH**
+5. **Invoice Payment Succeeded Handler**
+   - Route through `processSubscriptionEvent()` if possible
+   - Or add Provider-first locking explicitly
+   - Coordinate with subscription.updated webhook
 
-Verify disposition of ⚠️ legacy writers:
+6. **Invoice Payment Failed Handler**
+   - Route through `processSubscriptionEvent()` if possible
+   - Or add Provider-first locking explicitly
+   - Coordinate with subscription.updated webhook
 
-1. **Invoice Succeeded/Failed**
-   - Determine if these mutate subscription lifecycle state
-   - If yes: migrate to lifecycle helper or document why separate
-   - If no: document reasoning and mark as out-of-scope
+7. **Trial Expiry Cron**
+   - Add Provider FOR UPDATE before Provider mutation
+   - Keep SUB-12-A CAS pattern (correct for expiry check)
+   - Document interaction with SUB-06-A locks
 
-2. **Trial Expiry Cron**
-   - Locate implementation
-   - Verify SUB-12-A CAS protection is compatible with SUB-06-A locks
-   - Document interaction model
+### Phase 2: Admin Routes Investigation (COMPLETE)
 
-3. **Admin Override Routes**
-   - Verify existence and location
-   - If exist: apply lifecycle architecture
-   - If not exist: document
+**Status:** ✅ COMPLETE - No admin subscription override routes found
+
+Search confirmed no routes matching `app/api/admin/instructors/[id]/subscription/*` exist.
 
 ---
 
