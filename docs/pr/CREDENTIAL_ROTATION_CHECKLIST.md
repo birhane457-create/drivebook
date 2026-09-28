@@ -11,7 +11,7 @@ This checklist tracks which credentials have been exposed in version control and
 ## Credentials Requiring Rotation
 
 ### 1. Database (Supabase)
-- [ ] **DATABASE_URL** - Contains: postgres:EhWh1cNGN4qzmXi7@db.ikhqphbbilrocsghjyda.supabase.co
+- [ ] **DATABASE_URL** - Contains: postgres:<REDACTED_PASSWORD>@db.ikhqphbbilrocsghjyda.supabase.co
 - [ ] **DIRECT_URL** - Contains same password
 - **Action:** Supabase Dashboard → Settings → Database → Reset Password
 
@@ -21,7 +21,7 @@ This checklist tracks which credentials have been exposed in version control and
 
 ### 3. Stripe
 - [ ] **STRIPE_SECRET_KEY** - Test key: sk_test_51Rt9FIPFqwsHwRMq...
-- [ ] **STRIPE_WEBHOOK_SECRET** - Value: whsec_Y1LremsxnEOw39xSuUor4dx0fEDCkRJo
+- [ ] **STRIPE_WEBHOOK_SECRET** - Value: whsec_<REDACTED>
 - **Action:** Stripe Dashboard → Developers → API Keys → Roll Keys
 
 ### 4. Twilio

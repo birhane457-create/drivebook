@@ -78,7 +78,8 @@ ERROR: Webhook handler error for invoice.payment_failed
 2. **❌ FIXED: Test database misconfiguration**
    - Problem: vitest.config.ts defaulted to non-existent local database (`localhost:5433/drivebook_test`)
    - Solution: Set `TEST_DATABASE_URL` environment variable to actual Supabase database
-   - Command: `$env:TEST_DATABASE_URL="postgresql://postgres.ikhqphbbilrocsghjyda:EhWh1cNGN4qzmXi7@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"`
+   - Command: `$env:TEST_DATABASE_URL="postgresql://<REDACTED_USER>:<REDACTED_PASSWORD>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"`
+   - **Note:** Credentials redacted per SEC-CRED-01
 
 3. **❌ FIXED: Test fixtures schema mismatch**
    - Problem: Provider fixtures used `userId` and `location` fields that don't exist in schema
@@ -131,9 +132,10 @@ ERROR: Webhook handler error for invoice.payment_failed
 
 2. **Rerun complete test suite with email fixed:**
    ```powershell
-   $env:TEST_DATABASE_URL="postgresql://postgres.ikhqphbbilrocsghjyda:EhWh1cNGN4qzmXi7@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+   $env:TEST_DATABASE_URL="postgresql://<REDACTED_USER>:<REDACTED_PASSWORD>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
    npm test -- __tests__/integration/sub-06-a-invoice-handlers.test.ts --reporter=verbose --run
    ```
+   **Note:** Credentials redacted per SEC-CRED-01
 
 3. **Verify serialization retry logic:**
    - Concurrent test detected serialization error (40001) as expected
@@ -164,9 +166,11 @@ ERROR: Webhook handler error for invoice.payment_failed
 
 **Command:**
 ```powershell
-$env:TEST_DATABASE_URL="postgresql://postgres.ikhqphbbilrocsghjyda:EhWh1cNGN4qzmXi7@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+$env:TEST_DATABASE_URL="postgresql://<REDACTED_USER>:<REDACTED_PASSWORD>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
 npm test -- __tests__/integration/sub-06-a-invoice-handlers.test.ts --reporter=verbose --run
 ```
+
+**Note:** Credentials redacted per SEC-CRED-01.
 
 **Duration:** ~97 seconds total
 

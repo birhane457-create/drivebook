@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
 // Use the EXACT database URL from .env (not DIRECT_URL)
-const DATABASE_URL = "postgresql://postgres:EhWh1cNGN4qzmXi7@db.ikhqphbbilrocsghjyda.supabase.co:5432/postgres?sslmode=require";
+// CREDENTIALS REDACTED PER SEC-CRED-01 - Get from secure password manager
+const DATABASE_URL = "postgresql://<REDACTED_USER>:<REDACTED_PASSWORD>@db.ikhqphbbilrocsghjyda.supabase.co:5432/postgres?sslmode=require";
 
 const prisma = new PrismaClient({
   datasources: {

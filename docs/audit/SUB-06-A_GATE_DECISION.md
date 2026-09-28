@@ -15,9 +15,11 @@ Writers #7 and #8 each passed all four applicable non-concurrent runtime scenari
 **Duration:** 110.6 seconds  
 **Test Command:**
 ```powershell
-$env:TEST_DATABASE_URL="postgresql://postgres.ikhqphbbilrocsghjyda:EhWh1cNGN4qzmXi7@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+$env:TEST_DATABASE_URL="postgresql://<REDACTED_USER>:<REDACTED_PASSWORD>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
 npm test -- __tests__/integration/sub-06-a-invoice-handlers.test.ts --reporter=verbose --run
 ```
+
+**Note:** Credentials redacted per SEC-CRED-01.
 
 ### Writer #7: Invoice Payment Succeeded ✅ 4/4 PASS
 1. ✅ Subscription transition (TRIAL → ACTIVE) with real event timestamp
