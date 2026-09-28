@@ -1,18 +1,36 @@
-# SUB-06-A Writer #8 Evidence - handleInvoicePaymentFailed
+# SUB-06-A Writer #8 Evidence - handleInvoicePaymentFailed (Rev 2)
 
-**Status:** REMEDIATED - Awaiting Source Verification  
+**Status:** REMEDIATED (Rev 2) - Awaiting Source Verification  
 **Writer:** Invoice Payment Failed Handler  
 **Location:** `app/api/stripe/webhook/route.ts`  
 **Function:** `handleInvoicePaymentFailed()`  
 **Lines:** 2148-2272 (125 lines)  
 **Date:** 2026-08-15  
-**Commit:** [pending]
+**Commits:** f5945bae (Rev 1 - watermark defect), [pending] (Rev 2 - watermark fixed)
+
+---
+
+## Revision History
+
+**Rev 1 (commit f5945bae):** ❌ FAILED SOURCE VERIFICATION
+- ✅ Provider-first locking implemented
+- ✅ CANCELLED guard added
+- ✅ Lifecycle policy validation added
+- ❌ CRITICAL: Fabricated event timestamp breaks INV-3/INV-5 watermark enforcement
+
+**Rev 2 (this commit):** ✅ WATERMARK DEFECT FIXED
+- Uses actual `event.created` timestamp (not `Date.now()`)
+- Enables proper INV-3 rejection of older events
+- Enables proper INV-5 rejection of equal-timestamp events
+- Signature updated: `handleInvoicePaymentFailed(invoice, idempotencyKey, eventCreated)`
 
 ---
 
 ## Summary
 
-Writer #8 (handleInvoicePaymentFailed) has been remediated to follow the SUB-06-A Rev 7 Provider-first locking architecture. The handler now transitions subscriptions to PAST_DUE status only after establishing proper locks and validating lifecycle policy.
+Writer #8 (handleInvoicePaymentFailed) has been remediated to follow the SUB-06-A Rev 7 Provider-first locking architecture.
+
+**Rev 2 Update (2026-08-15):** Fixed critical watermark defect - now uses actual Stripe event timestamp instead of fabricated Date.now() timestamp for INV-3/INV-5 enforcement.
 
 ---
 
