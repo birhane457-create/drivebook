@@ -229,11 +229,11 @@ async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): P
 
     // INVOICE EVENTS
     case 'invoice.payment_succeeded':
-      await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice, idempotencyKey);
+      await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice, idempotencyKey, event.created);
       break;
 
     case 'invoice.payment_failed':
-      await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice, idempotencyKey);
+      await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice, idempotencyKey, event.created);
       break;
 
     // STRIPE CONNECT EVENTS
@@ -2021,7 +2021,8 @@ async function handleTrialEnding(
 
 async function handleInvoicePaymentSucceeded(
   invoice: Stripe.Invoice,
-  idempotencyKey: string
+  idempotencyKey: string,
+  eventCreated: number
 ): Promise<void> {
   const subscription = (invoice as any).subscription;
 
@@ -2097,11 +2098,12 @@ async function handleInvoicePaymentSucceeded(
         // Step 5: Lifecycle policy validation
         const { canTransitionSubscriptionState } = await import('@/lib/services/subscription-lifecycle');
         
-        // Construct a minimal Stripe event for policy validation
+        // Construct a minimal Stripe event for policy validation using REAL event timestamp
+        // CRITICAL: Must use actual event.created (not Date.now()) for watermark validation (INV-3, INV-5)
         const syntheticEvent: any = {
           id: `invoice_${invoice.id}`,
           type: 'invoice.payment_succeeded',
-          created: Math.floor(Date.now() / 1000), // Current timestamp
+          created: eventCreated, // Real Stripe event timestamp for watermark enforcement
         };
 
         const syntheticStripeSub: any = {
@@ -2119,7 +2121,9 @@ async function handleInvoicePaymentSucceeded(
           logger.warn('Invoice payment rejected by lifecycle policy', {
             subscriptionId: lockedSubscription.id,
             reason: policyResult.reason,
-            currentStatus: lockedSubscription.status
+            currentStatus: lockedSubscription.status,
+            eventCreated,
+            lastWebhookEventTimestamp: lockedSubscription.lastWebhookEventTimestamp
           });
           return; // Respect policy decision
         }
@@ -2148,7 +2152,8 @@ async function handleInvoicePaymentSucceeded(
 
 async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
-  idempotencyKey: string
+  idempotencyKey: string,
+  eventCreated: number
 ): Promise<void> {
   const subscription = (invoice as any).subscription;
 
@@ -2231,11 +2236,12 @@ async function handleInvoicePaymentFailed(
         // Step 5: Lifecycle policy validation
         const { canTransitionSubscriptionState } = await import('@/lib/services/subscription-lifecycle');
         
-        // Construct a minimal Stripe event for policy validation
+        // Construct a minimal Stripe event for policy validation using REAL event timestamp
+        // CRITICAL: Must use actual event.created (not Date.now()) for watermark validation (INV-3, INV-5)
         const syntheticEvent: any = {
           id: `invoice_${invoice.id}`,
           type: 'invoice.payment_failed',
-          created: Math.floor(Date.now() / 1000),
+          created: eventCreated, // Real Stripe event timestamp for watermark enforcement
         };
 
         const syntheticStripeSub: any = {
@@ -2254,7 +2260,9 @@ async function handleInvoicePaymentFailed(
             subscriptionId: lockedSubscription.id,
             currentStatus: lockedSubscription.status,
             targetStatus: 'PAST_DUE',
-            reason: policyResult.reason
+            reason: policyResult.reason,
+            eventCreated,
+            lastWebhookEventTimestamp: lockedSubscription.lastWebhookEventTimestamp
           });
           return;
         }
