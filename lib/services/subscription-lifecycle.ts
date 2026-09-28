@@ -165,19 +165,21 @@ export async function createOrReuseTrialSubscription(
 }
 
 /**
- * Step 1: Lock Provider and Subscription in universal order
+ * Step 1: Lock Provider and Subscriptions in universal order
  * 
  * CRITICAL: Uses pre-resolved stripeCustomerId (no Stripe API inside transaction)
  * 
- * Locking order (universal across all writers):
+ * Correct locking order (Provider-first ownership boundary):
  * 1. Provider (by stripeCustomerId) - SELECT ... FOR UPDATE
- * 2. Subscription (by stripeSubscriptionId if exists) - SELECT ... FOR UPDATE
- * 3. All current/eligible subscriptions for Provider - SELECT ... FOR UPDATE
+ * 2. ALL current/eligible subscriptions for Provider - SELECT ... FOR UPDATE
+ *    → Establishes Provider ownership boundary BEFORE acting on incoming Stripe ID
+ * 3. Incoming Subscription (by stripeSubscriptionId if exists) - SELECT ... FOR UPDATE
+ *    → Locked AFTER Provider ownership established
  * 
  * Returns:
  * - provider: Locked Provider
- * - subscription: Locked subscription matching incoming Stripe ID (if exists)
  * - currentSubscriptions: ALL current/eligible subscriptions for Provider (0, 1, or >1)
+ * - subscription: Locked subscription matching incoming Stripe ID (if exists)
  * 
  * CRITICAL INVARIANT: Provider should have EXACTLY ONE current/eligible subscription.
  * If >1 found, this indicates pre-existing invariant violation → FAIL CLOSED.
@@ -190,31 +192,15 @@ export async function lockProviderAndSubscription(
   stripeSubscriptionId: string
 ): Promise<{
   provider: any;
-  subscription: any | null;
   currentSubscriptions: any[];
+  subscription: any | null;
 }> {
-  // Step 1: Lock Provider first with lockProvider helper
+  // Step 1: Lock Provider first (universal locking primitive)
   const provider = await lockProvider(tx, undefined, stripeCustomerId);
 
-  // Step 2: Lock Subscription by incoming Stripe ID (if exists)
-  // This handles updates to existing subscriptions
-  const subscriptions = await tx.$queryRaw<any[]>`
-    SELECT * FROM "Subscription"
-    WHERE "stripeSubscriptionId" = ${stripeSubscriptionId}
-    FOR UPDATE
-  `;
-
-  const subscription = subscriptions.length > 0 ? subscriptions[0] : null;
-
-  // Re-read locked Subscription to get authoritative post-lock state
-  const lockedSubscription = subscription
-    ? await tx.subscription.findUnique({
-        where: { id: subscription.id },
-      })
-    : null;
-
-  // Step 3: Lock ALL current/eligible subscriptions for this Provider (CRITICAL for invariant)
-  // Uses FOR UPDATE to establish database-level row locks per Rev 7 architecture
+  // Step 2: Lock ALL current/eligible subscriptions for Provider (ownership boundary)
+  // CRITICAL: This establishes the Provider's subscription ownership BEFORE we lock
+  // or act on the incoming Stripe ID subscription. Per Rev 7: LOCK → RE-READ → VALIDATE.
   // Uses explicit NOT CANCELLED predicate per Rev 7 lifecycle semantics
   const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
     SELECT * FROM "Subscription"
@@ -244,7 +230,24 @@ export async function lockProviderAndSubscription(
     });
   }
 
-  return { provider, subscription: lockedSubscription, currentSubscriptions: validCurrentSubscriptions };
+  // Step 3: Lock Subscription by incoming Stripe ID (AFTER Provider ownership established)
+  // This is locked LAST because we need to validate it belongs to this Provider
+  const subscriptions = await tx.$queryRaw<any[]>`
+    SELECT * FROM "Subscription"
+    WHERE "stripeSubscriptionId" = ${stripeSubscriptionId}
+    FOR UPDATE
+  `;
+
+  const subscription = subscriptions.length > 0 ? subscriptions[0] : null;
+
+  // Re-read locked Subscription to get authoritative post-lock state
+  const lockedSubscription = subscription
+    ? await tx.subscription.findUnique({
+        where: { id: subscription.id },
+      })
+    : null;
+
+  return { provider, currentSubscriptions: validCurrentSubscriptions, subscription: lockedSubscription };
 }
 
 /**
@@ -409,9 +412,9 @@ export async function processSubscriptionEvent(
   const subscription = event.data.object as Stripe.Subscription;
   const stripeSubscriptionId = subscription.id;
 
-  // Step 1: Lock Provider, incoming Stripe ID subscription, and ALL current subscriptions
-  // Uses pre-resolved stripeCustomerId (no Stripe API I/O inside transaction)
-  const { provider, subscription: lockedSubscription, currentSubscriptions } = await lockProviderAndSubscription(
+  // Step 1: Lock Provider, then Provider's current subscriptions, then incoming Stripe ID
+  // CRITICAL: Provider ownership boundary established BEFORE incoming subscription locked
+  const { provider, currentSubscriptions, subscription: lockedSubscription } = await lockProviderAndSubscription(
     tx,
     stripeCustomerId,
     stripeSubscriptionId
