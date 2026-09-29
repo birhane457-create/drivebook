@@ -501,39 +501,52 @@ Mutate Provider + each Subscription individually
 
 ---
 
-#### 12. Admin Link Stripe Subscription
+#### 12. Admin Link Stripe Subscription ✅ REMEDIATED (SOURCE-VERIFIED)
 **Location:** `app/api/admin/instructors/[id]/subscription/route.ts`  
-**Lines:** 349-406 (POST handler, action: 'link_stripe_sub')  
+**Lines:** 448-541 (POST handler, action: 'link_stripe_sub')  
 **Lifecycle Fields Mutated:**
 - `Subscription.{stripeSubscriptionId, stripeCustomerId}`
 - `Provider.{stripeSubscriptionId, stripeCustomerId}`
 
-**Issue:** Stripe verification outside transaction, then direct mutations without Provider lock  
+**Previous Issue:** Stripe verification outside transaction, then direct mutations without Provider lock  
 **Race Condition:** Can race with webhook handler attaching Stripe ID to same subscription
 
-**Code:**
-```typescript
-// Lines 357-362: Stripe verification OUTSIDE transaction
-let stripeSub: any;
-try {
-  stripeSub = await stripe.subscriptions.retrieve(newSubId);
-} catch {
-  return NextResponse.json({ error: `Stripe subscription ${newSubId} not found` }, { status: 400 });
-}
+**Remediation Applied (Commit c7b52eb4):**
+- Step 1: Stripe verification outside transaction (lines 454-462) - immutable Stripe identity
+- Step 2a: Provider FOR UPDATE lock inside transaction (lines 469-479)
+- Step 2b: Subscription FOR UPDATE lock - specific or most recent (lines 481-505)
+- Step 2c: Ownership validation for target subscription (lines 492-494, 502-504)
+- Step 3: Mutations only after locks and validation (lines 507-518)
 
-// Lines 364-406: DB mutations WITHOUT Provider lock
-await prisma.$transaction(async (tx) => {
-  await tx.provider.update({ ... }); // ❌ No Provider lock
-  if (subscriptionRowId) {
-    await tx.subscription.update({ ... }); // ❌ No subscription lock
-  } else {
-    // Find and update active row
-    await tx.subscription.update({ ... }); // ❌ No subscription lock
-  }
-});
+**Architecture:**
+```
+Stripe verification (outside tx, immutable identity)
+  ↓
+Provider FOR UPDATE (by id)
+  ↓
+Subscription FOR UPDATE (specific ID or most recent with null stripeSubscriptionId)
+  ↓
+Ownership validation (subscription.providerId === provider.id)
+  ↓
+Mutate Provider + Subscription
 ```
 
-**Remediation Required:** Add Provider-first locking inside transaction
+**Evidence:**
+- Lines 469-479: Provider FOR UPDATE with subscriptions preload
+- Lines 481-505: Conditional Subscription FOR UPDATE lock (specific or find first)
+- Lines 492-494, 502-504: Ownership validation before mutation
+- Lines 507-518: Mutations only after locks acquired
+
+**Documentation:** Inline comments document SUB-06-A three-step pattern  
+**Commit:** c7b52eb4  
+**Status:** ✅ SOURCE-VERIFIED (awaiting behavioral concurrency tests)
+
+**Test Requirements (NOT YET VERIFIED):**
+- Admin link attaches Stripe IDs to Provider and Subscription
+- Concurrent admin link + webhook produces consistent final state
+- Ownership validation prevents cross-provider ID attachment
+- Link with deleted Provider/Subscription fails gracefully
+- Link with invalid Stripe ID returns 400
 
 ---
 
@@ -551,8 +564,16 @@ await prisma.$transaction(async (tx) => {
 ## Summary Statistics
 
 - **Total Writers:** 12
-- **Compliant:** 7 (58%) - Webhook handler, Registration, Invoice handlers (2), Trial expiry cron, Admin sync, Admin override
-- **Non-Compliant:** 5 (42%)
+- **Implementations Complete:** 12 (100%)
+  - **Already Compliant:** 4 (Webhook handler, Registration, Invoice handlers #7 & #8)
+  - **Remediated:** 7 (Writers #3, #5, #6, #9, #10, #11, #12)
+  - **Blocked (infrastructure):** 1 (Writer #4 - INFRA-SUB06A-DB-01)
+
+**Verification Status:**
+- **CLOSED:** 1 (Writer #3 - includes behavioral tests)
+- **BLOCKED:** 1 (Writer #4 - test DB schema sync blocker)
+- **SOURCE-VERIFIED (awaiting behavioral tests):** 6 (Writers #5, #6, #9, #10, #11, #12)
+- **SOURCE-VERIFIED (already compliant):** 4 (Writers #1, #2, #7, #8)
 
 ## Source Verification Evidence
 
