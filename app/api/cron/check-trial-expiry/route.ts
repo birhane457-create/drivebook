@@ -73,17 +73,11 @@ export async function GET(req: NextRequest) {
         //
         // Pattern: Provider FOR UPDATE → CAS updateMany → conditional Provider mutation
         const result = await prisma.$transaction(async (tx) => {
-          // Step 1: Lock Provider FOR UPDATE (SUB-06-A architecture)
+          // Step 1: Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE
+          // Uses lockProvider() which issues $queryRaw SELECT ... FOR UPDATE
           // This serializes with concurrent webhook handlers that also lock Provider first
-          const lockedProvider = await tx.provider.findUnique({
-            where: { id: trial.providerId },
-            include: {
-              subscriptions: {
-                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
-                orderBy: { createdAt: 'desc' },
-              },
-            },
-          });
+          const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
+          const lockedProvider = await lockProvider(tx, trial.providerId);
 
           if (!lockedProvider) {
             // Provider deleted between query and lock — skip

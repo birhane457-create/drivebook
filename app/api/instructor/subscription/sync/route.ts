@@ -103,8 +103,59 @@ export async function POST(req: NextRequest) {
     const tierChanged = instructor.subscriptionTier !== tier;
     const statusChanged = instructor.subscriptionStatus !== stripeStatus;
 
+    /**
+     * SUB-06-A Architecture: Provider-first FOR UPDATE locking
+     *
+     * Race condition: This sync can run concurrently with webhook handlers
+     * processing subscription.updated or subscription.deleted events from Stripe.
+     *
+     * Locking order:
+     * 1. Provider SELECT ... FOR UPDATE (via lockProvider() — actual PostgreSQL row lock)
+     * 2. Subscription SELECT ... FOR UPDATE (via $queryRaw)
+     * 3. Ownership validation
+     * 4. Mutations (Provider + Subscription)
+     *
+     * This ensures:
+     * - Provider row is hard-locked before any lifecycle decisions
+     * - Concurrent webhook handlers block on Provider lock, serializing access
+     * - Subscription ownership validated under lock
+     * - No lost updates between sync and webhook handler
+     *
+     * Note: Stripe API call intentionally OUTSIDE transaction to avoid
+     * long-held database locks during external HTTP calls.
+     */
+    const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
+
+    // SUB-06-A: Provider-first locking before lifecycle mutations
     await prisma.$transaction(async (tx) => {
-      // Update instructor record
+      // 1. Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE via $queryRaw
+      const lockedProvider = await lockProvider(tx, instructor.id);
+
+      if (!lockedProvider) {
+        throw new Error('Provider not found during sync');
+      }
+
+      // 2. Lock current subscription FOR UPDATE via $queryRaw
+      const lockedSubscriptions = await tx.$queryRaw<any[]>`
+        SELECT * FROM "Subscription"
+        WHERE "id" = ${activeSubscription.id}
+        FOR UPDATE
+      `;
+      const lockedSubscription = lockedSubscriptions[0] ?? null;
+
+      if (!lockedSubscription) {
+        throw new Error('Subscription not found during sync');
+      }
+
+      // 3. Validate ownership (subscription belongs to this provider)
+      if (!lockedSubscription) {
+        throw new Error('Subscription not found during sync');
+      }
+      if (lockedSubscription.providerId !== lockedProvider.id) {
+        throw new Error('Subscription ownership mismatch');
+      }
+
+      // 4. Update Provider record (already locked)
       await tx.provider.update({
         where: { id: instructor.id },
         data: {
@@ -115,7 +166,7 @@ export async function POST(req: NextRequest) {
         } as any,
       });
 
-      // Update subscription record
+      // 5. Update Subscription record (already locked)
       await tx.subscription.update({
         where: { id: activeSubscription.id },
         data: {
