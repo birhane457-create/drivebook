@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS, getTrialEndDate } from '@/lib/config/subscriptions';
 import { cancelSubscription } from '@/lib/services/subscription-cancel';
+import { createOrReuseTrialSubscription } from '@/lib/services/subscription-lifecycle';
 import jwt from 'jsonwebtoken';
 
 export const dynamic = 'force-dynamic';
@@ -110,47 +111,23 @@ export async function POST(req: NextRequest) {
       return updatedSub;
     });
   } else {
-    // First subscription — start fresh trial.
-    // SUB-02-A FIX: Both writes inside $transaction.
-    // SUB-02-B FIX: Re-check for concurrent creation inside the transaction.
-    const trialEnd = getTrialEndDate(tier as any);
-    const result = await prisma.$transaction(async (tx) => {
-      const raceCheck = await tx.subscription.findFirst({
-        where: { providerId: instructor.id, status: { in: ['TRIAL', 'ACTIVE'] } },
-      });
-
-      if (raceCheck) {
-        // Concurrent request already created the subscription — return it.
-        return { existing: raceCheck };
-      }
-
-      const newSub = await tx.subscription.create({
-        data: {
-          providerId: instructor.id,
-          tier,
-          status: 'TRIAL',
-          monthlyAmount: amount,
-          billingCycle,
-          currentPeriodStart: now,
-          currentPeriodEnd: periodEnd,
-          trialEndsAt: trialEnd,
-        },
-      });
-
+    // SUB-06-A Writer #4: First subscription — use lifecycle helper
+    // This implements Provider-first locking (Provider FOR UPDATE → subscription FOR UPDATE)
+    subscription = await prisma.$transaction(async (tx) => {
+      const sub = await createOrReuseTrialSubscription(tx, instructor.id);
+      
+      // Sync Provider state with subscription (helper locks but doesn't update Provider)
       await tx.provider.update({
         where: { id: instructor.id },
         data: {
-          subscriptionTier: tier as any,
-          subscriptionStatus: 'TRIAL',
-          trialEndsAt: trialEnd,
-          maxProviders: plan.limits.providers,
+          subscriptionTier: sub.tier,
+          subscriptionStatus: sub.status,
+          trialEndsAt: sub.trialEndsAt,
         },
       });
-
-      return { created: newSub };
+      
+      return sub;
     }, { isolationLevel: 'Serializable' });
-
-    subscription = 'existing' in result ? result.existing : result.created;
   }
 
   return NextResponse.json({ success: true, subscription });
