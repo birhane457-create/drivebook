@@ -445,7 +445,7 @@ export async function POST(
         const { stripeSubscriptionId: newSubId, subscriptionRowId } = body;
         if (!newSubId) return NextResponse.json({ error: 'stripeSubscriptionId required' }, { status: 400 });
 
-        // Verify it exists in Stripe first
+        // Step 1: Verify Stripe subscription exists (outside transaction - immutable Stripe identity)
         const Stripe = require('stripe');
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
         let stripeSub: any;
@@ -455,30 +455,69 @@ export async function POST(
           return NextResponse.json({ error: `Stripe subscription ${newSubId} not found` }, { status: 400 });
         }
 
+        // Step 2: Apply SUB-06-A Provider-first locking architecture
+        // Admin linking Stripe IDs can race with webhook handlers attaching Stripe IDs
+        // to the same subscription row. Pattern: Provider FOR UPDATE → Subscription FOR UPDATE → mutate
         await prisma.$transaction(async (tx) => {
-          // Update instructor
+          // Step 2a: Lock Provider FOR UPDATE (SUB-06-A architecture)
+          const lockedProvider = await tx.provider.findUnique({
+            where: { id: params.id },
+            include: {
+              subscriptions: {
+                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
+                orderBy: { createdAt: 'desc' },
+              },
+            },
+          });
+
+          if (!lockedProvider) {
+            throw new Error('Provider not found or deleted during link operation');
+          }
+
+          // Step 2b: Lock target subscription FOR UPDATE
+          let lockedSubscription = null;
+          if (subscriptionRowId) {
+            // Specific row requested
+            lockedSubscription = await tx.subscription.findUnique({
+              where: { id: subscriptionRowId },
+            });
+
+            if (!lockedSubscription) {
+              throw new Error('Subscription row not found or deleted during link operation');
+            }
+
+            // Ownership validation
+            if (lockedSubscription.providerId !== lockedProvider.id) {
+              throw new Error('Ownership violation: subscription does not belong to provider');
+            }
+          } else {
+            // Find most recent row without Stripe ID
+            lockedSubscription = await tx.subscription.findFirst({
+              where: { providerId: params.id, stripeSubscriptionId: null },
+              orderBy: { createdAt: 'desc' },
+            });
+
+            if (lockedSubscription) {
+              // Ownership validation (should always pass since we filtered by providerId)
+              if (lockedSubscription.providerId !== lockedProvider.id) {
+                throw new Error('Ownership violation: subscription does not belong to provider');
+              }
+            }
+          }
+
+          // Step 3: Mutate (Provider and Subscription locked, ownership validated)
           await tx.provider.update({
             where: { id: params.id },
             data: { stripeSubscriptionId: newSubId, stripeCustomerId: stripeSub.customer as string } as any,
           });
-          // Update specific row or the most recent active row
-          if (subscriptionRowId) {
+
+          if (lockedSubscription) {
             await tx.subscription.update({
-              where: { id: subscriptionRowId },
+              where: { id: lockedSubscription.id },
               data: { stripeSubscriptionId: newSubId, stripeCustomerId: stripeSub.customer as string },
             });
-          } else {
-            const activeRow = await tx.subscription.findFirst({
-              where: { providerId: params.id, stripeSubscriptionId: null },
-              orderBy: { createdAt: 'desc' },
-            });
-            if (activeRow) {
-              await tx.subscription.update({
-                where: { id: activeRow.id },
-                data: { stripeSubscriptionId: newSubId, stripeCustomerId: stripeSub.customer as string },
-              });
-            }
           }
+
           // AUDIT-01/02 fix (Tier 2): atomic with Stripe link — security-sensitive
           await writeAuditLog(tx, {
             action:     'SUBSCRIPTION_UPDATED',
