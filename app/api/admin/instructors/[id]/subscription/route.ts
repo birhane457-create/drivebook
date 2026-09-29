@@ -220,18 +220,28 @@ export async function POST(
             );
           }
 
-          // Step 2e: Identify target subscription from post-lock set
-          // Match by stripeSubscriptionId from the pre-tx Stripe fetch; fall back to
-          // the single current sub if available.
+          // Step 2e: Exact Stripe subscription identity match (TOCTOU guard)
+          // CRITICAL: The Stripe state fetched above belongs to instructor.stripeSubscriptionId.
+          // A concurrent lifecycle operation may have changed the Provider's current subscription
+          // from A → B between the pre-transaction Stripe fetch and this lock acquisition.
+          // Applying A's Stripe state to B would corrupt B's lifecycle identity.
+          // If A is absent from the post-lock set, do NOT fall back to B.
           const lockedSubscription = currentSubscriptions.find(
             s => (s as any).stripeSubscriptionId === instructor.stripeSubscriptionId
-          ) ?? currentSubscriptions[0] ?? null;
+          ) ?? null;
 
-          if (lockedSubscription) {
-            // Ownership validation (should always pass — filtered by providerId above)
-            if (lockedSubscription.providerId !== lockedProvider.id) {
-              throw new Error('Ownership violation: subscription does not belong to provider');
-            }
+          if (!lockedSubscription && currentSubscriptions.length > 0) {
+            // The subscription this Stripe fetch was for is no longer the current subscription.
+            // A concurrent operation replaced it. Do not mutate. Throw so the caller sees a
+            // clear reconciliation failure rather than silently writing stale state.
+            throw new Error(
+              `TOCTOU: Stripe subscription ${instructor.stripeSubscriptionId} is no longer the current subscription for provider ${lockedProvider.id} — a concurrent operation replaced it. Admin should re-sync after the concurrent operation settles.`
+            );
+          }
+
+          // Ownership validation for matched subscription
+          if (lockedSubscription && lockedSubscription.providerId !== lockedProvider.id) {
+            throw new Error('Ownership violation: subscription does not belong to provider');
           }
 
           // Step 3: Mutate Provider (locked)
