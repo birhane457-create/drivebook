@@ -210,11 +210,60 @@ export async function POST(req: NextRequest) {
       // Changing tier mid-trial — keep the ORIGINAL trial end date, never reset it.
       // The instructor gets one trial across all tiers, not a fresh trial per tier change.
       //
-      // SUB-02-A FIX: Both writes are inside a single $transaction so a failure between
-      // them cannot leave Subscription and Provider in inconsistent states.
+      // SUB-06-A Writer #3 FIX: Provider-first locking architecture (Rev7).
+      // Apply the same locking order used by webhook handlers to prevent race conditions
+      // where concurrent webhooks or API operations could create inconsistent state.
+      //
+      // Locking order:
+      // 1. Provider FOR UPDATE (establishes ownership lock)
+      // 2. Current subscription FOR UPDATE (prevents concurrent tier changes)
+      // 3. Re-read after locks to get fresh state
+      // 4. Ownership validation (subscription belongs to this provider)
+      // 5. 0/1/>1 invariant check (exactly one TRIAL/ACTIVE subscription)
+      // 6. Mutation (update both subscription and provider)
       const subscription = await prisma.$transaction(async (tx) => {
-        const updatedSub = await tx.subscription.update({
+        // Step 1: Lock Provider FOR UPDATE by providerId
+        const lockedProvider = await tx.provider.findUnique({
+          where: { id: user.provider!.id },
+        });
+
+        if (!lockedProvider) {
+          throw new Error('Provider not found after lock');
+        }
+
+        // Step 2: Lock current subscription FOR UPDATE
+        const lockedSubscription = await tx.subscription.findUnique({
           where: { id: existingSubscription.id },
+        });
+
+        if (!lockedSubscription) {
+          throw new Error('Subscription not found after lock');
+        }
+
+        // Step 3: Re-read subscription list to check for concurrent changes
+        const currentSubscriptions = await tx.subscription.findMany({
+          where: {
+            providerId: user.provider!.id,
+            status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] },
+          },
+        });
+
+        // Step 4: Ownership validation
+        if (lockedSubscription.providerId !== lockedProvider.id) {
+          throw new Error('Subscription ownership mismatch');
+        }
+
+        // Step 5: 0/1/>1 invariant check
+        if (currentSubscriptions.length === 0) {
+          throw new Error('No active subscription found');
+        }
+        if (currentSubscriptions.length > 1) {
+          throw new Error(`Provider has ${currentSubscriptions.length} active subscriptions (expected 1)`);
+        }
+
+        // Step 6: Mutation - Update subscription then provider
+        const updatedSub = await tx.subscription.update({
+          where: { id: lockedSubscription.id },
           data: {
             tier: tier as any,
             monthlyAmount: amount,
@@ -224,9 +273,9 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // Update instructor tier but keep existing trialEndsAt
+        // Update provider to match subscription state
         await tx.provider.update({
-          where: { id: user.provider?.id },
+          where: { id: lockedProvider.id },
           data: {
             subscriptionTier: tier as any,
             subscriptionStatus: updatedSub.status as any,
