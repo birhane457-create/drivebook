@@ -140,19 +140,28 @@ describe('SUB-06-A Writer #4: Trial Creation Locking (Production Routes)', () =>
 
       // Test: Call desktop production route to create first trial subscription
       const request = createDesktopRequest('BASIC');
-      const response = await DesktopPOST(request);
-      const data = await response.json();
+      
+      try {
+        const response = await DesktopPOST(request);
+        const data = await response.json();
 
-      // Debug: Log error if failed
-      if (response.status !== 200) {
-        console.error('Test 1 Error:', data);
+        // Debug: Log error if failed
+        if (response.status !== 200) {
+          console.error('Test 1 Error Response:', {
+            status: response.status,
+            data: data,
+          });
+        }
+
+        // Verify: Response indicates success
+        expect(response.status).toBe(200);
+        expect(data.success).toBe(true);
+        expect(data.subscription.tier).toBe('BASIC');
+        expect(data.subscription.status).toBe('TRIAL');
+      } catch (error) {
+        console.error('Test 1 Exception:', error);
+        throw error;
       }
-
-      // Verify: Response indicates success
-      expect(response.status).toBe(200);
-      expect(data.success).toBe(true);
-      expect(data.subscription.tier).toBe('BASIC');
-      expect(data.subscription.status).toBe('TRIAL');
 
       // Verify: Subscription was created in database
       const createdSubscription = await prisma.subscription.findFirst({
@@ -214,16 +223,29 @@ describe('SUB-06-A Writer #4: Trial Creation Locking (Production Routes)', () =>
       // Setup: Create user and provider WITHOUT subscription
       await createTestUserAndProvider();
 
-      // Test: Call mobile production route to create first trial subscription (use userId, not providerId)
-      const request = createMobileRequest(testUserId, 'BASIC');
-      const response = await MobilePOST(request);
-      const data = await response.json();
+      try {
+        // Test: Call mobile production route to create first trial subscription (use userId, not providerId)
+        const request = createMobileRequest(testUserId, 'BASIC');
+        const response = await MobilePOST(request);
+        const data = await response.json();
 
-      // Verify: Response indicates success
-      expect(response.status).toBe(200);
-      expect(data.success).toBe(true);
-      expect(data.subscription.tier).toBe('BASIC');
-      expect(data.subscription.status).toBe('TRIAL');
+        // Debug: Log error if failed
+        if (response.status !== 200) {
+          console.error('Test 3 Error Response:', {
+            status: response.status,
+            data: data,
+          });
+        }
+
+        // Verify: Response indicates success
+        expect(response.status).toBe(200);
+        expect(data.success).toBe(true);
+        expect(data.subscription.tier).toBe('BASIC');
+        expect(data.subscription.status).toBe('TRIAL');
+      } catch (error) {
+        console.error('Test 3 Exception:', error);
+        throw error;
+      }
 
       // Verify: Subscription was created in database
       const createdSubscription = await prisma.subscription.findFirst({
