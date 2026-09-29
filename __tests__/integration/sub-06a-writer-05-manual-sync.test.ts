@@ -26,55 +26,47 @@ if (!testDbUrl) {
 }
 
 describe('SUB-06-A Writer #5: Manual Subscription Sync - Behavioral Verification', () => {
-  let testUserId: string;
   let testProvider1Id: string;
   let testProvider2Id: string;
   let testStripeCustomerId1: string;
   let testStripeSubscriptionId1: string;
 
   beforeAll(async () => {
-    // Create test user
-    const testUser = await prisma.user.create({
-      data: {
-        email: `${TEST_PREFIX}-user-${Date.now()}@test.com`,
-        hashedPassword: 'test-hash',
-        role: 'INSTRUCTOR',
-      },
-    });
-    testUserId = testUser.id;
-
-    // Create test Provider 1 with Stripe subscription
+    // Create test Provider 1 with Stripe customer (no user relation needed for locking tests)
     const provider1 = await prisma.provider.create({
       data: {
         name: `${TEST_PREFIX}-provider-1`,
-        userId: testUserId,
+        phone: '+61400000001',
+        hourlyRate: 100.00,
         subscriptionTier: 'PRO',
         subscriptionStatus: 'ACTIVE',
         stripeCustomerId: 'cus_test_provider1',
-        stripeSubscriptionId: 'sub_test_provider1',
       },
     });
     testProvider1Id = provider1.id;
     testStripeCustomerId1 = provider1.stripeCustomerId!;
-    testStripeSubscriptionId1 = provider1.stripeSubscriptionId!;
 
     // Create subscription row for Provider 1
-    await prisma.subscription.create({
+    const sub1 = await prisma.subscription.create({
       data: {
         providerId: testProvider1Id,
         tier: 'PRO',
         status: 'ACTIVE',
         stripeCustomerId: testStripeCustomerId1,
-        stripeSubscriptionId: testStripeSubscriptionId1,
+        stripeSubscriptionId: 'sub_test_provider1',
         currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        monthlyAmount: 49.00,
+        billingCycle: 'monthly',
       },
     });
+    testStripeSubscriptionId1 = sub1.stripeSubscriptionId!;
 
     // Create test Provider 2 (for ownership tests)
     const provider2 = await prisma.provider.create({
       data: {
         name: `${TEST_PREFIX}-provider-2`,
-        userId: testUserId,
+        phone: '+61400000002',
+        hourlyRate: 100.00,
         subscriptionTier: 'BASIC',
         subscriptionStatus: 'TRIAL',
       },
@@ -83,10 +75,23 @@ describe('SUB-06-A Writer #5: Manual Subscription Sync - Behavioral Verification
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    await prisma.subscription.deleteMany({ where: { providerId: { in: [testProvider1Id, testProvider2Id] } } });
-    await prisma.provider.deleteMany({ where: { id: { in: [testProvider1Id, testProvider2Id] } } });
-    await prisma.user.delete({ where: { id: testUserId } });
+    // Cleanup test data - check if IDs were successfully created
+    if (testProvider1Id || testProvider2Id) {
+      await prisma.subscription.deleteMany({ 
+        where: { 
+          providerId: { 
+            in: [testProvider1Id, testProvider2Id].filter(Boolean) 
+          } 
+        } 
+      });
+      await prisma.provider.deleteMany({ 
+        where: { 
+          id: { 
+            in: [testProvider1Id, testProvider2Id].filter(Boolean) 
+          } 
+        } 
+      });
+    }
   });
 
   describe('Concurrency Tests', () => {
@@ -251,11 +256,11 @@ describe('SUB-06-A Writer #5: Manual Subscription Sync - Behavioral Verification
       const tempProvider = await prisma.provider.create({
         data: {
           name: `${TEST_PREFIX}-temp-provider`,
-          userId: testUserId,
+          phone: '+61400000003',
+          hourlyRate: 100.00,
           subscriptionTier: 'PRO',
           subscriptionStatus: 'ACTIVE',
           stripeCustomerId: 'cus_temp',
-          stripeSubscriptionId: 'sub_temp',
         },
       });
 
