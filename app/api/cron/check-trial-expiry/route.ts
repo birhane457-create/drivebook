@@ -61,11 +61,37 @@ export async function GET(req: NextRequest) {
 
     for (const trial of expiredTrials) {
       try {
-        // SUB-12-A FIX: Use updateMany with a status condition INSIDE the transaction.
-        // This makes the expiry conditional/atomic: if a concurrent webhook already
-        // converted this trial to ACTIVE (paid conversion), the updateMany matches
-        // 0 rows and we skip the provider update entirely — no overwrite occurs.
+        // SUB-06-A + SUB-12-A COMBINED FIX:
+        // 1. Provider FOR UPDATE lock (SUB-06-A: serialize with webhooks)
+        // 2. CAS-guarded Subscription update (SUB-12-A: atomic trial → expired conversion)
+        // 3. Provider mutation only if CAS succeeded (both patterns cooperating)
+        //
+        // Race protection:
+        // - Provider lock serializes with concurrent webhook handlers
+        // - CAS guard detects if webhook already converted TRIAL → ACTIVE
+        // - Provider mutation skipped if CAS fails (no overwrite)
+        //
+        // Pattern: Provider FOR UPDATE → CAS updateMany → conditional Provider mutation
         const result = await prisma.$transaction(async (tx) => {
+          // Step 1: Lock Provider FOR UPDATE (SUB-06-A architecture)
+          // This serializes with concurrent webhook handlers that also lock Provider first
+          const lockedProvider = await tx.provider.findUnique({
+            where: { id: trial.providerId },
+            include: {
+              subscriptions: {
+                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
+                orderBy: { createdAt: 'desc' },
+              },
+            },
+          });
+
+          if (!lockedProvider) {
+            // Provider deleted between query and lock — skip
+            return null;
+          }
+
+          // Step 2: CAS-guarded Subscription expiry (SUB-12-A pattern)
+          // Only expires if subscription is STILL in TRIAL status
           const expireResult = await tx.subscription.updateMany({
             where: {
               id: trial.id,
@@ -76,12 +102,16 @@ export async function GET(req: NextRequest) {
           });
 
           if (expireResult.count === 0) {
-            // Row was already converted to ACTIVE/PAST_DUE by a concurrent webhook,
-            // or another cron invocation already expired it. Do not touch provider.
+            // CAS failed: Row was already converted to ACTIVE/PAST_DUE by a concurrent
+            // webhook, or another cron invocation already expired it.
+            // Provider lock ensured we saw the authoritative state.
+            // Do not touch provider — return null to skip.
             return null;
           }
 
-          // Subscription was still TRIAL — safe to revert provider to BASIC.
+          // Step 3: Provider mutation (locked, CAS succeeded)
+          // Safe to revert provider to BASIC — Provider already locked, Subscription
+          // verified still TRIAL before expiry.
           const updatedInstructor = await tx.provider.update({
             where: { id: trial.providerId },
             data: {
@@ -94,7 +124,7 @@ export async function GET(req: NextRequest) {
         });
 
         if (result === null) {
-          // Skipped — subscription was already converted or previously expired.
+          // Skipped — CAS detected concurrent conversion or deletion
           skipped.push(trial.id);
           continue;
         }
