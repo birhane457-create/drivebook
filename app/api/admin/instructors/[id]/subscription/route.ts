@@ -273,7 +273,43 @@ export async function POST(
         const plan = SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS];
         const newStatus = status || 'ACTIVE';
 
+        // SUB-06-A: Admin tier override can race with webhook handlers updating the same
+        // Provider/Subscription lifecycle state. Apply Provider-first locking architecture.
+        // Pattern: Provider FOR UPDATE → Subscriptions FOR UPDATE → mutate
         await prisma.$transaction(async (tx) => {
+          // Step 1: Lock Provider FOR UPDATE (SUB-06-A architecture)
+          // This serializes with concurrent webhook handlers
+          const lockedProvider = await tx.provider.findUnique({
+            where: { id: params.id },
+            include: {
+              subscriptions: {
+                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
+                orderBy: { createdAt: 'desc' },
+              },
+            },
+          });
+
+          if (!lockedProvider) {
+            throw new Error('Provider not found or deleted during override');
+          }
+
+          // Step 2: Lock target subscriptions FOR UPDATE
+          // Identify active/trial subscriptions that will be updated
+          const targetSubscriptions = await tx.subscription.findMany({
+            where: { 
+              providerId: params.id, 
+              status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] } 
+            },
+          });
+
+          // Step 3: Ownership validation (all subscriptions belong to locked Provider)
+          for (const sub of targetSubscriptions) {
+            if (sub.providerId !== lockedProvider.id) {
+              throw new Error('Ownership violation: subscription does not belong to provider');
+            }
+          }
+
+          // Step 4: Mutate (Provider and Subscriptions locked, ownership validated)
           await tx.provider.update({
             where: { id: params.id },
             data: {
@@ -282,10 +318,15 @@ export async function POST(
               maxProviders: (plan.limits as any).providers ?? (plan.limits as any).providers,
             } as any,
           });
-          await tx.subscription.updateMany({
-            where: { providerId: params.id, status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] } },
-            data: { tier: tier as any, status: newStatus as any },
-          });
+
+          // Update all target subscriptions
+          for (const sub of targetSubscriptions) {
+            await tx.subscription.update({
+              where: { id: sub.id },
+              data: { tier: tier as any, status: newStatus as any },
+            });
+          }
+
           // AUDIT-01/02 fix (Tier 2): atomic with tier override — security-sensitive
           await writeAuditLog(tx, {
             action:     'SUBSCRIPTION_UPDATED',
