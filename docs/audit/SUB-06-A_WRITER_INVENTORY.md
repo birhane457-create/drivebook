@@ -178,7 +178,7 @@ Mutation
 
 ---
 
-### ❌ NON-COMPLIANT WRITERS (6/12)
+### ❌ NON-COMPLIANT WRITERS (5/12)
 
 #### 3. Instructor Subscription Route - Tier Change
 **Location:** `app/api/instructor/subscription/route.ts`  
@@ -454,28 +454,50 @@ Mutate Provider + Subscription
 
 ---
 
-#### 11. Admin Tier Override
+#### 11. Admin Tier Override ✅ REMEDIATED (SOURCE-VERIFIED)
 **Location:** `app/api/admin/instructors/[id]/subscription/route.ts`  
-**Lines:** 218-251 (POST handler, action: 'override_tier')  
+**Lines:** 261-335 (POST handler, action: 'override_tier')  
 **Lifecycle Fields Mutated:**
 - `Subscription.{tier, status}`
 - `Provider.{subscriptionTier, subscriptionStatus, maxProviders}`
 
-**Issue:** Direct mutations without Provider FOR UPDATE lock  
+**Previous Issue:** Direct mutations without Provider FOR UPDATE lock, used updateMany without row-level locks  
 **Race Condition:** Can conflict with concurrent webhook updates
 
-**Code:**
-```typescript
-await prisma.$transaction(async (tx) => {
-  await tx.provider.update({ ... }); // ❌ No Provider lock
-  await tx.subscription.updateMany({
-    where: { providerId: params.id, status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] } },
-    data: { tier: tier, status: newStatus }
-  });
-});
+**Remediation Applied (Commit 980326b1):**
+- Step 1: Provider FOR UPDATE lock (lines 277-287)
+- Step 2: Lock all target subscriptions FOR UPDATE (lines 289-295)
+- Step 3: Ownership validation for each subscription (lines 297-302)
+- Step 4: Individual updates on locked rows (lines 304-318)
+- Replaced updateMany with FOR UPDATE + individual updates pattern
+
+**Architecture:**
+```
+Provider FOR UPDATE (by id)
+  ↓
+Target subscriptions FOR UPDATE (status IN [TRIAL, ACTIVE, PAST_DUE])
+  ↓
+Ownership validation (each subscription.providerId === provider.id)
+  ↓
+Mutate Provider + each Subscription individually
 ```
 
-**Remediation Required:** Add Provider-first locking before mutations
+**Evidence:**
+- Lines 277-287: Provider FOR UPDATE with subscriptions preload
+- Lines 289-295: Target subscriptions findMany (locks acquired)
+- Lines 297-302: Ownership validation loop
+- Lines 304-318: Mutations only after locks and validation
+
+**Documentation:** Inline comments document SUB-06-A four-step pattern  
+**Commit:** 980326b1  
+**Status:** ✅ SOURCE-VERIFIED (awaiting behavioral concurrency tests)
+
+**Test Requirements (NOT YET VERIFIED):**
+- Admin override updates Provider and Subscriptions to specified tier/status
+- Concurrent admin override + webhook produces consistent final state
+- Ownership validation prevents cross-provider updates
+- Override with deleted Provider fails gracefully
+- Only TRIAL/ACTIVE/PAST_DUE subscriptions updated
 
 ---
 
@@ -529,8 +551,8 @@ await prisma.$transaction(async (tx) => {
 ## Summary Statistics
 
 - **Total Writers:** 12
-- **Compliant:** 6 (50%) - Webhook handler, Registration, Invoice handlers (2), Trial expiry cron, Admin sync
-- **Non-Compliant:** 6 (50%)
+- **Compliant:** 7 (58%) - Webhook handler, Registration, Invoice handlers (2), Trial expiry cron, Admin sync, Admin override
+- **Non-Compliant:** 5 (42%)
 
 ## Source Verification Evidence
 
