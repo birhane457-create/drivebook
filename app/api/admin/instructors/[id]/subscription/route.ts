@@ -183,43 +183,58 @@ export async function POST(
         const normalStatus = (stripeSub.status as string).toUpperCase().replace('CANCELED', 'CANCELLED');
         const plan = tier ? SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS] : null;
 
-        // Step 2: Apply SUB-06-A Provider-first locking architecture
+        // Step 2: Apply SUB-06-A Rev7 Provider-first locking with full current-sub inventory
         // Admin sync can race with concurrent webhook handlers processing the same Stripe events.
-        // Pattern: Provider FOR UPDATE → Subscription FOR UPDATE → ownership validation → mutate
+        // Pattern: Provider FOR UPDATE → ALL current subs FOR UPDATE → post-lock re-read →
+        //          0/1/>1 invariant → ownership → mutate
         const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
 
         await prisma.$transaction(async (tx) => {
-          // Step 2a: Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE
-          // Uses lockProvider() which issues $queryRaw SELECT ... FOR UPDATE
-          // This serializes with concurrent webhook handlers processing same Stripe events
+          // Step 2a: Lock Provider FOR UPDATE (actual PostgreSQL row lock via $queryRaw)
           const lockedProvider = await lockProvider(tx, params.id);
 
           if (!lockedProvider) {
             throw new Error('Provider not found or deleted during sync');
           }
 
-          // Step 2b: Lock target subscription FOR UPDATE via $queryRaw (if exists)
-          const subRow = instructor.subscriptions[0];
-          let lockedSubscription = null;
-          if (subRow) {
-            const lockedSubscriptions = await tx.$queryRaw<any[]>`
-              SELECT * FROM "Subscription"
-              WHERE "id" = ${subRow.id}
-              FOR UPDATE
-            `;
-            lockedSubscription = lockedSubscriptions[0] ?? null;
+          // Step 2b: Lock ALL current/eligible subscriptions FOR UPDATE (Rev7: full inventory)
+          // CRITICAL: Pre-transaction instructor.subscriptions snapshot is stale by the time
+          // we enter the transaction — a concurrent webhook may have mutated it during
+          // the Stripe API call above. Lock the complete current set instead.
+          const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
+            SELECT * FROM "Subscription"
+            WHERE "providerId" = ${lockedProvider.id}
+              AND "status" != 'CANCELLED'
+            FOR UPDATE
+          `;
 
-            if (!lockedSubscription) {
-              throw new Error('Subscription row deleted during sync');
-            }
+          // Step 2c: Post-lock re-read to get authoritative state after lock acquired
+          const currentSubscriptions = (await Promise.all(
+            currentSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
+          )).filter((s): s is NonNullable<typeof s> => s !== null);
 
-            // Step 2c: Ownership validation (subscription belongs to locked Provider)
+          // Step 2d: 0/1/>1 invariant — fail closed on multiple current subscriptions
+          if (currentSubscriptions.length > 1) {
+            throw new Error(
+              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions — failing closed`
+            );
+          }
+
+          // Step 2e: Identify target subscription from post-lock set
+          // Match by stripeSubscriptionId from the pre-tx Stripe fetch; fall back to
+          // the single current sub if available.
+          const lockedSubscription = currentSubscriptions.find(
+            s => (s as any).stripeSubscriptionId === instructor.stripeSubscriptionId
+          ) ?? currentSubscriptions[0] ?? null;
+
+          if (lockedSubscription) {
+            // Ownership validation (should always pass — filtered by providerId above)
             if (lockedSubscription.providerId !== lockedProvider.id) {
               throw new Error('Ownership violation: subscription does not belong to provider');
             }
           }
 
-          // Step 3: Mutate (Provider and Subscription locked, ownership validated)
+          // Step 3: Mutate Provider (locked)
           await tx.provider.update({
             where: { id: params.id },
             data: {
@@ -231,6 +246,7 @@ export async function POST(
             } as any,
           });
 
+          // Step 4: Mutate Subscription (locked, from post-lock set)
           if (lockedSubscription) {
             await tx.subscription.update({
               where: { id: lockedSubscription.id },
@@ -271,36 +287,49 @@ export async function POST(
         const plan = SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS];
         const newStatus = status || 'ACTIVE';
 
-        // SUB-06-A: Admin tier override can race with webhook handlers updating the same
-        // Provider/Subscription lifecycle state. Apply Provider-first locking architecture.
-        // Pattern: Provider FOR UPDATE → Subscriptions FOR UPDATE → mutate
+        // SUB-06-A Rev7: Provider-first locking with full current-sub inventory + 0/1/>1 invariant
+        // Pattern: Provider FOR UPDATE → ALL current subs FOR UPDATE → post-lock re-read →
+        //          0/1/>1 invariant (fail closed) → ownership → mutate
         const { lockProvider: lockProviderForOverride } = await import('@/lib/services/subscription-lifecycle');
 
         await prisma.$transaction(async (tx) => {
-          // Step 1: Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE
-          // Uses lockProvider() which issues $queryRaw SELECT ... FOR UPDATE
+          // Step 1: Lock Provider FOR UPDATE (actual PostgreSQL row lock via $queryRaw)
           const lockedProvider = await lockProviderForOverride(tx, params.id);
 
           if (!lockedProvider) {
             throw new Error('Provider not found or deleted during override');
           }
 
-          // Step 2: Lock target subscriptions FOR UPDATE via $queryRaw
-          const targetSubscriptions = await tx.$queryRaw<any[]>`
+          // Step 2: Lock ALL current/eligible subscriptions FOR UPDATE (Rev7: full inventory)
+          const targetSubscriptionsRaw = await tx.$queryRaw<any[]>`
             SELECT * FROM "Subscription"
             WHERE "providerId" = ${params.id}
               AND "status" IN ('TRIAL', 'ACTIVE', 'PAST_DUE')
             FOR UPDATE
           `;
 
-          // Step 3: Ownership validation (all subscriptions belong to locked Provider)
+          // Step 3: Post-lock re-read to get authoritative state after lock acquired
+          const targetSubscriptions = (await Promise.all(
+            targetSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
+          )).filter((s): s is NonNullable<typeof s> => s !== null);
+
+          // Step 4: 0/1/>1 invariant — fail closed on multiple current subscriptions
+          // An override on a Provider with >1 current subscriptions indicates a pre-existing
+          // invariant violation that must not be masked by blindly updating all rows.
+          if (targetSubscriptions.length > 1) {
+            throw new Error(
+              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${targetSubscriptions.length} current subscriptions — failing closed`
+            );
+          }
+
+          // Step 5: Ownership validation (all target subscriptions belong to locked Provider)
           for (const sub of targetSubscriptions) {
             if (sub.providerId !== lockedProvider.id) {
               throw new Error('Ownership violation: subscription does not belong to provider');
             }
           }
 
-          // Step 4: Mutate (Provider and Subscriptions locked, ownership validated)
+          // Step 6: Mutate Provider (locked)
           await tx.provider.update({
             where: { id: params.id },
             data: {
@@ -310,7 +339,7 @@ export async function POST(
             } as any,
           });
 
-          // Update all target subscriptions
+          // Step 7: Mutate each target subscription (locked, from post-lock re-read set)
           for (const sub of targetSubscriptions) {
             await tx.subscription.update({
               where: { id: sub.id },
@@ -334,43 +363,39 @@ export async function POST(
 
       // ── Cancel: cancel at period end via Stripe ───────────────────────
       case 'cancel': {
-        const instructor = await prisma.provider.findUnique({
+        const instructorForCancel = await prisma.provider.findUnique({
           where: { id: params.id },
-          select: { id: true },
+          select: { id: true, stripeSubscriptionId: true },
         }  as any) as any;
-        if (!instructor?.stripeSubscriptionId) {
-          // No Stripe sub — just mark cancelled in DB
-          await prisma.provider.update({
-            where: { id: params.id },
-            data: { subscriptionStatus: 'CANCELLED'  as any },
-          });
-          await prisma.subscription.updateMany({
-            where: { providerId: params.id, status: { in: ['TRIAL', 'ACTIVE'] } },
-            data: { status: 'CANCELLED', cancelledAt: new Date() },
+
+        if (!instructorForCancel?.stripeSubscriptionId) {
+          // No Stripe sub — delegate to cancelSubscription service (handles local-only path)
+          const { cancelSubscription } = await import('@/lib/services/subscription-cancel');
+          await cancelSubscription({
+            providerId: params.id,
+            mode: 'period_end',
+            reason: reason || 'Admin cancellation (no Stripe sub)',
+            actorEmail: adminEmail,
           });
           return NextResponse.json({ success: true, message: 'Subscription cancelled (no Stripe sub found)' });
         }
 
-        const Stripe = require('stripe');
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
-        await stripe.subscriptions.update(instructor.stripeSubscriptionId, {
-          cancel_at_period_end: true,
-          metadata: { cancelledByAdmin: adminEmail, cancelReason: reason || 'Admin cancellation' },
+        // Stripe cancel at period end — delegate to authoritative cancelSubscription service
+        // which enforces Rev7 Provider-first locking with full current-sub inventory
+        const { cancelSubscription } = await import('@/lib/services/subscription-cancel');
+        await cancelSubscription({
+          providerId: params.id,
+          mode: 'period_end',
+          reason: reason || 'Admin cancellation',
+          actorEmail: adminEmail,
         });
 
-        await prisma.subscription.updateMany({
-          where: { providerId: params.id, stripeSubscriptionId: instructor.stripeSubscriptionId },
-          data: { cancelAtPeriodEnd: true, cancelledAt: new Date() },
-        });
-
-        // AUDIT-01/02: cancel case has no $transaction (Stripe call already committed).
-        // Use writeAuditLogSafe — Tier 4 treatment, failure does not affect outcome.
         await writeAuditLogSafe({
           action:     'SUBSCRIPTION_CANCELLED',
           actorId:    session!.user.id!,
           actorRole:  'ADMIN',
           targetType: 'TRANSACTION',
-          targetId:   instructor.stripeSubscriptionId ?? params.id,
+          targetId:   instructorForCancel.stripeSubscriptionId ?? params.id,
           metadata:   { adminAction: 'cancel_at_period_end', adminEmail, reason },
         });
 
@@ -379,36 +404,34 @@ export async function POST(
 
       // ── Immediate cancel: cancel now in Stripe ────────────────────────
       case 'cancel_immediately': {
-        const instructor = await prisma.provider.findUnique({
+        const instructorForImmediateCancel = await prisma.provider.findUnique({
           where: { id: params.id },
-          select: { id: true },
+          select: { id: true, stripeSubscriptionId: true },
         }  as any) as any;
-        if (!instructor?.stripeSubscriptionId) {
+
+        if (!instructorForImmediateCancel?.stripeSubscriptionId) {
           return NextResponse.json({ error: 'No Stripe subscription found' }, { status: 400 });
         }
 
-        const Stripe = require('stripe');
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
-        await stripe.subscriptions.cancel(instructor.stripeSubscriptionId);
+        // Delegate to authoritative cancelSubscription service — enforces Rev7
+        // Provider-first locking with full current-sub inventory lock
+        const { cancelSubscription } = await import('@/lib/services/subscription-cancel');
+        await cancelSubscription({
+          providerId: params.id,
+          mode: 'immediate',
+          reason: reason || 'Admin immediate cancellation',
+          actorEmail: adminEmail,
+        });
 
-        await prisma.$transaction(async (tx) => {
-          await tx.provider.update({
-            where: { id: params.id },
-            data: { subscriptionStatus: 'CANCELLED' as any },
-          });
-          await tx.subscription.updateMany({
-            where: { providerId: params.id, stripeSubscriptionId: instructor.stripeSubscriptionId },
-            data: { status: 'CANCELLED', cancelledAt: new Date() },
-          });
-          // AUDIT-01/02 fix (Tier 2): immediate cancellation is access-termination — must be atomic
-          await writeAuditLog(tx, {
-            action:     'SUBSCRIPTION_CANCELLED',
-            actorId:    session!.user.id!,
-            actorRole:  'ADMIN',
-            targetType: 'TRANSACTION',
-            targetId:   instructor.stripeSubscriptionId ?? params.id,
-            metadata:   { adminAction: 'cancel_immediately', adminEmail, reason },
-          });
+        // Audit log written inside cancelSubscription via writeAuditLogSafe.
+        // Add admin-specific audit entry here for admin action traceability.
+        await writeAuditLogSafe({
+          action:     'SUBSCRIPTION_CANCELLED',
+          actorId:    session!.user.id!,
+          actorRole:  'ADMIN',
+          targetType: 'TRANSACTION',
+          targetId:   instructorForImmediateCancel.stripeSubscriptionId ?? params.id,
+          metadata:   { adminAction: 'cancel_immediately', adminEmail, reason },
         });
 
         return NextResponse.json({ success: true, message: 'Subscription cancelled immediately' });
@@ -446,64 +469,88 @@ export async function POST(
           return NextResponse.json({ error: `Stripe subscription ${newSubId} not found` }, { status: 400 });
         }
 
-        // Step 2: Apply SUB-06-A Provider-first locking architecture
-        // Admin linking Stripe IDs can race with webhook handlers attaching Stripe IDs
-        // to the same subscription row. Pattern: Provider FOR UPDATE → Subscription FOR UPDATE → mutate
+        // Step 2: Apply SUB-06-A Rev7 Provider-first locking with full current-sub inventory
+        // Linking a stripeSubscriptionId changes lifecycle identity — particularly sensitive.
+        // A concurrent webhook could be attaching the same Stripe ID to a different row.
+        // Pattern: Provider FOR UPDATE → ALL current subs FOR UPDATE → post-lock re-read →
+        //          0/1/>1 invariant → identify target from post-lock set → ownership → mutate
         const { lockProvider: lockProviderForLink } = await import('@/lib/services/subscription-lifecycle');
 
         await prisma.$transaction(async (tx) => {
-          // Step 2a: Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE
+          // Step 2a: Lock Provider FOR UPDATE (actual PostgreSQL row lock via $queryRaw)
           const lockedProvider = await lockProviderForLink(tx, params.id);
 
           if (!lockedProvider) {
             throw new Error('Provider not found or deleted during link operation');
           }
 
-          // Step 2b: Lock target subscription FOR UPDATE via $queryRaw
-          let lockedSubscription: any = null;
-          if (subscriptionRowId) {
-            // Specific row requested — lock it directly
-            const rows = await tx.$queryRaw<any[]>`
-              SELECT * FROM "Subscription"
-              WHERE "id" = ${subscriptionRowId}
-              FOR UPDATE
-            `;
-            lockedSubscription = rows[0] ?? null;
+          // Step 2b: Lock ALL current/eligible subscriptions FOR UPDATE (Rev7: full inventory)
+          // CRITICAL: Must establish the complete current-sub boundary before deciding which
+          // row receives the incoming Stripe ID. A concurrent webhook could be attaching
+          // the same stripeSubscriptionId to a different subscription row.
+          const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
+            SELECT * FROM "Subscription"
+            WHERE "providerId" = ${lockedProvider.id}
+              AND "status" != 'CANCELLED'
+            FOR UPDATE
+          `;
 
-            if (!lockedSubscription) {
-              throw new Error('Subscription row not found or deleted during link operation');
-            }
+          // Step 2c: Post-lock re-read to get authoritative state after lock acquired
+          const currentSubscriptions = (await Promise.all(
+            currentSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
+          )).filter((s): s is NonNullable<typeof s> => s !== null);
 
-            // Ownership validation
-            if (lockedSubscription.providerId !== lockedProvider.id) {
-              throw new Error('Ownership violation: subscription does not belong to provider');
-            }
-          } else {
-            // Find most recent row without Stripe ID — lock it
-            const rows = await tx.$queryRaw<any[]>`
-              SELECT * FROM "Subscription"
-              WHERE "providerId" = ${params.id}
-                AND "stripeSubscriptionId" IS NULL
-              ORDER BY "createdAt" DESC
-              LIMIT 1
-              FOR UPDATE
-            `;
-            lockedSubscription = rows[0] ?? null;
-
-            if (lockedSubscription) {
-              // Ownership validation (should always pass since filtered by providerId)
-              if (lockedSubscription.providerId !== lockedProvider.id) {
-                throw new Error('Ownership violation: subscription does not belong to provider');
-              }
-            }
+          // Step 2d: 0/1/>1 invariant — fail closed on multiple current subscriptions
+          if (currentSubscriptions.length > 1) {
+            throw new Error(
+              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions — failing closed`
+            );
           }
 
-          // Step 3: Mutate (Provider and Subscription locked, ownership validated)
+          // Step 2e: Identify target subscription from the post-lock set
+          // If a specific subscriptionRowId was requested, verify it is in the locked set.
+          // Otherwise, find the most recent current sub without a Stripe ID.
+          let lockedSubscription: any = null;
+          if (subscriptionRowId) {
+            lockedSubscription = currentSubscriptions.find(s => s.id === subscriptionRowId) ?? null;
+
+            if (!lockedSubscription) {
+              // Also check if it exists but is CANCELLED (not in current set)
+              const cancelledRows = await tx.$queryRaw<any[]>`
+                SELECT * FROM "Subscription"
+                WHERE "id" = ${subscriptionRowId}
+                  AND "providerId" = ${lockedProvider.id}
+                FOR UPDATE
+              `;
+              if (cancelledRows.length === 0) {
+                throw new Error('Subscription row not found or deleted during link operation');
+              }
+              // Re-read post-lock
+              lockedSubscription = await tx.subscription.findUnique({ where: { id: subscriptionRowId } });
+              if (!lockedSubscription) {
+                throw new Error('Subscription row not found after lock');
+              }
+            }
+          } else {
+            // Find the most recent current sub without a Stripe ID from the post-lock set
+            lockedSubscription = currentSubscriptions
+              .filter(s => !(s as any).stripeSubscriptionId)
+              .sort((a, b) => new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime())[0]
+              ?? null;
+          }
+
+          // Step 2f: Ownership validation
+          if (lockedSubscription && lockedSubscription.providerId !== lockedProvider.id) {
+            throw new Error('Ownership violation: subscription does not belong to provider');
+          }
+
+          // Step 3: Mutate Provider (locked)
           await tx.provider.update({
             where: { id: params.id },
             data: { stripeSubscriptionId: newSubId, stripeCustomerId: stripeSub.customer as string } as any,
           });
 
+          // Step 4: Mutate target Subscription (locked, from post-lock set)
           if (lockedSubscription) {
             await tx.subscription.update({
               where: { id: lockedSubscription.id },
