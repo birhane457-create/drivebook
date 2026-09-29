@@ -104,58 +104,78 @@ export async function POST(req: NextRequest) {
     const statusChanged = instructor.subscriptionStatus !== stripeStatus;
 
     /**
-     * SUB-06-A Architecture: Provider-first FOR UPDATE locking
+     * SUB-06-A Rev7: Provider-first FOR UPDATE locking with full current-subscription inventory
      *
-     * Race condition: This sync can run concurrently with webhook handlers
-     * processing subscription.updated or subscription.deleted events from Stripe.
+     * Race condition: This sync runs concurrently with webhook handlers processing
+     * subscription.updated / subscription.deleted events from Stripe.
      *
-     * Locking order:
-     * 1. Provider SELECT ... FOR UPDATE (via lockProvider() — actual PostgreSQL row lock)
-     * 2. Subscription SELECT ... FOR UPDATE (via $queryRaw)
-     * 3. Ownership validation
-     * 4. Mutations (Provider + Subscription)
+     * Locking order (Rev7):
+     * 1. Provider SELECT ... FOR UPDATE (lockProvider — $queryRaw)
+     * 2. ALL current/eligible subscriptions FOR UPDATE (WHERE status != 'CANCELLED')
+     * 3. Post-lock re-read of each locked subscription (authoritative state)
+     * 4. 0/1/>1 invariant check — fail closed if >1 current subscription
+     * 5. Identify target subscription from post-lock set (not pre-tx snapshot)
+     * 6. Ownership validation
+     * 7. Mutations (Provider + Subscription)
      *
-     * This ensures:
-     * - Provider row is hard-locked before any lifecycle decisions
-     * - Concurrent webhook handlers block on Provider lock, serializing access
-     * - Subscription ownership validated under lock
-     * - No lost updates between sync and webhook handler
+     * Why full inventory lock matters:
+     * The pre-transaction activeSubscription snapshot was read before the Stripe
+     * API call. A concurrent webhook could have mutated it during that window.
+     * Locking the full current set under the Provider lock ensures the lifecycle
+     * decision is made against authoritative state.
      *
-     * Note: Stripe API call intentionally OUTSIDE transaction to avoid
-     * long-held database locks during external HTTP calls.
+     * Stripe API call intentionally OUTSIDE transaction (no long-held locks during
+     * external HTTP calls).
      */
     const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
 
-    // SUB-06-A: Provider-first locking before lifecycle mutations
+    // SUB-06-A Rev7: Provider-first locking with full current-subscription inventory
     await prisma.$transaction(async (tx) => {
-      // 1. Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE via $queryRaw
+      // Step 1: Lock Provider FOR UPDATE (actual PostgreSQL row lock via $queryRaw)
       const lockedProvider = await lockProvider(tx, instructor.id);
 
       if (!lockedProvider) {
         throw new Error('Provider not found during sync');
       }
 
-      // 2. Lock current subscription FOR UPDATE via $queryRaw
-      const lockedSubscriptions = await tx.$queryRaw<any[]>`
+      // Step 2: Lock ALL current/eligible subscriptions FOR UPDATE (Rev7: full inventory)
+      // CRITICAL: Must lock the complete set, not just the pre-transaction snapshot.
+      // The pre-transaction activeSubscription read can become stale while Stripe is queried.
+      const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
         SELECT * FROM "Subscription"
-        WHERE "id" = ${activeSubscription.id}
+        WHERE "providerId" = ${lockedProvider.id}
+          AND "status" != 'CANCELLED'
         FOR UPDATE
       `;
-      const lockedSubscription = lockedSubscriptions[0] ?? null;
 
-      if (!lockedSubscription) {
-        throw new Error('Subscription not found during sync');
+      // Post-lock re-read to get authoritative state after lock acquired
+      const currentSubscriptions = (await Promise.all(
+        currentSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
+      )).filter((s): s is NonNullable<typeof s> => s !== null);
+
+      // Step 3: 0/1/>1 invariant (fail-closed on multiple current subscriptions)
+      if (currentSubscriptions.length > 1) {
+        throw new Error(
+          `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions — failing closed`
+        );
       }
 
-      // 3. Validate ownership (subscription belongs to this provider)
+      // Step 4: Identify the subscription that matches the Stripe ID we just fetched
+      // Use the post-lock re-read set, not the pre-transaction activeSubscription snapshot
+      const lockedSubscription = currentSubscriptions.find(
+        s => (s as any).stripeSubscriptionId === activeSubscription.stripeSubscriptionId
+      ) ?? currentSubscriptions[0] ?? null;
+
       if (!lockedSubscription) {
-        throw new Error('Subscription not found during sync');
+        throw new Error('Subscription not found under lock during sync');
       }
+
+      // Step 5: Ownership validation
       if (lockedSubscription.providerId !== lockedProvider.id) {
-        throw new Error('Subscription ownership mismatch');
+        throw new Error('Subscription ownership mismatch during sync');
       }
 
-      // 4. Update Provider record (already locked)
+      // Step 6: Mutate Provider (already locked)
       await tx.provider.update({
         where: { id: instructor.id },
         data: {
@@ -166,9 +186,9 @@ export async function POST(req: NextRequest) {
         } as any,
       });
 
-      // 5. Update Subscription record (already locked)
+      // Step 7: Mutate Subscription (already locked)
       await tx.subscription.update({
-        where: { id: activeSubscription.id },
+        where: { id: lockedSubscription.id },
         data: {
           tier: tier as any,
           status: stripeStatus as any,

@@ -146,31 +146,26 @@ export async function cancelSubscription(
   const newStatus = mode === 'immediate' ? 'CANCELLED' : undefined; // period_end keeps current status
 
   /**
-   * SUB-06-A Architecture: Provider-first FOR UPDATE locking
-   * 
+   * SUB-06-A Rev7: Provider-first FOR UPDATE locking with full current-subscription inventory
+   *
    * Race condition: After Stripe cancellation, webhook handlers can process
    * subscription.updated or subscription.deleted events concurrently with this
-   * local DB update, causing lost updates or inconsistent state.
-   * 
-   * Locking order:
-   * 1. Provider FOR UPDATE (by id)
-   * 2. Subscription FOR UPDATE (by id)
-   * 3. Ownership validation
-   * 4. Mutations (Subscription + Provider if immediate)
-   * 
-   * This ensures:
-   * - Provider state locked before lifecycle mutations
-   * - Concurrent webhooks serialize on Provider lock
-   * - Subscription ownership validated before mutation
-   * - No lost updates between cancellation and webhook handler
-   * 
-   * Note: Stripe cancellation intentionally OUTSIDE transaction (lines 123-151)
-   * to avoid long-held locks during external API calls. Transaction locks prevent
-   * race conditions during the mutation phase.
+   * local DB update.
+   *
+   * Locking order (Rev7):
+   * 1. Provider SELECT ... FOR UPDATE (lockProvider — $queryRaw)
+   * 2. ALL current/eligible subscriptions FOR UPDATE (WHERE status != 'CANCELLED')
+   * 3. Post-lock re-read (authoritative state after lock acquired)
+   * 4. 0/1/>1 invariant check — fail closed if >1 current subscription
+   * 5. Identify target subscription from post-lock set (not pre-tx findFirst snapshot)
+   * 6. Ownership validation
+   * 7. Mutations (Subscription + Provider if immediate)
+   *
+   * Stripe cancellation intentionally OUTSIDE transaction (lines above) to avoid
+   * long-held locks during external API calls.
    */
   await prisma.$transaction(async (tx) => {
-    // 1. Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE via lockProvider()
-    // This serializes with concurrent webhook handlers (subscription.updated / .deleted)
+    // Step 1: Lock Provider FOR UPDATE (actual PostgreSQL row lock via $queryRaw)
     const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
     const lockedProvider = await lockProvider(tx, providerId);
 
@@ -178,35 +173,55 @@ export async function cancelSubscription(
       throw new Error('Provider not found during cancellation');
     }
 
-    // 2. Lock Subscription FOR UPDATE via $queryRaw — actual PostgreSQL row lock
-    const lockedSubscriptions = await tx.$queryRaw<any[]>`
+    // Step 2: Lock ALL current/eligible subscriptions FOR UPDATE (Rev7: full inventory)
+    // CRITICAL: Must lock the complete set — the pre-tx findFirst snapshot can become
+    // stale during the Stripe API call window above.
+    const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
       SELECT * FROM "Subscription"
-      WHERE "id" = ${subscription.id}
+      WHERE "providerId" = ${lockedProvider.id}
+        AND "status" != 'CANCELLED'
       FOR UPDATE
     `;
-    const lockedSubscription = lockedSubscriptions[0] ?? null;
 
-    if (!lockedSubscription) {
-      throw new Error('Subscription not found during cancellation');
+    // Step 3: Post-lock re-read to get authoritative state after lock acquired
+    const currentSubscriptions = (await Promise.all(
+      currentSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
+    )).filter((s): s is NonNullable<typeof s> => s !== null);
+
+    // Step 4: 0/1/>1 invariant — fail closed on multiple current subscriptions
+    if (currentSubscriptions.length > 1) {
+      throw new Error(
+        `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions — failing closed`
+      );
     }
 
-    // 3. Validate ownership
+    // Step 5: Identify the target subscription from the post-lock set
+    // Match by id from the pre-tx snapshot; if the pre-tx sub was already cancelled
+    // (concurrent webhook), it will not appear in currentSubscriptions — fail gracefully.
+    const lockedSubscription = currentSubscriptions.find(s => s.id === subscription.id) ?? null;
+
+    if (!lockedSubscription) {
+      // Concurrent webhook already processed this cancellation — idempotent exit
+      logger.info(`[subscription-cancel] Subscription ${subscription.id} no longer current under lock — skipping mutation`);
+      return;
+    }
+
+    // Step 6: Ownership validation
     if (lockedSubscription.providerId !== lockedProvider.id) {
       throw new Error('Subscription ownership mismatch during cancellation');
     }
 
-    // 4. Mutate Subscription (already locked)
+    // Step 7: Mutate Subscription (locked)
     await tx.subscription.update({
-      where: { id: subscription.id },
+      where: { id: lockedSubscription.id },
       data: {
-        // cancelledAt = "cancellation requested at" (SUB-25: field semantic clarification)
-        cancelAtPeriodEnd: mode === 'period_end' ? true : (subscription as any).cancelAtPeriodEnd,
+        cancelAtPeriodEnd: mode === 'period_end' ? true : (lockedSubscription as any).cancelAtPeriodEnd,
         cancelledAt: now,
         ...(newStatus ? { status: newStatus } : {}),
       },
     });
 
-    // 5. Mutate Provider if immediate cancellation (already locked)
+    // Step 8: Mutate Provider if immediate cancellation (locked)
     if (mode === 'immediate') {
       await tx.provider.update({
         where: { id: providerId },
