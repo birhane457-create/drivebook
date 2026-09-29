@@ -46,7 +46,7 @@ A writer is **NON-COMPLIANT** if it directly mutates lifecycle fields without th
 
 ## Writer Inventory
 
-### ✅ COMPLIANT WRITERS (2/12)
+### ✅ COMPLIANT WRITERS (4/12)
 
 #### 1. Stripe Webhook Handler - Subscription Events
 **Location:** `app/api/stripe/webhook/route.ts` → `processSubscriptionEvent()`  
@@ -104,7 +104,81 @@ Mutation
 
 ---
 
-### ❌ NON-COMPLIANT WRITERS (10/12)
+#### 3. Invoice Payment Succeeded Handler
+**Location:** `app/api/stripe/webhook/route.ts` → `handleInvoicePaymentSucceeded()`  
+**Lines:** 2023-2137  
+**Lifecycle Fields Mutated:**
+- `Subscription.status` → ACTIVE
+- `Provider.{subscriptionStatus, trialEndsAt}`
+
+**Compliance:** ✅ USES LIFECYCLE ARCHITECTURE (Rev 7)  
+**Locking Architecture:**
+```
+Pre-check (unlocked) for stripeCustomerId routing
+  ↓
+lockProviderAndSubscription() helper (Provider + Subscription FOR UPDATE)
+  ↓
+Ownership validation
+  ↓
+Multiple subscription detection (fail closed)
+  ↓
+CANCELLED protection (INV-2)
+  ↓
+Lifecycle policy validation (watermark enforcement)
+  ↓
+Mutation
+```
+
+**Evidence:**
+- Lines 2052-2057: Uses `lockProviderAndSubscription()` helper
+- Lines 2059-2069: Ownership validation
+- Lines 2071-2090: Fail-closed invariant checks
+- Lines 2092-2119: Lifecycle policy validation
+- Lines 2121-2135: Mutations after locks
+
+**Commit:** Already compliant (Rev 7 architecture)  
+**Test Coverage:** Future enhancement - concurrent invoice webhooks + manual sync
+
+---
+
+#### 4. Invoice Payment Failed Handler
+**Location:** `app/api/stripe/webhook/route.ts` → `handleInvoicePaymentFailed()`  
+**Lines:** 2154-2300  
+**Lifecycle Fields Mutated:**
+- `Subscription.status` → PAST_DUE
+- `Provider.subscriptionStatus` → PAST_DUE
+
+**Compliance:** ✅ USES LIFECYCLE ARCHITECTURE (Rev 7)  
+**Locking Architecture:**
+```
+Pre-check (unlocked) for stripeCustomerId routing
+  ↓
+lockProviderAndSubscription() helper (Provider + Subscription FOR UPDATE)
+  ↓
+Ownership validation
+  ↓
+Multiple subscription detection (fail closed)
+  ↓
+CANCELLED protection (INV-2)
+  ↓
+Lifecycle policy validation (watermark enforcement)
+  ↓
+Mutation
+```
+
+**Evidence:**
+- Lines 2183-2191: Uses `lockProviderAndSubscription()` helper
+- Lines 2197-2207: Ownership validation
+- Lines 2209-2228: Fail-closed invariant checks
+- Lines 2230-2259: Lifecycle policy validation
+- Lines 2261-2273: Mutations after locks
+
+**Commit:** Already compliant (Rev 7 architecture)  
+**Test Coverage:** Future enhancement - concurrent invoice failure webhooks + cancellation
+
+---
+
+### ❌ NON-COMPLIANT WRITERS (7/12)
 
 #### 3. Instructor Subscription Route - Tier Change
 **Location:** `app/api/instructor/subscription/route.ts`  
@@ -244,89 +318,90 @@ await prisma.$transaction(async (tx) => {
 
 ---
 
-#### 7. Invoice Payment Succeeded Handler
+#### 7. Invoice Payment Succeeded Handler ✅ ALREADY COMPLIANT
 **Location:** `app/api/stripe/webhook/route.ts`  
-**Lines:** 2022-2060 (`handleInvoicePaymentSucceeded()`)  
+**Lines:** 2023-2137 (`handleInvoicePaymentSucceeded()`)  
 **Lifecycle Fields Mutated:**
 - `Subscription.status` → ACTIVE
 - `Provider.{subscriptionStatus, trialEndsAt}`
 
-**Issue:** Uses `updateMany` without Provider FOR UPDATE, separate `findFirst` for provider lookup  
-**Race Condition:** Can race with subscription event handlers
-
-**Code:**
-```typescript
-await tx.subscription.updateMany({
-  where: { stripeSubscriptionId: subscription },
-  data: { status: 'ACTIVE' }
-});
-const subscriptionRecord = await tx.subscription.findFirst({ ... });
-if (subscriptionRecord?.providerId) {
-  await tx.provider.update({ ... });
-}
+**Compliance:** ✅ **ALREADY COMPLIANT** - Uses SUB-06-A architecture with full gates  
+**Locking Architecture:**
+```
+Pre-check (unlocked) for stripeCustomerId routing
+  ↓
+lockProviderAndSubscription() helper (Provider + Subscription FOR UPDATE)
+  ↓
+Ownership validation (subscription.providerId === provider.id)
+  ↓
+Multiple subscription detection (fail closed if >1)
+  ↓
+CANCELLED protection (INV-2: reject reactivation)
+  ↓
+Lifecycle policy validation (watermark enforcement, INV-3/INV-5)
+  ↓
+Mutation (Subscription + Provider)
 ```
 
-**Remediation Required:** Route through lifecycle helper OR add Provider-first locking
+**Evidence:**
+- Lines 2040-2050: Pre-check for Provider routing (immutable Stripe identity)
+- Lines 2052-2057: `lockProviderAndSubscription()` helper (Rev 7 architecture)
+- Lines 2059-2069: Ownership validation
+- Lines 2071-2090: Fail-closed invariant checks (multiple subs, CANCELLED protection)
+- Lines 2092-2119: Lifecycle policy validation with watermark enforcement
+- Lines 2121-2135: Mutations only after all locks and validations pass
+
+**Documentation:** Inline comments document SUB-06-A architecture gates  
+**Commit:** Already compliant (commit hash in git log)  
+**Status:** ✅ SOURCE-VERIFIED
 
 ---
 
-#### 8. Invoice Payment Failed Handler
-**Location:** `app/api/stripe/webhook/route.ts`  
-**Lines:** 2069-2105 (`handleInvoicePaymentFailed()`)  
-**Lifecycle Fields Mutated:**
-- `Subscription.status` → PAST_DUE
-- `Provider.subscriptionStatus` → PAST_DUE
-
-**Issue:** Same pattern as invoice succeeded - `updateMany` without Provider lock  
-**Race Condition:** Can race with subscription cancellation or reactivation
-
-**Code:**
-```typescript
-await tx.subscription.updateMany({
-  where: { stripeSubscriptionId: subscription },
-  data: { status: 'PAST_DUE' }
-});
-const subscriptionRecord = await tx.subscription.findFirst({ ... });
-if (subscriptionRecord) {
-  await tx.provider.update({ ... });
-}
-```
-
-**Remediation Required:** Route through lifecycle helper OR add Provider-first locking
-
----
-
-#### 9. Trial Expiry Cron
+#### 9. Trial Expiry Cron ✅ REMEDIATED (SOURCE-VERIFIED)
 **Location:** `app/api/cron/check-trial-expiry/route.ts`  
-**Lines:** 64-133 (expiry loop with SUB-12-A CAS)  
+**Lines:** 64-133 (expiry loop)  
 **Lifecycle Fields Mutated:**
 - `Subscription.status` → EXPIRED
 - `Provider.{subscriptionStatus, subscriptionTier}`
 
-**Issue:** Uses SUB-12-A CAS protection (`updateMany` with status guard) but no Provider FOR UPDATE before Provider mutation  
-**Partial Compliance:** CAS prevents overwriting ACTIVE subscriptions, but Provider update is unprotected  
-**Race Condition:** Provider mutation can still race with webhook handler
+**Previous Issue:** SUB-12-A CAS protection present but no Provider FOR UPDATE lock before Provider mutation  
+**Race Condition:** Provider mutation could race with webhook handler
 
-**Code:**
-```typescript
-const expireResult = await tx.subscription.updateMany({
-  where: {
-    id: trial.id,
-    status: 'TRIAL',          // ✅ CAS guard
-    trialEndsAt: { lt: now }
-  },
-  data: { status: 'EXPIRED' }
-});
-if (expireResult.count === 0) return null; // ✅ Skip if already converted
-// ❌ No Provider lock before this mutation:
-await tx.provider.update({
-  where: { id: trial.providerId },
-  data: { subscriptionTier: 'BASIC', subscriptionStatus: 'EXPIRED' }
-});
+**Remediation Applied (Commit ba6429be):**
+- Added Provider FOR UPDATE lock before CAS-guarded expiry check (lines 70-81)
+- Preserved SUB-12-A CAS pattern (updateMany with status: 'TRIAL' guard, lines 83-90)
+- Provider mutation only executes if CAS succeeds (lines 98-106)
+- Combined SUB-06-A + SUB-12-A architecture (cooperative patterns)
+
+**Architecture:**
+```
+Provider FOR UPDATE (by id)
+  ↓
+CAS-guarded updateMany (status: 'TRIAL' AND trialEndsAt < now)
+  ↓
+If CAS count = 0: skip Provider mutation (concurrent conversion detected)
+  ↓
+If CAS count = 1: mutate Provider (locked, subscription verified TRIAL)
 ```
 
-**Special Consideration:** SUB-12-A CAS semantics may be acceptable if formally proven compatible with Rev 7  
-**Remediation Required:** Add Provider FOR UPDATE before Provider mutation, keep CAS for subscription
+**Evidence:**
+- Lines 70-81: Provider FOR UPDATE lock with subscription preload
+- Lines 83-90: CAS updateMany (SUB-12-A pattern preserved)
+- Lines 92-97: CAS failure detection (skip Provider mutation)
+- Lines 98-106: Provider mutation only after CAS success
+
+**Documentation:** Inline comments document combined SUB-06-A + SUB-12-A architecture  
+**Commit:** ba6429be  
+**Status:** ✅ SOURCE-VERIFIED (awaiting behavioral concurrency tests)
+
+**Test Requirements (NOT YET VERIFIED):**
+- Expired TRIAL → EXPIRED + Provider → BASIC
+- Non-expired TRIAL remains unchanged
+- Already-converted ACTIVE subscription not reverted
+- Concurrent expiry + successful conversion produces consistent Provider state
+- Concurrent cron invocations do not double-process
+- Unauthorized invocation returns 401
+- Audit/health behavior intact
 
 ---
 
@@ -435,8 +510,8 @@ await prisma.$transaction(async (tx) => {
 ## Summary Statistics
 
 - **Total Writers:** 12
-- **Compliant:** 2 (17%)
-- **Non-Compliant:** 10 (83%)
+- **Compliant:** 5 (42%) - Webhook handler, Registration, Invoice handlers (2), Trial expiry cron
+- **Non-Compliant:** 7 (58%)
 
 ## Source Verification Evidence
 
