@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS, getTrialEndDate } from '@/lib/config/subscriptions';
 import { cancelSubscription } from '@/lib/services/subscription-cancel';
+import { createOrReuseTrialSubscription } from '@/lib/services/subscription-lifecycle';
 
 
 export const dynamic = 'force-dynamic';
@@ -328,69 +329,25 @@ export async function POST(req: NextRequest) {
           : `Switched to ${plan.name} plan`,
       });
     } else {
-      // First-ever subscription — start fresh trial.
-      //
-      // SUB-02-A FIX: Both writes are inside a single $transaction.
-      // SUB-02-B FIX: Re-check inside the transaction that no concurrent request
-      // already created a subscription. If one is found (race), return it directly
-      // without creating a duplicate.
-      const trialEnd = getTrialEndDate(tier as any);
-
-      // Read stripeCustomerId before entering transaction (read-only, no locking needed).
-      const provider = await prisma.provider.findUnique({
-        where: { id: user.provider?.id },
-        select: { stripeCustomerId: true },
-      });
-
-      const result = await prisma.$transaction(async (tx) => {
-        // SUB-02-B: Re-check for an existing subscription INSIDE the transaction.
-        // With SERIALIZABLE isolation any concurrent transaction that reads the same
-        // absent row will either retry or get a serialization error, ensuring exactly
-        // one row is created.
-        const raceCheck = await tx.subscription.findFirst({
-          where: {
-            providerId: user.provider!.id,
-            status: { in: ['TRIAL', 'ACTIVE'] },
-          },
-        });
-
-        if (raceCheck) {
-          // A concurrent request already created the subscription — return it.
-          return { existing: raceCheck };
-        }
-
-        // F-13 FIX: Copy Provider's stripeCustomerId into Subscription row for
-        // authoritative webhook-to-trial correlation.
-        const newSub = await tx.subscription.create({
-          data: {
-            providerId: user.provider!.id,
-            tier,
-            status: 'TRIAL',
-            monthlyAmount: amount,
-            billingCycle,
-            currentPeriodStart: now,
-            currentPeriodEnd: periodEnd,
-            trialEndsAt: trialEnd,
-            stripeCustomerId: provider?.stripeCustomerId || null,
-          },
-        });
-
+      // SUB-06-A Writer #4: First-ever subscription — use lifecycle helper
+      // This implements Provider-first locking (Provider FOR UPDATE → subscription FOR UPDATE)
+      const subscription = await prisma.$transaction(async (tx) => {
+        const sub = await createOrReuseTrialSubscription(tx, user.provider!.id);
+        
+        // Sync Provider state with subscription (helper locks but doesn't update Provider)
         await tx.provider.update({
           where: { id: user.provider!.id },
           data: {
-            subscriptionTier: tier as any,
-            subscriptionStatus: 'TRIAL',
-            trialEndsAt: trialEnd,
-            maxProviders: plan.limits.providers,
+            subscriptionTier: sub.tier,
+            subscriptionStatus: sub.status,
+            trialEndsAt: sub.trialEndsAt,
           },
         });
-
-        return { created: newSub };
+        
+        return sub;
       }, {
         isolationLevel: 'Serializable',
       });
-
-      const subscription = ('existing' in result ? result.existing : result.created)!;
 
       return NextResponse.json({
         success: true,
