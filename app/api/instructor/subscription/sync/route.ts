@@ -160,14 +160,25 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Step 4: Identify the subscription that matches the Stripe ID we just fetched
-      // Use the post-lock re-read set, not the pre-transaction activeSubscription snapshot
+      // Step 4: Exact Stripe subscription identity match (TOCTOU guard)
+      // CRITICAL: The Stripe state fetched above belongs to activeSubscription.stripeSubscriptionId.
+      // A concurrent lifecycle operation (webhook, cancellation, migration) may have changed the
+      // Provider's current subscription from A → B between the Stripe fetch and this lock.
+      // Applying A's Stripe state to B is incorrect — B has a different identity.
+      // If A is absent from the post-lock set, do NOT fall back to B. Return a reconciliation
+      // result so the caller can re-sync after the concurrent operation settles.
       const lockedSubscription = currentSubscriptions.find(
         s => (s as any).stripeSubscriptionId === activeSubscription.stripeSubscriptionId
-      ) ?? currentSubscriptions[0] ?? null;
+      ) ?? null;
 
       if (!lockedSubscription) {
-        throw new Error('Subscription not found under lock during sync');
+        // The subscription this Stripe fetch was for is no longer the current subscription
+        // under lock. Do not mutate. Surface a reconciliation result.
+        return NextResponse.json({
+          synced: false,
+          reason: 'subscription_replaced_during_sync',
+          detail: `Stripe subscription ${activeSubscription.stripeSubscriptionId} is no longer the current subscription for this provider — a concurrent operation changed it. Retry to sync the new current subscription.`,
+        });
       }
 
       // Step 5: Ownership validation
