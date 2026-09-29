@@ -186,30 +186,28 @@ export async function POST(
         // Step 2: Apply SUB-06-A Provider-first locking architecture
         // Admin sync can race with concurrent webhook handlers processing the same Stripe events.
         // Pattern: Provider FOR UPDATE → Subscription FOR UPDATE → ownership validation → mutate
+        const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
+
         await prisma.$transaction(async (tx) => {
-          // Step 2a: Lock Provider FOR UPDATE (SUB-06-A architecture)
-          // This serializes with concurrent webhook handlers that also lock Provider first
-          const lockedProvider = await tx.provider.findUnique({
-            where: { id: params.id },
-            include: {
-              subscriptions: {
-                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
-                orderBy: { createdAt: 'desc' },
-              },
-            },
-          });
+          // Step 2a: Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE
+          // Uses lockProvider() which issues $queryRaw SELECT ... FOR UPDATE
+          // This serializes with concurrent webhook handlers processing same Stripe events
+          const lockedProvider = await lockProvider(tx, params.id);
 
           if (!lockedProvider) {
             throw new Error('Provider not found or deleted during sync');
           }
 
-          // Step 2b: Lock target subscription FOR UPDATE (if exists)
+          // Step 2b: Lock target subscription FOR UPDATE via $queryRaw (if exists)
           const subRow = instructor.subscriptions[0];
           let lockedSubscription = null;
           if (subRow) {
-            lockedSubscription = await tx.subscription.findUnique({
-              where: { id: subRow.id },
-            });
+            const lockedSubscriptions = await tx.$queryRaw<any[]>`
+              SELECT * FROM "Subscription"
+              WHERE "id" = ${subRow.id}
+              FOR UPDATE
+            `;
+            lockedSubscription = lockedSubscriptions[0] ?? null;
 
             if (!lockedSubscription) {
               throw new Error('Subscription row deleted during sync');
@@ -276,31 +274,24 @@ export async function POST(
         // SUB-06-A: Admin tier override can race with webhook handlers updating the same
         // Provider/Subscription lifecycle state. Apply Provider-first locking architecture.
         // Pattern: Provider FOR UPDATE → Subscriptions FOR UPDATE → mutate
+        const { lockProvider: lockProviderForOverride } = await import('@/lib/services/subscription-lifecycle');
+
         await prisma.$transaction(async (tx) => {
-          // Step 1: Lock Provider FOR UPDATE (SUB-06-A architecture)
-          // This serializes with concurrent webhook handlers
-          const lockedProvider = await tx.provider.findUnique({
-            where: { id: params.id },
-            include: {
-              subscriptions: {
-                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
-                orderBy: { createdAt: 'desc' },
-              },
-            },
-          });
+          // Step 1: Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE
+          // Uses lockProvider() which issues $queryRaw SELECT ... FOR UPDATE
+          const lockedProvider = await lockProviderForOverride(tx, params.id);
 
           if (!lockedProvider) {
             throw new Error('Provider not found or deleted during override');
           }
 
-          // Step 2: Lock target subscriptions FOR UPDATE
-          // Identify active/trial subscriptions that will be updated
-          const targetSubscriptions = await tx.subscription.findMany({
-            where: { 
-              providerId: params.id, 
-              status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] } 
-            },
-          });
+          // Step 2: Lock target subscriptions FOR UPDATE via $queryRaw
+          const targetSubscriptions = await tx.$queryRaw<any[]>`
+            SELECT * FROM "Subscription"
+            WHERE "providerId" = ${params.id}
+              AND "status" IN ('TRIAL', 'ACTIVE', 'PAST_DUE')
+            FOR UPDATE
+          `;
 
           // Step 3: Ownership validation (all subscriptions belong to locked Provider)
           for (const sub of targetSubscriptions) {
@@ -458,29 +449,26 @@ export async function POST(
         // Step 2: Apply SUB-06-A Provider-first locking architecture
         // Admin linking Stripe IDs can race with webhook handlers attaching Stripe IDs
         // to the same subscription row. Pattern: Provider FOR UPDATE → Subscription FOR UPDATE → mutate
+        const { lockProvider: lockProviderForLink } = await import('@/lib/services/subscription-lifecycle');
+
         await prisma.$transaction(async (tx) => {
-          // Step 2a: Lock Provider FOR UPDATE (SUB-06-A architecture)
-          const lockedProvider = await tx.provider.findUnique({
-            where: { id: params.id },
-            include: {
-              subscriptions: {
-                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
-                orderBy: { createdAt: 'desc' },
-              },
-            },
-          });
+          // Step 2a: Lock Provider FOR UPDATE — actual PostgreSQL SELECT ... FOR UPDATE
+          const lockedProvider = await lockProviderForLink(tx, params.id);
 
           if (!lockedProvider) {
             throw new Error('Provider not found or deleted during link operation');
           }
 
-          // Step 2b: Lock target subscription FOR UPDATE
-          let lockedSubscription = null;
+          // Step 2b: Lock target subscription FOR UPDATE via $queryRaw
+          let lockedSubscription: any = null;
           if (subscriptionRowId) {
-            // Specific row requested
-            lockedSubscription = await tx.subscription.findUnique({
-              where: { id: subscriptionRowId },
-            });
+            // Specific row requested — lock it directly
+            const rows = await tx.$queryRaw<any[]>`
+              SELECT * FROM "Subscription"
+              WHERE "id" = ${subscriptionRowId}
+              FOR UPDATE
+            `;
+            lockedSubscription = rows[0] ?? null;
 
             if (!lockedSubscription) {
               throw new Error('Subscription row not found or deleted during link operation');
@@ -491,14 +479,19 @@ export async function POST(
               throw new Error('Ownership violation: subscription does not belong to provider');
             }
           } else {
-            // Find most recent row without Stripe ID
-            lockedSubscription = await tx.subscription.findFirst({
-              where: { providerId: params.id, stripeSubscriptionId: null },
-              orderBy: { createdAt: 'desc' },
-            });
+            // Find most recent row without Stripe ID — lock it
+            const rows = await tx.$queryRaw<any[]>`
+              SELECT * FROM "Subscription"
+              WHERE "providerId" = ${params.id}
+                AND "stripeSubscriptionId" IS NULL
+              ORDER BY "createdAt" DESC
+              LIMIT 1
+              FOR UPDATE
+            `;
+            lockedSubscription = rows[0] ?? null;
 
             if (lockedSubscription) {
-              // Ownership validation (should always pass since we filtered by providerId)
+              // Ownership validation (should always pass since filtered by providerId)
               if (lockedSubscription.providerId !== lockedProvider.id) {
                 throw new Error('Ownership violation: subscription does not belong to provider');
               }
