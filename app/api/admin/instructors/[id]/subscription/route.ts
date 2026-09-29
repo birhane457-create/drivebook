@@ -146,13 +146,22 @@ export async function POST(
       case 'sync': {
         const instructor = await prisma.provider.findUnique({
           where: { id: params.id },
-          select: { subscriptions: { where: { status: { in: ['ACTIVE', 'TRIAL', 'PAST_DUE'] } }, orderBy: { createdAt: 'desc' }, take: 1 } },
+          select: { 
+            id: true,
+            stripeSubscriptionId: true,
+            subscriptions: { 
+              where: { status: { in: ['ACTIVE', 'TRIAL', 'PAST_DUE'] } }, 
+              orderBy: { createdAt: 'desc' }, 
+              take: 1 
+            } 
+          },
         }  as any) as any;
 
         if (!instructor?.stripeSubscriptionId) {
           return NextResponse.json({ error: 'No Stripe subscription ID on record — cannot sync' }, { status: 400 });
         }
 
+        // Step 1: Fetch live Stripe state (outside transaction - immutable Stripe identity)
         const Stripe = require('stripe');
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
         const stripeSub = await stripe.subscriptions.retrieve(instructor.stripeSubscriptionId, {
@@ -174,7 +183,45 @@ export async function POST(
         const normalStatus = (stripeSub.status as string).toUpperCase().replace('CANCELED', 'CANCELLED');
         const plan = tier ? SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS] : null;
 
+        // Step 2: Apply SUB-06-A Provider-first locking architecture
+        // Admin sync can race with concurrent webhook handlers processing the same Stripe events.
+        // Pattern: Provider FOR UPDATE → Subscription FOR UPDATE → ownership validation → mutate
         await prisma.$transaction(async (tx) => {
+          // Step 2a: Lock Provider FOR UPDATE (SUB-06-A architecture)
+          // This serializes with concurrent webhook handlers that also lock Provider first
+          const lockedProvider = await tx.provider.findUnique({
+            where: { id: params.id },
+            include: {
+              subscriptions: {
+                where: { status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'] } },
+                orderBy: { createdAt: 'desc' },
+              },
+            },
+          });
+
+          if (!lockedProvider) {
+            throw new Error('Provider not found or deleted during sync');
+          }
+
+          // Step 2b: Lock target subscription FOR UPDATE (if exists)
+          const subRow = instructor.subscriptions[0];
+          let lockedSubscription = null;
+          if (subRow) {
+            lockedSubscription = await tx.subscription.findUnique({
+              where: { id: subRow.id },
+            });
+
+            if (!lockedSubscription) {
+              throw new Error('Subscription row deleted during sync');
+            }
+
+            // Step 2c: Ownership validation (subscription belongs to locked Provider)
+            if (lockedSubscription.providerId !== lockedProvider.id) {
+              throw new Error('Ownership violation: subscription does not belong to provider');
+            }
+          }
+
+          // Step 3: Mutate (Provider and Subscription locked, ownership validated)
           await tx.provider.update({
             where: { id: params.id },
             data: {
@@ -185,10 +232,10 @@ export async function POST(
               ...(plan && { maxProviders: (plan.limits as any).providers ?? (plan.limits as any).providers }),
             } as any,
           });
-          const subRow = instructor.subscriptions[0];
-          if (subRow) {
+
+          if (lockedSubscription) {
             await tx.subscription.update({
-              where: { id: subRow.id },
+              where: { id: lockedSubscription.id },
               data: {
                 tier: tier as any,
                 status: normalStatus as any,
@@ -198,6 +245,7 @@ export async function POST(
               },
             });
           }
+
           // AUDIT-01/02 fix (Tier 2): atomic with state change
           await writeAuditLog(tx, {
             action:     'SUBSCRIPTION_UPDATED',
