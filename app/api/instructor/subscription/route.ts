@@ -214,51 +214,72 @@ export async function POST(req: NextRequest) {
       // Apply the same locking order used by webhook handlers to prevent race conditions
       // where concurrent webhooks or API operations could create inconsistent state.
       //
+      // CRITICAL: Uses actual PostgreSQL SELECT...FOR UPDATE row locks via $queryRaw.
+      //
       // Locking order:
-      // 1. Provider FOR UPDATE (establishes ownership lock)
-      // 2. Current subscription FOR UPDATE (prevents concurrent tier changes)
+      // 1. Provider FOR UPDATE (establishes ownership lock) - ACTUAL ROW LOCK
+      // 2. Current/eligible subscriptions FOR UPDATE - ACTUAL ROW LOCK
       // 3. Re-read after locks to get fresh state
       // 4. Ownership validation (subscription belongs to this provider)
       // 5. 0/1/>1 invariant check (exactly one TRIAL/ACTIVE subscription)
       // 6. Mutation (update both subscription and provider)
       const subscription = await prisma.$transaction(async (tx) => {
-        // Step 1: Lock Provider FOR UPDATE by providerId
+        // Step 1: Lock Provider FOR UPDATE using actual PostgreSQL row lock
+        const providersRaw = await tx.$queryRaw<any[]>`
+          SELECT * FROM "Provider"
+          WHERE "id" = ${user.provider!.id}
+          FOR UPDATE
+        `;
+
+        if (providersRaw.length === 0) {
+          throw new Error('Provider not found');
+        }
+
+        // Re-read locked Provider to get authoritative post-lock state
         const lockedProvider = await tx.provider.findUnique({
-          where: { id: user.provider!.id },
+          where: { id: providersRaw[0].id },
         });
 
         if (!lockedProvider) {
-          throw new Error('Provider not found after lock');
+          throw new Error('Provider disappeared after lock');
         }
 
-        // Step 2: Lock current subscription FOR UPDATE
-        const lockedSubscription = await tx.subscription.findUnique({
-          where: { id: existingSubscription.id },
-        });
+        // Step 2: Lock ALL current/eligible subscriptions FOR UPDATE using actual PostgreSQL row lock
+        // CRITICAL: This establishes the Provider's subscription ownership boundary
+        const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
+          SELECT * FROM "Subscription"
+          WHERE "providerId" = ${lockedProvider.id}
+            AND "status" != 'CANCELLED'
+          FOR UPDATE
+        `;
 
-        if (!lockedSubscription) {
-          throw new Error('Subscription not found after lock');
+        // Re-read locked subscriptions to get authoritative post-lock state
+        const currentSubscriptions = await Promise.all(
+          currentSubscriptionsRaw.map(sub =>
+            tx.subscription.findUnique({ where: { id: sub.id } })
+          )
+        );
+
+        const validCurrentSubscriptions = currentSubscriptions.filter((sub): sub is NonNullable<typeof sub> => sub !== null);
+
+        // Step 3: 0/1/>1 invariant check (CRITICAL)
+        if (validCurrentSubscriptions.length === 0) {
+          throw new Error('No current/eligible subscription found after lock');
+        }
+        if (validCurrentSubscriptions.length > 1) {
+          throw new Error(`INVARIANT VIOLATION: Provider has ${validCurrentSubscriptions.length} current subscriptions (expected 1)`);
         }
 
-        // Step 3: Re-read subscription list to check for concurrent changes
-        const currentSubscriptions = await tx.subscription.findMany({
-          where: {
-            providerId: user.provider!.id,
-            status: { in: ['TRIAL', 'ACTIVE', 'PAST_DUE'] },
-          },
-        });
+        const lockedSubscription = validCurrentSubscriptions[0];
 
-        // Step 4: Ownership validation
+        // Step 4: Ownership validation (defensive check)
         if (lockedSubscription.providerId !== lockedProvider.id) {
           throw new Error('Subscription ownership mismatch');
         }
 
-        // Step 5: 0/1/>1 invariant check
-        if (currentSubscriptions.length === 0) {
-          throw new Error('No active subscription found');
-        }
-        if (currentSubscriptions.length > 1) {
-          throw new Error(`Provider has ${currentSubscriptions.length} active subscriptions (expected 1)`);
+        // Step 5: Verify this is the subscription we expected to modify
+        if (lockedSubscription.id !== existingSubscription.id) {
+          throw new Error('Subscription identity mismatch - concurrent change detected');
         }
 
         // Step 6: Mutation - Update subscription then provider
