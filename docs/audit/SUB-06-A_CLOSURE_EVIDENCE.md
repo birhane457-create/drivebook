@@ -2,9 +2,10 @@
 
 **Finding:** No Provider-first FOR UPDATE locking on lifecycle writers  
 **Risk:** HIGH  
-**Final HEAD:** 3549303b  
+**Implementation verification HEAD:** 3549303b  
+**Final evidence commit:** 4d7443b0  
 **Date:** 2026-09-30  
-**Status:** ALL WRITERS FIX-VERIFIED — pending final independent closure assessment
+**Status:** ✅ CLOSED — independently assessed at 4d7443b0
 
 ---
 
