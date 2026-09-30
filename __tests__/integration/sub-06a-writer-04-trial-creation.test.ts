@@ -33,6 +33,26 @@ vi.mock('next-auth', () => ({
   getServerSession: vi.fn(),
 }));
 
+// Mock Stripe to prevent actual API calls in tests
+// The second concurrent request may reach the Stripe checkout path
+vi.mock('stripe', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test_mock' }),
+      },
+      checkout: {
+        sessions: {
+          create: vi.fn().mockResolvedValue({
+            url: 'https://checkout.stripe.com/test',
+            id: 'cs_test_mock',
+          }),
+        },
+      },
+    })),
+  };
+});
+
 describe('SUB-06-A Writer #4: Trial Creation Locking (Production Routes)', () => {
   // Test fixtures
   const testUserId = 'test-user-writer-04';
@@ -196,13 +216,20 @@ describe('SUB-06-A Writer #4: Trial Creation Locking (Production Routes)', () =>
         createTrialViaRoute(),
       ]);
 
-      // Both should succeed (one creates, one reuses)
+      // Both should succeed — first creates the trial, second finds it and
+      // either reuses it or routes to the Stripe checkout (add-payment) path.
+      // Both are valid 200 outcomes. The key invariant is exactly 1 subscription.
       expect(result1.status).toBe('fulfilled');
       expect(result2.status).toBe('fulfilled');
 
       if (result1.status === 'fulfilled' && result2.status === 'fulfilled') {
         expect(result1.value.response.status).toBe(200);
         expect(result2.value.response.status).toBe(200);
+        // One response is the trial creation, the other is either reuse or checkout
+        const data1 = result1.value.data;
+        const data2 = result2.value.data;
+        const bothSucceeded = data1.success !== false && data2.success !== false;
+        expect(bothSucceeded).toBe(true);
       }
 
       // Verify: Exactly ONE subscription was created (no duplicates)
