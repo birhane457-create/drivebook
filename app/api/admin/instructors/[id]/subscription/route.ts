@@ -1,7 +1,7 @@
-/**
+﻿/**
  * Admin Subscription Management API
- * GET  /api/admin/instructors/[id]/subscription — full subscription details + Stripe live data
- * POST /api/admin/instructors/[id]/subscription — admin override (tier change, force-sync, cancel, refund)
+ * GET  /api/admin/instructors/[id]/subscription â€” full subscription details + Stripe live data
+ * POST /api/admin/instructors/[id]/subscription â€” admin override (tier change, force-sync, cancel, refund)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,6 +14,7 @@ import { writeAuditLog, writeAuditLogSafe } from '@/lib/services/audit';
 import { logger } from '@/lib/logger';
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
+import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,8 +67,7 @@ export async function GET(
     let stripeError: string | null = null;
     if (instructor.stripeSubscriptionId) {
       try {
-        const Stripe = require('stripe');
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' as any });
         const stripeSub = await stripe.subscriptions.retrieve(instructor.stripeSubscriptionId, {
           expand: ['items.data.price', 'latest_invoice'],
         });
@@ -142,7 +142,7 @@ export async function POST(
     const adminEmail = session!.user.email || 'admin';
 
     switch (action) {
-      // ── Force-sync: pull live Stripe state into DB ─────────────────────
+      // â”€â”€ Force-sync: pull live Stripe state into DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       case 'sync': {
         const instructor = await prisma.provider.findUnique({
           where: { id: params.id },
@@ -158,12 +158,11 @@ export async function POST(
         }  as any) as any;
 
         if (!instructor?.stripeSubscriptionId) {
-          return NextResponse.json({ error: 'No Stripe subscription ID on record — cannot sync' }, { status: 400 });
+          return NextResponse.json({ error: 'No Stripe subscription ID on record â€” cannot sync' }, { status: 400 });
         }
 
         // Step 1: Fetch live Stripe state (outside transaction - immutable Stripe identity)
-        const Stripe = require('stripe');
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' as any });
         const stripeSub = await stripe.subscriptions.retrieve(instructor.stripeSubscriptionId, {
           expand: ['items.data.price'],
         });
@@ -185,8 +184,8 @@ export async function POST(
 
         // Step 2: Apply SUB-06-A Rev7 Provider-first locking with full current-sub inventory
         // Admin sync can race with concurrent webhook handlers processing the same Stripe events.
-        // Pattern: Provider FOR UPDATE → ALL current subs FOR UPDATE → post-lock re-read →
-        //          0/1/>1 invariant → ownership → mutate
+        // Pattern: Provider FOR UPDATE â†’ ALL current subs FOR UPDATE â†’ post-lock re-read â†’
+        //          0/1/>1 invariant â†’ ownership â†’ mutate
         const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
 
         await prisma.$transaction(async (tx) => {
@@ -199,7 +198,7 @@ export async function POST(
 
           // Step 2b: Lock ALL current/eligible subscriptions FOR UPDATE (Rev7: full inventory)
           // CRITICAL: Pre-transaction instructor.subscriptions snapshot is stale by the time
-          // we enter the transaction — a concurrent webhook may have mutated it during
+          // we enter the transaction â€” a concurrent webhook may have mutated it during
           // the Stripe API call above. Lock the complete current set instead.
           const currentSubscriptionsRaw = await tx.$queryRaw<any[]>`
             SELECT * FROM "Subscription"
@@ -213,17 +212,17 @@ export async function POST(
             currentSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
           )).filter((s): s is NonNullable<typeof s> => s !== null);
 
-          // Step 2d: 0/1/>1 invariant — fail closed on multiple current subscriptions
+          // Step 2d: 0/1/>1 invariant â€” fail closed on multiple current subscriptions
           if (currentSubscriptions.length > 1) {
             throw new Error(
-              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions — failing closed`
+              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions â€” failing closed`
             );
           }
 
           // Step 2e: Exact Stripe subscription identity match (TOCTOU guard)
           // CRITICAL: The Stripe state fetched above belongs to instructor.stripeSubscriptionId.
           // A concurrent lifecycle operation may have changed the Provider's current subscription
-          // from A → B between the pre-transaction Stripe fetch and this lock acquisition.
+          // from A â†’ B between the pre-transaction Stripe fetch and this lock acquisition.
           // Applying A's Stripe state to B would corrupt B's lifecycle identity.
           // If A is absent from the post-lock set, do NOT fall back to B.
           const lockedSubscription = currentSubscriptions.find(
@@ -235,7 +234,7 @@ export async function POST(
             // A concurrent operation replaced it. Do not mutate. Throw so the caller sees a
             // clear reconciliation failure rather than silently writing stale state.
             throw new Error(
-              `TOCTOU: Stripe subscription ${instructor.stripeSubscriptionId} is no longer the current subscription for provider ${lockedProvider.id} — a concurrent operation replaced it. Admin should re-sync after the concurrent operation settles.`
+              `TOCTOU: Stripe subscription ${instructor.stripeSubscriptionId} is no longer the current subscription for provider ${lockedProvider.id} â€” a concurrent operation replaced it. Admin should re-sync after the concurrent operation settles.`
             );
           }
 
@@ -284,7 +283,7 @@ export async function POST(
         return NextResponse.json({ success: true, message: `Synced: tier=${tier}, status=${normalStatus}`, tier, status: normalStatus });
       }
 
-      // ── Override tier: admin manually sets tier + status ───────────────
+      // â”€â”€ Override tier: admin manually sets tier + status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       case 'override_tier': {
         const { tier, status } = body;
         if (!tier || !['BASIC', 'PRO', 'STUDIO', 'PREMIUM'].includes(tier)) {
@@ -298,8 +297,8 @@ export async function POST(
         const newStatus = status || 'ACTIVE';
 
         // SUB-06-A Rev7: Provider-first locking with full current-sub inventory + 0/1/>1 invariant
-        // Pattern: Provider FOR UPDATE → ALL current subs FOR UPDATE → post-lock re-read →
-        //          0/1/>1 invariant (fail closed) → ownership → mutate
+        // Pattern: Provider FOR UPDATE â†’ ALL current subs FOR UPDATE â†’ post-lock re-read â†’
+        //          0/1/>1 invariant (fail closed) â†’ ownership â†’ mutate
         const { lockProvider: lockProviderForOverride } = await import('@/lib/services/subscription-lifecycle');
 
         await prisma.$transaction(async (tx) => {
@@ -323,12 +322,12 @@ export async function POST(
             targetSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
           )).filter((s): s is NonNullable<typeof s> => s !== null);
 
-          // Step 4: 0/1/>1 invariant — fail closed on multiple current subscriptions
+          // Step 4: 0/1/>1 invariant â€” fail closed on multiple current subscriptions
           // An override on a Provider with >1 current subscriptions indicates a pre-existing
           // invariant violation that must not be masked by blindly updating all rows.
           if (targetSubscriptions.length > 1) {
             throw new Error(
-              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${targetSubscriptions.length} current subscriptions — failing closed`
+              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${targetSubscriptions.length} current subscriptions â€” failing closed`
             );
           }
 
@@ -357,7 +356,7 @@ export async function POST(
             });
           }
 
-          // AUDIT-01/02 fix (Tier 2): atomic with tier override — security-sensitive
+          // AUDIT-01/02 fix (Tier 2): atomic with tier override â€” security-sensitive
           await writeAuditLog(tx, {
             action:     'SUBSCRIPTION_UPDATED',
             actorId:    session!.user.id!,
@@ -371,7 +370,7 @@ export async function POST(
         return NextResponse.json({ success: true, message: `Override applied: tier=${tier}, status=${newStatus}` });
       }
 
-      // ── Cancel: cancel at period end via Stripe ───────────────────────
+      // â”€â”€ Cancel: cancel at period end via Stripe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       case 'cancel': {
         const instructorForCancel = await prisma.provider.findUnique({
           where: { id: params.id },
@@ -379,7 +378,7 @@ export async function POST(
         }  as any) as any;
 
         if (!instructorForCancel?.stripeSubscriptionId) {
-          // No Stripe sub — delegate to cancelSubscription service (handles local-only path)
+          // No Stripe sub â€” delegate to cancelSubscription service (handles local-only path)
           const { cancelSubscription } = await import('@/lib/services/subscription-cancel');
           await cancelSubscription({
             providerId: params.id,
@@ -390,7 +389,7 @@ export async function POST(
           return NextResponse.json({ success: true, message: 'Subscription cancelled (no Stripe sub found)' });
         }
 
-        // Stripe cancel at period end — delegate to authoritative cancelSubscription service
+        // Stripe cancel at period end â€” delegate to authoritative cancelSubscription service
         // which enforces Rev7 Provider-first locking with full current-sub inventory
         const { cancelSubscription } = await import('@/lib/services/subscription-cancel');
         await cancelSubscription({
@@ -412,7 +411,7 @@ export async function POST(
         return NextResponse.json({ success: true, message: 'Subscription set to cancel at period end' });
       }
 
-      // ── Immediate cancel: cancel now in Stripe ────────────────────────
+      // â”€â”€ Immediate cancel: cancel now in Stripe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       case 'cancel_immediately': {
         const instructorForImmediateCancel = await prisma.provider.findUnique({
           where: { id: params.id },
@@ -423,7 +422,7 @@ export async function POST(
           return NextResponse.json({ error: 'No Stripe subscription found' }, { status: 400 });
         }
 
-        // Delegate to authoritative cancelSubscription service — enforces Rev7
+        // Delegate to authoritative cancelSubscription service â€” enforces Rev7
         // Provider-first locking with full current-sub inventory lock
         const { cancelSubscription } = await import('@/lib/services/subscription-cancel');
         await cancelSubscription({
@@ -447,7 +446,7 @@ export async function POST(
         return NextResponse.json({ success: true, message: 'Subscription cancelled immediately' });
       }
 
-      // ── Delete duplicate subscription rows ────────────────────────────
+      // â”€â”€ Delete duplicate subscription rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       case 'delete_subscription_row': {
         const { subscriptionRowId } = body;
         if (!subscriptionRowId) return NextResponse.json({ error: 'subscriptionRowId required' }, { status: 400 });
@@ -464,14 +463,13 @@ export async function POST(
         return NextResponse.json({ success: true, message: `Deleted subscription row ${subscriptionRowId}` });
       }
 
-      // ── Link Stripe subscription ID manually ──────────────────────────
+      // â”€â”€ Link Stripe subscription ID manually â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       case 'link_stripe_sub': {
         const { stripeSubscriptionId: newSubId, subscriptionRowId } = body;
         if (!newSubId) return NextResponse.json({ error: 'stripeSubscriptionId required' }, { status: 400 });
 
         // Step 1: Verify Stripe subscription exists (outside transaction - immutable Stripe identity)
-        const Stripe = require('stripe');
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' as any });
         let stripeSub: any;
         try {
           stripeSub = await stripe.subscriptions.retrieve(newSubId);
@@ -480,10 +478,10 @@ export async function POST(
         }
 
         // Step 2: Apply SUB-06-A Rev7 Provider-first locking with full current-sub inventory
-        // Linking a stripeSubscriptionId changes lifecycle identity — particularly sensitive.
+        // Linking a stripeSubscriptionId changes lifecycle identity â€” particularly sensitive.
         // A concurrent webhook could be attaching the same Stripe ID to a different row.
-        // Pattern: Provider FOR UPDATE → ALL current subs FOR UPDATE → post-lock re-read →
-        //          0/1/>1 invariant → identify target from post-lock set → ownership → mutate
+        // Pattern: Provider FOR UPDATE â†’ ALL current subs FOR UPDATE â†’ post-lock re-read â†’
+        //          0/1/>1 invariant â†’ identify target from post-lock set â†’ ownership â†’ mutate
         const { lockProvider: lockProviderForLink } = await import('@/lib/services/subscription-lifecycle');
 
         await prisma.$transaction(async (tx) => {
@@ -510,10 +508,10 @@ export async function POST(
             currentSubscriptionsRaw.map(s => tx.subscription.findUnique({ where: { id: s.id } }))
           )).filter((s): s is NonNullable<typeof s> => s !== null);
 
-          // Step 2d: 0/1/>1 invariant — fail closed on multiple current subscriptions
+          // Step 2d: 0/1/>1 invariant â€” fail closed on multiple current subscriptions
           if (currentSubscriptions.length > 1) {
             throw new Error(
-              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions — failing closed`
+              `INVARIANT VIOLATION: Provider ${lockedProvider.id} has ${currentSubscriptions.length} current subscriptions â€” failing closed`
             );
           }
 
@@ -568,7 +566,7 @@ export async function POST(
             });
           }
 
-          // AUDIT-01/02 fix (Tier 2): atomic with Stripe link — security-sensitive
+          // AUDIT-01/02 fix (Tier 2): atomic with Stripe link â€” security-sensitive
           await writeAuditLog(tx, {
             action:     'SUBSCRIPTION_UPDATED',
             actorId:    session!.user.id!,
