@@ -99,6 +99,7 @@ model Provider {
   maxProviders              Int                @default(1)
   stripeCustomerId          String?            @unique
   stripeAccountId           String?
+  stripeSubscriptionId      String?
   profileImage              String?
   // documentsVerified â€” used by extension-driven compliance flows (e.g. driving).
   // Null/false for business types that do not require document verification.

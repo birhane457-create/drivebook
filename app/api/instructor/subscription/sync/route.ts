@@ -15,6 +15,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS } from '@/lib/config/subscriptions';
+import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,9 +53,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ synced: false, reason: 'No Stripe subscription to sync' });
     }
 
-    const Stripe = require('stripe');
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2026-01-28.clover',
+      apiVersion: '2026-01-28.clover' as any,
     });
 
     // Fetch live subscription from Stripe
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
     const { lockProvider } = await import('@/lib/services/subscription-lifecycle');
 
     // SUB-06-A Rev7: Provider-first locking with full current-subscription inventory
-    await prisma.$transaction(async (tx) => {
+    const txResult = await prisma.$transaction(async (tx) => {
       // Step 1: Lock Provider FOR UPDATE (actual PostgreSQL row lock via $queryRaw)
       const lockedProvider = await lockProvider(tx, instructor.id);
 
@@ -210,7 +210,15 @@ export async function POST(req: NextRequest) {
           cancelAtPeriodEnd,
         },
       });
+
+      // Return null to signal normal completion (no early reconciliation exit)
+      return null;
     });
+
+    // If the transaction returned a NextResponse (TOCTOU reconciliation path), surface it
+    if (txResult !== null && txResult !== undefined) {
+      return txResult as NextResponse;
+    }
 
     console.log(`✅ Subscription synced for instructor ${instructor.id}: tier=${tier}, status=${stripeStatus}${tierChanged ? ' (tier changed)' : ''}${statusChanged ? ' (status changed)' : ''}`);
 
