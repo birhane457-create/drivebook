@@ -540,11 +540,21 @@ export async function POST(
               }
             }
           } else {
-            // Find the most recent current sub without a Stripe ID from the post-lock set
-            lockedSubscription = currentSubscriptions
+            // Find the most recent current sub from the post-lock set.
+            // Prefer a sub without a Stripe ID (initial attachment),
+            // but if all current subs already have a Stripe ID (concurrent write already
+            // completed), attach to the most recent current sub anyway to preserve
+            // Provider/Subscription consistency under concurrent calls.
+            const subsWithoutStripeId = currentSubscriptions
               .filter(s => !(s as any).stripeSubscriptionId)
-              .sort((a, b) => new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime())[0]
-              ?? null;
+              .sort((a, b) => new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime());
+
+            const subsWithStripeId = currentSubscriptions
+              .filter(s => !!(s as any).stripeSubscriptionId)
+              .sort((a, b) => new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime());
+
+            // Prefer unlinked row; fall back to most recent linked row to avoid torn state
+            lockedSubscription = subsWithoutStripeId[0] ?? subsWithStripeId[0] ?? null;
           }
 
           // Step 2f: Ownership validation
