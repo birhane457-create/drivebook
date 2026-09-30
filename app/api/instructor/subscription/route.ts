@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { SUBSCRIPTION_PLANS, getTrialEndDate } from '@/lib/config/subscriptions';
+import { SUBSCRIPTION_PLANS, getTrialEndDate, getStripePriceId } from '@/lib/config/subscriptions';
 import { cancelSubscription } from '@/lib/services/subscription-cancel';
 import { createOrReuseTrialSubscription } from '@/lib/services/subscription-lifecycle';
 
@@ -128,7 +128,6 @@ export async function POST(req: NextRequest) {
       });
 
       // Get price ID from config
-      const { getStripePriceId } = require('@/lib/config/subscriptions');
       const priceId = getStripePriceId(tier as any, billingCycle);
 
       // Get or create Stripe customer — use existing customer ID to prevent duplicates on retry
