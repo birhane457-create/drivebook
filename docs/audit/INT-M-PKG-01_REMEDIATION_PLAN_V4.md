@@ -405,6 +405,7 @@ No schema migration. No new model. `BookingIdempotencyKey` already exists.
 | T19a | Retry after PaymentIntent persistence failure | First attempt: Booking created, PaymentIntent created in Stripe, `paymentIntentId` DB update fails. Retry with same `idempotencyKey`: recovery path finds existing Booking via `BookingIdempotencyKey`; retrieves same Stripe intent via `pkg-${idempotencyKey}`; persists `paymentIntentId`; returns `clientSecret`. Exactly one Booking exists; exactly one PaymentIntent exists; successful webhook activates that Booking exactly once; exactly one wallet CREDIT. |
 | T19b | Retry after client/network timeout (server may have succeeded) | Client received no 201 response. Retry with same `idempotencyKey`: recovery path returns existing `clientSecret` if PaymentIntent reusable, or stored response if already confirmed. Exactly one purchase lifecycle. |
 | T19c | Repeat after successful purchase | Same `idempotencyKey` re-submitted after 201 already returned. Returns stored response. No new Booking; no new PaymentIntent; no additional wallet CREDIT. |
+| T19d | Concurrent same-key requests | Two simultaneous POST requests: same client, same provider, same packageType, same `idempotencyKey`. Database `@id` uniqueness on `BookingIdempotencyKey.key` ensures exactly one wins the `create` inside the transaction; the other gets P2002 → 409 and recovers the existing Booking. Final state: exactly 1 Booking; exactly 1 `BookingIdempotencyKey` row; exactly 1 Stripe PaymentIntent; exactly 1 eventual package CREDIT. |
 | T20 | Child booking after payment | `parentBookingId = booking.id`; `packageHoursUsed` increments; `packageHoursRemaining` decrements; wallet DEBIT created for lesson price |
 | T21 | `price`/`packageTotalPaid` invariant | `packageTotalPaid = serverPricing.total`; `price` per B1/B2; `booking.price` used for wallet DEBIT matches what was scheduled |
 | T22 | GET /api/client/packages/mobile regression | GET handler unchanged; no regression |
@@ -424,8 +425,10 @@ No schema migration. No new model. `BookingIdempotencyKey` already exists.
 | Webhook constraints | VERIFIED |
 | Existing Stripe idempotency | VERIFIED ABSENT — must add `idempotencyKey` param |
 | Recovery identity mechanism | VERIFIED — `BookingIdempotencyKey` already exists, same pattern as bulk route |
+| `BookingIdempotencyKey` DB uniqueness | VERIFIED — `key String @id` = PRIMARY KEY in PostgreSQL; database-enforced; concurrent inserts with same key → P2002 on second insert; atomic with Booking creation inside transaction |
+| Booking creation race | VERIFIED — atomic DB uniqueness; second concurrent same-key request gets P2002 → 409; recovers existing Booking by re-querying |
 | Booking cleanup on Stripe failure | VERIFIED — deletion (not FAILED; status absent from lifecycle) |
-| Remediation plan | SUBMITTED FOR REVIEW |
+| Remediation plan | TECHNICALLY READY — subject to B1/B2 decision |
 | B1/B2 product decision | REQUIRED BEFORE IMPLEMENTATION |
 | Implementation | NOT APPROVED |
 | Kill switch | REMAINS ENABLED |
