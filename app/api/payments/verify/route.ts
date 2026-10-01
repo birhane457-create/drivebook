@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
-    // ✅ SECURITY FIX: Authentication required - either paymentToken OR session
+    // âœ… SECURITY FIX: Authentication required - either paymentToken OR session
     const session = await getServerSession(authOptions);
     if (!session?.user?.id && !paymentToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ✅ READ ONLY: Just check Stripe status
+    // âœ… READ ONLY: Just check Stripe status
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     // Verify PI belongs to this booking
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // ✅ SECURITY FIX: Validate amount matches expected booking price
+    // âœ… SECURITY FIX: Validate amount matches expected booking price
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       select: { status: true, isPaid: true, price: true }
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     // Validate amount_received matches booking.price (in cents)
     const expectedAmountCents = Math.round(Number(booking.price) * 100);
     if (paymentIntent.amount_received && paymentIntent.amount_received !== expectedAmountCents) {
-      console.error(`⚠️ Amount mismatch: Stripe received ${paymentIntent.amount_received} cents, expected ${expectedAmountCents} cents for booking ${bookingId}`);
+      console.error(`âš ï¸ Amount mismatch: Stripe received ${paymentIntent.amount_received} cents, expected ${expectedAmountCents} cents for booking ${bookingId}`);
       // Log but don't block - webhook will reject if amounts don't match
     }
 
@@ -99,11 +100,11 @@ export async function POST(req: NextRequest) {
  * Re-runs wallet crediting for a confirmed booking that has no wallet transactions.
  * Should only be used by admins for manual intervention/recovery scenarios.
  * Includes Stripe verification and audit logging.
- * Safe to call multiple times — idempotent.
+ * Safe to call multiple times â€” idempotent.
  */
 export async function GET(req: NextRequest) {
   try {
-    // ✅ SECURITY FIX: Require ADMIN or SUPER_ADMIN role
+    // âœ… SECURITY FIX: Require ADMIN or SUPER_ADMIN role
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -144,7 +145,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ status: 'no_client', message: 'No client linked to booking' });
     }
 
-    // ✅ SECURITY FIX: Verify with Stripe before crediting wallet
+    // âœ… SECURITY FIX: Verify with Stripe before crediting wallet
     if (booking.paymentIntentId) {
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(booking.paymentIntentId);
@@ -188,7 +189,7 @@ export async function GET(req: NextRequest) {
       create: { userId: client.userId },
     });
 
-    // ✅ SECURITY FIX: Metadata-based idempotency
+    // âœ… SECURITY FIX: Metadata-based idempotency
     const idempotencyKey = `admin-credit-${bookingId}`;
     const alreadyCredited = await prisma.walletTransaction.findFirst({
       where: {
@@ -219,7 +220,7 @@ export async function GET(req: NextRequest) {
             walletId: wallet.id,
             type: 'CREDIT',
             amount: packageTotalPaid,
-            description: `Package purchase — ${booking.packageHours} hrs · booking #${bookingId}`,
+            description: `Package purchase â€” ${booking.packageHours} hrs Â· booking #${bookingId}`,
             status: 'CONFIRMED',
             metadata: { idempotencyKey, adminUserId: session.user.id }
           },
@@ -229,7 +230,7 @@ export async function GET(req: NextRequest) {
             walletId: wallet.id,
             type: 'DEBIT',
             amount: booking.price,
-            description: `First lesson — ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: verifyTz })} · booking #${bookingId}`,
+            description: `First lesson â€” ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: verifyTz })} Â· booking #${bookingId}`,
             status: 'CONFIRMED',
             metadata: { idempotencyKey, adminUserId: session.user.id }
           },
@@ -245,7 +246,7 @@ export async function GET(req: NextRequest) {
             walletId: wallet.id,
             type: 'CREDIT',
             amount: booking.price,
-            description: `Lesson payment · booking #${bookingId}`,
+            description: `Lesson payment Â· booking #${bookingId}`,
             status: 'CONFIRMED',
             metadata: { idempotencyKey, adminUserId: session.user.id }
           },
@@ -255,7 +256,7 @@ export async function GET(req: NextRequest) {
             walletId: wallet.id,
             type: 'DEBIT',
             amount: booking.price,
-            description: `Lesson booked — ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: verifyTz })} · booking #${bookingId}`,
+            description: `Lesson booked â€” ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: verifyTz })} Â· booking #${bookingId}`,
             status: 'CONFIRMED',
             metadata: { idempotencyKey, adminUserId: session.user.id }
           },

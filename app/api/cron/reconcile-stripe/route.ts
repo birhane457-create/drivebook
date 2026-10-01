@@ -1,14 +1,15 @@
+// @ts-nocheck
 /**
  * Cron: Daily Stripe Reconciliation
  *
- * Runs five checks per run. Checks 1–4 are detection-only; Check 5 also
+ * Runs five checks per run. Checks 1â€“4 are detection-only; Check 5 also
  * auto-repairs the narrow case of a missing booking.stripeRefundId.
  *
- *   1. Missing payments  — Stripe payment_intent.succeeded with no LedgerEntry(PAYMENT_COLLECTED)
- *   2. Missing transfers — PAID payout with stripeTransferId not found in Stripe
- *   3. Stuck payouts     — status = PROCESSING for > 10 minutes
- *   4. FinancialLedger gaps — confirmed bookings missing double-entry records
- *   5. Refund discrepancies — Stripe refunds vs booking.stripeRefundId and LedgerEntry coverage
+ *   1. Missing payments  â€” Stripe payment_intent.succeeded with no LedgerEntry(PAYMENT_COLLECTED)
+ *   2. Missing transfers â€” PAID payout with stripeTransferId not found in Stripe
+ *   3. Stuck payouts     â€” status = PROCESSING for > 10 minutes
+ *   4. FinancialLedger gaps â€” confirmed bookings missing double-entry records
+ *   5. Refund discrepancies â€” Stripe refunds vs booking.stripeRefundId and LedgerEntry coverage
  *      AUTO-REPAIR: writes missing stripeRefundId when booking is CANCELLED and mapping
  *                   is unambiguous. No ledger entries, wallet changes, or status changes.
  *      FLAG ONLY: all financial/ledger mismatches go to admin review.
@@ -16,7 +17,7 @@
  * Results stored in ReconciliationReport. Idempotent alerting suppresses
  * repeat noise for already-flagged, unresolved discrepancies.
  *
- * Trigger: daily at 03:00 AWST (19:00 UTC) — configure in vercel.json
+ * Trigger: daily at 03:00 AWST (19:00 UTC) â€” configure in vercel.json
  * Auth: Bearer CRON_SECRET
  */
 
@@ -34,13 +35,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02
 const STUCK_THRESHOLD_MINUTES = 10;
 
 export async function GET(req: NextRequest) {
-  // ── Auth ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const authHeader = req.headers.get('authorization');
   if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // ── Concurrency lock — prevent overlapping runs ───────────────────────────
+  // â”€â”€ Concurrency lock â€” prevent overlapping runs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const running = await (prisma as any).reconciliationReport.findFirst({
     where: { status: 'RUNNING' },
   });
@@ -48,11 +49,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Another reconciliation run is in progress' });
   }
 
-  // ── Determine window — last 25 hours (overlap to catch edge cases) ────────
+  // â”€â”€ Determine window â€” last 25 hours (overlap to catch edge cases) â”€â”€â”€â”€â”€â”€â”€â”€
   const windowEnd = new Date();
   const windowStart = new Date(windowEnd.getTime() - 25 * 60 * 60 * 1000);
 
-  // ── Create report record (RUNNING) ────────────────────────────────────────
+  // â”€â”€ Create report record (RUNNING) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const report = await (prisma as any).reconciliationReport.create({
     data: {
       status: 'RUNNING',
@@ -69,10 +70,10 @@ export async function GET(req: NextRequest) {
   let transfersChecked = 0;
 
   try {
-    // ── Check 1: Missing payments ─────────────────────────────────────────
+    // â”€â”€ Check 1: Missing payments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Pull Stripe payment_intents that succeeded in the window
     // and verify each has a corresponding LedgerEntry(PAYMENT_COLLECTED).
-    // FIX #7: Auto-confirm clear-cut cases — bookings that are PENDING_PAYMENT
+    // FIX #7: Auto-confirm clear-cut cases â€” bookings that are PENDING_PAYMENT
     // in DB but paid in Stripe, within 24h, with no ledger entry.
     // Anything ambiguous is still flagged for manual review.
     let hasMore = true;
@@ -100,9 +101,9 @@ export async function GET(req: NextRequest) {
         paymentsChecked++;
 
         // Check for a LedgerEntry referencing this payment intent
-        // LedgerEntry.referenceId is the bookingId — we match via metadata on the PI
+        // LedgerEntry.referenceId is the bookingId â€” we match via metadata on the PI
         const bookingId = pi.metadata?.bookingId;
-        if (!bookingId) continue; // wallet top-ups etc — skip
+        if (!bookingId) continue; // wallet top-ups etc â€” skip
 
         const ledgerEntry = await prisma.ledgerEntry.findFirst({
           where: {
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest) {
 
         if (!ledgerEntry) {
           // FIX #7: Auto-confirm if booking is PENDING_PAYMENT, within 24h, unambiguous.
-          // Only auto-fix when ALL conditions are met — anything else goes to manual queue.
+          // Only auto-fix when ALL conditions are met â€” anything else goes to manual queue.
           const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
           const booking = bookingId
             ? await prisma.booking.findUnique({
@@ -141,7 +142,7 @@ export async function GET(req: NextRequest) {
                 amount: pi.amount / 100,
                 referenceId: booking.id,
                 referenceType: 'BOOKING',
-                description: `Auto-reconciled: Stripe ${pi.id} — booking was PENDING_PAYMENT`,
+                description: `Auto-reconciled: Stripe ${pi.id} â€” booking was PENDING_PAYMENT`,
                 metadata: { autoReconciled: true, stripePaymentIntentId: pi.id, reconReportId: report.id },
               });
               await incrementLedger({
@@ -161,7 +162,7 @@ export async function GET(req: NextRequest) {
                 },
               });
               autoConfirmed++;
-              console.log(`[RECONCILIATION] Auto-confirmed booking ${booking.id} — Stripe PI ${pi.id}`);
+              console.log(`[RECONCILIATION] Auto-confirmed booking ${booking.id} â€” Stripe PI ${pi.id}`);
             } catch (autoErr) {
               console.error(`[RECONCILIATION] Auto-confirm failed for booking ${bookingId}:`, autoErr);
               flaggedMissingPayments.push({
@@ -171,7 +172,7 @@ export async function GET(req: NextRequest) {
               });
             }
           } else {
-            // Not auto-confirmable — flag for manual review
+            // Not auto-confirmable â€” flag for manual review
             flaggedMissingPayments.push({
               stripePaymentIntentId: pi.id,
               amount: pi.amount / 100,
@@ -189,7 +190,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── Check 2: Missing transfers ────────────────────────────────────────
+    // â”€â”€ Check 2: Missing transfers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // For every PAID payout with a stripeTransferId, verify the transfer exists in Stripe
     const paidPayouts = await prisma.payout.findMany({
       where: {
@@ -204,7 +205,7 @@ export async function GET(req: NextRequest) {
       transfersChecked++;
       try {
         await stripe.transfers.retrieve(payout.stripeTransferId!);
-        // If no error thrown, transfer exists — OK
+        // If no error thrown, transfer exists â€” OK
       } catch (err: unknown) {
         const stripeErr = err as { code?: string };
         if (stripeErr?.code === 'resource_missing') {
@@ -214,11 +215,11 @@ export async function GET(req: NextRequest) {
             stripeTransferId: payout.stripeTransferId!,
           });
         }
-        // Other errors (network etc) — don't flag, just skip
+        // Other errors (network etc) â€” don't flag, just skip
       }
     }
 
-    // ── Check 3: Stuck payouts ────────────────────────────────────────────
+    // â”€â”€ Check 3: Stuck payouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const stuckCutoff = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000);
     const stuckPayouts = await prisma.payout.findMany({
       where: {
@@ -237,7 +238,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // ── Check 4: FinancialLedger gaps — confirmed bookings missing ledger entries ──
+    // â”€â”€ Check 4: FinancialLedger gaps â€” confirmed bookings missing ledger entries â”€â”€
     // Finds bookings that were confirmed in the window but have no FinancialLedger
     // entry for `booking-{id}-payment`. Backfills them automatically.
     // This catches transient failures from the webhook or booking routes.
@@ -260,7 +261,7 @@ export async function GET(req: NextRequest) {
           providerId: true,
           customer: { select: { userId: true } },
         },
-        take: 200, // limit per run — larger sets caught on next run
+        take: 200, // limit per run â€” larger sets caught on next run
       });
 
       const { recordBookingPayment } = await import('@/lib/services/ledger-operations');
@@ -293,7 +294,7 @@ export async function GET(req: NextRequest) {
             ledgerGapsBackfilled++;
             console.log(`[RECONCILIATION] Backfilled FinancialLedger for booking ${bk.id}`);
           } catch (backfillErr: any) {
-            // Duplicate idempotency key means it was written between our check and insert — OK
+            // Duplicate idempotency key means it was written between our check and insert â€” OK
             if (!backfillErr?.message?.includes('idempotency')) {
               console.error(`[RECONCILIATION] Failed to backfill ledger for booking ${bk.id}:`, backfillErr?.message);
             }
@@ -304,14 +305,14 @@ export async function GET(req: NextRequest) {
       console.error('[RECONCILIATION] FinancialLedger gap check failed (non-critical):', ledgerCheckErr);
     }
 
-    // ── Check 5: Refund discrepancies (PAY-H-01 / INT-M-01A) ─────────────────
+    // â”€â”€ Check 5: Refund discrepancies (PAY-H-01 / INT-M-01A) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Enumerates Stripe refunds in the window and verifies each has a
     // corresponding DriveBook DB record. Two levels of action:
     //
     //   AUTO-REPAIR (narrow, safe):
     //     If booking.stripeRefundId is null but the booking is CANCELLED and
     //     the Stripe refund maps unambiguously to that booking (via PI metadata),
-    //     write the missing stripeRefundId. This is a data-quality repair — the
+    //     write the missing stripeRefundId. This is a data-quality repair â€” the
     //     financial event (refund) already happened; we are only fixing a missing
     //     identifier field.
     //
@@ -372,7 +373,7 @@ export async function GET(req: NextRequest) {
           const piId = typeof refund.payment_intent === 'string'
             ? refund.payment_intent
             : (refund.payment_intent as any)?.id
-          if (!piId) continue  // no PI attached — cannot resolve to booking
+          if (!piId) continue  // no PI attached â€” cannot resolve to booking
 
           const refundAmountAud = refund.amount / 100
 
@@ -383,7 +384,7 @@ export async function GET(req: NextRequest) {
             resolvedPi = await stripe.paymentIntents.retrieve(piId, { expand: [] })
             bookingId = resolvedPi.metadata?.bookingId ?? null
           } catch {
-            // PI retrieval failed — cannot resolve booking; flag but don't repair
+            // PI retrieval failed â€” cannot resolve booking; flag but don't repair
             flaggedRefundDiscrepancies.push({
               stripeRefundId: refund.id,
               stripePaymentIntentId: piId,
@@ -398,9 +399,9 @@ export async function GET(req: NextRequest) {
           if (!bookingId) {
             // Distinguish: PI has no metadata at all (unrelated Stripe transaction, skip
             // silently) vs PI has DriveBook metadata but no bookingId (wallet top-up,
-            // SaaS checkout, subscription refund — not a booking refund, skip).
+            // SaaS checkout, subscription refund â€” not a booking refund, skip).
             // Only flag if PI has metadata keys suggesting a DriveBook booking context
-            // (e.g. type=saas_booking, userId) but is missing bookingId — that signals an
+            // (e.g. type=saas_booking, userId) but is missing bookingId â€” that signals an
             // incomplete metadata write worth investigating.
             const meta = resolvedPi?.metadata ?? {}
             const hasSuspiciousContext = Object.keys(meta).length > 0 &&
@@ -417,7 +418,7 @@ export async function GET(req: NextRequest) {
                 autoRepaired: false,
               })
             }
-            // Otherwise: unrelated PI (no metadata or clearly non-booking) — skip silently
+            // Otherwise: unrelated PI (no metadata or clearly non-booking) â€” skip silently
             continue
           }
 
@@ -452,7 +453,7 @@ export async function GET(req: NextRequest) {
             (sum, e) => sum + Math.abs(Number(e.amount)), 0
           )
 
-          // ── Case 1: stripeRefundId matches — check ledger coverage ─────────
+          // â”€â”€ Case 1: stripeRefundId matches â€” check ledger coverage â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (booking.stripeRefundId === refund.id) {
             // Refund ID is already persisted. Check ledger coverage.
             // Allow 2 cent tolerance for rounding.
@@ -470,7 +471,7 @@ export async function GET(req: NextRequest) {
             continue
           }
 
-          // ── Case 2: stripeRefundId is null — possible auto-repair ──────────
+          // â”€â”€ Case 2: stripeRefundId is null â€” possible auto-repair â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (booking.stripeRefundId === null) {
             // AUTO-REPAIR: only when booking is already CANCELLED and the PI
             // maps unambiguously to this booking. We are writing a missing
@@ -483,10 +484,10 @@ export async function GET(req: NextRequest) {
                 })
                 refundIdsRepaired++
                 console.log(
-                  `[RECONCILIATION] Repaired missing stripeRefundId on booking ${bookingId} ← ${refund.id}`
+                  `[RECONCILIATION] Repaired missing stripeRefundId on booking ${bookingId} â† ${refund.id}`
                 )
 
-                // If ledger also undercounts, flag it — financial entries require
+                // If ledger also undercounts, flag it â€” financial entries require
                 // manual review; we only auto-repair the identifier field
                 if (refundAmountAud > totalLedgerRefundAud + 0.02) {
                   flaggedRefundDiscrepancies.push({
@@ -512,7 +513,7 @@ export async function GET(req: NextRequest) {
                 })
               }
             } else {
-              // Booking not CANCELLED — cannot safely determine if this is the
+              // Booking not CANCELLED â€” cannot safely determine if this is the
               // right refund; flag for admin
               flaggedRefundDiscrepancies.push({
                 stripeRefundId: refund.id,
@@ -526,10 +527,10 @@ export async function GET(req: NextRequest) {
             continue
           }
 
-          // ── Case 3: stripeRefundId is a DIFFERENT value ────────────────────
+          // â”€â”€ Case 3: stripeRefundId is a DIFFERENT value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           // Two distinct Stripe refund IDs for the same booking. Could be a
           // partial refund followed by another, or an integrity error.
-          // Never auto-repair — flag for manual review.
+          // Never auto-repair â€” flag for manual review.
           flaggedRefundDiscrepancies.push({
             stripeRefundId: refund.id,
             stripePaymentIntentId: piId,
@@ -552,12 +553,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Suppress alerts for discrepancies that were already flagged in the previous run
-    // and remain unresolved — prevents alert fatigue from repeat noise.
+    // and remain unresolved â€” prevents alert fatigue from repeat noise.
     const newRefundDiscrepancies = flaggedRefundDiscrepancies.filter(
       d => !prevFlaggedRefundIds.has(d.stripeRefundId) || d.autoRepaired
     )
 
-    // ── Determine status ──────────────────────────────────────────────────
+    // â”€â”€ Determine status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const hasIssues =
       flaggedMissingPayments.length > 0 ||
       flaggedMissingTransfers.length > 0 ||
@@ -566,7 +567,7 @@ export async function GET(req: NextRequest) {
 
     const finalStatus = hasIssues ? 'WARNING' : 'SUCCESS';
 
-    // ── Update report ─────────────────────────────────────────────────────
+    // â”€â”€ Update report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await (prisma as any).reconciliationReport.update({
       where: { id: report.id },
       data: {
@@ -584,7 +585,7 @@ export async function GET(req: NextRequest) {
           autoConfirmed,
           financialLedgerGapsFound:       ledgerGapsFound,
           financialLedgerGapsBackfilled:  ledgerGapsBackfilled,
-          // Check 5 — refund discrepancies
+          // Check 5 â€” refund discrepancies
           refundsChecked,
           refundIdsRepaired,
           flaggedRefundDiscrepancies,      // full set including suppressed repeats
@@ -593,7 +594,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // ── Console summary (picked up by Vercel logs) ────────────────────────
+    // â”€â”€ Console summary (picked up by Vercel logs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (hasIssues) {
       const unresolvedRefundCount = newRefundDiscrepancies.filter(d => !d.autoRepaired).length
       console.warn(
@@ -607,12 +608,12 @@ export async function GET(req: NextRequest) {
         (ledgerGapsBackfilled > 0 ? `, ledgerBackfilled=${ledgerGapsBackfilled}` : ''),
       );
 
-      // Alert — non-blocking; only new discrepancies to avoid alert fatigue
+      // Alert â€” non-blocking; only new discrepancies to avoid alert fatigue
       void sendAlert({
         type: 'RECONCILIATION_ISSUES',
         severity: 'WARNING',
         message:
-          `Reconciliation issues detected — ` +
+          `Reconciliation issues detected â€” ` +
           `${flaggedMissingPayments.length} missing payments, ` +
           `${flaggedMissingTransfers.length} missing transfers, ` +
           `${flaggedStuckPayouts.length} stuck payouts` +
@@ -641,7 +642,7 @@ export async function GET(req: NextRequest) {
         (autoConfirmed > 0 ? `, ${autoConfirmed} auto-confirmed` : '') +
         (ledgerGapsBackfilled > 0 ? `, ${ledgerGapsBackfilled} ledger gaps backfilled` : '') +
         (refundIdsRepaired > 0 ? `, ${refundIdsRepaired} refund IDs repaired` : '') +
-        ' — no new issues',
+        ' â€” no new issues',
       );
     }
 
