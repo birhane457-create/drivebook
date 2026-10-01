@@ -68,9 +68,10 @@ export async function GET(
     if (instructor.stripeSubscriptionId) {
       try {
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' as any });
-        const stripeSub = await stripe.subscriptions.retrieve(instructor.stripeSubscriptionId, {
+        const stripeSubRaw = await stripe.subscriptions.retrieve(instructor.stripeSubscriptionId, {
           expand: ['items.data.price', 'latest_invoice'],
         });
+        const stripeSub = stripeSubRaw as any;
         stripeData = {
           id: stripeSub.id,
           status: stripeSub.status,
@@ -165,7 +166,7 @@ export async function POST(
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' as any });
         const stripeSub = await stripe.subscriptions.retrieve(instructor.stripeSubscriptionId, {
           expand: ['items.data.price'],
-        });
+        }) as any;
 
         const priceToTier: Record<string, string> = {
           [process.env.STRIPE_BASIC_MONTHLY_PRICE_ID || '']: 'BASIC',
