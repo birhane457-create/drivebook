@@ -4,6 +4,8 @@ const nextConfig = {
     // Lint runs during builds — only errors (not warnings) will fail the build.
     // Run `npx next lint` locally to see all warnings.
     ignoreDuringBuilds: false,
+    // Exclude legacy archived code from linting
+    dirs: ['app', 'components', 'lib', 'pages'],
   },
   // Enable the instrumentation hook (instrumentation.ts) for startup env validation.
   // https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
