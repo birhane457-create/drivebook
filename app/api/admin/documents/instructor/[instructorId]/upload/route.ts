@@ -45,7 +45,7 @@ export async function POST(
     }
 
     // Handle upload (multipart)
-    const formData = await req.formData();
+    const formData = await req.formData() as any;
     const file = formData.get('file') as File | null;
     const field = formData.get('field') as string | null;
 
