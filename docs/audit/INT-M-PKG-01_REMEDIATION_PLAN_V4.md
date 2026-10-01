@@ -1,93 +1,89 @@
-# INT-M-PKG-01 — Remediation Plan v4
+# INT-M-PKG-01 — Remediation Plan v4 (final)
 
-**Status:** SUBMITTED FOR INDEPENDENT REVIEW — not approved for implementation  
-**Kill switch:** MUST REMAIN ENABLED (`ENABLE_MOBILE_PACKAGE_PURCHASE`) throughout  
-**Gate:** Implementation NOT APPROVED until B1/B2 product decision is recorded and this plan is accepted
+**Status:** WITHDRAWN — NOT FOR IMPLEMENTATION  
+**Reason:** The endpoint was designed for the legacy Expo mobile client. The current Capacitor mobile app does not call this endpoint. V4 assumed an active mobile product requirement that is not verified.  
+**Kill switch:** MUST REMAIN ENABLED (`ENABLE_MOBILE_PACKAGE_PURCHASE` unset = 503)  
 
----
+**Architectural finding (verified 2026-08-15):**
+- Current Capacitor app: wraps Next.js web app, uses NextAuth session auth, calls `app/api/public/bookings/bulk` for package purchase. Does NOT call `/api/client/packages/mobile`.
+- Legacy Expo app (`mobile/services/api.ts`, `mobile/screens/client/WalletScreen.tsx`): calls this endpoint. Is not the current mobile architecture.
+- Current client package purchase UI: `app/client-dashboard/page.tsx` → `AddCreditsModal` → `/api/client/wallet-topup-intent`. Package purchase via web booking wizard.
 
-## Changes from v3
+**Next decision (architectural, not technical):**
+- RETIRE: remove the obsolete POST handler. The kill switch becomes permanent. Current Capacitor app is unaffected. Legacy Expo code becomes dead.
+- REPLACE: only if an explicit product requirement emerges for a separate JWT-based mobile package-purchase API (e.g. a future non-Capacitor mobile client).
 
-- Orchestration failure recovery strategy corrected: client-supplied idempotency key
-  replaces `pkg-purchase-${booking.id}` which cannot survive retry across new Booking creation
-- Source-verified: `BookingIdempotencyKey` model already exists and is used by bulk booking
-  route — same pattern adopted here (no new infrastructure required)
-- `FAILED` removed as Booking cleanup status — source-verified absent from Booking lifecycle;
-  deletion is the correct cleanup on Stripe failure
-- T19/T19a/T19b/T19c rewritten per review requirements
-- B1/B2 webhook conditional written but explicitly blocked on product decision
+Until that decision is made: kill switch stays ON, finding stays OPEN.
 
 ---
 
-## Source Verification Findings (basis for v4 decisions)
+## Source-Determined Product Behavior
 
-### Booking status values (source-verified)
-Valid: `PENDING`, `PENDING_PAYMENT`, `CONFIRMED`, `COMPLETED`, `EXPIRED`, `CANCELLED`  
-`FAILED` does not exist in the Booking lifecycle. Cleanup on Stripe failure = **delete the Booking**.
+The mobile route is **Buy Later only**. This is not a design choice — it is what the source says:
 
-### `BookingIdempotencyKey` model (schema line 707)
-```prisma
-model BookingIdempotencyKey {
-  key       String   @id        // client-generated opaque unique key
-  bookingId String              // the Booking this key maps to
-  response  Json                // stored response for replay
-  email     String
-  createdAt DateTime @default(now())
-}
-```
-Already used by `app/api/public/bookings/bulk/route.ts` for the same purpose: client sends
-`Idempotency-Key` header, server stores `{ key, bookingId, response }` atomically inside the
-Booking creation transaction, retries replay the stored response.
+1. `WalletScreen.tsx` — "Purchase {pkg.name}" button with no lesson scheduling UI
+2. `mobile/services/api.ts` — `purchasePackage(packageId, paymentMethod)` sends no scheduled bookings
+3. GET handler returns `canScheduleMore: status === 'active' && remaining > 0` — lessons scheduled after purchase
+4. Existing disabled POST sets `startTime: new Date()` as a meaningless placeholder, not a real lesson
 
-The mobile route adopts the identical pattern. No new schema or infrastructure required.
-
-### `stripeService.createPaymentIntent()` (lib/services/stripe.ts line 105)
-Calls `stripe.paymentIntents.create(params)` with no second argument.
-The Stripe SDK accepts `stripe.paymentIntents.create(params, { idempotencyKey })`.
-This parameter is currently absent. Must be added to enable deterministic recovery.
-
-### Webhook Booking state machine (app/api/stripe/webhook/route.ts)
-- Only `PENDING_PAYMENT → CONFIRMED` is valid for `payment_intent.succeeded`
-- `CONFIRMED`/`COMPLETED` → idempotent replay (no error)
-- `EXPIRED` → CANCELLED + refund (outside transaction)
-- Any other status → error log, return (no state change)
-
-### Webhook DEBIT path (webhook route line 1113)
-```typescript
-description: `Lesson: ... ${new Date(booking.startTime!).toLocaleDateString(...)}`
-```
-Non-null assertion on `startTime`. Produces `Invalid Date` (not a crash) when `startTime = null`.
-Semantically wrong for B2 (Buy Later). Targeted conditional required if B2 is chosen.
+**Implications that are facts, not choices:**
+- `startTime = null`, `price = 0` at package purchase
+- `packageHoursRemaining = packageHours` (all hours available immediately)
+- Wallet after payment: CREDIT full `packageTotalPaid`; no first-lesson DEBIT
+- Webhook DEBIT block requires a `startTime && price > 0` guard to skip the DEBIT (existing code has `new Date(booking.startTime!)` non-null assertion that would produce `Invalid Date` on null — targeted fix required)
 
 ---
 
 ## Architecture Decisions (locked)
 
-1. **No `InstructorPackage` model** — packages remain booking bundles per existing architecture
-2. **API: `{ providerId, packageType, idempotencyKey }`** — semantic separation, not `packageId`
-3. **`PENDING_PAYMENT` at creation, `CONFIRMED` only on `payment_intent.succeeded`**
-4. **`paymentMethod !== 'manual'` as payment evidence: eliminated**
-5. **Kill switch stays enabled until all security tests pass**
-6. **`BookingIdempotencyKey` pattern for recovery** — client-supplied key, same as bulk route
+1. No `InstructorPackage` model — packages remain booking bundles per existing architecture
+2. API: `{ providerId, packageType, idempotencyKey }` — semantic separation, no `packageId`-as-provider
+3. `PENDING_PAYMENT` at creation; `CONFIRMED` only on `payment_intent.succeeded`
+4. `paymentMethod !== 'manual'` as payment evidence: eliminated entirely
+5. Kill switch stays enabled until all security tests pass
+6. `BookingIdempotencyKey` pattern for recovery — client-supplied key, same as bulk route
 
 ---
 
-## Open Decision Required Before Implementation
+## Source Verification Findings
 
-### B1 vs B2 — Product Decision
+**`BookingIdempotencyKey` (schema line 707):**
+```prisma
+model BookingIdempotencyKey {
+  key       String   @id    // PRIMARY KEY — database-enforced uniqueness
+  bookingId String
+  response  Json
+  email     String
+  createdAt DateTime @default(now())
+}
+```
+`@id` = PRIMARY KEY in PostgreSQL. Concurrent inserts with same key → P2002 on the second.
+Atomic creation with Booking inside one transaction prevents any window between the two.
 
-**B1 (Buy + schedule first lesson at purchase time)**
-- `startTime` non-null, `price = firstLessonPrice`
-- Existing webhook DEBIT path works unchanged
-- `packageHoursRemaining = packageHours - firstLessonDurationHours`
+**`stripeService.createPaymentIntent()` (lib/services/stripe.ts line 105):**
+```typescript
+const paymentIntent = await stripe.paymentIntents.create({ ... });
+// No second argument — no idempotency key currently passed
+```
+Must add optional `idempotencyKey` parameter forwarded to the Stripe SDK second argument.
 
-**B2 (Buy Later — no first lesson at purchase time)**
-- `startTime = null`, `price = 0`
-- Requires targeted webhook conditional (see Files Requiring Changes section)
-- `packageHoursRemaining = packageHours` (all hours available)
-- Wallet after payment: full `packageTotalPaid` CREDIT, no DEBIT
+**Booking status values (source-verified from webhook and bulk route):**
+`PENDING`, `PENDING_PAYMENT`, `CONFIRMED`, `COMPLETED`, `EXPIRED`, `CANCELLED`
+`FAILED` does not exist in the Booking lifecycle. Cleanup on Stripe failure = **delete**.
 
-**This decision must be recorded before any code is written.**
+**Webhook DEBIT path (webhook route line 1113):**
+```typescript
+description: `Lesson: ... ${new Date(booking.startTime!).toLocaleDateString(...)}`
+```
+Non-null assertion. Produces `Invalid Date` (not a crash) when `startTime = null`.
+Requires a `startTime && price > 0` conditional to skip DEBIT for Buy Later packages.
+
+**Webhook amount validation (webhook route line 1018):**
+```typescript
+const chargedAmount = (booking as any).packageTotalPaid || booking.price;
+```
+For packages, `packageTotalPaid` is the authoritative charged amount.
+`booking.price` is the first-lesson DEBIT amount. For Buy Later: `price = 0`, no DEBIT fires.
 
 ---
 
@@ -101,112 +97,85 @@ Semantically wrong for B2 (Buy Later). Targeted conditional required if B2 is ch
 }
 ```
 
-Server ignores/rejects any client-supplied: `price`, `packageHours`, `packageTotalPaid`,
-`status`, `isPaid`, `packageId`, `paymentMethod`.
+Server rejects (or ignores) any client-supplied: `price`, `packageHours`, `packageTotalPaid`,
+`status`, `isPaid`, `packageId`, `paymentMethod`, `startTime`, `endTime`.
 
-The `idempotencyKey` must be validated (non-empty string, reasonable length limit).
-It must be stored in `BookingIdempotencyKey` atomically with Booking creation.
+`idempotencyKey`: non-empty string, max 128 characters, validated server-side.
 
 ---
 
 ## Idempotent Orchestration
 
-### Recovery sequence on retry
+### Recovery on retry (idempotency key already exists)
 
 ```
-Client generates idempotencyKey (UUID) once per purchase attempt
-        ↓
 POST { providerId, packageType, idempotencyKey }
         ↓
-Server: BookingIdempotencyKey.findUnique({ key: idempotencyKey })
+BookingIdempotencyKey.findUnique({ key: idempotencyKey }) → EXISTS
         ↓
-  ┌─ EXISTS ─────────────────────────────────────────────────────────────────┐
-  │  bookingId = stored.bookingId                                             │
-  │  booking = Booking.findUnique({ id: bookingId })                         │
-  │                                                                           │
-  │  if booking.paymentIntentId exists:                                       │
-  │    intent = stripeService.retrievePaymentIntent(booking.paymentIntentId) │
-  │    if intent.status in reusableStatuses:                                  │
-  │      return { clientSecret: intent.client_secret, bookingId, ... }       │
-  │    // Intent not reusable (e.g. already succeeded) → replay stored resp  │
-  │    return stored.response                                                 │
-  │                                                                           │
-  │  if booking.paymentIntentId is null:                                      │
-  │    // Stripe call succeeded but DB update failed on first attempt         │
-  │    // Create PaymentIntent with deterministic idempotency key             │
-  │    intent = stripeService.createPaymentIntent({                           │
-  │      ...,                                                                 │
-  │      idempotencyKey: `pkg-${idempotencyKey}`  ← deterministic per key   │
-  │    })                                                                     │
-  │    persist booking.paymentIntentId                                        │
-  │    return { clientSecret, bookingId, ... }                                │
-  └───────────────────────────────────────────────────────────────────────────┘
+booking = Booking.findUnique({ id: stored.bookingId })
         ↓
-  ┌─ NOT EXISTS ─────────────────────────────────────────────────────────────┐
-  │  [normal first-attempt path — see below]                                 │
-  └──────────────────────────────────────────────────────────────────────────┘
+  ┌─ booking.paymentIntentId exists ─────────────────────────────────────┐
+  │  intent = stripeService.retrievePaymentIntent(booking.paymentIntentId)│
+  │  if intent.status in reusableStatuses:                                │
+  │    return { clientSecret, bookingId, ... }   ← reuse existing intent │
+  │  else:                                                                │
+  │    return stored.response                    ← replay stored response │
+  └───────────────────────────────────────────────────────────────────────┘
+        ↓
+  ┌─ booking.paymentIntentId is null ────────────────────────────────────┐
+  │  Stripe call succeeded, DB update failed on first attempt            │
+  │  intent = stripeService.createPaymentIntent({                        │
+  │    ..., idempotencyKey: `pkg-${idempotencyKey}`                      │
+  │  })  ← Stripe returns the same intent created on first attempt       │
+  │  await prisma.booking.update({ paymentIntentId: intent.id })         │
+  │  return { clientSecret, bookingId, ... }                             │
+  └───────────────────────────────────────────────────────────────────────┘
 ```
 
-### First-attempt path
+### First-attempt path (no existing key)
 
 ```
-Step 1: Validate all inputs and provider eligibility
+Step 1: Validate inputs + provider eligibility
         ↓
 Step 2: Compute server-side pricing
         calculatePackagePriceDynamic(provider.hourlyRate, hours, packageType)
         ↓
-Step 3: Create Booking (PENDING_PAYMENT) + store BookingIdempotencyKey
-        ATOMICALLY inside one prisma.$transaction()
-        — both writes succeed or both roll back
-        — BookingIdempotencyKey.key has @id (unique); concurrent duplicate → P2002 → 409
-        ↓
-        if this transaction fails → return error; no Stripe call made; no orphan
+Step 3: Create Booking + BookingIdempotencyKey atomically
+        prisma.$transaction([Booking.create, BookingIdempotencyKey.create])
+        — both succeed or both roll back
+        — concurrent same-key → P2002 on BookingIdempotencyKey → loser recovers via EXISTS path
+        — if transaction fails: return error; no Stripe call; no orphan
         ↓
 Step 4: Create Stripe PaymentIntent
-        idempotencyKey: `pkg-${idempotencyKey}`  ← deterministic per logical purchase
+        idempotencyKey: `pkg-${idempotencyKey}`  (deterministic per logical purchase)
         metadata.bookingId = booking.id
-        ↓
-        if Stripe call fails → delete Booking → return 500; no orphan
+        — if Stripe fails: delete Booking + delete idempotency key → return 500; clean state
         ↓
 Step 5: Persist booking.paymentIntentId
-        ↓
-        if DB update fails → PaymentIntent exists in Stripe but paymentIntentId not stored
-        → retry with same idempotencyKey enters recovery path (EXISTS branch above)
-        → same Stripe idempotency key `pkg-${idempotencyKey}` returns same intent
-        → paymentIntentId stored on second attempt
-        → no duplicate PaymentIntent
+        — if DB update fails: retry enters EXISTS → null path above → recovery succeeds
         ↓
 Step 6: Return { bookingId, clientSecret, packageTotalPaid, packageHours, status: 'PENDING_PAYMENT' }
 ```
 
-### Why `pkg-${idempotencyKey}` works across Booking recreations
-
-The Stripe idempotency key `pkg-${idempotencyKey}` is derived from the **client-generated
-purchase key**, not from `booking.id`. If Step 3 somehow produced two Bookings (concurrent
-requests with different Booking IDs), both would attempt to create a PaymentIntent with the
-same Stripe key — Stripe returns the first intent. Only one payment lifecycle exists.
-
-The `BookingIdempotencyKey` storage (Step 3, atomic with Booking creation) ensures that if
-two requests race with the same key, the second gets P2002 and returns 409 — the first
-Booking wins. Booking creation is therefore also idempotent at the application level.
+**DB concurrency** (prevents duplicate Bookings): `BookingIdempotencyKey.key @id` unique constraint.  
+**Cross-system idempotency** (prevents duplicate PaymentIntents): Stripe `idempotencyKey` on `paymentIntents.create`.  
+These address different failure modes. Neither replaces the other.
 
 ---
 
 ## Server Validation Chain
 
 ```
-validateMobileToken(req)
-  → auth.user.role === 'CLIENT'
-  → client = Customer.findFirst({ userId: auth.user.id })     (client must exist)
-  → providerId: non-empty string
-  → packageType: one of ['PACKAGE_6', 'PACKAGE_10', 'PACKAGE_15']
-  → idempotencyKey: non-empty string, max 128 chars
-  → Provider.findUnique({ id: providerId })                   (provider must exist)
+validateMobileToken(req)                                    existing
+  → auth.user.role === 'CLIENT'                             existing
+  → client = Customer.findFirst({ userId: auth.user.id })   existing
+  → Provider.findUnique({ id: providerId })
   → provider.approvalStatus === 'APPROVED'
   → provider.isActive === true
   → provider.acceptingBookings !== false
-  → checkProviderEligible(providerId, prisma)                 (doc expiry gate)
-  → provider.paymentMode !== 'DIRECT'
+  → checkProviderEligible(providerId, prisma)               existing helper (DOC-EXP-01)
+  → provider.paymentMode !== 'DIRECT'                       existing guard
   → provider.subscriptionStatus ACTIVE or (TRIAL + not expired)
 ```
 
@@ -219,37 +188,33 @@ const serverPricing = await calculatePackagePriceDynamic(
   provider.hourlyRate,
   PACKAGE_HOURS[packageType],   // from lib/config/packages.ts
   packageType,
-  false,                        // no test package
-  0
+  false, 0
 );
-// serverPricing.total     = packageTotalPaid (authoritative, never from client)
-// serverPricing.discountPercentage = lockedDiscountPct
+// serverPricing.total = packageTotalPaid — never from client
 ```
 
 ---
 
-## Booking Creation (atomic with idempotency key storage)
+## Booking Creation (atomic with idempotency key)
 
 ```typescript
 const { booking } = await prisma.$transaction(async (tx) => {
-  // Idempotency: attempt to store key atomically with Booking
-  // If key already exists (concurrent duplicate), @id constraint throws P2002 → 409
   const newBooking = await tx.booking.create({
     data: {
       providerId,
       customerId: client.id,
-      status: 'PENDING_PAYMENT',
+      status: 'PENDING_PAYMENT',                             // never 'CONFIRMED' at creation
       isPackageBooking: true,
       packageHours: PACKAGE_HOURS[packageType],
-      packageHoursRemaining: /* B1: hours - firstLessonHours | B2: hours */,
-      packageTotalPaid: serverPricing.total,    // authoritative charged amount
-      packageStatus: null,                       // NOT set by webhook; lifecycle field
+      packageHoursRemaining: PACKAGE_HOURS[packageType],     // all hours available (Buy Later)
+      packageTotalPaid: serverPricing.total,                 // authoritative; never from client
+      packageStatus: null,                                   // lifecycle field; webhook does not set it
       packageExpiryDate: new Date(Date.now() + 365 * 86400 * 1000),
-      price: /* B1: firstLessonPrice | B2: 0 */,
-      startTime: /* B1: scheduled | B2: null */,
+      price: 0,                                              // Buy Later; no first lesson at purchase
+      startTime: null,                                       // Buy Later; lessons scheduled later
       lockedHourlyRate: provider.hourlyRate,
       lockedDiscountPct: serverPricing.discountPercentage,
-      isPaid: false,
+      isPaid: false,                                         // never derived from paymentMethod
       createdBy: auth.user.id,
     }
   });
@@ -267,22 +232,19 @@ const { booking } = await prisma.$transaction(async (tx) => {
 });
 ```
 
-**`packageStatus` note:** The payment webhook does NOT establish `packageStatus`.
-Package status is established by the child-booking lifecycle
-(`confirm-package-booking` → `'active'`/`'completed'`) and expiry processing
-(cron → `'expired'`). Initial value `null` is handled by the GET packages route
+**`packageStatus` note:** The payment webhook does NOT establish `packageStatus`. It is set to
+`'active'` by `confirm-package-booking` when the first child lesson is confirmed, and to
+`'expired'` by the expiry cron. Initial value `null` is handled by the GET packages route
 as `packageStatus || 'active'`.
 
-**`price` vs `packageTotalPaid` invariant:**
-- `packageTotalPaid` = `serverPricing.total` — authoritative Stripe charge amount
-  (used by webhook line 1018: `chargedAmount = packageTotalPaid || booking.price`)
-- `price` = first lesson price (B1) or 0 (B2) — used for wallet DEBIT
-  (webhook line 1112: `amount: booking.price`)
-- These serve different purposes and must both be set explicitly.
+**`price` vs `packageTotalPaid`:**
+- `packageTotalPaid = serverPricing.total` — what Stripe charges; used by webhook amount
+  validation (`chargedAmount = packageTotalPaid || booking.price`, webhook line 1018)
+- `price = 0` — Buy Later; webhook DEBIT block skips DEBIT when `startTime = null && price = 0`
 
 ---
 
-## PaymentIntent Creation (after Booking exists)
+## PaymentIntent Creation
 
 ```typescript
 try {
@@ -293,7 +255,7 @@ try {
     commissionRate: await getCommissionRate(provider.subscriptionTier ?? 'BASIC'),
     customerEmail: auth.user.email ?? '',
     description: `Package: ${packageType} with ${provider.name}`,
-    idempotencyKey: `pkg-${idempotencyKey}`,  // deterministic per logical purchase
+    idempotencyKey: `pkg-${idempotencyKey}`,    // deterministic per logical purchase
   });
 
   await prisma.booking.update({
@@ -310,10 +272,8 @@ try {
   }, { status: 201 });
 
 } catch (stripeError) {
-  // Stripe call failed — delete Booking to avoid orphaned PENDING_PAYMENT row
-  // Deletion is safe: PaymentIntent was never created, webhook cannot fire
+  // Stripe failed — delete Booking and idempotency key so retry can attempt fresh
   await prisma.booking.delete({ where: { id: booking.id } }).catch(() => {});
-  // Also delete the idempotency key so retry can attempt fresh
   await prisma.bookingIdempotencyKey.delete({ where: { key: idempotencyKey } }).catch(() => {});
   return NextResponse.json({ error: 'Payment initialization failed' }, { status: 500 });
 }
@@ -321,36 +281,29 @@ try {
 
 ---
 
-## `stripeService.createPaymentIntent()` Change Required
+## Files Requiring Changes
+
+| File | Change | Scope |
+|------|--------|-------|
+| `lib/services/stripe.ts` | Add optional `idempotencyKey?: string` param; pass as second arg to `stripe.paymentIntents.create` | Small |
+| `app/api/client/packages/mobile/route.ts` | Replace POST handler with corrected implementation | Main change |
+| `app/api/stripe/webhook/route.ts` | Add `startTime && price > 0` guard before DEBIT block | One conditional |
+
+No schema migration. No new model. `BookingIdempotencyKey` already exists.
+
+### Webhook change (targeted)
 
 ```typescript
-interface CreatePaymentIntentParams {
-  // ... existing fields ...
-  idempotencyKey?: string;
-}
+// Current (line ~1112) — non-null assertion fails for Buy Later:
+// description: `Lesson: ${new Date(booking.startTime!).toLocaleDateString(...)}`,
 
-// In createPaymentIntent():
-const paymentIntent = await stripe.paymentIntents.create(
-  { amount, currency, ... },
-  idempotencyKey ? { idempotencyKey } : undefined
-);
-```
-
-This is the only change to the Stripe service. It is additive and does not affect existing callers.
-
----
-
-## Webhook Change (B2 only)
-
-If B2 is chosen, one targeted conditional in `app/api/stripe/webhook/route.ts`:
-
-```typescript
+// Corrected:
 if (isPackage && packageTotalPaid) {
   // CREDIT: full package amount
   await tx.walletTransaction.create({ type: 'CREDIT', amount: packageTotalPaid, ... });
 
-  // DEBIT: first lesson only if one was scheduled at purchase time (B1 behavior)
-  // B2 (Buy Later): no first lesson scheduled, no DEBIT
+  // DEBIT: first lesson only if one was scheduled at purchase (Buy+Schedule flow)
+  // Buy Later packages (startTime=null, price=0) skip this block entirely
   if (booking.startTime && Number(booking.price) > 0) {
     await tx.walletTransaction.create({
       type: 'DEBIT',
@@ -362,20 +315,8 @@ if (isPackage && packageTotalPaid) {
 }
 ```
 
-This removes the `!` non-null assertion and adds a guard. B1 behavior is unchanged
-(B1 has `startTime` and `price > 0`).
-
----
-
-## Files Requiring Changes
-
-| File | Change | Scope |
-|------|--------|-------|
-| `lib/services/stripe.ts` | Add optional `idempotencyKey` param | Small — one param, one SDK arg |
-| `app/api/client/packages/mobile/route.ts` | Replace POST handler | Main change |
-| `app/api/stripe/webhook/route.ts` | B2 only: conditional DEBIT | Small — one conditional |
-
-No schema migration. No new model. `BookingIdempotencyKey` already exists.
+This is a safe addition. Existing Buy+Schedule packages (from the web bulk flow) have
+non-null `startTime` and `price > 0`, so their behavior is unchanged.
 
 ---
 
@@ -389,28 +330,28 @@ No schema migration. No new model. `BookingIdempotencyKey` already exists.
 | T4 | Missing `packageType` | 400 |
 | T5 | Invalid `packageType` | 400 |
 | T6 | Missing `idempotencyKey` | 400 |
-| T7 | Non-string types | 400 |
-| T8 | Client supplies `price` | ignored; `booking.price` server-derived |
+| T7 | Non-string / malformed types | 400 |
+| T8 | Client supplies `price` | ignored; `booking.price = 0` |
 | T9 | Client supplies `packageHours` | ignored; `booking.packageHours = PACKAGE_HOURS[packageType]` |
 | T10 | Client supplies `status: 'CONFIRMED'` | ignored; `booking.status = 'PENDING_PAYMENT'` |
 | T11 | Client supplies `isPaid: true` | ignored; `booking.isPaid = false` |
-| T12 | Non-existent `providerId` | 404; `booking rows = 0`; `PaymentIntents = 0` |
-| T13 | Ineligible provider | 403; `booking rows = 0`; `wallet transactions = 0` |
+| T12 | Non-existent `providerId` | 404; booking rows = 0; PaymentIntents = 0 |
+| T13 | Ineligible provider | 403; booking rows = 0; wallet transactions = 0 |
 | T14 | Valid provider + `PACKAGE_10` | `booking.packageHours = 10`; `booking.packageTotalPaid` matches `calculatePackagePriceDynamic` exactly; `status = PENDING_PAYMENT`; `isPaid = false`; `clientSecret` returned |
 | T15 | Provider selection: Client A selects Provider B | `booking.customerId = Client A`; `booking.providerId = Provider B`; Provider B existing Bookings: count unchanged; Provider B wallet: unchanged; Provider B profile/subscription: unchanged |
-| T16 | `payment_intent.succeeded` webhook | `booking.status = CONFIRMED`; `booking.isPaid = true`; wallet CREDIT = `packageTotalPaid`; DEBIT per B1/B2 |
+| T16 | `payment_intent.succeeded` webhook | `booking.status = CONFIRMED`; `booking.isPaid = true`; wallet CREDIT = `packageTotalPaid`; no wallet DEBIT (Buy Later: `startTime = null`, `price = 0`) |
 | T17 | Webhook amount mismatch | rejected; `booking.status` remains `PENDING_PAYMENT` |
 | T18 | Duplicate webhook | idempotent; no second wallet CREDIT |
-| T19 | Stripe PaymentIntent creation fails | Booking deleted; `booking rows after = 0`; `isPaid = false`; no wallet CREDIT; 500 returned; no `clientSecret`; `BookingIdempotencyKey` deleted so retry can attempt fresh |
-| T19a | Retry after PaymentIntent persistence failure | First attempt: Booking created, PaymentIntent created in Stripe, `paymentIntentId` DB update fails. Retry with same `idempotencyKey`: recovery path finds existing Booking via `BookingIdempotencyKey`; retrieves same Stripe intent via `pkg-${idempotencyKey}`; persists `paymentIntentId`; returns `clientSecret`. Exactly one Booking exists; exactly one PaymentIntent exists; successful webhook activates that Booking exactly once; exactly one wallet CREDIT. |
-| T19b | Retry after client/network timeout (server may have succeeded) | Client received no 201 response. Retry with same `idempotencyKey`: recovery path returns existing `clientSecret` if PaymentIntent reusable, or stored response if already confirmed. Exactly one purchase lifecycle. |
-| T19c | Repeat after successful purchase | Same `idempotencyKey` re-submitted after 201 already returned. Returns stored response. No new Booking; no new PaymentIntent; no additional wallet CREDIT. |
-| T19d | Concurrent same-key requests | Two simultaneous POST requests: same client, same provider, same packageType, same `idempotencyKey`. Database `@id` uniqueness on `BookingIdempotencyKey.key` ensures exactly one wins the `create` inside the transaction; the other gets P2002 → 409 and recovers the existing Booking. Final state: exactly 1 Booking; exactly 1 `BookingIdempotencyKey` row; exactly 1 Stripe PaymentIntent; exactly 1 eventual package CREDIT. |
-| T20 | Child booking after payment | `parentBookingId = booking.id`; `packageHoursUsed` increments; `packageHoursRemaining` decrements; wallet DEBIT created for lesson price |
-| T21 | `price`/`packageTotalPaid` invariant | `packageTotalPaid = serverPricing.total`; `price` per B1/B2; `booking.price` used for wallet DEBIT matches what was scheduled |
-| T22 | GET /api/client/packages/mobile regression | GET handler unchanged; no regression |
-| T23 | B2 webhook DEBIT conditional (B2 only) | CREDIT fires; DEBIT does NOT fire when `startTime = null`; wallet balance = full `packageTotalPaid` |
-| T24 | Hostile IDOR baseline | Attacker crafts request with Provider B's ID. Assert: `unauthorized Booking rows = 0`; `unexpected wallet transactions = 0`; `unexpected PaymentIntents = 0`; Provider B's existing state unchanged. (Note: if Client A legitimately purchases from Provider B, one new Booking IS expected — T24 tests that no *unintended* state mutation occurs beyond the new Booking.) |
+| T19 | Stripe PaymentIntent creation fails | Booking deleted; booking rows after = 0; iPaid = false; no wallet CREDIT; BookingIdempotencyKey deleted; 500 returned |
+| T19a | Retry after PaymentIntent persistence failure | First attempt: Booking + idempotency key created; Stripe intent created; `paymentIntentId` DB update fails. Retry with same `idempotencyKey`: recovery finds existing Booking; retrieves same Stripe intent via `pkg-${idempotencyKey}`; persists `paymentIntentId`; returns `clientSecret`. Exactly 1 Booking; exactly 1 PaymentIntent; successful webhook confirms once; exactly 1 wallet CREDIT. |
+| T19b | Retry after client/network timeout | Client received no response. Retry with same `idempotencyKey`: returns existing `clientSecret` or stored response. Exactly 1 purchase lifecycle. |
+| T19c | Repeat after successful purchase | Same `idempotencyKey` after 201 returned. Returns stored response. No new Booking; no new PaymentIntent; no additional wallet CREDIT. |
+| T19d | Concurrent same-key requests | Two simultaneous POSTs: same client, same provider, same packageType, same `idempotencyKey`. Exactly 1 Booking; exactly 1 `BookingIdempotencyKey` row (P2002 on second); exactly 1 PaymentIntent; exactly 1 wallet CREDIT. |
+| T20 | Child lesson booking after payment | `parentBookingId = booking.id`; `packageHoursUsed` increments; `packageHoursRemaining` decrements; wallet DEBIT created for lesson price |
+| T21 | `price`/`packageTotalPaid` invariant | `booking.price = 0`; `booking.packageTotalPaid = serverPricing.total` |
+| T22 | GET /api/client/packages/mobile regression | no regression on GET handler |
+| T23 | Webhook DEBIT conditional | package CREDIT fires; DEBIT does NOT fire when `startTime = null`; wallet balance = full `packageTotalPaid` after payment |
+| T24 | Hostile IDOR baseline | Attacker crafts request with Provider B's ID. `unauthorized Booking rows = 0`; `unexpected wallet transactions = 0`; `unexpected PaymentIntents = 0`; Provider B's existing state unchanged. |
 
 ---
 
@@ -421,14 +362,14 @@ No schema migration. No new model. `BookingIdempotencyKey` already exists.
 | Finding | VERIFIED |
 | Production containment | VERIFIED |
 | Architecture | VERIFIED |
+| Buy Later as product behavior | VERIFIED — source-determined, not a design choice |
 | Pricing source | VERIFIED |
-| Webhook constraints | VERIFIED |
-| Existing Stripe idempotency | VERIFIED ABSENT — must add `idempotencyKey` param |
-| Recovery identity mechanism | VERIFIED — `BookingIdempotencyKey` already exists, same pattern as bulk route |
-| `BookingIdempotencyKey` DB uniqueness | VERIFIED — `key String @id` = PRIMARY KEY in PostgreSQL; database-enforced; concurrent inserts with same key → P2002 on second insert; atomic with Booking creation inside transaction |
-| Booking creation race | VERIFIED — atomic DB uniqueness; second concurrent same-key request gets P2002 → 409; recovers existing Booking by re-querying |
-| Booking cleanup on Stripe failure | VERIFIED — deletion (not FAILED; status absent from lifecycle) |
-| Remediation plan | TECHNICALLY READY — subject to B1/B2 decision |
-| B1/B2 product decision | REQUIRED BEFORE IMPLEMENTATION |
-| Implementation | NOT APPROVED |
+| Webhook constraints | VERIFIED — DEBIT conditional required |
+| Existing Stripe idempotency | VERIFIED ABSENT — `idempotencyKey` param must be added |
+| Recovery identity mechanism | VERIFIED — `BookingIdempotencyKey` already exists |
+| `BookingIdempotencyKey` DB uniqueness | VERIFIED — `key @id` = PRIMARY KEY; database-enforced |
+| Booking creation race | VERIFIED — DB uniqueness; second concurrent same-key → P2002 → recovers |
+| Booking cleanup on Stripe failure | VERIFIED — deletion (`FAILED` not a valid Booking status) |
+| Remediation plan | READY FOR INDEPENDENT REVIEW |
+| Implementation | NOT APPROVED until plan accepted |
 | Kill switch | REMAINS ENABLED |
