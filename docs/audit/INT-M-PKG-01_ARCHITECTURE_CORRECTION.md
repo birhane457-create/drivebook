@@ -1,7 +1,7 @@
 # INT-M-PKG-01 — Architecture Correction Notice
 
 **Date:** 2026-08-15  
-**Commit:** fef1d7dc  
+**Commit:** 57f875e1  
 **Supersedes:** specific claims in the documents listed below
 
 ---
@@ -33,7 +33,7 @@ or equivalent phrasing implying that the endpoint is part of the current product
 - `mobile/screens/client/WalletScreen.tsx` — called `purchasePackage()` → `POST /api/client/packages/mobile`
 - This codebase is still physically present in the repository but is not the current mobile architecture
 
-### Verification method
+### Verification method (57f875e1)
 Traced `app/client-dashboard/page.tsx` (current Capacitor client UI) to its API calls:
 - `fetch('/api/client/profile')`
 - `fetch('/api/client/wallet')`
