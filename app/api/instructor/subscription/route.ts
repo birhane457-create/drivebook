@@ -307,7 +307,7 @@ export async function POST(req: NextRequest) {
         });
 
         return updatedSub;
-      });
+      }, { timeout: 30000 });
 
       const daysLeft = existingSubscription.trialEndsAt
         ? Math.max(0, Math.ceil((new Date(existingSubscription.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
@@ -347,6 +347,7 @@ export async function POST(req: NextRequest) {
         return sub;
       }, {
         isolationLevel: 'Serializable',
+        timeout: 30000,
       });
 
       return NextResponse.json({

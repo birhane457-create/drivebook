@@ -279,7 +279,7 @@ export async function POST(
             targetId:   instructor.stripeSubscriptionId ?? params.id,
             metadata:   { adminAction: 'force_sync', adminEmail, tier, status: normalStatus, reason },
           });
-        });
+        }, { timeout: 30000 });
 
         return NextResponse.json({ success: true, message: `Synced: tier=${tier}, status=${normalStatus}`, tier, status: normalStatus });
       }
@@ -366,7 +366,7 @@ export async function POST(
             targetId:   `admin-override-${params.id}`,
             metadata:   { adminAction: 'override_tier', adminEmail, tier, status: newStatus, reason },
           });
-        });
+        }, { timeout: 30000 });
 
         return NextResponse.json({ success: true, message: `Override applied: tier=${tier}, status=${newStatus}` });
       }
@@ -586,7 +586,7 @@ export async function POST(
             targetId:   newSubId,
             metadata:   { adminAction: 'link_stripe_sub', adminEmail, stripeSubscriptionId: newSubId, reason },
           });
-        });
+        }, { timeout: 30000 });
 
         return NextResponse.json({ success: true, message: `Linked Stripe subscription ${newSubId}` });
       }
