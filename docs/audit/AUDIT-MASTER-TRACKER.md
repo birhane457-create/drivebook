@@ -1,7 +1,7 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 4.1 (MM-12 CLOSED with HTTP-500 follow-up tracked separately)
-**Last Updated:** 2026-09-24  
+**Version:** 4.3 (SUB-06-A-P2028 CLOSED; SUB-06-A-P40001 next)  
+**Last Updated:** 2026-10-02  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
