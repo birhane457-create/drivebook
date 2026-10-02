@@ -230,11 +230,17 @@ async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): P
 
     // INVOICE EVENTS
     case 'invoice.payment_succeeded':
-      await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice, idempotencyKey, event.created);
+      await withSerializableRetry(
+        () => handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice, idempotencyKey, event.created),
+        { operationName: 'webhook-invoice-payment-succeeded' }
+      );
       break;
 
     case 'invoice.payment_failed':
-      await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice, idempotencyKey, event.created);
+      await withSerializableRetry(
+        () => handleInvoicePaymentFailed(event.data.object as Stripe.Invoice, idempotencyKey, event.created),
+        { operationName: 'webhook-invoice-payment-failed' }
+      );
       break;
 
     // STRIPE CONNECT EVENTS
