@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
 
       // Return null to signal normal completion (no early reconciliation exit)
       return null;
-    });
+    }, { timeout: 30000 });
 
     // If the transaction returned a NextResponse (TOCTOU reconciliation path), surface it
     if (txResult !== null && txResult !== undefined) {

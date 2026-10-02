@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
           });
 
           return { updatedSub: { id: trial.id, status: 'EXPIRED' }, updatedInstructor };
-        });
+        }, { timeout: 30000 });
 
         if (result === null) {
           // Skipped — CAS detected concurrent conversion or deletion
