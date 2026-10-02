@@ -228,7 +228,7 @@ export async function cancelSubscription(
         data: { subscriptionStatus: 'CANCELLED' as any },
       });
     }
-  });
+  }, { timeout: 30000 });
 
   // AUDIT-01/02 fix (Tier 4): cancellation service — Stripe + DB already committed.
   // writeAuditLogSafe documents that this specific audit failure is non-critical
