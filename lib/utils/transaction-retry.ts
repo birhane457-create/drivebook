@@ -23,6 +23,23 @@ import { logger } from '@/lib/logger'
 const SERIALIZATION_ERROR_CODE = 'P2034'
 
 /**
+ * PostgreSQL error code 40001: could not serialize access due to concurrent update.
+ * Surfaces as a raw error message in Prisma when $queryRaw FOR UPDATE encounters
+ * lock contention in non-SERIALIZABLE transactions (e.g. the lockProvider() pattern).
+ * The losing transaction gets this error when the provider row is held by a concurrent
+ * transaction. A short retry will succeed once the lock is released.
+ */
+const PG_LOCK_CONFLICT_MESSAGE = '40001'
+
+function isP40001Error(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.message.includes(PG_LOCK_CONFLICT_MESSAGE) ||
+           error.message.includes('could not serialize access due to concurrent')
+  }
+  return false
+}
+
+/**
  * Known business-level error strings thrown inside transactions.
  * These must NEVER be retried — a retry would re-execute the callback
  * from the top, re-running balance checks, slot checks, etc., which
@@ -104,11 +121,12 @@ export async function withSerializableRetry<T>(
       }
 
       // Serialization conflict: eligible for retry
-      if (isSerializationError(error)) {
+      if (isSerializationError(error) || isP40001Error(error)) {
         lastError = error
+        const errorType = isSerializationError(error) ? 'P2034' : 'P40001'
         if (attempt < maxRetries) {
           const delay = backoffMs(attempt)
-          logger.info('Serialization conflict — retrying transaction', {
+          logger.info(`Serialization conflict (${errorType}) — retrying transaction`, {
             operation: opts.operationName,
             attempt: attempt + 1,
             maxRetries,
@@ -118,7 +136,7 @@ export async function withSerializableRetry<T>(
           continue
         }
         // Exhausted retries
-        logger.error('Serialization conflict — retries exhausted', {
+        logger.error(`Serialization conflict (${errorType}) — retries exhausted`, {
           operation: opts.operationName,
           totalAttempts: attempt + 1,
         })
