@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 4.5 (INT-M-01B CLOSED; MM-03 next)  
+**Version:** 4.6 (MM-03 CLOSED; MM-12-HTTP next)  
 **Last Updated:** 2026-08-15  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -202,7 +202,7 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 
 | ID | Title | Risk | Finding | Status |
 |---|---|---|---|---|
-| MM-03 | Customer payment intent — wallet top-up amount bounds | LOW | CONFIRMED | ⚠️ OPEN |
+| MM-03 | Customer payment intent — wallet top-up amount bounds | LOW | CONFIRMED | VERIFIED — hardcoded min($10)/max($10,000) ignored admin-configured walletTopUpMin/Max | `wallet-topup-intent/route.ts` — replaced hardcoded Zod bounds with runtime `getPlatformPricing()` check; added ZodError → 400 handler | 11/11 tests pass: B1–B6 bounds enforcement (incl. custom settings), B7 ZodError→400, B8–B9 auth, I1–I2 happy path. Exit 0. | ✅ CLOSED | `__tests__/integration/mm-03-wallet-topup-amount-bounds.test.ts` |
 | MM-12-HTTP | Concurrent same-key race HTTP 500 (not 409) | LOW | CONFIRMED | ⚠️ OPEN — API quality defect (parent MM-12 financial remediation CLOSED) |
 
 ---
