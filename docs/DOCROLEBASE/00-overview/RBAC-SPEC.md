@@ -3,6 +3,21 @@
 **Date:** August 2026  
 **Author:** Approved by product owner  
 
+> **APP-H-05 NOTE (2026-08-15):** This document uses the pre-Phase 4 permission names
+> (`users.instructors.*`, `users.clients.*`, `operations.test_centres.*`).
+> The canonical runtime names are in `lib/rbac/permissions.ts` which uses the renamed
+> values (`users.providers.*`, `users.customers.*`, `operations.extensions.*`).
+> **`lib/rbac/permissions.ts` is authoritative for all code.** This spec reflects the
+> design intent; the naming mapping is:
+>
+> | Spec name | Code name (`PERM.*`) |
+> |-----------|----------------------|
+> | `users.instructors.*` | `users.providers.*` |
+> | `users.clients.*` | `users.customers.*` |
+> | `operations.test_centres.*` | `operations.extensions.*` |
+>
+> This document will be updated to Phase 4 names in a future editorial pass.
+
 ---
 
 ## 0. Principles (non-negotiable)
