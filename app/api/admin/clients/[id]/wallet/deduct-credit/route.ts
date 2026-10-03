@@ -289,6 +289,21 @@ export async function POST(
           { status: 400 }
         );
       }
+      // MM-12-HTTP FIX: Prisma serialization failures (P2034) and PostgreSQL
+      // P40001 during the idempotency INSERT race should return 409, not 500.
+      // The client's idempotency key is still valid — a retry will succeed.
+      const isPrismaSerializationError =
+        err?.code === 'P2034' ||
+        err?.code === 'P2028' ||
+        err?.message?.includes('P40001') ||
+        err?.message?.includes('could not serialize') ||
+        err?.message?.includes('deadlock detected');
+      if (isPrismaSerializationError) {
+        return NextResponse.json(
+          { error: 'Request in progress — retry after a moment' },
+          { status: 409 }
+        );
+      }
       throw err;
     }
 
