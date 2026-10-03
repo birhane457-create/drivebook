@@ -158,7 +158,10 @@ afterAll(async () => {
     where: { wallet: { userId: testUser.id } },
   });
   await prisma.clientWallet.deleteMany({ where: { userId: testUser.id } });
-  await prisma.auditLog.deleteMany({ where: { actorId: testAdmin.id } });
+  // AUDIT-03: auditLog.deleteMany removed — trigger prevents deletion.
+  // AuditLog rows from this test are scoped to testAdmin.id which is unique
+  // per test run (created with TEST_PREFIX email). They do not interfere
+  // with future runs.
   await prisma.staffMember.deleteMany({ where: { userId: testAdmin.id } });
   await prisma.customer.deleteMany({ where: { id: testUser.customerId } });
   await prisma.user.deleteMany({ where: { email: { startsWith: TEST_PREFIX } } });

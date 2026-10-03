@@ -65,14 +65,21 @@ describe('AUDIT-05: Provider review atomic audit coverage', () => {
   })
 
   afterAll(async () => {
+    // AUDIT-03: AuditLog rows are immutable (DB trigger prevents deletion).
+    // Provider rows are cleaned up; AuditLog rows are left in place.
+    // Isolation is guaranteed by the unique timestamp prefix P — each run
+    // uses a distinct prefix and will never read another run's log entries.
     await prisma.$executeRaw`DELETE FROM "Provider" WHERE id LIKE ${P + '%'}`
-    await prisma.auditLog.deleteMany({ where: { targetId: { startsWith: P } } })
     await prisma.$disconnect()
   })
 
   beforeEach(async () => {
+    // AUDIT-03: AuditLog cleanup removed — trigger prevents deletion.
+    // Provider cleanup uses raw SQL (not affected by trigger).
+    // AuditLog entries from previous cases within the same run are scoped
+    // to their specific providerId (e.g. ${P}_prov_a1) and never overlap
+    // across test cases due to unique per-case IDs.
     await prisma.$executeRaw`DELETE FROM "Provider" WHERE id LIKE ${P + '%'}`
-    await prisma.auditLog.deleteMany({ where: { targetId: { startsWith: P } } })
   })
 
   // ── TEST 1: APPROVE path ────────────────────────────────────────────────────
@@ -207,7 +214,11 @@ describe('AUDIT-05: Provider review atomic audit coverage', () => {
     const provider = await getProvider(providerId)
     expect(provider?.approvalStatus).toBe('PENDING')
 
-    await prisma.auditLog.delete({ where: { id: seedId } })
+    // AUDIT-03: auditLog.delete removed — the seed row is permanent.
+    // seedId uses the unique run prefix P so it never collides with future runs.
+    // The seed row was created to prove atomicity (P2002 forces tx rollback).
+    // Its continued presence in the DB is correct: it was committed before the
+    // failed tx and must remain immutable.
   })
 
   // ── TEST 5: Authorization (no mutation on unauthorized) ──────────────────────
