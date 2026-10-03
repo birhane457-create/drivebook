@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 4.7 (MM-12-HTTP CLOSED; PAY-H-06 next)  
+**Version:** 4.8 (PAY-H-06 CLOSED; AUDIT-03 next)  
 **Last Updated:** 2026-08-15  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -75,7 +75,7 @@ All other audit documents are evidence records that support this file.
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|
-| PAY-H-06 | Package expiry refund policy undocumented | LOW | CONFIRMED | VERIFIED — business policy, not bug | NOT-STARTED | N/A | ⚠️ OPEN | PAY-H-06 |
+| PAY-H-06 | Package expiry refund policy undocumented | LOW | CONFIRMED | VERIFIED — business policy, not bug | N/A — documentation gap only | Policy documented: unused hours forfeited on expiry (no refund). Intentional. 365-day window + 3-stage advance notification. Customer can cancel before expiry for partial refund. Source-verified: `packageExpiryAlerts.ts` issues no refund; `packages/route.ts` states policy explicitly. | ✅ CLOSED | `docs/DOCROLEBASE/06-payments/PACKAGE_EXPIRY_REFUND_POLICY.md` | PAY-H-06 |
 | AUDIT-03 | AuditLog deletable (no DB trigger) | LOW | CONFIRMED | VERIFIED — no immutability protection | NOT-STARTED | PENDING | ⚠️ OPEN | AUDIT-03 |
 | AUDIT-04 | No audit log retention policy | LOW | CONFIRMED | UNVERIFIED | NOT-STARTED | PENDING | ⚠️ OPEN | AUDIT-04 |
 | APP-H-04 | Role catalogue incomplete | LOW | ARCHITECTURAL | VERIFIED — documented gap | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-04 |
