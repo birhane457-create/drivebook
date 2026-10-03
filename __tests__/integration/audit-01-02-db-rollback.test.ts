@@ -99,7 +99,9 @@ describe('AUDIT-02: Real PostgreSQL transaction rollback', () => {
   afterAll(async () => {
     // Raw delete to avoid schema-drift issues
     await prisma.$executeRaw`DELETE FROM "Provider" WHERE id LIKE ${P + '%'}`
-    await prisma.auditLog.deleteMany({ where: { actorId: `${P}_actor` } })
+    // AUDIT-03: auditLog.deleteMany removed — trigger prevents deletion.
+    // AuditLog rows use actorId = '${P}_actor' where P is a unique timestamp
+    // prefix — they do not interfere with future test runs.
     await prisma.$disconnect()
   })
 
