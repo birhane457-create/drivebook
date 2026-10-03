@@ -5,16 +5,20 @@ import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateWallet } from '@/lib/services/wallet-helpers';
 import { walletRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit';
+import { getPlatformPricing } from '@/lib/services/platform-pricing';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
-// P0 FIX #7: Add minimum $10 validation + maximum $10,000
+// MM-03 FIX: Validate amount against platform-configured walletTopUpMin/Max.
+// Previous code used hardcoded min($10)/max($10,000), ignoring admin-configured
+// bounds. An admin setting walletTopUpMax=$200 had no effect on this route.
+//
+// This schema validates only type/format. Business bounds are checked at runtime
+// after loading platform settings so admin changes take effect immediately.
 const schema = z.object({
   amount: z.number()
     .positive('Amount must be positive')
-    .min(10, 'Minimum top-up is $10')
-    .max(10000, 'Maximum amount is $10,000 per transaction')
     .multipleOf(0.01, 'Amount must have at most 2 decimal places'),
 });
 
@@ -49,6 +53,21 @@ export async function POST(req: NextRequest) {
     }
 
     const { amount } = schema.parse(await req.json());
+
+    // MM-03 FIX: Enforce platform-configured top-up bounds
+    const pricing = await getPlatformPricing();
+    if (amount < pricing.walletTopUpMin) {
+      return NextResponse.json(
+        { error: `Minimum top-up is $${pricing.walletTopUpMin}` },
+        { status: 400 }
+      );
+    }
+    if (amount > pricing.walletTopUpMax) {
+      return NextResponse.json(
+        { error: `Maximum top-up is $${pricing.walletTopUpMax} per transaction` },
+        { status: 400 }
+      );
+    }
 
     const user = await prisma.user.findUnique({ where: { email: session!.user!.email } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -89,6 +108,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ clientSecret: paymentIntent.clientSecret });
   } catch (error: any) {
     console.error('Wallet top-up intent error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to create payment intent' }, { status: 500 });
+    // Return 400 for validation errors (Zod), 500 for unexpected errors
+    const isValidationError = error?.name === 'ZodError' || error?.issues;
+    return NextResponse.json(
+      { error: isValidationError ? (error.issues?.[0]?.message ?? error.message) : (error.message || 'Failed to create payment intent') },
+      { status: isValidationError ? 400 : 500 }
+    );
   }
 }
