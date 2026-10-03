@@ -190,9 +190,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Clean up all test artifacts
-  await prisma.auditLog.deleteMany({
-    where: { actorId: { in: [adminUserId, nonAdminUserId] } },
-  });
+  // AUDIT-03: auditLog.deleteMany removed — trigger prevents deletion.
+  // AuditLog rows are scoped to adminUserId/nonAdminUserId which are unique
+  // per test run (created with TEST_PREFIX email). They do not interfere
+  // with future runs.
   await prisma.$executeRaw`
     DELETE FROM "Provider" WHERE name LIKE ${`${TEST_PREFIX}_%`}
   `;

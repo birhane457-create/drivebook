@@ -1,6 +1,6 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 4.8 (PAY-H-06 CLOSED; AUDIT-03 next)  
+**Version:** 4.9 (AUDIT-03 CLOSED; AUDIT-04 next)  
 **Last Updated:** 2026-08-15  
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -76,7 +76,7 @@ All other audit documents are evidence records that support this file.
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|
 | PAY-H-06 | Package expiry refund policy undocumented | LOW | CONFIRMED | VERIFIED — business policy, not bug | N/A — documentation gap only | Policy documented: unused hours forfeited on expiry (no refund). Intentional. 365-day window + 3-stage advance notification. Customer can cancel before expiry for partial refund. Source-verified: `packageExpiryAlerts.ts` issues no refund; `packages/route.ts` states policy explicitly. | ✅ CLOSED | `docs/DOCROLEBASE/06-payments/PACKAGE_EXPIRY_REFUND_POLICY.md` | PAY-H-06 |
-| AUDIT-03 | AuditLog deletable (no DB trigger) | LOW | CONFIRMED | VERIFIED — no immutability protection | NOT-STARTED | PENDING | ⚠️ OPEN | AUDIT-03 |
+| AUDIT-03 | AuditLog deletable (no DB trigger) | LOW | CONFIRMED | VERIFIED — no immutability protection | `prisma/migrations/20261015000001_audit03_auditlog_immutable/migration.sql` — `CREATE FUNCTION prevent_auditlog_delete()` + `BEFORE DELETE` trigger on `"AuditLog"` | V1 ORM delete → P0001 trigger error; V2 deleteMany → blocked; V3 raw SQL DELETE → P0001 (database-level proof); V4 CREATE still works; V5 $transaction delete → blocked. 7/7 AUDIT-05-HTTP suite passes after teardown refactor. 5 `auditLog.delete/deleteMany` calls removed from 4 test files — replaced with timestamp-prefix isolation. | ✅ CLOSED | `scripts/verify-audit03-trigger.mjs` | AUDIT-03 |
 | AUDIT-04 | No audit log retention policy | LOW | CONFIRMED | UNVERIFIED | NOT-STARTED | PENDING | ⚠️ OPEN | AUDIT-04 |
 | APP-H-04 | Role catalogue incomplete | LOW | ARCHITECTURAL | VERIFIED — documented gap | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-04 |
 | APP-H-05 | No centralised authorisation matrix | LOW | ARCHITECTURAL | VERIFIED — documented gap | NOT-STARTED | N/A | ⚠️ OPEN | APP-H-05 |
