@@ -246,9 +246,11 @@ export async function POST(
       // MM-12-HTTP FIX: Prisma serialization failures (P2034) and PostgreSQL
       // P40001 during the idempotency INSERT race should return 409, not 500.
       // The client's idempotency key is still valid — a retry will succeed.
+      // NOTE: P2028 ("Transaction already closed") is NOT included here — it
+      // indicates a Prisma transaction timeout/closure, not a serialization
+      // conflict, and should surface as a 500 for investigation.
       const isPrismaSerializationError =
         err?.code === 'P2034' ||
-        err?.code === 'P2028' ||
         err?.message?.includes('P40001') ||
         err?.message?.includes('could not serialize') ||
         err?.message?.includes('deadlock detected');

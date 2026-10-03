@@ -237,6 +237,21 @@ describe('MM-12-HTTP: Serialization errors return 409 not 500', () => {
       const res = await AddCredit(makeAddRequest(), { params: { id: 'client_001' } })
       expect(res.status).toBe(500)
     })
+
+    it('S10: P2028 (transaction timeout/closure) → 500, NOT 409 (distinct from serialization)', async () => {
+      // P2028 = "Transaction already closed" — caused by Prisma transaction
+      // timeout or too-many-queries, not a PostgreSQL serialization conflict.
+      // Must NOT be swallowed as a client-retry-safe 409.
+      mockPrismaTransaction.mockRejectedValue(
+        Object.assign(
+          new Error('Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction.'),
+          { code: 'P2028' }
+        )
+      )
+
+      const res = await AddCredit(makeAddRequest(), { params: { id: 'client_001' } })
+      expect(res.status).toBe(500)
+    })
   })
 
   // ── S3–S4: deduct-credit serialization errors ──────────────────────────────
