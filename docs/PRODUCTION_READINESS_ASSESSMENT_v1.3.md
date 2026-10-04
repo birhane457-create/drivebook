@@ -1,7 +1,7 @@
 # DriveBook Production Readiness Assessment v1.3
 
 **Assessment Date:** 2026-08-15  
-**Repository Commit:** `691baacb` (Audit Baseline v5.2)  
+**Repository Baseline:** Commit `691baacb` (2026-10-04) / Tracker v5.2 (Last Updated: 2026-08-15)  
 **Assessment Scope:** Repository-proven evidence only  
 **Methodology:** Independent source inspection at baseline  
 
@@ -23,6 +23,8 @@
 | Property | Value | Evidence |
 |---|---|---|
 | Current HEAD | `691baacb` | `git log --oneline -1` |
+| Baseline commit date | 2026-10-04 06:20:39 UTC | `git log --format="%ai" -1 691baacb` |
+| Tracker internal metadata | v5.2, Last Updated: 2026-08-15 | `docs/audit/AUDIT-MASTER-TRACKER.md` internal field |
 | Relationship to audit baseline | **Exact match** | HEAD = baseline, 0 commits after |
 | Working tree (tracked files) | Clean | `git status --porcelain` shows no modifications |
 | Audit tracker status | v5.2, 0 terminal OPEN findings | `docs/audit/AUDIT-MASTER-TRACKER.md` @ 691baacb |
@@ -30,7 +32,7 @@
 | `.env.example` in repository | Present | Template for required configuration |
 | `app/privacy/page.tsx` | **Present** | Version 2.0, effective 6 August 2026 |
 | `app/terms/page.tsx` | **Present** | Substantive legal content with links |
-| `docs/pr/CREDENTIAL_ROTATION_CHECKLIST.md` | **Present at baseline** | Created 2026-09-01, contains credential material, exists at 691baacb |
+| `docs/pr/CREDENTIAL_ROTATION_CHECKLIST.md` | **Present at baseline** | Committed c2ca997 (2026-09-13), present in 691baacb tree; self-reported creation: 2026-09-01 18:23 |
 
 ---
 
@@ -39,8 +41,8 @@
 ### SECURITY-01: Credentials Committed to Repository
 
 **Discovery:** Phase 3 production readiness assessment  
-**Existence at Baseline:** File exists at `691baacb`, created 2026-09-01 18:23  
-**Audit Tracker Status:** Not represented as OPEN finding in v5.2 tracker  
+**Existence at Baseline:** File committed c2ca997 (2026-09-13), present in baseline 691baacb tree (2026-10-04)  
+**Audit Tracker Status:** Not represented as OPEN finding in v5.2 tracker (tracker Last Updated: 2026-08-15)  
 
 **Classification:** This is a **baseline-scope discrepancy**, not a post-baseline finding. The credential exposure existed at the frozen audit baseline but was not tracked as a terminal OPEN finding in the v5.2 audit tracker.
 
@@ -407,7 +409,7 @@ For each exposed credential, check provider audit logs/dashboards:
 
 ### Audit Baseline Status
 
-**At commit `691baacb` / Tracker v5.2:**
+**At baseline commit `691baacb` (2026-10-04) / Tracker v5.2 (Last Updated: 2026-08-15):**
 
 The audit tracker reports **0 terminal OPEN findings** for application code security. All Phase 1 and Phase 2 code-level vulnerabilities have been remediated, rejected, superseded, or explicitly deferred by policy.
 
@@ -618,7 +620,7 @@ git ls-tree -r 691baacb | grep '\.env$'  # empty = not present
 ### Repository Status @ 691baacb
 
 ✅ **Code security:** 0 open audit findings in tracker  
-✅ **Application architecture:** Production-quality, well-tested  
+✅ **Application security controls and tested components:** Present in baseline; production deployment readiness subject to verification queues  
 ✅ **Legal pages:** Privacy and terms exist  
 ✅ **Payment integrity:** Verified through audit  
 ❌ **Credential management:** SECURITY-01 requires immediate resolution  
