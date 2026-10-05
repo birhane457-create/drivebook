@@ -79,10 +79,33 @@ npm run test
 6. `allows cron to expire trial when no conversion webhook arrives`
 7. `prevents cron from re-expiring an already-ACTIVE subscription`
 
-**Issue:** Expected behavior mismatch in concurrent subscription state handling
+**Root Cause Analysis:**
 
-**Severity:** Medium (affects cron job edge cases; requires investigation)  
-**Classification:** PRE-EXISTING — Logic expectation mismatch or test needs update
+**Mock-based tests (#3-4):** Test harness defect
+- Tests do NOT mock `@/lib/services/subscription-lifecycle`
+- Production route dynamically imports `lockProvider()` which uses `$queryRaw`
+- Mock transaction client only provides `subscription.updateMany`, `provider.update`
+- Missing `$queryRaw` capability causes mock execution to fail
+- Tests cannot execute the actual provider-lock logic
+
+**Database tests (#5-7):** Environment failure
+- Tests use real Prisma client with actual database operations
+- Require PostgreSQL running on port 5433
+- Test database unavailable during execution
+- Tests are correctly designed but cannot execute
+
+**Production Code Review:**
+- ✅ Source-inspected @ 6cd8a181
+- ✅ Uses provider-lock (SELECT FOR UPDATE) + CAS pattern
+- ✅ Pattern structure appears correct
+- ❌ Full concurrency verification: UNVERIFIED
+- ❌ Five database tests remain unverified
+
+**Severity:** Unproven — not demonstrated as defect  
+**Classification:** PRE-EXISTING — Test environment limitations, production defect not established  
+**Evidence Limitation:** Five real database concurrency tests remain unverified
+
+**See:** `docs/TRIAL_EXPIRY_INVESTIGATION.md` for detailed analysis
 
 #### 8-9. Database Connection Errors (2 failures)
 
@@ -211,11 +234,19 @@ Status: In progress (partial observation — timed out after 3 minutes)
 
 All 9 failures are **pre-existing** and not introduced by current environment:
 
-**Non-Critical (2):** Character encoding in receipts  
-**Medium (5):** Trial expiry cron race condition handling — **requires investigation before production**  
-**Environment (2):** Test database not configured  
+**Non-Critical (2):** Character encoding in receipts — formatting only, no functional impact  
 
-**Important:** The trial-expiry race condition failures are classified as medium severity and require investigation. While pre-existing and not caused by credential rotation, they should not be independently declared harmless to production without further analysis.
+**Unverified (5):** Trial expiry cron race condition handling
+- Mock-based tests (#3-4): Test harness defect — lockProvider() not mocked
+- Database tests (#5-7): Environment failure — test DB (port 5433) unavailable
+- **Production code:** Source-inspected — design appears correct
+- **Production defect:** None established
+- **Full concurrency verification:** Outstanding — 5 tests unverified
+- **Detailed analysis:** See `docs/TRIAL_EXPIRY_INVESTIGATION.md`
+
+**Environment (2):** Additional test database connection failures (tests #8-9) — same root cause as #5-7
+
+**Important:** The trial-expiry test failures do NOT demonstrate a production defect. Source inspection supports the implemented provider-lock + CAS design. However, five real database concurrency tests remain unverified due to test environment limitations. This should not block Phase 3 integration verification, but the five DB race tests remain explicitly listed as an evidence limitation.
 
 ---
 
