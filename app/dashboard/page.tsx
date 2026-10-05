@@ -501,7 +501,13 @@ export default async function DashboardPage() {
       )}
 
       {/* ── Profile completeness ─────────────────────────────────────────── */}
-      <ProfileCompletenessCard instructor={{ ...instructorWithExtensions, businessType }} />
+      <ProfileCompletenessCard instructor={{
+        ...instructorWithExtensions,
+        withholdingTaxRate: instructorWithExtensions.withholdingTaxRate != null
+          ? Number(instructorWithExtensions.withholdingTaxRate)
+          : null,
+        businessType,
+      }} />
 
       {/* ── AI Receptionist banner ───────────────────────────────────────── */}
       {isDriving && ['PRO', 'STUDIO', 'PREMIUM'].includes(
