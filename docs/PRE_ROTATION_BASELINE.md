@@ -69,19 +69,19 @@ npm run test
 **File:** `app/api/cron/__tests__/trial-expiry-race.test.ts`
 
 **Tests:**
-1. `2. Race skip — row already ACTIVE when cron runs > does NOT update provider when updateMany count is 0`
-2. `3. Mixed batch — some expire, some already converted > correctly separates expired vs skipped`
+3. `2. Race skip — row already ACTIVE when cron runs > does NOT update provider when updateMany count is 0`
+4. `3. Mixed batch — some expire, some already converted > correctly separates expired vs skipped`
 
 **File:** `app/api/cron/check-trial-expiry/__tests__/sub-12a-concurrent.test.ts`
 
 **Tests:**
-3. `prevents cron from expiring a trial that a webhook just converted to ACTIVE`
-4. `allows cron to expire trial when no conversion webhook arrives`
-5. `prevents cron from re-expiring an already-ACTIVE subscription`
+5. `prevents cron from expiring a trial that a webhook just converted to ACTIVE`
+6. `allows cron to expire trial when no conversion webhook arrives`
+7. `prevents cron from re-expiring an already-ACTIVE subscription`
 
 **Issue:** Expected behavior mismatch in concurrent subscription state handling
 
-**Severity:** Medium (affects cron job edge cases)  
+**Severity:** Medium (affects cron job edge cases; requires investigation)  
 **Classification:** PRE-EXISTING — Logic expectation mismatch or test needs update
 
 #### 8-9. Database Connection Errors (2 failures)
@@ -89,8 +89,8 @@ npm run test
 **File:** `app/api/cron/check-trial-expiry/__tests__/sub-12a-concurrent.test.ts`
 
 **Tests:**
-6. `handles triple concurrent race: cron + webhook + second webhook`
-7. `verifies cron re-confirms expiry inside transaction`
+8. `handles triple concurrent race: cron + webhook + second webhook`
+9. `verifies cron re-confirms expiry inside transaction`
 
 **Error:** `PrismaClientInitializationError: Can't reach database server at localhost:5433`
 
@@ -143,9 +143,9 @@ Status: In progress (partial observation — timed out after 3 minutes)
 - ✅ Linting and type-checking started
 - ⚠️ Timeout before completion confirmation
 
-**Assessment:** Build compiles successfully but requires extended time (large codebase).
+**Assessment:** Build compilation observed in progress; timed out before full completion. **BUILD: NOT FULLY VERIFIED.**
 
-**Recommendation:** Verify full build completion with longer timeout or observe to completion.
+**Recommendation:** Run full build to completion with longer timeout or manual observation before production deployment.
 
 ---
 
@@ -212,10 +212,10 @@ Status: In progress (partial observation — timed out after 3 minutes)
 All 9 failures are **pre-existing** and not introduced by current environment:
 
 **Non-Critical (2):** Character encoding in receipts  
-**Medium (5):** Trial expiry cron race condition handling  
+**Medium (5):** Trial expiry cron race condition handling — **requires investigation before production**  
 **Environment (2):** Test database not configured  
 
-**None are production blockers.** Payment security, idempotency, and core business logic tests all pass.
+**Important:** The trial-expiry race condition failures are classified as medium severity and require investigation. While pre-existing and not caused by credential rotation, they should not be independently declared harmless to production without further analysis.
 
 ---
 
