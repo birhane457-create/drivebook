@@ -84,10 +84,14 @@ describe('Trial expiry cron — SUB-12-A race condition', () => {
       // Simulate: subscription is still TRIAL when updateMany runs → count = 1
       mockTransaction.mockImplementation(async (fn: Function) => {
         const txClient = {
+          // lockProvider() Step 1: FOR UPDATE raw query
+          $queryRaw: vi.fn().mockResolvedValue([{ id: 'prov_001', name: 'Instructor sub_001' }]),
           subscription: {
             updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           provider: {
+            // lockProvider() Step 2: re-read after lock
+            findUnique: vi.fn().mockResolvedValue({ id: 'prov_001', name: 'Instructor sub_001' }),
             update: mockProviderUpdate.mockResolvedValue({ id: 'prov_001', name: 'Instructor sub_001' }),
           },
         };
@@ -117,10 +121,12 @@ describe('Trial expiry cron — SUB-12-A race condition', () => {
       // Simulate: webhook already changed status to ACTIVE → updateMany matches 0 rows
       mockTransaction.mockImplementation(async (fn: Function) => {
         const txClient = {
+          $queryRaw: vi.fn().mockResolvedValue([{ id: 'prov_002', name: 'Instructor sub_002' }]),
           subscription: {
             updateMany: vi.fn().mockResolvedValue({ count: 0 }),
           },
           provider: {
+            findUnique: vi.fn().mockResolvedValue({ id: 'prov_002', name: 'Instructor sub_002' }),
             update: mockProviderUpdate,
           },
         };
@@ -152,12 +158,20 @@ describe('Trial expiry cron — SUB-12-A race condition', () => {
         callCount++;
         // trial1 and trial3 still TRIAL; trial2 was already converted
         const isConverted = callCount === 2;
+        const trialIds = ['sub_a', 'sub_b', 'sub_c'];
+        const provIds  = ['prov_a', 'prov_b', 'prov_c'];
+        const provId   = provIds[callCount - 1] ?? `prov_${callCount}`;
         const innerUpdateMany = vi.fn().mockResolvedValue({ count: isConverted ? 0 : 1 });
-        const innerProviderUpdate = vi.fn().mockResolvedValue({ id: `prov_${callCount}`, name: `Inst ${callCount}` });
+        const innerProviderUpdate = vi.fn().mockResolvedValue({ id: provId, name: `Inst ${callCount}` });
 
         const txClient = {
+          // lockProvider() needs $queryRaw for FOR UPDATE and provider.findUnique for re-read
+          $queryRaw: vi.fn().mockResolvedValue([{ id: provId, name: `Inst ${callCount}` }]),
           subscription: { updateMany: innerUpdateMany },
-          provider: { update: innerProviderUpdate },
+          provider: {
+            findUnique: vi.fn().mockResolvedValue({ id: provId, name: `Inst ${callCount}` }),
+            update: innerProviderUpdate,
+          },
         };
         const result = await fn(txClient);
 
