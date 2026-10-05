@@ -2,12 +2,40 @@
 
 **Finding:** SECURITY-01 - Exposed credentials in repository  
 **Baseline Commit:** 691baacb (2026-10-04 06:20:39 UTC)  
-**Pre-Rotation Baseline:** Commit fbee8938 (2026-10-05)  
+**Pre-Rotation Functional Baseline:** Application state d1881de9; baseline evidence finalized at fbee8938  
 **Pre-Rotation Test Status:** 264/273 passing (96.7%)  
 
 **Evidence Preserved:**
 - Original checklist: `docs/pr/CREDENTIAL_ROTATION_CHECKLIST.md` @ 691baacb
-- Baseline document: `docs/PRE_ROTATION_BASELINE.md` @ fbee8938
+- Baseline document: `docs/PRE_ROTATION_BASELINE.md` @ fbee8938 (documents test results from d1881de9)
+
+---
+
+## Execution Timing Decision
+
+**Strategy:** Defer credential rotation until immediately before production deployment.
+
+**Rationale:**
+- Application not yet confirmed in production
+- Rotation is disruptive (invalidates sessions, requires provider coordination)
+- Testing and deployment verification should complete first
+- Rotating immediately before launch reduces risk of re-exposure
+
+**Revised Sequence:**
+1. ✅ Pre-rotation baseline established (264/273 passing)
+2. **NOW:** Complete local testing, build verification, deployment checks
+3. **NOW:** Verify Vercel deployment status, Stripe mode, DNS/domain
+4. **NOW:** Runtime/integration testing with current credentials
+5. **NOW:** Resolve remaining production-readiness issues
+6. **BEFORE PRODUCTION:** SECURITY-01 rotation (all 10 categories)
+7. **BEFORE PRODUCTION:** Post-rotation verification (≥264/273 tests)
+8. **AFTER ROTATION:** Deploy production with new credentials only
+9. **AFTER DEPLOYMENT:** Production smoke tests
+10. **AFTER VERIFICATION:** Mark SECURITY-01 FIX-VERIFIED
+
+**Critical Rule:** Do NOT deploy current exposed credentials to production. Rotation must complete before production launch.
+
+**Status:** SECURITY-01 remains confirmed critical, remediation deferred until pre-deployment phase.
 
 ---
 
@@ -36,7 +64,7 @@
 **Pre-Rotation:**
 - [ ] Verify current connection works
 - [ ] Check Supabase provider logs for usage history
-- [ ] Backup current credential (password manager)
+- [ ] Secure credential backup (password manager only - not GitHub/text files)
 
 **Rotation:**
 - [ ] Reset password at Supabase Dashboard
