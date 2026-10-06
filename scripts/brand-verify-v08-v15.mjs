@@ -7,11 +7,23 @@
  *
  *       SubdomainBookingPage markers (driving-specific):
  *         - "I've never driven before"  (FAQ text unique to driving page)
- *         - "How do packages work?"     (package FAQ unique to driving page)
- *         - "bg-gray-50"               (root className on driving page)
+ *         - "Book Your Lesson"          (CTA text in SubdomainBookingEntry)
  *
  *       BusinessWebsitePage markers:
- *         - id="booking-form"          (unique ID in business website renderer)
+ *         - "Book now →"               (CTA text in BusinessWebsitePage line 246)
+ *
+ *       NOTE: id="booking-form" is NOT a distinguishing marker —
+ *       it appears in both renderers (SubdomainBookingPage line 1065,
+ *       BusinessWebsitePage line 231).
+ *
+ *       LIMITATION: Next.js RSC/hydration payload embeds string content from
+ *       all imported component branches, even those not rendered. Both
+ *       "never driven before" and "Book now →" appeared in the driving-provider
+ *       body (51,425 chars) due to RSC bundling, not actual rendering of both
+ *       components. Body-text markers alone cannot reliably distinguish renderer
+ *       selection in a Next.js RSC context. Requires non-driving provider with
+ *       custom BusinessConfig to produce a response where only BusinessWebsitePage
+ *       markers appear.
  *
  * V-15: Full chain test:
  *       Step 1: Set domainVerified=true + customDomain="v15-full-<ts>.example.com" in DB
