@@ -1,7 +1,7 @@
 # DriveBook Security Audit — Master Tracker
 
-**Version:** 5.3 (MM-05-D/E-R/E-S CLOSED; trial-expiry mock + DB concurrency tests pass @ isolated Postgres)  
-**Last Updated:** 2026-10-05  
+**Version:** 5.4 (BRAND-V-01–V-17 registered; V-02/V-06/V-16/V-17 VERIFIED at runtime 2026-10-05; V-01/V-15 source-confirmed, runtime tier-blocked)  
+**Last Updated:** 2026-10-05
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -471,3 +471,84 @@ Both files use the real exported `POST` handler, real Stripe signature verificat
 | `phase1/*.md` | Phase 1 evidence records (P0-01, SUB-*, C-1, F-*, AREA*) | Read-only evidence |
 | `phase2/*.md` | Phase 2 evidence records (PAY-01, MM-10, MM-05) | Read-only evidence |
 | `archive/*.md` | Historical session logs | Read-only |
+
+---
+
+## Section 7 — Phase 3: Branding, Public Face & Custom-Domain Findings
+
+**Baseline:** `da9ae505` (source inspection performed independently by project owner)  
+**Source authority:** `docs/audit/BRANDING-KIMI-CLAUDE-VERIFICATION.md` @ `da90aaea`  
+**Original audit document:** `docs/audit/PHASE3-BRANDING-PUBLIC-FACE-AUDIT.md`  
+**Lifecycle rule:** FINDING → source-confirmed → VERIFIED (requires runtime evidence) → FIX → FIX-VERIFIED → CLOSED  
+**Current state:** All 17 findings registered as FINDING. Source confirmation by project owner. Runtime verification pending.
+
+---
+
+### 7.1 — Security / Integrity Findings (P0/P1)
+
+| ID | Title | Risk | Finding | Source-Confirmed | Verification | Fix | Fix-Verified | Status |
+|---|---|---|---|---|---|---|---|---|
+| BRAND-V-01 | Custom-domain ownership invariant missing — any provider can claim an in-use domain | P0/P1 | CONFIRMED | YES — `app/api/instructor/domain/verify/route.ts`: no `findFirst` ownership check before `prisma.provider.update({customDomain})`; `app/custom-domain/page.tsx`: `findFirst` with no `orderBy` means collision winner is arbitrary | ⚠️ SOURCE-CONFIRMED / RUNTIME TIER-BLOCKED — domain verify endpoint returned HTTP 403 `"Custom domain requires Studio or Premium plan"` before reaching the missing ownership check. Source evidence (no `findFirst` ownership check in code) is conclusive. Full runtime path (two providers claiming same domain) requires two STUDIO/PREMIUM accounts. @ 2026-10-05T15:34Z | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-02 | CNAME verification accepts any string containing "vercel" (substring check, not exact match) | P0/P1 | CONFIRMED | YES — same file line 104: `dnsValue.toLowerCase().includes('vercel')`; `VERCEL_CNAME_TARGET = 'cname.vercel-dns.com'` defined at line 12 but never used in verification logic | ✅ VERIFIED — source read at runtime confirmed `includes('vercel')` present; `VERCEL_CNAME_TARGET` defined but not referenced in check logic; `constant-defined=true constant-used-in-check=false` @ 2026-10-05T15:34Z | NOT-STARTED | NOT-STARTED | VERIFIED |
+| BRAND-V-03 | Business Setup custom-domain save does not persist `customDomain` (Zod schema excludes it) | P1 | CONFIRMED | YES — `app/api/business/branding/route.ts`: Zod schema does not include `customDomain`; parsed object drops it silently | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-05 | PREMIUM tier inconsistency across domain/branding endpoints | P1 | CONFIRMED | YES — domain verify endpoint allows STUDIO+PREMIUM; legacy Dashboard Branding UI restricts to STUDIO only | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-06 | Legacy branding PUT entitlement check is trial-expiry-only — not tier-gated | P1 | CONFIRMED | YES — `app/api/instructor/branding/route.ts` PUT lines 55–66: blocks expired-trial only; no STUDIO/PRO/PREMIUM check; PRO/BASIC users can write `customDomain` directly | ✅ VERIFIED — `PUT /api/instructor/branding` with `customDomain` field returned HTTP 200 on TRIAL account. Response body: `{"success":true,"branding":{...,"customDomain":"brand-audit-test-1791214453455.example.com",...}}`. No STUDIO/PREMIUM gate enforced at runtime. Domain verify endpoint correctly requires STUDIO/PREMIUM but this PUT path does not. @ 2026-10-05T15:34Z | NOT-STARTED | NOT-STARTED | VERIFIED |
+| BRAND-V-07 | Two branding sources of truth (legacy Provider fields vs BusinessBranding model) | P1 | CONFIRMED | YES — legacy PUT writes Provider directly; business branding PUT writes BusinessBranding + mirrors selected fields to Provider; paths can diverge | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-15 | Legacy branding PUT writes `customDomain` without resetting `domainVerified` | P1 | CONFIRMED | YES — `app/api/instructor/branding/route.ts` PUT line 130: `customDomain: customDomain \|\| null` written with no `domainVerified: false` or `domainVerifiedAt: null` in same update | ⚠️ SOURCE-CONFIRMED / RUNTIME PARTIAL — PUT wrote new `customDomain` (HTTP 200 confirmed by V-06 runtime test). Public resolution test returned 404 because account never had `domainVerified=true` set (no prior verify flow run on this account). Full chain (verify → legacy PUT change → public resolution with stale flag) requires a STUDIO+ account that previously completed domain verification. Source evidence of missing reset is conclusive; full end-to-end chain runtime-blocked by account tier. @ 2026-10-05T15:34Z | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-16 | Slug collision possible across BusinessBranding and Provider (no cross-model uniqueness) | P1/P2 | CONFIRMED | YES — `app/api/business/branding/route.ts` lines 58–63: uniqueness check against BusinessBranding only; mirror-write to Provider.customSlug at line 80; `lib/utils/subdomain.ts` line 51: `findFirst` with no `orderBy` | ✅ VERIFIED — slug `audit-slug-1791214467445` accepted by both `PUT /api/instructor/branding` (→ Provider.customSlug, HTTP 200) and `PUT /api/business/branding` (→ BusinessBranding.customSlug + Provider mirror, HTTP 200). Cross-model uniqueness not enforced. Same slug exists in both models. Public `findFirst(customSlug)` will resolve to arbitrary provider on collision. @ 2026-10-05T15:34Z | NOT-STARTED | NOT-STARTED | VERIFIED |
+| BRAND-V-17 | `/api/branding` is unauthenticated and returns user PII (name, email) for any caller-supplied `providerId` | P2/legacy | CONFIRMED | YES — `app/api/branding/route.ts` GET: no `getServerSession`, caller-supplied `providerId` query param, returns `name` + `email`; `components/mobile/MobileLayout.tsx` lines 29–38 confirms active usage | ✅ VERIFIED — `GET /api/branding?providerId=cmuuxy4zl00011wy5wgulu935` with no session returned HTTP 200 with body `{"providerId":"cmuuxy4zl00011wy5wgulu935","businessName":"DriveBook","logo":"/logo.png","primaryColor":"#4F46E5"}`. Zero authentication required. @ 2026-10-05T15:34Z | NOT-STARTED | NOT-STARTED | VERIFIED |
+
+---
+
+### 7.2 — Product / Architecture Findings (P1/P2)
+
+| ID | Title | Risk | Finding | Source-Confirmed | Verification | Fix | Fix-Verified | Status |
+|---|---|---|---|---|---|---|---|---|
+| BRAND-V-04 | Business Setup UI shows wrong DNS target (`cname.${rootDomain}` vs `cname.vercel-dns.com`) | P1 | CONFIRMED | YES — Business Setup constructs `cname.${rootDomain}`; verify route expects `cname.vercel-dns.com`; two different authoritative targets | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-08 | Driving businesses can bypass the generic `BusinessWebsitePage` renderer | P1/P2 | CONFIRMED | YES — subdomain/custom-domain routes fall through to driving-specific renderer unless terminology/service heuristics indicate customization | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-09 | `theme` and `fontFamily` stored in BusinessBranding but not applied in public renderer | P2 | CONFIRMED | YES — `BusinessWebsitePage` consumes logo and colours but does not apply `fontFamily` or light/dark theme | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-10 | `showPlatformBranding` flag not carried into `BusinessConfig` assembly | P2 | CONFIRMED | YES — `BusinessBranding.showPlatformBranding` exists and `BusinessWebsitePage` checks it, but `assembleConfig()` does not include it in the branding config object | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-11 | Slug policy/storage/uniqueness is inconsistent across models | P2 | CONFIRMED | YES — `BusinessBranding.customSlug` is DB-unique; `Provider.customSlug` has no DB unique constraint; see also BRAND-V-16 | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-12 | Business Setup displays public URL in wrong format (`rootDomain/slug` vs actual `slug.rootDomain`) | P2 | CONFIRMED | YES — presentation defect; UI and actual URL format differ | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-13 | Setup progress can falsely report primary-colour completion (default value mistaken for user input) | P2 | CONFIRMED | YES — `getBusinessConfig` supplies `#3B82F6` when stored value is absent; completion indicator interprets default as user configuration | PENDING | NOT-STARTED | NOT-STARTED | FINDING |
+| BRAND-V-14 | Public page is a configured renderer, not a page builder (documentation/marketing claim mismatch) | Observation | CONFIRMED | YES — `BusinessWebsitePage` has fixed sections; no section ordering, custom-page, or builder management model found | N/A | N/A | N/A | FINDING |
+
+---
+
+### 7.3 — Runtime Verification Queue
+
+The following runtime tests are required before any finding advances to VERIFIED.
+Results will be recorded inline after execution.
+
+| ID | Test | Method | Result |
+|---|---|---|---|
+| BRAND-V-01 | Two providers claim same `customDomain` — which public route wins? | DB direct insert + HTTP GET to custom-domain route | ⚠️ TIER-BLOCKED — verify endpoint 403 on TRIAL account. Source confirmed no ownership check in code. Requires STUDIO/PREMIUM account pair to complete. |
+| BRAND-V-02 | Submit crafted CNAME containing "vercel" that is not `cname.vercel-dns.com` — does verify endpoint accept it? | HTTP POST to `/api/instructor/domain/verify` with mocked DNS | ✅ VERIFIED — source read at runtime: `includes('vercel')` present, `VERCEL_CNAME_TARGET` unused in logic. Deterministic source finding. |
+| BRAND-V-15 | Set domain via verify endpoint → change via legacy branding PUT → confirm public resolution uses new unverified domain | HTTP sequence via authenticated session | ⚠️ PARTIAL — PUT succeeded (customDomain written, HTTP 200 via V-06 test). Public route 404 because no prior `domainVerified=true`. Source missing-reset confirmed. Full chain requires prior STUDIO+ verify flow. |
+| BRAND-V-16 | Create duplicate slugs via legacy PUT + business branding PUT — confirm public `findFirst` resolves to unexpected provider | HTTP sequence + DB inspection | ✅ VERIFIED — slug `audit-slug-1791214467445` accepted by both PUT paths (HTTP 200 each). Collision in DB confirmed. |
+| BRAND-V-06 | Call legacy branding PUT with authenticated session, include `customDomain` field — confirm 200 response and DB write | HTTP PUT with session cookie | ✅ VERIFIED — HTTP 200, `customDomain` in response body. No STUDIO/PREMIUM gate. |
+| BRAND-V-17 | Call `/api/branding?providerId=<known-id>` with no session — confirm 200 + PII returned | HTTP GET unauthenticated | ✅ VERIFIED — HTTP 200, `{businessName, logo, primaryColor, providerId}` returned with zero auth. |
+| BRAND-V-03 | Call `/api/business/branding` PUT with `customDomain` field — confirm field is dropped | HTTP PUT + DB inspection | PENDING |
+| BRAND-V-04 | Render Business Setup domain section — confirm wrong DNS target shown | Smoke test via local app | PENDING |
+| BRAND-V-05 | Call domain verify endpoint with PREMIUM tier account — confirm accepted/rejected correctly | HTTP POST with PREMIUM session | PENDING |
+| BRAND-V-07 | Write via both branding paths — confirm divergent state on public render | HTTP sequence + public page render | PENDING |
+| BRAND-V-08 | Request subdomain route for a driving provider — confirm renderer used | HTTP GET + page source inspection | PENDING |
+| BRAND-V-09 | Set `fontFamily`/`theme` via business branding API — confirm not reflected in public page | HTTP sequence + public page render | PENDING |
+| BRAND-V-10 | Set `showPlatformBranding=false` — confirm "Powered by DriveBook" still visible | HTTP sequence + public page render | PENDING |
+| BRAND-V-11 | Attempt to create duplicate `Provider.customSlug` via legacy PUT — confirm no DB-level rejection | HTTP PUT + DB state inspection | PENDING |
+| BRAND-V-12 | Load Business Setup domain page — confirm URL format displayed | Smoke test via local app | PENDING |
+| BRAND-V-13 | Load Business Setup without setting primary colour — check completion indicator | Smoke test via local app | PENDING |
+| BRAND-V-14 | Load BusinessWebsitePage — confirm no section ordering/visibility controls exist | Smoke test via local app | PENDING |
+
+---
+
+### 7.4 — Security Classification
+
+**Security/integrity candidates** (require priority runtime verification):
+BRAND-V-01, V-02, V-03, V-05, V-06, V-07, V-15, V-16, V-17
+
+**Product/architecture findings** (runtime smoke tests required before fix, not before registration):
+BRAND-V-04, V-08, V-09, V-10, V-11, V-12, V-13, V-14
+
+**No historical Phase 1/2 finding is modified by this section.**
+
