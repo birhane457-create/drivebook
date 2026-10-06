@@ -90,6 +90,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid domain format' }, { status: 400 });
     }
 
+    // V-01 FIX: Ownership check — reject if another provider already owns this domain.
+    // Without this check any provider who can route DNS to Vercel can claim a domain
+    // already verified by a different provider. The check must happen before DNS lookup
+    // so a domain cannot be stolen by passing DNS validation.
+    const existingOwner = await prisma.provider.findFirst({
+      where: {
+        customDomain: domain,
+        domainVerified: true,
+        NOT: { id: instructor.id },
+      },
+      select: { id: true },
+    });
+    if (existingOwner) {
+      return NextResponse.json(
+        { error: 'This domain is already verified by another account.' },
+        { status: 409 }
+      );
+    }
+
     // DNS lookup — check CNAME or ANAME/ALIAS points to Vercel
     // ANAME/ALIAS records don't appear in CNAME lookups — they resolve as A records.
     // So we check CNAME first, then fall back to A record resolution against Vercel's IPs.

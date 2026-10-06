@@ -26,13 +26,17 @@ export default async function CustomDomainPage({
   const customDomain = headersList.get('x-custom-domain');
   if (!customDomain) notFound();
 
-  // Find the provider who owns this verified custom domain
+  // Find the provider who owns this verified custom domain.
+  // orderBy domainVerifiedAt DESC ensures deterministic resolution if two providers
+  // somehow share a customDomain (legacy data). The ownership check in the verify
+  // endpoint (V-01 fix) prevents new collisions from entering the DB.
   const instructor = await prisma.provider.findFirst({
     where: {
       customDomain,
       domainVerified: true,
       subscriptionTier: { in: ['STUDIO', 'PREMIUM'] },
     },
+    orderBy: { domainVerifiedAt: 'desc' },
     select: { id: true, customSlug: true },
   });
 
