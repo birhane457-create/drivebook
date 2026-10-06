@@ -1,4 +1,4 @@
-﻿# DriveBook Security Audit â€” Master Tracker
+# DriveBook Security Audit â€” Master Tracker
 
 **Version:** 5.9 (8 VERIFIED at runtime; 9 SOURCE-CONFIRMED; V-15 exploit-chain reproduced; V-08 RSC body-marker limitation documented)  
 **Last Updated:** 2026-10-05
@@ -480,7 +480,7 @@ Both files use the real exported `POST` handler, real Stripe signature verificat
 **Source authority:** `docs/audit/BRANDING-KIMI-CLAUDE-VERIFICATION.md` @ `da90aaea`  
 **Original audit document:** `docs/audit/PHASE3-BRANDING-PUBLIC-FACE-AUDIT.md`  
 **Lifecycle rule:** FINDING â†’ source-confirmed â†’ VERIFIED (requires runtime evidence) â†’ FIX â†’ FIX-VERIFIED â†’ CLOSED  
-**Current state:** 17 findings registered. 8 VERIFIED at runtime. 9 SOURCE-CONFIRMED. 2 FIX-VERIFIED (V-01, V-06). 0 CLOSED. See individual rows for evidence detail.
+**Current state:** 17 findings registered. 8 VERIFIED at runtime. 9 SOURCE-CONFIRMED. 3 FIX-VERIFIED (V-01, V-06, V-15). 0 CLOSED. See individual rows for evidence detail.
 
 ---
 

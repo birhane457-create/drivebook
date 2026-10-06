@@ -140,7 +140,15 @@ export async function PUT(req: NextRequest) {
         brandColorSecondary: brandColorSecondary || null,
         showBrandingOnBookingPage: showBrandingOnBookingPage === true,
         customSlug: customSlug || null,
-        customDomain: customDomain || null,
+        // V-15 FIX: when customDomain changes, reset domainVerified to false.
+        // The previous domain was verified via DNS; the new domain has not been
+        // verified and must not inherit the prior verified state.
+        // Only reset when customDomain is explicitly provided in the request body.
+        ...(customDomain !== undefined && {
+          customDomain: customDomain || null,
+          domainVerified: false,
+          domainVerifiedAt: null,
+        }),
         ...(cleanBusinessName !== undefined && { businessName: cleanBusinessName }),
       },
       select: {
@@ -150,6 +158,8 @@ export async function PUT(req: NextRequest) {
         showBrandingOnBookingPage: true,
         customSlug: true,
         customDomain: true,
+        domainVerified: true,
+        domainVerifiedAt: true,
         businessName: true,
       },
     });
