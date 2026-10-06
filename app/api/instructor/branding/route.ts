@@ -74,6 +74,19 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { brandLogo, brandColorPrimary, brandColorSecondary, showBrandingOnBookingPage, customSlug, customDomain, businessName } = body;
 
+    // V-06 FIX: customDomain requires STUDIO or PREMIUM tier.
+    // The domain verify endpoint already enforces this gate; the legacy branding PUT
+    // must match to prevent a lower-tier provider bypassing the entitlement check.
+    // Other branding fields (colors, logo, businessName, customSlug) are not gated here.
+    if (customDomain !== undefined && customDomain !== null && customDomain !== '') {
+      if (!['STUDIO', 'PREMIUM'].includes(instructor.subscriptionTier)) {
+        return NextResponse.json(
+          { error: 'Custom domain requires Studio or Premium plan' },
+          { status: 403 }
+        );
+      }
+    }
+
     // businessName available to ALL tiers — any instructor can set a display/trading name.
     // Sole instructors use it for nicknames or trading names; schools use it for the school name.
     // It never replaces instructor.name in legal/payout contexts — display only.
