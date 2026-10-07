@@ -150,55 +150,113 @@ async function main() {
     }
   }
 
-  // ── V07-FV-4: No crash when BusinessBranding absent (real no-record provider) ──
-  console.log('\n── V07-FV-4: No crash for provider with no BusinessBranding record ─');
-  // Create a minimal provider that has never had a BusinessBranding record
-  const dummyUId = `v07fv2-u-${TS}`;
-  const dummyPId = `v07fv2-p-${TS}`;
+  // ── V07-FV-4: PUT from a provider with NO BusinessBranding record ──────────
+  // Create a new provider via the register API (gets email verification skipped
+  // via DB direct set), then login as that provider and PUT to /api/instructor/branding.
+  // Confirms the sync try/catch does not surface as 500 for no-record providers.
+  console.log('\n── V07-FV-4: PUT from provider with no BusinessBranding (real session) ─');
+
+  const dummyUId    = `v07fv2-u-${TS}`;
+  const dummyPId    = `v07fv2-p-${TS}`;
+  const dummyEmail  = `v07fv2-${TS}@audit.test`;
+  const dummyPass   = `Audit${TS}!`;
+
+  // Create via Prisma (register API would trigger email — bypass with direct create)
   await prisma.user.create({
-    data: { id: dummyUId, email: `v07fv2-${TS}@audit.test`, name: 'V07 FV2 NoBiz', role: 'provider', emailVerified: true },
-  });
-  await prisma.provider.create({
-    data: { id: dummyPId, userId: dummyUId, name: 'V07 FV2 NoBiz', phone: '+61400000066', hourlyRate: 50, subscriptionTier: 'PRO', subscriptionStatus: 'ACTIVE' },
-  });
+    data: { id: dummyUId, email: dummyEmail, name: 'V07 FV2 NoBiz', role: 'provider', emailVerified: true },
+  }).catch(() => {});
 
-  // Confirm there is no BusinessBranding for this provider
-  const existingBiz = await (prisma).businessBranding.findUnique({ where: { businessId: `biz_${dummyPId}` } }).catch(() => null);
-  if (existingBiz) {
-    // Delete it so the test is valid
-    await (prisma).businessBranding.delete({ where: { businessId: `biz_${dummyPId}` } }).catch(() => {});
-  }
-
-  // Login as the test account (not the dummy) — the endpoint uses the session provider
-  // For this test we verify via the main account since we can't login as the dummy.
-  // Instead: verify that the sync try/catch does not crash by confirming HTTP 200
-  // when called from the main account (which does have a bizBranding record).
-  // The actual no-record path is covered by the try/catch in production code.
-  // We confirm the catch branch does not surface as a 500.
-  const p4 = JSON.stringify({ brandColorPrimary: '#888888' });
-  const r4 = await req(`${BASE}/api/instructor/branding`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(p4), 'Cookie': session }, body: p4,
+  // Set hashed password directly via the register endpoint so NextAuth can verify it
+  const regPayload = JSON.stringify({
+    name: 'V07 FV2 NoBiz', email: dummyEmail, password: dummyPass,
+    phone: '+61400000066', businessType: 'driving', termsAccepted: true, termsVersion: '1.0',
   });
+  const regRes = await req(`${BASE}/api/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(regPayload) }, body: regPayload,
+  });
+  const regData = regRes.json();
+  const newProvId = regData?.providerId;
+  console.log(`   Register HTTP ${regRes.status} — providerId=${newProvId}`);
 
-  if (r4.status === 200) {
-    record('V07-FV-4', 'PASS', 'Legacy PUT returns HTTP 200 — sync errors are caught and do not surface as 500.', { actual: `HTTP ${r4.status}`, note: 'try/catch in sync code confirmed non-fatal. No-record provider created in DB but PUT tested via main account.' });
+  if (regRes.status !== 201 || !newProvId) {
+    record('V07-FV-4', 'PRECONDITION-BLOCKED',
+      `Could not register dummy provider for FV-4. HTTP ${regRes.status}. Cannot test no-BusinessBranding path via real session.`,
+      { actual: `register HTTP ${regRes.status}` }
+    );
   } else {
-    record('V07-FV-4', 'FAIL', `Legacy PUT returned ${r4.status} — unexpected error.`, { actual: `HTTP ${r4.status} body=${r4.body.substring(0, 200)}` });
+    // Mark email as verified so login works
+    await prisma.user.updateMany({
+      where: { email: dummyEmail },
+      data: { emailVerified: true, verificationToken: null, verificationTokenExpiry: null },
+    }).catch(() => {});
+
+    // Confirm no BusinessBranding exists for this provider
+    const bizIdDummy = `biz_${newProvId}`;
+    const dummyBiz = await (prisma).businessBranding.findUnique({ where: { businessId: bizIdDummy } }).catch(() => null);
+    console.log(`   BusinessBranding for dummy: ${dummyBiz ? 'EXISTS (unexpected)' : 'ABSENT (expected)'}`);
+
+    // Login as the dummy provider
+    let dummySession = null;
+    try {
+      dummySession = await login(dummyEmail, dummyPass);
+      console.log(`   Dummy session obtained: ${dummySession.substring(0, 50)}...`);
+    } catch (e) {
+      console.log(`   Dummy login failed: ${e.message}`);
+    }
+
+    if (!dummySession) {
+      record('V07-FV-4', 'PRECONDITION-BLOCKED',
+        'Could not login as dummy provider — cannot test no-BusinessBranding path via real session.',
+        { actual: 'login failed' }
+      );
+    } else {
+      // PUT from dummy session (no BusinessBranding record exists)
+      const p4 = JSON.stringify({ brandColorPrimary: '#777777' });
+      const r4 = await req(`${BASE}/api/instructor/branding`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(p4), 'Cookie': dummySession }, body: p4,
+      });
+
+      if (r4.status === 200) {
+        // Confirm no BusinessBranding was created (sync skipped gracefully)
+        const bizAfter = await (prisma).businessBranding.findUnique({ where: { businessId: bizIdDummy } }).catch(() => null);
+        if (!bizAfter) {
+          record('V07-FV-4', 'PASS',
+            'PUT from provider with NO BusinessBranding returned HTTP 200. No BusinessBranding row created. Sync skipped gracefully.',
+            { actual: `HTTP 200 bizAfter=${bizAfter === null ? 'null (no record created)' : 'EXISTS'}` }
+          );
+        } else {
+          record('V07-FV-4', 'PASS',
+            'PUT returned HTTP 200. BusinessBranding row was created by sync (acceptable — sync succeeded rather than skipped).',
+            { actual: `HTTP 200 bizAfter=EXISTS` }
+          );
+        }
+      } else {
+        record('V07-FV-4', 'FAIL',
+          `PUT from no-BusinessBranding provider returned ${r4.status} — sync error may have propagated.`,
+          { actual: `HTTP ${r4.status} body=${r4.body.substring(0, 200)}` }
+        );
+      }
+    }
   }
 
-  // Cleanup
-  await prisma.provider.delete({ where: { id: dummyPId } }).catch(() => {});
-  await prisma.user.delete({ where: { id: dummyUId } }).catch(() => {});
+  // Cleanup dummy
+  await prisma.provider.deleteMany({ where: { userId: { startsWith: dummyUId } } }).catch(() => {});
+  await prisma.user.deleteMany({ where: { id: dummyUId } }).catch(() => {});
+  await prisma.user.deleteMany({ where: { email: dummyEmail } }).catch(() => {});
   await prisma.provider.update({
     where: { id: provider.id },
     data: { brandLogo: provider.brandLogo, brandColorPrimary: provider.brandColorPrimary, showBrandingOnBookingPage: provider.showBrandingOnBookingPage },
   }).catch(() => {});
 
   console.log('\n' + '═'.repeat(68));
-  const passed = results.filter(r => r.status === 'PASS').length;
-  const failed = results.filter(r => r.status === 'FAIL').length;
-  console.log(`  FIX-VERIFIED v2 V-07: ${passed} PASS / ${failed} FAIL`);
-  results.forEach(r => console.log(`  ${r.status === 'PASS' ? '✅' : '❌'}  ${r.id}: ${r.evidence.substring(0, 100)}`));
+  const passed  = results.filter(r => r.status === 'PASS').length;
+  const failed  = results.filter(r => r.status === 'FAIL').length;
+  const blocked = results.filter(r => r.status === 'PRECONDITION-BLOCKED').length;
+  console.log(`  FIX-VERIFIED v2 V-07: ${passed} PASS / ${failed} FAIL / ${blocked} PRECONDITION-BLOCKED`);
+  results.forEach(r => {
+    const icon = r.status === 'PASS' ? '✅' : r.status === 'PRECONDITION-BLOCKED' ? '⏭️' : '❌';
+    console.log(`  ${icon}  ${r.id}: ${r.status} — ${r.evidence.substring(0, 80)}`);
+  });
   console.log('═'.repeat(68));
   console.log(`\nCompleted: ${new Date().toISOString()}`);
   await prisma.$disconnect();

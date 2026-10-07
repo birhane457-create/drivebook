@@ -113,8 +113,14 @@ async function main() {
   }
 
   if (!bizBrandingCreated) {
-    // BusinessBranding table may require a Business FK — test the Provider-only path
-    record('V16-FV-2', 'PASS', 'BusinessBranding seed not possible (FK constraint). V16-FV-1 already proves cross-model Provider check works. This test is a pre-condition skip.', { actual: 'bizBrandingCreated=false' });
+    // FK constraint prevents seeding a standalone BusinessBranding row.
+    // This test cannot be executed in the current environment.
+    // Record as PRECONDITION-BLOCKED (not PASS) — a blocked test is not a passing test.
+    record('V16-FV-2', 'PRECONDITION-BLOCKED',
+      'BusinessBranding seed requires a Business FK that cannot be created without the full business setup flow. ' +
+      'Test cannot execute. The cross-model slug check (V16-FV-1) covers the Provider path.',
+      { actual: 'bizBrandingCreated=false — FK constraint blocked seed' }
+    );
   } else {
     const r2 = await putBizBranding(session, { customSlug: bizSlug });
     const d2 = r2.json();
@@ -163,13 +169,18 @@ async function main() {
   await prisma.provider.update({ where: { id: provider.id }, data: { customSlug: provider.customSlug ?? null } }).catch(() => {});
 
   console.log('\n' + '═'.repeat(68));
-  const passed = results.filter(r => r.status === 'PASS').length;
-  const failed = results.filter(r => r.status === 'FAIL').length;
-  console.log(`  FIX-VERIFIED v2 V-16: ${passed} PASS / ${failed} FAIL`);
-  results.forEach(r => console.log(`  ${r.status === 'PASS' ? '✅' : '❌'}  ${r.id}: ${r.evidence.substring(0, 100)}`));
+  const passed  = results.filter(r => r.status === 'PASS').length;
+  const failed  = results.filter(r => r.status === 'FAIL').length;
+  const blocked = results.filter(r => r.status === 'PRECONDITION-BLOCKED').length;
+  console.log(`  FIX-VERIFIED v2 V-16: ${passed} PASS / ${failed} FAIL / ${blocked} PRECONDITION-BLOCKED`);
+  results.forEach(r => {
+    const icon = r.status === 'PASS' ? '✅' : r.status === 'PRECONDITION-BLOCKED' ? '⏭️' : '❌';
+    console.log(`  ${icon}  ${r.id}: ${r.status} — ${r.evidence.substring(0, 80)}`);
+  });
   console.log('═'.repeat(68));
   console.log(`\nCompleted: ${new Date().toISOString()}`);
   await prisma.$disconnect();
+  // Only FAIL causes exit 1 — PRECONDITION-BLOCKED is documented, not a failure
   process.exit(failed > 0 ? 1 : 0);
 }
 
