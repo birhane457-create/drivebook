@@ -84,15 +84,19 @@ export default function BrandingPage() {
         {/* Slug */}
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">URL Slug</label>
+          {/* V-12 FIX: actual public URL is slug.rootDomain (subdomain), not rootDomain/slug (path).
+              Input shows the slug; suffix shows .rootDomain so the full preview is correct. */}
           <div className="light flex items-center rounded-lg bg-gray-800 border border-gray-700 overflow-hidden focus-within:border-blue-500">
-            <span className="px-3 py-2 text-sm text-muted-foreground/60 border-r border-gray-700 shrink-0">
-              {process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'platform.com'}/
-            </span>
             <input className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground focus:outline-none"
               value={form.customSlug} onChange={e => setForm(f => ({ ...f, customSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
               placeholder="your-business" />
+            <span className="px-3 py-2 text-sm text-muted-foreground/60 border-l border-gray-700 shrink-0">
+              .{process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'platform.com'}
+            </span>
           </div>
-          <p className="mt-1 text-xs text-gray-600">Lowercase letters, numbers and hyphens only.</p>
+          <p className="mt-1 text-xs text-gray-600">
+            Your public URL will be <span className="font-mono">{form.customSlug || 'your-business'}.{process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'platform.com'}</span>
+          </p>
         </div>
 
         {/* Platform branding toggle */}
