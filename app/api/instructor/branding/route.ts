@@ -164,6 +164,33 @@ export async function PUT(req: NextRequest) {
       },
     });
 
+    // V-07 FIX: Sync branding fields from Provider to BusinessBranding.
+    // Without this, writing via the legacy PUT leaves BusinessBranding stale,
+    // causing divergence between the two branding sources of truth.
+    // Only syncs if a BusinessBranding record exists for this provider's business.
+    const bizId = `biz_${instructor.id}`;
+    try {
+      const existingBranding = await (prisma as any).businessBranding.findUnique({
+        where: { businessId: bizId },
+        select: { businessId: true },
+      });
+      if (existingBranding) {
+        await (prisma as any).businessBranding.update({
+          where: { businessId: bizId },
+          data: {
+            logo:                 brandLogo || null,
+            primaryColour:        brandColorPrimary || null,
+            secondaryColour:      brandColorSecondary || null,
+            customSlug:           customSlug || undefined,
+            showPlatformBranding: showBrandingOnBookingPage !== true,
+            ...(customDomain !== undefined && { customDomain: customDomain || null }),
+          },
+        });
+      }
+    } catch {
+      // BusinessBranding table may not exist for all providers — non-critical.
+    }
+
     return NextResponse.json({ success: true, branding: updated });
   } catch (error) {
     console.error('Error updating branding:', error);
