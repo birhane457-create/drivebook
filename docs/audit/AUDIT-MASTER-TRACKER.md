@@ -1,6 +1,6 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.20 (9 CLOSED: V-01, V-02, V-03, V-05, V-06, V-07, V-15, V-16, V-17; closure accepted by project owner at c2ffd70c)
+**Version:** 5.21 (V-04, V-08–V-14 SOURCE-CONFIRMED by verification script; product/architecture remediation pending)
 **Last Updated:** 2026-10-07
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -480,7 +480,7 @@ Both files use the real exported `POST` handler, real Stripe signature verificat
 **Source authority:** `docs/audit/BRANDING-KIMI-CLAUDE-VERIFICATION.md` @ `da90aaea`  
 **Original audit document:** `docs/audit/PHASE3-BRANDING-PUBLIC-FACE-AUDIT.md`  
 **Lifecycle rule:** FINDING â†’ source-confirmed â†’ VERIFIED (requires runtime evidence) â†’ FIX â†’ FIX-VERIFIED â†’ CLOSED  
-**Current state:** 17 findings registered. 9 CLOSED (V-01, V-02, V-03, V-05, V-06, V-07, V-15, V-16, V-17). 8 SOURCE-CONFIRMED (V-04, V-08–V-14). 0 FIX-VERIFIED pending closure. CLOSED acceptance by project owner 2026-10-07.
+**Current state:** 17 findings registered. 9 CLOSED (V-01, V-02, V-03, V-05, V-06, V-07, V-15, V-16, V-17). 8 SOURCE-CONFIRMED / FINDING (V-04, V-08–V-14) — source re-confirmed by scripts/verify-v04-v08-v14.mjs @ 2026-10-07, exit 0. 0 FIX-VERIFIED. Remediation pending for V-04/V-08–V-14.
 
 ---
 
@@ -531,16 +531,16 @@ Results will be recorded inline after execution.
 | BRAND-V-06 | Call legacy branding PUT with authenticated session, include `customDomain` field â€” confirm 200 response and DB write | HTTP PUT with session cookie | ✅ FIX-VERIFIED — PRO/BASIC 403; STUDIO 200; color-write still 200. Script: fix-verify-v06.mjs |
 | BRAND-V-17 | Call `/api/branding?providerId=<known-id>` with no session â€” confirm 200 + data returned | HTTP GET unauthenticated | ✅ FIX-VERIFIED — HTTP 200; no email; no name; display fields present. Script: fix-verify-v17.mjs |
 | BRAND-V-03 | Call `/api/business/branding` PUT with `customDomain` field â€” confirm field is dropped | HTTP PUT + DB inspection | ✅ FIX-VERIFIED — HTTP 200; exact DB match; domainVerified=false; domain preserved. Script: fix-verify-v03.mjs v2 |
-| BRAND-V-04 | Render Business Setup domain section â€” confirm wrong DNS target shown | Smoke test via local app | PENDING |
+| BRAND-V-04 | Render Business Setup domain section â€” confirm wrong DNS target shown | Smoke test via local app | SOURCE-CONFIRMED @ 2026-10-07 — hasWrong=true hasRight=false. Script: verify-v04-v08-v14.mjs |
 | BRAND-V-05 | Call domain verify endpoint with PREMIUM tier account â€” confirm accepted/rejected correctly | HTTP POST with PREMIUM session | ✅ FIX-VERIFIED (source) — PREMIUM tier features.customDomain confirmed in source. Script: fix-verify-v05.mjs |
 | BRAND-V-07 | Write via both branding paths â€” confirm divergent state on public render | HTTP sequence + public page render | ✅ FIX-VERIFIED (FV-4 PRECONDITION-BLOCKED) — logo/colour/inversion exact match; FV-4 dummy session unavailable. Script: fix-verify-v07.mjs v3 |
-| BRAND-V-08 | Request subdomain route for a driving provider â€” confirm renderer used | HTTP GET + page source inspection | PENDING |
-| BRAND-V-09 | Set `fontFamily`/`theme` via business branding API â€” confirm not reflected in public page | HTTP sequence + public page render | PENDING |
-| BRAND-V-10 | Set `showPlatformBranding=false` â€” confirm "Powered by DriveBook" still visible | HTTP sequence + public page render | PENDING |
-| BRAND-V-11 | Attempt to create duplicate `Provider.customSlug` via legacy PUT â€” confirm no DB-level rejection | HTTP PUT + DB state inspection | PENDING |
-| BRAND-V-12 | Load Business Setup domain page â€” confirm URL format displayed | Smoke test via local app | PENDING |
-| BRAND-V-13 | Load Business Setup without setting primary colour â€” check completion indicator | Smoke test via local app | PENDING |
-| BRAND-V-14 | Load BusinessWebsitePage â€” confirm no section ordering/visibility controls exist | Smoke test via local app | PENDING |
+| BRAND-V-08 | Request subdomain route for a driving provider â€” confirm renderer used | HTTP GET + page source inspection | SOURCE-CONFIRMED @ 2026-10-07 — hasBothImports=true isCustomisedCheck=true. HTTP smoke returned 500 (provider state issue). Script: verify-v04-v08-v14.mjs |
+| BRAND-V-09 | Set `fontFamily`/`theme` via business branding API â€” confirm not reflected in public page | HTTP sequence + public page render | SOURCE-CONFIRMED @ 2026-10-07 — pageUsesFontFamily=false pageUsesTheme=false configHasFont=true. Script: verify-v04-v08-v14.mjs |
+| BRAND-V-10 | Set `showPlatformBranding=false` â€” confirm "Powered by DriveBook" still visible | HTTP sequence + public page render | SOURCE-CONFIRMED @ 2026-10-07 — usesAsAnyCast=true typesHasFlag=false assembleHasFlag=false. Script: verify-v04-v08-v14.mjs |
+| BRAND-V-11 | Attempt to create duplicate `Provider.customSlug` via legacy PUT â€” confirm no DB-level rejection | HTTP PUT + DB state inspection | SOURCE-CONFIRMED @ 2026-10-07 — Provider.customSlug @unique=false BusinessBranding.customSlug @unique=true. Script: verify-v04-v08-v14.mjs |
+| BRAND-V-12 | Load Business Setup domain page â€” confirm URL format displayed | Smoke test via local app | SOURCE-CONFIRMED @ 2026-10-07 — brandingPage-pathFormat=true domainPage-subdomainFormat=true. Script: verify-v04-v08-v14.mjs |
+| BRAND-V-13 | Load Business Setup without setting primary colour â€” check completion indicator | Smoke test via local app | SOURCE-CONFIRMED @ 2026-10-07 — checksColour=true assembleHasDefault=true. Script: verify-v04-v08-v14.mjs |
+| BRAND-V-14 | Load BusinessWebsitePage â€” confirm no section ordering/visibility controls exist | Smoke test via local app | SOURCE-CONFIRMED @ 2026-10-07 — hasSectionOrder=false hasPageBuilder=false. Script: verify-v04-v08-v14.mjs |
 
 ---
 
