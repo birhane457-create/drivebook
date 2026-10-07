@@ -60,9 +60,16 @@ export default function BusinessWebsitePage({
   const { terminology, branding, aiConfig, services } = config
   const primary   = branding.primaryColour   ?? '#3B82F6'
   const secondary = branding.secondaryColour ?? '#10B981'
+  // V-09 FIX: apply fontFamily and theme from branding config.
+  // fontFamily is injected as a CSS custom property and applied via style.
+  // theme controls the Tailwind dark/light mode class on the root element.
+  const fontStyle = branding.fontFamily
+    ? { fontFamily: branding.fontFamily, '--bwp-font': branding.fontFamily } as React.CSSProperties
+    : undefined
+  const themeClass = branding.theme === 'dark' ? 'dark' : 'light'
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen bg-gray-50 ${themeClass}`} style={fontStyle}>
       {/* Nav */}
       <nav className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
