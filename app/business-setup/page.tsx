@@ -67,7 +67,10 @@ export default async function BusinessSetupOverviewPage() {
     { label: 'Business name set',       done: !!config.name },
     { label: 'Support email set',       done: !!config.supportEmail },
     { label: 'At least one service',    done: config.services.length > 0 },
-    { label: 'Primary colour set',      done: !!config.branding.primaryColour },
+    // V-13 FIX: assembleConfig always returns '#3B82F6' as the default primaryColour,
+    // so !!config.branding.primaryColour was permanently truthy even when the user
+    // had never set a colour. Check that it differs from the default instead.
+    { label: 'Primary colour set',      done: !!config.branding.primaryColour && config.branding.primaryColour !== '#3B82F6' },
     { label: 'AI description written',  done: config.aiConfig.businessDescription.length > 20 },
   ]
   const completedCount = completionItems.filter(i => i.done).length
