@@ -101,11 +101,14 @@ function assembleConfig(
   }
 
   const assembledBranding: BusinessBranding = {
-    logo:            branding?.logo            ?? undefined,
-    primaryColour:   branding?.primaryColour   ?? '#3B82F6',
-    secondaryColour: branding?.secondaryColour ?? undefined,
-    fontFamily:      branding?.fontFamily      ?? undefined,
-    theme:           (branding?.theme as 'light' | 'dark') ?? 'light',
+    logo:                 branding?.logo            ?? undefined,
+    primaryColour:        branding?.primaryColour   ?? '#3B82F6',
+    secondaryColour:      branding?.secondaryColour ?? undefined,
+    fontFamily:           branding?.fontFamily      ?? undefined,
+    theme:                (branding?.theme as 'light' | 'dark') ?? 'light',
+    // V-10 FIX: include showPlatformBranding in the typed config object.
+    // Was previously accessed via (as any) cast in BusinessWebsitePage.
+    showPlatformBranding: branding?.showPlatformBranding ?? true,
   }
 
   const assembledAIConfig: AIConfig = {
