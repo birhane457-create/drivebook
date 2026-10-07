@@ -22,6 +22,16 @@ const brandingSchema = z.object({
                          .regex(/^[a-z0-9-]{3,40}$/, 'Use lowercase letters, numbers and hyphens (3–40 chars)')
                          .optional()
                          .nullable(),
+  // V-03 FIX: customDomain was previously absent from the Zod schema, causing
+  // the field to be silently dropped when sent via /api/business/branding PUT.
+  // Domain verification still goes through /api/instructor/domain/verify which
+  // enforces DNS + ownership checks. This field is accepted here for persistence
+  // but does NOT set domainVerified (that remains the verify endpoint's responsibility).
+  customDomain:         z.string()
+                         .regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i,
+                           'Invalid domain format')
+                         .optional()
+                         .nullable(),
 })
 
 export async function GET(req: NextRequest) {
@@ -80,10 +90,14 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    // V-03 FIX: customDomain is accepted by the Zod schema but BusinessBranding
+    // table does not have a customDomain column. Extract it before upsert.
+    const { customDomain: _domainForProvider, ...brandingData } = parsed.data;
+
     const branding = await (prisma as any).businessBranding.upsert({
       where: { businessId: bizId },
-      create: { businessId: bizId, ...parsed.data },
-      update: parsed.data,
+      create: { businessId: bizId, ...brandingData },
+      update: brandingData,
     })
 
     // Mirror back to Instructor for backward compatibility
@@ -94,6 +108,10 @@ export async function PUT(req: NextRequest) {
         brandColorPrimary:    parsed.data.primaryColour ?? undefined,
         brandColorSecondary:  parsed.data.secondaryColour ?? undefined,
         customSlug:           parsed.data.customSlug    ?? undefined,
+        // V-03 FIX: mirror customDomain to Provider (was previously dropped by Zod).
+        // domainVerified is NOT set here — verification still requires DNS check
+        // via /api/instructor/domain/verify.
+        customDomain:         parsed.data.customDomain  ?? undefined,
         showBrandingOnBookingPage: parsed.data.showPlatformBranding === false,
       },
     })
