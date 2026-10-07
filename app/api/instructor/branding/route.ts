@@ -178,17 +178,21 @@ export async function PUT(req: NextRequest) {
         await (prisma as any).businessBranding.update({
           where: { businessId: bizId },
           data: {
-            logo:                 brandLogo || null,
-            primaryColour:        brandColorPrimary || null,
-            secondaryColour:      brandColorSecondary || null,
-            customSlug:           customSlug || undefined,
-            showPlatformBranding: showBrandingOnBookingPage !== true,
+            // Only sync fields that were explicitly provided in the PUT body.
+            // BusinessBranding.primaryColour is NOT NULL — never write null unless
+            // brandColorPrimary was explicitly cleared (null sent, not merely absent).
+            ...(brandLogo !== undefined && { logo: brandLogo || null }),
+            ...(brandColorPrimary !== undefined && { primaryColour: brandColorPrimary || '#3B82F6' }),
+            ...(brandColorSecondary !== undefined && { secondaryColour: brandColorSecondary || null }),
+            ...(customSlug !== undefined && { customSlug: customSlug || null }),
+            ...(showBrandingOnBookingPage !== undefined && { showPlatformBranding: showBrandingOnBookingPage !== true }),
             ...(customDomain !== undefined && { customDomain: customDomain || null }),
           },
         });
       }
-    } catch {
-      // BusinessBranding table may not exist for all providers — non-critical.
+    } catch (syncErr) {
+      // Log sync errors in development but don't fail the request.
+      console.error('[V-07 sync] BusinessBranding sync error:', syncErr instanceof Error ? syncErr.message : String(syncErr));
     }
 
     return NextResponse.json({ success: true, branding: updated });

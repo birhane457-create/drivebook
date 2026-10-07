@@ -1,13 +1,11 @@
 /**
- * FIX-VERIFIED test for BRAND-V-01
- * Custom-domain ownership invariant
+ * FIX-VERIFIED test for BRAND-V-01 (hardened — all negative branches FAIL)
  *
  * Tests:
- *   V01-FV-1: Verify endpoint rejects a domain already owned by another provider (409)
- *   V01-FV-2: Verify endpoint allows a provider to re-verify their own domain (not blocked)
- *   V01-FV-3: Public /custom-domain uses orderBy domainVerifiedAt DESC (deterministic)
- *
- * Requires: LOCAL DEV SERVER on http://localhost:3000
+ *   V01-FV-1: Verify endpoint returns HTTP 409 for domain owned by another provider
+ *   V01-FV-2: Verify endpoint does NOT return 409 for own domain re-verification
+ *   V01-FV-3: Public /custom-domain returns HTTP 200 for collision scenario
+ *             (proves the route resolves rather than erroring — orderBy makes it deterministic)
  */
 
 import http  from 'http';
@@ -52,22 +50,18 @@ async function login(email, password) {
 const results = [];
 function record(id, status, evidence, details = {}) {
   results.push({ id, status, evidence, ...details });
-  const icon = status === 'PASS' ? '✅' : '❌';
-  console.log(`\n${icon}  ${id}: ${status}`);
+  console.log(`\n${status === 'PASS' ? '✅' : '❌'}  ${id}: ${status}`);
   console.log(`   Evidence: ${evidence}`);
   if (details.actual) console.log(`   Actual:   ${details.actual}`);
-  if (details.note)   console.log(`   Note:     ${details.note}`);
 }
 
 async function main() {
   console.log('╔══════════════════════════════════════════════════════════════════╗');
-  console.log('║   FIX-VERIFIED: BRAND-V-01 domain ownership invariant           ║');
+  console.log('║   FIX-VERIFIED v2: BRAND-V-01 domain ownership invariant        ║');
   console.log('╚══════════════════════════════════════════════════════════════════╝');
   console.log(`\nStarted: ${new Date().toISOString()}`);
 
   const session = await login(EMAIL, PASS);
-  console.log(`   Session: ${session.substring(0, 50)}...`);
-
   const realProvider = await prisma.provider.findFirst({
     where: { user: { email: EMAIL } },
     select: { id: true, subscriptionTier: true, customDomain: true, domainVerified: true },
@@ -75,125 +69,88 @@ async function main() {
   console.log(`   Provider: ${realProvider.id} tier=${realProvider.subscriptionTier}`);
 
   const TS         = Date.now();
-  const testDomain = `v01-fv-test-${TS}.example.com`;
+  const testDomain = `v01-fv2-test-${TS}.example.com`;
 
   // ── V01-FV-1: 409 when domain already owned by another provider ──────────
   console.log('\n── V01-FV-1: Reject domain owned by another provider (expect 409) ─');
+  const dummyUserId = `v01fv2-u-${TS}`;
+  const dummyProvId = `v01fv2-p-${TS}`;
 
-  // Create a dummy provider that already owns the test domain
-  const dummyUserId = `v01fv-u-${TS}`;
-  const dummyProvId = `v01fv-p-${TS}`;
   await prisma.user.create({
-    data: { id: dummyUserId, email: `v01fv-${TS}@audit.test`, name: 'V01 FV Dummy', role: 'provider', emailVerified: true },
+    data: { id: dummyUserId, email: `v01fv2-${TS}@audit.test`, name: 'V01 FV2 Dummy', role: 'provider', emailVerified: true },
   });
   await prisma.provider.create({
     data: {
-      id: dummyProvId, userId: dummyUserId, name: 'V01 FV Dummy',
+      id: dummyProvId, userId: dummyUserId, name: 'V01 FV2 Dummy',
       phone: '+61400000088', hourlyRate: 50,
       customDomain: testDomain, domainVerified: true, domainVerifiedAt: new Date(),
       subscriptionTier: 'STUDIO', subscriptionStatus: 'ACTIVE',
     },
   });
-  console.log(`   Seeded: dummy provider (${dummyProvId}) owns ${testDomain}`);
-
-  // Set the real provider to STUDIO so they can reach the ownership check
   await prisma.provider.update({ where: { id: realProvider.id }, data: { subscriptionTier: 'STUDIO' } });
 
-  const payload409 = JSON.stringify({ domain: testDomain });
-  const res409 = await req(`${BASE}/api/instructor/domain/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload409), 'Cookie': session },
-    body: payload409,
+  const payload1 = JSON.stringify({ domain: testDomain });
+  const res1 = await req(`${BASE}/api/instructor/domain/verify`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload1), 'Cookie': session }, body: payload1,
   });
-  const data409 = res409.json();
-  console.log(`   HTTP: ${res409.status}  error: ${data409?.error}`);
+  const d1 = res1.json();
 
-  if (res409.status === 409 && data409?.error?.toLowerCase().includes('another account')) {
-    record('V01-FV-1', 'PASS',
-      'Verify endpoint returned HTTP 409 when domain already owned by another provider.',
-      { actual: `HTTP ${res409.status} error="${data409.error}"` }
-    );
-  } else if (res409.status === 403 && data409?.error?.toLowerCase().includes('studio')) {
-    record('V01-FV-1', 'PASS',
-      'Verify endpoint returned HTTP 403 tier gate — ownership check not reached but domain cannot be claimed.',
-      { actual: `HTTP ${res409.status} — tier gate fired before ownership check`, note: 'Tier gate is also a valid defense.' }
-    );
+  // STRICT: only 409 with the correct message passes
+  if (res1.status === 409 && d1?.error?.toLowerCase().includes('another account')) {
+    record('V01-FV-1', 'PASS', 'HTTP 409 returned for domain owned by another provider.', { actual: `HTTP ${res1.status} error="${d1.error}"` });
   } else {
-    record('V01-FV-1', 'FAIL',
-      `Expected HTTP 409 (domain already owned). Got HTTP ${res409.status}.`,
-      { actual: `HTTP ${res409.status} body=${res409.body.substring(0, 200)}` }
-    );
+    record('V01-FV-1', 'FAIL', `Expected HTTP 409 with ownership error. Got HTTP ${res1.status}.`, { actual: `HTTP ${res1.status} body=${res1.body.substring(0, 200)}` });
   }
 
-  // ── V01-FV-2: Provider can re-verify their own domain (not blocked) ──────
-  console.log('\n── V01-FV-2: Provider not blocked from re-verifying own domain ────');
-
-  const ownDomain = `v01-fv-own-${TS}.example.com`;
-  // Set the real provider to already own this domain
+  // ── V01-FV-2: Own domain re-verification not blocked ─────────────────────
+  console.log('\n── V01-FV-2: Own domain not blocked (expect NOT 409) ──────────────');
+  const ownDomain = `v01-fv2-own-${TS}.example.com`;
   await prisma.provider.update({
     where: { id: realProvider.id },
     data: { customDomain: ownDomain, domainVerified: true, domainVerifiedAt: new Date(), subscriptionTier: 'STUDIO' },
   });
-
-  const payloadOwn = JSON.stringify({ domain: ownDomain });
-  const resOwn = await req(`${BASE}/api/instructor/domain/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payloadOwn), 'Cookie': session },
-    body: payloadOwn,
+  const payload2 = JSON.stringify({ domain: ownDomain });
+  const res2 = await req(`${BASE}/api/instructor/domain/verify`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload2), 'Cookie': session }, body: payload2,
   });
-  const dataOwn = resOwn.json();
-  console.log(`   HTTP: ${resOwn.status}  error: ${dataOwn?.error}`);
+  const d2 = res2.json();
 
-  // Expect NOT 409 — may be 200 (DNS resolves) or non-409 error (DNS fails)
-  if (resOwn.status !== 409) {
-    record('V01-FV-2', 'PASS',
-      `Verify endpoint did NOT return 409 for provider re-verifying their own domain. HTTP ${resOwn.status}.`,
-      { actual: `HTTP ${resOwn.status} — ownership check correctly allows own-domain re-verification` }
-    );
+  if (res2.status === 409) {
+    record('V01-FV-2', 'FAIL', 'Verify endpoint blocked provider from re-verifying their OWN domain with 409 — fix is too broad.', { actual: `HTTP 409 error="${d2?.error}"` });
   } else {
-    record('V01-FV-2', 'FAIL',
-      'Verify endpoint returned 409 when provider tried to re-verify their OWN domain — fix is too broad.',
-      { actual: `HTTP 409 error="${dataOwn?.error}"` }
-    );
+    record('V01-FV-2', 'PASS', `Own domain not blocked. HTTP ${res2.status} (may fail DNS — expected for test domain).`, { actual: `HTTP ${res2.status}` });
   }
 
-  // ── V01-FV-3: Public resolver uses deterministic orderBy ─────────────────
-  console.log('\n── V01-FV-3: Public resolver orderBy domainVerifiedAt DESC ─────────');
-
-  // Two providers own the same domain — confirm /custom-domain returns HTTP 200
-  // (deterministic winner, not arbitrary). We can only verify it doesn't crash.
-  const sharedDomain = `v01-fv-shared-${TS}.example.com`;
+  // ── V01-FV-3: Collision scenario resolves via HTTP 200 (deterministic) ───
+  console.log('\n── V01-FV-3: Collision resolves HTTP 200 (orderBy deterministic) ──');
+  const sharedDomain = `v01-fv2-shared-${TS}.example.com`;
+  // Place both providers on the same domain, verify = true
+  // newer domainVerifiedAt on dummy — it should win
   await prisma.provider.update({
     where: { id: realProvider.id },
-    data: { customDomain: sharedDomain, domainVerified: true, domainVerifiedAt: new Date(Date.now() - 1000), subscriptionTier: 'STUDIO' },
+    data: { customDomain: sharedDomain, domainVerified: true, domainVerifiedAt: new Date(Date.now() - 2000), subscriptionTier: 'STUDIO' },
   });
   await prisma.provider.update({
     where: { id: dummyProvId },
     data: { customDomain: sharedDomain, domainVerified: true, domainVerifiedAt: new Date() },
   });
 
-  let domainRes;
+  let res3;
   try {
-    domainRes = await req(`${BASE}/custom-domain`, {
+    res3 = await req(`${BASE}/custom-domain`, {
       headers: { 'x-custom-domain': sharedDomain, Cookie: session },
       timeoutMs: 45000,
     });
   } catch (e) {
-    domainRes = { status: `error:${e.message}`, body: '' };
+    res3 = { status: `error:${e.message}`, body: '' };
   }
-  console.log(`   HTTP: ${domainRes.status}`);
 
-  if (domainRes.status === 200) {
-    record('V01-FV-3', 'PASS',
-      'Public /custom-domain returns HTTP 200 with deterministic orderBy. No arbitrary/undefined resolution.',
-      { actual: `HTTP 200 — most-recently-verified provider served`, note: 'orderBy domainVerifiedAt DESC applied' }
-    );
+  // STRICT: must be 200. For this to be 200 with our test domain, the resolver
+  // must find a provider with domainVerified=true and STUDIO tier. We set both.
+  if (res3.status === 200) {
+    record('V01-FV-3', 'PASS', 'Collision scenario: /custom-domain returns HTTP 200 — orderBy applied, route resolves without error.', { actual: `HTTP 200` });
   } else {
-    record('V01-FV-3', 'PASS',
-      `Public /custom-domain returned HTTP ${domainRes.status} — page not found for test domain (expected: no real CNAME). ` +
-      'orderBy fix applied in source, deterministic behavior confirmed in code review.',
-      { actual: `HTTP ${domainRes.status}`, note: 'HTTP 404 expected for non-CNAME test domain' }
-    );
+    record('V01-FV-3', 'FAIL', `Expected HTTP 200 for collision scenario. Got ${res3.status}. orderBy cannot be confirmed without successful resolution.`, { actual: `HTTP ${res3.status}` });
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
@@ -204,17 +161,13 @@ async function main() {
     data: { customDomain: realProvider.customDomain, domainVerified: realProvider.domainVerified, subscriptionTier: realProvider.subscriptionTier },
   }).catch(() => {});
 
-  // ── Summary ──────────────────────────────────────────────────────────────
   console.log('\n' + '═'.repeat(68));
   const passed = results.filter(r => r.status === 'PASS').length;
   const failed = results.filter(r => r.status === 'FAIL').length;
-  console.log(`  FIX-VERIFIED V-01: ${passed} PASS / ${failed} FAIL`);
-  results.forEach(r => {
-    console.log(`  ${r.status === 'PASS' ? '✅' : '❌'}  ${r.id}: ${r.evidence.substring(0, 100)}`);
-  });
+  console.log(`  FIX-VERIFIED v2 V-01: ${passed} PASS / ${failed} FAIL`);
+  results.forEach(r => console.log(`  ${r.status === 'PASS' ? '✅' : '❌'}  ${r.id}: ${r.evidence.substring(0, 100)}`));
   console.log('═'.repeat(68));
   console.log(`\nCompleted: ${new Date().toISOString()}`);
-
   await prisma.$disconnect();
   process.exit(failed > 0 ? 1 : 0);
 }
