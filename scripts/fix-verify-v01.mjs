@@ -121,11 +121,10 @@ async function main() {
     record('V01-FV-2', 'PASS', `Own domain not blocked. HTTP ${res2.status} (may fail DNS — expected for test domain).`, { actual: `HTTP ${res2.status}` });
   }
 
-  // ── V01-FV-3: Collision scenario resolves via HTTP 200 (deterministic) ───
-  console.log('\n── V01-FV-3: Collision resolves HTTP 200 (orderBy deterministic) ──');
+  // ── V01-FV-3: Collision scenario — newer provider wins, not arbitrary ──────
+  console.log('\n── V01-FV-3: Collision — newer domainVerifiedAt provider wins ──────');
   const sharedDomain = `v01-fv2-shared-${TS}.example.com`;
-  // Place both providers on the same domain, verify = true
-  // newer domainVerifiedAt on dummy — it should win
+  // dummyProvId gets newer domainVerifiedAt — should be the winner
   await prisma.provider.update({
     where: { id: realProvider.id },
     data: { customDomain: sharedDomain, domainVerified: true, domainVerifiedAt: new Date(Date.now() - 2000), subscriptionTier: 'STUDIO' },
@@ -145,12 +144,27 @@ async function main() {
     res3 = { status: `error:${e.message}`, body: '' };
   }
 
-  // STRICT: must be 200. For this to be 200 with our test domain, the resolver
-  // must find a provider with domainVerified=true and STUDIO tier. We set both.
-  if (res3.status === 200) {
-    record('V01-FV-3', 'PASS', 'Collision scenario: /custom-domain returns HTTP 200 — orderBy applied, route resolves without error.', { actual: `HTTP 200` });
+  // STRICT: HTTP 200 required AND the response body must contain the dummyProvId
+  // (newer domainVerifiedAt) to confirm orderBy DESC actually selects the correct winner.
+  if (res3.status === 200 && res3.body.includes(dummyProvId)) {
+    record('V01-FV-3', 'PASS',
+      `Collision resolved HTTP 200 and response body contains dummyProvId (newer domainVerifiedAt). ` +
+      `orderBy domainVerifiedAt DESC confirmed selecting correct winner.`,
+      { actual: `HTTP 200 body-contains-dummyProvId=true` }
+    );
+  } else if (res3.status === 200 && !res3.body.includes(dummyProvId)) {
+    // 200 but wrong provider served — orderBy may not be working as expected
+    const bodyHasReal = res3.body.includes(realProvider.id);
+    record('V01-FV-3', 'FAIL',
+      `HTTP 200 but response body does not contain dummyProvId (newer domainVerifiedAt). ` +
+      `orderBy winner not confirmed. body-contains-realProvider=${bodyHasReal}.`,
+      { actual: `HTTP 200 dummyProvId-in-body=false realProvId-in-body=${bodyHasReal}` }
+    );
   } else {
-    record('V01-FV-3', 'FAIL', `Expected HTTP 200 for collision scenario. Got ${res3.status}. orderBy cannot be confirmed without successful resolution.`, { actual: `HTTP ${res3.status}` });
+    record('V01-FV-3', 'FAIL',
+      `Expected HTTP 200 with dummyProvId in body. Got ${res3.status}.`,
+      { actual: `HTTP ${res3.status}` }
+    );
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
