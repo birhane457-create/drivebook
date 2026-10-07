@@ -1,0 +1,18 @@
+-- V-11 FIX: Add @unique constraint to Provider.customSlug
+-- BusinessBranding.customSlug already has @unique.
+-- Without this constraint the legacy branding PUT could create duplicate slugs
+-- causing arbitrary public resolution via findFirst.
+--
+-- Note: If duplicates exist in production, resolve them before running this migration
+-- by nullifying older duplicates:
+--
+--   UPDATE "Provider" p1 SET "customSlug" = NULL
+--   WHERE "customSlug" IS NOT NULL
+--     AND EXISTS (
+--       SELECT 1 FROM "Provider" p2
+--       WHERE p2."customSlug" = p1."customSlug"
+--         AND p2."createdAt" < p1."createdAt"
+--     );
+--
+-- Then apply the unique index:
+CREATE UNIQUE INDEX IF NOT EXISTS "Provider_customSlug_key" ON "Provider"("customSlug");

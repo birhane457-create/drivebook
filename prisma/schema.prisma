@@ -138,7 +138,11 @@ model Provider {
   yearsExperience           Int?
   domainVerified            Boolean            @default(false)
   domainVerifiedAt          DateTime?
-  customSlug                String?
+  // V-11 FIX: add @unique to match BusinessBranding.customSlug policy.
+  // The business branding PUT checks BusinessBranding uniqueness then mirrors
+  // the slug to Provider. Without this constraint a legacy PUT could create
+  // duplicates that cause arbitrary public resolution via findFirst.
+  customSlug                String?            @unique
   baseAddressLat            Float?
   baseAddressLng            Float?
   baseLatitude              Float?
