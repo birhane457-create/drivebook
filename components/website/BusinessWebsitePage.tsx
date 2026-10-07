@@ -280,7 +280,7 @@ export default function BusinessWebsitePage({
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <Link href="/privacy" className="hover:text-gray-600">Privacy</Link>
             <Link href="/terms" className="hover:text-gray-600">Terms</Link>
-            {!(branding as any).showPlatformBranding ? null : (
+            {!branding.showPlatformBranding ? null : (
               <span>Powered by {process.env.NEXT_PUBLIC_PLATFORM_SLUG ?? 'Platform'}</span>
             )}
           </div>
