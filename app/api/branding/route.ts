@@ -3,6 +3,16 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * GET /api/branding?providerId=<id>
+ *
+ * Public endpoint — returns display-only branding for the mobile booking page.
+ * MobileLayout.tsx calls this to render logo/colours for an instructor's booking page.
+ *
+ * V-17 FIX: The original endpoint returned name and email (PII) with no authentication.
+ * This version returns only display branding fields (logo, colours, businessName).
+ * name/email are NOT returned. providerId is echoed back as it was caller-supplied anyway.
+ */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -15,30 +25,29 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const instructor = await prisma.user.findUnique({
-      where: {
-        id: providerId,
-        role: 'provider',
-      },
+    // V-17 FIX: select only public display branding fields — no PII (name, email)
+    const provider = await prisma.provider.findFirst({
+      where: { id: providerId },
       select: {
-        id: true,
-        name: true,
-        email: true,
+        businessName:      true,
+        brandLogo:         true,
+        brandColorPrimary: true,
+        showBrandingOnBookingPage: true,
       },
     });
 
-    if (!instructor) {
+    if (!provider) {
       return NextResponse.json(
-        { error: 'Instructor not found' },
+        { error: 'Provider not found' },
         { status: 404 }
       );
     }
 
     return NextResponse.json({
-      providerId: instructor.id,
-      businessName: instructor.name || 'DriveBook',
-      logo: '/logo.png',
-      primaryColor: '#4F46E5',
+      providerId,
+      businessName: provider.businessName ?? 'DriveBook',
+      logo:         provider.brandLogo ?? '/logo.png',
+      primaryColor: provider.brandColorPrimary ?? '#4F46E5',
     });
   } catch (error) {
     console.error('Error fetching branding:', error);
