@@ -184,7 +184,9 @@ export default function BrandingPage() {
       }
 
       const tier = instructor?.subscriptionTier;
-      const isStudio = tier === 'STUDIO';
+      // V-05 FIX: allow PREMIUM tier to write customDomain (consistent with
+      // /api/instructor/domain/verify which accepts ['STUDIO', 'PREMIUM']).
+      const canSetDomain = ['STUDIO', 'PREMIUM'].includes(tier);
 
       const [brandRes, profileRes] = await Promise.all([
         fetch('/api/instructor/branding', {
@@ -196,7 +198,7 @@ export default function BrandingPage() {
             brandColorSecondary,
             showBrandingOnBookingPage,
             customSlug: slug || null,
-            customDomain: isStudio ? (customDomain || null) : null,
+            customDomain: canSetDomain ? (customDomain || null) : null,
             businessName: businessName.trim() || null,
           }),
         }),
@@ -236,7 +238,7 @@ export default function BrandingPage() {
   const tier = instructor?.subscriptionTier;
   const accountType = instructor?.accountType ?? 'INDIVIDUAL';
   const features = {
-    customDomain: tier === 'STUDIO',
+    customDomain: ['STUDIO', 'PREMIUM'].includes(tier),
     isBusiness:   accountType === 'BUSINESS',
   };
   const isBasic = tier === 'BASIC';
