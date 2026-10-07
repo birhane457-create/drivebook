@@ -121,7 +121,11 @@ export async function POST(req: NextRequest) {
       const cnameRecords = await dns.resolveCname(domain);
       dnsValue = cnameRecords[0] || '';
       dnsMethod = 'CNAME';
-      verified = dnsValue.toLowerCase().includes('vercel');
+      // V-02 FIX: use exact match against the authoritative target constant.
+      // The previous check used .includes('vercel') which accepted any CNAME
+      // containing the substring (e.g. attacker-vercel.example.com would pass).
+      // Exact equality against the constant prevents this.
+      verified = dnsValue.toLowerCase() === VERCEL_CNAME_TARGET;
     } catch {
       // CNAME not found — try A record (ANAME/ALIAS resolves this way)
       try {
