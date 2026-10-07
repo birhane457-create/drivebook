@@ -56,10 +56,26 @@ export async function PUT(req: NextRequest) {
 
     // Slug uniqueness check
     if (parsed.data.customSlug) {
-      const existing = await (prisma as any).businessBranding.findFirst({
+      // Check uniqueness in BusinessBranding table
+      const existingBiz = await (prisma as any).businessBranding.findFirst({
         where: { customSlug: parsed.data.customSlug, NOT: { businessId: bizId } },
       })
-      if (existing) {
+      if (existingBiz) {
+        return NextResponse.json({ error: 'This URL slug is already taken. Please choose another.' }, { status: 400 })
+      }
+
+      // V-16 FIX: Also check Provider.customSlug — the legacy branding PUT writes
+      // slugs directly to Provider without going through BusinessBranding.
+      // Without this check, a slug unique in BusinessBranding can collide with
+      // an existing Provider.customSlug set via the legacy path.
+      const existingProvider = await prisma.provider.findFirst({
+        where: {
+          customSlug: parsed.data.customSlug,
+          id: { not: session!.user!.providerId },
+        },
+        select: { id: true },
+      })
+      if (existingProvider) {
         return NextResponse.json({ error: 'This URL slug is already taken. Please choose another.' }, { status: 400 })
       }
     }
