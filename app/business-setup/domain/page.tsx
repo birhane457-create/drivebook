@@ -169,8 +169,10 @@ export default function DomainPage() {
             <p className="text-xs text-muted-foreground/60">Add these records to your domain's DNS settings:</p>
             <div className="space-y-2">
               {[
-                { type: 'CNAME', name: '@', value: `cname.${rootDomain}` },
-                { type: 'CNAME', name: 'www', value: `cname.${rootDomain}` },
+                // V-04 FIX: use the authoritative Vercel CNAME target, not a dynamic rootDomain string.
+                // The verify endpoint uses cname.vercel-dns.com; the UI must match.
+                { type: 'CNAME', name: '@',   value: 'cname.vercel-dns.com' },
+                { type: 'CNAME', name: 'www', value: 'cname.vercel-dns.com' },
               ].map((r: any) => (
                 <div key={r.name} className="flex items-center gap-2 font-mono text-xs bg-gray-900 rounded px-3 py-2">
                   <span className="text-primary w-12 shrink-0">{r.type}</span>
