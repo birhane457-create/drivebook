@@ -1,12 +1,11 @@
 /**
- * FIX-VERIFIED test for BRAND-V-03
- * Business branding PUT must persist customDomain (no longer dropped by Zod).
+ * FIX-VERIFIED test for BRAND-V-03 (hardened — all negative branches FAIL)
  *
  * Tests:
  *   V03-FV-1: PUT /api/business/branding with customDomain returns 200
- *   V03-FV-2: Provider.customDomain is updated in DB after PUT
- *   V03-FV-3: domainVerified is NOT set to true (verification still required)
- *   V03-FV-4: PUT without customDomain does not clear existing customDomain
+ *   V03-FV-2: Provider.customDomain equals the sent value in DB
+ *   V03-FV-3: domainVerified remains false after PUT
+ *   V03-FV-4: PUT without customDomain field preserves existing customDomain in DB
  */
 
 import http  from 'http';
@@ -51,75 +50,74 @@ async function login(email, password) {
 const results = [];
 function record(id, status, evidence, details = {}) {
   results.push({ id, status, evidence, ...details });
-  const icon = status === 'PASS' ? '✅' : '❌';
-  console.log(`\n${icon}  ${id}: ${status}`);
+  console.log(`\n${status === 'PASS' ? '✅' : '❌'}  ${id}: ${status}`);
   console.log(`   Evidence: ${evidence}`);
   if (details.actual) console.log(`   Actual:   ${details.actual}`);
 }
 
 async function main() {
   console.log('╔══════════════════════════════════════════════════════════════════╗');
-  console.log('║   FIX-VERIFIED: BRAND-V-03 customDomain persistence             ║');
+  console.log('║   FIX-VERIFIED v2: BRAND-V-03 customDomain persistence          ║');
   console.log('╚══════════════════════════════════════════════════════════════════╝');
   console.log(`\nStarted: ${new Date().toISOString()}`);
 
   const session = await login(EMAIL, PASS);
   const TS = Date.now();
-  const testDomain = `v03-fv-${TS}.example.com`;
+  const testDomain = `v03-fv2-${TS}.example.com`;
 
   const provider = await prisma.provider.findFirst({
     where: { user: { email: EMAIL } },
     select: { id: true, customDomain: true, domainVerified: true, subscriptionTier: true },
   });
 
-  // Set STUDIO tier for customDomain writes
   await prisma.provider.update({ where: { id: provider.id }, data: { subscriptionTier: 'STUDIO', customDomain: null, domainVerified: false } });
 
   // V03-FV-1: PUT with customDomain returns 200
   console.log('\n── V03-FV-1: PUT with customDomain returns 200 ────────────────────');
-  const payload = JSON.stringify({ customDomain: testDomain, primaryColour: '#FF0000' });
+  const payload1 = JSON.stringify({ customDomain: testDomain, primaryColour: '#FF0000' });
   const res1 = await req(`${BASE}/api/business/branding`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'Cookie': session }, body: payload,
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload1), 'Cookie': session }, body: payload1,
   });
   const d1 = res1.json();
   if (res1.status === 200 && d1?.success) {
-    record('V03-FV-1', 'PASS', 'PUT /api/business/branding with customDomain returned HTTP 200.', { actual: `HTTP ${res1.status}` });
+    record('V03-FV-1', 'PASS', 'PUT returned HTTP 200.', { actual: `HTTP ${res1.status}` });
   } else {
-    record('V03-FV-1', 'FAIL', `Expected 200.`, { actual: `HTTP ${res1.status} body=${res1.body.substring(0, 200)}` });
+    record('V03-FV-1', 'FAIL', `Expected 200. Got ${res1.status}.`, { actual: `HTTP ${res1.status} body=${res1.body.substring(0, 200)}` });
   }
 
-  // V03-FV-2: Provider.customDomain updated in DB
-  console.log('\n── V03-FV-2: Provider.customDomain updated in DB ──────────────────');
+  // V03-FV-2: Provider.customDomain exactly matches sent value
+  console.log('\n── V03-FV-2: Provider.customDomain matches sent value in DB ───────');
   const after1 = await prisma.provider.findUnique({ where: { id: provider.id }, select: { customDomain: true } });
   if (after1.customDomain === testDomain) {
-    record('V03-FV-2', 'PASS', `Provider.customDomain updated to "${testDomain}".`, { actual: `customDomain="${after1.customDomain}"` });
+    record('V03-FV-2', 'PASS', `Provider.customDomain="${after1.customDomain}" matches sent value.`, { actual: `customDomain="${after1.customDomain}"` });
   } else {
-    record('V03-FV-2', 'FAIL', `Provider.customDomain not updated.`, { actual: `customDomain="${after1.customDomain}"` });
+    // STRICT: any mismatch is a FAIL
+    record('V03-FV-2', 'FAIL', `Provider.customDomain="${after1.customDomain}" does not match sent "${testDomain}".`, { actual: `got="${after1.customDomain}" expected="${testDomain}"` });
   }
 
-  // V03-FV-3: domainVerified NOT set to true
+  // V03-FV-3: domainVerified remains false
   console.log('\n── V03-FV-3: domainVerified not set to true ────────────────────────');
   const after1v = await prisma.provider.findUnique({ where: { id: provider.id }, select: { domainVerified: true } });
   if (after1v.domainVerified === false) {
-    record('V03-FV-3', 'PASS', 'domainVerified remains false — verification still required via /api/instructor/domain/verify.', { actual: `domainVerified=${after1v.domainVerified}` });
+    record('V03-FV-3', 'PASS', 'domainVerified=false — not auto-verified by business PUT.', { actual: `domainVerified=${after1v.domainVerified}` });
   } else {
-    record('V03-FV-3', 'FAIL', 'domainVerified was set to true — business branding PUT should not verify domains.', { actual: `domainVerified=${after1v.domainVerified}` });
+    record('V03-FV-3', 'FAIL', 'domainVerified=true — business PUT should not set this.', { actual: `domainVerified=${after1v.domainVerified}` });
   }
 
-  // V03-FV-4: PUT without customDomain does not clear existing
+  // V03-FV-4: PUT without customDomain preserves existing value
   console.log('\n── V03-FV-4: PUT without customDomain preserves existing ───────────');
   const payload2 = JSON.stringify({ primaryColour: '#00FF00' });
-  const res2 = await req(`${BASE}/api/business/branding`, {
+  await req(`${BASE}/api/business/branding`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload2), 'Cookie': session }, body: payload2,
   });
   const after2 = await prisma.provider.findUnique({ where: { id: provider.id }, select: { customDomain: true } });
+  // STRICT: customDomain must equal the previously set value exactly
   if (after2.customDomain === testDomain) {
-    record('V03-FV-4', 'PASS', 'PUT without customDomain preserved existing customDomain.', { actual: `customDomain="${after2.customDomain}"` });
+    record('V03-FV-4', 'PASS', `customDomain preserved: "${after2.customDomain}".`, { actual: `customDomain="${after2.customDomain}"` });
   } else {
-    record('V03-FV-4', 'PASS', `PUT without customDomain: customDomain="${after2.customDomain}" (undefined means no-clear, acceptable).`, { actual: `customDomain="${after2.customDomain}"` });
+    record('V03-FV-4', 'FAIL', `customDomain not preserved. Expected "${testDomain}", got "${after2.customDomain}".`, { actual: `got="${after2.customDomain}"` });
   }
 
-  // Cleanup
   await prisma.provider.update({
     where: { id: provider.id },
     data: { customDomain: provider.customDomain, domainVerified: provider.domainVerified, subscriptionTier: provider.subscriptionTier },
@@ -128,7 +126,7 @@ async function main() {
   console.log('\n' + '═'.repeat(68));
   const passed = results.filter(r => r.status === 'PASS').length;
   const failed = results.filter(r => r.status === 'FAIL').length;
-  console.log(`  FIX-VERIFIED V-03: ${passed} PASS / ${failed} FAIL`);
+  console.log(`  FIX-VERIFIED v2 V-03: ${passed} PASS / ${failed} FAIL`);
   results.forEach(r => console.log(`  ${r.status === 'PASS' ? '✅' : '❌'}  ${r.id}: ${r.evidence.substring(0, 100)}`));
   console.log('═'.repeat(68));
   console.log(`\nCompleted: ${new Date().toISOString()}`);
