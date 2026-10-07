@@ -140,6 +140,9 @@ export interface BusinessBranding {
   secondaryColour?: string      // hex
   fontFamily?: string
   theme: 'light' | 'dark'
+  // V-10 FIX: field was present in BusinessBranding DB model and used in
+  // BusinessWebsitePage via (as any) cast — now properly typed.
+  showPlatformBranding?: boolean
 }
 
 // ── Domain Extension ──────────────────────────────────────────────────────────
