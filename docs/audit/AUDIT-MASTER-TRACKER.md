@@ -1,7 +1,7 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.28 (V-08 INVALIDATED: routing already works; V-14 remaining)
-**Last Updated:** 2026-10-07
+**Version:** 5.29 (V-14 INVALIDATED: configured renderer matches product contract; TIERS.md "full white-label" claim corrected)
+**Last Updated:** 2026-10-08
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -480,7 +480,7 @@ Both files use the real exported `POST` handler, real Stripe signature verificat
 **Source authority:** `docs/audit/BRANDING-KIMI-CLAUDE-VERIFICATION.md` @ `da90aaea`  
 **Original audit document:** `docs/audit/PHASE3-BRANDING-PUBLIC-FACE-AUDIT.md`  
 **Lifecycle rule:** FINDING â†’ source-confirmed â†’ VERIFIED (requires runtime evidence) â†’ FIX â†’ FIX-VERIFIED â†’ CLOSED  
-**Current state:** 17 findings registered. 9 CLOSED (V-01, V-02, V-03, V-05, V-06, V-07, V-15, V-16, V-17). 6 FIX-VERIFIED (V-04, V-09, V-10, V-11, V-12, V-13). 1 INVALIDATED (V-08). 1 SOURCE-CONFIRMED / FINDING (V-14) — source re-confirmed by scripts/verify-v04-v08-v14.mjs @ 2026-10-07, exit 0. 0 FIX-VERIFIED. Remediation pending for V-04/V-08–V-14.
+**Current state:** 17 findings registered. 9 CLOSED (V-01, V-02, V-03, V-05, V-06, V-07, V-15, V-16, V-17). 6 FIX-VERIFIED (V-04, V-09, V-10, V-11, V-12, V-13). 2 INVALIDATED (V-08, V-14). 0 SOURCE-CONFIRMED / FINDING — source re-confirmed by scripts/verify-v04-v08-v14.mjs @ 2026-10-07, exit 0. 0 FIX-VERIFIED. Remediation pending for V-04/V-08–V-14.
 
 ---
 
@@ -511,7 +511,7 @@ Both files use the real exported `POST` handler, real Stripe signature verificat
 | BRAND-V-11 | Slug policy/storage/uniqueness is inconsistent across models | P2 | CONFIRMED | YES — `BusinessBranding.customSlug` is DB-unique; `Provider.customSlug` has no DB unique constraint; see also BRAND-V-16 | SOURCE-CONFIRMED — schema: `Provider.customSlug @unique=false`; `BusinessBranding.customSlug @unique=true`. Runtime V-16 also confirmed slug collision in Provider. @ 2026-10-06T07:47Z | fix/brand-v11 — `prisma/schema.prisma`: @unique added to Provider.customSlug; migration 20261007222011 applied to Supabase test DB | 4/4 PASS exit 0 @ 2026-10-07T16:19Z (V11-FV-1 schema @unique; V11-FV-2 DB index exists; V11-FV-3 API 400 on duplicate; V11-FV-4 revert-detection). Script: `scripts/fix-verify-v11.mjs` | ✅ FIX-VERIFIED |
 | BRAND-V-12 | Business Setup branding page shows URL in path format (`rootDomain/slug`) vs actual subdomain format (`slug.rootDomain`) | P2 | CONFIRMED | YES — presentation defect; UI and actual URL format differ | SOURCE-CONFIRMED — `app/business-setup/branding/page.tsx` line 89: shows `{rootDomain}/` prefix + slug = path format. Actual public URL is `slug.rootDomain` (subdomain). Business Setup domain page correctly shows subdomain format. `brandingPage-pathFormat=true` @ 2026-10-06T07:47Z | fix/brand-v12 — `app/business-setup/branding/page.tsx`: input suffix changed from rootDomain/ prefix to .rootDomain suffix; preview shows slug.rootDomain | 4/4 PASS exit 0 @ 2026-10-07T13:59Z (V12-FV-1 old prefix absent; V12-FV-2 suffix present; V12-FV-3 preview shows slug.rootDomain; V12-FV-4 revert-detection). Script: `scripts/fix-verify-v12.mjs` | ✅ FIX-VERIFIED |
 | BRAND-V-13 | Setup progress falsely reports primary-colour complete because assembleConfig supplies a default value | P2 | CONFIRMED | YES — `getBusinessConfig` supplies `#3B82F6` when stored value is absent; completion indicator interprets default as user configuration | SOURCE-CONFIRMED — `app/business-setup/page.tsx` line 70: `done: !!config.branding.primaryColour`; `assembleConfig` always returns `#3B82F6` default; `setupChecksColour=true assembleHasDefault=true`. @ 2026-10-06T07:47Z | fix/brand-v13 — `app/business-setup/page.tsx`: primaryColour completion check compares against default #3B82F6 (not !!value) | 5/5 PASS exit 0 @ 2026-10-07T14:06Z (V13-FV-1 simple check absent; V13-FV-2 default comparison present; V13-FV-3 default→false; V13-FV-4 custom→true; V13-FV-5 revert-detection). Script: `scripts/fix-verify-v13.mjs` | ✅ FIX-VERIFIED |
-| BRAND-V-14 | Public page is a configured renderer, not a page builder (documentation/marketing claim mismatch) | Observation | CONFIRMED | YES — `BusinessWebsitePage` is a fixed-section configured public website renderer. The inspected path has no section ordering, section visibility, custom-page, or comparable page-builder management model. | SOURCE-CONFIRMED — `hasSectionOrder=false hasSectionVisible=false hasPageBuilder=false hasHero=true hasServices=true hasBooking=true`. Fixed sections only. @ 2026-10-06T07:47Z | N/A | N/A | FINDING |
+| BRAND-V-14 | Public page is a configured renderer, not a page builder (documentation/marketing claim mismatch) | Observation | CONFIRMED | SOURCE-CONFIRMED + PRODUCT-CONTRACT REVIEW — repository searched for page-builder, full-white-label, or unrestricted-editor claims. No such claims found. "full white-label" in DOCROLEBASE/07-subscriptions/TIERS.md PREMIUM section was vague and inconsistent; corrected to accurate description. Product contract confirmed: DriveBook provides a branded configured renderer, not a page builder. | 2026-10-08: product documentation reviewed; no false claims of page-builder capability found. docs/DOCROLEBASE/07-subscriptions/TIERS.md "full white-label" clarified. | docs correction: TIERS.md PREMIUM description updated to remove vague "full white-label" claim — replaced with accurate "enhanced branded booking experience" + roadmap note | Documentation-only. No code change required. | ✅ INVALIDATED / RECLASSIFIED — product-scope observation; system correctly implements configured renderer matching actual product contract; no page-builder claim exists in repository |
 
 ---
 
@@ -540,7 +540,7 @@ Results will be recorded inline after execution.
 | BRAND-V-11 | Attempt to create duplicate `Provider.customSlug` via legacy PUT â€” confirm no DB-level rejection | HTTP PUT + DB state inspection | SOURCE-CONFIRMED @ 2026-10-07 — Provider.customSlug @unique=false BusinessBranding.customSlug @unique=true. Script: verify-v04-v08-v14.mjs |
 | BRAND-V-12 | Load Business Setup domain page â€” confirm URL format displayed | Smoke test via local app | SOURCE-CONFIRMED @ 2026-10-07 — brandingPage-pathFormat=true domainPage-subdomainFormat=true. Script: verify-v04-v08-v14.mjs |
 | BRAND-V-13 | Load Business Setup without setting primary colour â€” check completion indicator | Smoke test via local app | SOURCE-CONFIRMED @ 2026-10-07 — checksColour=true assembleHasDefault=true. Script: verify-v04-v08-v14.mjs |
-| BRAND-V-14 | Load BusinessWebsitePage â€” confirm no section ordering/visibility controls exist | Smoke test via local app | SOURCE-CONFIRMED @ 2026-10-07 — hasSectionOrder=false hasPageBuilder=false. Script: verify-v04-v08-v14.mjs |
+| BRAND-V-14 | Load BusinessWebsitePage â€” confirm no section ordering/visibility controls exist | Smoke test via local app | ✅ INVALIDATED — product contract review confirmed no page-builder claim. Configured renderer matches intended product scope. TIERS.md documentation corrected. @ 2026-10-08 |
 
 ---
 
