@@ -78,6 +78,7 @@ export async function fetchProviderWebsiteData(
     (instructor.subscriptionStatus === 'TRIAL' && !trialExpired)
 
   // Load BusinessConfig — tries DB first, falls back to driving template
+  // Load BusinessConfig — tries DB first, falls back to driving template
   const config = await getBusinessConfig({ providerId: instructor.id })
 
   // Override branding from Instructor fields if not in BusinessConfig yet
