@@ -121,7 +121,7 @@ export default function SubdomainPricingBooking({
 
       {/* ── Full-screen overlay ──────────────────────────────────────────── */}
       {open && (
-        <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-y-auto">
+        <div className="dark fixed inset-0 z-[100] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-y-auto">
           {/* Header */}
           <div className="sticky top-0 z-10 bg-gradient-to-r from-white/5 to-white/2 border-b border-white/6 backdrop-blur-sm shadow-sm">
             <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
