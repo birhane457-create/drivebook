@@ -77,8 +77,13 @@ export default function BulkBookingForm({
   const [areaCheckDetail, setAreaCheckDetail] = useState<{ distanceKm?: number; radiusKm?: number } | null>(null);
 
   // Slot
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
   const [isShortNoticeSlot, setIsShortNoticeSlot] = useState(false);
+
+  // Min/max date helpers
+  const getMinDate = () => new Date().toISOString().split('T')[0];
+  const getMaxDate = () => { const d = new Date(); d.setMonth(d.getMonth() + 3); return d.toISOString().split('T')[0]; };
 
   // Details
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'new' | 'exists'>('idle');
@@ -647,14 +652,37 @@ export default function BulkBookingForm({
             </div>
           )}
 
+          {/* Date picker — was missing, causing SlotPicker to always show "Select a date first" */}
+          <div>
+            <label htmlFor="lesson-date" className="block text-sm font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+              <Calendar className="h-4 w-4" style={{ color: primary }} />
+              Select Date *
+            </label>
+            <div className="relative">
+              <input
+                type="date"
+                id="lesson-date"
+                value={selectedDate}
+                min={getMinDate()}
+                max={getMaxDate()}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setSelectedSlot(null); // clear time when date changes
+                }}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-gray-900 font-medium focus:ring-2 focus:outline-none cursor-pointer"
+                style={{ colorScheme: 'light' }}
+              />
+            </div>
+          </div>
+
           <SlotPicker
             providerId={providerId}
-            date={selectedSlot?.date ?? ''}
+            date={selectedDate}
             duration={selectedDuration}
             value={selectedSlot?.time ?? ''}
             onChange={(time) => {
-              if (selectedSlot?.date) {
-                setSelectedSlot({ date: selectedSlot.date, time });
+              if (selectedDate) {
+                setSelectedSlot(time ? { date: selectedDate, time } : null);
               }
             }}
           />
