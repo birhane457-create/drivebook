@@ -10,11 +10,11 @@ export default async function PublicBookingPage({
   params,
   searchParams 
 }: { 
-  params: { providerId: string }
+  params: { instructorId: string }
   searchParams: { location?: string }
 }) {
   const instructor = await prisma.provider.findUnique({
-    where: { id: params.providerId },
+    where: { id: params.instructorId },
   }) as any;
   if (!instructor) notFound();
 
