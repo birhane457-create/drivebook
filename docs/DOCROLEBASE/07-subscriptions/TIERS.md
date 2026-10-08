@@ -66,7 +66,9 @@ Adds: offline/cash booking tracking, branded booking page (`slug.drivebook.com.a
 Adds: custom domain (`yourdomain.com.au`), 1 year free domain included, even lower commission.
 
 ### PREMIUM
-Adds: business name on all public surfaces, AI receptionist answers as your business, full white-label, API access, lowest commission (10%).
+Adds: business name on all public surfaces, AI receptionist answers as your business, enhanced branded booking experience, API access, lowest commission (10%).
+
+**Note:** "Full white-label" (removing all DriveBook branding from the customer journey) is a future roadmap item — see "Coming Soon" below.
 
 **"Coming Soon" in PREMIUM:**
 - Direct payments (0% commission) — Phase 2, NOT implemented
