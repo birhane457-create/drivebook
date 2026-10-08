@@ -710,8 +710,17 @@ export default function BookingDetailsForm() {
                       aria-label="Select lesson date"
                       aria-required="true"
                       aria-invalid={!selectedDate}
-                      className="w-full px-4 py-3 bg-background border-2 border-slate-400 rounded-xl text-foreground font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] [color-scheme:dark]"
+                      className="w-full px-4 py-3 bg-background border-2 border-slate-400 rounded-xl font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] text-foreground [color-scheme:dark] appearance-none cursor-pointer"
+                      style={{ colorScheme: 'dark' }}
                     />
+                    {/* Visible calendar icon so users know it's clickable */}
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                    </span>
                   </div>
                 </div>
 
@@ -936,8 +945,16 @@ export default function BookingDetailsForm() {
                         aria-label="Select test date"
                         aria-required="true"
                         aria-invalid={!selectedTestDate}
-                        className="w-full px-4 py-3 bg-background border-2 border-slate-400 rounded-xl text-foreground font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] [color-scheme:dark]"
+                        className="w-full px-4 py-3 bg-background border-2 border-slate-400 rounded-xl text-foreground font-bold transition-all duration-100 hover:border-white focus:outline-none focus:border-sky-400 focus:shadow-[0_4px_0_0_#0284c7,0_10px_20px_0_rgba(56,189,248,0.3)] [color-scheme:dark] appearance-none cursor-pointer"
+                        style={{ colorScheme: 'dark' }}
                       />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                          <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                          <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                      </span>
                     </div>
                   </div>
                 )}
