@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Calendar, MapPin, Car, Star, ArrowLeft, AlertTriangle } from 'lucide-react'
-import BulkBookingForm from '@/components/BulkBookingForm'
+import PublicBookingWizard from '@/components/PublicBookingWizard'
 import { getDisplayName } from '@/lib/branding/getDisplayIdentity'
+import { getPackageTiers, DEFAULT_PACKAGE_TIERS } from '@/lib/config/packages'
 
 export default async function PublicBookingPage({ 
   params,
@@ -32,20 +33,51 @@ export default async function PublicBookingPage({
   // booking page — hasCustomBranding/hasBranding controls whether to show brand logo/colours
   const hasBranding =
     (instructor as any).showBrandingOnBookingPage === true;
-  const hasCustomBranding =
-    instructor.subscriptionTier === 'PRO' ||
-    instructor.subscriptionTier === 'STUDIO' ||
-    instructor.subscriptionTier === 'PREMIUM';
 
   const brandLogo = hasBranding ? (instructor as any).brandLogo : null;
-  const primaryColor = hasBranding && (instructor as any).brandColorPrimary ? (instructor as any).brandColorPrimary : '#3B82F6';
-  const secondaryColor = hasBranding && (instructor as any).brandColorSecondary ? (instructor as any).brandColorSecondary : '#10B981';
+  const primaryColor = hasBranding && (instructor as any).brandColorPrimary
+    ? (instructor as any).brandColorPrimary
+    : '#3B82F6';
+  const secondaryColor = hasBranding && (instructor as any).brandColorSecondary
+    ? (instructor as any).brandColorSecondary
+    : '#10B981';
 
   const searchedLocation = searchParams.location || null;
 
   const allowedDurations: number[] = Array.isArray((instructor as any).allowedDurations)
     ? (instructor as any).allowedDurations as number[]
     : [];
+
+  // ── Package tiers — from DB (no hardcoded values) ─────────────────────────
+  // Used for the subtitle ("save up to X%") and the profile card tier list.
+  // Falls back to DEFAULT_PACKAGE_TIERS if the DB row has never been saved.
+  const packageTiers = await getPackageTiers().catch(() => DEFAULT_PACKAGE_TIERS);
+  const maxDiscount = packageTiers.length > 0
+    ? Math.max(...packageTiers.map(t => t.discount))
+    : 0;
+
+  // Build a human-readable tier label for the profile sidebar, e.g. "6 / 10 / 15 hrs"
+  const tierHoursLabel = packageTiers
+    .slice()
+    .sort((a, b) => a.hours - b.hours)
+    .map(t => `${t.hours}`)
+    .join(' / ') + ' hrs';
+
+  // Provider shape expected by SubdomainBookingWizard (via PublicBookingWizard)
+  const providerForWizard = {
+    id:                   instructor.id,
+    name:                 getDisplayName(instructor),
+    displayName:          getDisplayName(instructor),
+    profileImage:         instructor.profileImage ?? null,
+    hourlyRate:           instructor.hourlyRate,
+    averageRating:        instructor.averageRating ?? null,
+    totalReviews:         instructor.totalReviews ?? 0,
+    offersTestPackage:    instructor.offersTestPackage ?? false,
+    testPackagePrice:     instructor.testPackagePrice ?? null,
+    testPackageDuration:  instructor.testPackageDuration ?? null,
+    testPackageIncludes:  (instructor.testPackageIncludes as string[]) ?? [],
+    allowedDurations,
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -91,7 +123,7 @@ export default async function PublicBookingPage({
                   {instructor.profileImage ? (
                     <Image src={instructor.profileImage} alt={getDisplayName(instructor)} fill className="object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-5xl font-bold text-foreground">
+                    <div className="w-full h-full flex items-center justify-center text-5xl font-bold text-gray-400">
                       {getDisplayName(instructor).charAt(0)}
                     </div>
                   )}
@@ -100,12 +132,12 @@ export default async function PublicBookingPage({
                   {instructor.carImage ? (
                     <Image src={instructor.carImage} alt="Training vehicle" fill className="object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-foreground">
+                    <div className="w-full h-full flex items-center justify-center text-gray-300">
                       <Car className="h-12 w-12" />
                     </div>
                   )}
                   {(instructor.carMake || instructor.carModel) && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-foreground text-xs px-2 py-1 truncate">
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-xs px-2 py-1 truncate">
                       {[instructor.carYear, instructor.carMake, instructor.carModel].filter(Boolean).join(' ')}
                     </div>
                   )}
@@ -117,12 +149,21 @@ export default async function PublicBookingPage({
                 <h1 className="text-xl font-bold text-gray-900">{getDisplayName(instructor)}</h1>
                 <div className="flex items-center gap-1 mt-1 mb-3">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className={`h-4 w-4 ${i < Math.round((instructor as any).averageRating ?? 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />
+                    <Star
+                      key={i}
+                      className={`h-4 w-4 ${
+                        i < Math.round((instructor as any).averageRating ?? 0)
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'text-gray-200'
+                      }`}
+                    />
                   ))}
                   {(instructor as any).totalReviews > 0 ? (
-                    <span className="ml-1 text-sm text-muted-foreground/60">({(instructor as any).averageRating?.toFixed(1)} · {(instructor as any).totalReviews} reviews)</span>
+                    <span className="ml-1 text-sm text-gray-500">
+                      ({(instructor as any).averageRating?.toFixed(1)} · {(instructor as any).totalReviews} reviews)
+                    </span>
                   ) : (
-                    <span className="ml-1 text-sm text-muted-foreground">New instructor</span>
+                    <span className="ml-1 text-sm text-gray-400">New instructor</span>
                   )}
                 </div>
 
@@ -134,20 +175,23 @@ export default async function PublicBookingPage({
                 {/* Pricing tiles */}
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <div className="bg-blue-50 rounded-lg px-3 py-2">
-                    <p className="text-xs text-muted-foreground/60">Standard</p>
-                    <p className="text-base font-bold text-blue-700" style={{ color: secondaryColor }}>
+                    <p className="text-xs text-gray-500">Standard</p>
+                    <p className="text-base font-bold" style={{ color: secondaryColor }}>
                       ${instructor.hourlyRate}/hr
                     </p>
                   </div>
                   <div className="bg-green-50 rounded-lg px-3 py-2">
-                    <p className="text-xs text-muted-foreground/60">Bulk packages</p>
-                    <p className="text-base font-bold text-green-700">6 / 10 / 15 hrs</p>
+                    <p className="text-xs text-gray-500">Bulk packages</p>
+                    {/* Dynamic: derived from DB package tiers, not hardcoded */}
+                    <p className="text-base font-bold text-green-700">{tierHoursLabel}</p>
                   </div>
                   {instructor.offersTestPackage && (
                     <div className="bg-purple-50 rounded-lg px-3 py-2 col-span-2">
-                      <p className="text-xs text-muted-foreground/60">PDA test pack</p>
+                      <p className="text-xs text-gray-500">PDA test pack</p>
                       <p className="text-base font-bold text-purple-700">
-                        {instructor.testPackagePrice ? `$${instructor.testPackagePrice.toFixed(2)}` : 'Available'}
+                        {instructor.testPackagePrice
+                          ? `$${instructor.testPackagePrice.toFixed(2)}`
+                          : 'Available'}
                       </p>
                     </div>
                   )}
@@ -159,7 +203,7 @@ export default async function PublicBookingPage({
                     <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
                       <MapPin className="h-4 w-4" /> Service Areas
                     </h3>
-                    <p className="text-xs text-muted-foreground/60">{instructor.serviceAreas}</p>
+                    <p className="text-xs text-gray-500">{instructor.serviceAreas}</p>
                   </div>
                 )}
               </div>
@@ -175,12 +219,12 @@ export default async function PublicBookingPage({
                 <h2 className="text-xl font-bold text-gray-900 mb-2">
                   {getDisplayName(instructor)} is not currently accepting bookings
                 </h2>
-                <p className="text-muted-foreground/60 text-sm mb-6">
-                  This instructor's account is temporarily inactive. Please check back later or find another instructor.
+                <p className="text-gray-500 text-sm mb-6">
+                  This instructor&apos;s account is temporarily inactive. Please check back later or find another instructor.
                 </p>
                 <Link
                   href="/instructors"
-                  className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-foreground px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors"
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Find Another Instructor
@@ -189,10 +233,13 @@ export default async function PublicBookingPage({
             ) : (
               <>
                 {searchedLocation && (
-                  <div className="border-2 rounded-lg p-4 mb-6" style={{ 
-                    backgroundColor: `${primaryColor}10`, 
-                    borderColor: `${primaryColor}40` 
-                  }}>
+                  <div
+                    className="border-2 rounded-lg p-4 mb-6"
+                    style={{
+                      backgroundColor: `${primaryColor}10`,
+                      borderColor: `${primaryColor}40`,
+                    }}
+                  >
                     <div className="flex items-start gap-3">
                       <MapPin className="h-5 w-5 mt-0.5" style={{ color: primaryColor }} />
                       <div>
@@ -206,30 +253,23 @@ export default async function PublicBookingPage({
                     </div>
                   </div>
                 )}
-                
+
                 <div className="bg-white rounded-lg shadow p-6">
                   <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
                     <Calendar className="h-6 w-6" style={{ color: primaryColor }} />
                     Book Your Lessons
                   </h2>
+                  {/* Subtitle: maxDiscount computed from DB tiers — no hardcoded % */}
                   <p className="text-gray-600 mb-6">
-                    Choose a package and save up to 12% on bulk bookings
+                    {maxDiscount > 0
+                      ? `Choose a package and save up to ${maxDiscount}% on bulk bookings`
+                      : 'Choose a package and start booking your lessons'}
                   </p>
-                  <BulkBookingForm 
-                    providerId={instructor.id}
-                    instructorName={getDisplayName(instructor)}
-                    hourlyRate={instructor.hourlyRate}
-                    searchedLocation={searchedLocation}
-                    brandColorPrimary={primaryColor}
-                    brandColorSecondary={secondaryColor}
-                    serviceAreas={instructor.serviceAreas}
-                    baseAddress={instructor.baseAddress}
-                    serviceRadiusKm={instructor.serviceRadiusKm}
-                    allowedDurations={allowedDurations}
-                    offersTestPackage={instructor.offersTestPackage ?? false}
-                    testPackagePrice={instructor.testPackagePrice ?? undefined}
-                    testPackageDuration={instructor.testPackageDuration ?? undefined}
-                    testPackageIncludes={(instructor.testPackageIncludes as string[]) ?? []}
+
+                  {/* Unified booking wizard — same component used on subdomain/custom-domain pages */}
+                  <PublicBookingWizard
+                    provider={providerForWizard}
+                    primary={primaryColor}
                   />
                 </div>
               </>
