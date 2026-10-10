@@ -138,6 +138,18 @@ How money flows. Independent of tier and account type.
 - Do NOT set `paymentMode = 'DIRECT'` on any account — it will break checkout
 - The 0% commission promise on PREMIUM requires `DIRECT` mode — this is why it's "phase 2"
 
+**Payment authority — who can execute a refund:**
+
+| Scenario | Refund authority | DriveBook action |
+|---|---|---|
+| `paymentMode = 'PLATFORM'` | DriveBook | Execute Stripe refund + debit wallet |
+| `paymentMode = 'DIRECT'` (phase 2) | The business | Record obligation; notify business; no Stripe call |
+| White-label branding only | Still determined by `paymentMode` | Branding does not change refund authority |
+
+**White-label branding does not determine refund authority.** A PREMIUM instructor with a custom domain is still `PLATFORM` payment mode — DriveBook handles their refunds. Only `paymentMode` and who actually received the Stripe payment determine who can refund.
+
+**See also:** `.kiro/steering/booking-engine-architecture.md` for the three-layer separation of booking engine, product rules, and payment adapter.
+
 ---
 
 ### 4. Business Model — `Provider.businessModel` (String)
