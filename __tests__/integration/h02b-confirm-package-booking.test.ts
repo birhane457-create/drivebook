@@ -446,14 +446,40 @@ describe('H-02b: concurrent double-confirmation (serialization)', () => {
 
 describe('H-02b: insufficient hours after previous confirmed bookings', () => {
   it('I-01: confirming more hours than available → 400, wallet untouched', async () => {
-    // Package has 1 hour; request 2 hours
-    const { packageBooking, childBooking } = await createPackageFixture(
-      studentA, instructor, 1, 60  // 1-hour package
+    // Package has 1 hour; request matches the booking duration (1h) but exceeds
+    // the package capacity. Duration must match the booking, so we create a 1hr
+    // booking and pass hoursToDeduct: 1, but the package only has 1hr and it is
+    // already fully consumed by the fixture setup. We need a fixture where 0 hours
+    // remain — create a 1hr package with a 1hr booking, confirm it, then try again.
+    //
+    // Simpler: use a 1-hour package and attempt to confirm a 2-hour booking.
+    // The 2hr booking → hoursToDeduct: 2, package has 1hr → INSUFFICIENT_HOURS.
+    const { packageBooking } = await createPackageFixture(
+      studentA, instructor, 1, 60  // 1-hour package, wallet gets $60
     );
+    // Create a 2-hour child booking so hoursToDeduct: 2 matches the duration
+    const start2h = new Date(FUTURE.getTime() + 50 * 60 * 60 * 1000);
+    const end2h   = new Date(start2h.getTime() + 2 * 60 * 60 * 1000);
+    const child2h = await (prisma.booking.create as any)({
+      data: {
+        providerId: instructor.provider.id,
+        customerId: studentA.customer.id,
+        customerName: studentA.customer.name,
+        status: 'PENDING',
+        startTime: start2h,
+        endTime: end2h,
+        duration: 120,
+        price: 0,
+        isPackageBooking: false,
+        parentBookingId: null,
+      },
+    });
+
     const balanceBefore = (await getWalletBalance(studentA.user.id)).balance;
 
+    // hoursToDeduct: 2 matches the 2hr booking duration, but package only has 1hr
     const { status, body } = await callRoute(
-      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 2 },
+      { bookingId: child2h.id, packageBookingId: packageBooking.id, hoursToDeduct: 2 },
       studentA.user.email
     );
 
@@ -461,9 +487,9 @@ describe('H-02b: insufficient hours after previous confirmed bookings', () => {
     expect(body.error).toMatch(/insufficient hours/i);
 
     const balanceAfter = (await getWalletBalance(studentA.user.id)).balance;
-    expect(balanceAfter).toBe(balanceBefore);
+    expect(balanceAfter).toBeCloseTo(balanceBefore, 2);
 
-    const booking = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    const booking = await prisma.booking.findUnique({ where: { id: child2h.id } });
     expect(booking?.status).toBe('PENDING');
   });
 });
@@ -778,5 +804,121 @@ describe('H-02b-F3: duplicate hour-accounting regression', () => {
     // child4 stays PENDING
     const c4 = await prisma.booking.findUnique({ where: { id: child4.id } });
     expect(c4?.status).toBe('PENDING');
+  });
+});
+
+describe('H-02b-F4: client-supplied hours must match server-derived booking duration', () => {
+  /**
+   * hoursToDeduct is accepted from the client for format validation only.
+   * The route derives the authoritative duration from booking.startTime/endTime
+   * inside the transaction, and rejects any request where the supplied value
+   * differs by more than ±0.001h (~3.6 seconds).
+   *
+   * This prevents:
+   *   - A client sending hoursToDeduct: 1 for a 2-hour lesson (underpays $60)
+   *   - A client sending hoursToDeduct: 2 for a 1-hour lesson (over-deducts, but
+   *     wastes the student's own package hours — still rejected for consistency)
+   */
+
+  it('F4-01: 2-hour booking with hoursToDeduct: 1 — rejected, all state unchanged', async () => {
+    // Create a 2-hour child booking
+    const { packageBooking } = await createPackageFixture(studentA, instructor, 10, 60);
+    const start = new Date(FUTURE.getTime() + 30 * 60 * 60 * 1000);
+    const end   = new Date(start.getTime() + 2 * 60 * 60 * 1000); // 2 hours
+    const child2h = await (prisma.booking.create as any)({
+      data: {
+        providerId:    instructor.provider.id,
+        customerId:    studentA.customer.id,
+        customerName:  studentA.customer.name,
+        status:        'PENDING',
+        startTime:     start,
+        endTime:       end,
+        duration:      120,
+        price:         0,
+        isPackageBooking: false,
+        parentBookingId: null,
+      },
+    });
+
+    const balanceBefore = (await getWalletBalance(studentA.user.id)).balance;
+    const pkgBefore = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+
+    // Send hoursToDeduct: 1 for a 2-hour booking — mismatch
+    const { status, body } = await callRoute(
+      { bookingId: child2h.id, packageBookingId: packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+
+    expect(status).toBe(409);
+    expect(body.error).toMatch(/does not match the booking duration/i);
+    expect(body.supplied).toBeCloseTo(1, 3);
+    expect(body.serverDerived).toBeCloseTo(2, 3);
+
+    // Booking still PENDING
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: child2h.id } });
+    expect(bookingAfter?.status).toBe('PENDING');
+
+    // Wallet unchanged
+    const balanceAfter = (await getWalletBalance(studentA.user.id)).balance;
+    expect(balanceAfter).toBeCloseTo(balanceBefore, 2);
+
+    // Package counters unchanged
+    const pkgAfter = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+    expect(Number(pkgAfter?.packageHoursUsed)).toBe(Number(pkgBefore?.packageHoursUsed));
+    expect(Number(pkgAfter?.packageHoursRemaining)).toBe(Number(pkgBefore?.packageHoursRemaining));
+  });
+
+  it('F4-02: 1-hour booking with hoursToDeduct: 2 — rejected, all state unchanged', async () => {
+    // FUTURE child booking is 1 hour (FUTURE → FUTURE_END defined at top of file)
+    const { packageBooking, childBooking } = await createPackageFixture(studentA, instructor, 10, 60);
+
+    const balanceBefore = (await getWalletBalance(studentA.user.id)).balance;
+    const pkgBefore = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+
+    // Send hoursToDeduct: 2 for a 1-hour booking — mismatch
+    const { status, body } = await callRoute(
+      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 2 },
+      studentA.user.email
+    );
+
+    expect(status).toBe(409);
+    expect(body.error).toMatch(/does not match the booking duration/i);
+    expect(body.supplied).toBeCloseTo(2, 3);
+    expect(body.serverDerived).toBeCloseTo(1, 3);
+
+    // Booking still PENDING
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    expect(bookingAfter?.status).toBe('PENDING');
+
+    // Wallet unchanged
+    const balanceAfter = (await getWalletBalance(studentA.user.id)).balance;
+    expect(balanceAfter).toBeCloseTo(balanceBefore, 2);
+
+    // Package counters unchanged
+    const pkgAfter = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+    expect(Number(pkgAfter?.packageHoursUsed)).toBe(Number(pkgBefore?.packageHoursUsed));
+    expect(Number(pkgAfter?.packageHoursRemaining)).toBe(Number(pkgBefore?.packageHoursRemaining));
+  });
+
+  it('F4-03: exact match (1h booking, hoursToDeduct: 1) — succeeds normally', async () => {
+    // Regression: the mismatch check must not block a correct request
+    const { packageBooking, childBooking } = await createPackageFixture(studentA, instructor, 10, 60);
+    const balanceBefore = (await getWalletBalance(studentA.user.id)).balance;
+
+    const { status, body } = await callRoute(
+      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+
+    // Wallet debited $60
+    const balanceAfter = (await getWalletBalance(studentA.user.id)).balance;
+    expect(balanceBefore - balanceAfter).toBeCloseTo(60, 2);
+
+    // Booking confirmed
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    expect(bookingAfter?.status).toBe('CONFIRMED');
   });
 });
