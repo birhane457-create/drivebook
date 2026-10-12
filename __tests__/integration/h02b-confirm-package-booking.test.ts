@@ -619,3 +619,164 @@ describe('H-02b-F2: insufficient wallet balance fails closed', () => {
     expect(Number(pkgAfter?.packageHoursUsed)).toBe(0);
   });
 });
+
+describe('H-02b-F3: duplicate hour-accounting regression', () => {
+  /**
+   * Before the fix, availableHours = packageTotalHours - packageHoursUsed - otherUsedHours.
+   * packageHoursUsed and otherUsedHours both count confirmed lessons, so each confirmed
+   * lesson was subtracted twice.
+   *
+   * Example with a 3-hour package and three 1-hour lessons:
+   *   After lesson 1: packageHoursUsed=1, otherUsedHours=1 → old: 3-1-1=1 (wrong), new: 3-1=2
+   *   After lesson 2: packageHoursUsed=2, otherUsedHours=2 → old: 3-2-2=-1 (wrong), new: 3-2=1
+   *   Lesson 3 would have been blocked by the old code even though 1 hour remains.
+   *
+   * The fix uses only child booking records as the authoritative source.
+   * packageHoursUsed is retained for display/audit but not used in the availability check.
+   */
+
+  /** Create a child booking with explicit startTime/endTime for a given hour slot */
+  async function createChildBooking(
+    student: Awaited<ReturnType<typeof createStudent>>,
+    instr: Awaited<ReturnType<typeof createInstructor>>,
+    hourOffset: number   // hours from FUTURE for this lesson's start
+  ) {
+    const start = new Date(FUTURE.getTime() + hourOffset * 60 * 60 * 1000 + 24 * 60 * 60 * 1000);
+    const end   = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour later
+    return (prisma.booking.create as any)({
+      data: {
+        providerId:    instr.provider.id,
+        customerId:    student.customer.id,
+        customerName:  student.customer.name,
+        status:        'PENDING',
+        startTime:     start,
+        endTime:       end,
+        duration:      60,
+        price:         0,
+        isPackageBooking: false,
+        parentBookingId: null,
+      },
+    });
+  }
+
+  it('F3-01: three sequential confirmations on a 3-hour package — all succeed, correct available hours after each', async () => {
+    /**
+     * Scenario: 3-hour package, 3 one-hour lessons confirmed one at a time.
+     * With the old double-count formula, lesson 3 would be blocked (available = -1).
+     * With the fix, each confirmation correctly sees the remaining hours.
+     *
+     * Expected after each confirmation:
+     *   Before any: available = 3
+     *   After 1st:  available = 2
+     *   After 2nd:  available = 1
+     *   After 3rd:  available = 0  (package completed)
+     */
+    const pkg = await createPackageFixture(studentA, instructor, 3, 60);
+    // 3-hour package: wallet credited $180 (3 × $60)
+
+    const child1 = await createChildBooking(studentA, instructor, 0);
+    const child2 = await createChildBooking(studentA, instructor, 2);
+    const child3 = await createChildBooking(studentA, instructor, 4);
+
+    // ── Confirm lesson 1 ──────────────────────────────────────────────────────
+    const r1 = await callRoute(
+      { bookingId: child1.id, packageBookingId: pkg.packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+    expect(r1.status).toBe(200);
+
+    // After lesson 1: packageHoursUsed = 1, 1 confirmed child booking
+    const pkgAfter1 = await prisma.booking.findUnique({ where: { id: pkg.packageBooking.id } });
+    expect(Number(pkgAfter1?.packageHoursUsed)).toBeCloseTo(1, 4);
+    expect(Number(pkgAfter1?.packageHoursRemaining)).toBeCloseTo(2, 4);
+
+    // ── Confirm lesson 2 ──────────────────────────────────────────────────────
+    const r2 = await callRoute(
+      { bookingId: child2.id, packageBookingId: pkg.packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+    // Old formula: 3 - 1 (packageHoursUsed) - 1 (otherUsedHours) = 1 → would pass.
+    // New formula: 3 - 1 (otherUsedHours: child1 confirmed) = 2 → correct.
+    expect(r2.status).toBe(200);
+
+    const pkgAfter2 = await prisma.booking.findUnique({ where: { id: pkg.packageBooking.id } });
+    expect(Number(pkgAfter2?.packageHoursUsed)).toBeCloseTo(2, 4);
+    expect(Number(pkgAfter2?.packageHoursRemaining)).toBeCloseTo(1, 4);
+
+    // ── Confirm lesson 3 ──────────────────────────────────────────────────────
+    // This is the critical assertion: the old code would compute
+    //   available = 3 - 2 - 2 = -1 → INSUFFICIENT_HOURS (wrong block)
+    // The fixed code computes:
+    //   available = 3 - 2 (child1+child2 confirmed) = 1 → passes
+    const r3 = await callRoute(
+      { bookingId: child3.id, packageBookingId: pkg.packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+    expect(r3.status).toBe(200);
+
+    const pkgAfter3 = await prisma.booking.findUnique({ where: { id: pkg.packageBooking.id } });
+    expect(Number(pkgAfter3?.packageHoursUsed)).toBeCloseTo(3, 4);
+    expect(Number(pkgAfter3?.packageHoursRemaining)).toBeCloseTo(0, 4);
+    expect(pkgAfter3?.packageStatus).toBe('completed');
+
+    // All three child bookings confirmed
+    const children = await prisma.booking.findMany({
+      where: {
+        id: { in: [child1.id, child2.id, child3.id] },
+      },
+      select: { id: true, status: true },
+    });
+    expect(children.every(c => c.status === 'CONFIRMED')).toBe(true);
+
+    // Wallet debited 3 × $60 = $180 (package was $180, should be fully consumed)
+    const walletBalance = (await getWalletBalance(studentA.user.id)).balance;
+    // Net = $180 (package credit) - $180 (3 × $60 debit) = $0
+    // Note: other tests in the suite may have added credits too — compare relative debits
+    const debits = await prisma.walletTransaction.findMany({
+      where: {
+        walletId: studentA.wallet.id,
+        type: 'DEBIT',
+        status: 'CONFIRMED',
+        description: { contains: 'Package hours used' },
+      },
+    });
+    // At least 3 package-hours debits exist (may be more from other tests)
+    const packageDebitsForThisRun = debits.filter(d =>
+      [child1.id, child2.id, child3.id].includes(d.bookingId ?? '')
+    );
+    expect(packageDebitsForThisRun).toHaveLength(3);
+    const totalDebited = packageDebitsForThisRun.reduce((s, d) => s + Number(d.amount), 0);
+    expect(totalDebited).toBeCloseTo(180, 2); // 3 × $60
+  });
+
+  it('F3-02: attempting a 4th lesson on an exhausted 3-hour package → 400 INSUFFICIENT_HOURS', async () => {
+    /**
+     * After all 3 hours are used, a 4th confirmation attempt must be rejected.
+     * Verifies the boundary at package exhaustion.
+     */
+    const pkg = await createPackageFixture(studentA, instructor, 3, 60);
+
+    const child1 = await createChildBooking(studentA, instructor, 6);
+    const child2 = await createChildBooking(studentA, instructor, 8);
+    const child3 = await createChildBooking(studentA, instructor, 10);
+    const child4 = await createChildBooking(studentA, instructor, 12);
+
+    // Confirm all 3 valid lessons
+    await callRoute({ bookingId: child1.id, packageBookingId: pkg.packageBooking.id, hoursToDeduct: 1 }, studentA.user.email);
+    await callRoute({ bookingId: child2.id, packageBookingId: pkg.packageBooking.id, hoursToDeduct: 1 }, studentA.user.email);
+    await callRoute({ bookingId: child3.id, packageBookingId: pkg.packageBooking.id, hoursToDeduct: 1 }, studentA.user.email);
+
+    // 4th attempt must fail
+    const r4 = await callRoute(
+      { bookingId: child4.id, packageBookingId: pkg.packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+    expect(r4.status).toBe(400);
+    expect(r4.body.error).toMatch(/insufficient hours/i);
+    expect(r4.body.available).toBeCloseTo(0, 2);
+
+    // child4 stays PENDING
+    const c4 = await prisma.booking.findUnique({ where: { id: child4.id } });
+    expect(c4?.status).toBe('PENDING');
+  });
+});
