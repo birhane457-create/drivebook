@@ -8,17 +8,15 @@ import { withSerializableRetry } from '@/lib/utils/transaction-retry';
 export const dynamic = 'force-dynamic';
 
 // ── SERIALIZABLE transaction config ──────────────────────────────────────────
-// H-02b: Upgrade from Read Committed (Prisma default) to Serializable.
-// withSerializableRetry handles P2034 (serialization failure) with backoff.
+// H-02b: Serializable isolation prevents concurrent confirmations from both
+// committing. withSerializableRetry handles P2034 with exponential backoff.
 const SERIALIZABLE_TX = {
   isolationLevel: 'Serializable' as const,
   maxWait: 5000,
   timeout: 10000,
 };
 
-// ── Helper: coerce Prisma Decimal → JS number ─────────────────────────────────
-// Prisma returns Decimal objects for Decimal(n,m) columns.
-// Number.isFinite(Decimal) is always false — coerce before any numeric guard.
+// ── Helper: coerce Prisma Decimal → JS number ────────────────────────────────
 function toJsNumber(val: unknown): number {
   if (val === null || val === undefined) return 0;
   if (typeof val === 'number') return val;
@@ -44,9 +42,9 @@ export async function POST(request: Request) {
 
     // ── INPUT FORMAT VALIDATION ───────────────────────────────────────────────
     // hoursToDeduct must be a finite positive number.
-    // This validates the caller sent a sensible value — it is NOT the financial
-    // authority. The server derives the authoritative duration from booking records
-    // inside the transaction (step 3a) and rejects any mismatch (H-02b-F4).
+    // It is NOT the financial authority — the server derives the authoritative
+    // duration inside the transaction from DB booking times (F4, F5 fixes).
+    // A mismatch between this value and the server-derived duration is rejected.
     if (
       typeof hoursToDeduct !== 'number' ||
       !Number.isFinite(hoursToDeduct) ||
@@ -58,33 +56,42 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── PRE-FLIGHT: fetch child booking + ownership check ─────────────────────
-    const booking = await prisma.booking.findUnique({
+    // ── PRE-FLIGHT OWNERSHIP CHECK (fast-reject, no financial data read) ──────
+    // H-02b-F5: This check reads ONLY the fields needed to verify the requesting
+    // user owns this booking. It does NOT read startTime, endTime, price, or any
+    // field used in financial calculations — those are read inside the transaction.
+    //
+    // This is a cheap deny-early guard. The authoritative ownership and duration
+    // checks happen again inside the SERIALIZABLE transaction against a consistent
+    // snapshot (steps 1b and 3a below), making this pre-flight check redundant for
+    // correctness but valuable for avoiding unnecessary transaction overhead on
+    // obviously unauthorized requests.
+    const preflightBooking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: {
-        provider: true,
-        customer: { include: { user: true } },
+      select: {
+        customerId: true,
+        customer: {
+          select: { user: { select: { email: true } } },
+        },
       },
     }) as any;
 
-    if (!booking) {
+    if (!preflightBooking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    // Verify the authenticated user owns this booking's customer record.
-    // Without this, any authenticated user who knows bookingId + packageBookingId
-    // could confirm a booking belonging to a different student.
-    if (booking.customer?.user?.email !== session.user.email) {
+    if (preflightBooking.customer?.user?.email !== session.user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     // ── SERIALIZABLE TRANSACTION ──────────────────────────────────────────────
-    // All validation, wallet checks, state changes, and ledger writes are atomic.
-    // withSerializableRetry retries P2034 conflicts with exponential backoff.
+    // ALL financial data is read inside this transaction: booking times, provider
+    // rate, wallet balance. No value from outside the transaction is used in any
+    // financial calculation.
     const updatedBooking = await withSerializableRetry(
       () => prisma.$transaction(async (tx) => {
 
-        // ── 1. Fetch package booking (consistent snapshot) ───────────────────
+        // ── 1a. Fetch package booking (transaction-scoped snapshot) ───────────
         const packageBooking = await tx.booking.findUnique({
           where: { id: packageBookingId },
           include: { provider: true },
@@ -97,29 +104,52 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 2. Cross-ownership check ─────────────────────────────────────────
-        // Ensure child and package belong to the same customer.
-        if (packageBooking.customerId !== booking.customerId) {
+        // ── 1b. H-02b-F5: Fetch child booking inside transaction ──────────────
+        // All financially relevant fields (startTime, endTime, customerId,
+        // provider, status) are read here from the transaction-scoped snapshot,
+        // not from the pre-flight fetch outside the transaction.
+        //
+        // This guarantees that the duration used for the wallet debit and hour
+        // deduction is consistent with the booking record at the moment of
+        // confirmation, not at some earlier point. Any concurrent modification
+        // to the booking between the pre-flight check and this read will cause
+        // Serializable isolation to abort and retry.
+        const txBooking = await tx.booking.findUnique({
+          where: { id: bookingId },
+          include: {
+            provider: true,
+            customer: { include: { user: true } },
+          },
+        }) as any;
+
+        if (!txBooking) {
+          throw Object.assign(
+            new Error('Booking not found inside transaction'),
+            { code: 'BOOKING_NOT_FOUND' }
+          );
+        }
+
+        // ── 2. Ownership checks (transaction-scoped) ──────────────────────────
+        // Re-verify ownership against transaction-scoped data.
+        if (txBooking.customer?.user?.email !== session.user.email) {
+          throw Object.assign(
+            new Error('Unauthorized'),
+            { code: 'UNAUTHORIZED' }
+          );
+        }
+
+        if (packageBooking.customerId !== txBooking.customerId) {
           throw Object.assign(
             new Error('Package booking does not belong to the same customer'),
             { code: 'OWNERSHIP_MISMATCH' }
           );
         }
 
-        // ── 3a. H-02b-F4: Derive authoritative lesson duration from DB ────────
-        // The client-supplied hoursToDeduct is a hint, not a financial authority.
-        // The actual duration is computed from booking.startTime / booking.endTime,
-        // which were written by the server when the booking was created and cannot
-        // be tampered with by the client at confirmation time.
-        //
-        // A mismatch means the client is either:
-        //   (a) sending a stale value (e.g. from a previous booking duration), or
-        //   (b) deliberately undercharging themselves (financial manipulation).
-        // Both are rejected. The caller must send the value that matches reality.
-        //
-        // Tolerance: ±0.001h (~3.6 seconds) to absorb floating-point rounding
-        // in clients that compute the duration themselves.
-        if (!booking.startTime || !booking.endTime) {
+        // ── 3a. F5: Derive authoritative duration from transaction-scoped record
+        // startTime and endTime come from txBooking (read inside this transaction),
+        // NOT from the pre-flight booking object. This ensures the duration is
+        // consistent with the DB state at the time of confirmation.
+        if (!txBooking.startTime || !txBooking.endTime) {
           throw Object.assign(
             new Error('Booking is missing start or end time — cannot derive authoritative duration'),
             { code: 'BOOKING_MISSING_TIMES' }
@@ -127,7 +157,7 @@ export async function POST(request: Request) {
         }
 
         const serverDerivedHours =
-          (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) /
+          (new Date(txBooking.endTime).getTime() - new Date(txBooking.startTime).getTime()) /
           (1000 * 60 * 60);
 
         if (!Number.isFinite(serverDerivedHours) || serverDerivedHours <= 0) {
@@ -137,7 +167,8 @@ export async function POST(request: Request) {
           );
         }
 
-        const DURATION_TOLERANCE = 0.001; // hours (~3.6 seconds)
+        // F4: validate client-supplied value matches server-derived duration
+        const DURATION_TOLERANCE = 0.001; // ±0.001h (~3.6 seconds)
         if (Math.abs(hoursToDeduct - serverDerivedHours) > DURATION_TOLERANCE) {
           throw Object.assign(
             new Error(
@@ -151,11 +182,10 @@ export async function POST(request: Request) {
           );
         }
 
-        // From this point, use serverDerivedHours as the authoritative value.
-        // hoursToDeduct is not referenced again.
+        // authorizedHours is derived entirely from trusted DB data inside this tx
         const authorizedHours = serverDerivedHours;
 
-        // ── 3b. Hour availability check (F3 fix: child records as sole source) ─
+        // ── 3b. Hour availability check (child records as sole source, F3 fix) ─
         const otherChildBookings = await tx.booking.findMany({
           where: {
             parentBookingId: packageBookingId,
@@ -168,13 +198,11 @@ export async function POST(request: Request) {
         const packageTotalHours = toJsNumber(packageBooking.packageHours);
 
         const otherUsedHours = otherChildBookings.reduce((sum: number, b: any) => {
-          const dur =
-            (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) /
-            (1000 * 60 * 60);
-          return sum + dur;
+          return sum + (
+            (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / (1000 * 60 * 60)
+          );
         }, 0);
 
-        // Single source: child booking records only (not packageHoursUsed counter)
         const availableHours = packageTotalHours - otherUsedHours;
 
         if (availableHours < authorizedHours) {
@@ -186,9 +214,13 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 4. Locked rate: coerce and validate ──────────────────────────────
+        // ── 4. Locked rate from transaction-scoped package booking ────────────
+        // lockedHourlyRate comes from packageBooking (fetched inside tx at step 1a).
+        // NOTE (H-02): This rate policy is under separate review. The rate used here
+        // is the one locked at package purchase time, not the booking instructor's
+        // current rate. Do not change this as part of F5.
         const lockedRate = toJsNumber(
-          packageBooking.lockedHourlyRate ?? booking.provider?.hourlyRate
+          packageBooking.lockedHourlyRate ?? txBooking.provider?.hourlyRate
         );
 
         if (!Number.isFinite(lockedRate) || lockedRate <= 0) {
@@ -198,10 +230,11 @@ export async function POST(request: Request) {
           );
         }
 
-        // transactionAmount now uses the server-derived hours — client cannot manipulate
+        // transactionAmount uses authorizedHours (from DB) and lockedRate (from tx)
+        // — no client-supplied value participates in any financial calculation
         const transactionAmount = authorizedHours * lockedRate;
 
-        // ── 5. Wallet must exist — fail closed ───────────────────────────────
+        // ── 5. Wallet must exist — fail closed ────────────────────────────────
         const userWallet = await tx.clientWallet.findFirst({
           where: { user: { email: session.user.email } },
         });
@@ -213,7 +246,7 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 6. Authoritative dollar-balance sufficiency check ─────────────────
+        // ── 6. Authoritative dollar-balance check (aggregated inside tx) ──────
         const creditAgg = await tx.walletTransaction.aggregate({
           where: { walletId: userWallet.id, status: 'CONFIRMED', type: 'CREDIT' },
           _sum: { amount: true },
@@ -239,15 +272,11 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 7. Confirm the child booking — conditional on PENDING status ──────
-        // updateMany with status: 'PENDING' predicate creates a read-write conflict
-        // that Serializable isolation detects. The second concurrent transaction
-        // reads PENDING, but by the time it writes the first has changed it to
-        // CONFIRMED — Postgres fires P2034. withSerializableRetry retries;
-        // the retry finds status !== 'PENDING', guard.count === 0 → ALREADY_CONFIRMED.
-        //
-        // NOTE (H-02): price remains 0. Setting the correct lesson price on child
-        // bookings is a separate change blocked on package entitlement policy.
+        // ── 7. Confirm child booking — conditional on PENDING status ──────────
+        // updateMany with WHERE status='PENDING' creates a read-write conflict
+        // Serializable can detect. Second concurrent tx reads PENDING but first
+        // already wrote CONFIRMED → P2034 → retry → guard.count===0 → 409.
+        // NOTE (H-02): price remains 0 — separate change blocked on policy.
         const guard = await tx.booking.updateMany({
           where: { id: bookingId, status: 'PENDING' },
           data: {
@@ -272,7 +301,7 @@ export async function POST(request: Request) {
           include: { provider: true, customer: true },
         });
 
-        // ── 8. Update package hour counters (F3 fix: absolute from child records)
+        // ── 8. Update package hour counters (absolute, F3 fix) ────────────────
         const totalConsumedHours = otherUsedHours + authorizedHours;
         const newHoursRemaining  = Math.max(0, packageTotalHours - totalConsumedHours);
         const newPackageStatus   = totalConsumedHours >= packageTotalHours ? 'completed' : 'active';
@@ -293,7 +322,7 @@ export async function POST(request: Request) {
             type: 'DEBIT',
             amount: transactionAmount,
             status: 'CONFIRMED',
-            description: `Package hours used — ${authorizedHours.toFixed(2)}h with ${booking.provider?.name ?? 'provider'}`,
+            description: `Package hours used — ${authorizedHours.toFixed(2)}h with ${txBooking.provider?.name ?? 'provider'}`,
             bookingId,
           },
         });
@@ -303,11 +332,11 @@ export async function POST(request: Request) {
           data: { balance: { decrement: transactionAmount } },
         });
 
-        // ── 10. Platform transaction record ──────────────────────────────────
+        // ── 10. Platform transaction record ───────────────────────────────────
         await (tx as any).transaction.create({
           data: {
             bookingId,
-            providerId: booking.providerId,
+            providerId: txBooking.providerId,
             amount: transactionAmount,
             platformFee: 0,
             providerPayout: transactionAmount,
@@ -319,7 +348,7 @@ export async function POST(request: Request) {
               packageBookingId,
               hoursDeducted: authorizedHours,
               suppliedHoursToDeduct: hoursToDeduct,
-              instructorName: booking.provider?.name,
+              instructorName: txBooking.provider?.name,
             },
           },
         });
@@ -341,8 +370,26 @@ export async function POST(request: Request) {
     if (error?.code === 'PACKAGE_NOT_FOUND') {
       return NextResponse.json({ error: 'Package booking not found' }, { status: 404 });
     }
+    if (error?.code === 'BOOKING_NOT_FOUND') {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+    if (error?.code === 'UNAUTHORIZED') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
     if (error?.code === 'OWNERSHIP_MISMATCH') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+    if (error?.code === 'BOOKING_MISSING_TIMES') {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    if (error?.code === 'INVALID_BOOKING_DURATION') {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    if (error?.code === 'HOURS_DURATION_MISMATCH') {
+      return NextResponse.json(
+        { error: error.message, supplied: error.supplied, serverDerived: error.serverDerived },
+        { status: 409 }
+      );
     }
     if (error?.code === 'INSUFFICIENT_HOURS') {
       return NextResponse.json(
@@ -353,9 +400,6 @@ export async function POST(request: Request) {
     if (error?.code === 'INVALID_LOCKED_RATE') {
       return NextResponse.json({ error: error.message }, { status: 422 });
     }
-    if (error?.code === 'ALREADY_CONFIRMED') {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
     if (error?.code === 'WALLET_NOT_FOUND') {
       return NextResponse.json({ error: error.message }, { status: 422 });
     }
@@ -365,21 +409,8 @@ export async function POST(request: Request) {
         { status: 402 }
       );
     }
-    if (error?.code === 'BOOKING_MISSING_TIMES') {
-      return NextResponse.json({ error: error.message }, { status: 422 });
-    }
-    if (error?.code === 'INVALID_BOOKING_DURATION') {
-      return NextResponse.json({ error: error.message }, { status: 422 });
-    }
-    if (error?.code === 'HOURS_DURATION_MISMATCH') {
-      return NextResponse.json(
-        {
-          error: error.message,
-          supplied: error.supplied,
-          serverDerived: error.serverDerived,
-        },
-        { status: 409 }
-      );
+    if (error?.code === 'ALREADY_CONFIRMED') {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     return NextResponse.json({ error: 'Failed to confirm package booking' }, { status: 500 });
