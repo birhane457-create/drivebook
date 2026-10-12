@@ -42,10 +42,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // ── INPUT VALIDATION ──────────────────────────────────────────────────────
+    // ── INPUT FORMAT VALIDATION ───────────────────────────────────────────────
     // hoursToDeduct must be a finite positive number.
-    // Old check: `if (!hoursToDeduct)` — falsy only, so negative values passed.
-    // A negative debit would ADD to wallet balance instead of deducting (financial vulnerability).
+    // This validates the caller sent a sensible value — it is NOT the financial
+    // authority. The server derives the authoritative duration from booking records
+    // inside the transaction (step 3a) and rejects any mismatch (H-02b-F4).
     if (
       typeof hoursToDeduct !== 'number' ||
       !Number.isFinite(hoursToDeduct) ||
@@ -105,28 +106,56 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 3. Hour availability check ───────────────────────────────────────
-        // H-02b-F3 FIX: derive consumed hours exclusively from child booking
-        // duration records, not from packageHoursUsed + child durations combined.
+        // ── 3a. H-02b-F4: Derive authoritative lesson duration from DB ────────
+        // The client-supplied hoursToDeduct is a hint, not a financial authority.
+        // The actual duration is computed from booking.startTime / booking.endTime,
+        // which were written by the server when the booking was created and cannot
+        // be tampered with by the client at confirmation time.
         //
-        // The previous formula was:
-        //   availableHours = packageTotalHours - packageUsedStored - otherUsedHours
+        // A mismatch means the client is either:
+        //   (a) sending a stale value (e.g. from a previous booking duration), or
+        //   (b) deliberately undercharging themselves (financial manipulation).
+        // Both are rejected. The caller must send the value that matches reality.
         //
-        // That double-counts every confirmed lesson because:
-        //   - packageHoursUsed is incremented by this route after each confirmation
-        //   - otherUsedHours is the sum of durations of those same confirmed child bookings
-        //
-        // Example: 10hr package, 1 confirmed lesson (1hr):
-        //   packageHoursUsed = 1, otherUsedHours = 1
-        //   old formula: 10 - 1 - 1 = 8 (wrong — should be 9)
-        //
-        // Authoritative source: child booking records.
-        // These exist only if a confirmation transaction committed, so they cannot
-        // be stale or spoofed. packageHoursUsed is kept for display/audit purposes
-        // but must not participate in the availability calculation.
-        //
-        // Correct formula:
-        //   availableHours = packageTotalHours - sum(OTHER confirmed/completed child durations)
+        // Tolerance: ±0.001h (~3.6 seconds) to absorb floating-point rounding
+        // in clients that compute the duration themselves.
+        if (!booking.startTime || !booking.endTime) {
+          throw Object.assign(
+            new Error('Booking is missing start or end time — cannot derive authoritative duration'),
+            { code: 'BOOKING_MISSING_TIMES' }
+          );
+        }
+
+        const serverDerivedHours =
+          (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) /
+          (1000 * 60 * 60);
+
+        if (!Number.isFinite(serverDerivedHours) || serverDerivedHours <= 0) {
+          throw Object.assign(
+            new Error('Booking has an invalid duration (endTime must be after startTime)'),
+            { code: 'INVALID_BOOKING_DURATION' }
+          );
+        }
+
+        const DURATION_TOLERANCE = 0.001; // hours (~3.6 seconds)
+        if (Math.abs(hoursToDeduct - serverDerivedHours) > DURATION_TOLERANCE) {
+          throw Object.assign(
+            new Error(
+              `hoursToDeduct (${hoursToDeduct.toFixed(4)}h) does not match the booking duration (${serverDerivedHours.toFixed(4)}h). Use the actual booking duration.`
+            ),
+            {
+              code: 'HOURS_DURATION_MISMATCH',
+              supplied: hoursToDeduct,
+              serverDerived: serverDerivedHours,
+            }
+          );
+        }
+
+        // From this point, use serverDerivedHours as the authoritative value.
+        // hoursToDeduct is not referenced again.
+        const authorizedHours = serverDerivedHours;
+
+        // ── 3b. Hour availability check (F3 fix: child records as sole source) ─
         const otherChildBookings = await tx.booking.findMany({
           where: {
             parentBookingId: packageBookingId,
@@ -137,9 +166,6 @@ export async function POST(request: Request) {
         });
 
         const packageTotalHours = toJsNumber(packageBooking.packageHours);
-        // packageUsedStored intentionally not used in calculations — child booking
-        // records are the authoritative source (see comment above). The counter
-        // packageHoursUsed is written absolutely from child records on each confirmation.
 
         const otherUsedHours = otherChildBookings.reduce((sum: number, b: any) => {
           const dur =
@@ -148,15 +174,15 @@ export async function POST(request: Request) {
           return sum + dur;
         }, 0);
 
-        // Single source: child booking records only
+        // Single source: child booking records only (not packageHoursUsed counter)
         const availableHours = packageTotalHours - otherUsedHours;
 
-        if (availableHours < hoursToDeduct) {
+        if (availableHours < authorizedHours) {
           throw Object.assign(
             new Error(
-              `Insufficient hours. Available: ${availableHours.toFixed(2)}, Requested: ${hoursToDeduct}`
+              `Insufficient hours. Available: ${availableHours.toFixed(2)}, Required: ${authorizedHours.toFixed(2)}`
             ),
-            { code: 'INSUFFICIENT_HOURS', available: availableHours, requested: hoursToDeduct }
+            { code: 'INSUFFICIENT_HOURS', available: availableHours, requested: authorizedHours }
           );
         }
 
@@ -172,13 +198,10 @@ export async function POST(request: Request) {
           );
         }
 
-        const transactionAmount = hoursToDeduct * lockedRate;
+        // transactionAmount now uses the server-derived hours — client cannot manipulate
+        const transactionAmount = authorizedHours * lockedRate;
 
-        // ── 5. H-02b-F1: Wallet must exist — fail closed ─────────────────────
-        // Previous code: `if (userWallet) { debit }` — missing wallet silently
-        // allowed booking confirmation and hour-counter decrement without any
-        // wallet debit. That creates a free lesson with no financial record.
-        // Fix: wallet absence is a hard error that rolls back the entire transaction.
+        // ── 5. Wallet must exist — fail closed ───────────────────────────────
         const userWallet = await tx.clientWallet.findFirst({
           where: { user: { email: session.user.email } },
         });
@@ -190,13 +213,7 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 6. H-02b-F2: Authoritative dollar-balance sufficiency check ───────
-        // Package-hour check (step 3) verifies hour capacity but does not verify
-        // that the wallet holds enough dollars to cover this lesson.
-        // A student could have package hours remaining but an empty or depleted
-        // wallet (e.g. refunded, admin-deducted, or drained by a different path).
-        // Re-aggregate the ledger balance inside this transaction so the check
-        // is atomic with the debit that follows — no TOCTOU gap.
+        // ── 6. Authoritative dollar-balance sufficiency check ─────────────────
         const creditAgg = await tx.walletTransaction.aggregate({
           where: { walletId: userWallet.id, status: 'CONFIRMED', type: 'CREDIT' },
           _sum: { amount: true },
@@ -255,53 +272,38 @@ export async function POST(request: Request) {
           include: { provider: true, customer: true },
         });
 
-        // ── 8. Update package hour counters ──────────────────────────────────
-        // H-02b-F3 FIX: derive the new counter values from the same single source
-        // used in the availability check (child booking records), not from the
-        // stored counter plus child records (which double-counts).
-        //
-        //   totalConsumedHours = otherUsedHours (already confirmed) + hoursToDeduct (this one)
-        //   newHoursRemaining  = packageTotalHours - totalConsumedHours
-        //   newHoursUsed       = totalConsumedHours  (set absolutely, not incremented)
-        //
-        // Setting packageHoursUsed absolutely (not { increment }) means the counter
-        // is always consistent with child booking records regardless of any prior
-        // stale values.
-        const totalConsumedHours = otherUsedHours + hoursToDeduct;
+        // ── 8. Update package hour counters (F3 fix: absolute from child records)
+        const totalConsumedHours = otherUsedHours + authorizedHours;
         const newHoursRemaining  = Math.max(0, packageTotalHours - totalConsumedHours);
         const newPackageStatus   = totalConsumedHours >= packageTotalHours ? 'completed' : 'active';
 
         await tx.booking.update({
           where: { id: packageBookingId },
           data: {
-            packageHoursUsed:      { set: totalConsumedHours },   // absolute, not incremental
+            packageHoursUsed:      { set: totalConsumedHours },
             packageHoursRemaining: { set: newHoursRemaining },
             packageStatus:         newPackageStatus,
           },
         });
 
         // ── 9. Wallet debit ───────────────────────────────────────────────────
-        // Balance check (step 6) already confirmed sufficient funds.
-        // NOTE (H-02): debit amount uses lockedHourlyRate × hours. This will
-        // change to booking.price once H-02 is implemented.
         await tx.walletTransaction.create({
           data: {
             walletId: userWallet.id,
             type: 'DEBIT',
             amount: transactionAmount,
             status: 'CONFIRMED',
-            description: `Package hours used — ${hoursToDeduct}h with ${booking.provider?.name ?? 'provider'}`,
+            description: `Package hours used — ${authorizedHours.toFixed(2)}h with ${booking.provider?.name ?? 'provider'}`,
             bookingId,
           },
         });
 
-        // Sync stored balance cache (authoritative source is always the ledger aggregate)
         await tx.clientWallet.update({
           where: { id: userWallet.id },
           data: { balance: { decrement: transactionAmount } },
         });
 
-        // ── 10. Platform transaction record ───────────────────────────────────
+        // ── 10. Platform transaction record ──────────────────────────────────
         await (tx as any).transaction.create({
           data: {
             bookingId,
@@ -311,11 +313,12 @@ export async function POST(request: Request) {
             providerPayout: transactionAmount,
             type: 'BOOKING_PAYMENT',
             status: 'COMPLETED',
-            description: `Package hours — ${hoursToDeduct}h from package ${packageBookingId}`,
+            description: `Package hours — ${authorizedHours.toFixed(2)}h from package ${packageBookingId}`,
             metadata: {
               bookingId,
               packageBookingId,
-              hoursDeducted: hoursToDeduct,
+              hoursDeducted: authorizedHours,
+              suppliedHoursToDeduct: hoursToDeduct,
               instructorName: booking.provider?.name,
             },
           },
@@ -360,6 +363,22 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: error.message, available: error.available, required: error.required },
         { status: 402 }
+      );
+    }
+    if (error?.code === 'BOOKING_MISSING_TIMES') {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    if (error?.code === 'INVALID_BOOKING_DURATION') {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    if (error?.code === 'HOURS_DURATION_MISMATCH') {
+      return NextResponse.json(
+        {
+          error: error.message,
+          supplied: error.supplied,
+          serverDerived: error.serverDerived,
+        },
+        { status: 409 }
       );
     }
 
