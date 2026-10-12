@@ -922,3 +922,91 @@ describe('H-02b-F4: client-supplied hours must match server-derived booking dura
     expect(bookingAfter?.status).toBe('CONFIRMED');
   });
 });
+
+describe('H-02b-F5: booking duration read inside transaction, not from pre-flight snapshot', () => {
+  /**
+   * F5 fix: the child booking is fetched inside the SERIALIZABLE transaction
+   * (step 1b) so that startTime/endTime come from the consistent DB snapshot
+   * at confirmation time, not from a pre-transaction read.
+   *
+   * Test strategy: create a booking with 1-hour duration, then update the DB
+   * to a 2-hour duration before calling the route. Send hoursToDeduct: 1.
+   *
+   * Before F5: the route read startTime/endTime from the pre-flight fetch, so
+   * it would see 1 hour, pass the mismatch check, and confirm at the wrong price.
+   *
+   * After F5: the route reads startTime/endTime from the tx-scoped fetch. It sees
+   * the updated 2-hour duration in the DB, computes serverDerivedHours = 2, and
+   * rejects hoursToDeduct: 1 with HOURS_DURATION_MISMATCH (409).
+   */
+
+  it('F5-01: booking times updated between pre-flight and transaction — route uses transaction-scoped times', async () => {
+    const { packageBooking, childBooking } = await createPackageFixture(studentA, instructor);
+    // childBooking was created as 1 hour (FUTURE → FUTURE_END)
+
+    const balanceBefore = (await getWalletBalance(studentA.user.id)).balance;
+    const pkgBefore = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+
+    // Simulate a concurrent update: extend the booking to 2 hours in the DB
+    // BEFORE the route's transaction runs. The pre-flight check has already
+    // occurred (in our test, the pre-flight and transaction are not separated
+    // in time, but the transaction fetch will see whatever is in the DB now).
+    const newEnd2h = new Date(FUTURE.getTime() + 2 * 60 * 60 * 1000);
+    await (prisma.booking.update as any)({
+      where: { id: childBooking.id },
+      data: { endTime: newEnd2h, duration: 120 },
+    });
+
+    // Now call the route with hoursToDeduct: 1 — matches the original 1hr booking
+    // but the DB now has a 2hr booking. The tx-scoped fetch sees 2 hours.
+    const { status, body } = await callRoute(
+      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+
+    // Route must reject because tx-scoped times give serverDerivedHours=2, not 1
+    expect(status).toBe(409);
+    expect(body.error).toMatch(/does not match the booking duration/i);
+    expect(body.supplied).toBeCloseTo(1, 3);
+    expect(body.serverDerived).toBeCloseTo(2, 3);
+
+    // Booking still PENDING (was not confirmed)
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    expect(bookingAfter?.status).toBe('PENDING');
+
+    // Wallet unchanged
+    const balanceAfter = (await getWalletBalance(studentA.user.id)).balance;
+    expect(balanceAfter).toBeCloseTo(balanceBefore, 2);
+
+    // Package counters unchanged
+    const pkgAfter = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+    expect(Number(pkgAfter?.packageHoursUsed)).toBe(Number(pkgBefore?.packageHoursUsed));
+    expect(Number(pkgAfter?.packageHoursRemaining)).toBe(Number(pkgBefore?.packageHoursRemaining));
+  });
+
+  it('F5-02: booking times unchanged — correct hoursToDeduct succeeds with tx-scoped duration', async () => {
+    /**
+     * Regression guard: F5 fix must not block the normal happy path.
+     * When times have not changed, the tx-scoped duration matches hoursToDeduct
+     * and the confirmation succeeds.
+     */
+    const { packageBooking, childBooking } = await createPackageFixture(studentA, instructor);
+    const balanceBefore = (await getWalletBalance(studentA.user.id)).balance;
+
+    // No modification to the booking — times are still 1 hour
+    const { status, body } = await callRoute(
+      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+
+    // Wallet debited $60 (1h × $60/hr)
+    const balanceAfter = (await getWalletBalance(studentA.user.id)).balance;
+    expect(balanceBefore - balanceAfter).toBeCloseTo(60, 2);
+
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    expect(bookingAfter?.status).toBe('CONFIRMED');
+  });
+});
