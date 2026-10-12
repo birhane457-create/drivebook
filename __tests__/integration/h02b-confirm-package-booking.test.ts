@@ -467,3 +467,155 @@ describe('H-02b: insufficient hours after previous confirmed bookings', () => {
     expect(booking?.status).toBe('PENDING');
   });
 });
+
+describe('H-02b-F1: missing wallet fails closed', () => {
+  it('F1-01: no wallet — booking stays PENDING, hour counters unchanged, no debit', async () => {
+    /**
+     * Reproduces H-02b-F1: previously if userWallet was null the route confirmed
+     * the booking and decremented packageHoursUsed with no wallet debit.
+     *
+     * Fix: wallet absence throws WALLET_NOT_FOUND inside the transaction,
+     * rolling back ALL changes: booking stays PENDING, hour counters unchanged.
+     */
+    const { packageBooking, childBooking } = await createPackageFixture(studentA, instructor);
+
+    // Delete the wallet so it is absent during confirmation
+    await prisma.clientWallet.delete({ where: { id: studentA.wallet.id } });
+
+    const { status, body } = await callRoute(
+      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+
+    expect(status).toBe(422);
+    expect(body.error).toMatch(/wallet not found/i);
+
+    // Booking must still be PENDING — not confirmed
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    expect(bookingAfter?.status).toBe('PENDING');
+
+    // Hour counters must be unchanged
+    const pkgAfter = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+    expect(Number(pkgAfter?.packageHoursUsed)).toBe(0);
+    expect(Number(pkgAfter?.packageHoursRemaining)).toBe(10);
+
+    // Recreate wallet so afterAll cleanup works
+    studentA.wallet = await prisma.clientWallet.create({ data: { userId: studentA.user.id } });
+  });
+});
+
+describe('H-02b-F2: insufficient wallet balance fails closed', () => {
+  it('F2-01: package hours available but wallet empty — all state unchanged, no debit', async () => {
+    /**
+     * Reproduces H-02b-F2: previously the route checked package hours but not
+     * the authoritative ledger balance. A student with hours remaining but a
+     * depleted wallet (e.g. admin-deducted, refunded externally) could confirm
+     * a lesson for free.
+     *
+     * Fix: authoritative ledger balance is aggregated inside the transaction.
+     * If balance < transactionAmount the transaction throws INSUFFICIENT_WALLET_BALANCE
+     * and rolls back — booking PENDING, hour counters unchanged, no debit created.
+     */
+    // Create package fixture — this adds wallet credit of packageTotalPaid ($600)
+    const { packageBooking, childBooking, packageTotalPaid } =
+      await createPackageFixture(studentA, instructor, 10, 60);
+
+    // Drain the wallet: add a debit for the full balance so nothing remains
+    await prisma.walletTransaction.create({
+      data: {
+        walletId: studentA.wallet.id,
+        type: 'DEBIT',
+        amount: packageTotalPaid, // drains the $600 credit added by createPackageFixture
+        status: 'CONFIRMED',
+        description: 'Test drain — simulate empty wallet',
+      },
+    });
+    await prisma.clientWallet.update({
+      where: { id: studentA.wallet.id },
+      data: { balance: { decrement: packageTotalPaid } },
+    });
+
+    // Confirm the balance is now $0
+    const walletBefore = await prisma.clientWallet.findUnique({
+      where: { id: studentA.wallet.id },
+      include: { transactions: { where: { status: 'CONFIRMED' } } },
+    });
+    const credits = walletBefore!.transactions.filter(t => t.type === 'CREDIT');
+    const debits  = walletBefore!.transactions.filter(t => t.type === 'DEBIT');
+    const balance = credits.reduce((s, t) => s + Number(t.amount), 0)
+                  - debits.reduce((s, t) => s + Number(t.amount), 0);
+    expect(balance).toBeCloseTo(0, 2);
+
+    // Package hours are still available (10h, none used)
+    const pkgBefore = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+    expect(Number(pkgBefore?.packageHoursUsed)).toBe(0);
+
+    // Attempt confirmation — should fail with 402 (payment required)
+    const { status, body } = await callRoute(
+      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+
+    expect(status).toBe(402);
+    expect(body.error).toMatch(/insufficient wallet balance/i);
+    expect(body.available).toBeCloseTo(0, 2);
+    expect(body.required).toBeCloseTo(60, 2); // 1h × $60
+
+    // Booking must still be PENDING
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    expect(bookingAfter?.status).toBe('PENDING');
+
+    // Hour counters must be unchanged
+    const pkgAfter = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+    expect(Number(pkgAfter?.packageHoursUsed)).toBe(0);
+    expect(Number(pkgAfter?.packageHoursRemaining)).toBe(10);
+
+    // No new debit created (only the drain debit we added above)
+    const debitsAfter = await prisma.walletTransaction.findMany({
+      where: { walletId: studentA.wallet.id, type: 'DEBIT', status: 'CONFIRMED' },
+    });
+    // Only the drain debit exists — no confirmation debit
+    expect(debitsAfter).toHaveLength(1);
+    expect(debitsAfter[0].description).toMatch(/drain/i);
+  });
+
+  it('F2-02: partial balance — enough for some lessons but not this one — fails closed', async () => {
+    /**
+     * Student wallet has $40 remaining; lesson costs $60 (1h × $60/hr).
+     * The route must reject with 402 and leave all state unchanged.
+     */
+    const { packageBooking, childBooking, packageTotalPaid } =
+      await createPackageFixture(studentA, instructor, 10, 60);
+
+    // Leave only $40: drain $560 of the $600 credit
+    const drainAmount = packageTotalPaid - 40;
+    await prisma.walletTransaction.create({
+      data: {
+        walletId: studentA.wallet.id,
+        type: 'DEBIT',
+        amount: drainAmount,
+        status: 'CONFIRMED',
+        description: 'Test partial drain',
+      },
+    });
+    await prisma.clientWallet.update({
+      where: { id: studentA.wallet.id },
+      data: { balance: { decrement: drainAmount } },
+    });
+
+    const { status, body } = await callRoute(
+      { bookingId: childBooking.id, packageBookingId: packageBooking.id, hoursToDeduct: 1 },
+      studentA.user.email
+    );
+
+    expect(status).toBe(402);
+    expect(body.available).toBeCloseTo(40, 2);
+    expect(body.required).toBeCloseTo(60, 2);
+
+    const bookingAfter = await prisma.booking.findUnique({ where: { id: childBooking.id } });
+    expect(bookingAfter?.status).toBe('PENDING');
+
+    const pkgAfter = await prisma.booking.findUnique({ where: { id: packageBooking.id } });
+    expect(Number(pkgAfter?.packageHoursUsed)).toBe(0);
+  });
+});
