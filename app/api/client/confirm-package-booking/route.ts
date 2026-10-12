@@ -106,6 +106,27 @@ export async function POST(request: Request) {
         }
 
         // ── 3. Hour availability check ───────────────────────────────────────
+        // H-02b-F3 FIX: derive consumed hours exclusively from child booking
+        // duration records, not from packageHoursUsed + child durations combined.
+        //
+        // The previous formula was:
+        //   availableHours = packageTotalHours - packageUsedStored - otherUsedHours
+        //
+        // That double-counts every confirmed lesson because:
+        //   - packageHoursUsed is incremented by this route after each confirmation
+        //   - otherUsedHours is the sum of durations of those same confirmed child bookings
+        //
+        // Example: 10hr package, 1 confirmed lesson (1hr):
+        //   packageHoursUsed = 1, otherUsedHours = 1
+        //   old formula: 10 - 1 - 1 = 8 (wrong — should be 9)
+        //
+        // Authoritative source: child booking records.
+        // These exist only if a confirmation transaction committed, so they cannot
+        // be stale or spoofed. packageHoursUsed is kept for display/audit purposes
+        // but must not participate in the availability calculation.
+        //
+        // Correct formula:
+        //   availableHours = packageTotalHours - sum(OTHER confirmed/completed child durations)
         const otherChildBookings = await tx.booking.findMany({
           where: {
             parentBookingId: packageBookingId,
@@ -116,7 +137,10 @@ export async function POST(request: Request) {
         });
 
         const packageTotalHours = toJsNumber(packageBooking.packageHours);
-        const packageUsedStored = toJsNumber(packageBooking.packageHoursUsed);
+        // packageUsedStored intentionally not used in calculations — child booking
+        // records are the authoritative source (see comment above). The counter
+        // packageHoursUsed is written absolutely from child records on each confirmation.
+
         const otherUsedHours = otherChildBookings.reduce((sum: number, b: any) => {
           const dur =
             (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) /
@@ -124,7 +148,8 @@ export async function POST(request: Request) {
           return sum + dur;
         }, 0);
 
-        const availableHours = packageTotalHours - packageUsedStored - otherUsedHours;
+        // Single source: child booking records only
+        const availableHours = packageTotalHours - otherUsedHours;
 
         if (availableHours < hoursToDeduct) {
           throw Object.assign(
@@ -230,22 +255,28 @@ export async function POST(request: Request) {
           include: { provider: true, customer: true },
         });
 
-        // ── 8. Decrement package hour counters ───────────────────────────────
-        const newHoursRemaining = Math.max(
-          0,
-          packageTotalHours - (packageUsedStored + otherUsedHours + hoursToDeduct)
-        );
-        const newPackageStatus =
-          packageUsedStored + otherUsedHours + hoursToDeduct >= packageTotalHours
-            ? 'completed'
-            : 'active';
+        // ── 8. Update package hour counters ──────────────────────────────────
+        // H-02b-F3 FIX: derive the new counter values from the same single source
+        // used in the availability check (child booking records), not from the
+        // stored counter plus child records (which double-counts).
+        //
+        //   totalConsumedHours = otherUsedHours (already confirmed) + hoursToDeduct (this one)
+        //   newHoursRemaining  = packageTotalHours - totalConsumedHours
+        //   newHoursUsed       = totalConsumedHours  (set absolutely, not incremented)
+        //
+        // Setting packageHoursUsed absolutely (not { increment }) means the counter
+        // is always consistent with child booking records regardless of any prior
+        // stale values.
+        const totalConsumedHours = otherUsedHours + hoursToDeduct;
+        const newHoursRemaining  = Math.max(0, packageTotalHours - totalConsumedHours);
+        const newPackageStatus   = totalConsumedHours >= packageTotalHours ? 'completed' : 'active';
 
         await tx.booking.update({
           where: { id: packageBookingId },
           data: {
-            packageHoursUsed: { increment: hoursToDeduct },
+            packageHoursUsed:      { set: totalConsumedHours },   // absolute, not incremental
             packageHoursRemaining: { set: newHoursRemaining },
-            packageStatus: newPackageStatus,
+            packageStatus:         newPackageStatus,
           },
         });
 
