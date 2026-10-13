@@ -1,6 +1,6 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.31 (PB-UI-01/02/04 fix pushed — commit ba9403b1; copy-only; awaiting independent verification; H-02b remains OPEN)
+**Version:** 5.31 (PB-UI-01/02/04 FIX-VERIFIED — commit ba9403b1; 22 tests exit 0 — pb-ui-copy-corrections.test.ts 2026-10-13; H-02b remains OPEN)
 **Last Updated:** 2026-10-13
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -628,10 +628,10 @@ Route file: `app/api/client/confirm-package-booking/route.ts`
 
 | ID | Title | Risk | Finding | Required change | Status |
 |---|---|---|---|---|---|
-| PB-UI-01 | "Credits never expire" in BulkBookingForm, add-funds page, receipt emails | LOW | CONFIRMED — contradicts legal terms (12 months inactivity) | Replace with "Credit is valid for 12 months from last account activity" | ⏳ FIX-PUSHED — `ba9403b1` — copy-only; awaiting independent verification |
-| PB-UI-02 | "12 months from purchase" in BookNowOrLater, PackageSelector, packages marketing page, Stripe checkout description | LOW | CONFIRMED — contradicts legal terms (inactivity-based) | Replace with "12 months from last account activity" | ⏳ FIX-PUSHED — `ba9403b1` — copy-only; awaiting independent verification |
+| PB-UI-01 | "Credits never expire" in BulkBookingForm, add-funds page, receipt emails | LOW | CONFIRMED — contradicts legal terms (12 months inactivity) | Replace with "Credit is valid for 12 months from last account activity" | ✅ FIX-VERIFIED — `ba9403b1` — 10 tests (C-01..C-10), exit 0 — `pb-ui-copy-corrections.test.ts` 2026-10-13 |
+| PB-UI-02 | "12 months from purchase" in BookNowOrLater, PackageSelector, packages marketing page, Stripe checkout description | LOW | CONFIRMED — contradicts legal terms (inactivity-based) | Replace with "12 months from last account activity" | ✅ FIX-VERIFIED — `ba9403b1` — 8 tests (C-11..C-18), exit 0 — `pb-ui-copy-corrections.test.ts` 2026-10-13 |
 | PB-UI-03 | Student dashboard shows "Hours Remaining" as primary entitlement metric | MEDIUM | CONFIRMED — implies fixed-hour guarantee; contradicts dollar-wallet policy | Replace primary display with wallet dollar balance; show estimated hours as secondary with rate qualifier | OPEN — blocked on H-02 (need correct child `Booking.price` before wallet-based display is accurate) |
-| PB-UI-04 | SMS/push notification copy claims fixed hour count ("you have X lesson hours available") | MEDIUM | CONFIRMED — `packageExpiryAlerts.ts`, `remind-client/route.ts` | Replace with wallet dollar balance; use approximate hours with rate qualifier | ⏳ FIX-PUSHED — `ba9403b1` — copy-only; awaiting independent verification |
+| PB-UI-04 | SMS/push notification copy claims fixed hour count ("you have X lesson hours available") | MEDIUM | CONFIRMED — `packageExpiryAlerts.ts`, `remind-client/route.ts` | Remove fixed hour-count claims; reference wallet credit. Note: showing dollar balance requires new DB query — beyond approved copy-only scope; tracked as follow-up once H-02 is resolved (same constraint as PB-UI-03) | ✅ FIX-VERIFIED — `ba9403b1` — 4 tests (C-19..C-22), exit 0 — `pb-ui-copy-corrections.test.ts` 2026-10-13 |
 
 ---
 
