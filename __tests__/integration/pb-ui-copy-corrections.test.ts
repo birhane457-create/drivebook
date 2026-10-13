@@ -124,8 +124,11 @@ describe('PB-UI-04 — hour-count claims removed from notifications and SMS', ()
   })
   test('packageExpiryAlerts.ts: all four messages mention wallet credit', () => {
     const src = read('lib/jobs/packageExpiryAlerts.ts')
-    const walletMatches = src.split('wallet credit').length - 1
-    expect(walletMatches).toBeGreaterThanOrEqual(4)
+    // Assert each individual notification message — not just a count
+    expect(src).toContain(`expires in 7 days. Book your remaining lessons now — unused wallet credit will be lost at expiry.`)
+    expect(src).toContain(`expires tomorrow. Book your remaining lessons now — unused wallet credit cannot be carried over.`)
+    expect(src).toContain(`expires today at midnight. Book your remaining lessons now — unused wallet credit will be lost.`)
+    expect(src).toContain(`expired and any unused wallet credit from this package has been forfeited.`)
   })
 
   test('remind-client/route.ts: old SMS hour-count pattern absent', () => {
