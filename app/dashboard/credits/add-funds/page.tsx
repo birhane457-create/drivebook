@@ -244,7 +244,7 @@ export default function AddFundsPage() {
               <div className="mt-6 pt-6 border-t border-border">
                 <h3 className="font-semibold text-foreground text-sm mb-3">Good to know</h3>
                 <ul className="space-y-1 text-xs text-muted-foreground">
-                  <li>Credits never expire</li>
+                  <li>Credit is valid for 12 months from last account activity</li>
                   <li>All payments are secure</li>
                   <li>24/7 customer support</li>
                 </ul>
