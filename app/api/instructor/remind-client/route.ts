@@ -79,8 +79,10 @@ export async function POST(req: NextRequest) {
     // Build the reminder message — different for package vs general clients
     const instructorDisplayName = getDisplayName(booking.provider)
     const hoursRemaining = Number(booking.packageHoursRemaining ?? 0)
+    // PB-UI-04: do not claim a fixed hour count — wallet is dollar-denominated.
+    // hoursRemaining is kept for the rate-limit audit log metadata only; it is not shown in the message.
     const message = hoursRemaining > 0
-      ? `Hi ${client.name.split(' ')[0]}! This is a reminder from ${instructorDisplayName} — you have ${hoursRemaining.toFixed(1)} lesson hour${hoursRemaining !== 1 ? 's' : ''} available in your package. Book your next lesson at drivebook.com.au`
+      ? `Hi ${client.name.split(' ')[0]}! This is a reminder from ${instructorDisplayName} — you still have wallet credit available in your package. Book your next lesson at drivebook.com.au`
       : `Hi ${client.name.split(' ')[0]}! ${instructorDisplayName} would love to see you back for another lesson. Book online at drivebook.com.au`
 
     // Send SMS

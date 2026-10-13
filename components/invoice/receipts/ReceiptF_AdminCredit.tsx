@@ -48,7 +48,7 @@ export default function ReceiptF_AdminCredit({ isDemo }: Props) {
       />
 
       <p className="text-xs text-muted-foreground/60 text-center">
-        Credits never expire and can be used with any instructor on DriveBook.
+        Credits valid for 12 months from last account activity and can be used with any instructor on DriveBook.
       </p>
     </ReceiptShell>
   );

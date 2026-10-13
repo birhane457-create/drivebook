@@ -375,7 +375,7 @@ export default function BulkBookingForm({
           </div>
           {bookingType === 'later' && (
             <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              ✓ Purchase hours now, schedule your lessons from your dashboard whenever you&apos;re ready. Credits never expire.
+              ✓ Purchase wallet credit now, schedule your lessons from your dashboard whenever you&apos;re ready. Credit is valid for 12 months from last account activity.
             </p>
           )}
 

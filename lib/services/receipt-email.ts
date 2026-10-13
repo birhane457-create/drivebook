@@ -396,7 +396,7 @@ export async function sendWalletTopUpReceipt(data: {
         </table>
       </div>
 
-      <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">Credits never expire and can be used with any instructor on DriveBook.</p>
+      <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">Credit is valid for 12 months from last account activity and can be used with any instructor on DriveBook.</p>
       ${footer(rn)}`;
 
   await emailService.sendGenericEmail({
@@ -530,7 +530,7 @@ export async function sendAdminCreditReceipt(data: {
         </table>
       </div>
 
-      <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">Credits never expire and can be used with any instructor on DriveBook.</p>
+      <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">Credit is valid for 12 months from last account activity and can be used with any instructor on DriveBook.</p>
       ${footer(rn)}`;
 
   await emailService.sendGenericEmail({
