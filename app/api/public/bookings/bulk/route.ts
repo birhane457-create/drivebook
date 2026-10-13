@@ -644,7 +644,7 @@ export async function POST(req: NextRequest) {
                 unit_amount: Math.round(verifiedTotal * 100),
                 product_data: {
                   name: `DriveBook Lesson Package Ã¢â‚¬â€ ${data.hours} Hours`,
-                  description: `With ${getDisplayName(instructor)}. Valid for 12 months from purchase.`,
+                  description: `With ${getDisplayName(instructor)}. Credit valid for 12 months from last account activity.`,
                 },
               },
             },

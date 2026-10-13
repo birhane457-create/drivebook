@@ -110,7 +110,7 @@ export default function BookNowOrLater() {
 
       {/* Info note at bottom with spacing */}
       <div className="bg-blue-900 border-2 border-blue-500 rounded-lg p-3 max-w-2xl mx-auto text-center text-sm text-blue-50 font-medium shadow-md">
-        <span className="font-bold">Note:</span> Your hours are valid for 12 months from purchase date
+        <span className="font-bold">Note:</span> Your wallet credit is valid for 12 months from last account activity
       </div>
     </div>
   );
