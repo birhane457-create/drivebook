@@ -1,7 +1,7 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.29 (V-14 INVALIDATED: configured renderer matches product contract; TIERS.md "full white-label" claim corrected)
-**Last Updated:** 2026-10-08
+**Version:** 5.30 (Section 8 added: Public-Booking audit; H-02b F1–F5 source-verified; H-02b disposition FIX-VERIFIED pending independent test execution)
+**Last Updated:** 2026-10-12
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -554,3 +554,99 @@ BRAND-V-04, V-08, V-09, V-10, V-11, V-12, V-13, V-14
 
 **No historical Phase 1/2 finding is modified by this section.**
 
+
+---
+
+## Section 8 — Public-Booking Audit
+
+**Baseline:** `485bdab1` (public booking flow audit initiated)
+**Repository:** `birhane457-create/drivebook` · branch `main`
+**Scope:** `/book/[instructorId]`, `/subdomain/[slug]`, `/custom-domain`, `POST /api/public/bookings/bulk`, `confirm-package-booking`, `BookingContext`, `PackageSelector`, wallet/hour entitlement model.
+**Steering documents written:** `.kiro/steering/booking-engine-architecture.md`, `.kiro/steering/package-entitlement-policy.md`, `.kiro/steering/platform-model.md` (updated)
+
+---
+
+### 8.1 — Architecture / Unification
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status |
+|---|---|---|---|---|---|---|---|
+| PB-ARCH-01 | BulkBookingForm not unified with SubdomainBookingWizard | ARCHITECTURAL | CONFIRMED | Source-confirmed: three separate booking entry points with divergent implementations | `e8d25807` — `PublicBookingWizard` wrapper created; `/book/[instructorId]` now uses `SubdomainBookingWizard` + `BookingContext`; package tiers and discount from DB via `getPackageTiers()` | Source-verified by independent review; no independent test execution | ✅ CLOSED — accepted as correct direction |
+
+---
+
+### 8.2 — Package Entitlement Policy
+
+| ID | Title | Risk | Finding | Fix | Status |
+|---|---|---|---|---|---|
+| PB-POL-01 | Packages presented as fixed-hour entitlement; wallet is dollar-denominated | ARCHITECTURAL | CONFIRMED — wallet stores dollars not hours; hour count is an estimate at purchase rate | Policy documented in `.kiro/steering/package-entitlement-policy.md` | ✅ POLICY ESTABLISHED — dollar-wallet model approved; copy corrections required (see PB-UI-01) |
+| PB-POL-02 | `packageHoursRemaining` / `packageHoursUsed` used as financial authority | HIGH | CONFIRMED — stale counters used in refund calculation, scheduling gate, UI display | H-02b-F3 removed stale counter from availability check; H-02b-F5 moved booking read into transaction; refund formula correction blocked on H-02 | ⏸ PARTIALLY MITIGATED — counter removed from availability check; refund formula still uses stale data (H-01 OPEN) |
+
+---
+
+### 8.3 — confirm-package-booking Route (H-02b)
+
+Route file: `app/api/client/confirm-package-booking/route.ts`
+
+| ID | Title | Risk | Finding | Verification | Fix commit | Test evidence | Auditor disposition |
+|---|---|---|---|---|---|---|---|
+| H-02b | Read Committed isolation — concurrent double-confirm | HIGH | CONFIRMED | Source-confirmed: no `isolationLevel` set; two concurrent requests both committed (C-01 test demonstrated before fix) | `352bd1bd` | 10/10 tests, PostgreSQL port 5433, `2026-10-11T12:49:43Z` | Source fix verified by independent review |
+| H-02b-F1 | Missing wallet silently allows free lesson | HIGH | CONFIRMED | Source-confirmed: `if (userWallet)` block; booking confirmed without debit if wallet null | `12d6eb73` | F1-01 passes: 422, booking PENDING, counters unchanged | Fix present; reported test evidence |
+| H-02b-F2 | No authoritative dollar-balance check | HIGH | CONFIRMED | Source-confirmed: hour check present, dollar check absent | `12d6eb73` | F2-01, F2-02 pass: 402, all state unchanged | Fix present; reported test evidence |
+| H-02b-F3 | Duplicate hour-accounting — `packageHoursUsed + otherUsedHours` double-counts | HIGH | CONFIRMED | Source-confirmed: `availableHours = total - usedStored - otherUsed`; each confirmed lesson subtracted twice | `d0875bac` | F3-01 (3 sequential lessons all succeed), F3-02 (4th blocked) | Fix present; reported test evidence |
+| H-02b-F4 | Client-supplied `hoursToDeduct` used as financial authority | HIGH | CONFIRMED | Source-confirmed: `transactionAmount = hoursToDeduct × lockedRate`; client can undersupply to pay less | `e3ab7c6b` | F4-01 (2hr booking + 1hr claim → 409), F4-02 (1hr booking + 2hr claim → 409), F4-03 (exact match → 200) | Fix present; reported test evidence |
+| H-02b-F5 | Booking duration derived from pre-transaction snapshot, not transaction-scoped read | HIGH | CONFIRMED — identified by independent source review of `e3ab7c6b` | `a74a44b0` — child booking fetched via `tx.booking.findUnique()` inside SERIALIZABLE transaction (step 1b); all financial values derived from `txBooking` | F5-01 (times updated before tx → 409 from tx-scoped read), F5-02 (unchanged times → 200) | **Source fix verified by independent review (`a74a44b0`)**. Test limitation noted: F5-01 does not reproduce a concurrent race; it updates times before calling the route. Source change addresses the stale-read concern. |
+
+**H-02b overall status: OPEN** — source fixes for F1–F5 verified by independent review. Test evidence supplied but not independently executed. Per auditor: "Record H-02b as FIX-VERIFIED only if your audit procedure accepts the supplied PostgreSQL test evidence without independently rerunning it."
+
+**Test summary (20 tests, `__tests__/integration/h02b-confirm-package-booking.test.ts`):**
+
+| Group | IDs | Count | Last run |
+|---|---|---|---|
+| Input validation | V-01..V-05 | 5 | `2026-10-12 20:42:36` port 5433 |
+| Ownership | O-01..O-02 | 2 | Same run |
+| Concurrency (P2034 logged) | C-01..C-02 | 2 | Same run |
+| Insufficient hours | I-01 | 1 | Same run |
+| Missing wallet (F1) | F1-01 | 1 | Same run |
+| Insufficient balance (F2) | F2-01, F2-02 | 2 | Same run |
+| Duplicate hour-accounting (F3) | F3-01, F3-02 | 2 | Same run |
+| Duration mismatch (F4) | F4-01, F4-02, F4-03 | 3 | Same run |
+| Tx-scoped booking read (F5) | F5-01, F5-02 | 2 | Same run |
+| **Total** | | **20** | Exit 0 |
+
+---
+
+### 8.4 — Package Pricing / Refund (OPEN)
+
+| ID | Title | Risk | Finding | Status | Blocked on |
+|---|---|---|---|---|---|
+| H-02 | Child booking `price: 0` — lesson has no recorded economic value | HIGH | CONFIRMED — `confirm-package-booking` sets `price: 0`; breaks audit trail, payout, refund attribution | OPEN | Package entitlement policy decision (PB-POL-01 resolved; implementation not yet started) |
+| H-01 | Refund formula uses stale `packageHoursRemaining` | HIGH | CONFIRMED — `calculatePartialPackageRefund()` derives `hoursUsed = packageHours - packageHoursRemaining`; stale counter produces wrong refund base | OPEN | H-02 must be fixed first (refund formula to use `sum(child Booking.price)` after H-02 sets correct prices) |
+
+---
+
+### 8.5 — UI Copy / Expiry Inconsistencies (OPEN)
+
+| ID | Title | Risk | Finding | Required change | Status |
+|---|---|---|---|---|---|
+| PB-UI-01 | "Credits never expire" in BulkBookingForm, add-funds page, receipt emails | LOW | CONFIRMED — contradicts legal terms (12 months inactivity) | Replace with "Credit is valid for 12 months from last account activity" | OPEN |
+| PB-UI-02 | "12 months from purchase" in BookNowOrLater, PackageSelector, packages marketing page, Stripe checkout description | LOW | CONFIRMED — contradicts legal terms (inactivity-based) | Replace with "12 months from last account activity" | OPEN |
+| PB-UI-03 | Student dashboard shows "Hours Remaining" as primary entitlement metric | MEDIUM | CONFIRMED — implies fixed-hour guarantee; contradicts dollar-wallet policy | Replace primary display with wallet dollar balance; show estimated hours as secondary with rate qualifier | OPEN — blocked on H-02 (need correct child `Booking.price` before wallet-based display is accurate) |
+| PB-UI-04 | SMS/push notification copy claims fixed hour count ("you have X lesson hours available") | MEDIUM | CONFIRMED — `packageExpiryAlerts.ts`, `remind-client/route.ts` | Replace with wallet dollar balance; use approximate hours with rate qualifier | OPEN |
+
+---
+
+### 8.6 — Server-Side Pricing Integrity (VERIFIED SAFE)
+
+These items were raised during the audit and verified source-safe. Recorded here for completeness.
+
+| Item | Verification | Outcome |
+|---|---|---|
+| Client price manipulation (bulk booking) | Server recalculates via `calculatePackagePriceDynamic`; 1-cent tolerance; 409 on mismatch | ✅ VERIFIED SAFE |
+| Platform fee authority | `getPlatformFeeRate()` → DB with defaults fallback; not hardcoded in route | ✅ VERIFIED SAFE |
+| Wallet credit — once exactly | `recordWebhookEvent()` + `walletTransaction.create` in same SERIALIZABLE tx; `@unique` idempotency key | ✅ VERIFIED SAFE |
+| Webhook amount validation | `receivedCents !== expectedCents` throws; `expectedTotal` is server-generated metadata | ✅ VERIFIED SAFE |
+| Commission locking | Rate locked at `Booking.commissionRate` at creation; webhook reads from `Booking`; payout reads from `Transaction.providerPayout` | ✅ VERIFIED SAFE |
+| Wallet ownership | `ClientWallet` keyed on `userId`; no `providerId` binding | ✅ VERIFIED SAFE |
+| Concurrent double-spend (`POST /api/bookings`) | Balance re-checked inside SERIALIZABLE tx; pre-check is fast-reject only | ✅ VERIFIED SAFE |
+| Slot double-booking | Three-layer guard: Booking table + SlotReservation + PostgreSQL GiST constraint | ✅ VERIFIED SAFE |
+| Idempotency (`POST /api/public/bookings/bulk`) | `BookingIdempotencyKey` persisted inside same `$transaction` as `Booking.create` | ✅ VERIFIED SAFE |
