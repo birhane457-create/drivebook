@@ -186,7 +186,7 @@ export default function BrandingPage() {
       const tier = instructor?.subscriptionTier;
       // V-05 FIX: allow PREMIUM tier to write customDomain (consistent with
       // /api/instructor/domain/verify which accepts ['STUDIO', 'PREMIUM']).
-      const canSetDomain = ['STUDIO', 'PREMIUM'].includes(tier);
+      const canSetDomain = ['STUDIO', 'PREMIUM'].includes(tier ?? '');
 
       const [brandRes, profileRes] = await Promise.all([
         fetch('/api/instructor/branding', {
@@ -238,7 +238,7 @@ export default function BrandingPage() {
   const tier = instructor?.subscriptionTier;
   const accountType = instructor?.accountType ?? 'INDIVIDUAL';
   const features = {
-    customDomain: ['STUDIO', 'PREMIUM'].includes(tier),
+    customDomain: ['STUDIO', 'PREMIUM'].includes(tier ?? ''),
     isBusiness:   accountType === 'BUSINESS',
   };
   const isBasic = tier === 'BASIC';
