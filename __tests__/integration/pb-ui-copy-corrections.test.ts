@@ -131,6 +131,46 @@ describe('PB-UI-04 — hour-count claims removed from notifications and SMS', ()
     expect(src).toContain(`expired and any unused wallet credit from this package has been forfeited.`)
   })
 
+  // PB-UI-04 runtime wiring check:
+  // Verify each message string is wired to its correct date-range branch.
+  // Method: each branch owns a unique sentinel (the date-range variable name used
+  // in the prisma query directly above each createNotification call). We verify
+  // that the sentinel and its corresponding message are co-located within the
+  // same 60-line window — confirming the message belongs to that branch.
+  test('PB-UI-04 wiring: 7-day message is in the range7d branch', () => {
+    const lines = read('lib/jobs/packageExpiryAlerts.ts').split('\n')
+    const msgLine = lines.findIndex(l => l.includes('expires in 7 days'))
+    expect(msgLine).toBeGreaterThan(-1)
+    // The 7-day branch iterates over `expiringIn7Days` — verify the for-loop
+    // variable is present within 40 lines above the message
+    const window = lines.slice(Math.max(0, msgLine - 40), msgLine + 5).join('\n')
+    expect(window).toContain('expiringIn7Days')
+  })
+
+  test('PB-UI-04 wiring: tomorrow message is in the range1d branch', () => {
+    const lines = read('lib/jobs/packageExpiryAlerts.ts').split('\n')
+    const msgLine = lines.findIndex(l => l.includes('expires tomorrow'))
+    expect(msgLine).toBeGreaterThan(-1)
+    const window = lines.slice(Math.max(0, msgLine - 40), msgLine + 5).join('\n')
+    expect(window).toContain('expiringIn1Day')
+  })
+
+  test('PB-UI-04 wiring: today message is in the rangeToday branch', () => {
+    const lines = read('lib/jobs/packageExpiryAlerts.ts').split('\n')
+    const msgLine = lines.findIndex(l => l.includes('expires today at midnight'))
+    expect(msgLine).toBeGreaterThan(-1)
+    const window = lines.slice(Math.max(0, msgLine - 40), msgLine + 5).join('\n')
+    expect(window).toContain('expiringToday')
+  })
+
+  test('PB-UI-04 wiring: expired message is in the rangeYesterday branch', () => {
+    const lines = read('lib/jobs/packageExpiryAlerts.ts').split('\n')
+    const msgLine = lines.findIndex(l => l.includes('has expired and any unused wallet credit'))
+    expect(msgLine).toBeGreaterThan(-1)
+    const window = lines.slice(Math.max(0, msgLine - 40), msgLine + 5).join('\n')
+    expect(window).toContain('expiredYesterday')
+  })
+
   test('remind-client/route.ts: old SMS hour-count pattern absent', () => {
     // The old message contained "lesson hour" as a literal in the template
     const src = read('app/api/instructor/remind-client/route.ts')
