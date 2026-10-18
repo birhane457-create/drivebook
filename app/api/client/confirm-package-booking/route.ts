@@ -236,12 +236,15 @@ export async function POST(request: Request) {
         // H-02 FIX: Calculate lesson price using authorized duration and applicable rate
         const lessonPrice = parseFloat((authorizedHours * applicableRate).toFixed(2));
 
-        // H-02 FIX: Get platform fee rate from DB (MEDIUM-10 pattern)
-        const { getPlatformFeeRate, getCommissionRate } = await import('@/lib/services/platform-pricing');
-        const platformFeeRate = await getPlatformFeeRate();
-        const platformFee = parseFloat((lessonPrice * (platformFeeRate / 100)).toFixed(2));
+        // H-02 FIX: Platform fee for wallet-funded lessons
+        // POLICY (§2.2): Wallet-funded bookings do NOT incur a second platform fee.
+        // The fee was collected when the package was purchased or wallet was topped up.
+        // We set platformFee to 0 for this wallet-funded lesson to avoid double-counting
+        // in financial reports. The original package purchase already recorded the fee.
+        const platformFee = 0;
 
         // H-02 FIX: Get commission rate for this instructor's tier
+        const { getCommissionRate } = await import('@/lib/services/platform-pricing');
         const commissionRatePct = await getCommissionRate(txBooking.provider.subscriptionTier ?? 'BASIC');
         const commissionRate = commissionRatePct / 100;
         const providerPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2));

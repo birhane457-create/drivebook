@@ -83,24 +83,32 @@ const lessonPrice = parseFloat((authorizedHours × applicableRate).toFixed(2));
 - ✅ `applicableRate` is instructor's current rate (policy §3.1)
 - ✅ Rounded to 2 decimal places for currency precision
 
-### 2.3 Platform Fee Calculation
+### 2.3 Platform Fee for Wallet-Funded Bookings
 
-**Policy (§2.1):** "Platform fee applies after promotional discounts"
+**Policy:** Package bookings are wallet-funded. The platform fee was collected when the package was purchased (calculated on the discounted package amount).
 
-**Note:** Package bookings are wallet-funded. Platform fee was collected at package purchase time. For consistency with other wallet-funded bookings, we calculate but do NOT charge a second platform fee here.
+**Implementation:** Wallet-funded lesson confirmations record **`platformFee: 0`** in both the `Booking` record and the `Transaction` record.
+
+**Rationale:** Prevents double-counting the platform fee in financial reports. The fee appears once (at package purchase) not repeatedly (at each lesson confirmation).
 
 **Implementation:**
 ```typescript
-// Lines 222-224: confirm-package-booking/route.ts
-const { getPlatformFeeRate } = await import('@/lib/services/platform-pricing');
-const platformFeeRate = await getPlatformFeeRate();
-const platformFee = parseFloat((lessonPrice × (platformFeeRate / 100)).toFixed(2));
+// Lines 220-228: confirm-package-booking/route.ts
+const lessonPrice = parseFloat((authorizedHours * applicableRate).toFixed(2));
+
+// Platform fee for wallet-funded lessons: 0
+// Policy (§2.2): Fee already collected at package purchase time
+const platformFee = 0;
+
+const commissionRatePct = await getCommissionRate(txBooking.provider.subscriptionTier ?? 'BASIC');
+const commissionRate = commissionRatePct / 100;
+const providerPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2));
 ```
 
 **Verification:**
-- ✅ Rate retrieved from DB (not hardcoded)
-- ✅ Calculated on lesson price
-- ✅ MEDIUM-10 pattern (getPlatformFeeRate from DB)
+- ✅ `platformFee = 0` (not calculated from DB rate)
+- ✅ Avoids double-counting in financial reports
+- ✅ Original package fee preserved at purchase time
 
 ### 2.4 Commission and Payout Calculation
 
@@ -224,7 +232,7 @@ await (tx as any).transaction.create({
 ### 4.1 Booking Record Fields
 ```
 price:          $70.00  (lesson price)
-platformFee:    $2.52   (3.6% of $70)
+platformFee:    $0.00   (wallet-funded; fee collected at package purchase)
 providerPayout: $59.50  (85% of $70, BASIC tier 15% commission)
 commissionRate: 0.15    (15% for BASIC tier)
 ```
@@ -237,7 +245,7 @@ DEBIT: $70.00 (matches booking.price)
 ### 4.3 Transaction Record
 ```
 amount:         $70.00  (matches booking.price)
-platformFee:    $2.52   (matches booking.platformFee)
+platformFee:    $0.00   (matches booking.platformFee; wallet-funded)
 providerPayout: $59.50  (matches booking.providerPayout)
 commissionRate: 0.15    (matches booking.commissionRate)
 ```
@@ -269,21 +277,23 @@ $70.00 = $59.50 + $10.50 ✅
 
 | Test ID | Scenario | Verification |
 |---------|----------|--------------|
-| H02-T01 | Basic confirmation | price = duration × current rate |
-| H02-T02 | Platform fee | fee = price × DB fee rate |
+| H02-T01 | Basic confirmation | price = duration × current rate; isPaid & status verified |
+| H02-T02 | Platform fee | fee = 0 (wallet-funded) |
 | H02-T03 | Provider payout | payout = price × (1 - commission) |
-| H02-T04 | Transaction record | matches booking financials |
+| H02-T04 | Transaction record | all financial fields match booking exactly |
 | H02-T05 | Wallet debit | debit = lesson price |
 | H02-T06 | Rate change | uses instructor's NEW rate |
 | H02-T07 | Insufficient balance | booking blocked after rate increase |
 | H02-T08 | Multi-hour booking | price = 2hrs × current rate |
 | H02-T09 | Different instructor | uses their rate and tier |
-| H02-T10 | Financial reconciliation | price = payout + commission |
+| H02-T10 | Financial reconciliation | payout = price × (1 - commission); fee = 0 |
 
 ### 5.2 Test Execution Status
-**Status:** Test database (localhost:5433) not available during implementation  
-**Verification Method:** Source-level inspection (this document)  
-**Next Step:** Tests must be executed in environment with PostgreSQL database
+**Status:** ⚠️ **CORRECTED** — Database safety guard added  
+**Safety:** Tests now verify DATABASE_URL contains "test" or uses port 5433  
+**Test File:** `__tests__/integration/h02-child-booking-pricing.test.ts`  
+**Test Count:** 10 tests  
+**Next Step:** Execute tests in environment with PostgreSQL test database
 
 ---
 
@@ -293,12 +303,12 @@ $70.00 = $59.50 + $10.50 ✅
 - [x] `app/api/client/confirm-package-booking/route.ts`
 
 ### Changes Made
-- [x] Import `getPlatformFeeRate` and `getCommissionRate` (line 222)
+- [x] Import `getCommissionRate` only (not getPlatformFeeRate)
 - [x] Calculate `applicableRate` from instructor's current rate (lines 210-218)
 - [x] Calculate `lessonPrice = authorizedHours × applicableRate` (line 220)
-- [x] Calculate `platformFee` from DB rate (lines 222-224)
-- [x] Calculate `commissionRate` and `providerPayout` (lines 226-229)
-- [x] Set `transactionAmount = lessonPrice` (line 231)
+- [x] Set `platformFee = 0` for wallet-funded lesson (line 228)
+- [x] Calculate `commissionRate` and `providerPayout` (lines 230-232)
+- [x] Set `transactionAmount = lessonPrice` (line 234)
 - [x] Update booking with all financial fields (lines 287-296)
 - [x] Create transaction record with correct values (lines 360-379)
 
@@ -460,4 +470,4 @@ Every package lesson now has:
 
 ---
 
-**Status:** IMPLEMENTATION COMPLETE — AWAITING TEST EXECUTION
+**Status:** DEFECTS CORRECTED — AWAITING RE-REVIEW AND TEST EXECUTION
