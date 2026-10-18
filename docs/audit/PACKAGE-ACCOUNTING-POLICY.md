@@ -76,9 +76,9 @@ totalCharged = (originalValue - promotionalDiscount) + platformFee
 | Package purchase | ✅ Yes | Discounted package amount |
 | Wallet top-up | ✅ Yes | Top-up amount (e.g., 5% of $200 = $10 fee) |
 | Direct single-booking payment | ✅ Yes | Booking price |
-| Booking paid from wallet credit | ❌ No | Fee already collected when wallet was funded |
+| Booking paid from wallet credit | ❌ No | Fee already collected when wallet was funded; **record platformFee: 0 in booking/transaction** |
 
-**Critical rule:** A wallet-funded booking does NOT charge a second platform fee. The fee was collected at the time the wallet credit was purchased or topped up.
+**Critical rule:** A wallet-funded booking does NOT charge a second platform fee. The fee was collected at the time the wallet credit was purchased or topped up. **Record `platformFee: 0` in the booking and transaction records** to avoid double-counting in financial reports.
 
 ### 2.3 Platform Fee Refund Policy
 
