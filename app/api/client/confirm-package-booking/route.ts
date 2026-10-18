@@ -214,25 +214,40 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 4. Locked rate from transaction-scoped package booking ────────────
-        // lockedHourlyRate comes from packageBooking (fetched inside tx at step 1a).
-        // NOTE (H-02): This rate policy is under separate review. The rate used here
-        // is the one locked at package purchase time, not the booking instructor's
-        // current rate. Do not change this as part of F5.
-        const lockedRate = toJsNumber(
-          packageBooking.lockedHourlyRate ?? txBooking.provider?.hourlyRate
-        );
+        // ── 4. H-02 FIX: Locked rate and financial calculations ──────────────
+        // POLICY (2026-10-18): Use instructor's CURRENT rate at booking confirmation
+        // time, NOT the original package purchase rate. This implements the approved
+        // dollar-credit wallet model where hours are estimates, not guarantees.
+        //
+        // The locked rate is the instructor's applicable rate when THIS booking is
+        // confirmed. It is locked for THIS booking only — future bookings may use
+        // different rates if the instructor changes their rate.
+        //
+        // See docs/audit/PACKAGE-ACCOUNTING-POLICY.md §3.1
+        const applicableRate = toJsNumber(txBooking.provider?.hourlyRate);
 
-        if (!Number.isFinite(lockedRate) || lockedRate <= 0) {
+        if (!Number.isFinite(applicableRate) || applicableRate <= 0) {
           throw Object.assign(
-            new Error('Package booking has no valid locked hourly rate'),
-            { code: 'INVALID_LOCKED_RATE' }
+            new Error('Instructor has no valid hourly rate'),
+            { code: 'INVALID_INSTRUCTOR_RATE' }
           );
         }
 
-        // transactionAmount uses authorizedHours (from DB) and lockedRate (from tx)
-        // — no client-supplied value participates in any financial calculation
-        const transactionAmount = authorizedHours * lockedRate;
+        // H-02 FIX: Calculate lesson price using authorized duration and applicable rate
+        const lessonPrice = parseFloat((authorizedHours * applicableRate).toFixed(2));
+
+        // H-02 FIX: Get platform fee rate from DB (MEDIUM-10 pattern)
+        const { getPlatformFeeRate, getCommissionRate } = await import('@/lib/services/platform-pricing');
+        const platformFeeRate = await getPlatformFeeRate();
+        const platformFee = parseFloat((lessonPrice * (platformFeeRate / 100)).toFixed(2));
+
+        // H-02 FIX: Get commission rate for this instructor's tier
+        const commissionRatePct = await getCommissionRate(txBooking.provider.subscriptionTier ?? 'BASIC');
+        const commissionRate = commissionRatePct / 100;
+        const providerPayout = parseFloat((lessonPrice * (1 - commissionRate)).toFixed(2));
+
+        // Wallet debit amount (same as lesson price for package bookings)
+        const transactionAmount = lessonPrice;
 
         // ── 5. Wallet must exist — fail closed ────────────────────────────────
         const userWallet = await tx.clientWallet.findFirst({
@@ -272,19 +287,27 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── 7. Confirm child booking — conditional on PENDING status ──────────
+        // ── 7. H-02 FIX: Confirm child booking with correct financial values ──
         // updateMany with WHERE status='PENDING' creates a read-write conflict
         // Serializable can detect. Second concurrent tx reads PENDING but first
         // already wrote CONFIRMED → P2034 → retry → guard.count===0 → 409.
-        // NOTE (H-02): price remains 0 — separate change blocked on policy.
+        //
+        // H-02 FIX: Set price, platformFee, providerPayout, commissionRate to actual
+        // values calculated above. This makes the child booking an authoritative
+        // financial record suitable for refund calculations and audit trails.
         const guard = await tx.booking.updateMany({
           where: { id: bookingId, status: 'PENDING' },
           data: {
             status: 'CONFIRMED',
             isPackageBooking: false,
             parentBookingId: packageBookingId,
+            price: lessonPrice,
+            platformFee,
+            providerPayout,
+            commissionRate,
             paymentIntentId: `package-${packageBookingId}-${bookingId}`,
             paidAt: new Date(),
+            isPaid: true,
           },
         });
 
@@ -332,23 +355,27 @@ export async function POST(request: Request) {
           data: { balance: { decrement: transactionAmount } },
         });
 
-        // ── 10. Platform transaction record ───────────────────────────────────
+        // ── 10. H-02 FIX: Platform transaction record with correct financials ─
         await (tx as any).transaction.create({
           data: {
             bookingId,
             providerId: txBooking.providerId,
-            amount: transactionAmount,
-            platformFee: 0,
-            providerPayout: transactionAmount,
+            amount: lessonPrice,
+            platformFee,
+            providerPayout,
+            commissionRate,
             type: 'BOOKING_PAYMENT',
             status: 'COMPLETED',
-            description: `Package hours — ${authorizedHours.toFixed(2)}h from package ${packageBookingId}`,
+            description: `Package lesson — ${authorizedHours.toFixed(2)}h at $${applicableRate}/hr from package ${packageBookingId}`,
             metadata: {
               bookingId,
               packageBookingId,
               hoursDeducted: authorizedHours,
               suppliedHoursToDeduct: hoursToDeduct,
+              applicableRate,
+              lessonPrice,
               instructorName: txBooking.provider?.name,
+              policyVersion: '2026-10-18',
             },
           },
         });
