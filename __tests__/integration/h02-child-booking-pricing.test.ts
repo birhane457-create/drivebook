@@ -33,13 +33,34 @@ describe('H-02: Child Booking Pricing', () => {
   let pendingBooking: any;
 
   beforeEach(async () => {
-    // DATABASE SAFETY CHECK: Verify we're using a test database
+    // DATABASE SAFETY CHECK: Fail-closed allowlist approach
+    // Only explicitly approved test database URLs are permitted
     const dbUrl = process.env.DATABASE_URL || '';
-    if (!dbUrl.includes('test') && !dbUrl.includes(':5433')) {
+    
+    const APPROVED_TEST_DATABASES = [
+      'postgresql://localhost:5433/drivebook_test',
+      'postgresql://127.0.0.1:5433/drivebook_test',
+      'postgresql://localhost:5433/test',
+      'postgresql://127.0.0.1:5433/test',
+      // CI environments
+      'postgresql://postgres:postgres@localhost:5433/test',
+      'postgresql://postgres@localhost:5433/drivebook_test',
+    ];
+    
+    const isApproved = APPROVED_TEST_DATABASES.some(approved => 
+      dbUrl.startsWith(approved)
+    );
+    
+    if (!isApproved) {
       throw new Error(
-        'SAFETY GUARD: DATABASE_URL must contain "test" or use port 5433. ' +
-        'Current: ' + dbUrl.substring(0, 50) + '... ' +
-        'These tests perform destructive operations and must NOT run against production.'
+        '═══ DATABASE SAFETY GUARD VIOLATION ═══\n' +
+        'This test suite performs DESTRUCTIVE operations (deleteMany).\n' +
+        'Only explicitly approved test databases are permitted.\n\n' +
+        `Current DATABASE_URL: ${dbUrl.substring(0, 60)}...\n\n` +
+        'Approved test databases:\n' +
+        APPROVED_TEST_DATABASES.map(db => `  - ${db}`).join('\n') + '\n\n' +
+        'To add a new test database, update the APPROVED_TEST_DATABASES allowlist.\n' +
+        'NEVER add production databases to this list.'
       );
     }
 
