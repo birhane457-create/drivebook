@@ -656,6 +656,11 @@ export async function POST(req: NextRequest) {
             hours: String(data.hours),
             packageType: data.packageType,
             expectedTotal: String(verifiedTotal), // AUDIT FIX #1: Validate amount in webhook
+            // H-02 ACCOUNTING: Seal values needed to reconstruct face value and platform fee
+            // in the webhook, without re-querying live data that may have changed.
+            hourlyRate: String(instructor.hourlyRate),
+            discountPct: String(serverPricing.discountPercentage),
+            packagePlatformFee: String(serverPricing.platformFee), // full package fee, e.g. $33.25
           },
           success_url: `${baseUrl}/client-dashboard/wallet?payment=success&verify_email=1&uid=${userId}`,
           cancel_url:  `${baseUrl}/client-dashboard/wallet?payment=cancelled`,
@@ -778,7 +783,11 @@ export async function POST(req: NextRequest) {
             endTime: endTime ?? undefined,
             duration: firstLessonDurationMinutes,
             price: firstLessonPrice,
-            platformFee: firstLessonPlatformFee,
+            // H-02 ACCOUNTING: Platform fee on the parent package booking must be 0.
+            // The full package-level platform fee (e.g. $33.25) is collected via
+            // packageTotalPaid and recorded in a separate PACKAGE_FEE Transaction by
+            // the Stripe webhook. Individual lesson platformFee is set at confirmation.
+            platformFee: 0,
             providerPayout: firstLessonPayout,
             // Lock commission rate at booking time Ã¢â‚¬â€ immutable even if platform rates change later.
             // Payout service uses this stored value, never re-fetches the live rate.
