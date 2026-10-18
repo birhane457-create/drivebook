@@ -33,7 +33,17 @@ describe('H-02: Child Booking Pricing', () => {
   let pendingBooking: any;
 
   beforeEach(async () => {
-    // Clean slate
+    // DATABASE SAFETY CHECK: Verify we're using a test database
+    const dbUrl = process.env.DATABASE_URL || '';
+    if (!dbUrl.includes('test') && !dbUrl.includes(':5433')) {
+      throw new Error(
+        'SAFETY GUARD: DATABASE_URL must contain "test" or use port 5433. ' +
+        'Current: ' + dbUrl.substring(0, 50) + '... ' +
+        'These tests perform destructive operations and must NOT run against production.'
+      );
+    }
+
+    // Clean slate (test database only)
     await prisma.walletTransaction.deleteMany({});
     await prisma.clientWallet.deleteMany({});
     await prisma.booking.deleteMany({});
@@ -151,7 +161,14 @@ describe('H-02: Child Booking Pricing', () => {
 
     const confirmed = await prisma.booking.findUnique({
       where: { id: pendingBooking.id },
-      select: { price: true, platformFee: true, providerPayout: true, commissionRate: true },
+      select: { 
+        price: true, 
+        platformFee: true, 
+        providerPayout: true, 
+        commissionRate: true,
+        isPaid: true,
+        status: true,
+      },
     });
 
     expect(Number(confirmed!.price)).toBe(70); // 1hr × $70/hr
@@ -160,10 +177,10 @@ describe('H-02: Child Booking Pricing', () => {
   });
 
   /**
-   * H02-T02: Platform fee calculated correctly
-   * Policy: 3.6% of lesson price (from DB settings)
+   * H02-T02: Platform fee = 0 for wallet-funded lessons
+   * Policy (§2.2): Fee already collected at package purchase time
    */
-  it('H02-T02: Platform fee = (lesson price) × (DB fee rate)', async () => {
+  it('H02-T02: Platform fee = 0 for wallet-funded lesson', async () => {
     const request = {
       json: async () => ({
         bookingId: pendingBooking.id,
@@ -181,8 +198,8 @@ describe('H-02: Child Booking Pricing', () => {
       select: { price: true, platformFee: true },
     });
 
-    const expectedFee = parseFloat((70 * 0.036).toFixed(2)); // 3.6% of $70
-    expect(Number(confirmed!.platformFee)).toBe(expectedFee);
+    // Wallet-funded lesson: no second platform fee
+    expect(Number(confirmed!.platformFee)).toBe(0);
   });
 
   /**
@@ -214,7 +231,7 @@ describe('H-02: Child Booking Pricing', () => {
   });
 
   /**
-   * H02-T04: Transaction record created with correct amounts
+   * H02-T04: Transaction record matches booking financials exactly
    */
   it('H02-T04: Transaction record matches booking financials', async () => {
     const request = {
@@ -229,13 +246,21 @@ describe('H-02: Child Booking Pricing', () => {
     const response = await POST(request);
     expect(response.status).toBe(200);
 
+    const booking = await prisma.booking.findUnique({
+      where: { id: pendingBooking.id },
+      select: { price: true, platformFee: true, providerPayout: true, commissionRate: true },
+    });
+
     const transaction = await prisma.transaction.findFirst({
       where: { bookingId: pendingBooking.id },
-      select: { amount: true, platformFee: true, providerPayout: true, type: true, status: true },
+      select: { amount: true, platformFee: true, providerPayout: true, commissionRate: true, type: true, status: true },
     });
 
     expect(transaction).toBeTruthy();
-    expect(Number(transaction!.amount)).toBe(70);
+    expect(Number(transaction!.amount)).toBe(Number(booking!.price));
+    expect(Number(transaction!.platformFee)).toBe(Number(booking!.platformFee));
+    expect(Number(transaction!.providerPayout)).toBe(Number(booking!.providerPayout));
+    expect(Number(transaction!.commissionRate)).toBe(Number(booking!.commissionRate));
     expect(transaction!.type).toBe('BOOKING_PAYMENT');
     expect(transaction!.status).toBe('COMPLETED');
   });
@@ -442,7 +467,8 @@ describe('H-02: Child Booking Pricing', () => {
 
   /**
    * H02-T10: Financial reconciliation
-   * Verify: price = platformFee + providerPayout (with rounding tolerance)
+   * Verify: lessonPrice = providerPayout / (1 - commissionRate)
+   * For wallet-funded lessons: platformFee = 0
    */
   it('H02-T10: Financial fields reconcile within rounding tolerance', async () => {
     const request = {
@@ -459,20 +485,23 @@ describe('H-02: Child Booking Pricing', () => {
 
     const confirmed = await prisma.booking.findUnique({
       where: { id: pendingBooking.id },
-      select: { price: true, platformFee: true, providerPayout: true },
+      select: { price: true, platformFee: true, providerPayout: true, commissionRate: true },
     });
 
     const price = Number(confirmed!.price);
     const fee = Number(confirmed!.platformFee);
     const payout = Number(confirmed!.providerPayout);
+    const commission = Number(confirmed!.commissionRate);
 
-    // Commission split: price = providerPayout / (1 - commissionRate)
-    // Platform doesn't take platformFee from this transaction (wallet-funded)
-    // The commission is the only deduction: price × commissionRate
-    const commission = price - payout;
-    
-    // Verify commission makes sense (BASIC = 15%)
-    const expectedCommission = parseFloat((price * 0.15).toFixed(2));
-    expect(Math.abs(commission - expectedCommission)).toBeLessThan(0.02); // Rounding tolerance
+    // Wallet-funded: platform fee must be 0
+    expect(fee).toBe(0);
+
+    // Commission reconciliation: payout = price × (1 - commissionRate)
+    const expectedPayout = parseFloat((price * (1 - commission)).toFixed(2));
+    expect(Math.abs(payout - expectedPayout)).toBeLessThan(0.02); // Rounding tolerance
+
+    // Verify commission makes sense: lessonPrice = payout / (1 - commissionRate)
+    const reconstructedPrice = parseFloat((payout / (1 - commission)).toFixed(2));
+    expect(Math.abs(reconstructedPrice - price)).toBeLessThan(0.02);
   });
 });
