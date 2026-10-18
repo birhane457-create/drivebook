@@ -287,7 +287,7 @@ async function handleCheckoutCompleted(
   idempotencyKey: string
 ): Promise<void> {
   const { customer, metadata, payment_intent } = checkoutSession;
-  const { type, providerId, userId, hours, packageType } = metadata || {};
+  const { type, providerId, userId, hours, packageType, hourlyRate: hourlyRateStr, discountPct: discountPctStr, packagePlatformFee: packagePlatformFeeStr } = metadata || {};
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Wallet credit (Book Later flow) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   // These sessions are created by POST /api/public/bookings/bulk with bookingType="later".
@@ -519,24 +519,97 @@ async function handleCheckoutCompleted(
               wallet = await tx.clientWallet.create({ data: { userId } });
             }
       
-            // Credit the wallet
+            // H-02 ACCOUNTING: Credit face value per approved policy (PACKAGE-ACCOUNTING-POLICY.md, 2026-10-18)
+            // Metadata sealed at Checkout Session creation includes hourlyRate, discountPct,
+            // packagePlatformFee so we don't need a live DB lookup here.
+            const hoursNum           = parseInt(hours ?? '0', 10);
+            const hourlyRateNum      = parseFloat(hourlyRateStr ?? '0');
+            const discountPctNum     = parseFloat(discountPctStr ?? '0');
+            const sealedPkgFee       = parseFloat(packagePlatformFeeStr ?? '0');
+            const stripePaymentIntId = typeof payment_intent === 'string' ? payment_intent : payment_intent?.id ?? '';
+
+            // Face value = undiscounted package total (e.g. $700)
+            const packageFaceValue   = hoursNum > 0 && hourlyRateNum > 0
+              ? parseFloat((hoursNum * hourlyRateNum).toFixed(2))
+              : amountPaid; // fallback: credit what was paid (old behaviour, safe)
+
+            // DriveBook promotional residual (face value - what customer paid)
+            const drivebookPromotion = parseFloat((packageFaceValue - amountPaid).toFixed(2));
+
+            // Full platform fee: use sealed value if available, else derive from amounts
+            const packagePlatformFee = sealedPkgFee > 0
+              ? sealedPkgFee
+              : parseFloat((amountPaid - packageFaceValue * (1 - discountPctNum / 100)).toFixed(2));
+
+            // 1. CREDIT wallet with face value
             await tx.walletTransaction.create({
               data: {
                 walletId: wallet.id,
                 type: 'CREDIT',
-                amount: amountPaid,
-                description: `Package purchase â€“ ${hours ?? '?'} hours via Stripe Checkout`,
+                amount: packageFaceValue,
+                description: `Package purchase — ${hours ?? '?'} hours via Stripe Checkout — face value credit`,
                 status: 'CONFIRMED',
-                // F-12 FIX: Store PaymentIntent ID for explicit correlation
                 metadata: {
-                  stripePaymentIntentId: typeof payment_intent === 'string' ? payment_intent : payment_intent?.id,
+                  stripePaymentIntentId: stripePaymentIntId,
                   stripeCheckoutSessionId: checkoutSession.id,
                   packageType: packageType ?? 'unknown',
+                  amountPaid,
+                  packageFaceValue,
+                  drivebookPromotion,
+                  packagePlatformFee,
                 },
               },
             });
-      
-            logger.info(`Ã¢Å“â€¦ Wallet credited: +$${amountPaid} for userId=${userId}`);
+
+            // 2. PROMOTION entry: DriveBook funds the residual (only if non-zero)
+            if (drivebookPromotion > 0.001) {
+              await tx.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'CREDIT',
+                  amount: drivebookPromotion,
+                  description: `DriveBook promotional subsidy — package discount residual`,
+                  status: 'CONFIRMED',
+                  metadata: {
+                    stripePaymentIntentId: stripePaymentIntId,
+                    stripeCheckoutSessionId: checkoutSession.id,
+                    type: 'DRIVEBOOK_PROMOTION',
+                    packageFaceValue,
+                    amountPaid,
+                  },
+                },
+              });
+            }
+
+            // 3. PACKAGE_FEE Transaction: explicit, immutable record of the full platform fee
+            if (packagePlatformFee > 0) {
+              await (tx as any).transaction.create({
+                data: {
+                  type: 'PACKAGE_FEE',
+                  totalAmount: packagePlatformFee,
+                  platformFee: packagePlatformFee,
+                  providerPayout: 0,
+                  commissionRate: 0,
+                  amount: packagePlatformFee,
+                  status: 'SETTLED',
+                  stripePaymentIntentId: stripePaymentIntId,
+                  providerId: providerId ?? 'UNKNOWN',
+                  createdBy: 'STRIPE_WEBHOOK',
+                  metadata: {
+                    packageFaceValue,
+                    amountPaid,
+                    drivebookPromotion,
+                    discountPctNum,
+                    hourlyRateNum,
+                    hoursNum,
+                    stripeCheckoutSessionId: checkoutSession.id,
+                    idempotencyKey: `pkg-fee-checkout-${checkoutSession.id}`,
+                  },
+                },
+              });
+            }
+
+            logger.info(`Package wallet (Book Later): face=$${packageFaceValue} / paid=$${amountPaid} / promo=+$${drivebookPromotion} / pkg_fee=$${packagePlatformFee} for userId=${userId}`);
           }, SERIALIZABLE_TX);
     }, { operationName: 'webhook-checkout-session-1' });
 
@@ -1084,55 +1157,123 @@ async function handleBookingPaymentSuccess(
             }
           });
       
-          // Ã¢â€â‚¬Ã¢â€â‚¬ Wallet: credit full package amount, debit first lesson Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-          // Per financial doctrine (PATH 2: STRIPE BOOKING):
-          //   CREDIT wallet = full package amount paid via Stripe (packageTotalPaid)
-          //   DEBIT  wallet = first lesson price (booking.price = 1hr Ãƒâ€” hourlyRate)
-          // Remaining balance = credits available for future lessons from this package.
+          // ── Wallet: credit face value, record PACKAGE_FEE, debit first lesson ──────
+          // Approved accounting policy (PACKAGE-ACCOUNTING-POLICY.md, 2026-10-18):
+          //   Face-Value Model A:
+          //   CREDIT wallet  = face value (packageHours x lockedHourlyRate), e.g. $700
+          //   DEBIT  wallet  = first lesson price (booking.price), e.g. $70
+          //   PROMOTION      = DriveBook-funded residual (faceValue - packageTotalPaid)
+          //   PACKAGE_FEE Tx = explicit Transaction row for full platform fee, e.g. $33.25
+          //                    linked immutably to Stripe PI for reconciliation.
           // For single lessons: just confirm any pending wallet transactions.
           if (userId) {
             let wallet = await tx.clientWallet.findUnique({ where: { userId } });
             if (!wallet) {
               wallet = await tx.clientWallet.create({ data: { userId } });
             }
-      
-            const packageTotalPaid = (booking as any).packageTotalPaid as number | null;
-            const isPackage = (booking as any).isPackageBooking && (booking as any).packageHours > 1;
-      
-            if (isPackage && packageTotalPaid) {
-              // CREDIT: full package amount the client paid via Stripe
+
+            const packageTotalPaid  = Number((booking as any).packageTotalPaid ?? 0);
+            const packageHours      = Number((booking as any).packageHours ?? 0);
+            const lockedHourlyRate  = Number((booking as any).lockedHourlyRate ?? (booking as any).provider?.hourlyRate ?? 0);
+            const lockedDiscountPct = Number((booking as any).lockedDiscountPct ?? 0);
+            const isPackage         = (booking as any).isPackageBooking && packageHours > 1;
+
+            if (isPackage && packageTotalPaid && lockedHourlyRate) {
+              // Face value = undiscounted package total (e.g. $700)
+              const packageFaceValue   = parseFloat((packageHours * lockedHourlyRate).toFixed(2));
+              // Discounted base = face value after discount, before platform fee (e.g. $665)
+              const discountedBase     = parseFloat((packageFaceValue * (1 - lockedDiscountPct / 100)).toFixed(2));
+              // Full platform fee collected at purchase (e.g. $33.25)
+              const packagePlatformFee = parseFloat((packageTotalPaid - discountedBase).toFixed(2));
+              // DriveBook promotional residual (face value - what customer paid, e.g. $1.75)
+              const drivebookPromotion = parseFloat((packageFaceValue - packageTotalPaid).toFixed(2));
+
+              // 1. CREDIT wallet with face value
               await tx.walletTransaction.create({
                 data: {
                   walletId: wallet.id,
                   type: 'CREDIT',
-                  amount: packageTotalPaid,
-                  description: `Package purchase Ã¢â‚¬â€ ${(booking as any).packageHours} hours (Stripe)`,
+                  amount: packageFaceValue,
+                  description: `Package purchase — ${packageHours} hours (Stripe) — face value credit`,
                   status: 'CONFIRMED',
-                }
+                  metadata: {
+                    stripePaymentIntentId: paymentIntentId,
+                    packageTotalPaid,
+                    packageFaceValue,
+                    drivebookPromotion,
+                    packagePlatformFee,
+                  },
+                },
               });
-      
-              // DEBIT: first lesson already scheduled (booking.price = 1hr Ãƒâ€” hourlyRate)
+
+              // 2. DEBIT wallet for first lesson already scheduled
               await tx.walletTransaction.create({
                 data: {
                   walletId: wallet.id,
                   type: 'DEBIT',
                   amount: booking.price,
-                  description: `Lesson: ${booking.provider?.user?.name || "Instructor"} Ã¢â‚¬â€ ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE })} ${new Date(booking.startTime!).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_TIMEZONE })} (${Number(booking.duration ?? 60)}min) #${bookingId.slice(0,8)}`,
+                  description: `Lesson: ${booking.provider?.user?.name || "Instructor"} — ${new Date(booking.startTime!).toLocaleDateString('en-AU', { timeZone: DEFAULT_TIMEZONE })} ${new Date(booking.startTime!).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_TIMEZONE })} (${Number(booking.duration ?? 60)}min) #${bookingId.slice(0, 8)}`,
                   status: 'CONFIRMED',
-                }
+                },
               });
-      
-              const remaining = packageTotalPaid - Number(booking.price);
-              logger.info(`Ã¢Å“â€¦ Package wallet: +${packageTotalPaid} CREDIT / -${booking.price} DEBIT = ${remaining.toFixed(2)} remaining for userId=${userId}`);
+
+              // 3. PROMOTION entry: DriveBook funds the residual (only if non-zero)
+              if (drivebookPromotion > 0.001) {
+                await tx.walletTransaction.create({
+                  data: {
+                    walletId: wallet.id,
+                    type: 'CREDIT',
+                    amount: drivebookPromotion,
+                    description: `DriveBook promotional subsidy — package discount residual`,
+                    status: 'CONFIRMED',
+                    metadata: {
+                      stripePaymentIntentId: paymentIntentId,
+                      type: 'DRIVEBOOK_PROMOTION',
+                      packageFaceValue,
+                      packageTotalPaid,
+                    },
+                  },
+                });
+              }
+
+              // 4. PACKAGE_FEE Transaction: explicit, immutable record of the full platform fee
+              await (tx as any).transaction.create({
+                data: {
+                  bookingId: bookingId,
+                  providerId: booking.providerId,
+                  type: 'PACKAGE_FEE',
+                  totalAmount: packagePlatformFee,
+                  platformFee: packagePlatformFee,
+                  providerPayout: 0,
+                  commissionRate: 0,
+                  amount: packagePlatformFee,
+                  status: 'SETTLED',
+                  stripePaymentIntentId: paymentIntentId,
+                  createdBy: 'STRIPE_WEBHOOK',
+                  metadata: {
+                    packageFaceValue,
+                    discountedBase,
+                    packageTotalPaid,
+                    drivebookPromotion,
+                    lockedDiscountPct,
+                    lockedHourlyRate,
+                    packageHours,
+                    idempotencyKey: `pkg-fee-${bookingId}`,
+                  },
+                },
+              });
+
+              const remaining = packageFaceValue - Number(booking.price);
+              logger.info(`Package wallet (Book Now): face=$${packageFaceValue} / first_lesson=-$${booking.price} / promo=+$${drivebookPromotion} / pkg_fee=$${packagePlatformFee} / remaining=$${remaining.toFixed(2)} for userId=${userId}`);
             } else {
-              // Single lesson Ã¢â‚¬â€ confirm any pending wallet transactions
+              // Single lesson — confirm any pending wallet transactions
               await tx.walletTransaction.updateMany({
                 where: {
                   walletId: wallet.id,
                   status: 'PENDING',
-                  createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
+                  createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
                 },
-                data: { status: 'CONFIRMED' }
+                data: { status: 'CONFIRMED' },
               });
             }
           }
