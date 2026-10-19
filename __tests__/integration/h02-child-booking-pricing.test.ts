@@ -11,19 +11,27 @@
  * - Rate changes affect future bookings only
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { prisma } from '@/lib/prisma';
 import { POST } from '@/app/api/client/confirm-package-booking/route';
 import type { NextRequest } from 'next/server';
 
-// Mock next-auth
-const mockSession = {
-  user: { id: 'test-user-id', email: 'student@test.com', role: 'CLIENT' },
-  expires: '2099-12-31',
-};
+// Mock next-auth — use vi.hoisted() so mockSession is available when the
+// vi.mock() factory is evaluated (vi.mock is hoisted above all imports).
+const { mockSession } = vi.hoisted(() => ({
+  mockSession: {
+    user: { id: 'test-user-id', email: 'student@test.com', role: 'CLIENT' },
+    expires: '2099-12-31',
+  },
+}));
 
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(() => Promise.resolve(mockSession)),
+}));
+
+vi.mock('next/headers', () => ({
+  headers: vi.fn(() => new Map()),
+  cookies: vi.fn(() => ({ get: vi.fn(), set: vi.fn() })),
 }));
 
 describe('H-02: Child Booking Pricing', () => {
