@@ -555,25 +555,28 @@ async function handleCheckoutCompleted(
                   packageType: packageType ?? 'unknown',
                   amountPaid,
                   packageFaceValue,
+                  discountAmount: parseFloat((packageFaceValue - amountPaid + packagePlatformFee).toFixed(2)),
                   drivebookPromotion,
                   packagePlatformFee,
                 },
               },
             });
 
-            // 2. PROMOTION entry: DriveBook funds the residual (only if non-zero)
+            // 2. PROMOTION entry: DriveBook-funded residual (audit only, not spendable)
+            // type:'PLATFORM_SUBSIDY' is intentionally not 'CREDIT' so getWalletBalance()
+            // does not count it twice. The face-value CREDIT above already gives $700.
             if (drivebookPromotion > 0.001) {
               await tx.walletTransaction.create({
                 data: {
                   walletId: wallet.id,
-                  type: 'CREDIT',
+                  type: 'PLATFORM_SUBSIDY',
                   amount: drivebookPromotion,
-                  description: `DriveBook promotional subsidy — package discount residual`,
+                  description: `DriveBook promotional subsidy — package discount residual (non-spendable audit record)`,
                   status: 'CONFIRMED',
                   metadata: {
                     stripePaymentIntentId: stripePaymentIntId,
                     stripeCheckoutSessionId: checkoutSession.id,
-                    type: 'DRIVEBOOK_PROMOTION',
+                    subsidyType: 'DRIVEBOOK_PROMOTION',
                     packageFaceValue,
                     amountPaid,
                   },
@@ -581,29 +584,30 @@ async function handleCheckoutCompleted(
               });
             }
 
-            // 3. PACKAGE_FEE Transaction: explicit, immutable record of the full platform fee
+            // 3. PACKAGE_FEE Transaction: explicit, immutable record of the full platform fee.
+            // Fields match the Transaction Prisma model exactly (no totalAmount, no createdBy).
             if (packagePlatformFee > 0) {
               await (tx as any).transaction.create({
                 data: {
                   type: 'PACKAGE_FEE',
-                  totalAmount: packagePlatformFee,
+                  amount: packagePlatformFee,
                   platformFee: packagePlatformFee,
                   providerPayout: 0,
                   commissionRate: 0,
-                  amount: packagePlatformFee,
                   status: 'SETTLED',
                   stripePaymentIntentId: stripePaymentIntId,
                   providerId: providerId ?? 'UNKNOWN',
-                  createdBy: 'STRIPE_WEBHOOK',
                   metadata: {
                     packageFaceValue,
                     amountPaid,
+                    discountAmount: parseFloat((packageFaceValue - amountPaid + packagePlatformFee).toFixed(2)),
                     drivebookPromotion,
                     discountPctNum,
                     hourlyRateNum,
                     hoursNum,
                     stripeCheckoutSessionId: checkoutSession.id,
                     idempotencyKey: `pkg-fee-checkout-${checkoutSession.id}`,
+                    createdBy: 'STRIPE_WEBHOOK',
                   },
                 },
               });
@@ -1200,6 +1204,7 @@ async function handleBookingPaymentSuccess(
                     stripePaymentIntentId: paymentIntentId,
                     packageTotalPaid,
                     packageFaceValue,
+                    discountAmount: parseFloat((packageFaceValue - discountedBase).toFixed(2)),
                     drivebookPromotion,
                     packagePlatformFee,
                   },
@@ -1217,48 +1222,52 @@ async function handleBookingPaymentSuccess(
                 },
               });
 
-              // 3. PROMOTION entry: DriveBook funds the residual (only if non-zero)
+              // 3. PROMOTION entry: DriveBook-funded residual (audit only, not spendable)
+              // type:'PLATFORM_SUBSIDY' is intentionally not 'CREDIT' so getWalletBalance()
+              // does not count it twice. The face-value CREDIT above already gives $700.
               if (drivebookPromotion > 0.001) {
                 await tx.walletTransaction.create({
                   data: {
                     walletId: wallet.id,
-                    type: 'CREDIT',
+                    type: 'PLATFORM_SUBSIDY',
                     amount: drivebookPromotion,
-                    description: `DriveBook promotional subsidy — package discount residual`,
+                    description: `DriveBook promotional subsidy — package discount residual (non-spendable audit record)`,
                     status: 'CONFIRMED',
                     metadata: {
                       stripePaymentIntentId: paymentIntentId,
-                      type: 'DRIVEBOOK_PROMOTION',
+                      subsidyType: 'DRIVEBOOK_PROMOTION',
                       packageFaceValue,
                       packageTotalPaid,
+                      discountedBase,
                     },
                   },
                 });
               }
 
-              // 4. PACKAGE_FEE Transaction: explicit, immutable record of the full platform fee
+              // 4. PACKAGE_FEE Transaction: explicit, immutable record of the full platform fee.
+              // Fields match the Transaction Prisma model exactly (no totalAmount, no createdBy).
               await (tx as any).transaction.create({
                 data: {
                   bookingId: bookingId,
                   providerId: booking.providerId,
                   type: 'PACKAGE_FEE',
-                  totalAmount: packagePlatformFee,
+                  amount: packagePlatformFee,
                   platformFee: packagePlatformFee,
                   providerPayout: 0,
                   commissionRate: 0,
-                  amount: packagePlatformFee,
                   status: 'SETTLED',
                   stripePaymentIntentId: paymentIntentId,
-                  createdBy: 'STRIPE_WEBHOOK',
                   metadata: {
                     packageFaceValue,
                     discountedBase,
                     packageTotalPaid,
+                    discountAmount: parseFloat((packageFaceValue - discountedBase).toFixed(2)),
                     drivebookPromotion,
                     lockedDiscountPct,
                     lockedHourlyRate,
                     packageHours,
                     idempotencyKey: `pkg-fee-${bookingId}`,
+                    createdBy: 'STRIPE_WEBHOOK',
                   },
                 },
               });
