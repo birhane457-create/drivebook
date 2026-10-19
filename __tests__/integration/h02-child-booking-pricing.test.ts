@@ -45,6 +45,9 @@ describe('H-02: Child Booking Pricing', () => {
       // CI environments
       'postgresql://postgres:postgres@localhost:5433/test',
       'postgresql://postgres@localhost:5433/drivebook_test',
+      // Standard local test database (vitest.config.ts default)
+      'postgresql://postgres:testpass@localhost:5433/drivebook_test',
+      'postgresql://postgres:testpass@127.0.0.1:5433/drivebook_test',
     ];
     
     const isApproved = APPROVED_TEST_DATABASES.some(approved => 

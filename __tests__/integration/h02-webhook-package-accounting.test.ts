@@ -34,10 +34,14 @@ import { getWalletBalance } from '@/lib/services/wallet-helpers';
 import { execSync } from 'child_process';
 
 // ── Stripe mock ───────────────────────────────────────────────────────────────
-// The webhook module creates `const stripe = new Stripe(...)` at module load.
-// vi.mock hoists and replaces the 'stripe' module entirely before any import
-// runs, so constructEventMock is what stripe.webhooks.constructEvent points to.
-const constructEventMock = vi.fn();
+// vi.hoisted() runs before any module is imported, before any other module-level
+// code in this file. The returned object is therefore safe to reference inside
+// the vi.mock('stripe', ...) factory, which is also hoisted by Vitest.
+// A plain `const constructEventMock = vi.fn()` at module level would be in the
+// temporal dead zone when the factory runs — using vi.hoisted() eliminates that.
+const { constructEventMock } = vi.hoisted(() => ({
+  constructEventMock: vi.fn(),
+}));
 
 vi.mock('stripe', () => {
   const MockStripe = vi.fn().mockImplementation(() => ({
@@ -164,7 +168,7 @@ beforeAll(async () => {
   const stuUser = await prisma.user.create({
     data: { email: `${PREFIX}_stu@test.com`, role: 'CLIENT' },
   });
-  await prisma.customer.create({
+  const stuCustomer = await prisma.customer.create({
     data: {
       userId: stuUser.id,
       name:   `${PREFIX} Student`,
@@ -180,6 +184,9 @@ beforeAll(async () => {
   const bookNowBooking = await (prisma as any).booking.create({
     data: {
       providerId:           instr.id,
+      // customerId links the booking to the customer so the webhook can resolve
+      // the student's userId and credit the correct wallet (fix: was missing)
+      customerId:           stuCustomer.id,
       customerName:         `${PREFIX} Student`,
       customerPhone:        '+61400000092',
       status:               'PENDING_PAYMENT',
