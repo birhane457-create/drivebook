@@ -60,12 +60,16 @@ export const drivingPaymentExtension: PaymentExtension = {
         },
       }) as any
       if (booking?.customer?.userId) {
+        // ledger identity: totalAmount === platformFee + providerPayout
+        // Use price - providerPayout as ledger platformFee (DriveBook retention)
+        const bPayout   = Number(booking.providerPayout ?? 0);
+        const ledgerFee = parseFloat((Number(amount) - bPayout).toFixed(2));
         await recordBookingPayment({
           bookingId,
           userId:           booking.customer.userId,
           providerId:       booking.providerId,
           totalAmount:      amount,
-          platformFee:      booking.platformFee ?? 0,
+          platformFee:      ledgerFee,
           providerPayout:   booking.providerPayout ?? 0,
           createdBy:        'system',
         })

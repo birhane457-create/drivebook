@@ -1518,8 +1518,21 @@ async function handleBookingPaymentSuccess(
     if (ledgerBooking) {
       const instrPayout = (ledgerBooking as any).providerPayout
         ?? ledgerBooking.price * (1 - ((ledgerBooking as any).commissionRate ?? 15) / 100);
-      const platFee = (ledgerBooking as any).platformFee
-        ?? ledgerBooking.price - instrPayout;
+
+      // For ledger double-entry, platformFee must equal the total DriveBook
+      // retention (price - providerPayout) so that the accounting identity holds:
+      //   totalAmount === platformFee + providerPayout
+      //
+      // The DB column platformFee is 0 on wallet-funded child lessons (correct
+      // per PACKAGE-ACCOUNTING-POLICY §2.2 — no second billing-level fee).
+      // However the $10.50 commission DriveBook retains still flows through the
+      // ledger as the platform's share. Using the DB column directly produces
+      //   70 ≠ 0 + 59.5  → ledger mismatch error.
+      // Computing it from price - providerPayout gives the correct ledger value:
+      //   70 = 10.50 + 59.50  ✓
+      const platFeeForLedger = parseFloat((ledgerBooking.price - instrPayout).toFixed(2));
+      const platFee = platFeeForLedger > 0 ? platFeeForLedger
+        : ((ledgerBooking as any).platformFee ?? 0);
 
       // Existing payout-service ledger (totalCollected/totalReserved)
       await recordPaymentCollected(bookingId, ledgerBooking.price, instrPayout);
