@@ -296,13 +296,15 @@ describe('H-02 Webhook — Book Now (payment_intent.succeeded)', () => {
 
   /** Shared: POST the Book Now event once; all W01–W05 assertions read from DB. */
   let bookNowEventId: string;
+  let bookNowCreated: number;  // store created timestamp for deterministic duplicate idempotencyKey
 
   beforeAll(async () => {
     bookNowEventId = newEventId();
+    bookNowCreated = Math.floor(Date.now() / 1000);
     const event = {
       id:      bookNowEventId,
       type:    'payment_intent.succeeded',
-      created: Math.floor(Date.now() / 1000),
+      created: bookNowCreated,
       data: {
         object: {
           id:              `pi_bn_${PREFIX}`,
@@ -411,7 +413,7 @@ describe('H-02 Webhook — Book Now (payment_intent.succeeded)', () => {
     const dupEvent = {
       id:      bookNowEventId,           // same id as first delivery
       type:    'payment_intent.succeeded',
-      created: Math.floor(Date.now() / 1000),
+      created: bookNowCreated,           // reuse original timestamp → same idempotencyKey
       data: {
         object: {
           id:              `pi_bn_${PREFIX}`,
@@ -455,17 +457,19 @@ describe('H-02 Webhook — Book Later (checkout.session.completed)', () => {
   let bookLaterSessionId: string;
   let bookLaterEventId:   string;
   let bookLaterPiId:      string;
+  let bookLaterCreated:   number;  // store created timestamp for deterministic duplicate idempotencyKey
 
   /** Shared: POST the Book Later checkout event once; W07–W11 read from DB. */
   beforeAll(async () => {
-    bookLaterEventId  = newEventId();
+    bookLaterEventId   = newEventId();
     bookLaterSessionId = `cs_bl_${PREFIX}`;
     bookLaterPiId      = `pi_bl_${PREFIX}`;
+    bookLaterCreated   = Math.floor(Date.now() / 1000);
 
     const event = {
       id:      bookLaterEventId,
       type:    'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
+      created: bookLaterCreated,
       data: {
         object: {
           id:              bookLaterSessionId,
@@ -627,7 +631,7 @@ describe('H-02 Webhook — Book Later (checkout.session.completed)', () => {
     const dupEvent = {
       id:      bookLaterEventId,        // same event id → same idempotencyKey
       type:    'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
+      created: bookLaterCreated,        // reuse original timestamp → same idempotencyKey
       data: {
         object: {
           id:              bookLaterSessionId,
