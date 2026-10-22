@@ -435,7 +435,7 @@ export async function POST(request: Request) {
     }
     if (error?.code === 'INSUFFICIENT_WALLET_BALANCE') {
       return NextResponse.json(
-        { error: error.message, available: error.available, required: error.required },
+        { code: 'INSUFFICIENT_WALLET_BALANCE', error: error.message, available: error.available, required: error.required },
         { status: 402 }
       );
     }
