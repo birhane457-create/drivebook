@@ -6,8 +6,19 @@
 # SAFETY:
 #   By default this script REFUSES to delete an existing data directory.
 #   Pass -Reset to allow destructive recreation of both D:\pg16 and D:\pg16data.
-#   The -Reset flag requires the data directory to be the expected disposable
-#   test path (D:\pg16data) and must NOT match any production indicators.
+#
+#   The -Reset safeguards implemented in code are:
+#     1. The data directory path must equal the expected value (D:\pg16data).
+#        Any deviation (e.g. pointing at a different path) aborts with an error.
+#     2. The script checks for postmaster.pid and refuses if the cluster is running.
+#     3. The user must explicitly pass -Reset; no implicit deletion occurs.
+#
+#   NOTE: The script does NOT inspect database contents or attempt to detect
+#   production data. It cannot distinguish a populated production cluster from
+#   an empty test cluster by examining the data directory. The fixed-path and
+#   PID-file checks reduce accidental deletion of the intended test cluster;
+#   they do not provide production-cluster detection. Do not run -Reset against
+#   any directory that contains data you have not already backed up externally.
 #
 # Usage:
 #   # First run (no existing data):
