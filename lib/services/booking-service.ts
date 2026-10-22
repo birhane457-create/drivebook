@@ -647,12 +647,18 @@ export async function createBooking(
 
   // FinancialLedger â€” after tx commits (idempotent, non-critical)
   try {
+    // ledger identity: totalAmount === platformFee + providerPayout
+    // Use price - providerPayout as ledger platformFee (DriveBook's commission retention)
+    // rather than booking.platformFee which is 0 on wallet-funded lessons per policy §2.2
+    const bPrice    = Number(booking.price ?? 0);
+    const bPayout   = Number(booking.providerPayout ?? 0);
+    const ledgerFee = parseFloat((bPrice - bPayout).toFixed(2));
     await recordBookingPayment({
       bookingId: booking.id,
       userId: client.userId!,
       providerId: providerId,
       totalAmount: booking.price,
-      platformFee: booking.platformFee ?? 0,
+      platformFee: ledgerFee,
       providerPayout: booking.providerPayout ?? 0,
       createdBy: actorId,
     })
