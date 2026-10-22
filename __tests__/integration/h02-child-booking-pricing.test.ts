@@ -16,17 +16,14 @@ import { prisma } from '@/lib/prisma';
 import { POST } from '@/app/api/client/confirm-package-booking/route';
 import type { NextRequest } from 'next/server';
 
-// Mock next-auth — use vi.hoisted() so mockSession is available when the
-// vi.mock() factory is evaluated (vi.mock is hoisted above all imports).
-const { mockSession } = vi.hoisted(() => ({
-  mockSession: {
+// Mock next-auth — inline the session in the factory so no vi.hoisted() is
+// needed. vi.mock() is hoisted above imports by Vitest, so the factory must
+// be self-contained (no references to outer-scope variables).
+vi.mock('next-auth', () => ({
+  getServerSession: vi.fn(() => Promise.resolve({
     user: { id: 'test-user-id', email: 'student@test.com', role: 'CLIENT' },
     expires: '2099-12-31',
-  },
-}));
-
-vi.mock('next-auth', () => ({
-  getServerSession: vi.fn(() => Promise.resolve(mockSession)),
+  })),
 }));
 
 vi.mock('next/headers', () => ({

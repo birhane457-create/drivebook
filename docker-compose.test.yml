@@ -5,7 +5,7 @@ services:
     image: postgres:16-alpine
     container_name: drivebook-test-db
     environment:
-      POSTGRES_USER: testuser
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: testpass
       POSTGRES_DB: drivebook_test
     ports:
@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres-test-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U testuser -d drivebook_test"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d drivebook_test"]
       interval: 5s
       timeout: 5s
       retries: 5
