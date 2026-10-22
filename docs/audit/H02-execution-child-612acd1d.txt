@@ -1,0 +1,73 @@
+﻿Kiro.exe : [33mThe CJS build of Vite's Node API is deprecated. See 
+https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for 
+more details.[39m
+At line:1 char:768
++ ... \Kiro.exe"; & $KIRO "$DB\node_modules\vitest\vitest.mjs" run --config 
+...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([33mThe CJS bu...e details.[39 
+   m:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+≡ƒôº Email service mocked for integration tests
+
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T01: Confirmation sets price = duration ├ù current instructor rate
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T01: Confirmation sets price = duration ├ù current instructor rate[33m 412[2mms[22m[39m
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T02: Platform fee = 0 for wallet-funded lesson
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T03: Provider payout = price ├ù (1 - commission rate)
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T04: Transaction record matches booking financials
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T04: Transaction record matches booking financials
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T05: Wallet debited by lesson price
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T06: Rate change ΓÇö new booking uses instructor current rate
+[90mstderr[2m | __tests__/integration/h02-child-booking-pricing.test.ts[2m 
+> [22m[2mH-02: Child Booking Pricing[2m > [22m[2mH02-T07: Insufficient 
+balance blocks booking after rate increase[22m[39m
+Error confirming package booking: Error: Insufficient wallet balance. 
+Available: $140.00, Required: $150.00
+    at [90mE:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\[39mapp\api\client\confirm-package-booking\route.ts:282:13
+    at Proxy._transactionWithCallback [90m(E:\DOC\flowstate-wms\AI voice 
+assistance - Copy - Copy - Copy\drivebook\[39mnode_modules\[4m@prisma\client
+[24m\runtime\library.js:130:8000[90m)[39m
+    at Module.withSerializableRetry [90m(E:\DOC\flowstate-wms\AI voice 
+assistance - Copy - Copy - 
+Copy\drivebook\[39mlib\utils\transaction-retry.ts:116:14[90m)[39m
+    at Module.POST [90m(E:\DOC\flowstate-wms\AI voice assistance - Copy - 
+Copy - Copy\drivebook\[39mapp\api\client\confirm-package-booking\route.ts:91:
+28[90m)[39m
+    at [90mE:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\driv
+ebook\[39m__tests__\integration\h02-child-booking-pricing.test.ts:394:22
+    at runTest [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%
+20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[2
+4m/dist/index.js:781:11[90m)[39m
+    at runSuite [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-
+%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[
+24m/dist/index.js:909:15[90m)[39m
+    at runSuite [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-
+%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[
+24m/dist/index.js:909:15[90m)[39m
+    at runFiles [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-
+%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[
+24m/dist/index.js:958:5[90m)[39m
+    at startTests [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%2
+0-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner
+[24m/dist/index.js:967:3[90m)[39m {
+  code: [32m'INSUFFICIENT_WALLET_BALANCE'[39m,
+  available: [33m140[39m,
+  required: [33m150[39m
+}
+
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T07: Insufficient balance blocks booking after rate increase
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T08: Multi-hour booking price = duration ├ù current rate
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T09: Different instructor rate applies to their booking
+ [32mΓ£ô[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T10: Financial fields reconcile within rounding tolerance
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 17:08:15
+[2m   Duration [22m 2.83s[2m (transform 237ms, setup 86ms, collect 387ms, tests 1.10s, environment 1ms, prepare 274ms)[22m
+
