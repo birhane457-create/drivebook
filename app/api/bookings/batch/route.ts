@@ -727,12 +727,16 @@ async function createConfirmedBooking(ctx: {
   try {
     const { recordBookingPayment } = await import('@/lib/services/ledger-operations')
     if (booking.isPaid && customer?.userId) {
+      // ledger identity: totalAmount === platformFee + providerPayout
+      const bPrice    = Number(booking.price ?? 0);
+      const bPayout   = Number(booking.providerPayout ?? 0);
+      const ledgerFee = parseFloat((bPrice - bPayout).toFixed(2));
       await recordBookingPayment({
         bookingId: booking.id,
         userId: customer.userId,
         providerId,
         totalAmount: booking.price,
-        platformFee: booking.platformFee ?? 0,
+        platformFee: ledgerFee,
         providerPayout: booking.providerPayout ?? 0,
         createdBy: providerId,
       })

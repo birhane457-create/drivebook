@@ -405,6 +405,52 @@ describe('H-02 Webhook — Book Now (payment_intent.succeeded)', () => {
     expect(balance).toBeCloseTo(FACE_VALUE - FIRST_LESSON, 1);
   });
 
+  // W-LG ───────────────────────────────────────────────────────────────────────
+  it('W-LG: FinancialLedger entries balance for Book Now booking (amount === platformFee + providerPayout)', async () => {
+    // The FinancialLedger should have 3 entries for the first lesson:
+    //   Entry 1: CLIENT_WALLET → PLATFORM_ESCROW  ($70.00)
+    //   Entry 2: PLATFORM_ESCROW → PLATFORM_REVENUE ($10.50  = 70 × 0.15 commission)
+    //   Entry 3: PLATFORM_ESCROW → INSTRUCTOR_PAYABLE ($59.50 = 70 × 0.85)
+    //
+    // The pre-fix bug: platformFee was passed as 0 (DB column value for wallet-funded
+    // lessons per policy §2.2) rather than as the DriveBook commission retention
+    // (price − providerPayout = $10.50).  This caused: 70 ≠ 0 + 59.5.
+    // After fix: ledger call uses price − providerPayout for the platformFee arg.
+    const paymentEntry = await (prisma as any).financialLedger.findFirst({
+      where: {
+        bookingId:    bookNowBookingId,
+        idempotencyKey: `booking-${bookNowBookingId}-payment`,
+      },
+    });
+    expect(paymentEntry, 'FinancialLedger payment entry missing — ledger call failed').not.toBeNull();
+    expect(Number(paymentEntry!.amount)).toBeCloseTo(FIRST_LESSON, 2); // $70.00
+
+    const commissionEntry = await (prisma as any).financialLedger.findFirst({
+      where: {
+        bookingId:    bookNowBookingId,
+        idempotencyKey: `booking-${bookNowBookingId}-commission`,
+      },
+    });
+    expect(commissionEntry, 'FinancialLedger commission entry missing — ledger call failed').not.toBeNull();
+    // Commission = price × commissionRate = $70 × 0.15 = $10.50
+    expect(Number(commissionEntry!.amount)).toBeCloseTo(FIRST_LESSON * 0.15, 2);
+
+    const payoutEntry = await (prisma as any).financialLedger.findFirst({
+      where: {
+        bookingId:    bookNowBookingId,
+        idempotencyKey: `booking-${bookNowBookingId}-instructor-payout`,
+      },
+    });
+    expect(payoutEntry, 'FinancialLedger instructor-payout entry missing — ledger call failed').not.toBeNull();
+    // Payout = price × (1 − commissionRate) = $70 × 0.85 = $59.50
+    expect(Number(payoutEntry!.amount)).toBeCloseTo(FIRST_LESSON * 0.85, 2);
+
+    // Verify the accounting identity holds: commission + payout === lesson price
+    const commission = Number(commissionEntry!.amount);
+    const payout     = Number(payoutEntry!.amount);
+    expect(Math.abs(commission + payout - FIRST_LESSON)).toBeLessThan(0.02);
+  });
+
   // W06 ────────────────────────────────────────────────────────────────────────
   it('W06: duplicate payment_intent.succeeded delivery is idempotent', async () => {
     const balanceBefore = (await getWalletBalance(studentUserId)).balance;

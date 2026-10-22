@@ -279,7 +279,9 @@ export async function GET(req: NextRequest) {
           if (!clientUserId) continue;
 
           const instrPayout = bk.providerPayout != null ? Number(bk.providerPayout) : bk.price.toNumber() * 0.85;
-          const platFee    = bk.platformFee != null ? Number(bk.platformFee) : bk.price.toNumber() - instrPayout;
+          // ledger identity: totalAmount === platformFee + providerPayout
+          // Always derive from price - payout (not DB platformFee which is 0 on wallet-funded lessons)
+          const platFee = parseFloat((bk.price.toNumber() - instrPayout).toFixed(2));
 
           try {
             await recordBookingPayment({

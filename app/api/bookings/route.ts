@@ -591,12 +591,16 @@ export async function POST(req: NextRequest) {
     // Idempotent: safe to retry — duplicate idempotencyKey is silently ignored.
     try {
       if (booking.isPaid && client.userId) {
+        // ledger identity: totalAmount === platformFee + providerPayout
+        const bPrice    = Number(booking.price ?? 0);
+        const bPayout   = Number(booking.providerPayout ?? 0);
+        const ledgerFee = parseFloat((bPrice - bPayout).toFixed(2));
         await recordBookingPayment({
           bookingId: booking.id,
           userId: client.userId,
           providerId: providerId,
           totalAmount: booking.price,
-          platformFee: booking.platformFee ?? 0,
+          platformFee: ledgerFee,
           providerPayout: booking.providerPayout ?? 0,
           createdBy: session!.user!.id,
         })
