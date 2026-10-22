@@ -34,16 +34,12 @@ import { getWalletBalance } from '@/lib/services/wallet-helpers';
 import { execSync } from 'child_process';
 
 // ── Stripe mock ───────────────────────────────────────────────────────────────
-// vi.hoisted() runs before any module is imported, before any other module-level
-// code in this file. The returned object is therefore safe to reference inside
-// the vi.mock('stripe', ...) factory, which is also hoisted by Vitest.
-// A plain `const constructEventMock = vi.fn()` at module level would be in the
-// temporal dead zone when the factory runs — using vi.hoisted() eliminates that.
-const { constructEventMock } = vi.hoisted(() => ({
-  constructEventMock: vi.fn(),
-}));
-
+// The constructEvent mock is created inside the vi.mock factory and exposed on
+// the MockStripe constructor as _constructEventMock.  This avoids vi.hoisted()
+// which crashes the Vitest worker on Windows native ("No test suite found" /
+// "Cannot read properties of undefined (reading 'on')").
 vi.mock('stripe', () => {
+  const constructEventMock = vi.fn();
   const MockStripe = vi.fn().mockImplementation(() => ({
     webhooks: {
       constructEvent: constructEventMock,
@@ -55,6 +51,8 @@ vi.mock('stripe', () => {
       create: vi.fn().mockResolvedValue({ id: 're_test' }),
     },
   }));
+  // Expose the mock for mockStripeEvent() to configure per-test
+  (MockStripe as any)._constructEventMock = constructEventMock;
   return { default: MockStripe };
 });
 
@@ -99,15 +97,20 @@ vi.mock('@/lib/services/auditLogger', () => ({
   },
 }));
 
-// ledger-operations is called in the audit path after the financial tx commits;
-// mocking prevents ledger double-entry errors without a full ledger setup
-vi.mock('@/lib/services/ledger-operations', () => ({
-  recordBookingPayment: vi.fn().mockResolvedValue(undefined),
-  recordWalletCredit:   vi.fn().mockResolvedValue(undefined),
+// ledger-service is imported by the webhook route; mocking prevents ledger
+// double-entry DB writes without a full ledger setup. (The original test mocked
+// 'ledger-operations' — a different module the route does not import.)
+vi.mock('@/lib/services/ledger-service', () => ({
+  appendLedgerEntry: vi.fn().mockResolvedValue(undefined),
+  incrementLedger:   vi.fn().mockResolvedValue(undefined),
 }));
 
-// Import route AFTER mocks are established
+// Import Stripe (gets the mock constructor) and route AFTER mocks are established
+import Stripe from 'stripe';
 import { POST } from '@/app/api/stripe/webhook/route';
+
+// Retrieve the constructEvent mock exposed by the stripe mock factory
+const constructEventMock = (Stripe as any)._constructEventMock as ReturnType<typeof vi.fn>;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Example from approved accounting policy (2026-10-18):
@@ -132,6 +135,11 @@ if (!DB_URL.includes('drivebook_test')) {
   );
 }
 
+// ── Test env defaults (Stripe is mocked, but the route checks for the secret) ─
+process.env.STRIPE_SECRET_KEY     ??= 'sk_test_stub';
+process.env.STRIPE_WEBHOOK_SECRET ??= 'whsec_stub';
+process.env.NEXTAUTH_SECRET       ??= 'test-secret-h02';
+
 // ── Test fixture state ────────────────────────────────────────────────────────
 const PREFIX = `h02w_${Date.now()}`;
 
@@ -143,8 +151,10 @@ let bookLaterStudentUserId:  string;  // separate user so Book Later wallet is c
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeAll(async () => {
-  // Ensure test DB schema is current
-  execSync('npx prisma db push --skip-generate --accept-data-loss', {
+  // Ensure test DB schema is current — use local prisma binary (npx not available in all envs)
+  const prismaBin = require('path').join(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js');
+  const nodeExe = process.execPath;
+  execSync(`"${nodeExe}" "${prismaBin}" db push --skip-generate --accept-data-loss`, {
     env:   { ...process.env, DATABASE_URL: DB_URL },
     stdio: 'pipe',
   });
