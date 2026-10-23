@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.41 (H-02 CLOSED — independent re-execution evidence committed at 612acd1d)
+**Version:** 5.42 (H-02 ledger fix documentation clarified — platform fee vs instructor commission distinction)
 **Last Updated:** 2026-10-22
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -625,8 +625,20 @@ Route file: `app/api/client/confirm-package-booking/route.ts`
 
 ---
 
-### 8.5 — UI Copy / Expiry Inconsistencies (OPEN)
+### H-02 Addendum — Ledger accounting distinction (2026-10-22, post-closure review)
 
+**Independent reviewer note accepted.** Commit `58f12d2c` fixes the ledger mismatch (`70 ≠ 0 + 59.5`) found in the `b6f78361` execution logs. Subsequent documentation clarification commit makes the following distinction explicit at every call site and in test W-LG:
+
+| Term | Meaning | DB location |
+|---|---|---|
+| `booking.platformFee` | Student-paid platform fee added on top of the lesson/package price, collected at package purchase or wallet top-up (policy §2.2). Set to **0** on wallet-funded child lessons — must NOT be re-charged. | `Booking.platformFee` column |
+| Ledger `platformFee` parameter | DriveBook's commission share **deducted from the lesson price** when computing instructor payout ($10.50 = $70 × 15%). Not a student charge. Used only to satisfy the double-entry identity `totalAmount = commissionShare + instructorPayout`. | Computed as `price − providerPayout` at each call site |
+
+These are separate charges with different payers. The code now passes `price − providerPayout` as the ledger parameter, leaving `booking.platformFee = 0` unchanged on the DB record. Test W-LG labels Entry 2 as "DriveBook commission share" and asserts `commission + payout === lessonPrice`, not `studentPlatformFee + payout`. **Tracker v5.41 → v5.42.** H-02 status: ✅ **CLOSED**.
+
+---
+
+### 8.5 — UI Copy / Expiry Inconsistencies (OPEN)
 | ID | Title | Risk | Finding | Required change | Status |
 |---|---|---|---|---|---|
 | PB-UI-01 | "Credits never expire" in BulkBookingForm, add-funds page, receipt emails | LOW | CONFIRMED — contradicts legal terms (12 months inactivity) | Replace with "Credit is valid for 12 months from last account activity" | ✅ FIX-VERIFIED — `ba9403b1` — 10 tests (C-01..C-10), exit 0 — `pb-ui-copy-corrections.test.ts` 2026-10-13. **Independent review 1 (2026-10-13):** source diff confirmed copy-only; test run = supplied evidence (not independently re-executed); FIX-VERIFIED accepted; not CLOSED pending independent test re-run. **Independent review 2 (2026-10-13, commit 4e2919b0):** status unchanged — FIX-VERIFIED confirmed; not CLOSED until independent test execution completed. **Kiro local execution (2026-10-13T14:56:24, HEAD 8443cba6):** `npx vitest run __tests__/integration/pb-ui-copy-corrections.test.ts` — 22/22 passed, exit 0. **Definitive execution at eb51ae75 (2026-10-13T14:20:29):** 26/26 passed, exit 0 — test file and HEAD are the same commit; traceability gap resolved. Evidence: `docs/audit/PB-UI-CLOSURE-EXECUTION-LOG.txt`. Note: wiring tests are branch-proximity/source-structure checks, not runtime behavioral tests. |

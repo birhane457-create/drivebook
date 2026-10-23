@@ -728,6 +728,8 @@ async function createConfirmedBooking(ctx: {
     const { recordBookingPayment } = await import('@/lib/services/ledger-operations')
     if (booking.isPaid && customer?.userId) {
       // ledger identity: totalAmount === platformFee + providerPayout
+      // DISTINCTION: booking.platformFee = student-paid fee (policy §2.2, not re-charged here).
+      // ledgerFee = commission deducted from lesson price to compute instructor payout.
       const bPrice    = Number(booking.price ?? 0);
       const bPayout   = Number(booking.providerPayout ?? 0);
       const ledgerFee = parseFloat((bPrice - bPayout).toFixed(2));
