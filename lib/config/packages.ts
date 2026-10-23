@@ -196,6 +196,23 @@ export type PredefinedPackage = typeof PREDEFINED_PACKAGES[number];
 
 export const PLATFORM_FEE_PERCENTAGE = DEFAULT_SETTINGS.platformFeePercentage; // 3.6% platform processing fee
 
+/**
+ * getDiscountMinHoursForPct(discountPct)
+ * Returns the minimum hours required to earn a given discount percentage,
+ * by looking up the live tier list.  Used at purchase time to seal
+ * lockedDiscountMinHours on the Booking.
+ * Returns 0 if no matching tier found (custom / no discount).
+ */
+export async function getDiscountMinHoursForPct(discountPct: number): Promise<number> {
+  if (discountPct <= 0) return 0;
+  const tiers = await getPackageTiers();
+  // Find the tier whose discount matches; prefer the lowest-hours tier if multiple match
+  const matching = tiers
+    .filter(t => t.discount === discountPct)
+    .sort((a, b) => a.hours - b.hours);
+  return matching.length > 0 ? matching[0].hours : 0;
+}
+
 // Dynamic package getter that uses database settings
 export async function getHourPackages() {
   const settings = await getPricingSettings();
@@ -258,6 +275,9 @@ export async function calculatePackagePriceDynamic(
   if (packageType === 'CUSTOM') {
     discountPercentage = await getDiscountForCustomHours(hours);
   }
+
+  // Seal the minimum qualifying hours for this discount tier (Decision A — H-01 fix)
+  const discountMinHours = await getDiscountMinHoursForPct(discountPercentage);
   
   const testPackageAmount = includeTestPackage ? testPackagePrice : 0;
 
@@ -283,6 +303,7 @@ export async function calculatePackagePriceDynamic(
     subtotal,
     discount,
     discountPercentage,
+    discountMinHours,   // H-01: minimum hours to qualify for this tier
     testPackage: testPackageAmount,
     platformFee,
     total,

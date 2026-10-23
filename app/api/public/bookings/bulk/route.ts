@@ -800,6 +800,11 @@ export async function POST(req: NextRequest) {
             packageTotalPaid: verifiedTotal,
             lockedHourlyRate: instructor.hourlyRate,
             lockedDiscountPct: serverPricing.discountPercentage,
+            // H-01 FIX: lock the minimum-hour threshold for this discount tier at purchase time.
+            // Used by calculatePartialPackageRefund() to re-evaluate tier eligibility on cancellation.
+            // Must NOT be re-fetched from live PlatformSettings later — the discount was earned
+            // against these terms, and admin changes must not retroactively alter the refund.
+            lockedDiscountMinHours: serverPricing.discountMinHours > 0 ? serverPricing.discountMinHours : null,
             // Secure payment token Ã¢â‚¬â€ required alongside bookingId to access payment page
             paymentToken: crypto.randomUUID(),
           } as any,
