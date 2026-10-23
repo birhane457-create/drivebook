@@ -1523,13 +1523,17 @@ async function handleBookingPaymentSuccess(
       // retention (price - providerPayout) so that the accounting identity holds:
       //   totalAmount === platformFee + providerPayout
       //
-      // The DB column platformFee is 0 on wallet-funded child lessons (correct
-      // per PACKAGE-ACCOUNTING-POLICY §2.2 — no second billing-level fee).
-      // However the $10.50 commission DriveBook retains still flows through the
-      // ledger as the platform's share. Using the DB column directly produces
-      //   70 ≠ 0 + 59.5  → ledger mismatch error.
-      // Computing it from price - providerPayout gives the correct ledger value:
-      //   70 = 10.50 + 59.50  ✓
+      // IMPORTANT DISTINCTION:
+      //   booking.platformFee (DB column = 0)  ← student-paid platform fee,
+      //     collected at package purchase / wallet top-up (policy §2.2).
+      //     Must NOT be re-collected here on a wallet-funded lesson.
+      //   ledgerFee = price - providerPayout   ← DriveBook commission retention
+      //     ($10.50 = 15% of $70), deducted from the lesson price when computing
+      //     the instructor payout. This is DriveBook's share of the lesson price,
+      //     not an additional student-facing charge.
+      //
+      // Using booking.platformFee (0) produces:  70 ≠ 0 + 59.5  → mismatch.
+      // Using price - providerPayout ($10.50):   70 = 10.50 + 59.50  ✓
       const platFeeForLedger = parseFloat((ledgerBooking.price - instrPayout).toFixed(2));
       const platFee = platFeeForLedger > 0 ? platFeeForLedger
         : ((ledgerBooking as any).platformFee ?? 0);

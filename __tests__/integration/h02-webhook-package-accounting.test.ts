@@ -409,13 +409,20 @@ describe('H-02 Webhook — Book Now (payment_intent.succeeded)', () => {
   it('W-LG: FinancialLedger entries balance for Book Now booking (amount === platformFee + providerPayout)', async () => {
     // The FinancialLedger should have 3 entries for the first lesson:
     //   Entry 1: CLIENT_WALLET → PLATFORM_ESCROW  ($70.00)
-    //   Entry 2: PLATFORM_ESCROW → PLATFORM_REVENUE ($10.50  = 70 × 0.15 commission)
-    //   Entry 3: PLATFORM_ESCROW → INSTRUCTOR_PAYABLE ($59.50 = 70 × 0.85)
+    //   Entry 2: PLATFORM_ESCROW → PLATFORM_REVENUE ($10.50 = DriveBook commission, 15% of $70)
+    //   Entry 3: PLATFORM_ESCROW → INSTRUCTOR_PAYABLE ($59.50 = instructor payout, 85% of $70)
     //
-    // The pre-fix bug: platformFee was passed as 0 (DB column value for wallet-funded
-    // lessons per policy §2.2) rather than as the DriveBook commission retention
-    // (price − providerPayout = $10.50).  This caused: 70 ≠ 0 + 59.5.
-    // After fix: ledger call uses price − providerPayout for the platformFee arg.
+    // ACCOUNTING DISTINCTION:
+    //   - Student-paid platform fee (policy §2.2): collected at package purchase.
+    //     booking.platformFee = 0 on this booking (no second student charge). Correct.
+    //   - Instructor commission ($10.50): DriveBook's share deducted from the lesson
+    //     price when computing instructor payout. This is what the ledger's Entry 2
+    //     records — DriveBook retains $10.50 from the $70 lesson price.
+    //   - These are two separate charges. The $10.50 is NOT a second platform fee
+    //     charged to the student; it is a commission split from the lesson price.
+    //
+    // The pre-fix bug passed booking.platformFee (0) as the ledger parameter,
+    // giving 70 ≠ 0 + 59.5. After fix: 70 = 10.50 + 59.50 ✓
     const paymentEntry = await (prisma as any).financialLedger.findFirst({
       where: {
         bookingId:    bookNowBookingId,
@@ -432,7 +439,8 @@ describe('H-02 Webhook — Book Now (payment_intent.succeeded)', () => {
       },
     });
     expect(commissionEntry, 'FinancialLedger commission entry missing — ledger call failed').not.toBeNull();
-    // Commission = price × commissionRate = $70 × 0.15 = $10.50
+    // Commission = DriveBook share = price × commissionRate = $70 × 0.15 = $10.50
+    // This is NOT a second student platform fee; it is deducted from the lesson price.
     expect(Number(commissionEntry!.amount)).toBeCloseTo(FIRST_LESSON * 0.15, 2);
 
     const payoutEntry = await (prisma as any).financialLedger.findFirst({
@@ -445,7 +453,8 @@ describe('H-02 Webhook — Book Now (payment_intent.succeeded)', () => {
     // Payout = price × (1 − commissionRate) = $70 × 0.85 = $59.50
     expect(Number(payoutEntry!.amount)).toBeCloseTo(FIRST_LESSON * 0.85, 2);
 
-    // Verify the accounting identity holds: commission + payout === lesson price
+    // Verify the accounting identity: commission + payout === lesson price
+    // (not platformFee + payout — the student-paid fee is a separate transaction)
     const commission = Number(commissionEntry!.amount);
     const payout     = Number(payoutEntry!.amount);
     expect(Math.abs(commission + payout - FIRST_LESSON)).toBeLessThan(0.02);

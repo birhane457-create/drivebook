@@ -280,7 +280,9 @@ export async function GET(req: NextRequest) {
 
           const instrPayout = bk.providerPayout != null ? Number(bk.providerPayout) : bk.price.toNumber() * 0.85;
           // ledger identity: totalAmount === platformFee + providerPayout
-          // Always derive from price - payout (not DB platformFee which is 0 on wallet-funded lessons)
+          // DISTINCTION: bk.platformFee = student-paid fee at package purchase (policy §2.2, not re-charged).
+          // platFee here = DriveBook commission share deducted from lesson price to compute instructor payout.
+          // Always derive from price - payout to keep the identity correct for all booking types.
           const platFee = parseFloat((bk.price.toNumber() - instrPayout).toFixed(2));
 
           try {
