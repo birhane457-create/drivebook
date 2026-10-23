@@ -61,7 +61,10 @@ export const drivingPaymentExtension: PaymentExtension = {
       }) as any
       if (booking?.customer?.userId) {
         // ledger identity: totalAmount === platformFee + providerPayout
-        // Use price - providerPayout as ledger platformFee (DriveBook retention)
+        // Use price - providerPayout as ledger platformFee (DriveBook commission retention).
+        // DISTINCTION: booking.platformFee = student-paid fee at package purchase (policy §2.2,
+        // not re-charged on wallet-funded lessons). ledgerFee = commission share deducted
+        // from lesson price when computing instructor payout. Different charge, different payer.
         const bPayout   = Number(booking.providerPayout ?? 0);
         const ledgerFee = parseFloat((Number(amount) - bPayout).toFixed(2));
         await recordBookingPayment({

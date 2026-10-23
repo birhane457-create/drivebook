@@ -650,6 +650,12 @@ export async function createBooking(
     // ledger identity: totalAmount === platformFee + providerPayout
     // Use price - providerPayout as ledger platformFee (DriveBook's commission retention)
     // rather than booking.platformFee which is 0 on wallet-funded lessons per policy §2.2
+    //
+    // DISTINCTION: booking.platformFee = student-paid platform fee collected at
+    // package purchase / wallet top-up; must NOT be re-charged here.
+    // ledgerFee = DriveBook's commission share deducted from lesson price ($10.50
+    // at 15% on a $70 lesson). Different charge, different payer, correct for
+    // the ledger double-entry identity.
     const bPrice    = Number(booking.price ?? 0);
     const bPayout   = Number(booking.providerPayout ?? 0);
     const ledgerFee = parseFloat((bPrice - bPayout).toFixed(2));
