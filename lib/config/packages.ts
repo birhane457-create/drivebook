@@ -197,16 +197,34 @@ export type PredefinedPackage = typeof PREDEFINED_PACKAGES[number];
 export const PLATFORM_FEE_PERCENTAGE = DEFAULT_SETTINGS.platformFeePercentage; // 3.6% platform processing fee
 
 /**
- * getDiscountMinHoursForPct(discountPct)
- * Returns the minimum hours required to earn a given discount percentage,
- * by looking up the live tier list.  Used at purchase time to seal
- * lockedDiscountMinHours on the Booking.
- * Returns 0 if no matching tier found (custom / no discount).
+ * resolveDiscountTierMinHours(purchasedHours)
+ * Returns the minimum qualifying hours threshold for the discount tier that
+ * applies to a given purchase of `purchasedHours`.
+ *
+ * H01-RV-02 FIX: Do NOT reverse-lookup by discount percentage.  If two tiers
+ * share the same percentage, that lookup is ambiguous.  Instead, find the tier
+ * whose `hours` threshold is ≤ purchasedHours — i.e., the highest tier the
+ * customer actually qualifies for — and return that tier's `hours` directly.
+ * This is unambiguous regardless of how admin has configured the tier percentages.
+ *
+ * Returns 0 if no tier qualifies (purchasedHours < every tier's threshold).
  */
+export async function resolveDiscountTierMinHours(purchasedHours: number): Promise<number> {
+  if (purchasedHours <= 0) return 0;
+  const tiers = await getPackageTiers();
+  // All tiers whose threshold is <= purchasedHours; pick the one with the highest threshold
+  const qualifying = tiers
+    .filter(t => t.hours <= purchasedHours)
+    .sort((a, b) => b.hours - a.hours);  // descending — highest qualifying tier first
+  return qualifying.length > 0 ? qualifying[0].hours : 0;
+}
+
+/** @deprecated Use resolveDiscountTierMinHours(purchasedHours) instead.
+ * This reverse-lookup by percentage is ambiguous when multiple tiers share
+ * the same discount percentage (H01-RV-02). Kept for reference only. */
 export async function getDiscountMinHoursForPct(discountPct: number): Promise<number> {
   if (discountPct <= 0) return 0;
   const tiers = await getPackageTiers();
-  // Find the tier whose discount matches; prefer the lowest-hours tier if multiple match
   const matching = tiers
     .filter(t => t.discount === discountPct)
     .sort((a, b) => a.hours - b.hours);
@@ -276,8 +294,10 @@ export async function calculatePackagePriceDynamic(
     discountPercentage = await getDiscountForCustomHours(hours);
   }
 
-  // Seal the minimum qualifying hours for this discount tier (Decision A — H-01 fix)
-  const discountMinHours = await getDiscountMinHoursForPct(discountPercentage);
+  // H01-RV-02 FIX: seal the qualifying tier threshold using the purchased hours,
+  // not by reverse-looking up the percentage (ambiguous if tiers share a %).
+  // resolveDiscountTierMinHours returns the highest tier threshold ≤ purchasedHours.
+  const discountMinHours = await resolveDiscountTierMinHours(hours);
   
   const testPackageAmount = includeTestPackage ? testPackagePrice : 0;
 
