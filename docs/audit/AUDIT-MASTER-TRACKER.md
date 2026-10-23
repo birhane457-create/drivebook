@@ -627,14 +627,26 @@ Route file: `app/api/client/confirm-package-booking/route.ts`
 
 ### H-02 Addendum — Ledger accounting distinction (2026-10-22, post-closure review)
 
-**Independent reviewer note accepted.** Commit `58f12d2c` fixes the ledger mismatch (`70 ≠ 0 + 59.5`) found in the `b6f78361` execution logs. Subsequent documentation clarification commit makes the following distinction explicit at every call site and in test W-LG:
+**Independent reviewer note accepted.** Commit `58f12d2c` fixes the ledger mismatch (`70 ≠ 0 + 59.5`) found in the `b6f78361` execution logs. Subsequent documentation clarification commit `9cf831e3` makes the following distinction explicit at every call site and in test W-LG:
 
 | Term | Meaning | DB location |
 |---|---|---|
 | `booking.platformFee` | Student-paid platform fee added on top of the lesson/package price, collected at package purchase or wallet top-up (policy §2.2). Set to **0** on wallet-funded child lessons — must NOT be re-charged. | `Booking.platformFee` column |
 | Ledger `platformFee` parameter | DriveBook's commission share **deducted from the lesson price** when computing instructor payout ($10.50 = $70 × 15%). Not a student charge. Used only to satisfy the double-entry identity `totalAmount = commissionShare + instructorPayout`. | Computed as `price − providerPayout` at each call site |
 
-These are separate charges with different payers. The code now passes `price − providerPayout` as the ledger parameter, leaving `booking.platformFee = 0` unchanged on the DB record. Test W-LG labels Entry 2 as "DriveBook commission share" and asserts `commission + payout === lessonPrice`, not `studentPlatformFee + payout`. **Tracker v5.41 → v5.42.** H-02 status: ✅ **CLOSED**.
+These are separate charges with different payers. The code passes `price − providerPayout` as the ledger parameter, leaving `booking.platformFee = 0` unchanged on the DB record. Test W-LG labels Entry 2 as "DriveBook commission share" and asserts `commission + payout === lessonPrice`, not `studentPlatformFee + payout`.
+
+**Independent review assessment (commit 9cf831e3, 2026-10-22):** Terminology and test comments are clearer. The commit documents no arithmetic or runtime behaviour change. H-02 CLOSED is retained on prior evidence. Documentation clarification does not independently prove the 5 non-webhook ledger call sites (`booking-service.ts`, `payment-extension.ts`, `bookings/route.ts`, `bookings/batch/route.ts`, `reconcile-stripe/route.ts`) across every booking path — broader ledger correctness requires separate behavioral coverage of those paths. Tracked as follow-on finding **LDG-01** below.
+
+**Tracker v5.41 → v5.42.** H-02 status: ✅ **CLOSED**.
+
+---
+
+### H-02 Follow-on: LDG-01 — Ledger call-site behavioral coverage
+
+| ID | Title | Risk | Status | Scope |
+|---|---|---|---|---|
+| LDG-01 | Five non-webhook `recordBookingPayment` call sites not behaviorally tested for ledger identity correctness | MEDIUM | **OPEN** — documentation fix applied at `9cf831e3`; arithmetic fix applied at `58f12d2c`; runtime behavioral tests not yet written for the 5 non-webhook paths | `lib/services/booking-service.ts` (offline booking creation), `lib/extensions/driving/payment-extension.ts` (payment extension hook), `app/api/bookings/route.ts` (standard booking API), `app/api/bookings/batch/route.ts` (bulk booking), `app/api/cron/reconcile-stripe/route.ts` (reconciliation cron). W-LG test covers only the webhook path (`handleBookingPaymentSuccess`). Behavioral tests for each path should assert: (a) FinancialLedger entries are written, (b) commission + payout === lessonPrice, (c) no "Amount mismatch" error logged. Not a blocker for H-02 closure; separate finding. |
 
 ---
 
