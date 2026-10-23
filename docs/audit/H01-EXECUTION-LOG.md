@@ -167,3 +167,54 @@ Pre-commit HEAD: 6179c380
 **Total: 15/15 PASS**
 
 H-02 regression: 24/24 PASS (no regressions).
+
+---
+
+## Purchase-path audit — 2026-10-23 (response to reviewer RV-02 follow-up)
+
+### Reviewer concern
+`resolveDiscountTierMinHours()` calls `getPackageTiers()` which reads live DB configuration.
+If admins change tier thresholds after purchase, historical refunds might be evaluated against
+new terms.
+
+### Finding: architecture is correct — sealed at purchase, never re-read
+
+`resolveDiscountTierMinHours()` is called in exactly **one** source location:
+`calculatePackagePriceDynamic()` in `lib/config/packages.ts`. The returned value
+(`discountMinHours`) is written immediately to `Booking.lockedDiscountMinHours` at purchase time.
+
+The refund function `calculatePartialPackageRefund()` reads **only** from `booking.lockedDiscountMinHours`
+(the stored DB field). It contains no call to `resolveDiscountTierMinHours`, `getPackageTiers`,
+or any live settings lookup. Admin tier changes after purchase have zero effect on historical refunds.
+
+### Package creation path audit
+
+Every `booking.create` call in the codebase was searched for `isPackageBooking`, `packageHours`,
+`packageTotalPaid`. Only one route sets these fields:
+
+| Route | Creates package booking? | Writes `lockedDiscountMinHours`? |
+|---|---|---|
+| `app/api/public/bookings/bulk/route.ts` | ✅ Yes — only route that does | ✅ Yes (line ~807) |
+| `app/api/bookings/route.ts` | ❌ Single lessons only | N/A |
+| `app/api/bookings/batch/route.ts` | ❌ No package fields | N/A |
+| `app/api/bookings/combined/route.ts` | ❌ No package fields | N/A |
+| `app/api/bookings/offline/route.ts` | ❌ No package fields | N/A |
+| `app/api/bookings/mobile/route.ts` | ❌ No package fields | N/A |
+| `app/api/client/bookings/create-bulk/route.ts` | ❌ Wallet-funded lessons, no package fields | N/A |
+| `app/api/admin/bookings/route.ts` | ❌ No package fields | N/A |
+| `app/api/public/bookings/route.ts` | ❌ No package fields | N/A |
+
+### New tests added
+
+| Test | What it proves |
+|---|---|
+| H01-SEAL-IMMUTABLE | Mutating stored `lockedDiscountMinHours` changes refund; live tier config has no effect |
+| H01-SEAL-ZERO | `lockedDiscountMinHours=0` (no qualifying tier) → discount always retained |
+
+### Test run — 2026-10-23 (third run)
+
+```
+Pre-commit HEAD: 27333c5b
+```
+
+**H-01: 17/17 PASS. H-02 regression: 24/24 PASS.**
