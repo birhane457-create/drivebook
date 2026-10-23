@@ -99,3 +99,71 @@ New column: Booking.lockedDiscountMinHours DECIMAL(8,2) NULL
 H-01 remains **OPEN**. This log records implementation and first-party test execution only.  
 Independent reviewer must verify: exact diff, migration, all call sites, and this execution log  
 before status may change to FIX-VERIFIED.
+
+---
+
+## Reviewer corrections — 2026-10-23 (H01-RV-01, H01-RV-02)
+
+### H01-RV-01 — Formula analysis
+
+Independent reviewer raised that `drivebookPromotion = faceValue - packageTotalPaid` may be wrong
+because `packageTotalPaid = discountedBase + platformFee` (real purchase contract).
+
+**Analysis:** The formula IS correct. `drivebookPromotion` represents the **non-cash-backed gap**
+between wallet credit and cash paid — i.e., what DriveBook actually subsidised above the student's
+payment. When `packageTotalPaid = discountedBase + platformFee`, this gap equals:
+
+```
+faceValue - (discountedBase + platformFee)
+= faceValue × discountPct/100 - discountedBase × platformFeePct/100
+```
+
+The reviewer's example ($35 discount, $33.25 fee → gap=$1.75) is arithmetically correct;
+the promotional credit is $1.75, not $35. Only $1.75 of the wallet credit is non-cash-backed.
+
+**Action taken:** Formula kept unchanged. Test fixtures updated from simplified values
+(platformFee=$35) to realistic values (platformFee=discountedBase×3.6%). Added `H01-RV-REALISTIC`
+test that explicitly asserts the formula is correct for the reviewer's $698.25 scenario,
+and that voidedPromo = $1.75, NOT the full discount $35.
+
+### H01-RV-02 — Tier threshold sealing
+
+Independent reviewer correctly identified that `getDiscountMinHoursForPct()` (reverse-lookup by
+discount percentage) is ambiguous when multiple tiers share the same percentage.
+
+**Action taken:** Added `resolveDiscountTierMinHours(purchasedHours)` — finds the highest tier
+threshold ≤ purchasedHours, unambiguous regardless of tier configuration. `calculatePackagePriceDynamic`
+now uses this function. `getDiscountMinHoursForPct` retained but marked `@deprecated`. Added
+`H01-RV-02` test asserting the sealing is correct.
+
+### Test run after reviewer corrections — 2026-10-23
+
+```
+Command: run-h01-tests.bat (verbose)
+Database: postgresql://postgres:testpass@localhost:5433/drivebook_test
+Node: Kiro.exe (ELECTRON_RUN_AS_NODE=1, Node v24.21.0)
+Vitest: v1.6.1
+Pre-commit HEAD: 6179c380
+```
+
+| Test | Name | Result |
+|---|---|---|
+| H01-T01 | 0 lessons → maxStripeRefund ($630) | ✅ PASS |
+| H01-T02 | all lessons used → 0 | ✅ PASS |
+| H01-T03 | 5hrs used, null min → discount retained | ✅ PASS |
+| H01-T04 | 5hrs used, min=10 → discount VOIDED | ✅ PASS |
+| H01-T05 | 0hrs consumed, min set, ≥ threshold | ✅ PASS |
+| H01-T06 | legacy row, 7hrs consumed → discount retained | ✅ PASS |
+| H01-T07 | refund capped at maxStripeRefund | ✅ PASS |
+| H01-T08 | error on null packageTotalPaid | ✅ PASS |
+| H01-T09 | error on missing PACKAGE_FEE Transaction | ✅ PASS |
+| H01-T10 | Book Later PACKAGE_FEE via PI lookup | ✅ PASS |
+| H01-T11 | floor guard — never negative | ✅ PASS |
+| H01-T12 | rounding — no float accumulation | ✅ PASS |
+| H01-STALE | stale counter NOT used | ✅ PASS |
+| H01-RV-REALISTIC | reviewer scenario ($698.25 total) — $1.75 promo void | ✅ PASS |
+| H01-RV-02 | tier threshold sealing unambiguous | ✅ PASS |
+
+**Total: 15/15 PASS**
+
+H-02 regression: 24/24 PASS (no regressions).

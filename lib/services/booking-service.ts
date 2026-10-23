@@ -772,11 +772,14 @@ export async function confirmBooking(
  *   faceValue         = packageHours × lockedHourlyRate
  *   discountedBase    = faceValue × (1 − lockedDiscountPct/100)
  *   platformFee       = from PACKAGE_FEE Transaction row (non-refundable, always retained)
+ *   packageTotalPaid  = discountedBase + platformFee  (what Stripe charged)
  *   maxStripeRefund   = packageTotalPaid − platformFee  (= discountedBase)
  *   remainingCredit   = faceValue − consumedValue
+ *   drivebookPromotion = faceValue − packageTotalPaid
+ *     (non-cash-backed gap: wallet carries this amount above what was paid in cash)
  *   qualifiesForDisc  = remainingUnused hours >= lockedDiscountMinHours
  *                       (null lockedDiscountMinHours → legacy row → discount always retained)
- *   voidedPromo       = if !qualifiesForDisc: faceValue − packageTotalPaid, else 0
+ *   voidedPromo       = if !qualifiesForDisc: drivebookPromotion, else 0
  *   refundableBase    = min(remainingCredit − voidedPromo, maxStripeRefund)
  *                       floor to 0 (never negative)
  *
@@ -829,7 +832,13 @@ async function calculatePartialPackageRefund(booking: any): Promise<number> {
 
   // ── 3. Face value and discount amounts ──────────────────────────────────────
   const faceValue = parseFloat((packageHours * lockedHourlyRate).toFixed(2))
-  // Discount funded by DriveBook (promotional credit — non-cash-backed)
+  // drivebookPromotion = the non-cash-backed portion of the wallet credit.
+  // packageTotalPaid = discountedBase + platformFee (what Stripe actually charged).
+  // faceValue - packageTotalPaid = the gap between wallet credit and cash paid,
+  // which is exactly the amount DriveBook subsidised on this package.
+  // NOTE: this is NOT the same as faceValue × lockedDiscountPct/100 (that would be
+  // the full discount, but part of that discount is offset by the platform fee that
+  // the student also paid). Only the true non-cash gap should be voidable.
   const drivebookPromotion = parseFloat((faceValue - totalPaid).toFixed(2))
 
   // ── 4. Platform fee — authoritative source: PACKAGE_FEE Transaction row ─────

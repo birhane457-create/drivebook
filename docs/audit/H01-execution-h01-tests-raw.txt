@@ -5,22 +5,24 @@
 [90mstdout[2m | unknown test[22m[39m
 📧 Email service mocked for integration tests
 
- [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T01 | 0 lessons used → refund equals maxStripeRefund (discountedBase $630)
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T01 | 0 lessons used → refund = maxStripeRefund ($630)
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T02 | all lessons used → refund = 0
- [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T03 | 5 of 10hrs used, null lockedDiscountMinHours (legacy) → discount retained
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T03 | 5 of 10hrs used, lockedDiscountMinHours=null (legacy) → discount retained
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T04 | 5 of 10hrs used, lockedDiscountMinHours=10 → discount VOIDED
- [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T05 | 0hrs consumed, lockedDiscountMinHours set, remaining ≥ threshold → discount retained
- [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T06 | legacy row (lockedDiscountMinHours=null) with 7hrs consumed → discount retained
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T05 | 0hrs consumed, lockedDiscountMinHours=10, remaining ≥ threshold → discount retained
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T06 | legacy row (lockedDiscountMinHours=null), 7hrs consumed → discount retained
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T07 | refund capped at maxStripeRefund — never exceeds packageTotalPaid minus platformFee
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T11 | floor guard — refund is never negative
- [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T12 | rounding — cents do not accumulate floating-point error
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T12 | rounding — no floating-point accumulation
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T08 | error thrown when packageTotalPaid is null
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T09 | error thrown when PACKAGE_FEE Transaction not found (both lookups fail)
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-T10 | Book Later — PACKAGE_FEE found via stripePaymentIntentId (no bookingId on Tx)
- [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-STALE | stale packageHoursRemaining counter is NOT used — consumed value from child prices
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-STALE | stale packageHoursRemaining counter is NOT used — child prices are
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-RV-REALISTIC | reviewer scenario: formula correct when platformFee ≈ discount
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-RV-02 | tier threshold sealing is unambiguous (resolveDiscountTierMinHours)
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
-[2m   Start at [22m 21:20:59
-[2m   Duration [22m 1.38s[2m (transform 186ms, setup 46ms, collect 452ms, tests 417ms, environment 0ms, prepare 181ms)[22m
+[2m      Tests [22m [1m[32m15 passed[39m[22m[90m (15)[39m
+[2m   Start at [22m 22:36:39
+[2m   Duration [22m 1.51s[2m (transform 184ms, setup 65ms, collect 499ms, tests 475ms, environment 0ms, prepare 178ms)[22m
 
