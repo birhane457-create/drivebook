@@ -20,9 +20,11 @@
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-STALE | stale packageHoursRemaining counter is NOT used — child prices are
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-RV-REALISTIC | reviewer scenario: formula correct when platformFee ≈ discount
  [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-RV-02 | tier threshold sealing is unambiguous (resolveDiscountTierMinHours)
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-SEAL-IMMUTABLE | live tier config changes after purchase do NOT affect historical refunds
+ [32m✓[39m __tests__/integration/h01-partial-package-refund.test.ts[2m > [22mH-01 — calculatePartialPackageRefund (via requestPackageCancellation preview)[2m > [22mH01-SEAL-ZERO | lockedDiscountMinHours=0 → no minimum → discount always retained
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m15 passed[39m[22m[90m (15)[39m
-[2m   Start at [22m 22:36:39
-[2m   Duration [22m 1.51s[2m (transform 184ms, setup 65ms, collect 499ms, tests 475ms, environment 0ms, prepare 178ms)[22m
+[2m      Tests [22m [1m[32m17 passed[39m[22m[90m (17)[39m
+[2m   Start at [22m 23:03:22
+[2m   Duration [22m 1.77s[2m (transform 207ms, setup 53ms, collect 529ms, tests 650ms, environment 0ms, prepare 215ms)[22m
 
