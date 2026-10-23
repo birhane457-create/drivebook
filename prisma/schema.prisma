@@ -295,6 +295,11 @@ model Booking {
   updatedAt             DateTime  @updatedAt
   customerEmail         String?
   lockedDiscountPct     Decimal?  @db.Decimal(5, 2)
+  // H-01 FIX: minimum qualifying hours for the discount tier locked at purchase time.
+  // Used during partial-refund calculation to determine whether remaining hours still
+  // qualify for the original discount.  Null on legacy rows → discount retained
+  // unconditionally (documented compatibility rule in PACKAGE-ACCOUNTING-POLICY.md §4).
+  lockedDiscountMinHours Decimal? @db.Decimal(8, 2)
   lockedHourlyRate      Decimal?  @db.Decimal(10, 2)
   offlineAmountPaid     Decimal?  @db.Decimal(12, 2)
   offlinePaymentMethod  String?

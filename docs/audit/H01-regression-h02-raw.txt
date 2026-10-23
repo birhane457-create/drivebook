@@ -1,0 +1,103 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T01: Confirmation sets price = duration × current instructor rate
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T01: Confirmation sets price = duration × current instructor rate[33m 491[2mms[22m[39m
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T02: Platform fee = 0 for wallet-funded lesson
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T03: Provider payout = price × (1 - commission rate)
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T04: Transaction record matches booking financials
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T05: Wallet debited by lesson price
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T06: Rate change — new booking uses instructor current rate
+[90mstderr[2m | __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22m[2mH-02: Child Booking Pricing[2m > [22m[2mH02-T07: Insufficient balance blocks booking after rate increase[22m[39m
+Error confirming package booking: Error: Insufficient wallet balance. Available: $140.00, Required: $150.00
+    at [90mE:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\[39mapp\api\client\confirm-package-booking\route.ts:282:13
+    at Proxy._transactionWithCallback [90m(E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\[39mnode_modules\[4m@prisma\client[24m\runtime\library.js:130:8000[90m)[39m
+    at Module.withSerializableRetry [90m(E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\[39mlib\utils\transaction-retry.ts:116:14[90m)[39m
+    at Module.POST [90m(E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\[39mapp\api\client\confirm-package-booking\route.ts:91:28[90m)[39m
+    at [90mE:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\[39m__tests__\integration\h02-child-booking-pricing.test.ts:394:22
+    at runTest [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:781:11[90m)[39m
+    at runSuite [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:909:15[90m)[39m
+    at runSuite [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:909:15[90m)[39m
+    at runFiles [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:958:5[90m)[39m
+    at startTests [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:967:3[90m)[39m {
+  code: [32m'INSUFFICIENT_WALLET_BALANCE'[39m,
+  available: [33m140[39m,
+  required: [33m150[39m
+}
+
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T07: Insufficient balance blocks booking after rate increase
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T08: Multi-hour booking price = duration × current rate
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T09: Different instructor rate applies to their booking
+ [32m✓[39m __tests__/integration/h02-child-booking-pricing.test.ts[2m > [22mH-02: Child Booking Pricing[2m > [22mH02-T10: Financial fields reconcile within rounding tolerance
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Now (payment_intent.succeeded)[22m[39m
+[2026-10-23T13:21:46.614Z] INFO : Ã°Å¸â€œÂ¥ Processing webhook: payment_intent.succeeded
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Now (payment_intent.succeeded)[22m[39m
+[2026-10-23T13:21:46.665Z] INFO : Package wallet (Book Now): face=$700 / first_lesson=-$70 / promo=+$1.75 / pkg_fee=$33.25 / remaining=$630.00 for userId=cmvl015yf0003111c9ayyuzd6
+[2026-10-23T13:21:46.666Z] INFO : Ã¢Å“â€¦ Booking payment processed with validations: cmvl015yk0007111cbia0j6sx
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Now (payment_intent.succeeded)[22m[39m
+[2026-10-23T13:21:46.669Z] INFO : Ã¢Å“â€¦ Ledger updated: collected=70 reserved=59.5
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Now (payment_intent.succeeded)[22m[39m
+<empty line>
+[90mstderr[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Now (payment_intent.succeeded)[22m[39m
+[2026-10-23T13:21:46.754Z] ERROR: Failed to create payment notification {"error":"Cannot read properties of undefined (reading 'catch')"}
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22m[2mW06: duplicate payment_intent.succeeded delivery is idempotent[22m[39m
+[2026-10-23T13:21:46.774Z] INFO : Ã°Å¸â€œÂ¥ Processing webhook: payment_intent.succeeded
+
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22mW01: wallet CREDIT entry = face value ($700), not paid amount ($698.25)
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22mW02: PLATFORM_SUBSIDY entry present and NOT type CREDIT (not spendable)
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22mW03: PACKAGE_FEE Transaction created with correct amount and Stripe PI link
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22mW04: first-lesson DEBIT entry = $70
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22mW05: getWalletBalance() = $630 (face value $700 minus first lesson $70)
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22mW-LG: FinancialLedger entries balance for Book Now booking (amount === platformFee + providerPayout)
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22m[2mW06: duplicate payment_intent.succeeded delivery is idempotent[22m[39m
+[2026-10-23T13:21:46.794Z] INFO : Ã¢Å“â€¦ Concurrent webhook delivery lost the idempotency race {"idempotencyKey":"payment_intent.succeeded_evt_h02w_1792761704989_1_1792761706"}
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Later (checkout.session.completed)[22m[39m
+[2026-10-23T13:21:46.799Z] INFO : Ã°Å¸â€œÂ¥ Processing webhook: checkout.session.completed
+[2026-10-23T13:21:46.800Z] INFO : Ã°Å¸â€™Â° Wallet credit checkout completed: userId=cmvl015yr0008111c8ti44yi8 amount=698.25
+[2026-10-23T13:21:46.800Z] INFO : Ã¢Å“â€¦ Amount validation passed: 69825 cents
+
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Now (payment_intent.succeeded)[2m > [22mW06: duplicate payment_intent.succeeded delivery is idempotent
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Later (checkout.session.completed)[22m[39m
+[2026-10-23T13:21:46.809Z] INFO : Package wallet (Book Later): face=$700 / paid=$698.25 / promo=+$1.75 / pkg_fee=$33.25 for userId=cmvl015yr0008111c8ti44yi8
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22m[2mW12: missing sealed metadata (old session) falls back to amountPaid credit[22m[39m
+[2026-10-23T13:21:46.821Z] INFO : Ã°Å¸â€œÂ¥ Processing webhook: checkout.session.completed
+[2026-10-23T13:21:46.822Z] INFO : Ã°Å¸â€™Â° Wallet credit checkout completed: userId=cmvl0164k0011111c5aij4ge4 amount=698.25
+[2026-10-23T13:21:46.822Z] INFO : Ã¢Å“â€¦ Amount validation passed: 69825 cents
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22m[2mW12: missing sealed metadata (old session) falls back to amountPaid credit[22m[39m
+[2026-10-23T13:21:46.825Z] INFO : Package wallet (Book Later): face=$698.25 / paid=$698.25 / promo=+$0 / pkg_fee=$0 for userId=cmvl0164k0011111c5aij4ge4
+
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22mW07: wallet CREDIT entry = face value ($700)
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22mW08: PLATFORM_SUBSIDY entry present and NOT type CREDIT
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22mW09: PACKAGE_FEE Transaction created with correct amount and Stripe PI link
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22mW10: no first-lesson DEBIT entry (Book Later has no first lesson yet)
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22mW11: getWalletBalance() = $700 (PLATFORM_SUBSIDY not counted)
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22m[2mW11b: duplicate checkout.session.completed delivery is idempotent[22m[39m
+[2026-10-23T13:21:46.846Z] INFO : Ã°Å¸â€œÂ¥ Processing webhook: checkout.session.completed
+[2026-10-23T13:21:46.847Z] INFO : Ã°Å¸â€™Â° Wallet credit checkout completed: userId=cmvl015yr0008111c8ti44yi8 amount=698.25
+[2026-10-23T13:21:46.847Z] INFO : Ã¢Å“â€¦ Amount validation passed: 69825 cents
+
+[90mstdout[2m | __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22m[2mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22m[2mW11b: duplicate checkout.session.completed delivery is idempotent[22m[39m
+[2026-10-23T13:21:46.850Z] INFO : Ã¢Å“â€¦ Concurrent webhook delivery lost the idempotency race {"idempotencyKey":"checkout.session.completed_evt_h02w_1792761704989_2_1792761706"}
+
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22mW12: missing sealed metadata (old session) falls back to amountPaid credit
+ [32m✓[39m __tests__/integration/h02-webhook-package-accounting.test.ts[2m > [22mH-02 Webhook — Book Later (checkout.session.completed)[2m > [22mW11b: duplicate checkout.session.completed delivery is idempotent
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m24 passed[39m[22m[90m (24)[39m
+[2m   Start at [22m 21:21:43
+[2m   Duration [22m 3.25s[2m (transform 581ms, setup 62ms, collect 1.57s, tests 2.94s, environment 0ms, prepare 387ms)[22m
+
