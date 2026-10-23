@@ -757,76 +757,152 @@ export async function confirmBooking(
  * Cancel a booking with refund calculation.
  * Refund policy is read from PlatformSettings â€” no hardcoded values.
 /**
- * Calculate partial package refund with tier-aware discount recalculation.
- * 
- * When a customer cancels a package booking after using some hours, we must:
- * 1. Calculate how many hours were used vs remaining
- * 2. Determine what discount tier applies to the USED hours (not the original purchase tier)
- * 3. Calculate what the customer should have paid for used hours at original locked rates
- * 4. Refund the difference: packageTotalPaid - amountForUsedHours
- * 
- * Example:
- * - Customer bought 10hr package at $70/hr with 10% discount → paid $630 total
- * - Used 5 lessons (5hrs), 5hrs remain
- * - 5 hours does NOT qualify for any discount (need 6+ for 5% discount)
- * - Amount for used hours: 5 × $70 × (1 - 0%) = $350
- * - Refundable base amount: $630 - $350 = $280
- * - Apply time-based policy (100% if >48h, 50% if >24h, 0% otherwise) to $280
- * 
- * @param booking - Booking record with package fields
- * @returns Refundable base amount before applying time-based cancellation policy
+ * H-01 FIX: Calculate partial package refund per approved policy
+ * (docs/audit/PACKAGE-ACCOUNTING-POLICY.md §4, 2026-10-18).
+ *
+ * DEFECTS FIXED
+ *   - BUG: used stale packageHoursRemaining counter → replaced with SUM(child Booking.price)
+ *   - BUG: applied hardcoded live tier thresholds to used hours → uses lockedDiscountPct from purchase
+ *   - BUG: no floor guard → can return negative; fixed with Math.max(0, ...)
+ *   - BUG: packageTotalPaid = null treated as 0 → now throws an error
+ *   - BUG: platformFee not separated → now fetched from authoritative Transaction row
+ *
+ * FORMULA (policy §4)
+ *   consumedValue     = SUM(child Booking.price WHERE status IN [CONFIRMED, COMPLETED])
+ *   faceValue         = packageHours × lockedHourlyRate
+ *   discountedBase    = faceValue × (1 − lockedDiscountPct/100)
+ *   platformFee       = from PACKAGE_FEE Transaction row (non-refundable, always retained)
+ *   maxStripeRefund   = packageTotalPaid − platformFee  (= discountedBase)
+ *   remainingCredit   = faceValue − consumedValue
+ *   qualifiesForDisc  = remainingUnused hours >= lockedDiscountMinHours
+ *                       (null lockedDiscountMinHours → legacy row → discount always retained)
+ *   voidedPromo       = if !qualifiesForDisc: faceValue − packageTotalPaid, else 0
+ *   refundableBase    = min(remainingCredit − voidedPromo, maxStripeRefund)
+ *                       floor to 0 (never negative)
+ *
+ * @param booking  - Parent package Booking row (with provider, customer relations)
+ * @returns        Refundable base amount (before time-based policy multiplier)
+ * @throws         Error if packageTotalPaid is null/missing (requires admin override)
+ * @throws         Error if PACKAGE_FEE Transaction cannot be located (requires manual review)
  */
-function calculatePartialPackageRefund(booking: any): number {
-  // Package fields from DB (locked at purchase time)
-  const packageHours = (booking as any).packageHours ?? 0
-  const packageHoursRemaining = (booking as any).packageHoursRemaining ?? 0
-  const packageTotalPaid = (booking as any).packageTotalPaid ?? 0
-  const lockedHourlyRate = (booking as any).lockedHourlyRate ?? booking.provider?.hourlyRate ?? 0
+async function calculatePartialPackageRefund(booking: any): Promise<number> {
+  // ── 1. Validate required fields ─────────────────────────────────────────────
+  const packageHours = Number((booking as any).packageHours ?? 0)
+  const lockedHourlyRate = Number(
+    (booking as any).lockedHourlyRate ?? booking.provider?.hourlyRate ?? 0
+  )
+  const lockedDiscountPct = Number((booking as any).lockedDiscountPct ?? 0)
+  // lockedDiscountMinHours: null on legacy rows → treat as "always qualifies"
+  const lockedDiscountMinHours: number | null =
+    (booking as any).lockedDiscountMinHours != null
+      ? Number((booking as any).lockedDiscountMinHours)
+      : null
 
-  // If not a package booking, return single lesson price
+  // If not a package booking, return single lesson price (unchanged behaviour)
   if (!packageHours || packageHours <= 1) {
-    return booking.price
+    return Number(booking.price ?? 0)
   }
 
-  // Calculate hours used
-  const hoursUsed = packageHours - packageHoursRemaining
+  // packageTotalPaid = null is a data error; admin must use override path
+  const packageTotalPaid = (booking as any).packageTotalPaid
+  if (packageTotalPaid == null) {
+    throw new Error(
+      `[H-01] packageTotalPaid is null for booking ${booking.id} — cannot calculate refund without authoritative payment amount. Use adminOverrideAmount.`
+    )
+  }
+  const totalPaid = Number(packageTotalPaid)
 
-  // If no hours used yet, refund full package amount
-  if (hoursUsed <= 0) {
-    return packageTotalPaid
+  // ── 2. Consumed value from actual child booking prices ──────────────────────
+  // REPLACES the stale packageHoursRemaining counter which is never decremented
+  // correctly in all code paths.
+  const childBookings = await prisma.booking.findMany({
+    where: {
+      parentBookingId: booking.id,
+      status: { in: ['CONFIRMED', 'COMPLETED'] },
+    },
+    select: { price: true },
+  })
+  const consumedValue = childBookings.reduce(
+    (sum, b) => sum + Number(b.price ?? 0),
+    0
+  )
+
+  // ── 3. Face value and discount amounts ──────────────────────────────────────
+  const faceValue = parseFloat((packageHours * lockedHourlyRate).toFixed(2))
+  // Discount funded by DriveBook (promotional credit — non-cash-backed)
+  const drivebookPromotion = parseFloat((faceValue - totalPaid).toFixed(2))
+
+  // ── 4. Platform fee — authoritative source: PACKAGE_FEE Transaction row ─────
+  // Decision B: hard-error if not found (requires manual admin review).
+  // Book Now: bookingId is set on the Transaction.
+  // Book Later: bookingId is null — fall back to stripePaymentIntentId lookup.
+  let platformFee: number | null = null
+
+  const feeByBookingId = await (prisma as any).transaction.findFirst({
+    where: { bookingId: booking.id, type: 'PACKAGE_FEE' },
+    select: { platformFee: true, amount: true },
+  })
+  if (feeByBookingId) {
+    platformFee = Number(feeByBookingId.platformFee ?? feeByBookingId.amount)
+  } else {
+    // Book Later path: Transaction has no bookingId — search by stripePaymentIntentId
+    const piId = (booking as any).paymentIntentId
+    if (piId) {
+      const feeByPi = await (prisma as any).transaction.findFirst({
+        where: { stripePaymentIntentId: piId, type: 'PACKAGE_FEE' },
+        select: { platformFee: true, amount: true },
+      })
+      if (feeByPi) {
+        platformFee = Number(feeByPi.platformFee ?? feeByPi.amount)
+      }
+    }
   }
 
-  // If all hours used, no refund
-  if (packageHoursRemaining <= 0) {
+  if (platformFee === null) {
+    throw new Error(
+      `[H-01] PACKAGE_FEE Transaction not found for booking ${booking.id} (paymentIntentId: ${(booking as any).paymentIntentId ?? 'none'}). ` +
+      `Cannot verify non-refundable platform fee. Use adminOverrideAmount for manual processing.`
+    )
+  }
+
+  // Maximum Stripe can refund = cash paid minus the non-refundable platform fee
+  const maxStripeRefund = parseFloat((totalPaid - platformFee).toFixed(2))
+
+  // ── 5. Remaining credit ─────────────────────────────────────────────────────
+  const remainingCredit = parseFloat((faceValue - consumedValue).toFixed(2))
+
+  // If no credit remains (all hours consumed), no refund possible
+  if (remainingCredit <= 0) {
     return 0
   }
 
-  // Determine what discount tier applies to hours USED (not original package tier)
-  // Tier thresholds: <6hrs = 0%, 6-9hrs = 5%, 10-14hrs = 10%, 15+hrs = 12%
-  let usedTierDiscountPct = 0
-  if (hoursUsed >= 15) {
-    usedTierDiscountPct = 12
-  } else if (hoursUsed >= 10) {
-    usedTierDiscountPct = 10
-  } else if (hoursUsed >= 6) {
-    usedTierDiscountPct = 5
+  // ── 6. Discount re-qualification check ─────────────────────────────────────
+  // Remaining (unconsumed) hours in face-value terms:
+  //   unconsumedHours = remainingCredit / lockedHourlyRate
+  // If this falls below the locked tier threshold, the promotional discount is
+  // no longer earned and must be voided — the student cannot keep the discount
+  // on hours they did not use.
+  //
+  // lockedDiscountMinHours = null (legacy row) → always qualifies; discount retained.
+  let voidedPromotion = 0
+  if (lockedDiscountMinHours !== null && lockedHourlyRate > 0) {
+    const unconsumedHours = parseFloat((remainingCredit / lockedHourlyRate).toFixed(4))
+    const qualifiesForDiscount = unconsumedHours >= lockedDiscountMinHours
+    if (!qualifiesForDiscount && drivebookPromotion > 0) {
+      // Void the entire promotional discount — it was never earned on these hours
+      voidedPromotion = drivebookPromotion
+    }
   }
-  // else: hoursUsed < 6 → 0% discount
 
-  // Calculate what customer should have paid for used hours at locked rate
-  const rateDecimal = toDecimal(lockedHourlyRate)
-  const hoursDecimal = toDecimal(hoursUsed)
-  const subtotalForUsed = multiplyAmount(rateDecimal, hoursDecimal)
-  
-  // Apply the used-hours tier discount
-  const discountMultiplier = toDecimal(1 - usedTierDiscountPct / 100)
-  const amountForUsedHours = roundAmount(multiplyAmount(subtotalForUsed, discountMultiplier), 2)
+  // ── 7. Refundable base ──────────────────────────────────────────────────────
+  const rawRefundable = parseFloat(
+    (remainingCredit - voidedPromotion).toFixed(2)
+  )
+  // Cap: Stripe can only refund up to what was actually paid in cash minus the
+  // non-refundable platform fee.  Floor: never return a negative amount.
+  const refundableBase = Math.max(0, Math.min(rawRefundable, maxStripeRefund))
 
-  // Refundable base = what they paid - what they should pay for used hours
-  const totalPaidDecimal = toDecimal(packageTotalPaid)
-  const refundableBase = subtractAmounts(totalPaidDecimal, amountForUsedHours)
-
-  return toNumber(roundAmount(refundableBase, 2))
+  return parseFloat(refundableBase.toFixed(2))
 }
 
 
@@ -855,7 +931,7 @@ export async function requestPackageCancellation(
   if (booking.customerId !== customerId) throw makeError('UNAUTHORIZED', 'Not authorized to cancel this booking')
   
   // Calculate refund amount (tier-aware for packages)
-  const baseRefundAmount = calculatePartialPackageRefund(booking)
+  const baseRefundAmount = await calculatePartialPackageRefund(booking)
   
   // Apply time-based policy
   const now = new Date()
@@ -935,7 +1011,7 @@ export async function approveCancellation(
   if (overrideAmount !== undefined && overrideAmount !== null) {
     refundAmount = overrideAmount
   } else {
-    const baseRefundAmount = calculatePartialPackageRefund(booking)
+    const baseRefundAmount = await calculatePartialPackageRefund(booking)
     const requestTime = new Date(booking.cancellationRequestedAt)
     const originalTime = new Date((booking as any).originalStartTime || booking.startTime || requestTime)
     const hoursNotice = (originalTime.getTime() - requestTime.getTime()) / 3_600_000
@@ -1181,7 +1257,7 @@ export async function cancelBooking(
 
   if (!isNonRefundable && !isPast) {
     // Calculate base refundable amount using tier-aware package logic
-    const baseRefundAmount = calculatePartialPackageRefund(booking)
+    const baseRefundAmount = await calculatePartialPackageRefund(booking)
 
     // Apply time-based cancellation policy
     if (hoursNotice >= fullRefundWindow) {
