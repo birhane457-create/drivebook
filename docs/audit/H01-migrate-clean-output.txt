@@ -1,0 +1,43 @@
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "drivebook_test", schema "public" at "localhost:5433"
+
+36 migrations found in prisma/migrations
+
+Applying migration `20260116000000_sub_06_a_unique_constraints`
+Error: P3018
+
+A migration failed to apply. New migrations cannot be applied before the error is recovered from. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
+
+Migration name: 20260116000000_sub_06_a_unique_constraints
+
+Database error code: 42601
+
+Database error:
+ERROR: loop variable of loop over rows must be a record variable or list of scalar variables
+
+Position:
+[1m 18[0m   IF duplicate_count > 0 THEN
+[1m 19[0m     RAISE NOTICE 'SUB-06-A MIGRATION WARNING: Found % duplicate stripeCustomerId values in Provider table', duplicate_count;
+[1m 20[0m     RAISE NOTICE 'Duplicate stripeCustomerId values:';
+[1m 21[0m     
+[1m 22[0m     -- Log all duplicates
+[1m 23[1;31m     FOR r IN ([0m
+
+DbError { severity: "ERROR", parsed_severity: Some(Error), code: SqlState(E42601), message: "loop variable of loop over rows must be a record variable or list of scalar variables", detail: None, hint: None, position: Some(Original(791)), where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("pl_gram.y"), line: Some(1572), routine: Some("plpgsql_yyparse") }
+
+
+Prisma schema loaded from prisma\schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to .\node_modules\@prisma\client in 1.06s
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+ column_name | data_type 
+-------------+-----------
+(0 rows)
+
+ERROR:  relation "Booking" does not exist
+LINE 1: SELECT COUNT(*) as booking_count FROM "Booking";
+                                              ^
