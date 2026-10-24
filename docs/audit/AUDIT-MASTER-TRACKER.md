@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.48 (LDG-01 L03-B failure-injection test — ledger rejection does not block booking response)
+**Version:** 5.49 (LDG-01 independent review accepted as FIX-VERIFIED at b5d9bd63)
 **Last Updated:** 2026-10-24
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -646,7 +646,7 @@ These are separate charges with different payers. The code passes `price − pro
 
 | ID | Title | Risk | Status | Scope |
 |---|---|---|---|---|
-| LDG-01 | Five non-webhook `recordBookingPayment` call sites not behaviorally tested for ledger identity correctness | MEDIUM | **FIX-VERIFIED** — 13/13 behavioral tests pass (9 callsite + 4 route handler). L03 and L04 coverage gap resolved: actual route handlers invoked via `POST()` function calls with mocked auth and real DB; assertions verify LedgerEntry rows written, commission+payout===price, and handler returns 200/201. L01/L02/L05 tested via direct service/function calls. Bug found and fixed: `payment-extension.ts` missing `providerId` in `select` projection. Evidence: `docs/audit/LDG01-execution-raw.txt`, `docs/audit/LDG01-route-handler-raw.txt`. |
+| LDG-01 | Five non-webhook `recordBookingPayment` call sites not behaviorally tested for ledger identity correctness | MEDIUM | **✅ FIX-VERIFIED** — Independent review accepted at `b5d9bd63` (2026-10-24). 13/13 behavioral tests pass (9 callsite + 4 route handler). L03/L04 invoke actual route handlers; L03-B injects real ledger rejection via `mockRejectedValueOnce` and proves booking response still succeeds. Bug found and fixed: `payment-extension.ts` missing `providerId` in `select` projection. Reviewer note: error logging visible in stderr but not explicitly asserted by a logger spy (non-blocking observation). Evidence: `docs/audit/LDG01-execution-raw.txt`, `docs/audit/LDG01-route-handler-raw.txt`. |
 
 ---
 
