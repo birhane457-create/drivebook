@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.46 (LDG-01 behavioral tests added — 9/9 pass; extension bug found and fixed)
-**Last Updated:** 2026-10-23
+**Version:** 5.47 (LDG-01 L03/L04 route handler coverage added — all 5 paths now behaviorally tested via actual handlers)
+**Last Updated:** 2026-10-24
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -646,7 +646,7 @@ These are separate charges with different payers. The code passes `price − pro
 
 | ID | Title | Risk | Status | Scope |
 |---|---|---|---|---|
-| LDG-01 | Five non-webhook `recordBookingPayment` call sites not behaviorally tested for ledger identity correctness | MEDIUM | **FIX-VERIFIED** — 9/9 behavioral tests pass at `4697ab06` (pre-commit); test file `__tests__/integration/ldg-01-ledger-callsite-coverage.test.ts`. Bug found and fixed during testing: `payment-extension.ts` `onBookingConfirmed` queried booking without `providerId` in the `select` → `INSTRUCTOR_PAYABLE requires entityId` error; fixed by adding `providerId: true` to select. All 5 paths covered: L01 booking-service (3 entries written, identity holds, identity guard active), L02 payment-extension (entries written after bug fix), L03 bookings/route formula (4 rate variants), L04 batch/route formula (3 durations), L05 cron backfill (gap detected → written, fallback payout 85%, idempotent duplicate detection). H-02 regression: 24/24 pass. Evidence: `docs/audit/LDG01-execution-raw.txt`. |
+| LDG-01 | Five non-webhook `recordBookingPayment` call sites not behaviorally tested for ledger identity correctness | MEDIUM | **FIX-VERIFIED** — 13/13 behavioral tests pass (9 callsite + 4 route handler). L03 and L04 coverage gap resolved: actual route handlers invoked via `POST()` function calls with mocked auth and real DB; assertions verify LedgerEntry rows written, commission+payout===price, and handler returns 200/201. L01/L02/L05 tested via direct service/function calls. Bug found and fixed: `payment-extension.ts` missing `providerId` in `select` projection. Evidence: `docs/audit/LDG01-execution-raw.txt`, `docs/audit/LDG01-route-handler-raw.txt`. |
 
 ---
 
