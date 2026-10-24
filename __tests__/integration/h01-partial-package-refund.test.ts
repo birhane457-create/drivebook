@@ -67,7 +67,9 @@ const FACE_VALUE = HOURLY_RATE * PACKAGE_HOURS;                             // $
 const DISCOUNTED_BASE = FACE_VALUE * (1 - LOCKED_DISCOUNT_PCT / 100);       // $630.00
 const PLATFORM_FEE   = parseFloat((DISCOUNTED_BASE * 0.036).toFixed(2));    // $22.68
 const PACKAGE_TOTAL_PAID = parseFloat((DISCOUNTED_BASE + PLATFORM_FEE).toFixed(2)); // $652.68
-const DRIVEBOOK_PROMOTION = parseFloat((FACE_VALUE - PACKAGE_TOTAL_PAID).toFixed(2)); // $47.32
+// H01-RV-03 FIX: drivebookPromotion = faceValue - discountedBase (the discount itself)
+// NOT faceValue - packageTotalPaid (which includes platform fee and understates the void)
+const DRIVEBOOK_PROMOTION = parseFloat((FACE_VALUE * (LOCKED_DISCOUNT_PCT / 100)).toFixed(2)); // $70.00
 const MAX_STRIPE_REFUND   = parseFloat((PACKAGE_TOTAL_PAID - PLATFORM_FEE).toFixed(2)); // $630.00
 
 let providerId: string;
@@ -423,15 +425,12 @@ describe('H-01 — calculatePartialPackageRefund (via requestPackageCancellation
   });
 
   it('H01-RV-REALISTIC | reviewer scenario: formula correct when platformFee ≈ discount', async () => {
-    // H01-RV-01 reviewer example: $700 face, discount=$35, platformFee=$33.25, totalPaid=$698.25
-    // Verify the formula correctly derives drivebookPromotion = $700 - $698.25 = $1.75
-    // (NOT the full $35 discount — only the true non-cash gap is voidable)
-    //
+    // H01-RV-03: drivebookPromotion must be the discount ($35), not the cash gap ($1.75)
     // Package: 10hrs, $70/hr, 5% discount (= $35 discount)
     //   discountedBase = $700 × 0.95 = $665
     //   platformFee    = $665 × 0.05 = $33.25  (5% rate for reviewer's example)
     //   totalPaid      = $665 + $33.25 = $698.25
-    //   drivebookPromotion = $700 - $698.25 = $1.75
+    //   drivebookPromotion = faceValue × discountPct/100 = $700 × 5% = $35
     //   maxStripeRefund    = $698.25 - $33.25 = $665
     //
     // 5hrs consumed → remainingCredit = $700 - $350 = $350
@@ -439,15 +438,15 @@ describe('H-01 — calculatePartialPackageRefund (via requestPackageCancellation
     //   → discount retained → voidedPromo=0 → rawRefundable=$350 < $665 → $350
     //
     // Same 5hrs consumed, lockedDiscountMinHours = 6 (so 5hrs does NOT qualify):
-    //   unconsumedHrs = 350/70 = 5 < 6 → void promo $1.75
-    //   rawRefundable = $350 - $1.75 = $348.25
+    //   unconsumedHrs = 350/70 = 5 < 6 → void promo $35
+    //   rawRefundable = $350 - $35 = $315  (matches policy §4 example)
 
     const platformFeeRate = 0.05;  // 5% to match reviewer's $33.25 on $665 base
     const discountPct = 5;
     const db = parseFloat((FACE_VALUE * (1 - discountPct / 100)).toFixed(2));  // $665
     const fee = parseFloat((db * platformFeeRate).toFixed(2));                  // $33.25
     const totalPaid = parseFloat((db + fee).toFixed(2));                        // $698.25
-    const promo = parseFloat((FACE_VALUE - totalPaid).toFixed(2));              // $1.75
+    const promo = parseFloat((FACE_VALUE * (discountPct / 100)).toFixed(2));    // $35 (NOT $1.75)
 
     // Sub-test A: qualifies (minHours=5, remaining=5hrs) → no void
     const bookingA = await createPackageBooking({
@@ -460,7 +459,7 @@ describe('H-01 — calculatePartialPackageRefund (via requestPackageCancellation
     const { calculatedRefund: refA } = await requestPackageCancellation(bookingA, customerId);
     expect(refA).toBeCloseTo(350, 1);  // no void
 
-    // Sub-test B: does NOT qualify (minHours=6, remaining=5hrs) → void $1.75
+    // Sub-test B: does NOT qualify (minHours=6, remaining=5hrs) → void $35
     const bookingB = await createPackageBooking({
       lockedDiscountPct: discountPct,
       lockedDiscountMinHours: 6,
@@ -469,11 +468,11 @@ describe('H-01 — calculatePartialPackageRefund (via requestPackageCancellation
     await createPkgFeeTransaction(bookingB, undefined, fee);
     await createChildBookings(bookingB, Array(5).fill({ durationHours: 1 }));
     const { calculatedRefund: refB } = await requestPackageCancellation(bookingB, customerId);
-    expect(refB).toBeCloseTo(parseFloat((350 - promo).toFixed(2)), 1);  // $348.25
+    expect(refB).toBeCloseTo(315, 1);  // $350 - $35 = $315 (matches policy!)
 
-    // Assert: voidedPromo is $1.75, NOT the full discount $35
-    expect(parseFloat((350 - refB).toFixed(2))).toBeCloseTo(promo, 1);  // $1.75
-    expect(parseFloat((350 - refB).toFixed(2))).not.toBeCloseTo(35, 0); // NOT $35
+    // Assert: voidedPromo is $35 (the discount), NOT $1.75 (the cash gap)
+    expect(parseFloat((350 - refB).toFixed(2))).toBeCloseTo(promo, 1);  // $35
+    expect(parseFloat((350 - refB).toFixed(2))).not.toBeCloseTo(1.75, 1); // NOT $1.75
   });
 
   it('H01-RV-02 | tier threshold sealing is unambiguous (resolveDiscountTierMinHours)', async () => {
