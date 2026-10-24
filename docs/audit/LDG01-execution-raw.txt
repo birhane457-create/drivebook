@@ -1,0 +1,22 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL01 | booking-service createBooking: commission + payout === lessonPrice
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL01 | booking-service: Amount mismatch is thrown when params are wrong
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL02 | payment-extension onBookingConfirmed: entries written, identity holds
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL02 | payment-extension: zero payout booking → identity still holds
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL03 | bookings/route POST: formula price-providerPayout satisfies identity
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL04 | bookings/batch route: same formula holds for multi-booking batch
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL05 | reconcile-stripe cron: backfill writes entries when gap detected
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL05 | reconcile-stripe cron: fallback payout (0.85) also satisfies identity
+ [32m✓[39m __tests__/integration/ldg-01-ledger-callsite-coverage.test.ts[2m > [22mLDG-01 — recordBookingPayment call-site ledger identity coverage[2m > [22mL05 | reconcile-stripe cron: idempotent — double backfill does not duplicate entries
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m9 passed[39m[22m[90m (9)[39m
+[2m   Start at [22m 23:29:08
+[2m   Duration [22m 1.11s[2m (transform 125ms, setup 48ms, collect 285ms, tests 240ms, environment 0ms, prepare 207ms)[22m
+
