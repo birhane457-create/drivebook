@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.47 (LDG-01 L03/L04 route handler coverage added — all 5 paths now behaviorally tested via actual handlers)
+**Version:** 5.48 (LDG-01 L03-B failure-injection test — ledger rejection does not block booking response)
 **Last Updated:** 2026-10-24
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
