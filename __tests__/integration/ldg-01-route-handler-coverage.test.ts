@@ -80,10 +80,22 @@ vi.mock('@/lib/config/platform-settings', () => ({
   getBookingSettings: vi.fn().mockResolvedValue({ maxDurationMinutes: 480 }),
 }));
 
+// Mock ledger-operations with a spy wrapping the real implementation.
+// This allows L03-A/L04 to use real recordBookingPayment (verify entries written)
+// while L03-B can override it to reject (prove failure handling).
+vi.mock('@/lib/services/ledger-operations', async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  return {
+    ...actual,
+    recordBookingPayment: vi.fn(actual.recordBookingPayment),
+  };
+});
+
 // ── Import route handlers (after vi.mock declarations) ────────────────────────
 import { POST as bookingsPost }      from '@/app/api/bookings/route';
 import { POST as batchPost }         from '@/app/api/bookings/batch/route';
 import { getServerSession }          from 'next-auth';
+import { recordBookingPayment as mockedRecordBookingPayment } from '@/lib/services/ledger-operations';
 
 // ── Test constants ────────────────────────────────────────────────────────────
 const HOURLY_RATE    = 70;
@@ -221,14 +233,13 @@ describe('L03 — bookings/route.ts POST handler', () => {
     expect(res.status).not.toBe(500);
   });
 
-  it('L03-B | handler: ledger write does not block booking response on failure', async () => {
-    // Prove the ledger write is non-critical: even if it throws, the booking
-    // response is still 200/201. We can't easily inject a ledger failure without
-    // a spy, so we verify the route's catch block is wired correctly by checking
-    // the response status is independent of the ledger.
-    // (The code has try/catch around recordBookingPayment and calls sendAlert.)
-    // This test is a regression guard: if someone removes the try/catch, the
-    // booking would 500 — this test would catch that regression.
+  it('L03-B | handler: ledger write failure does NOT block booking response', async () => {
+    // Inject a ledger failure: make recordBookingPayment reject for this call only.
+    // The route handler has a try/catch around the ledger call — the booking
+    // response must still be 200/201 despite the ledger rejection.
+    const ledgerError = new Error('Simulated ledger failure — DB connection lost');
+    vi.mocked(mockedRecordBookingPayment).mockRejectedValueOnce(ledgerError);
+
     const startTime = new Date(Date.now() + 72 * 3600000).toISOString();
     const endTime   = new Date(Date.now() + 73 * 3600000).toISOString();
 
@@ -239,9 +250,25 @@ describe('L03 — bookings/route.ts POST handler', () => {
     });
 
     const res = await bookingsPost(req);
+
+    // Booking response must succeed despite ledger failure
     expect([200, 201]).toContain(res.status);
     const body = await res.json();
     expect(body).toHaveProperty('booking');
+
+    // Verify: the booking was created in the DB (proves the transaction committed
+    // before the ledger write was attempted)
+    const bookingId = body.booking.id;
+    const booking = await (prisma.booking as any).findUnique({
+      where: { id: bookingId },
+      select: { id: true, status: true, isPaid: true },
+    });
+    expect(booking).toBeTruthy();
+    expect(booking.status).toBe('CONFIRMED');
+
+    // Verify: no LedgerEntry rows were written (the rejection prevented them)
+    const entries = await getLedgerEntries(bookingId);
+    expect(entries).toHaveLength(0);
   });
 
 });
