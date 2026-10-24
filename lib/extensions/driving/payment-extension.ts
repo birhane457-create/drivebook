@@ -53,6 +53,7 @@ export const drivingPaymentExtension: PaymentExtension = {
       const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
         select: {
+          providerId: true,   // H-01/LDG-01 FIX: required for ledger INSTRUCTOR_PAYABLE account
           customerId: true,
           platformFee: true,
           providerPayout: true,
