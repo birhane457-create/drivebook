@@ -1,0 +1,39 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+[90mstderr[2m | __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22m[2mL03 — bookings/route.ts POST handler[2m > [22m[2mL03-A | handler creates booking AND writes 3 LedgerEntry rows[22m[39m
+[2026-10-24T10:04:17.961Z] ERROR: Email confirmation failed — attempting SMS + in-app fallback {"error":"__vite_ssr_import_5__.emailService.sendBookingConfirmation is not a function","bookingId":"cmvm8f25f000gvfuqa7tn26oq","clientEmail":"ldg01-rh-cust-1792836257887@test.com"}
+
+[90mstdout[2m | __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22m[2mL03 — bookings/route.ts POST handler[2m > [22m[2mL03-A | handler creates booking AND writes 3 LedgerEntry rows[22m[39m
+SMS not configured. Would send: {
+  to: [32m'0422222001'[39m,
+  message: [32m'Booking confirmed! Your lesson with LDG01 RH Provider is on 26 Oct 2026 at 18:04. Price: $70'[39m
+}
+
+[90mstderr[2m | __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22m[2mL03 — bookings/route.ts POST handler[2m > [22m[2mL03-A | handler creates booking AND writes 3 LedgerEntry rows[22m[39m
+[2026-10-24T10:04:18.019Z] ERROR: In-app notification fallback also failed {"error":"[vitest] No \"notifyClientBookingConfirmed\" export is defined on the \"@/lib/services/notifications\" mock. Did you forget to return it from \"vi.mock\"?\nIf you need to partially mock a module, you can use \"importOriginal\" helper inside:\n","bookingId":"cmvm8f25f000gvfuqa7tn26oq"}
+
+ [32m✓[39m __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22mL03 — bookings/route.ts POST handler[2m > [22mL03-A | handler creates booking AND writes 3 LedgerEntry rows
+[90mstdout[2m | __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22m[2mL03 — bookings/route.ts POST handler[2m > [22m[2mL03-B | handler: ledger write does not block booking response on failure[22m[39m
+SMS not configured. Would send: {
+  to: [32m'0422222001'[39m,
+  message: [32m'Booking confirmed! Your lesson with LDG01 RH Provider is on 27 Oct 2026 at 18:04. Price: $70'[39m
+}
+
+[90mstderr[2m | __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22m[2mL03 — bookings/route.ts POST handler[2m > [22m[2mL03-B | handler: ledger write does not block booking response on failure[22m[39m
+[2026-10-24T10:04:18.104Z] ERROR: Email confirmation failed — attempting SMS + in-app fallback {"error":"__vite_ssr_import_5__.emailService.sendBookingConfirmation is not a function","bookingId":"cmvm8f29g000qvfuqnu8t2gxi","clientEmail":"ldg01-rh-cust-1792836257887@test.com"}
+[2026-10-24T10:04:18.105Z] ERROR: In-app notification fallback also failed {"error":"[vitest] No \"notifyClientBookingConfirmed\" export is defined on the \"@/lib/services/notifications\" mock. Did you forget to return it from \"vi.mock\"?\nIf you need to partially mock a module, you can use \"importOriginal\" helper inside:\n","bookingId":"cmvm8f29g000qvfuqnu8t2gxi"}
+
+ [32m✓[39m __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22mL03 — bookings/route.ts POST handler[2m > [22mL03-B | handler: ledger write does not block booking response on failure
+ [32m✓[39m __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22mL04 — bookings/batch/route.ts POST handler[2m > [22mL04-A | handler creates batch booking AND writes 3 LedgerEntry rows per booking
+ [32m✓[39m __tests__/integration/ldg-01-route-handler-coverage.test.ts[2m > [22mL04 — bookings/batch/route.ts POST handler[2m > [22mL04-B | batch: two bookings in one request — each gets independent ledger entries
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 18:04:16
+[2m   Duration [22m 1.58s[2m (transform 243ms, setup 44ms, collect 612ms, tests 385ms, environment 0ms, prepare 229ms)[22m
+
