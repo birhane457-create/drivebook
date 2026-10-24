@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.45 (H-01 purchase-path audit complete — sealed field immutability proven; 17/17 tests pass)
+**Version:** 5.46 (LDG-01 behavioral tests added — 9/9 pass; extension bug found and fixed)
 **Last Updated:** 2026-10-23
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -646,7 +646,7 @@ These are separate charges with different payers. The code passes `price − pro
 
 | ID | Title | Risk | Status | Scope |
 |---|---|---|---|---|
-| LDG-01 | Five non-webhook `recordBookingPayment` call sites not behaviorally tested for ledger identity correctness | MEDIUM | **OPEN** — documentation fix applied at `9cf831e3`; arithmetic fix applied at `58f12d2c`; runtime behavioral tests not yet written for the 5 non-webhook paths | `lib/services/booking-service.ts` (offline booking creation), `lib/extensions/driving/payment-extension.ts` (payment extension hook), `app/api/bookings/route.ts` (standard booking API), `app/api/bookings/batch/route.ts` (bulk booking), `app/api/cron/reconcile-stripe/route.ts` (reconciliation cron). W-LG test covers only the webhook path (`handleBookingPaymentSuccess`). Behavioral tests for each path should assert: (a) FinancialLedger entries are written, (b) commission + payout === lessonPrice, (c) no "Amount mismatch" error logged. Not a blocker for H-02 closure; separate finding. |
+| LDG-01 | Five non-webhook `recordBookingPayment` call sites not behaviorally tested for ledger identity correctness | MEDIUM | **FIX-VERIFIED** — 9/9 behavioral tests pass at `4697ab06` (pre-commit); test file `__tests__/integration/ldg-01-ledger-callsite-coverage.test.ts`. Bug found and fixed during testing: `payment-extension.ts` `onBookingConfirmed` queried booking without `providerId` in the `select` → `INSTRUCTOR_PAYABLE requires entityId` error; fixed by adding `providerId: true` to select. All 5 paths covered: L01 booking-service (3 entries written, identity holds, identity guard active), L02 payment-extension (entries written after bug fix), L03 bookings/route formula (4 rate variants), L04 batch/route formula (3 durations), L05 cron backfill (gap detected → written, fallback payout 85%, idempotent duplicate detection). H-02 regression: 24/24 pass. Evidence: `docs/audit/LDG01-execution-raw.txt`. |
 
 ---
 
