@@ -775,8 +775,9 @@ export async function confirmBooking(
  *   packageTotalPaid  = discountedBase + platformFee  (what Stripe charged)
  *   maxStripeRefund   = packageTotalPaid − platformFee  (= discountedBase)
  *   remainingCredit   = faceValue − consumedValue
- *   drivebookPromotion = faceValue − packageTotalPaid
- *     (non-cash-backed gap: wallet carries this amount above what was paid in cash)
+ *   drivebookPromotion = faceValue − discountedBase = faceValue × lockedDiscountPct/100
+ *     (the promotional discount itself; NOT faceValue − packageTotalPaid, which
+ *     would understate the void by including the non-refundable platform fee)
  *   qualifiesForDisc  = remainingUnused hours >= lockedDiscountMinHours
  *                       (null lockedDiscountMinHours → legacy row → discount always retained)
  *   voidedPromo       = if !qualifiesForDisc: drivebookPromotion, else 0
@@ -832,14 +833,23 @@ async function calculatePartialPackageRefund(booking: any): Promise<number> {
 
   // ── 3. Face value and discount amounts ──────────────────────────────────────
   const faceValue = parseFloat((packageHours * lockedHourlyRate).toFixed(2))
-  // drivebookPromotion = the non-cash-backed portion of the wallet credit.
-  // packageTotalPaid = discountedBase + platformFee (what Stripe actually charged).
-  // faceValue - packageTotalPaid = the gap between wallet credit and cash paid,
-  // which is exactly the amount DriveBook subsidised on this package.
-  // NOTE: this is NOT the same as faceValue × lockedDiscountPct/100 (that would be
-  // the full discount, but part of that discount is offset by the platform fee that
-  // the student also paid). Only the true non-cash gap should be voidable.
-  const drivebookPromotion = parseFloat((faceValue - totalPaid).toFixed(2))
+  // H01-RV-03 FIX: drivebookPromotion = the promotional discount that must be voided
+  // when the customer no longer qualifies for the locked tier.
+  //
+  // Per policy §4, the promotional credit is the discount amount itself:
+  //   drivebookPromotion = faceValue - discountedBase = faceValue × lockedDiscountPct / 100
+  //
+  // This is NOT faceValue - packageTotalPaid, because packageTotalPaid includes the
+  // platform fee (packageTotalPaid = discountedBase + platformFee). Subtracting
+  // packageTotalPaid from faceValue would give the cash gap, not the discount. The
+  // platform fee being non-refundable (enforced via maxStripeRefund cap) is a separate
+  // constraint that must not reduce the promotional credit to be voided.
+  //
+  // Example (reviewer's scenario): face=$700, 5% discount, $665 base, $33.25 fee, $698.25 paid
+  //   drivebookPromotion = $700 × 5% = $35  (correct: the discount)
+  //   NOT $700 - $698.25 = $1.75  (wrong: that's the cash gap, understates the void)
+  const discountedBase = parseFloat((faceValue * (1 - lockedDiscountPct / 100)).toFixed(2))
+  const drivebookPromotion = parseFloat((faceValue - discountedBase).toFixed(2))
 
   // ── 4. Platform fee — authoritative source: PACKAGE_FEE Transaction row ─────
   // Decision B: hard-error if not found (requires manual admin review).
