@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.50 (H-01 RV-03 fix: drivebookPromotion = discount, not cash gap — matches policy §4)
+**Version:** 5.51 (H-01 migration committed and verified on clean DB; RV-03 formula fix applied)
 **Last Updated:** 2026-10-24
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
