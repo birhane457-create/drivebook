@@ -25,7 +25,7 @@ export default defineConfig({
     },
     // Explicitly transform test files so Next.js instrumentation hooks
     // cannot intercept them and strip the Vitest test context.
-    transformMode: {
+    testTransformMode: {
       web: [],
     },
     coverage: {
