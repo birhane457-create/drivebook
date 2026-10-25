@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       },
       include: { 
         provider: { 
-          select: { id: true, name: true } 
+          select: { id: true, name: true, hourlyRate: true } 
         },
         customer: { select: { name: true }
         }
@@ -98,6 +98,14 @@ export async function GET(req: NextRequest) {
       const isCompleted = remaining === 0;
       const status = isExpired ? 'expired' : isCompleted ? 'completed' : packageBooking.packageStatus || 'active';
 
+      // PB-UI-03 FIX: canScheduleMore must NOT depend on estimated hours remaining.
+      // 'completed' status is derived from remaining === 0 — an hours estimate.
+      // Only block on hard conditions: package explicitly expired (date) or
+      // an explicit status set by admin/system (not computed from hours).
+      // The server-side booking route validates actual wallet balance vs lesson price.
+      const packageDbStatus = (packageBooking as any).packageStatus;
+      const explicitlyCancelled = packageDbStatus === 'cancelled' || packageDbStatus === 'CANCELLED';
+      const canSchedule = !isExpired && !explicitlyCancelled;
       return {
         id: packageBooking.id,
         purchaseDate: packageBooking.createdAt,
@@ -105,11 +113,13 @@ export async function GET(req: NextRequest) {
         hoursTotal: packageHours,
         hoursUsed: hoursUsed,
         hoursRemaining: remaining,
-        // PB-UI-03: locked rate for estimated-hours calculation (secondary info)
+        // PB-UI-03: locked rate for historical reference
         lockedHourlyRate: Number(packageBooking.lockedHourlyRate ?? 0),
+        // Current instructor rate for new-booking estimate (may differ from locked rate)
+        currentHourlyRate: Number(packageBooking.provider.hourlyRate ?? packageBooking.lockedHourlyRate ?? 0),
         status: status,
         instructor: packageBooking.provider,
-        canScheduleMore: status === 'active' && remaining > 0,
+        canScheduleMore: canSchedule,
         bookings: childBookings.map((b: any) => ({
           id: b.id,
           date: b.startTime,
