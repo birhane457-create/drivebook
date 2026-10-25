@@ -1,8 +1,16 @@
 'use client';
 
+// PB-UI-03 FIX: Display wallet dollar balance as the primary entitlement metric.
+// Approved policy (docs/audit/PACKAGE-ACCOUNTING-POLICY.md §5, 2026-10-18):
+//   - Dollar credit balance is the authoritative entitlement (from getWalletBalance)
+//   - Estimated remaining hours are secondary information, qualified by the
+//     applicable lesson rate ("~X hrs at $Y/hr")
+//   - Booking gate uses wallet balance, never the stale hour counter
+//   - "Hours Remaining" must NOT appear as the sole primary metric
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Package, Clock, AlertTriangle, TrendingUp, Loader2, CalendarDays, BookOpen } from 'lucide-react';
+import { Package, Clock, AlertTriangle, TrendingUp, Loader2, CalendarDays, BookOpen, DollarSign, Wallet } from 'lucide-react';
 
 interface ChildBooking {
   id: string;
@@ -20,14 +28,22 @@ interface PackageData {
   hoursTotal: number;
   hoursUsed: number;
   hoursRemaining: number;
+  lockedHourlyRate: number;
   status: string;
   provider: { id: string; name: string };
   canScheduleMore: boolean;
   bookings: ChildBooking[];
 }
 
+interface WalletInfo {
+  balance: number;
+  totalPaid: number;
+  totalSpent: number;
+}
+
 interface PackagesResponse {
   packages: PackageData[];
+  wallet: WalletInfo;
   summary: {
     total: number;
     used: number;
@@ -74,7 +90,7 @@ export default function ClientPackagesPage() {
       <div className="min-h-screen bg-background text-foreground pb-24">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Your Packages</h1>
-          <p className="text-muted-foreground mb-8">Manage your lesson packages and remaining hours</p>
+          <p className="text-muted-foreground mb-8">Manage your lesson packages and credit balance</p>
 
           <div className="bg-card/60 backdrop-blur rounded-2xl border border-border shadow-lg shadow-slate-950/20 p-12 text-center">
             <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
@@ -94,19 +110,24 @@ export default function ClientPackagesPage() {
   const getDaysUntilExpiry = (expiryDate: string) => {
     const now = new Date();
     const expiry = new Date(expiryDate);
-    const daysRemaining = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return daysRemaining;
+    return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   const isExpiringSoon = (pkg: PackageData) => {
-    const daysRemaining = getDaysUntilExpiry(pkg.expiryDate);
-    return daysRemaining <= 7 && daysRemaining >= 0;
+    const d = getDaysUntilExpiry(pkg.expiryDate);
+    return d <= 7 && d >= 0;
   };
 
-  const isExpired = (pkg: PackageData) => {
-    const daysRemaining = getDaysUntilExpiry(pkg.expiryDate);
-    return daysRemaining < 0;
+  const isExpired = (pkg: PackageData) => getDaysUntilExpiry(pkg.expiryDate) < 0;
+
+  // PB-UI-03: estimated remaining hours = balance / rate (secondary, qualified)
+  const estimatedHours = (balance: number, rate: number): string => {
+    if (!rate || rate <= 0) return '';
+    const hrs = balance / rate;
+    return `~${hrs.toFixed(1)} hrs at $${rate.toFixed(0)}/hr`;
   };
+
+  const walletBalance = data.wallet?.balance ?? 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
@@ -117,11 +138,26 @@ export default function ClientPackagesPage() {
             <Package className="h-8 w-8 text-violet-400" />
             Your Packages
           </h1>
-          <p className="text-muted-foreground">Manage your lesson packages and schedule remaining hours</p>
+          <p className="text-muted-foreground">Manage your lesson packages and credit balance</p>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards — PB-UI-03: dollar balance is primary */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+          {/* PRIMARY: Wallet Credit Balance */}
+          <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-green-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all md:col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs md:text-sm text-muted-foreground font-semibold">Credit Balance</p>
+              <Wallet className="h-5 w-5 text-emerald-400" />
+            </div>
+            <p className="text-2xl md:text-3xl font-bold text-emerald-400">
+              ${walletBalance.toFixed(2)}
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">
+              Credit valid for 12 months from last account activity
+            </p>
+          </div>
+
           {/* Active Packages */}
           <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-blue-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
             <div className="flex items-center justify-between mb-2">
@@ -132,24 +168,14 @@ export default function ClientPackagesPage() {
             <p className="text-xs text-muted-foreground/60 mt-1">Ready to use</p>
           </div>
 
-          {/* Total Hours Remaining */}
-          <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-green-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
+          {/* SECONDARY: Estimated Hours (qualified) */}
+          <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-violet-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs md:text-sm text-muted-foreground font-semibold">Hours Remaining</p>
-              <Clock className="h-5 w-5 text-emerald-400" />
-            </div>
-            <p className="text-2xl md:text-3xl font-bold text-emerald-400">{data.summary.remaining.toFixed(1)}h</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Out of {data.summary.total.toFixed(1)}h</p>
-          </div>
-
-          {/* Hours Used */}
-          <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-orange-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs md:text-sm text-muted-foreground font-semibold">Hours Used</p>
+              <p className="text-xs md:text-sm text-muted-foreground font-semibold">Lessons Used</p>
               <TrendingUp className="h-5 w-5 text-orange-400" />
             </div>
             <p className="text-2xl md:text-3xl font-bold text-orange-400">{data.summary.used.toFixed(1)}h</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">{Math.round((data.summary.used / data.summary.total) * 100 || 0)}% of total</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Across all packages</p>
           </div>
 
           {/* Expiring Soon */}
@@ -168,7 +194,7 @@ export default function ClientPackagesPage() {
           <div className="bg-card/60 backdrop-blur rounded-2xl border border-border shadow-lg shadow-slate-950/20 p-12 text-center">
             <Package className="h-16 w-16 text-slate-600 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No Active Packages</h3>
-            <p className="text-muted-foreground mb-6">You haven't purchased any lesson packages yet.</p>
+            <p className="text-muted-foreground mb-6">You haven&apos;t purchased any lesson packages yet.</p>
             <Link
               href="/client-dashboard/book-lesson?newInstructor=true"
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition"
@@ -184,6 +210,7 @@ export default function ClientPackagesPage() {
               const daysUntilExpiry = getDaysUntilExpiry(pkg.expiryDate);
               const expiringSoon = isExpiringSoon(pkg);
               const expired = isExpired(pkg);
+              const estHours = estimatedHours(walletBalance, pkg.lockedHourlyRate);
 
               return (
                 <div
@@ -243,11 +270,43 @@ export default function ClientPackagesPage() {
 
                   {/* Package Details */}
                   <div className="p-4 md:p-6 space-y-4">
-                    {/* Progress Bar */}
+
+                    {/* PB-UI-03: PRIMARY — Credit Balance; SECONDARY — Estimated hours (qualified) */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* Primary: wallet credit balance */}
+                      <div className="bg-green-900/20 rounded-lg p-3 text-center border border-green-700/30 col-span-1">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <DollarSign className="h-3 w-3 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">Credit Balance</p>
+                        </div>
+                        <p className="text-lg font-semibold text-emerald-400">${walletBalance.toFixed(2)}</p>
+                        {estHours && (
+                          <p className="text-xs text-muted-foreground/60 mt-1">{estHours}</p>
+                        )}
+                      </div>
+                      {/* Secondary: lessons consumed */}
+                      <div className="bg-orange-900/20 rounded-lg p-3 text-center border border-orange-700/30">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">Lessons Used</p>
+                        </div>
+                        <p className="text-lg font-semibold text-orange-400">{pkg.hoursUsed.toFixed(1)}h</p>
+                      </div>
+                      {/* Secondary: package total for reference */}
+                      <div className="bg-secondary/50 rounded-lg p-3 text-center border border-white/5">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Package className="h-3 w-3 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">Package Size</p>
+                        </div>
+                        <p className="text-lg font-semibold text-foreground">{pkg.hoursTotal}h</p>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar (lesson consumption, not balance) */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-foreground">
-                          {pkg.hoursRemaining.toFixed(1)}h remaining (of {pkg.hoursTotal}h)
+                          {pkg.hoursUsed.toFixed(1)}h of {pkg.hoursTotal}h lesson hours consumed
                         </span>
                         <span className="text-sm text-muted-foreground">{usagePercent}% used</span>
                       </div>
@@ -265,22 +324,6 @@ export default function ClientPackagesPage() {
                       </div>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-secondary/50 rounded-lg p-3 text-center border border-white/5">
-                        <p className="text-xs text-muted-foreground mb-1">Total</p>
-                        <p className="text-lg font-semibold text-foreground">{pkg.hoursTotal}h</p>
-                      </div>
-                      <div className="bg-orange-900/20 rounded-lg p-3 text-center border border-orange-700/30">
-                        <p className="text-xs text-muted-foreground mb-1">Used</p>
-                        <p className="text-lg font-semibold text-orange-400">{pkg.hoursUsed.toFixed(1)}h</p>
-                      </div>
-                      <div className="bg-green-900/20 rounded-lg p-3 text-center border border-green-700/30">
-                        <p className="text-xs text-muted-foreground mb-1">Remaining</p>
-                        <p className="text-lg font-semibold text-emerald-400">{pkg.hoursRemaining.toFixed(1)}h</p>
-                      </div>
-                    </div>
-
                     {/* Scheduled Lessons */}
                     {pkg.bookings.length > 0 && (
                       <div className="border-t border-white/5 pt-4">
@@ -289,7 +332,7 @@ export default function ClientPackagesPage() {
                           Scheduled Lessons ({pkg.bookings.length})
                         </h4>
                         <div className="space-y-2">
-                          {pkg.bookings.slice(0, 3).map((booking: any) => (
+                          {pkg.bookings.slice(0, 3).map((booking: ChildBooking) => (
                             <div
                               key={booking.id}
                               className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg border border-white/5 text-sm"
@@ -330,7 +373,7 @@ export default function ClientPackagesPage() {
 
                     {/* Action Section */}
                     <div className="border-t border-white/5 pt-4 flex gap-3">
-                      {pkg.canScheduleMore && (
+                      {pkg.canScheduleMore && walletBalance > 0 && (
                         <Link
                           href={`/client-dashboard/book-lesson?providerId=${pkg.provider.id}`}
                           className="flex-1 px-4 py-2.5 bg-primary text-foreground font-semibold rounded-lg hover:bg-primary/90 transition flex items-center justify-center gap-2 text-sm"
@@ -339,6 +382,11 @@ export default function ClientPackagesPage() {
                           Schedule Lesson
                         </Link>
                       )}
+                      {pkg.canScheduleMore && walletBalance <= 0 && (
+                        <div className="flex-1 px-4 py-2.5 bg-secondary/50 text-muted-foreground font-semibold rounded-lg border border-border text-center text-sm">
+                          No credit balance — top up to schedule
+                        </div>
+                      )}
                       {expired && (
                         <div className="flex-1 px-4 py-2.5 bg-red-900/30 text-destructive font-semibold rounded-lg border border-red-700/50 text-center text-sm">
                           This package has expired
@@ -346,16 +394,16 @@ export default function ClientPackagesPage() {
                       )}
                       {pkg.status === 'completed' && !expired && (
                         <div className="flex-1 px-4 py-2.5 bg-green-900/30 text-emerald-400 font-semibold rounded-lg border border-green-700/50 text-center text-sm">
-                          All hours used
+                          All lessons scheduled
                         </div>
                       )}
                     </div>
 
                     {/* Alert for expiring packages */}
-                    {expiringSoon && !expired && pkg.hoursRemaining > 0 && (
+                    {expiringSoon && !expired && walletBalance > 0 && (
                       <div className="p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg">
                         <p className="text-sm text-amber-300">
-                          ⚠️ <span className="font-semibold">Hurry!</span> You have {pkg.hoursRemaining.toFixed(1)} hours left before this package expires.
+                          ⚠️ <span className="font-semibold">Hurry!</span> You have ${walletBalance.toFixed(2)} in credit expiring soon.{estHours && ` That&apos;s ${estHours}.`}
                         </p>
                       </div>
                     )}
@@ -366,30 +414,33 @@ export default function ClientPackagesPage() {
           </div>
         )}
 
-        {/* Info Section */}
+        {/* How Packages Work — PB-UI-03: updated to reflect dollar-wallet model */}
         <div className="mt-8 bg-card/60 backdrop-blur rounded-2xl border border-border shadow-lg shadow-slate-950/20 p-5">
           <h3 className="font-semibold text-foreground mb-3">📦 How Packages Work</h3>
           <ul className="text-sm text-foreground space-y-2">
             <li className="flex gap-3">
               <span className="text-primary font-bold">•</span>
-              <span>Packages give you a set number of hours to schedule lessons at your preferred pace</span>
+              <span>When you buy a package, a dollar credit is added to your wallet — that credit is your entitlement</span>
             </li>
             <li className="flex gap-3">
               <span className="text-primary font-bold">•</span>
-              <span>Hours are only deducted after lessons are completed, not when you book</span>
+              <span>Each lesson is deducted from your credit balance at the instructor&apos;s rate at the time of booking</span>
             </li>
             <li className="flex gap-3">
               <span className="text-primary font-bold">•</span>
-              <span>Packages expire 1 year from purchase — use remaining hours before expiry</span>
+              <span>Estimated hours shown above are calculated from your balance ÷ rate — they may change if the rate changes</span>
             </li>
             <li className="flex gap-3">
               <span className="text-primary font-bold">•</span>
-              <span>You can purchase new packages or renew existing ones anytime</span>
+              <span>Credit is valid for 12 months from last account activity</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="text-primary font-bold">•</span>
+              <span>You can purchase new packages or top up anytime</span>
             </li>
           </ul>
         </div>
       </div>
     </div>
-
   );
 }
