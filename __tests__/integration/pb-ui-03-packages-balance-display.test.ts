@@ -308,17 +308,55 @@ describe('PB-UI-03 — /api/client/packages wallet dollar balance', () => {
     await (prisma.booking as any).deleteMany({ where: { parentBookingId: packageBookingId } });
   });
 
-  it('P10 | currentHourlyRate reflects provider current rate (for new-booking estimate)', async () => {
+  it('P10 | currentHourlyRate reflects provider CURRENT rate, not locked purchase rate', async () => {
+    // Reviewer finding 4b: P10 must use DIFFERENT values for locked vs current rate
+    // to prove the implementation uses the current rate, not the historical locked rate.
+    //
+    // Setup:
+    //   lockedHourlyRate (at purchase) = $70   ← recorded on the Booking at purchase time
+    //   provider.hourlyRate (current)  = $80   ← instructor raised rate since purchase
+    //
+    // Expected estimate: $700 / $80 = 8.75 hrs (uses CURRENT rate)
+    //   NOT: $700 / $70 = 10.0 hrs (would use locked rate — wrong)
+
+    const CURRENT_RATE = 80;    // instructor raised rate after this package was purchased
+    const LOCKED_RATE  = HOURLY_RATE; // $70 — the rate locked at purchase time
+
+    // Update the provider's current hourlyRate to $80
+    await (prisma.provider as any).update({
+      where: { id: providerId },
+      data: { hourlyRate: CURRENT_RATE },
+    });
+
     const res = await GET(makeRequest());
     const body = await res.json();
 
     const pkg = body.packages.find((p: any) => p.id === packageBookingId);
-    // currentHourlyRate should match the instructor's current hourlyRate ($70)
-    expect(pkg.currentHourlyRate).toBe(HOURLY_RATE);
-    // lockedHourlyRate is also present (for historical reference)
-    expect(pkg.lockedHourlyRate).toBe(HOURLY_RATE);
-    // Both happen to be the same in this test; the key is they are separate fields
-    // and currentHourlyRate comes from provider.hourlyRate, not the locked value
+
+    // currentHourlyRate = provider's CURRENT rate ($80)
+    expect(pkg.currentHourlyRate).toBe(CURRENT_RATE);
+
+    // lockedHourlyRate = rate at purchase ($70) — still present for historical reference
+    expect(pkg.lockedHourlyRate).toBe(LOCKED_RATE);
+
+    // The two rates differ — proving the test actually distinguishes them
+    expect(pkg.currentHourlyRate).not.toBe(pkg.lockedHourlyRate);
+
+    // Verify the estimate formula: walletBalance / currentRate
+    // wallet has PACKAGE_TOTAL_PAID ($652.68) in credit
+    const currentBalance = body.wallet.balance;
+    const expectedHours = currentBalance / CURRENT_RATE; // ~8.16 hrs at $80
+    // The API returns the rate; the dashboard computes the label.
+    // We verify the rate is correct — if currentHourlyRate=$80 is used,
+    // the dashboard would show "Approx. 8.2 hrs at $80/hr" (not 9.3 hrs at $70).
+    expect(pkg.currentHourlyRate).toBe(CURRENT_RATE);
+    expect(expectedHours).toBeCloseTo(PACKAGE_TOTAL_PAID / CURRENT_RATE, 1);
+
+    // Restore provider hourlyRate for other tests
+    await (prisma.provider as any).update({
+      where: { id: providerId },
+      data: { hourlyRate: HOURLY_RATE },
+    });
   });
 
 });
