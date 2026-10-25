@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getWalletBalance } from '@/lib/services/wallet-helpers';
 
 
 export const dynamic = 'force-dynamic';
@@ -35,9 +36,13 @@ export async function GET(req: NextRequest) {
 
     const clientIds = clients.map(c => c.id);
 
+    // PB-UI-03: Get authoritative wallet dollar balance (not derived from hour counters)
+    const walletBalance = await getWalletBalance(user.id);
+
     if (clientIds.length === 0) {
       return NextResponse.json({
         packages: [],
+        wallet: { balance: walletBalance.balance, totalPaid: walletBalance.totalPaid, totalSpent: walletBalance.totalSpent },
         summary: {
           total: 0,
           used: 0,
@@ -100,6 +105,8 @@ export async function GET(req: NextRequest) {
         hoursTotal: packageHours,
         hoursUsed: hoursUsed,
         hoursRemaining: remaining,
+        // PB-UI-03: locked rate for estimated-hours calculation (secondary info)
+        lockedHourlyRate: Number(packageBooking.lockedHourlyRate ?? 0),
         status: status,
         instructor: packageBooking.provider,
         canScheduleMore: status === 'active' && remaining > 0,
@@ -129,6 +136,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       packages,
+      wallet: { balance: walletBalance.balance, totalPaid: walletBalance.totalPaid, totalSpent: walletBalance.totalSpent },
       summary
     });
 
