@@ -13,9 +13,11 @@
  [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP06 | hoursUsed is from child booking durations, not stale packageHoursUsed counter
  [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP07 | summary still includes hours fields (secondary info, backward compat)
  [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP08 | zero balance returns correctly (not null)
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP09 | canScheduleMore is true even when estimated hours reach zero (balance gates booking, not hours)
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP10 | currentHourlyRate reflects provider current rate (for new-booking estimate)
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m8 passed[39m[22m[90m (8)[39m
-[2m   Start at [22m 01:46:00
-[2m   Duration [22m 1.45s[2m (transform 139ms, setup 61ms, collect 288ms, tests 324ms, environment 0ms, prepare 362ms)[22m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 02:34:33
+[2m   Duration [22m 1.20s[2m (transform 135ms, setup 46ms, collect 296ms, tests 262ms, environment 0ms, prepare 251ms)[22m
 
