@@ -1,0 +1,142 @@
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "drivebook_test", schema "public" at "localhost:5433"
+
+36 migrations found in prisma/migrations
+
+Applying migration `20260116000000_sub_06_a_unique_constraints`
+Applying migration `20260328041651_init`
+Applying migration `20260329085455_add_domain_verified_studio_tier`
+Applying migration `20260415125750_add_test_centre`
+Applying migration `20260522230959_add_instructor_expenses`
+Applying migration `20260523000001_add_platform_rate_change`
+Applying migration `20260603000001_add_accepting_bookings`
+Applying migration `20260603000002_add_booking_idempotency_key`
+Applying migration `20260604214535_add_staff_tasks_ledger`
+Applying migration `20260612172146_add_pda_test_system`
+Applying migration `20260613000001_add_special_service_tracking`
+Applying migration `20260613150000_add_missing_tables`
+Applying migration `20260614000000_create_pda_config_test_centre_table`
+Applying migration `20260617000001_add_slot_reservation_end_time`
+Applying migration `20260703000001_add_instructor_video_specialties`
+Applying migration `20260714000001_add_review_unique_index`
+Applying migration `20260714000002_add_instructor_location_fields`
+Applying migration `20260717000001_add_business_name`
+Applying migration `20260718000001_add_account_type_payment_mode`
+Applying migration `20260718000002_add_device_token`
+Applying migration `20260720000001_add_assessment_type`
+Applying migration `20260721000001_add_studio_commission_rate`
+Applying migration `20260813085848_add_business_config_tables`
+Applying migration `20260814043152_add_driving_extension_tables_phase2b`
+Applying migration `20260814210950_remove_driving_fields_from_core_tables`
+Applying migration `20260815000001_mm12d_admin_wallet_idempotency`
+Applying migration `20260816074701_add_user_provider_id`
+Applying migration `20260901190618_float_to_decimal_migration`
+Applying migration `20260903221659_package_cancellation_workflow`
+Applying migration `20260911000000_add_wallet_transaction_payment_intent_unique`
+Applying migration `20260911000001_quote_checkout_generation`
+Applying migration `20260916131858_sub22_unique_current_subscription`
+Applying migration `20260922000001_payh04_slot_reservation_no_overlap`
+Applying migration `20261007222011_brand_v11_provider_customslug_unique`
+Applying migration `20261015000001_audit03_auditlog_immutable`
+Applying migration `20261024000001_h01_add_locked_discount_min_hours`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260116000000_sub_06_a_unique_constraints/
+    └─ migration.sql
+  └─ 20260328041651_init/
+    └─ migration.sql
+  └─ 20260329085455_add_domain_verified_studio_tier/
+    └─ migration.sql
+  └─ 20260415125750_add_test_centre/
+    └─ migration.sql
+  └─ 20260522230959_add_instructor_expenses/
+    └─ migration.sql
+  └─ 20260523000001_add_platform_rate_change/
+    └─ migration.sql
+  └─ 20260603000001_add_accepting_bookings/
+    └─ migration.sql
+  └─ 20260603000002_add_booking_idempotency_key/
+    └─ migration.sql
+  └─ 20260604214535_add_staff_tasks_ledger/
+    └─ migration.sql
+  └─ 20260612172146_add_pda_test_system/
+    └─ migration.sql
+  └─ 20260613000001_add_special_service_tracking/
+    └─ migration.sql
+  └─ 20260613150000_add_missing_tables/
+    └─ migration.sql
+  └─ 20260614000000_create_pda_config_test_centre_table/
+    └─ migration.sql
+  └─ 20260617000001_add_slot_reservation_end_time/
+    └─ migration.sql
+  └─ 20260703000001_add_instructor_video_specialties/
+    └─ migration.sql
+  └─ 20260714000001_add_review_unique_index/
+    └─ migration.sql
+  └─ 20260714000002_add_instructor_location_fields/
+    └─ migration.sql
+  └─ 20260717000001_add_business_name/
+    └─ migration.sql
+  └─ 20260718000001_add_account_type_payment_mode/
+    └─ migration.sql
+  └─ 20260718000002_add_device_token/
+    └─ migration.sql
+  └─ 20260720000001_add_assessment_type/
+    └─ migration.sql
+  └─ 20260721000001_add_studio_commission_rate/
+    └─ migration.sql
+  └─ 20260813085848_add_business_config_tables/
+    └─ migration.sql
+  └─ 20260814043152_add_driving_extension_tables_phase2b/
+    └─ migration.sql
+  └─ 20260814210950_remove_driving_fields_from_core_tables/
+    └─ migration.sql
+  └─ 20260815000001_mm12d_admin_wallet_idempotency/
+    └─ migration.sql
+  └─ 20260816074701_add_user_provider_id/
+    └─ migration.sql
+  └─ 20260901190618_float_to_decimal_migration/
+    └─ migration.sql
+  └─ 20260903221659_package_cancellation_workflow/
+    └─ migration.sql
+  └─ 20260911000000_add_wallet_transaction_payment_intent_unique/
+    └─ migration.sql
+  └─ 20260911000001_quote_checkout_generation/
+    └─ migration.sql
+  └─ 20260916131858_sub22_unique_current_subscription/
+    └─ migration.sql
+  └─ 20260922000001_payh04_slot_reservation_no_overlap/
+    └─ migration.sql
+  └─ 20261007222011_brand_v11_provider_customslug_unique/
+    └─ migration.sql
+  └─ 20261015000001_audit03_auditlog_immutable/
+    └─ migration.sql
+  └─ 20261024000001_h01_add_locked_discount_min_hours/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "drivebook_test", schema "public" at "localhost:5433"
+
+36 migrations found in prisma/migrations
+
+Database schema is up to date!
+Prisma schema loaded from prisma\schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to .\node_modules\@prisma\client in 1.06s
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to react to database changes in your app as they happen? Discover how with Pulse: https://pris.ly/tip-1-pulse
+
+      column_name       | data_type | is_nullable 
+------------------------+-----------+-------------
+ lockedDiscountMinHours | numeric   | YES
+(1 row)
+
+ conname 
+---------
+(0 rows)
+

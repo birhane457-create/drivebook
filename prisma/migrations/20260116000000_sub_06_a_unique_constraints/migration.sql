@@ -1,11 +1,25 @@
 -- SUB-06-A: Add unique constraints for Provider.stripeCustomerId and Subscription.stripeSubscriptionId
 -- Rev 7 requirement: Enforce database-level uniqueness for Stripe identifiers
+--
+-- MIG-CHAIN-01 FIX: On a clean database, this migration runs BEFORE the init
+-- migration (20260328041651) that creates the Provider and Subscription tables.
+-- The original code assumed the tables already existed. Guard every section
+-- with a table-existence check so the migration is safe for both:
+--   - Existing databases: tables exist → run duplicate checks + add constraints
+--   - Clean databases: tables don't exist yet → skip (init will create them
+--     with the constraints from the Prisma schema)
 
 -- Step 1: Detect and report existing duplicates for Provider.stripeCustomerId
 DO $$
 DECLARE
   duplicate_count INTEGER;
+  r RECORD;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Provider') THEN
+    RAISE NOTICE 'SUB-06-A MIGRATION: Provider table does not exist yet, skipping duplicate check (init migration will create it)';
+    RETURN;
+  END IF;
+
   SELECT COUNT(*) INTO duplicate_count
   FROM (
     SELECT "stripeCustomerId", COUNT(*) as cnt
@@ -41,7 +55,13 @@ END $$;
 DO $$
 DECLARE
   duplicate_count INTEGER;
+  r RECORD;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Subscription') THEN
+    RAISE NOTICE 'SUB-06-A MIGRATION: Subscription table does not exist yet, skipping duplicate check (init migration will create it)';
+    RETURN;
+  END IF;
+
   SELECT COUNT(*) INTO duplicate_count
   FROM (
     SELECT "stripeSubscriptionId", COUNT(*) as cnt
@@ -77,20 +97,40 @@ BEGIN
 END $$;
 
 -- Step 3: Add unique constraint for Provider.stripeCustomerId
--- Only reached if no duplicates were found
-ALTER TABLE "Provider" 
-  ADD CONSTRAINT "Provider_stripeCustomerId_key" 
-  UNIQUE ("stripeCustomerId");
+-- Guard: skip if table doesn't exist (clean database) or constraint already exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Provider') THEN
+    RAISE NOTICE 'SUB-06-A MIGRATION: Provider table does not exist yet, skipping constraint (init migration will handle it)';
+    RETURN;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Provider_stripeCustomerId_key') THEN
+    RAISE NOTICE 'SUB-06-A MIGRATION: Provider_stripeCustomerId_key constraint already exists, skipping';
+    RETURN;
+  END IF;
+  ALTER TABLE "Provider" ADD CONSTRAINT "Provider_stripeCustomerId_key" UNIQUE ("stripeCustomerId");
+  RAISE NOTICE 'SUB-06-A MIGRATION: Added Provider_stripeCustomerId_key constraint';
+END $$;
 
 -- Step 4: Add unique constraint for Subscription.stripeSubscriptionId
-ALTER TABLE "Subscription" 
-  ADD CONSTRAINT "Subscription_stripeSubscriptionId_key" 
-  UNIQUE ("stripeSubscriptionId");
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Subscription') THEN
+    RAISE NOTICE 'SUB-06-A MIGRATION: Subscription table does not exist yet, skipping constraint (init migration will handle it)';
+    RETURN;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Subscription_stripeSubscriptionId_key') THEN
+    RAISE NOTICE 'SUB-06-A MIGRATION: Subscription_stripeSubscriptionId_key constraint already exists, skipping';
+    RETURN;
+  END IF;
+  ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_stripeSubscriptionId_key" UNIQUE ("stripeSubscriptionId");
+  RAISE NOTICE 'SUB-06-A MIGRATION: Added Subscription_stripeSubscriptionId_key constraint';
+END $$;
 
 -- Log successful migration
 DO $$
 BEGIN
-  RAISE NOTICE 'SUB-06-A MIGRATION COMPLETE: Unique constraints added successfully';
-  RAISE NOTICE '  - Provider.stripeCustomerId is now UNIQUE';
-  RAISE NOTICE '  - Subscription.stripeSubscriptionId is now UNIQUE';
+  RAISE NOTICE 'SUB-06-A MIGRATION COMPLETE: Unique constraints processed successfully';
+  RAISE NOTICE '  - Provider.stripeCustomerId unique constraint handled';
+  RAISE NOTICE '  - Subscription.stripeSubscriptionId unique constraint handled';
 END $$;
