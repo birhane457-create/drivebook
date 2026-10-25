@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.52 (H-01 independently accepted as FIX-VERIFIED at 60ab17b1 — all three findings resolved)
+**Version:** 5.53 (MIG-CHAIN-01: PL/pgSQL fixed; schema drift documented — chain out of sync with Prisma schema)
 **Last Updated:** 2026-10-24
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -650,7 +650,15 @@ These are separate charges with different payers. The code passes `price − pro
 
 ### Pre-existing migration chain issue (noted during H-01 review, tracked separately)
 
-**MIG-CHAIN-01** — `prisma migrate deploy` fails on full migration chain due to PL/pgSQL syntax error in migration `20260116000000_sub_06_a_unique_constraints` (loop variable declaration incompatible with PostgreSQL 16). This predates H-01 and is unrelated to the H-01 migration. The project uses `prisma db push` for schema sync in development. The H-01 migration (`20261024000001_h01_add_locked_discount_min_hours`) is valid SQL with `IF NOT EXISTS` idempotency. MIG-CHAIN-01 should be resolved before relying on the full Prisma Migrate chain in production. **Risk:** LOW (operational, not security). **Status:** OPEN — separate from H-01.
+**MIG-CHAIN-01** — Two issues found during investigation:
+
+**Issue 1 (FIXED): PL/pgSQL syntax incompatibility.** Migration `20260116000000_sub_06_a_unique_constraints` used undeclared loop variable `r` in `FOR r IN (...)` loops — PG16 requires explicit declaration. Also, the migration queries `Provider`/`Subscription` tables before the `init` migration creates them. Fix: added `r RECORD;` declarations and table-existence guards (`information_schema.tables` check). The PL/pgSQL blocks now skip gracefully when tables don't exist yet (clean database), and run duplicate checks + add constraints when they do (existing database).
+
+**Issue 2 (OPEN — schema drift): Migration chain out of sync with Prisma schema.** After the PL/pgSQL fix, `prisma migrate deploy` on a clean PG16 database completes all 36 migrations, but the resulting schema is incomplete — columns like `Provider.businessModel` (and likely many others) were added via `prisma db push` without corresponding migration files. The migration chain produces a schema that doesn't match the current Prisma schema. This is not a PL/pgSQL issue; it's accumulated schema drift from using `db push` (direct schema sync) instead of `migrate dev` (which generates migration files).
+
+**Impact on H-01:** None. The H-01 migration (`20261024000001`) is valid SQL with `IF NOT EXISTS` idempotency and works correctly with `db push` (the project's standard schema sync method). H-01, H-02, and LDG-01 tests all pass on `db push`-synced databases.
+
+**Required for MIG-CHAIN-01 closure:** Baseline the migration chain against the current Prisma schema (either create a single baseline migration capturing the full schema, or generate missing migration files for each `db push` change). This is a project-wide operational task, not specific to H-01. **Risk:** LOW (operational, not security). **Status:** OPEN — PL/pgSQL fixed; schema drift resolution pending.
 
 ---
 
