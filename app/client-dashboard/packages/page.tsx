@@ -29,8 +29,10 @@ interface PackageData {
   hoursUsed: number;
   hoursRemaining: number;
   lockedHourlyRate: number;
+  // PB-UI-03 FIX: current instructor rate for new-booking estimate (not lockedHourlyRate)
+  currentHourlyRate: number;
   status: string;
-  provider: { id: string; name: string };
+  provider: { id: string; name: string; hourlyRate: number };
   canScheduleMore: boolean;
   bookings: ChildBooking[];
 }
@@ -120,11 +122,13 @@ export default function ClientPackagesPage() {
 
   const isExpired = (pkg: PackageData) => getDaysUntilExpiry(pkg.expiryDate) < 0;
 
-  // PB-UI-03: estimated remaining hours = balance / rate (secondary, qualified)
-  const estimatedHours = (balance: number, rate: number): string => {
-    if (!rate || rate <= 0) return '';
-    const hrs = balance / rate;
-    return `~${hrs.toFixed(1)} hrs at $${rate.toFixed(0)}/hr`;
+  // PB-UI-03 FIX: estimated hours uses CURRENT instructor rate (not locked purchase rate)
+  // This tells the customer what their balance would buy at today's pricing.
+  // Label clearly as an approximation — not a guaranteed entitlement.
+  const estimatedHours = (balance: number, currentRate: number): string => {
+    if (!currentRate || currentRate <= 0) return '';
+    const hrs = balance / currentRate;
+    return `Approx. ${hrs.toFixed(1)} hrs at $${currentRate.toFixed(0)}/hr`;
   };
 
   const walletBalance = data.wallet?.balance ?? 0;
@@ -210,7 +214,8 @@ export default function ClientPackagesPage() {
               const daysUntilExpiry = getDaysUntilExpiry(pkg.expiryDate);
               const expiringSoon = isExpiringSoon(pkg);
               const expired = isExpired(pkg);
-              const estHours = estimatedHours(walletBalance, pkg.lockedHourlyRate);
+              // PB-UI-03 FIX: use CURRENT instructor rate for new-booking estimate (not locked rate)
+              const estHours = estimatedHours(walletBalance, pkg.currentHourlyRate || pkg.provider.hourlyRate);
 
               return (
                 <div
@@ -273,16 +278,20 @@ export default function ClientPackagesPage() {
 
                     {/* PB-UI-03: PRIMARY — Credit Balance; SECONDARY — Estimated hours (qualified) */}
                     <div className="grid grid-cols-3 gap-3">
-                      {/* Primary: wallet credit balance */}
+                      {/* PB-UI-03 FIX: No per-package balance duplicate.
+                          Show only the rate-qualified estimate (what this balance
+                          might buy at THIS instructor's current rate). */}
                       <div className="bg-green-900/20 rounded-lg p-3 text-center border border-green-700/30 col-span-1">
                         <div className="flex items-center justify-center gap-1 mb-1">
                           <DollarSign className="h-3 w-3 text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground">Credit Balance</p>
+                          <p className="text-xs text-muted-foreground">Est. Lessons</p>
                         </div>
-                        <p className="text-lg font-semibold text-emerald-400">${walletBalance.toFixed(2)}</p>
-                        {estHours && (
-                          <p className="text-xs text-muted-foreground/60 mt-1">{estHours}</p>
+                        {estHours ? (
+                          <p className="text-xs text-emerald-400 font-medium leading-tight">{estHours}</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground/60">Rate unavailable</p>
                         )}
+                        <p className="text-xs text-muted-foreground/50 mt-1">from your balance</p>
                       </div>
                       {/* Secondary: lessons consumed */}
                       <div className="bg-orange-900/20 rounded-lg p-3 text-center border border-orange-700/30">

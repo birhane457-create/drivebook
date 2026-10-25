@@ -275,4 +275,50 @@ describe('PB-UI-03 — /api/client/packages wallet dollar balance', () => {
     });
   });
 
+  it('P09 | canScheduleMore is true even when estimated hours reach zero (balance gates booking, not hours)', async () => {
+    // PB-UI-03 reviewer finding 3: hours-remaining must NOT gate scheduling.
+    // The API should set canScheduleMore based on status+expiry only.
+    // Simulate: package has consumed all hours (hoursUsed = hoursTotal via child bookings)
+    // but wallet still has balance. canScheduleMore must still be true.
+    const startTime = new Date(Date.now() - 24 * 3600000);
+    // Create 10 × 1hr CONFIRMED child bookings = full package consumed
+    for (let i = 0; i < 10; i++) {
+      await (prisma.booking as any).create({
+        data: {
+          providerId, customerId, status: 'CONFIRMED',
+          parentBookingId: packageBookingId,
+          startTime: new Date(startTime.getTime() - i * 3600000),
+          endTime: new Date(startTime.getTime() - (i - 1) * 3600000),
+          duration: 60, price: HOURLY_RATE,
+          isPackageBooking: false, source: 'platform',
+          platformFee: 0, providerPayout: HOURLY_RATE,
+        },
+      });
+    }
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    const pkg = body.packages.find((p: any) => p.id === packageBookingId);
+    expect(pkg.hoursUsed).toBeCloseTo(10, 0);  // all hours consumed
+    // canScheduleMore must still be true — hours do not gate scheduling
+    expect(pkg.canScheduleMore).toBe(true);
+
+    // Clean up
+    await (prisma.booking as any).deleteMany({ where: { parentBookingId: packageBookingId } });
+  });
+
+  it('P10 | currentHourlyRate reflects provider current rate (for new-booking estimate)', async () => {
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    const pkg = body.packages.find((p: any) => p.id === packageBookingId);
+    // currentHourlyRate should match the instructor's current hourlyRate ($70)
+    expect(pkg.currentHourlyRate).toBe(HOURLY_RATE);
+    // lockedHourlyRate is also present (for historical reference)
+    expect(pkg.lockedHourlyRate).toBe(HOURLY_RATE);
+    // Both happen to be the same in this test; the key is they are separate fields
+    // and currentHourlyRate comes from provider.hourlyRate, not the locked value
+  });
+
 });
