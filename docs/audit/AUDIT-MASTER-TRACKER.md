@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.54 (MIG-CHAIN-01: PL/pgSQL fixed + schema drift reconciled; prisma migrate diff confirms schema match)
+**Version:** 5.55 (MIG-CHAIN-01: stale tracker paragraph corrected; Vercel build fix — vitest.config.ts transformMode→testTransformMode; DROP COLUMN safety documented)
 **Last Updated:** 2026-10-25
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -666,7 +666,9 @@ These are separate charges with different payers. The code passes `price − pro
 
 **Impact on H-01:** None. H-01 migration deploys correctly via both paths. 17/17 tests pass on both db-push and migrate-deploy databases. **Risk:** LOW (operational, not security). **Status:** FIXED — PL/pgSQL and schema drift both resolved.
 
-**Required for MIG-CHAIN-01 closure:** Baseline the migration chain against the current Prisma schema (either create a single baseline migration capturing the full schema, or generate missing migration files for each `db push` change). This is a project-wide operational task, not specific to H-01. **Risk:** LOW (operational, not security). **Status:** OPEN — PL/pgSQL fixed; schema drift resolution pending.
+**Required for MIG-CHAIN-01 closure:** ~~Baseline the migration chain against the current Prisma schema.~~ **DONE** — Baseline migration `20261024000002` created; `prisma migrate diff` confirms schema equivalence. **Status: FIXED.**
+
+**DROP COLUMN safety note:** The baseline migration drops columns (`Provider.paymentModel`, `Provider.voiceLineStatus`, `StaffMember.reason`, `StaffMember.wallet`, `Subscription.checkoutGeneration`) that were artifacts of an earlier incorrect baseline iteration (v1), never deployed to production (project uses `db push`). `DROP COLUMN IF EXISTS` is a no-op on production databases where these columns never existed. On test databases where v1 was applied, these columns contained only default values (no application data). Safe for existing databases.
 
 ---
 
