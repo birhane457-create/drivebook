@@ -1,0 +1,21 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP01 | API response includes wallet.balance as top-level field
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP02 | wallet.balance = CREDIT total − DEBIT total (exact from WalletTransaction rows)
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP03 | wallet.balance decreases after a lesson deduction
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP04 | wallet.balance is 0 for a new user with no transactions
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP05 | each package includes lockedHourlyRate for estimated-hours calculation
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP06 | hoursUsed is from child booking durations, not stale packageHoursUsed counter
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP07 | summary still includes hours fields (secondary info, backward compat)
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP08 | zero balance returns correctly (not null)
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m8 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 01:46:00
+[2m   Duration [22m 1.45s[2m (transform 139ms, setup 61ms, collect 288ms, tests 324ms, environment 0ms, prepare 362ms)[22m
+
