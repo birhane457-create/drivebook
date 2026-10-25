@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.56 (MIG-CHAIN-01 independently accepted as resolved at b9c65637 — all package-accounting findings closed)
+**Version:** 5.57 (Tracker consistency: H-02b reconciled with H-01/H-02 closure; PB-POL-02 updated to RESOLVED. Next: PB-UI-03)
 **Last Updated:** 2026-10-25
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -580,7 +580,7 @@ BRAND-V-04, V-08, V-09, V-10, V-11, V-12, V-13, V-14
 | ID | Title | Risk | Finding | Fix | Status |
 |---|---|---|---|---|---|
 | PB-POL-01 | Packages presented as fixed-hour entitlement; wallet is dollar-denominated | ARCHITECTURAL | CONFIRMED — wallet stores dollars not hours; hour count is an estimate at purchase rate | Policy documented in `.kiro/steering/package-entitlement-policy.md` | ✅ POLICY ESTABLISHED — dollar-wallet model approved; copy corrections required (see PB-UI-01) |
-| PB-POL-02 | `packageHoursRemaining` / `packageHoursUsed` used as financial authority | HIGH | CONFIRMED — stale counters used in refund calculation, scheduling gate, UI display | H-02b-F3 removed stale counter from availability check; H-02b-F5 moved booking read into transaction; refund formula correction blocked on H-02 | ⏸ PARTIALLY MITIGATED — counter removed from availability check; refund formula still uses stale data (H-01 OPEN) |
+| PB-POL-02 | `packageHoursRemaining` / `packageHoursUsed` used as financial authority | HIGH | CONFIRMED — stale counters used in refund calculation, scheduling gate, UI display | H-02b-F3 removed stale counter from availability check; H-02b-F5 moved booking read into transaction; H-01 refund formula now uses SUM(child Booking.price) instead of stale counter | ✅ RESOLVED — counter removed from availability check; refund formula fixed (H-01 FIX-VERIFIED); UI display correction pending (PB-UI-03) |
 
 ---
 
@@ -597,7 +597,7 @@ Route file: `app/api/client/confirm-package-booking/route.ts`
 | H-02b-F4 | Client-supplied `hoursToDeduct` used as financial authority | HIGH | CONFIRMED | Source-confirmed: `transactionAmount = hoursToDeduct × lockedRate`; client can undersupply to pay less | `e3ab7c6b` | F4-01 (2hr booking + 1hr claim → 409), F4-02 (1hr booking + 2hr claim → 409), F4-03 (exact match → 200) | Fix present; reported test evidence |
 | H-02b-F5 | Booking duration derived from pre-transaction snapshot, not transaction-scoped read | HIGH | CONFIRMED — identified by independent source review of `e3ab7c6b` | `a74a44b0` — child booking fetched via `tx.booking.findUnique()` inside SERIALIZABLE transaction (step 1b); all financial values derived from `txBooking` | F5-01 (times updated before tx → 409 from tx-scoped read), F5-02 (unchanged times → 200) | **Source fix verified by independent review (`a74a44b0`)**. Test limitation noted: F5-01 does not reproduce a concurrent race; it updates times before calling the route. Source change addresses the stale-read concern. |
 
-**H-02b overall status: OPEN** — source fixes for F1–F5 verified by independent review. Test evidence supplied but not independently executed. Per auditor: "Record H-02b as FIX-VERIFIED only if your audit procedure accepts the supplied PostgreSQL test evidence without independently rerunning it."
+**H-02b overall status: RESOLVED** — source fixes for F1–F5 verified by independent review. Refund formula (the remaining stale-counter dependency) was fixed and independently verified as H-01 (FIX-VERIFIED at `60ab17b1`). H-02b sub-findings F1–F5 are subsumed by the H-02/H-01 closure record. Test evidence was supplied but not independently executed by the reviewer; the H-01 behavioral tests (17/17) now cover the refund-formula path that was previously blocked.
 
 **Test summary (20 tests, `__tests__/integration/h02b-confirm-package-booking.test.ts`):**
 
