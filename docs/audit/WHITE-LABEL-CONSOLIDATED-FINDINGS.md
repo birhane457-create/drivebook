@@ -57,10 +57,10 @@ A prior finding may be reopened only with new evidence under AUDIT-PROCESS.md. I
 ## 4. Verification order
 
 1. **Containment checks:** WLA-001 and WLA-017 — payment-mode entry points and trusted host headers.
-2. **Money path:** WLA-002, WLA-003, WLA-004 and WLA-005 — test mode only, with ledger and refund trace.
+2. **Money path:** WLA-002, WLA-003, WLA-004 and WLA-005 — test mode only, with ledger and refund trace; keep WLA-004 runtime conclusion pending until a Stripe test-mode response is captured.
 3. **Domain control and routing:** WLA-006, WLA-007, WLA-010, WLA-011 and WLA-012.
 4. **Tenant isolation:** WLA-008 and WLA-016.
-5. **Public identity and communications:** WLA-009, WLA-013, WLA-014, WLA-015 and WLA-018.
+5. **Public identity and communications:** WLA-009, WLA-013, WLA-014, WLA-015, WLA-018 and WLA-019.
 
 The order may change if initial verification identifies a critical exploitable path. Verification must be performed one finding at a time, with exact commit SHA, code location, test command, output, exit code, and residual limitations recorded.
 
@@ -69,9 +69,13 @@ The order may change if initial verification identifies a critical exploitable p
 - No production code changed by this consolidation.
 - Source-level findings confirmed: WLA-001, WLA-003, WLA-004, WLA-006, WLA-009, WLA-010, WLA-011, WLA-012, WLA-013 and WLA-015.
 - Commits `0b47689c` and `f733ae01` contain source changes for WLA-001 and WLA-003 respectively. Guard ordering is corrected; FIX-VERIFIED remains pending due source-focused tests rather than handler execution.
-- The prior master tracker remains authoritative until its versioned update is committed on this audit branch.
+- Master tracker v5.74 is updated on this audit branch and remains unmerged to `main` pending review.
 - DIRECT / provider-settlement mode must remain blocked until the applicable payment, wallet, ledger, refund and domain/tenant findings are resolved and independently verified.
 
 - WLA-004 request-context mismatch is source/API-contract verified. The code path's normal-registration reachability remains unresolved; the exact Stripe API response remains unknown because no test-mode credentials were available; a mock/request-shape test would not replace the API check.
 - This review did not execute runtime route tests, a Stripe test-mode transaction or a production-data query.
 - WLA-019 records the provider-return-host question; it is a candidate requiring the white-label contract decision, not yet a verified product defect.
+
+### WLA-004 audit-note qualification
+
+The new `docs/audit/WLA-004-SOURCE-ANALYSIS.md` correctly identifies that the Checkout request sets a Connect-only `application_fee_amount` without a documented direct-charge or destination-charge context. However, its alternatives that Stripe may silently ignore the fee versus reject the request are hypotheses, not observed results. Do not choose either outcome until a test-mode API response exists. Its phrase “custom/future API version” for `2026-02-25.clover` is also not temporally accurate as of 2026-10-26; February 25, 2026 is in the past. No conclusion about SDK/API support should be inferred from that date alone.
