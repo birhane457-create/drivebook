@@ -324,8 +324,10 @@ async function _createAndBindSession(
       customerId: quote.customerId,
       quoteNumber: (quote as any)?.quoteNumber,
     },
-    success_url: `${baseUrl}/customer-dashboard/bookings?payment=success&quoteId=${quoteId}`,
-    cancel_url:  `${baseUrl}/customer-dashboard/bookings?payment=cancelled&quoteId=${quoteId}`,
+    // WLA-003 FIX: success/cancel URLs corrected to /client-dashboard/bookings
+    // (not /customer-dashboard/bookings which does not exist as a route)
+    success_url: `${baseUrl}/client-dashboard/bookings?payment=success&quoteId=${quoteId}`,
+    cancel_url:  `${baseUrl}/client-dashboard/bookings?payment=cancelled&quoteId=${quoteId}`,
     customer_email: quote.customer.email,
   }
 
