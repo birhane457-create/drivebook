@@ -4,13 +4,14 @@
 // Approved policy (docs/audit/PACKAGE-ACCOUNTING-POLICY.md §5, 2026-10-18):
 //   - Dollar credit balance is the authoritative entitlement (from getWalletBalance)
 //   - Estimated remaining hours are secondary information, qualified by the
-//     applicable lesson rate ("~X hrs at $Y/hr")
-//   - Booking gate uses wallet balance, never the stale hour counter
-//   - "Hours Remaining" must NOT appear as the sole primary metric
+//     applicable lesson rate ("Approx. X hrs at $Y/hr")
+//   - Estimate uses CURRENT instructor rate (not locked purchase rate)
+//   - Estimate is informational only — no hours are reserved or guaranteed
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Package, Clock, AlertTriangle, TrendingUp, Loader2, CalendarDays, BookOpen, DollarSign, Wallet } from 'lucide-react';
+import { estimateHours } from '@/lib/utils/estimate-hours';
 
 interface ChildBooking {
   id: string;
@@ -122,14 +123,9 @@ export default function ClientPackagesPage() {
 
   const isExpired = (pkg: PackageData) => getDaysUntilExpiry(pkg.expiryDate) < 0;
 
-  // PB-UI-03 FIX: estimated hours uses CURRENT instructor rate (not locked purchase rate)
-  // This tells the customer what their balance would buy at today's pricing.
-  // Label clearly as an approximation — not a guaranteed entitlement.
-  const estimatedHours = (balance: number, currentRate: number): string => {
-    if (!currentRate || currentRate <= 0) return '';
-    const hrs = balance / currentRate;
-    return `Approx. ${hrs.toFixed(1)} hrs at $${currentRate.toFixed(0)}/hr`;
-  };
+  // PB-UI-03 FIX: use shared estimateHours utility (lib/utils/estimate-hours.ts)
+  // Uses CURRENT instructor rate (currentHourlyRate from provider.hourlyRate).
+  // Informational only — does not reserve or guarantee hours.
 
   const walletBalance = data.wallet?.balance ?? 0;
 
@@ -214,8 +210,8 @@ export default function ClientPackagesPage() {
               const daysUntilExpiry = getDaysUntilExpiry(pkg.expiryDate);
               const expiringSoon = isExpiringSoon(pkg);
               const expired = isExpired(pkg);
-              // PB-UI-03 FIX: use CURRENT instructor rate for new-booking estimate (not locked rate)
-              const estHours = estimatedHours(walletBalance, pkg.currentHourlyRate || pkg.provider.hourlyRate);
+              // PB-UI-03 FIX: call shared estimateHours utility with CURRENT instructor rate
+              const estHours = estimateHours(walletBalance, pkg.currentHourlyRate || pkg.provider.hourlyRate);
 
               return (
                 <div
