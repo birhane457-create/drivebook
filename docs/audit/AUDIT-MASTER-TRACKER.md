@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.73 (source review updated against main `79cd47ac`; WLA-001 guard ordering fixed in source; WLA-001/WLA-003 FIX-VERIFIED pending behavioural tests; WLA-004 Connect request-context mismatch source/API-contract verified, runtime pending.)
+**Version:** 5.74 (reviewed current main `79cd47ac`; WLA-001 guard order corrected but handler-level verification pending; WLA-003 URL correction present but redirect test is source-only; WLA-004 request-context mismatch source/API-contract verified, runtime pending; WLA-019 return-host contract candidate added.)
 **Last Updated:** 2026-10-26
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -704,9 +704,9 @@ These items were raised during the audit and verified source-safe. Recorded here
 ## Section 9 — White-Label and Account-Separation Consolidation (2026-10-26)
 
 **Evidence document:** `docs/audit/WHITE-LABEL-CONSOLIDATED-FINDINGS.md`  
-**Source baseline:** `79cd47ac1696d898bc2b5125a0b5237dae622ae3`  
-**Branch:** `audit/white-label-findings-consolidation`  
-**Status rule:** Every WLA item begins at FINDING. The table records consolidation candidates, not verified defects. No runtime execution was performed for this registration.  
+**Source baseline:** `79cd47ac1696d898bc2b5125a0b5237dae622ae3`
+**Branch:** `audit/white-label-consolidation-current-main`
+**Status rule:** Candidate findings are source-reviewed and labelled by evidence scope. Source verification does not equal FIX-VERIFIED or CLOSED; WLA-001/WLA-003 fixes require behavioural tests.
 **Relationship to Section 7:** Existing BRAND-V findings and their historical statuses are preserved. Reconcile before reopening, superseding or splitting any existing finding.
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
@@ -729,7 +729,8 @@ These items were raised during the audit and verified source-safe. Recorded here
 | WLA-016 | Portal identity and business lifecycle separation | MEDIUM | Scope finding: portal branding, staff roles, suspension and closure semantics need a complete contract and tests | FINDING — map routes and test business/account lifecycle | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
 | WLA-017 | Trust boundary for x-custom-domain header | HIGH | Candidate: caller-controlled header may be trusted without host-to-provider validation | FINDING — trace ingress overwrite/consumers and test spoofing safely | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
 | WLA-018 | White-label capability claims versus product contract | MEDIUM | Candidate: external-facing claims may overstate configured branding capabilities | FINDING — audit marketing/tier/docs and reconcile BRAND-V-14 | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-019 | Quote Checkout return host may break white-label journey | MEDIUM / ARCHITECTURAL | Candidate — success/cancel URLs are built from global `NEXTAUTH_URL` and therefore target the DriveBook host | FINDING — determine whether the approved white-label contract requires return to provider host; inspect trusted host/domain resolution and test in staging | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-019) |
 
-**Lifecycle note:** `OPEN` in this section means the investigation is registered and not closed; the lifecycle stage remains `FINDING`. No item has been advanced to VERIFIED. Do not implement a fix before the relevant finding is independently verified under `AUDIT-PROCESS.md`.
+**Lifecycle note:** Every WLA item is OPEN. Source-verified findings are identified in the Verification column; none is FIX-VERIFIED or CLOSED. OPEN means work remains, and any future fix must follow `AUDIT-PROCESS.md`.
 
 **Important tracker correction:** The previous Section 7 “Current state” summary and some historical descriptions may be stale relative to current source. They are preserved as historical evidence, not silently rewritten here. Reconcile each existing BRAND-V ID against current source and runtime evidence before changing its status.
