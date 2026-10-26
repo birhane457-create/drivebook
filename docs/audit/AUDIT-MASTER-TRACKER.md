@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.64 (Priority queue closure markers aligned with main findings table)
+**Version:** 5.65 (Final tracker consistency: section 8.4 OPEN→RESOLVED; PB-POL-02 awaiting→FIX-VERIFIED. Audit scope complete except AI-M-01/02 deferred.)
 **Last Updated:** 2026-10-25
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -580,7 +580,7 @@ BRAND-V-04, V-08, V-09, V-10, V-11, V-12, V-13, V-14
 | ID | Title | Risk | Finding | Fix | Status |
 |---|---|---|---|---|---|
 | PB-POL-01 | Packages presented as fixed-hour entitlement; wallet is dollar-denominated | ARCHITECTURAL | CONFIRMED — wallet stores dollars not hours; hour count is an estimate at purchase rate | Policy documented in `.kiro/steering/package-entitlement-policy.md` | ✅ POLICY ESTABLISHED — dollar-wallet model approved; copy corrections required (see PB-UI-01) |
-| PB-POL-02 | `packageHoursRemaining` / `packageHoursUsed` used as financial authority | HIGH | CONFIRMED — stale counters used in refund calculation, scheduling gate, UI display | H-02b-F3 removed stale counter from availability check; H-02b-F5 moved booking read into transaction; H-01 refund formula now uses SUM(child Booking.price) instead of stale counter | ✅ RESOLVED — counter removed from availability check; refund formula fixed (H-01 FIX-VERIFIED); UI display correction implemented (PB-UI-03 IMPLEMENTATION COMPLETE, awaiting final FIX-VERIFIED acceptance) |
+| PB-POL-02 | `packageHoursRemaining` / `packageHoursUsed` used as financial authority | HIGH | CONFIRMED — stale counters used in refund calculation, scheduling gate, UI display | H-02b-F3 removed stale counter from availability check; H-02b-F5 moved booking read into transaction; H-01 refund formula now uses SUM(child Booking.price) instead of stale counter | ✅ RESOLVED — counter removed from availability check; refund formula fixed (H-01 FIX-VERIFIED); UI display correction complete (PB-UI-03 FIX-VERIFIED at `d92c7f48`) |
 
 ---
 
@@ -616,7 +616,7 @@ Route file: `app/api/client/confirm-package-booking/route.ts`
 
 ---
 
-### 8.4 — Package Pricing / Refund (OPEN)
+### 8.4 — Package Pricing / Refund (RESOLVED)
 
 | ID | Title | Risk | Finding | Status | Blocked on |
 |---|---|---|---|---|---|
