@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.67 (WLA-001 source-verified; 17 remaining WLA findings at FINDING pending independent verification.)
+**Version:** 5.68 (WLA-001 and WLA-003 source-verified; 16 remaining WLA findings at FINDING pending independent verification.)
 **Last Updated:** 2026-10-26
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -713,7 +713,7 @@ These items were raised during the audit and verified source-safe. Recorded here
 |---|---|---|---|---|---|---|---|---|
 | WLA-001 | DIRECT mode registration and quote-checkout guard gap | HIGH | CONFIRMED by source inspection — non-driving registration assigns DIRECT; quote-accept calls SaaS Checkout without checking provider.paymentMode; create-intent and bulk-booking have inline DIRECT guards | VERIFIED — source inspection only; runtime/Stripe behaviour not tested. `app/api/register/route.ts`, `app/api/client/quotes/[id]/accept/route.ts`, `lib/services/saas-payment.ts`; helper `assertPlatformPaymentMode()` has no inspected call sites | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-001) |
 | WLA-002 | SaaS quote payment settlement and ledger completeness | HIGH | Candidate: platform Checkout may lack provider payable/transfer or complete ledger path | FINDING — test-mode payment-to-ledger/payout/refund trace | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
-| WLA-003 | Quote checkout return URL | HIGH | Candidate: checkout return path does not match current customer dashboard route | FINDING — verify route tree and success/cancel flow | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-003 | Quote checkout return URL mismatch | HIGH | CONFIRMED by source/route-inventory inspection — `saas-payment.ts` returns to `/customer-dashboard/bookings`; current student route is `/client-dashboard/bookings` | VERIFIED — source/route-inventory only; runtime Stripe return not tested | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-003) |
 | WLA-004 | Stripe application-fee charge context | MEDIUM | Candidate: application_fee_amount may not match intended Connect charge type | FINDING — inspect exact request and run controlled test-mode payment | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
 | WLA-005 | Provider visibility of aggregate wallet balance | HIGH | Candidate: instructor-client API may expose user-wide balance rather than provider-attributed credit | FINDING — trace API and consumers; decide wallet semantics; test cross-provider visibility | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
 | WLA-006 | Custom-domain Vercel response treated as ownership proof | HIGH | Candidate: domain_already_in_use/domain_already_exists may be treated as successful verification | FINDING — inspect verification branches and test mocked responses | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
