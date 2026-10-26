@@ -43,6 +43,8 @@ vi.mock('next/headers', () => ({
 
 import { GET } from '@/app/api/client/packages/route';
 import { getServerSession } from 'next-auth/next';
+// PB-UI-03: import the shared utility so P10b tests the ACTUAL implementation
+import { estimateHours, estimateHoursValue } from '@/lib/utils/estimate-hours';
 
 // ── Test data ─────────────────────────────────────────────────────────────────
 const HOURLY_RATE = 70;
@@ -358,42 +360,44 @@ describe('PB-UI-03 — /api/client/packages wallet dollar balance', () => {
     });
   });
 
-  it('P10b | estimate formula: $700 balance ÷ $80/hr current rate = 8.75 hrs (NOT 10 hrs at locked $70 rate)', async () => {
-    // Reviewer's exact example: wallet=$700, current rate=$80 → 8.75 hrs
-    // This test verifies the dashboard helper formula produces the correct result,
-    // and that using the locked rate ($70) would give a DIFFERENT (wrong) answer.
-    //
-    // The estimate is informational only — it does not reserve or guarantee hours.
-    // Book a lesson to secure the price for that booking.
-    //
-    // estimatedHours helper (from page.tsx): balance / currentRate, formatted as
-    //   "Approx. X.X hrs at $Y/hr"
-    //
-    // With balance=$700, current=$80:  $700/$80 = 8.75 → "Approx. 8.8 hrs at $80/hr"
-    // With balance=$700, locked=$70:   $700/$70 = 10.0 → "Approx. 10.0 hrs at $70/hr" ← WRONG
+  it('P10b | estimateHours utility: $700 at $80/hr = 8.75 hrs (not 10 hrs at locked $70 rate)', async () => {
+    // Reviewer finding: P10b must call the ACTUAL estimateHours implementation,
+    // not just reproduce the formula independently.
+    // This test imports and calls lib/utils/estimate-hours.ts directly — the same
+    // function used by the dashboard — so any change to the implementation would
+    // cause this test to fail.
 
-    const CURRENT_RATE = 80;
-    const LOCKED_RATE  = 70;
-    const BALANCE      = 700;   // simplified whole-number example
+    const CURRENT_RATE = 80;   // instructor's current rate
+    const LOCKED_RATE  = 70;   // purchase-time locked rate
+    const BALANCE      = 700;  // reviewer's exact example: $700 wallet balance
 
-    // Verify the formula
-    const estimateAtCurrentRate = BALANCE / CURRENT_RATE;   // 8.75
-    const estimateAtLockedRate  = BALANCE / LOCKED_RATE;    // 10.0
+    // ── Call the actual shared implementation ────────────────────────────────
+    const estimateWithCurrentRate = estimateHoursValue(BALANCE, CURRENT_RATE);
+    const estimateWithLockedRate  = estimateHoursValue(BALANCE, LOCKED_RATE);
 
-    expect(estimateAtCurrentRate).toBeCloseTo(8.75, 2);
-    expect(estimateAtLockedRate ).toBeCloseTo(10.0, 2);
+    // ── Reviewer's exact example ─────────────────────────────────────────────
+    // $700 / $80 = 8.75 hrs (correct — dashboard uses current rate)
+    expect(estimateWithCurrentRate).toBeCloseTo(8.75, 2);
 
-    // The two estimates are different — confirming that rate source matters
-    expect(estimateAtCurrentRate).not.toBeCloseTo(estimateAtLockedRate, 0);
+    // $700 / $70 = 10.0 hrs (wrong — would use locked rate)
+    expect(estimateWithLockedRate).toBeCloseTo(10.0, 2);
 
-    // The correct estimate (using current rate) is LESS than the locked-rate estimate.
-    // If the dashboard accidentally used lockedHourlyRate, the customer would see
-    // a higher (misleading) hour estimate based on the old cheaper rate.
-    expect(estimateAtCurrentRate).toBeLessThan(estimateAtLockedRate);
+    // The two estimates are different (confirming rate source matters)
+    expect(estimateWithCurrentRate).not.toBeCloseTo(estimateWithLockedRate, 0);
 
-    // Double-check via the API: with currentRate=$80, the API must return
-    // currentHourlyRate=80 (not 70). P10 already sets the provider rate to $80
-    // and verifies this — P10b confirms the formula consequence.
+    // Current-rate estimate is less than locked-rate estimate
+    // (instructor raised rate → fewer hours for same dollar balance)
+    expect(estimateWithCurrentRate).toBeLessThan(estimateWithLockedRate);
+
+    // ── Also verify the formatted string output ───────────────────────────────
+    const formattedLabel = estimateHours(BALANCE, CURRENT_RATE);
+    // Dashboard displays this label — must reference $80/hr (not $70/hr)
+    expect(formattedLabel).toContain('$80');
+    expect(formattedLabel).not.toContain('$70');
+    expect(formattedLabel).toMatch(/Approx\.\s+8\.\d\s+hrs/);
+    // Formatted label must NOT imply a guaranteed entitlement
+    // (it is informational — the function name and label are both "Approx.")
+    expect(formattedLabel).toMatch(/^Approx\./);
   });
 
 });
