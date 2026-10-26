@@ -19,11 +19,11 @@
 
 ## 2. New consolidated findings
 
-**Lifecycle status for all rows below: FINDING — awaiting independent verification.** Priority is triage guidance, not a completed risk assessment.
+**Lifecycle status:** WLA-001 is now VERIFIED by independent source inspection. All other rows remain at FINDING pending their own verification. Priority is triage guidance, not a completed risk assessment.
 
 | ID | Priority | Consolidated finding | Preliminary source evidence | Verification required | Origin |
 |---|---|---|---|---|---|
-| WLA-001 | P1 | DIRECT mode may be assigned during non-driving business registration, while payment routes do not consistently enforce a global mode gate. | `app/api/register/route.ts`; `lib/utils/account.ts`; `app/api/client/quotes/[id]/accept/route.ts`; `app/api/payments/create-intent/route.ts`; `app/api/public/bookings/bulk/route.ts` | Trace registration-to-checkout flows; enumerate every payment entry point; test that unsupported DIRECT accounts are blocked server-side. Do not activate DIRECT. | Claude + GPT |
+| WLA-001 | P1 | DIRECT mode is assigned to non-driving registrations; quote checkout does not enforce the same DIRECT-mode block as the guarded booking/wallet routes. | `app/api/register/route.ts` sets `paymentMode = 'DIRECT'` when `businessType !== 'driving'`; `app/api/client/quotes/[id]/accept/route.ts` calls `createCheckoutSession()` without checking `paymentMode`; `lib/services/saas-payment.ts` checks `businessConfig.paymentModel === 'saas'` but does not guard `provider.paymentMode`; `create-intent` and bulk booking do contain inline DIRECT guards. `assertPlatformPaymentMode()` has no call sites in the inspected files. | **VERIFIED — source inspection.** Confirmed unsupported DIRECT is assignable and the quote checkout path lacks the DIRECT-mode guard used in the other inspected payment routes. Runtime/Stripe behaviour not tested. Next: add targeted tests and inspect all other payment entry points before FIX. | Claude + GPT |
 | WLA-002 | P1 | SaaS quote Checkout may create a platform charge without a corresponding provider payable, transfer, or complete ledger entry in the `saas_booking` webhook branch. | `lib/services/saas-payment.ts`; `app/api/stripe/webhook/route.ts` | Trace a test-mode payment from Checkout Session through webhook, Stripe balance, ledger, provider payable/payout, refund and reconciliation. Establish whether this is a code omission or handled elsewhere. | Claude |
 | WLA-003 | P1 | Quote checkout may return customers to a nonexistent or incorrect customer-dashboard route. | `lib/services/saas-payment.ts`; current customer dashboard route tree | Confirm route existence and exercise success/cancel return URLs in test mode. | Claude |
 | WLA-004 | P2 | `application_fee_amount` may be set without the required connected-account charge context for the intended Stripe Connect charge type. | `lib/services/saas-payment.ts` and Stripe request construction | Confirm exact request parameters and charge type; run a controlled Stripe test-mode transaction; inspect Stripe API response. Do not classify as a Stripe rejection before test evidence. | Claude |
@@ -66,6 +66,7 @@ The order may change if initial verification identifies a critical exploitable p
 ## 5. Current disposition
 
 - No production code changed by this consolidation.
-- No finding in this document is marked VERIFIED, FIX, FIX-VERIFIED or CLOSED.
+- WLA-001 is VERIFIED by source inspection only; no runtime test was executed.
+- All other WLA findings remain at FINDING; none is FIX, FIX-VERIFIED or CLOSED.
 - The prior master tracker remains authoritative until its versioned update is committed on this audit branch.
 - DIRECT / provider-settlement mode must remain blocked until the applicable payment, wallet, ledger, refund and domain/tenant findings are resolved and independently verified.
