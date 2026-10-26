@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.59 (PB-UI-03 review corrections: booking gate, rate source, balance de-duplication; 10/10 tests)
+**Version:** 5.60 (PB-UI-03: P10b added — $700/$80=8.75 vs $700/$70=10 hrs; 11/11 tests pass)
 **Last Updated:** 2026-10-25
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
