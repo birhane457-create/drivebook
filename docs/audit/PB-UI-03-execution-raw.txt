@@ -15,9 +15,10 @@
  [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP08 | zero balance returns correctly (not null)
  [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP09 | canScheduleMore is true even when estimated hours reach zero (balance gates booking, not hours)
  [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP10 | currentHourlyRate reflects provider CURRENT rate, not locked purchase rate
+ [32m✓[39m __tests__/integration/pb-ui-03-packages-balance-display.test.ts[2m > [22mPB-UI-03 — /api/client/packages wallet dollar balance[2m > [22mP10b | estimate formula: $700 balance ÷ $80/hr current rate = 8.75 hrs (NOT 10 hrs at locked $70 rate)
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
-[2m   Start at [22m 03:20:31
-[2m   Duration [22m 1.22s[2m (transform 154ms, setup 46ms, collect 337ms, tests 272ms, environment 0ms, prepare 210ms)[22m
+[2m      Tests [22m [1m[32m11 passed[39m[22m[90m (11)[39m
+[2m   Start at [22m 14:27:24
+[2m   Duration [22m 1.05s[2m (transform 122ms, setup 46ms, collect 267ms, tests 253ms, environment 0ms, prepare 186ms)[22m
 
