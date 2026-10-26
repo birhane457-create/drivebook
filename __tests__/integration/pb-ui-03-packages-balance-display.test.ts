@@ -391,13 +391,10 @@ describe('PB-UI-03 — /api/client/packages wallet dollar balance', () => {
 
     // ── Also verify the formatted string output ───────────────────────────────
     const formattedLabel = estimateHours(BALANCE, CURRENT_RATE);
+    // Exact expected output: 8.75 rounds to 8.8 at one decimal place
+    expect(formattedLabel).toBe('Approx. 8.8 hrs at $80/hr');
     // Dashboard displays this label — must reference $80/hr (not $70/hr)
-    expect(formattedLabel).toContain('$80');
     expect(formattedLabel).not.toContain('$70');
-    expect(formattedLabel).toMatch(/Approx\.\s+8\.\d\s+hrs/);
-    // Formatted label must NOT imply a guaranteed entitlement
-    // (it is informational — the function name and label are both "Approx.")
-    expect(formattedLabel).toMatch(/^Approx\./);
   });
 
 });
