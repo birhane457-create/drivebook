@@ -222,8 +222,7 @@ describe('WLA-001 — DIRECT-mode guard on quote checkout accept route', () => {
   // verifiable from the source without runtime execution.
 
   const routeSource = readFileSync(
-    resolve('e:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook',
-            'app/api/client/quotes/[id]/accept/route.ts'),
+    resolve(process.cwd(), 'app/api/client/quotes/[id]/accept/route.ts'),
     'utf-8'
   );
 
@@ -268,8 +267,7 @@ describe('WLA-001 — DIRECT-mode guard on quote checkout accept route', () => {
   it('A05 | guard matches the pattern used by create-intent and bulk-booking', async () => {
     // Read the create-intent route for comparison
     const intentSource = readFileSync(
-      resolve('e:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook',
-              'app/api/payments/create-intent/route.ts'),
+      resolve(process.cwd(), 'app/api/payments/create-intent/route.ts'),
       'utf-8'
     );
     // Both must check paymentMode === 'DIRECT' and return 503
@@ -299,6 +297,19 @@ describe('WLA-001 — DIRECT-mode guard on quote checkout accept route', () => {
     expect(shouldBlock({ paymentMode: '' })).toBe(false);
   });
 
+  it('A07 | guard appears before acceptQuote call — no state change before 503', async () => {
+    // Reviewer finding: the guard previously ran AFTER acceptQuote(), which
+    // could change quote/booking state before returning 503. The guard must
+    // run BEFORE acceptQuote() so no state changes occur on rejection.
+    const guardPos = routeSource.indexOf("paymentMode === 'DIRECT'");
+    const acceptQuotePos = routeSource.indexOf('await acceptQuote(');
+
+    expect(guardPos).toBeGreaterThan(-1);
+    expect(acceptQuotePos).toBeGreaterThan(-1);
+    // Guard must appear BEFORE acceptQuote call in source order
+    expect(guardPos).toBeLessThan(acceptQuotePos);
+  });
+
 });
 
 // ── WLA-003 tests ─────────────────────────────────────────────────────────────
@@ -323,10 +334,7 @@ describe('WLA-003 — Stripe Checkout redirect URLs use /client-dashboard/bookin
     // Read the actual source file to verify the correction is present.
     const { readFileSync } = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      'e:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook',
-      'lib/services/saas-payment.ts'
-    );
+    const filePath = resolve(process.cwd(), 'lib/services/saas-payment.ts');
     const source = readFileSync(filePath, 'utf-8');
 
     // Corrected URLs must be present
@@ -341,10 +349,7 @@ describe('WLA-003 — Stripe Checkout redirect URLs use /client-dashboard/bookin
   it('B03 | Both URLs include the quoteId parameter', async () => {
     const { readFileSync } = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      'e:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook',
-      'lib/services/saas-payment.ts'
-    );
+    const filePath = resolve(process.cwd(), 'lib/services/saas-payment.ts');
     const source = readFileSync(filePath, 'utf-8');
     expect(source).toContain('payment=success&quoteId=');
     expect(source).toContain('payment=cancelled&quoteId=');
