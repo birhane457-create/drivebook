@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.63 (Tracker cleanup: section 8.5 OPEN→FIX-VERIFIED; PB-UI-04 H-02 blocker note cleared. Next: INT-M-03A source review)
+**Version:** 5.64 (Priority queue closure markers aligned with main findings table)
 **Last Updated:** 2026-10-25
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -243,13 +243,13 @@ Structural root weakness: no dedicated `Refund` entity. State scattered across `
 |---|---|---|
 | 14 | MM-12 | Admin wallet credit idempotency | âœ… CLOSED â€” 638888f0 + production verified 2026-09-24 |
 | 15 | MM-02 | Delete `StripeService.createPayout()` | âœ… CLOSED â€” deleted, 0 source references post-deletion |
-| 16 | INT-M-03A | Encrypt OAuth tokens at rest |
-| 17 | INT-M-03F | Revoke OAuth token on calendar disconnect |
+| 16 | INT-M-03A | Encrypt OAuth tokens at rest | ✅ CLOSED — `ec928470` / evidence `a81c2aa6` |
+| 17 | INT-M-03F | Revoke OAuth token on calendar disconnect | ✅ CLOSED — `e4488298` ✅ Vercel SUCCESS |
 | 18 | PAY-H-04 | SlotReservation unique constraint | âœ… CLOSED â€” 560a77c2 + production verified 2026-09-24 |
-| 19 | DOC-EXP-01 | Block bookings with expired provider documents |
-| 20 | DATA-EXP-01 | Remove phone from public instructor API |
-| 21 | AUDIT-01/02/05 | Audit logging hardening |
-| 22 | RBAC-M-02 | Replace role checks with permission checks in admin routes |
+| 19 | DOC-EXP-01 | Block bookings with expired provider documents | ✅ CLOSED — checkProviderEligible() applied to 6 routes |
+| 20 | DATA-EXP-01 | Remove phone from public instructor API | ✅ CLOSED — phone removed from public projection |
+| 21 | AUDIT-01/02/05 | Audit logging hardening | ✅ CLOSED — writeAuditLog(tx) + atomicity + immutability trigger |
+| 22 | RBAC-M-02 | Replace role checks with permission checks in admin routes | ✅ CLOSED — 118 call-sites, requirePermission(PERM.*) |
 
 ---
 
