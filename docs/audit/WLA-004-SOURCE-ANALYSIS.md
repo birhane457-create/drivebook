@@ -84,7 +84,7 @@ The WLA-001 DIRECT-mode guard now blocks providers with `paymentMode = 'DIRECT'`
 A connected account by itself does not change the current Checkout request. The request parameters must explicitly use a documented charge pattern:
 
 - **Direct charge:** create the relevant request in the connected-account context (Stripe-Account / SDK `stripeAccount` request option) and set `application_fee_amount`; confirm the account has the required payment capability.
-- **Destination charge:** keep Checkout on the platform account and set `payment_intent_data.transfer_data.destination = provider.stripeAccountId`, paired with `application_fee_amount`. If the provider's business identity should appear as settlement merchant, evaluate `on_behalf_of` as a separate explicit choice and verify its requirements.
+- **Destination charge:** keep Checkout on the platform account and set `payment_intent_data.transfer_data.destination = provider.stripeAccountId`, paired with `application_fee_amount`. If the provider's business identity should appear as settlement merchant, evaluate `on_behalf_of` as a separate explicit choice and verify its requirements. Stripe states `on_behalf_of` requires the connected account to have a payments capability such as `card_payments` (https://docs.stripe.com/connect/separate-charges-and-transfers). The current `app/api/instructor/stripe-connect/onboard/route.ts` requests `transfers` only, so onboarding capabilities may need to change if `on_behalf_of` is selected.
 - **Current request as-is:** it sets `application_fee_amount` with neither account context nor destination. Test that request in isolation if the only question is how Stripe responds, but that is not a test of the intended connected-account fee flow.
 
 **Test evidence required:**
