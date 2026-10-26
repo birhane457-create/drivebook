@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.65 (Final tracker consistency: section 8.4 OPEN→RESOLVED; PB-POL-02 awaiting→FIX-VERIFIED. Audit scope complete except AI-M-01/02 deferred.)
-**Last Updated:** 2026-10-25
+**Version:** 5.66 (White-label/account-separation findings consolidated; 18 new findings registered at FINDING, pending independent verification.)
+**Last Updated:** 2026-10-26
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -697,3 +697,39 @@ These items were raised during the audit and verified source-safe. Recorded here
 | Concurrent double-spend (`POST /api/bookings`) | Balance re-checked inside SERIALIZABLE tx; pre-check is fast-reject only | ✅ VERIFIED SAFE |
 | Slot double-booking | Three-layer guard: Booking table + SlotReservation + PostgreSQL GiST constraint | ✅ VERIFIED SAFE |
 | Idempotency (`POST /api/public/bookings/bulk`) | `BookingIdempotencyKey` persisted inside same `$transaction` as `Booking.create` | ✅ VERIFIED SAFE |
+
+
+---
+
+## Section 9 — White-Label and Account-Separation Consolidation (2026-10-26)
+
+**Evidence document:** `docs/audit/WHITE-LABEL-CONSOLIDATED-FINDINGS.md`  
+**Source baseline:** `5945d0378e9998e5eb58f9f3ce10e73b0da73362`  
+**Branch:** `audit/white-label-findings-consolidation`  
+**Status rule:** Every WLA item begins at FINDING. The table records consolidation candidates, not verified defects. No runtime execution was performed for this registration.  
+**Relationship to Section 7:** Existing BRAND-V findings and their historical statuses are preserved. Reconcile before reopening, superseding or splitting any existing finding.
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| WLA-001 | DIRECT mode registration and payment-entry guards | HIGH | Candidate: registration may assign DIRECT and entry points may not share a mode gate | FINDING — inspect every payment entry point and test server-side blocking | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-002 | SaaS quote payment settlement and ledger completeness | HIGH | Candidate: platform Checkout may lack provider payable/transfer or complete ledger path | FINDING — test-mode payment-to-ledger/payout/refund trace | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-003 | Quote checkout return URL | HIGH | Candidate: checkout return path does not match current customer dashboard route | FINDING — verify route tree and success/cancel flow | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-004 | Stripe application-fee charge context | MEDIUM | Candidate: application_fee_amount may not match intended Connect charge type | FINDING — inspect exact request and run controlled test-mode payment | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-005 | Provider visibility of aggregate wallet balance | HIGH | Candidate: instructor-client API may expose user-wide balance rather than provider-attributed credit | FINDING — trace API and consumers; decide wallet semantics; test cross-provider visibility | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-006 | Custom-domain Vercel response treated as ownership proof | HIGH | Candidate: domain_already_in_use/domain_already_exists may be treated as successful verification | FINDING — inspect verification branches and test mocked responses | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-007 | Concurrent/cross-model domain ownership | HIGH | Candidate: domain uniqueness may not be enforced across models and concurrent claims | FINDING — inspect schema and test isolated concurrent claims | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-008 | Cross-provider tenant isolation inventory | HIGH | Scope finding: complete isolation across APIs, files, exports, jobs and business staff is not yet demonstrated | FINDING — inventory routes and run Provider A/B negative tests; split only with evidence | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-009 | PREMIUM branding entitlement consistency | MEDIUM | Candidate: renderer gate may differ from account feature policy | FINDING — compare current helper, renderer and tier tests; reconcile BRAND-V-05 | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-010 | Custom-domain middleware path rewrites | HIGH | Candidate: booking/legal routes may be rewritten to generic custom-domain page | FINDING — enumerate paths and test each host type; reconcile BRAND-V history | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-011 | Host classification substring matching | MEDIUM | Candidate: host classification may not use exact host/subdomain boundaries | FINDING — test deceptive hostnames and exact comparison logic | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-012 | BusinessDomain-to-provider lookup ID mismatch | MEDIUM | Candidate: business ID may be passed to a provider-ID/slug lookup | FINDING — trace both domain model paths and test reachable route | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-013 | Per-provider public metadata identity | MEDIUM | Candidate: global metadata may remain DriveBook-branded on provider hosts | FINDING — inspect rendered metadata/SEO/social/JSON-LD on each host type | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-014 | Branding source-of-truth divergence | MEDIUM | Candidate: Provider and BusinessBranding write paths may still diverge | FINDING — reconcile BRAND-V-07 and test any remaining field-level divergence | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-015 | Provider identity in customer communications | MEDIUM | Candidate: email/SMS/receipt templates may retain platform identity | FINDING — inventory and test all customer communication templates | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-016 | Portal identity and business lifecycle separation | MEDIUM | Scope finding: portal branding, staff roles, suspension and closure semantics need a complete contract and tests | FINDING — map routes and test business/account lifecycle | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-017 | Trust boundary for x-custom-domain header | HIGH | Candidate: caller-controlled header may be trusted without host-to-provider validation | FINDING — trace ingress overwrite/consumers and test spoofing safely | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-018 | White-label capability claims versus product contract | MEDIUM | Candidate: external-facing claims may overstate configured branding capabilities | FINDING — audit marketing/tier/docs and reconcile BRAND-V-14 | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+
+**Lifecycle note:** `OPEN` in this section means the investigation is registered and not closed; the lifecycle stage remains `FINDING`. No item has been advanced to VERIFIED. Do not implement a fix before the relevant finding is independently verified under `AUDIT-PROCESS.md`.
+
+**Important tracker correction:** The previous Section 7 “Current state” summary and some historical descriptions may be stale relative to current source. They are preserved as historical evidence, not silently rewritten here. Reconcile each existing BRAND-V ID against current source and runtime evidence before changing its status.
