@@ -69,6 +69,18 @@ export async function POST(
       }, { status: 400 })
     }
 
+    // WLA-001 FIX: DIRECT payment mode guard (phase 2 safety net).
+    // This guard runs BEFORE acceptQuote() so no state changes occur if the
+    // provider is in DIRECT mode. The same pattern is used in create-intent
+    // and bulk-booking routes. Remove in phase 2 when Direct Charges are
+    // implemented.
+    if (quote.booking?.provider?.paymentMode === 'DIRECT') {
+      return NextResponse.json({
+        error: 'Direct payment mode is not yet available for this business. Please contact support.',
+        code: 'PAYMENT_MODE_NOT_IMPLEMENTED',
+      }, { status: 503 })
+    }
+
     // Accept the quote if not already past that step
     if (quote.status === 'PENDING') {
       await acceptQuote(quoteId, session!.user!.id, 'CLIENT')
@@ -76,17 +88,6 @@ export async function POST(
 
     // Get business ID from provider
     const businessId = `biz_${quote.providerId}`
-
-    // WLA-001 FIX: DIRECT payment mode guard (phase 2 safety net).
-    // createCheckoutSession() guards Business.paymentModel but NOT Provider.paymentMode.
-    // This guard matches the pattern used in create-intent and bulk-booking routes.
-    // Remove in phase 2 when Direct Charges are implemented.
-    if (quote.booking?.provider?.paymentMode === 'DIRECT') {
-      return NextResponse.json({
-        error: 'Direct payment mode is not yet available for this business. Please contact support.',
-        code: 'PAYMENT_MODE_NOT_IMPLEMENTED',
-      }, { status: 503 })
-    }
 
     // Create or retrieve Stripe Checkout session for payment
     const checkoutResult = await createCheckoutSession(quoteId, businessId)

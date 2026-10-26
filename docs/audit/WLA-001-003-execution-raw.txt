@@ -11,12 +11,13 @@
  [32m✓[39m __tests__/integration/wla-001-003-payment-mode-guard.test.ts[2m > [22mWLA-001 — DIRECT-mode guard on quote checkout accept route[2m > [22mA04 | guard returns NextResponse.json with error message
  [32m✓[39m __tests__/integration/wla-001-003-payment-mode-guard.test.ts[2m > [22mWLA-001 — DIRECT-mode guard on quote checkout accept route[2m > [22mA05 | guard matches the pattern used by create-intent and bulk-booking
  [32m✓[39m __tests__/integration/wla-001-003-payment-mode-guard.test.ts[2m > [22mWLA-001 — DIRECT-mode guard on quote checkout accept route[2m > [22mA06 | pure-logic test: DIRECT provider should be blocked, PLATFORM should pass
+ [32m✓[39m __tests__/integration/wla-001-003-payment-mode-guard.test.ts[2m > [22mWLA-001 — DIRECT-mode guard on quote checkout accept route[2m > [22mA07 | guard appears before acceptQuote call — no state change before 503
  [32m✓[39m __tests__/integration/wla-001-003-payment-mode-guard.test.ts[2m > [22mWLA-003 — Stripe Checkout redirect URLs use /client-dashboard/bookings[2m > [22mB01 | success_url uses /client-dashboard/bookings (not /customer-dashboard)
  [32m✓[39m __tests__/integration/wla-001-003-payment-mode-guard.test.ts[2m > [22mWLA-003 — Stripe Checkout redirect URLs use /client-dashboard/bookings[2m > [22mB02 | Checkout URL source contains /client-dashboard/ not /customer-dashboard/
  [32m✓[39m __tests__/integration/wla-001-003-payment-mode-guard.test.ts[2m > [22mWLA-003 — Stripe Checkout redirect URLs use /client-dashboard/bookings[2m > [22mB03 | Both URLs include the quoteId parameter
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m9 passed[39m[22m[90m (9)[39m
-[2m   Start at [22m 21:32:50
-[2m   Duration [22m 796ms[2m (transform 81ms, setup 50ms, collect 125ms, tests 134ms, environment 0ms, prepare 201ms)[22m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 22:43:30
+[2m   Duration [22m 971ms[2m (transform 88ms, setup 66ms, collect 128ms, tests 174ms, environment 0ms, prepare 222ms)[22m
 
