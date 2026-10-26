@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.65 (Final tracker consistency: section 8.4 OPEN→RESOLVED; PB-POL-02 awaiting→FIX-VERIFIED. Audit scope complete except AI-M-01/02 deferred.)
-**Last Updated:** 2026-10-25
+**Version:** 5.73 (source review updated against main `79cd47ac`; WLA-001 guard ordering fixed in source; WLA-001/WLA-003 FIX-VERIFIED pending behavioural tests; WLA-004 Connect request-context mismatch source/API-contract verified, runtime pending.)
+**Last Updated:** 2026-10-26
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -697,3 +697,39 @@ These items were raised during the audit and verified source-safe. Recorded here
 | Concurrent double-spend (`POST /api/bookings`) | Balance re-checked inside SERIALIZABLE tx; pre-check is fast-reject only | ✅ VERIFIED SAFE |
 | Slot double-booking | Three-layer guard: Booking table + SlotReservation + PostgreSQL GiST constraint | ✅ VERIFIED SAFE |
 | Idempotency (`POST /api/public/bookings/bulk`) | `BookingIdempotencyKey` persisted inside same `$transaction` as `Booking.create` | ✅ VERIFIED SAFE |
+
+
+---
+
+## Section 9 — White-Label and Account-Separation Consolidation (2026-10-26)
+
+**Evidence document:** `docs/audit/WHITE-LABEL-CONSOLIDATED-FINDINGS.md`  
+**Source baseline:** `79cd47ac1696d898bc2b5125a0b5237dae622ae3`  
+**Branch:** `audit/white-label-findings-consolidation`  
+**Status rule:** Every WLA item begins at FINDING. The table records consolidation candidates, not verified defects. No runtime execution was performed for this registration.  
+**Relationship to Section 7:** Existing BRAND-V findings and their historical statuses are preserved. Reconcile before reopening, superseding or splitting any existing finding.
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| WLA-001 | DIRECT-mode guard on quote checkout | HIGH | CONFIRMED — non-driving registration assigns DIRECT and quote-checkout previously had no guard | FIX — commit `0b47689c49719e81053163e46513fe9ad24f104e` moves the 503 guard before `acceptQuote()` and Checkout session creation | FIX-VERIFIED PENDING — supplied 10/10 suite is primarily source-level; it does not call the imported route handler; A06 reimplements the condition. Need handler-level proof that DIRECT returns 503 and neither `acceptQuote` nor `createCheckoutSession` executes | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-001) |
+| WLA-002 | White-label provider-settlement contract not defined | ARCHITECTURAL | Design gap: current SaaS quote payments settle to the platform by existing architecture; overlaps historical MM-10-A and is not independently classified as a defect | FINDING — reconcile MM-10-A and obtain approved provider-settlement requirements before defining implementation | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-002) |
+| WLA-003 | Quote checkout return URL mismatch | HIGH | CONFIRMED — prior success/cancel paths did not match the current student dashboard route | FIX — commit `f733ae01422b83b8d74d3811c6cc22363ea0d822` corrects both URLs to `/client-dashboard/bookings` | FIX-VERIFIED PENDING — B02/B03 are source-string assertions; B01 only asserts imported function type; Checkout redirect not exercised | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-003) |
+| WLA-004 | Stripe application-fee charge context | MEDIUM / ARCHITECTURAL | CONFIRMED by source and official API-contract review — `application_fee_amount` is set with no connected-account request context or `transfer_data.destination`; matches neither documented Connect charge pattern | NOT-STARTED — first confirm intended charge model and whether this service is supported/reachable after WLA-001; test in Stripe test mode with non-zero commission when test credentials are available | PENDING — no Stripe API request was executed; do not claim reject vs silent ignore | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-004); Stripe: https://docs.stripe.com/connect/direct-charges and https://docs.stripe.com/connect/destination-charges |
+| WLA-005 | Wallet attribution contract not defined for provider-specific mode | ARCHITECTURAL | Current wallet is user-wide, not provider-attributed; defect status depends on approved white-label wallet contract | FINDING — owner decision required on shared marketplace wallet versus provider-specific credit; then test visibility/settlement | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-005) |
+| WLA-006 | Vercel already-in-use response treated as successful project attachment | HIGH | CONFIRMED by source inspection — `addDomainToVercel()` returns success for domain_already_in_use/domain_already_exists; DNS checks also run first, so DNS bypass is not established | VERIFIED — source branch only; `domainVerified` effect and actual Vercel routing untested | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-006) |
+| WLA-007 | Concurrent/cross-model domain ownership | HIGH | Candidate: domain uniqueness may not be enforced across models and concurrent claims | FINDING — inspect schema and test isolated concurrent claims | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-008 | Cross-provider tenant isolation inventory | HIGH | Scope finding: complete isolation across APIs, files, exports, jobs and business staff is not yet demonstrated | FINDING — inventory routes and run Provider A/B negative tests; split only with evidence | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-009 | PREMIUM branding entitlement inconsistency | MEDIUM | CONFIRMED by source inspection — feature helper grants whiteLabel to PREMIUM, but driving renderer gate excludes PREMIUM | VERIFIED — source inspection only; reconcile BRAND-V-05 and run tier behaviour tests before FIX | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-009) |
+| WLA-010 | Custom-domain path exemptions incomplete | HIGH | CONFIRMED by source inspection — middleware skipPaths omit `/book`, `/privacy`, `/terms`, while generic website links to these paths | VERIFIED — source inspection only; HTTP route behaviour untested | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-010) |
+| WLA-011 | Host classification uses substring matching | MEDIUM | CONFIRMED by source inspection — middleware uses `hostname.includes(rootDomain)` | VERIFIED — source condition only; deceptive-host routing tests pending | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-011) |
+| WLA-012 | BusinessDomain fallback identifier mismatch | MEDIUM | CONFIRMED by source/data-flow inspection — businessId passed to helper that resolves Provider by id/customSlug | VERIFIED — source/data-flow only; runtime BusinessDomain-only route test pending | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-012) |
+| WLA-013 | Custom-domain metadata inherits DriveBook root identity | MEDIUM | CONFIRMED by source inspection — custom-domain page has no provider metadata override; root layout emits DriveBook metadata/Organization JSON-LD and Google Ads script. Subdomain page has dynamic metadata. | VERIFIED — source inspection only; per-host rendered HTML/analytics tests pending | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-013) |
+| WLA-014 | Branding source-of-truth divergence | MEDIUM | Candidate: Provider and BusinessBranding write paths may still diverge | FINDING — reconcile BRAND-V-07 and test any remaining field-level divergence | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-015 | Platform-branded receipt path | MEDIUM | CONFIRMED by source inspection — wallet/package receipt path sends from `DriveBook Payments <payments@drivebook.com.au>` | VERIFIED — one source path only; full template inventory and runtime email rendering pending | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-015) |
+| WLA-016 | Portal identity and business lifecycle separation | MEDIUM | Scope finding: portal branding, staff roles, suspension and closure semantics need a complete contract and tests | FINDING — map routes and test business/account lifecycle | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-017 | Trust boundary for x-custom-domain header | HIGH | Candidate: caller-controlled header may be trusted without host-to-provider validation | FINDING — trace ingress overwrite/consumers and test spoofing safely | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+| WLA-018 | White-label capability claims versus product contract | MEDIUM | Candidate: external-facing claims may overstate configured branding capabilities | FINDING — audit marketing/tier/docs and reconcile BRAND-V-14 | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
+
+**Lifecycle note:** `OPEN` in this section means the investigation is registered and not closed; the lifecycle stage remains `FINDING`. No item has been advanced to VERIFIED. Do not implement a fix before the relevant finding is independently verified under `AUDIT-PROCESS.md`.
+
+**Important tracker correction:** The previous Section 7 “Current state” summary and some historical descriptions may be stale relative to current source. They are preserved as historical evidence, not silently rewritten here. Reconcile each existing BRAND-V ID against current source and runtime evidence before changing its status.
