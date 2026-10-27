@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.76 (owner clarified SaaS subscription is available to all provider types incl driving instructors; WLA-020 records registration/model mismatch; WLA-004 Connect testing requires platform test mode plus connected test account.)
+**Version:** 5.77 (WLA-021 records misleading onboarding-success toast while Stripe account may still be under review; WLA-022 tracks Express Dashboard access gap pending product confirmation.)
 **Last Updated:** 2026-10-26
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -731,6 +731,8 @@ These items were raised during the audit and verified source-safe. Recorded here
 | WLA-018 | White-label capability claims versus product contract | MEDIUM | Candidate: external-facing claims may overstate configured branding capabilities | FINDING — audit marketing/tier/docs and reconcile BRAND-V-14 | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 |
 | WLA-019 | Quote Checkout return host may break white-label journey | MEDIUM / ARCHITECTURAL | Candidate — success/cancel URLs are built from global `NEXTAUTH_URL` and therefore target the DriveBook host | FINDING — determine whether the approved white-label contract requires return to provider host; inspect trusted host/domain resolution and test in staging | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-019) |
 | WLA-020 | SaaS eligibility tied to business vertical at registration | HIGH / ARCHITECTURAL | Owner-confirmed requirement: DriveBook SaaS subscription offering is available to all provider types, including driving instructors who subscribe. Current registration derives `businessModel` and `paymentMode` solely from `businessType`. | FINDING — reconcile signup, subscription tiers, Business template config, operating model and paymentMode; separate subscription eligibility from booking-payment routing | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-020) |
+| WLA-021 | Stripe onboarding return overstates account readiness | MEDIUM | CONFIRMED by source/API-contract review — `stripe=success` triggers a toast saying payouts will be processed automatically before account readiness is checked; Stripe return URL only confirms hosted flow exit | FIX NOT STARTED — return neutral message; show payout-ready only from authoritative account status; test review pending/charges disabled/payouts disabled | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-021) |
+| WLA-022 | Express Dashboard provider access not surfaced | MEDIUM / CAPABILITY GAP | Candidate — onboarding UI exists but no Express Dashboard login-link flow was found in reviewed source | FINDING — owner/product confirmation whether providers need access to Stripe-hosted Express Dashboard; if yes, add authenticated own-account login link with account ownership isolation | NOT-STARTED | PENDING | OPEN | WHITE-LABEL-CONSOLIDATED-FINDINGS.md §2 (WLA-022) |
 
 **Lifecycle note:** Every WLA item is OPEN. Source-verified findings are identified in the Verification column; none is FIX-VERIFIED or CLOSED. OPEN means work remains, and any future fix must follow `AUDIT-PROCESS.md`.
 
