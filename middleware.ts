@@ -41,7 +41,13 @@ export async function middleware(req: NextRequest) {
     hostname.includes('localhost') || 
     hostname.endsWith('vercel.app')  // all *.vercel.app preview/production URLs
   if (!isOwnDomain) {
-    const skipPaths = ['/api', '/_next', '/static', '/booking', '/login', '/register', '/dashboard', '/admin', '/client-dashboard', '/sitemap.xml', '/robots.txt', '/rss.xml']
+    // WLA-010 FIX: added /book, /privacy, /terms to skip-paths.
+    // BusinessWebsitePage.tsx links to /book/{provider.id}, /privacy and /terms.
+    // Without these exemptions those links are rewritten to /custom-domain/book/...,
+    // /custom-domain/privacy and /custom-domain/terms — wrong routes that 404.
+    // Note: subdomain rewrite (below) already exempts /book and /book/ — this aligns
+    // the custom-domain path with the same behaviour.
+    const skipPaths = ['/api', '/_next', '/static', '/booking', '/book', '/login', '/register', '/dashboard', '/admin', '/client-dashboard', '/privacy', '/terms', '/sitemap.xml', '/robots.txt', '/rss.xml']
     const shouldRewrite = !skipPaths.some(p => url.pathname.startsWith(p))
     if (shouldRewrite) {
       const rest = url.pathname === '/' ? '' : url.pathname
