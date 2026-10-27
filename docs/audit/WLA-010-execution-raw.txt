@@ -1,0 +1,23 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE01 | /book is in custom-domain skipPaths
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE02 | /privacy is in custom-domain skipPaths
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE03 | /terms is in custom-domain skipPaths
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE04 | /booking is still in skipPaths (existing, must not regress)
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE05 | BusinessWebsitePage links to /book/{id}, /privacy, /terms
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE06 | custom-domain /book exemption aligns with subdomain /book exemption
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE07 | source includes WLA-010 fix comment
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE08 | pure-logic: /book, /privacy, /terms are NOT rewritten after fix
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE09 | pure-logic: root path / IS rewritten (renders provider page)
+ [32m✓[39m __tests__/integration/wla-010-custom-domain-path-exemptions.test.ts[2m > [22mWLA-010 — Custom-domain middleware path exemptions[2m > [22mE10 | pure-logic: /book/ prefix (deep paths) are also skipped
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 21:30:20
+[2m   Duration [22m 1.20s[2m (transform 142ms, setup 149ms, collect 73ms, tests 11ms, environment 0ms, prepare 420ms)[22m
+
