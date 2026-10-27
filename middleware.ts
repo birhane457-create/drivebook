@@ -52,6 +52,16 @@ export async function middleware(req: NextRequest) {
     }
     return NextResponse.next()
   }
+
+  // WLA-017 FIX: On own-domain requests, strip any client-supplied
+  // x-custom-domain header to prevent spoofing. The custom-domain page now
+  // uses the Host header (TLS-verified) instead, but this defense-in-depth
+  // measure ensures no other code can accidentally trust a spoofed header.
+  if (req.headers.get('x-custom-domain')) {
+    const response = NextResponse.next()
+    response.headers.delete('x-custom-domain')
+    return response
+  }
   // ─────────────────────────────────────────────────────────────────────────
 
   // Extract subdomain FIRST — before any public path short-circuits
