@@ -1,0 +1,21 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH01 | page reads host header for tenant resolution
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH02 | page strips port from host header
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH03 | page validates host is not an own domain
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH04 | page no longer uses x-custom-domain for tenant lookup
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH05 | middleware strips client-supplied x-custom-domain on own domain
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH06 | middleware still sets x-custom-domain on custom-domain rewrites
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH07 | page source includes WLA-017 fix comment
+ [32m✓[39m __tests__/integration/wla-017-custom-domain-header.test.ts[2m > [22mWLA-017 — Custom-domain header trust and tenant resolution[2m > [22mH08 | middleware source includes WLA-017 fix comment
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m8 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 20:10:04
+[2m   Duration [22m 2.32s[2m (transform 71ms, setup 112ms, collect 41ms, tests 4ms, environment 0ms, prepare 1.74s)[22m
+
