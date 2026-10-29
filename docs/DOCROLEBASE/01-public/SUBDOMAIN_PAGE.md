@@ -2,7 +2,7 @@
 
 **Route:** `/subdomain/[slug]` (served at `[slug].drivebook.com.au`)  
 **Auth required:** No  
-**Status:** ✅ VERIFIED COMPLETE (July 2026)  
+**Status:** WLA-009 renderer update committed; runtime verification pending  
 **File:** `app/subdomain/[slug]/page.tsx`, `components/subdomain/SubdomainBookingEntry.tsx`, `components/subdomain/SubdomainBookingWizard.tsx`, `components/subdomain/SubdomainClientFeatures.tsx`  
 **Full reference:** `docs/SUBDOMAIN_SYSTEM.md`
 
@@ -103,10 +103,10 @@ See [BOOKING_FLOW.md](./BOOKING_FLOW.md) for full payment flow.
 | Social links | âœ… | âœ… | âœ… | âœ… |
 
 ```typescript
-const isPro = instructor.subscriptionTier === 'PRO'
-           || instructor.subscriptionTier === 'STUDIO'
-           || instructor.subscriptionTier === 'PREMIUM';
-const hasBranding = isPro && instructor.showBrandingOnBookingPage;
+const isBrandingEligible = instructor.subscriptionTier === 'PRO'
+                        || instructor.subscriptionTier === 'STUDIO'
+                        || instructor.subscriptionTier === 'PREMIUM';
+const hasBranding = isBrandingEligible && instructor.showBrandingOnBookingPage;
 // Nav shows instructor logo only if hasBranding, otherwise shows Car icon + "DriveBook"
 // Colors apply to all tiers â€” fall back to #3B82F6 / #10B981 if not set
 ```
@@ -217,3 +217,8 @@ Wildcard CNAME `*` â†’ `cname.vercel-dns.com` in Vercel DNS panel. SSL auto
 - [BOOKING_FLOW.md](./BOOKING_FLOW.md) â€” Full booking flow (public + subdomain)
 - `docs/SUBDOMAIN_SYSTEM.md` â€” Full reference (DNS, middleware, local dev setup, all fields)
 - `docs/DOCROLEBASE/03-instructor/SUBSCRIPTION_TIERS.md` â€” Tier features and domain setup
+
+
+## WLA-009 — Premium white-label entitlement
+
+The subdomain renderer's branding eligibility includes `PREMIUM`, alongside the existing `PRO` and `STUDIO` branding path. The centralized `getAccountFeatures()` white-label entitlement is granted by `subscriptionTier === 'PREMIUM'` only; `accountType` must not grant this entitlement. The future BUSINESS subscription does not inherit PREMIUM features by default. Runtime test execution is required before this behavior can be marked verified.
