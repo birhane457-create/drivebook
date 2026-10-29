@@ -60,9 +60,9 @@ export function getDisplayName(account: AccountLike): string {
 // ── Feature flags ─────────────────────────────────────────────────────────────
 
 /**
- * Returns the feature set for an account based on tier and account type.
+ * Returns the feature set for an account based on subscription tier.
  *
- * Today: derived entirely from subscriptionTier + accountType.
+ * Paid feature entitlements must not be granted by account structure.
  * Future: can be overridden per-account via a DB flags column if needed.
  *
  * Use this instead of checking plan strings directly in product code.
