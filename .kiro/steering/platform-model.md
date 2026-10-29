@@ -117,7 +117,8 @@ What KIND of account structure the provider has. Independent of tier.
 
 **Rules:**
 - `accountType` values are always `INDIVIDUAL` or `BUSINESS` — never `PREMIUM`
-- `accountType === 'BUSINESS'` is the check for multi-provider identity features
+- `accountType === 'BUSINESS'` may identify legacy/future structure semantics, but must not grant subscription features.
+- White-label is tier-gated: only `subscriptionTier === 'PREMIUM'` grants `whiteLabel` in `getAccountFeatures()`; the future BUSINESS subscription has no implied inheritance.
 - Do NOT confuse `accountType: 'BUSINESS'` with the subscription `tier: 'BUSINESS'`
 - In `lib/utils/account.ts`: `AccountType = 'INDIVIDUAL' | 'BUSINESS'`
 - In `lib/branding/getDisplayIdentity.ts`: `isBusiness` checks `accountType === 'BUSINESS'` OR `subscriptionTier === 'PREMIUM'`
