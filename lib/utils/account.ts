@@ -72,20 +72,27 @@ export function getAccountFeatures(account: {
   accountType?: string | null
 }): AccountFeatures {
   const tier = account.subscriptionTier ?? 'BASIC'
-  const isBusiness = account.accountType === 'BUSINESS'
   const isPremium = tier === 'PREMIUM'
   const isPro = tier === 'PRO' || tier === 'STUDIO' || isPremium
   const isStudioPlus = tier === 'STUDIO' || isPremium
 
   return {
-    // White label: full removal of DriveBook branding — PREMIUM tier
-    whiteLabel: isPremium || isBusiness,  // PREMIUM = full white-label
+    // White label: full removal of DriveBook branding — PREMIUM tier only.
+    // Provider structure (accountType=BUSINESS) must NOT grant whiteLabel.
+    // Architecture decision 2026-10-27: structure defines capacity;
+    // subscription defines entitlement.
+    whiteLabel: isPremium,
 
     // Direct payments: PREMIUM with DIRECT paymentMode (Stripe Connect)
     directPayments: false,            // phase 2: flip to isPremium when implemented
 
-    // Multi-instructor: PRO and above
-    multiInstructor: isPro,
+    // Multi-instructor: returns false for all current tiers.
+    // The multi-provider capability is not yet implemented.
+    // Granting multiInstructor=true based on tier alone would be incorrect —
+    // the current product supports one provider per account at every tier.
+    // Set to true only when the Business tier and multi-provider management
+    // are implemented and the provider-limit enforcement is in place.
+    multiInstructor: false,
 
     // AI receptionist dedicated number: PRO and above
     aiReceptionist: isPro,
