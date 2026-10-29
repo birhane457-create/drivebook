@@ -229,11 +229,13 @@ Feature map (from `lib/utils/account.ts`):
 |---------|-------|-----|--------|---------|
 | `displayName` | ✅ | ✅ | ✅ | ✅ |
 | `customSlug` | ❌ | ✅ | ✅ | ✅ |
-| `multiInstructor` | ❌ | ✅ | ✅ | ✅ |
+| `multiInstructor` | ❌ | ❌ | ❌ | ❌ (future — not implemented) |
 | `aiReceptionist` | ❌ | ✅ | ✅ | ✅ |
 | `customDomain` | ❌ | ❌ | ✅ | ✅ |
 | `whiteLabel` | ❌ | ❌ | ❌ | ✅ |
 | `directPayments` | ❌ | ❌ | ❌ | ❌ (phase 2) |
+
+**Note on `multiInstructor`:** Returns `false` for all current tiers per the architecture decision (2026-10-27). Multi-provider management is not yet implemented. It will be enabled only when the Business tier, provider-limit enforcement, and team management features are fully implemented.
 
 ---
 
