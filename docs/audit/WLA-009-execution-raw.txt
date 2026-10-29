@@ -9,14 +9,16 @@
  [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mgetAccountFeatures — centralized entitlement policy[2m > [22mG02 | PREMIUM has customDomain=true in getAccountFeatures
  [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mgetAccountFeatures — centralized entitlement policy[2m > [22mG03 | PREMIUM has customSlug=true in getAccountFeatures
  [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mgetAccountFeatures — centralized entitlement policy[2m > [22mG03b | PRO and STUDIO also have whiteLabel=false (below PREMIUM)
- [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mRenderer isPro — subdomain page behavior (documents gap)[2m > [22mG04 | Renderer source: PRO and STUDIO are in isPro definition
- [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mRenderer isPro — subdomain page behavior (documents gap)[2m > [22mG05 | Renderer source: PREMIUM is absent from isPro definition (the gap)
+ [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mRenderer isPro — subdomain page behavior (documents gap)[2m > [22mG04 | Renderer source: PRO, STUDIO and PREMIUM are in isBrandingEligible
+ [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mRenderer isPro — subdomain page behavior (documents gap)[2m > [22mG05 | Renderer source: PREMIUM is included in isBrandingEligible (WLA-009 fix)
  [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mRenderer isPro — subdomain page behavior (documents gap)[2m > [22mG06 | Source analysis file documents the gap
- [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mRenderer isPro — subdomain page behavior (documents gap)[2m > [22mG07 | Renderer comment mentions PRO/STUDIO/BUSINESS but not PREMIUM
- [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mPolicy verification helpers (pure logic)[2m > [22mG08 | If PREMIUM were included in isPro, hasBranding would be true
+ [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mRenderer isPro — subdomain page behavior (documents gap)[2m > [22mG07 | Renderer comment reflects architecture decision
+ [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mPolicy verification helpers (pure logic)[2m > [22mG08 | isBrandingEligible includes PREMIUM — hasBranding is now true for PREMIUM
+ [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mPolicy verification helpers (pure logic)[2m > [22mG09 | multiInstructor returns false for all current tiers (not yet implemented)
+ [32m✓[39m __tests__/integration/wla-009-premium-branding-entitlement.test.ts[2m > [22mWLA-009 — PREMIUM white-label entitlement vs subdomain renderer gate[2m > [22mPolicy verification helpers (pure logic)[2m > [22mG10 | whiteLabel is tier-only — accountType=BUSINESS does not grant it alone
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m9 passed[39m[22m[90m (9)[39m
-[2m   Start at [22m 12:01:34
-[2m   Duration [22m 1.51s[2m (transform 96ms, setup 103ms, collect 100ms, tests 21ms, environment 0ms, prepare 961ms)[22m
+[2m      Tests [22m [1m[32m11 passed[39m[22m[90m (11)[39m
+[2m   Start at [22m 01:46:19
+[2m   Duration [22m 704ms[2m (transform 62ms, setup 47ms, collect 69ms, tests 23ms, environment 0ms, prepare 247ms)[22m
 
