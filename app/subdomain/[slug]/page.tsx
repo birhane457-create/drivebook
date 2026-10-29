@@ -171,10 +171,14 @@ export default async function SubdomainBookingPage({
     subStatus === 'ACTIVE' ||
     (subStatus === 'TRIAL' && !trialExpired);
 
-  // Branding — colors apply for all tiers; logo/name white-labelling is PRO/STUDIO/BUSINESS only
-  // subdomain page — isPro controls featured badge visibility
-  const isPro = instructor.subscriptionTier === 'PRO' || instructor.subscriptionTier === 'STUDIO';
-  const hasBranding = isPro && instructor.showBrandingOnBookingPage;
+  // White-label branding is a subscription entitlement, not an account-structure flag.
+  // PREMIUM includes full white-label for a single provider; future BUSINESS-tier
+  // inheritance is not implied until a separate feature matrix is approved.
+  const isBrandingEligible =
+    instructor.subscriptionTier === 'PRO' ||
+    instructor.subscriptionTier === 'STUDIO' ||
+    instructor.subscriptionTier === 'PREMIUM';
+  const hasBranding = isBrandingEligible && instructor.showBrandingOnBookingPage;
   const brandLogo = hasBranding ? instructor.brandLogo : null;
   // Colors apply regardless of tier — fall back to defaults if not set
   const primary = instructor.brandColorPrimary || '#3B82F6';
