@@ -77,9 +77,23 @@ added with full white-label entitlement.
   - The driving subdomain page has its own separate branding policy
   - Requires the comment to be updated to say "PRO/STUDIO/BUSINESS only (not PREMIUM)"
 
-## Conclusion
+## Status: RESOLVED — fix applied at f09c6c3d (2026-10-27)
 
-No code change should be made until the policy is settled. This analysis establishes:
+### Decision made
+Option A was chosen: PREMIUM includes branding on the driving-specific subdomain renderer.
+This aligns with the architecture decision (2026-10-27) that subscription tier defines entitlement
+and PREMIUM's `whiteLabel: true` covers logo/name branding for a single provider.
+
+### Changes implemented
+- `lib/utils/account.ts`: `whiteLabel: isPremium` (structure removed), `multiInstructor: false`
+- `app/subdomain/[slug]/page.tsx`: `isBrandingEligible` includes PREMIUM
+- 11/11 tests pass; Vercel success at `f09c6c3d`
+
+See also: docs/audit/WLA-009-execution-raw.txt
+
+---
+
+## Original source-level analysis
 1. There is a definite inconsistency between getAccountFeatures and the renderer
 2. BRAND-V-05 does not cover this — they are different code paths
 3. The renderer's comment suggests the exclusion may have been intentional
