@@ -1,10 +1,21 @@
 # WLA-009 Source Analysis — PREMIUM white-label entitlement vs subdomain renderer gate
 
-**Date:** 2026-10-27
-**Finding:** WLA-009 (source-verified, policy decision required before fix)
-**Commit:** `c65cf3ee`
+**Status:** ✅ RESOLVED — fix applied at `f09c6c3d` (2026-10-27)  
+**Decision:** Option A — PREMIUM includes branding on the driving-specific subdomain renderer  
+**Architecture decision recorded:** `.kiro/steering/account-architecture.md`
 
-## Source-level analysis
+### What was fixed
+- `lib/utils/account.ts`: `whiteLabel: isPremium` (`isBusiness` removed — structure no longer grants entitlement); `multiInstructor: false` for all current tiers
+- `app/subdomain/[slug]/page.tsx`: `isPro` → `isBrandingEligible`, now includes PREMIUM
+- 11/11 tests pass; Vercel success at `f09c6c3d`
+
+---
+
+**Original analysis date:** 2026-10-27  
+**Original finding state:** policy decision required before fix  
+**Resolved commit:** `c65cf3ee` (analysis) → `f09c6c3d` (fix) → `a2955de0` (docs)
+
+## Source-level analysis (original — preserved for audit history)
 
 ### 1. getAccountFeatures() — lib/utils/account.ts
 
@@ -76,18 +87,6 @@ added with full white-label entitlement.
   - PREMIUM may be intended only for the non-driving BusinessWebsitePage renderer
   - The driving subdomain page has its own separate branding policy
   - Requires the comment to be updated to say "PRO/STUDIO/BUSINESS only (not PREMIUM)"
-
-## Status: RESOLVED — fix applied at f09c6c3d (2026-10-27)
-
-### Decision made
-Option A was chosen: PREMIUM includes branding on the driving-specific subdomain renderer.
-This aligns with the architecture decision (2026-10-27) that subscription tier defines entitlement
-and PREMIUM's `whiteLabel: true` covers logo/name branding for a single provider.
-
-### Changes implemented
-- `lib/utils/account.ts`: `whiteLabel: isPremium` (structure removed), `multiInstructor: false`
-- `app/subdomain/[slug]/page.tsx`: `isBrandingEligible` includes PREMIUM
-- 11/11 tests pass; Vercel success at `f09c6c3d`
 
 See also: docs/audit/WLA-009-execution-raw.txt
 
