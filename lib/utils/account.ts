@@ -72,14 +72,13 @@ export function getAccountFeatures(account: {
   accountType?: string | null
 }): AccountFeatures {
   const tier = account.subscriptionTier ?? 'BASIC'
-  const isBusiness = account.accountType === 'BUSINESS'
   const isPremium = tier === 'PREMIUM'
   const isPro = tier === 'PRO' || tier === 'STUDIO' || isPremium
   const isStudioPlus = tier === 'STUDIO' || isPremium
 
   return {
     // White label: full removal of DriveBook branding — PREMIUM tier
-    whiteLabel: isPremium || isBusiness,  // PREMIUM = full white-label
+    whiteLabel: isPremium,               // PREMIUM = full white-label; structure never grants entitlement
 
     // Direct payments: PREMIUM with DIRECT paymentMode (Stripe Connect)
     directPayments: false,            // phase 2: flip to isPremium when implemented
