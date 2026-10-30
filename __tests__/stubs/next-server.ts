@@ -32,6 +32,9 @@ export class NextRequest {
   }
 
   async json(): Promise<unknown> {
+    if (typeof this._body === 'string') {
+      return JSON.parse(this._body);
+    }
     return this._body;
   }
 

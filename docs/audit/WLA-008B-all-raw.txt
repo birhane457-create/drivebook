@@ -1,0 +1,92 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+[90mstdout[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: withSerializableRetry behavioral tests[2m > [22m[2mRETRY-01 — P2034 on first attempt, success on retry → returns result[22m[39m
+[2026-10-30T15:26:13.782Z] INFO : Serialization conflict (P2034) — retrying transaction {"operation":"retry-01","attempt":1,"maxRetries":2,"backoffMs":49}
+
+[90mstdout[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: withSerializableRetry behavioral tests[2m > [22m[2mRETRY-02 — all retries exhausted → rethrows P2034[22m[39m
+[2026-10-30T15:26:13.841Z] INFO : Serialization conflict (P2034) — retrying transaction {"operation":"retry-02","attempt":1,"maxRetries":2,"backoffMs":46}
+
+ [32m✓[39m __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22mWLA-008-B: withSerializableRetry behavioral tests[2m > [22mRETRY-01 — P2034 on first attempt, success on retry → returns result
+[90mstdout[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: withSerializableRetry behavioral tests[2m > [22m[2mRETRY-02 — all retries exhausted → rethrows P2034[22m[39m
+[2026-10-30T15:26:13.900Z] INFO : Serialization conflict (P2034) — retrying transaction {"operation":"retry-02","attempt":2,"maxRetries":2,"backoffMs":77}
+
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[22m[39m
+[CONC] Result A: PENDING_PAYMENT
+[CONC] Result B: CONFIRMED
+
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-01 — at least one booking was committed (non-vacuous)[22m[39m
+[CONC-01] Total booking rows: [33m2[39m
+
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-02 — exactly one CONFIRMED (isPaid) booking exists — no double-spend[22m[39m
+[CONC-02] CONFIRMED bookings: [33m1[39m
+  booking cmvv4k6cc000ajk221quzwrff price: 60
+
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-03 — the losing result is PENDING_PAYMENT or P2034 (never a second CONFIRMED)[22m[39m
+[CONC-03] Loser status: PENDING_PAYMENT
+
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-04 — wallet balance equals initial minus exactly one lesson price[22m[39m
+[CONC-04] Final wallet balance: [33m20[39m
+
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-05 — total confirmed debits equal one lesson price[22m[39m
+[CONC-05] Total debited: [33m60[39m from [33m1[39m debit(s)
+
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-06 — double-entry: confirmed booking count equals debit transaction count[22m[39m
+[CONC-06] Confirmed bookings: [33m1[39m | Debits: [33m1[39m
+
+[90mstdout[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: withSerializableRetry behavioral tests[2m > [22m[2mRETRY-02 — all retries exhausted → rethrows P2034[22m[39m
+<empty line>
+[90mstderr[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: withSerializableRetry behavioral tests[2m > [22m[2mRETRY-02 — all retries exhausted → rethrows P2034[22m[39m
+[2026-10-30T15:26:13.991Z] ERROR: Serialization conflict (P2034) — retries exhausted {"operation":"retry-02","totalAttempts":3}
+
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-01 — at least one booking was committed (non-vacuous)
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-02 — exactly one CONFIRMED (isPaid) booking exists — no double-spend
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-03 — the losing result is PENDING_PAYMENT or P2034 (never a second CONFIRMED)
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-04 — wallet balance equals initial minus exactly one lesson price
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-05 — total confirmed debits equal one lesson price
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-06 — double-entry: confirmed booking count equals debit transaction count
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-07 — source: SERIALIZABLE isolation + withSerializableRetry + P2034→409 present
+[90mstdout[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: Mobile route HTTP response tests[2m > [22m[2mHTTP-01 — exhausted P2034 from $transaction → HTTP 409[22m[39m
+[2026-10-30T15:26:13.998Z] INFO : Serialization conflict (P2034) — retrying transaction {"operation":"mobile-booking","attempt":1,"maxRetries":2,"backoffMs":28}
+
+ [32m✓[39m __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22mWLA-008-B: withSerializableRetry behavioral tests[2m > [22mRETRY-02 — all retries exhausted → rethrows P2034
+ [32m✓[39m __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22mWLA-008-B: withSerializableRetry behavioral tests[2m > [22mRETRY-03 — non-P2034 error rethrown immediately (no retry)
+ [32m✓[39m __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22mWLA-008-B: withSerializableRetry behavioral tests[2m > [22mRETRY-04 — first-call success → result returned, called once
+[90mstdout[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: Mobile route HTTP response tests[2m > [22m[2mHTTP-01 — exhausted P2034 from $transaction → HTTP 409[22m[39m
+[2026-10-30T15:26:14.037Z] INFO : Serialization conflict (P2034) — retrying transaction {"operation":"mobile-booking","attempt":2,"maxRetries":2,"backoffMs":37}
+
+[90mstdout[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: Mobile route HTTP response tests[2m > [22m[2mHTTP-01 — exhausted P2034 from $transaction → HTTP 409[22m[39m
+<empty line>
+[90mstderr[2m | __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22m[2mWLA-008-B: Mobile route HTTP response tests[2m > [22m[2mHTTP-01 — exhausted P2034 from $transaction → HTTP 409[22m[39m
+[2026-10-30T15:26:14.085Z] ERROR: Serialization conflict (P2034) — retries exhausted {"operation":"mobile-booking","totalAttempts":3}
+[Mobile API] Create booking error: PrismaClientKnownRequestError: serialization failure
+    at makeP2034 [90m(E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\[39m__tests__\integration\wla-008-b-mobile-route-http.test.ts:103:10[90m)[39m
+    at [90mE:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - Copy\drivebook\[39m__tests__\integration\wla-008-b-mobile-route-http.test.ts:178:38
+    at [90mfile:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:135:14
+    at [90mfile:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:60:26
+    at runTest [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:781:17[90m)[39m
+    at runSuite [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:909:15[90m)[39m
+    at runSuite [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:909:15[90m)[39m
+    at runFiles [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:958:5[90m)[39m
+    at startTests [90m(file:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:967:3[90m)[39m
+    at [90mfile:///E:/DOC/flowstate-wms/AI%20voice%20assistance%20-%20Copy%20-%20Copy%20-%20Copy/drivebook/[39mnode_modules/[4mvitest[24m/dist/chunks/runtime-runBaseTests.oAvMKtQC.js:116:7 {
+  code: [32m'P2034'[39m,
+  clientVersion: [32m'5.22.0'[39m,
+  meta: [90mundefined[39m
+}
+
+ [32m✓[39m __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22mWLA-008-B: Mobile route HTTP response tests[2m > [22mHTTP-01 — exhausted P2034 from $transaction → HTTP 409
+ [32m✓[39m __tests__/integration/wla-008-b-mobile-route-http.test.ts[2m > [22mWLA-008-B: Mobile route HTTP response tests[2m > [22mHTTP-02 — successful $transaction → HTTP 201 with booking data
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 23:26:12
+[2m   Duration [22m 1.13s[2m (transform 140ms, setup 89ms, collect 333ms, tests 643ms, environment 0ms, prepare 413ms)[22m
+

@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.68 (WLA-008-B-RUNTIME: SERIALIZABLE isolation added + 5/5 PostgreSQL concurrency tests at b75e37fc; WLA-008 remains OPEN)
+**Version:** 5.69 (WLA-008-B: test hardening per reviewer — non-vacuous concurrency tests, RETRY behavioral tests, HTTP 409/201 route tests; 13/13 PostgreSQL+mock; tracker accurately qualified)
 **Last Updated:** 2026-10-30
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -744,7 +744,7 @@ Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, 
 | WLA-008-A-txt | `/api/instructor/invoices/[transactionId]` | Post-fetch IDOR (findUnique then ownership check) | `findFirst({ where: { id, providerId } })`; 404 for null | `2dc5d81a` | **FIX APPLIED** |
 | WLA-008-A-data | `/api/instructor/invoices/[transactionId]/data` | Same post-fetch IDOR pattern (reviewer identified) | `findFirst({ where: { id, providerId } })`; removed 403 branch; 404 for null | `98fb7605` | **FIX APPLIED** |
 | WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap); default READ COMMITTED isolation allowed double-spend | Customer ownership via `bookings.some`; wallet balance check + booking create + debit inside single `$transaction`; `isolationLevel: 'Serializable'` added (matches pattern in main bookings route, confirm-package-booking, Stripe webhook) | `2dc5d81a`, `98fb7605`, `b75e37fc` | **FIX APPLIED** — SERIALIZABLE isolation source-verified; PostgreSQL concurrency test run (see below) |
-| WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc` | **5/5 REPORTED** — PostgreSQL 16.4, 127.0.0.1:5433; raw log: `docs/audit/WLA-008B-concurrency-raw.txt`. Independent review outstanding. Serialization-failure HTTP response not yet verified. |
+| WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc`, `68b4778e` | **13/13 REPORTED** (PostgreSQL 16.4, 127.0.0.1:5433 + mocked handler) — commit `68b4778e`. Tests: 7 PostgreSQL-backed (CONC-01..CONC-07: non-vacuous, exact outcome, balance, debits, double-entry, source), 4 retry behavioral (RETRY-01..04: P2034→retry→success; exhausted; non-retryable; clean), 2 route HTTP (HTTP-01: exhausted P2034→409 confirmed via 3 tx calls in log; HTTP-02: 201). Raw log: `docs/audit/WLA-008B-all-raw.txt`. Independent review outstanding. |
 | WLA-008-C | `/api/bookings/combined` POST | No rate limiting → slot-squatting with zero-cost PENDING bookings | `bookingRateLimit` (10/min) before DB; per-user identifier | `2dc5d81a` | **FIX APPLIED** — fail-open limitation documented |
 
 Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
@@ -759,21 +759,30 @@ Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 | `/api/bookings/[id]` methods | PATCH/GET/DELETE ✅ verified; other methods need confirming |
 | 7 other ⚠️ REVIEW routes | See route inventory document |
 
-Test evidence:
-- Source-inspection: 24/24 tests, `__tests__/integration/wla-008-cross-provider-isolation.test.ts`, commit `98fb7605`
-- PostgreSQL concurrency: 5/5 tests, `__tests__/integration/wla-008-b-wallet-concurrency.test.ts`, commit `b75e37fc`
-  - CONC-01: final balance $20 (not negative) ✓
-  - CONC-02: exactly 1 CONFIRMED booking ✓
-  - CONC-03: total debits ($60) ≤ initial balance ($80) ✓
-  - CONC-04: 1 CONFIRMED = 1 debit (double-entry invariant) ✓
-  - CONC-05: SERIALIZABLE isolation present in source ✓
-  - Reported; not independently re-executed
+Test evidence (commit `68b4778e`):
+- Source-inspection: 26/26, `wla-008-cross-provider-isolation.test.ts`
+- PostgreSQL concurrency (7 tests, `wla-008-b-wallet-concurrency.test.ts`):
+  - CONC-01: at least one booking row committed (non-vacuous) ✓
+  - CONC-02: exactly 1 CONFIRMED booking (not 0, not 2) ✓
+  - CONC-03: loser is PENDING_PAYMENT or P2034 ✓
+  - CONC-04: balance = $80 − $60 = $20 (exact) ✓
+  - CONC-05: 1 debit, total = $60 ✓
+  - CONC-06: confirmed bookings = debit count (double-entry) ✓
+  - CONC-07: source structure checks ✓
+- Retry utility behavioral (4 tests, `wla-008-b-mobile-route-http.test.ts`):
+  - RETRY-01: P2034 → retry → success (2 calls) ✓
+  - RETRY-02: all retries exhausted → rethrow P2034 (3 calls logged) ✓
+  - RETRY-03: non-P2034 rethrown immediately (1 call) ✓
+  - RETRY-04: first-call success (1 call) ✓
+- Route HTTP (2 tests, `wla-008-b-mobile-route-http.test.ts`):
+  - HTTP-01: exhausted P2034 → 409; log confirms 3 tx attempts before catch ✓
+  - HTTP-02: successful booking → 201 with booking data ✓
 
 Verification limitations:
-- Source-inspection tests check structural patterns only — they do not invoke HTTP handlers.
-- Concurrency test demonstrates one-winner outcome but does not verify the losing request's HTTP response or P2034 serialization-failure handling from the route layer.
-- No Provider A/B database-level behavioral tests. Full cross-tenant verification incomplete.
-- 13 ⚠️ REVIEW routes from the inventory still require ownership review.
+- Concurrency tests use a helper that mirrors route logic but does not call `withSerializableRetry` — isolation property tested directly; retry path tested separately via RETRY-01..04
+- HTTP tests use mocked Prisma; they prove the route handler routes errors correctly but do not connect to PostgreSQL
+- No Provider A/B database-level behavioral tests. Full cross-tenant verification incomplete
+- 13 ⚠️ REVIEW routes from the inventory still require ownership review
 
 ### 9.4 — Verification qualification
 
