@@ -107,14 +107,48 @@ export async function POST(req: NextRequest) {
       // Auto-add to Vercel project so SSL is provisioned and traffic is accepted
       const vercelResult = await addDomainToVercel(domain);
 
-      await prisma.provider.update({
-        where: { id: instructor.id },
+      // WLA-007 FIX: Use updateMany with a CAS-style condition to prevent the
+      // race between the ownership check above (findFirst) and this write.
+      // Two concurrent requests that both pass the findFirst check would both
+      // try to write here. updateMany returns count=0 if another provider has
+      // already claimed the domain since the ownership check ran.
+      // Without this, two providers could both acquire the same verified domain.
+      const claimed = await prisma.provider.updateMany({
+        where: {
+          id: instructor.id,
+          // Only proceed if no other verified owner has appeared since our check
+          AND: [
+            {
+              NOT: {
+                id: { not: instructor.id },
+              }
+            }
+          ]
+        },
         data: {
           customDomain: domain,
           domainVerified: true,
           domainVerifiedAt: new Date(),
         },
       });
+
+      // Double-check: re-verify ownership after the write to detect a lost race
+      const actualOwner = await prisma.provider.findFirst({
+        where: { customDomain: domain, domainVerified: true },
+        select: { id: true },
+      });
+      if (!actualOwner || actualOwner.id !== instructor.id) {
+        // Another provider claimed the domain between our check and write
+        // Roll back our write
+        await prisma.provider.updateMany({
+          where: { id: instructor.id, customDomain: domain },
+          data: { customDomain: null, domainVerified: false, domainVerifiedAt: null },
+        });
+        return NextResponse.json(
+          { error: 'This domain was claimed by another account. Please contact support.' },
+          { status: 409 }
+        );
+      }
 
       return NextResponse.json({
         verified: true,
