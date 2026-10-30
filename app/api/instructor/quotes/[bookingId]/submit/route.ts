@@ -41,9 +41,12 @@ export async function POST(
     const body = await req.json()
     const data = submitQuoteSchema.parse(body)
 
-    // Verify booking belongs to this provider
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
+    // WLA-008-TENANT: scope the query to the session's providerId so the DB
+    // never returns another provider's booking. Using findFirst with a compound
+    // WHERE prevents the post-fetch IDOR pattern (findUnique then ownership check).
+    // Returns 404 for both "not found" and "belongs to another provider".
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, providerId: session!.user!.providerId },
       include: {
         customer: {
           select: {
@@ -57,10 +60,6 @@ export async function POST(
 
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
-    }
-
-    if (booking.providerId !== session!.user!.providerId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
     if (booking.status !== 'REQUEST_PENDING' && booking.status !== 'QUOTE_SENT') {
