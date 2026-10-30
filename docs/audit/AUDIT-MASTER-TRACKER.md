@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.66 (WLA series added to tracker — fixes for WLA-001/003/006/009/010/017 on main; 12 findings still open)
-**Last Updated:** 2026-10-27
+**Version:** 5.67 (WLA-007 fix verified; WLA-008 route inventory complete + sub-findings fixed; 10 WLA findings still open)
+**Last Updated:** 2026-10-30
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -725,8 +725,8 @@ These items were raised during the audit and verified source-safe. Recorded here
 | WLA-002 | Provider-settlement semantics for SaaS mode | ARCHITECTURAL | OPEN — architecture decision recorded | Overlaps MM-10-A. Pending SaaS payment implementation. |
 | WLA-004 | `application_fee_amount` set without connected-account context | P2 | SOURCE ANALYSIS COMPLETE — runtime verification pending | Stripe test-mode verification requires connected account (not yet approved). Analysis: `docs/audit/WLA-004-SOURCE-ANALYSIS.md`. |
 | WLA-005 | Wallet balance is user-wide, not provider-attributed | ARCHITECTURAL | OPEN — architecture decision required | Whether this is a defect depends on approved white-label wallet contract. |
-| WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | OPEN | Concurrent claim tests not yet run. |
-| WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | OPEN | Requires complete route inventory and Provider A/B negative-access tests. |
+| WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | **FIX APPLIED** — reviewer confirmed `b924a144` correct; DB partial unique index + P2002 catch replaces tautological updateMany | `b924a144` | 7/7 source+simulation | Reviewer note: 7/7 tests are source checks and a simulated race, not a real concurrent PostgreSQL test. Migration presence in Git does not independently prove application to production. |
+| WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | **FIXES APPLIED** — route inventory complete (47 routes); 3 sub-findings fixed; open items documented separately | `98fb7605` | 24/24 source | Sub-finding detail below. Remaining route inventory items (13 routes) still require ownership review. Full behavioral Provider A/B tests not yet run. |
 | WLA-011 | Host classification may use substring matching | P2 | OPEN | Deceptive-host tests not yet run. |
 | WLA-012 | BusinessDomain-only fallback passes `businessId` to a provider ID/slug lookup | P2 | OPEN | Runtime staging test required. |
 | WLA-013 | Custom-domain pages inherit global DriveBook metadata | P2 | OPEN | Provider metadata isolation policy must be defined before fix. |
@@ -735,7 +735,33 @@ These items were raised during the audit and verified source-safe. Recorded here
 | WLA-016 | Customer/provider portal identity may not support full independent branding | P2 | OPEN | Product contract must be defined first. |
 | WLA-018 | Public branding may imply more white-label capability than implemented | P2 | OPEN | Compare external claims to actual features. |
 
-### 9.3 — Verification qualification
+### 9.3 — WLA-008 sub-finding detail
+
+Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, commit `037eea18`).
+
+| Sub-ID | Route | Pattern | Fix | Commit | Status |
+|---|---|---|---|---|---|
+| WLA-008-A-txt | `/api/instructor/invoices/[transactionId]` | Post-fetch IDOR (findUnique then ownership check) | `findFirst({ where: { id, providerId } })`; 404 for null | `2dc5d81a` | **FIX APPLIED** |
+| WLA-008-A-data | `/api/instructor/invoices/[transactionId]/data` | Same post-fetch IDOR pattern (reviewer identified) | `findFirst({ where: { id, providerId } })`; removed 403 branch; 404 for null | `98fb7605` | **FIX APPLIED** |
+| WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap) | Customer ownership via `bookings.some`; wallet balance check, booking create, and debit inside single `$transaction` | `2dc5d81a`, `98fb7605` | **FIX APPLIED** |
+| WLA-008-C | `/api/bookings/combined` POST | No rate limiting → slot-squatting with zero-cost PENDING bookings | `bookingRateLimit` (10/min) before DB; per-user identifier | `2dc5d81a` | **FIX APPLIED** — fail-open limitation documented |
+
+Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
+
+| Route | Remaining concern |
+|---|---|
+| `/api/instructor/quotes/[bookingId]/submit` | Post-fetch provider ownership check |
+| `/api/bookings/batch` | Customer ownership not yet verified (customerId from body, no booking-based scope check) |
+| `/api/client/bookings/create-bulk` | Provider and package ownership; wallet behavior |
+| `/api/business/branding` | Route-level verification needed |
+| `/api/bookings` POST | Inventory notes inconsistency with actual source; needs reconciliation |
+| `/api/bookings/[id]` methods | PATCH/GET/DELETE ✅ verified; other methods need confirming |
+| 7 other ⚠️ REVIEW routes | See route inventory document |
+
+Test evidence: 24/24 source-inspection tests, `__tests__/integration/wla-008-cross-provider-isolation.test.ts`, commit `98fb7605`.  
+Verification limitation: tests read source files and check structural patterns. No Provider A/B database-level behavioral tests. Full behavioral cross-tenant verification is incomplete.
+
+### 9.4 — Verification qualification
 
 All WLA fixes listed above were applied on main. Reported test evidence:
 - WLA-001/003: 10/10 source+logic tests (route-handler invocation blocked by next-auth/next Vitest mock limitation)
