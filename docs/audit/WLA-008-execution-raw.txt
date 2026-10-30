@@ -28,12 +28,18 @@
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC03 — rate limit is applied before any DB query
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC04 — 429 response is returned on rate limit exceeded
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC05 — getRateLimitIdentifier is used to scope limit per user
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT01 — /api/instructor/quotes/[bookingId]/submit uses findFirst with providerId (not post-fetch check)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT02 — /api/instructor/clients/[id] is pre-scoped by bookings.some + providerId
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT03 — /api/client/quotes/request accepts providerId from body (by design, marketplace flow)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT04 — /api/client/bookings/[id] scopes by clientIds from session user
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT05 — /api/client/bookings/create-bulk recalculates price from instructor.hourlyRate (no client price trust)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT06 — /api/business/branding scopes by biz_${session.user.providerId}
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008: Regression — secured routes still have correct scoping[2m > [22mR01 — bookings/[id] PATCH still uses session.user.providerId in WHERE clause
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008: Regression — secured routes still have correct scoping[2m > [22mR02 — bookings/batch POST still uses providerId from session (not body)
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008: Regression — secured routes still have correct scoping[2m > [22mR03 — schedule-package-hours providerId is used only for redirect URL, not DB query
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m26 passed[39m[22m[90m (26)[39m
-[2m   Start at [22m 22:23:14
-[2m   Duration [22m 729ms[2m (transform 61ms, setup 49ms, collect 59ms, tests 8ms, environment 0ms, prepare 237ms)[22m
+[2m      Tests [22m [1m[32m32 passed[39m[22m[90m (32)[39m
+[2m   Start at [22m 01:29:45
+[2m   Duration [22m 800ms[2m (transform 72ms, setup 47ms, collect 59ms, tests 12ms, environment 0ms, prepare 227ms)[22m
 

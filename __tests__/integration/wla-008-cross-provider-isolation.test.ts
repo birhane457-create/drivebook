@@ -248,6 +248,71 @@ describe('WLA-008-C: Combined booking rate limit — source verification', () =>
   })
 })
 
+// ─── WLA-008-TENANT: 13-route ownership review ───────────────────────────────
+
+describe('WLA-008-TENANT: 13-route ownership review results', () => {
+  it('T01 — /api/instructor/quotes/[bookingId]/submit uses findFirst with providerId (not post-fetch check)', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/quotes/[bookingId]/submit/route.ts'),
+      'utf-8'
+    )
+    // Must use findFirst (not findUnique) with providerId in WHERE
+    expect(source).toMatch(/findFirst/)
+    // The actual DB lookup must not be findUnique — findUnique doesn't accept
+    // compound WHERE with providerId. Check only the lookup call, not comments.
+    expect(source).not.toMatch(/prisma\.\w+\.findUnique/)
+    // providerId must be in the WHERE clause
+    expect(source).toMatch(/where:\s*\{[^}]*id:\s*bookingId[^}]*providerId/)
+    // Post-fetch ownership check must be removed
+    expect(source).not.toMatch(/booking\.providerId\s*!==/)
+    // 403 branch must be removed (404 for both cases)
+    expect(source).not.toMatch(/status:\s*403/)
+  })
+
+  it('T02 — /api/instructor/clients/[id] is pre-scoped by bookings.some + providerId', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/clients/[id]/route.ts'),
+      'utf-8'
+    )
+    expect(source).toMatch(/bookings.*some.*providerId.*session/)
+  })
+
+  it('T03 — /api/client/quotes/request accepts providerId from body (by design, marketplace flow)', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/api/client/quotes/request/route.ts'),
+      'utf-8'
+    )
+    // Client picks the provider — providerId from body is intentional
+    expect(source).toMatch(/providerId:\s*data\.providerId/)
+    // Must use session.user.id for customer identity
+    expect(source).toMatch(/customerId:\s*session/)
+  })
+
+  it('T04 — /api/client/bookings/[id] scopes by clientIds from session user', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/api/client/bookings/[id]/route.ts'),
+      'utf-8'
+    )
+    expect(source).toMatch(/customerId:\s*\{\s*in:\s*clientIds/)
+  })
+
+  it('T05 — /api/client/bookings/create-bulk recalculates price from instructor.hourlyRate (no client price trust)', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/api/client/bookings/create-bulk/route.ts'),
+      'utf-8'
+    )
+    // Server recalculates price from the instructor's current rate
+    expect(source).toMatch(/instructor\.hourlyRate\s*\*\s*item\.duration/)
+  })
+
+  it('T06 — /api/business/branding scopes by biz_${session.user.providerId}', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/api/business/branding/route.ts'),
+      'utf-8'
+    )
+    expect(source).toMatch(/biz_\$\{session/)
+  })
+})
 // ─── WLA-008: Regression guard — other routes remain unaffected ───────────────
 
 describe('WLA-008: Regression — secured routes still have correct scoping', () => {

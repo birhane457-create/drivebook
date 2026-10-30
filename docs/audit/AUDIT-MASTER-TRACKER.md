@@ -749,19 +749,31 @@ Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, 
 
 Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 
-| Route | Remaining concern |
-|---|---|
-| `/api/instructor/quotes/[bookingId]/submit` | Post-fetch provider ownership check |
-| `/api/bookings/batch` | Customer ownership not yet verified (customerId from body, no booking-based scope check) |
-| `/api/client/bookings/create-bulk` | Provider and package ownership; wallet behavior |
-| `/api/business/branding` | Route-level verification needed |
-| `/api/bookings` POST | Inventory notes inconsistency with actual source; needs reconciliation |
-| `/api/bookings/[id]` methods | PATCH/GET/DELETE ✅ verified; other methods need confirming |
-| 7 other ⚠️ REVIEW routes | See route inventory document |
+| Route | Remaining concern | Review result |
+|---|---|---|
+| `/api/instructor/quotes/[bookingId]/submit` | Post-fetch provider ownership check | **FIXED** — `findFirst({ where: { id, providerId } })`; post-fetch check removed; 404 for both cases |
+| `/api/instructor/clients/[id]` | Ownership check | ✅ SECURED — `bookings: { some: { providerId } }` pre-scoped |
+| `/api/instructor/invoices/[transactionId]` | Post-fetch IDOR | ✅ FIXED (WLA-008-A) |
+| `/api/instructor/invoices/[transactionId]/data` | Post-fetch IDOR | ✅ FIXED (WLA-008-A-data) |
+| `/api/bookings` POST | providerId from session vs body | ✅ SECURED — `session.user.providerId` throughout |
+| `/api/bookings/[id]` GET/PATCH/DELETE | Booking ownership | ✅ SECURED — `bookingWhere.providerId = providerId` |
+| `/api/bookings/batch` POST | Customer ownership | ✅ SECURED — `session.user.providerId` |
+| `/api/bookings/combined` POST | Rate limiting | ✅ FIXED (WLA-008-C) |
+| `/api/bookings/mobile` POST | Customer IDOR + payment bypass | ✅ FIXED (WLA-008-B) |
+| `/api/client/schedule-package-hours` | providerId from body | ✅ SECURED — `userId: user.id` scoping; providerId only for redirect URL |
+| `/api/client/quotes/request` | providerId from body | ✅ BY DESIGN — client picks provider (marketplace flow) |
+| `/api/client/bookings/create-bulk` | Provider/package ownership | ✅ BY DESIGN — client books any instructor; server recalculates price |
+| `/api/client/bookings/[id]` | Booking ownership | ✅ SECURED — `customerId: { in: clientIds }` |
+| `/api/business/branding` | Route-level verification | ✅ SECURED — `biz_${session.user.providerId}` |
 
-Test evidence (commit `b5befcf8`):
-- Source-inspection: 26/26, `wla-008-cross-provider-isolation.test.ts`
-- PostgreSQL concurrency (7 tests, `wla-008-b-wallet-concurrency.test.ts`):
+Test evidence (commit `b5befcf8` + quotes/submit fix):
+- Source-inspection: 32/32, `wla-008-cross-provider-isolation.test.ts`
+  - A01–A04: invoice text route IDOR fix ✓
+  - D01–D04: invoice data route IDOR fix ✓
+  - B01–B10: mobile route (ownership, wallet, SERIALIZABLE, retry, P2034→409) ✓
+  - C01–C05: combined route rate limit ✓
+  - T01–T06: 13-route ownership review (quotes/submit fix, clients, quotes/request, client bookings, create-bulk, branding) ✓
+  - R01–R03: regression guards ✓
   - CONC-01: at least one booking row committed (non-vacuous) ✓
   - CONC-02: exactly 1 CONFIRMED booking (not 0, not 2) ✓
   - CONC-03: loser is PENDING_PAYMENT or P2034 ✓
@@ -782,7 +794,7 @@ Verification limitations:
 - Concurrency tests use a helper that mirrors route logic but does not call `withSerializableRetry` — isolation property tested directly; retry path tested separately via RETRY-01..04
 - HTTP tests use mocked Prisma; they prove the route handler routes errors correctly but do not connect to PostgreSQL
 - No Provider A/B database-level behavioral tests. Full cross-tenant verification incomplete
-- 13 ⚠️ REVIEW routes from the inventory still require ownership review
+- All 13 ⚠️ REVIEW routes from the inventory have been inspected; 1 additional IDOR fixed (quotes/submit); see route review table above
 
 ### 9.4 — Verification qualification
 
