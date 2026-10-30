@@ -1,22 +1,20 @@
 /**
- * WLA-007 TESTS — Concurrent domain ownership claims
+ * WLA-007 TESTS — Concurrent domain ownership claims (corrected)
  *
- * Finding: The domain verify route checked ownership with findFirst, then claimed
- * the domain with update — with no transaction between the two. Two concurrent
- * requests could both pass the ownership check and both claim the same domain.
+ * Previous fix used a tautological updateMany condition that provided no protection.
+ * This corrected fix uses a DB-level partial unique index that prevents two providers
+ * from having the same customDomain with domainVerified=true simultaneously.
  *
- * Fix: After the initial updateMany, a post-write re-check confirms the current
- * provider is still the verified owner. If another provider claimed it in the
- * race window, the write is rolled back and 409 is returned.
+ * The route catches P2002 (unique constraint violation) and returns 409.
  *
- * WHAT IS TESTED (source-level + pure-logic)
- *   C01  Route source contains post-write ownership re-check
- *   C02  Route source contains rollback on lost race
- *   C03  Route source uses updateMany (not update) for the claim
- *   C04  Route source returns 409 when ownership is lost
- *   C05  Pure-logic: two providers claiming simultaneously — only one wins
- *   C06  Route source contains WLA-007 fix comment
- *   C07  Existing ownership check (V-01 fix) still present (regression guard)
+ * WHAT IS TESTED
+ *   C01  Route catches P2002 and returns 409
+ *   C02  Route uses prisma.provider.update (not updateMany with tautology)
+ *   C03  Migration SQL creates partial unique index
+ *   C04  Migration index is partial (WHERE domainVerified = true only)
+ *   C05  Route source no longer contains the tautological AND/NOT condition
+ *   C06  Existing V-01 ownership check still present (regression guard)
+ *   C07  Pure-logic: P2002 from concurrent claim → 409 response
  */
 
 import { describe, it, expect } from 'vitest';
@@ -28,101 +26,91 @@ const routeSource = readFileSync(
   'utf-8'
 );
 
-describe('WLA-007 — Concurrent domain ownership claims', () => {
+const migrationSource = readFileSync(
+  resolve(process.cwd(), 'prisma/migrations/20261027000001_wla_007_domain_verified_unique/migration.sql'),
+  'utf-8'
+);
 
-  it('C01 | Route source contains post-write ownership re-check', () => {
-    // After claiming the domain, the route must re-check that the current
-    // provider is still the verified owner (detects a lost race)
-    expect(routeSource).toContain('actualOwner');
-    expect(routeSource).toContain("actualOwner.id !== instructor.id");
-  });
+describe('WLA-007 — Concurrent domain ownership claims (DB constraint fix)', () => {
 
-  it('C02 | Route source contains rollback on lost race', () => {
-    // If the race is lost, the write must be rolled back
-    expect(routeSource).toContain('Roll back our write');
-    expect(routeSource).toContain('customDomain: null');
-    expect(routeSource).toContain('domainVerified: false');
-  });
-
-  it('C03 | Route source uses updateMany (not update) for the claim', () => {
-    // updateMany allows conditional WHERE clauses; plain update would fail
-    // if the row was modified by a concurrent request
-    expect(routeSource).toContain('prisma.provider.updateMany');
-    // The old code used prisma.provider.update — ensure it's gone from the claim section
-    const claimSection = routeSource.substring(
-      routeSource.indexOf('WLA-007 FIX'),
-      routeSource.indexOf('return NextResponse.json', routeSource.indexOf('WLA-007 FIX'))
-    );
-    expect(claimSection).not.toContain('prisma.provider.update(');
-  });
-
-  it('C04 | Route source returns 409 when ownership is lost', () => {
+  it('C01 | Route catches P2002 and returns 409', () => {
+    expect(routeSource).toContain("'P2002'");
     expect(routeSource).toContain('409');
     expect(routeSource).toContain('claimed by another account');
   });
 
-  it('C05 | Pure-logic: two providers claiming simultaneously — only one wins', () => {
-    // Simulate the race: Provider A and Provider B both pass the findFirst check
-    // (neither sees the other as existing owner). Both write. The post-write
-    // re-check must detect that only one can be the actual owner.
-
-    // Simulate DB state after both writes
-    const dbState: Record<string, { id: string; customDomain: string | null; domainVerified: boolean }> = {
-      'prov-a': { id: 'prov-a', customDomain: 'test.com', domainVerified: true },
-      'prov-b': { id: 'prov-b', customDomain: 'test.com', domainVerified: true },
-    };
-
-    // Post-write re-check for Provider A
-    function recheck(providerId: string, domain: string): boolean {
-      // findFirst WHERE customDomain = domain AND domainVerified = true
-      // Returns the first match. In a real DB this is ordered by something;
-      // in the race, both rows exist. The check is: does the actual owner
-      // match the claiming provider?
-      const owners = Object.values(dbState).filter(
-        r => r.customDomain === domain && r.domainVerified === true
-      );
-      // If multiple owners exist, the race was lost by at least one
-      // The first match determines who "wins" (deterministic in the real query
-      // because of orderBy domainVerifiedAt DESC — the earlier write wins)
-      const actualOwner = owners[0];
-      return actualOwner?.id === providerId;
-    }
-
-    // Provider A wrote first (earlier domainVerifiedAt)
-    // Provider B wrote second (later domainVerifiedAt)
-    // The query orders by domainVerifiedAt DESC — so Provider B would be first
-    // But Provider A was first to verify, so Provider A's timestamp is earlier
-    // In practice: the first write has an earlier timestamp, DESC picks the LATEST
-    // So Provider B (second) would be returned as the owner, and Provider A loses
-
-    // Simulate: Provider A's recheck
-    const aWins = recheck('prov-a', 'test.com');
-    // Simulate: Provider B's recheck
-    const bWins = recheck('prov-b', 'test.com');
-
-    // Only one can win (in a properly ordered query, the first match is deterministic)
-    // In our simulation, both see themselves as owners — this is the race the
-    // rollback mechanism handles: the provider who doesn't match the query's
-    // ordering (domainVerifiedAt DESC) loses and must roll back.
-    // At least one must be able to detect the conflict:
-    expect(aWins || bWins).toBe(true);
-
-    // The key assertion: if both claim, the recheck detects a problem for at least one
-    // In the real code, actualOwner.id !== instructor.id triggers the rollback
-    const conflictDetected = (aWins && !bWins) || (!aWins && bWins) || (aWins && bWins);
-    expect(conflictDetected).toBe(true);
+  it('C02 | Route uses prisma.provider.update (not updateMany with tautology)', () => {
+    // The corrected fix uses a simple update with P2002 catch
+    expect(routeSource).toContain('prisma.provider.update(');
+    // The old tautological updateMany is gone
+    expect(routeSource).not.toContain('claimed.count');
   });
 
-  it('C06 | Route source contains WLA-007 fix comment', () => {
-    expect(routeSource).toContain('WLA-007');
+  it('C03 | Migration creates partial unique index on customDomain', () => {
+    expect(migrationSource).toContain('CREATE UNIQUE INDEX');
+    expect(migrationSource).toContain('Provider_customDomain_domainVerified_unique');
+    expect(migrationSource).toContain('"customDomain"');
   });
 
-  it('C07 | Existing V-01 ownership check still present (regression guard)', () => {
-    // The pre-DNS ownership check must remain — WLA-007 adds a post-write check
-    // but does not remove the pre-write check
+  it('C04 | Migration index is partial (WHERE domainVerified = true)', () => {
+    // The index only applies to verified domains — multiple providers can
+    // have the same customDomain pending (domainVerified=false)
+    expect(migrationSource).toContain('WHERE "domainVerified" = true');
+  });
+
+  it('C05 | Route source no longer contains tautological AND/NOT condition', () => {
+    // The previous broken code had: AND: [NOT: { id: { not: instructor.id } }]
+    // which was always true and provided no protection
+    expect(routeSource).not.toContain('id: { not: instructor.id }');
+    expect(routeSource).not.toContain('claimed = await');
+  });
+
+  it('C06 | Existing V-01 ownership check still present (regression guard)', () => {
     expect(routeSource).toContain('V-01 FIX');
     expect(routeSource).toContain('existingOwner');
-    expect(routeSource).toContain('domainVerified: true');
+  });
+
+  it('C07 | Pure-logic: P2002 from concurrent claim produces 409', () => {
+    // Simulate: Provider A and B both pass the pre-write findFirst check.
+    // Provider A's update succeeds. Provider B's update fails with P2002
+    // because the partial unique index prevents two verified owners.
+    function attemptClaim(
+      providerId: string,
+      domain: string,
+      dbState: Map<string, { customDomain: string | null; domainVerified: boolean }>
+    ): { success: boolean; error?: string } {
+      // Check if another provider already has this domain verified
+      for (const [id, record] of dbState) {
+        if (id !== providerId && record.customDomain === domain && record.domainVerified) {
+          // P2002 — unique constraint violation
+          return { success: false, error: 'P2002' };
+        }
+      }
+      // No conflict — claim succeeds
+      dbState.set(providerId, { customDomain: domain, domainVerified: true });
+      return { success: true };
+    }
+
+    const db = new Map<string, { customDomain: string | null; domainVerified: boolean }>([
+      ['prov-a', { customDomain: null, domainVerified: false }],
+      ['prov-b', { customDomain: null, domainVerified: false }],
+    ]);
+
+    // Both pass the pre-write check (neither has the domain yet)
+    // Provider A claims first
+    const resultA = attemptClaim('prov-a', 'test.com', db);
+    expect(resultA.success).toBe(true);
+
+    // Provider B claims second — should fail with P2002
+    const resultB = attemptClaim('prov-b', 'test.com', db);
+    expect(resultB.success).toBe(false);
+    expect(resultB.error).toBe('P2002');
+
+    // Only Provider A owns the verified domain
+    expect(db.get('prov-a')?.customDomain).toBe('test.com');
+    expect(db.get('prov-a')?.domainVerified).toBe(true);
+    expect(db.get('prov-b')?.customDomain).toBe(null);
+    expect(db.get('prov-b')?.domainVerified).toBe(false);
   });
 
 });

@@ -5,16 +5,16 @@
 [90mstdout[2m | unknown test[22m[39m
 📧 Email service mocked for integration tests
 
- [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC01 | Route source contains post-write ownership re-check
- [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC02 | Route source contains rollback on lost race
- [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC03 | Route source uses updateMany (not update) for the claim
- [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC04 | Route source returns 409 when ownership is lost
- [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC05 | Pure-logic: two providers claiming simultaneously — only one wins
- [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC06 | Route source contains WLA-007 fix comment
- [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC07 | Existing V-01 ownership check still present (regression guard)
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims (DB constraint fix)[2m > [22mC01 | Route catches P2002 and returns 409
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims (DB constraint fix)[2m > [22mC02 | Route uses prisma.provider.update (not updateMany with tautology)
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims (DB constraint fix)[2m > [22mC03 | Migration creates partial unique index on customDomain
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims (DB constraint fix)[2m > [22mC04 | Migration index is partial (WHERE domainVerified = true)
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims (DB constraint fix)[2m > [22mC05 | Route source no longer contains tautological AND/NOT condition
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims (DB constraint fix)[2m > [22mC06 | Existing V-01 ownership check still present (regression guard)
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims (DB constraint fix)[2m > [22mC07 | Pure-logic: P2002 from concurrent claim produces 409
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m7 passed[39m[22m[90m (7)[39m
-[2m   Start at [22m 12:41:42
-[2m   Duration [22m 652ms[2m (transform 56ms, setup 56ms, collect 42ms, tests 3ms, environment 0ms, prepare 239ms)[22m
+[2m   Start at [22m 13:05:23
+[2m   Duration [22m 685ms[2m (transform 57ms, setup 54ms, collect 38ms, tests 4ms, environment 0ms, prepare 243ms)[22m
 
