@@ -187,35 +187,45 @@ export async function POST(req: NextRequest) {
     const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
     const price = instructor.hourlyRate * (durationMinutes / 60);
 
-    // WLA-008-B fix: mobile POST must follow the same wallet-check logic as
-    // the web booking route. Instructor-created bookings are PENDING_PAYMENT
-    // when the client's wallet balance is insufficient; CONFIRMED only when
-    // the wallet covers the full price. No booking may be set to CONFIRMED
-    // without a corresponding wallet debit.
+    // WLA-008-B fix (v2): balance check, booking creation, and wallet debit are
+    // all performed inside a single $transaction. This prevents two concurrent
+    // requests from both reading a sufficient balance before either debit commits
+    // (race condition), and prevents a CONFIRMED/isPaid:true booking with no
+    // corresponding wallet debit if the wallet disappears between an outer check
+    // and an inner debit.
+    //
+    // Pattern mirrors the confirmed-path in POST /api/bookings/batch:
+    //   1. Re-read wallet inside tx (authoritative, serialized)
+    //   2. Aggregate confirmed transactions for the real spendable balance
+    //   3. If balance < price → create PENDING_PAYMENT booking, no debit
+    //   4. If balance >= price → create CONFIRMED booking + debit atomically
     const clientRecord = await prisma.customer.findUnique({
       where: { id: customerId },
       select: { userId: true },
     });
     const clientUserId = clientRecord?.userId ?? null;
 
-    let bookingStatus: 'CONFIRMED' | 'PENDING_PAYMENT' = 'PENDING_PAYMENT';
-    if (clientUserId) {
-      const wallet = await prisma.clientWallet.findUnique({
-        where: { userId: clientUserId },
-        include: { transactions: { where: { status: 'CONFIRMED' } } },
-      });
-      if (wallet) {
-        const credits = wallet.transactions.filter(t => t.type === 'CREDIT').reduce((s, t) => s + Number(t.amount), 0);
-        const debits  = wallet.transactions.filter(t => t.type === 'DEBIT').reduce((s, t) => s + Number(t.amount), 0);
-        if (credits - debits >= price) {
-          bookingStatus = 'CONFIRMED';
-          // Debit the wallet atomically with the booking creation below.
+    const booking = await prisma.$transaction(async (tx) => {
+      // Authoritative wallet balance read — inside the transaction so concurrent
+      // requests see a consistent snapshot and cannot double-spend.
+      let bookingStatus: 'CONFIRMED' | 'PENDING_PAYMENT' = 'PENDING_PAYMENT';
+      let walletIdForDebit: string | null = null;
+
+      if (clientUserId) {
+        const wallet = await tx.clientWallet.findUnique({
+          where: { userId: clientUserId },
+          include: { transactions: { where: { status: 'CONFIRMED' } } },
+        });
+        if (wallet) {
+          const credits = wallet.transactions.filter(t => t.type === 'CREDIT').reduce((s, t) => s + Number(t.amount), 0);
+          const debits  = wallet.transactions.filter(t => t.type === 'DEBIT').reduce((s, t) => s + Number(t.amount), 0);
+          if (credits - debits >= price) {
+            bookingStatus = 'CONFIRMED';
+            walletIdForDebit = wallet.id;
+          }
         }
       }
-    }
 
-    // Create booking — status and payment reflect wallet check above
-    const booking = await prisma.$transaction(async (tx) => {
       const newBooking = await tx.booking.create({
         data: {
           providerId: decoded.providerId,
@@ -235,24 +245,22 @@ export async function POST(req: NextRequest) {
         include: { customer: true },
       });
 
-      // Debit wallet only when confirmed
-      if (bookingStatus === 'CONFIRMED' && clientUserId) {
-        const wallet = await tx.clientWallet.findUnique({ where: { userId: clientUserId } });
-        if (wallet) {
-          await tx.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              type: 'DEBIT',
-              amount: price,
-              description: `Mobile lesson booking — ${start.toLocaleDateString('en-AU')}`,
-              status: 'CONFIRMED',
-            },
-          });
-          await tx.clientWallet.update({
-            where: { id: wallet.id },
-            data: { balance: { decrement: price } },
-          });
-        }
+      // Debit wallet atomically — only if the same tx confirms sufficient balance.
+      // walletIdForDebit is non-null only when bookingStatus === 'CONFIRMED'.
+      if (walletIdForDebit) {
+        await tx.walletTransaction.create({
+          data: {
+            walletId: walletIdForDebit,
+            type: 'DEBIT',
+            amount: price,
+            description: `Mobile lesson booking — ${start.toLocaleDateString('en-AU')}`,
+            status: 'CONFIRMED',
+          },
+        });
+        await tx.clientWallet.update({
+          where: { id: walletIdForDebit },
+          data: { balance: { decrement: price } },
+        });
       }
 
       return newBooking;
