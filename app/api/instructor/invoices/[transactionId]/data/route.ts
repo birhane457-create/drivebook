@@ -24,8 +24,12 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const transaction = await (prisma.transaction.findUnique as any)({
-      where: { id: params.transactionId },
+    // WLA-008-A fix (applied to /data sibling): scope the query to the session's
+    // providerId. Using findFirst with { id, providerId } prevents the DB from
+    // returning another provider's record. Returns 404 for both "not found" and
+    // "belongs to another provider" — callers cannot distinguish the two.
+    const transaction = await (prisma.transaction.findFirst as any)({
+      where: { id: params.transactionId, providerId: session!.user!.providerId },
       include: {
         provider: {
           select: {
@@ -55,12 +59,10 @@ export async function GET(
       },
     });
 
+    // WLA-008-A: ownership enforced at query level above.
+    // Null means either no such record or it belongs to another provider — both 404.
     if (!transaction) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
-
-    if (transaction.providerId !== session!.user!.providerId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     const ins = transaction.provider;
