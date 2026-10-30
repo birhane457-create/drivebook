@@ -1,61 +1,55 @@
 /**
  * WLA-008-B-RUNTIME: Mobile Booking Wallet Concurrency Test
  *
- * This test runs against a real PostgreSQL database (port 5433) and verifies
- * that two concurrent mobile booking requests competing for the same wallet
- * balance cannot both result in CONFIRMED bookings if the combined cost exceeds
- * the wallet balance.
+ * Runs against real PostgreSQL (127.0.0.1:5433 / drivebook_test).
  *
- * WHAT IS BEING TESTED
- *   The /api/bookings/mobile POST handler now uses SERIALIZABLE transaction
- *   isolation. Under READ COMMITTED (Prisma default), two concurrent requests
- *   could both read the same sufficient balance before either debit commits,
- *   then both proceed to create CONFIRMED bookings — a double-spend.
- *   SERIALIZABLE isolation detects the write conflict and aborts one transaction
- *   (P2034 serialization failure), which the caller must retry or treat as
- *   PENDING_PAYMENT.
+ * THREE TEST GROUPS
  *
- * WHAT CONSTITUTES A PASS
- *   Given: wallet balance = $80, booking A = $60, booking B = $60
- *   (combined cost $120 > wallet $80 — only one can be confirmed)
+ * Group 1 — CONC-01..CONC-07: Concurrent transaction integrity
+ *   Two booking attempts fire concurrently against a $80 wallet where
+ *   each lesson costs $60 (combined $120 > $80). SERIALIZABLE isolation
+ *   ensures exactly one CONFIRMED booking and one debit.
  *
- *   The test fires both booking transactions concurrently via Promise.all.
- *   After both settle, invariants that must hold:
- *     1. The wallet balance is NOT negative
- *     2. There is not more than one CONFIRMED booking that is isPaid:true
- *        (i.e., the wallet was not double-spent)
- *     3. At least one booking exists (the test is not vacuously passing)
- *     4. Total wallet debits from confirmed transactions ≤ initial balance
+ *   The helper (attemptMobileBooking) replicates the route's transaction
+ *   logic with SERIALIZABLE isolation but intentionally does NOT call
+ *   withSerializableRetry. This tests the isolation property directly:
+ *   one transaction wins, the other gets P2034 and is recorded as ERROR.
+ *   The tests then assert:
+ *     - At least one booking was committed (non-vacuous)
+ *     - Exactly one booking is CONFIRMED and isPaid
+ *     - Wallet balance = initial − one lesson price (no double-spend)
+ *     - Debit count equals confirmed booking count (double-entry)
  *
- * DATABASE: postgresql://postgres:testpass@localhost:5433/drivebook_test
+ * Group 2 — RETRY-01..RETRY-04: withSerializableRetry behavioral tests
+ *   Tests the retry utility directly: P2034 → retry → success; P2034
+ *   exhausted → rethrow; non-P2034 → immediate rethrow; success → pass-through.
  *
- * NOTE ON SERIALIZATION FAILURES
- *   Prisma throws P2034 when a SERIALIZABLE transaction conflicts. The mobile
- *   route does not currently catch P2034 and retry — a P2034 will propagate as
- *   a 500. This is acceptable: the client retries, the retry runs as
- *   PENDING_PAYMENT if the first booking already debited the wallet. The test
- *   accepts either a P2034-derived error response or a PENDING_PAYMENT outcome
- *   for the losing transaction — both are correct. What is NOT acceptable is
- *   two CONFIRMED bookings with a combined debit exceeding the initial balance.
+ * Group 3 — HTTP-01..HTTP-02: Route HTTP response tests
+ *   Verifies that the route returns HTTP 409 on exhausted P2034, and HTTP
+ *   201 on a successful booking, using the actual route handler with mocked
+ *   Prisma.
+ *
+ * DATABASE: postgresql://postgres:testpass@127.0.0.1:5433/drivebook_test
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
 
-// ─── Test fixtures ────────────────────────────────────────────────────────────
+// ─── Fixture globals ─────────────────────────────────────────────────────────
 
 const TEST_PREFIX = 'WLA008B'
-const INITIAL_BALANCE = 80     // enough for ONE $60 lesson, not two
-const LESSON_PRICE_A  = 60     // booking A price
-const LESSON_PRICE_B  = 60     // booking B price (combined = $120 > $80)
+const INITIAL_BALANCE = 80   // enough for ONE $60 lesson, not two
+const LESSON_PRICE_A  = 60
+const LESSON_PRICE_B  = 60  // combined $120 > $80
 
 let providerAId: string
 let clientUserId: string
-let customerId:  string
-let walletId:    string
+let customerId:   string
+let walletId:     string
+
+// ─── Fixture setup / teardown ────────────────────────────────────────────────
 
 async function cleanup() {
-  // Delete in dependency order; ignore missing records
   await prisma.walletTransaction.deleteMany({
     where: { wallet: { userId: clientUserId ?? '__none__' } },
   }).catch(() => {})
@@ -82,7 +76,6 @@ async function cleanup() {
 beforeAll(async () => {
   await cleanup()
 
-  // Create provider user
   const providerUser = await prisma.user.create({
     data: {
       email: `${TEST_PREFIX}-provider@test.com`,
@@ -91,7 +84,6 @@ beforeAll(async () => {
     },
   })
 
-  // Create provider — use relation connect API (Prisma 5 rejects bare userId scalar)
   const provider = await (prisma.provider as any).create({
     data: {
       user:               { connect: { id: providerUser.id } },
@@ -105,7 +97,6 @@ beforeAll(async () => {
   })
   providerAId = provider.id
 
-  // Create client user
   const clientUser = await prisma.user.create({
     data: {
       email: `${TEST_PREFIX}-client@test.com`,
@@ -115,7 +106,7 @@ beforeAll(async () => {
   })
   clientUserId = clientUser.id
 
-  // Create customer record — use raw SQL to avoid Prisma client relation API quirks
+  // Raw INSERT avoids Prisma client relation-API quirk for Customer.userId
   const customerId_raw = `WLA008B-cust-${Date.now()}`
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Customer" (id, "userId", name, email, phone, status, "createdAt", "updatedAt")
@@ -125,16 +116,11 @@ beforeAll(async () => {
   )
   customerId = customerId_raw
 
-  // Create wallet with exactly INITIAL_BALANCE
   const wallet = await prisma.clientWallet.create({
-    data: {
-      userId:  clientUserId,
-      balance: INITIAL_BALANCE,
-    },
+    data: { userId: clientUserId, balance: INITIAL_BALANCE },
   })
   walletId = wallet.id
 
-  // Seed a single CREDIT transaction to establish the balance
   await prisma.walletTransaction.create({
     data: {
       walletId,
@@ -150,18 +136,28 @@ afterAll(async () => {
   await cleanup()
 }, 30000)
 
-// ─── Helper: run one booking transaction (mirrors the mobile route logic) ─────
+// ─── Helper: one booking attempt (mirrors route logic, tests isolation) ───────
+//
+// This helper deliberately uses prisma.$transaction with SERIALIZABLE isolation
+// directly, WITHOUT withSerializableRetry. The intent is to test the isolation
+// property in isolation: one tx wins, the other gets P2034 immediately.
+// The retry helper is tested separately in Group 2 (RETRY-*).
+
+type AttemptResult =
+  | { status: 'CONFIRMED'; bookingId: string }
+  | { status: 'PENDING_PAYMENT'; bookingId: string }
+  | { status: 'P2034' }
+  | { status: 'ERROR'; error: string }
 
 async function attemptMobileBooking(
   startOffsetMinutes: number,
   lessonPrice: number
-): Promise<{ status: 'CONFIRMED' | 'PENDING_PAYMENT' | 'ERROR'; bookingId?: string; error?: string }> {
-  const start = new Date(Date.now() + startOffsetMinutes * 60_000 + 86_400_000) // tomorrow + offset
-  const end   = new Date(start.getTime() + 60 * 60_000) // 1 hour
+): Promise<AttemptResult> {
+  const start = new Date(Date.now() + startOffsetMinutes * 60_000 + 86_400_000)
+  const end   = new Date(start.getTime() + 60 * 60_000)
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // ── Exact same logic as the fixed mobile route ──────────────────────────
       let bookingStatus: 'CONFIRMED' | 'PENDING_PAYMENT' = 'PENDING_PAYMENT'
       let walletIdForDebit: string | null = null
 
@@ -198,134 +194,122 @@ async function attemptMobileBooking(
         await tx.walletTransaction.create({
           data: {
             walletId: walletIdForDebit,
-            type:        'DEBIT',
-            amount:      lessonPrice,
-            description: `WLA008B concurrency test booking`,
-            status:      'CONFIRMED',
+            type:    'DEBIT',
+            amount:  lessonPrice,
+            description: 'WLA008B concurrency test booking',
+            status:  'CONFIRMED',
           },
         })
         await tx.clientWallet.update({
           where: { id: walletIdForDebit },
-          data: { balance: { decrement: lessonPrice } },
+          data:  { balance: { decrement: lessonPrice } },
         })
       }
 
       return { bookingStatus, bookingId: newBooking.id }
-    }, {
-      isolationLevel: 'Serializable',
-      maxWait: 5000,
-      timeout: 10000,
-    })
+    }, { isolationLevel: 'Serializable', maxWait: 5000, timeout: 10000 })
 
     return { status: result.bookingStatus, bookingId: result.bookingId }
   } catch (err: any) {
-    // P2034 = serialization failure — expected for the losing concurrent transaction
-    const code = err?.code ?? err?.meta?.code ?? ''
-    if (code === 'P2034' || err?.message?.includes('serializ')) {
-      return { status: 'ERROR', error: 'P2034-serialization-failure' }
-    }
+    const code = err?.code ?? ''
+    if (code === 'P2034') return { status: 'P2034' }
     return { status: 'ERROR', error: err?.message ?? String(err) }
   }
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+// ─── Group 1: Concurrent transaction integrity ───────────────────────────────
 
 describe('WLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity', () => {
-  it('CONC-01 — wallet balance is not negative after two concurrent $60 bookings against $80 wallet', async () => {
-    // Fire two concurrent booking attempts. Combined cost $120 > balance $80.
-    // SERIALIZABLE isolation ensures only one can commit as CONFIRMED.
-    const [resultA, resultB] = await Promise.all([
-      attemptMobileBooking(60,  LESSON_PRICE_A),  // starts in 1h
-      attemptMobileBooking(180, LESSON_PRICE_B),  // starts in 3h
+  let resultA: AttemptResult
+  let resultB: AttemptResult
+
+  // Run the race once; subsequent tests read shared state.
+  beforeAll(async () => {
+    ;[resultA, resultB] = await Promise.all([
+      attemptMobileBooking(60,  LESSON_PRICE_A),
+      attemptMobileBooking(180, LESSON_PRICE_B),
     ])
-
-    // Read final wallet state
-    const finalWallet = await prisma.clientWallet.findUnique({
-      where: { userId: clientUserId },
-    })
-    const finalBalance = Number(finalWallet?.balance ?? 0)
-
-    console.log('[CONC-01] Result A:', resultA.status, resultA.error ?? '')
-    console.log('[CONC-01] Result B:', resultB.status, resultB.error ?? '')
-    console.log('[CONC-01] Final wallet balance:', finalBalance)
-
-    // PRIMARY INVARIANT: wallet must not be negative
-    expect(finalBalance).toBeGreaterThanOrEqual(0)
+    console.log('[CONC] Result A:', resultA.status)
+    console.log('[CONC] Result B:', resultB.status)
   }, 30000)
 
-  it('CONC-02 — at most one CONFIRMED booking exists after the concurrent race', async () => {
-    const confirmedBookings = await prisma.booking.findMany({
-      where: {
-        providerId: providerAId,
-        customerId,
-        status:     'CONFIRMED',
-        isPaid:     true,
-      },
+  it('CONC-01 — at least one booking was committed (non-vacuous)', async () => {
+    // If both attempts fail entirely (e.g. both ERROR), all the balance/debit
+    // checks would trivially pass against an empty database state. This test
+    // guards against that: at least one tx must have committed a booking row.
+    const totalBookings = await prisma.booking.count({
+      where: { providerId: providerAId, customerId },
     })
+    console.log('[CONC-01] Total booking rows:', totalBookings)
+    expect(totalBookings).toBeGreaterThanOrEqual(1)
+  }, 30000)
 
+  it('CONC-02 — exactly one CONFIRMED (isPaid) booking exists — no double-spend', async () => {
+    const confirmedBookings = await prisma.booking.findMany({
+      where: { providerId: providerAId, customerId, status: 'CONFIRMED', isPaid: true },
+    })
     console.log('[CONC-02] CONFIRMED bookings:', confirmedBookings.length)
     for (const b of confirmedBookings) {
       console.log('  booking', b.id, 'price:', b.price)
     }
-
-    // Only one booking can be CONFIRMED because the wallet only had $80
-    // and each lesson costs $60. Two CONFIRMEDs would require $120.
-    expect(confirmedBookings.length).toBeLessThanOrEqual(1)
+    // Exactly one: not zero (at least one winner), not two (no double-spend)
+    expect(confirmedBookings.length).toBe(1)
   }, 30000)
 
-  it('CONC-03 — total debits from confirmed wallet transactions ≤ initial balance', async () => {
-    const debitTxns = await prisma.walletTransaction.findMany({
-      where: {
-        walletId,
-        type:   'DEBIT',
-        status: 'CONFIRMED',
-      },
-    })
-
-    const totalDebited = debitTxns.reduce((s, t) => s + Number(t.amount), 0)
-    console.log('[CONC-03] Total debited:', totalDebited, 'from', debitTxns.length, 'debit transaction(s)')
-
-    // Total debits must never exceed initial balance
-    expect(totalDebited).toBeLessThanOrEqual(INITIAL_BALANCE)
-  }, 30000)
-
-  it('CONC-04 — double-entry invariant: confirmed booking count matches debit transaction count', async () => {
+  it('CONC-03 — the losing result is PENDING_PAYMENT or P2034 (never a second CONFIRMED)', async () => {
+    // The loser either committed as PENDING_PAYMENT (balance insufficient at
+    // the time of its own read) or was aborted by P2034 and retried as ERROR.
     const confirmedBookings = await prisma.booking.count({
       where: { providerId: providerAId, customerId, status: 'CONFIRMED', isPaid: true },
     })
-    const debitTxns = await prisma.walletTransaction.count({
-      where: { walletId, type: 'DEBIT', status: 'CONFIRMED' },
-    })
-
-    console.log('[CONC-04] CONFIRMED bookings:', confirmedBookings, '| Wallet debits:', debitTxns)
-
-    // Every CONFIRMED booking must have exactly one wallet debit
-    expect(confirmedBookings).toBe(debitTxns)
+    const loser = resultA.status === 'CONFIRMED' ? resultB : resultA
+    console.log('[CONC-03] Loser status:', loser.status)
+    expect(confirmedBookings).toBe(1)
+    expect(['PENDING_PAYMENT', 'P2034']).toContain(loser.status)
   }, 30000)
 
-  it('CONC-05 — source uses SERIALIZABLE isolation level', () => {
-    // Structural proof that the fix is in the source — prevents silent regression.
-    const { readFileSync } = require('fs')
-    const { resolve } = require('path')
-    const source = readFileSync(
-      resolve(process.cwd(), 'app/api/bookings/mobile/route.ts'),
-      'utf-8'
-    )
-    expect(source).toMatch(/isolationLevel.*Serializable|Serializable.*isolationLevel/)
-    expect(source).toMatch(/MOBILE_BOOKING_TX/)
-  })
+  it('CONC-04 — wallet balance equals initial minus exactly one lesson price', async () => {
+    const finalWallet = await prisma.clientWallet.findUnique({
+      where: { userId: clientUserId },
+    })
+    const finalBalance = Number(finalWallet?.balance ?? -999)
+    console.log('[CONC-04] Final wallet balance:', finalBalance)
+    // $80 − $60 = $20 — not $20−$60=−$40 (double-spend), not $80 (nothing happened)
+    expect(finalBalance).toBe(INITIAL_BALANCE - LESSON_PRICE_A)
+  }, 30000)
 
-  it('CONC-06 — P2034 is handled as 409 in the route catch block (source check)', () => {
+  it('CONC-05 — total confirmed debits equal one lesson price', async () => {
+    const debitTxns = await prisma.walletTransaction.findMany({
+      where: { walletId, type: 'DEBIT', status: 'CONFIRMED' },
+    })
+    const totalDebited = debitTxns.reduce((s, t) => s + Number(t.amount), 0)
+    console.log('[CONC-05] Total debited:', totalDebited, 'from', debitTxns.length, 'debit(s)')
+    expect(debitTxns.length).toBe(1)
+    expect(totalDebited).toBe(LESSON_PRICE_A)
+  }, 30000)
+
+  it('CONC-06 — double-entry: confirmed booking count equals debit transaction count', async () => {
+    const confirmedBookings = await prisma.booking.count({
+      where: { providerId: providerAId, customerId, status: 'CONFIRMED', isPaid: true },
+    })
+    const debitCount = await prisma.walletTransaction.count({
+      where: { walletId, type: 'DEBIT', status: 'CONFIRMED' },
+    })
+    console.log('[CONC-06] Confirmed bookings:', confirmedBookings, '| Debits:', debitCount)
+    expect(confirmedBookings).toBe(debitCount)
+  }, 30000)
+
+  it('CONC-07 — source: SERIALIZABLE isolation + withSerializableRetry + P2034→409 present', () => {
     const { readFileSync } = require('fs')
     const { resolve } = require('path')
-    const source = readFileSync(
-      resolve(process.cwd(), 'app/api/bookings/mobile/route.ts'),
-      'utf-8'
-    )
-    // Verify explicit P2034 catch returns 409
-    expect(source).toMatch(/P2034/)
-    expect(source).toMatch(/409/)
-    // Verify withSerializableRetry wraps the transaction (retries before surfacing P2034)
-    expect(source).toMatch(/withSerializableRetry/)
+    const src = readFileSync(resolve(process.cwd(), 'app/api/bookings/mobile/route.ts'), 'utf-8')
+    expect(src).toMatch(/isolationLevel.*Serializable|Serializable.*isolationLevel/)
+    expect(src).toMatch(/MOBILE_BOOKING_TX/)
+    expect(src).toMatch(/withSerializableRetry/)
+    expect(src).toMatch(/P2034/)
+    expect(src).toMatch(/409/)
   })
 })
+
+// ─── Group 2 and Group 3 (RETRY-*, HTTP-*) live in wla-008-b-mobile-route-http.test.ts
+
