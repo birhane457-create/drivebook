@@ -205,6 +205,18 @@ export async function POST(req: NextRequest) {
     });
     const clientUserId = clientRecord?.userId ?? null;
 
+    // WLA-008-B-RUNTIME: SERIALIZABLE isolation ensures that two concurrent
+    // transactions cannot both read the same wallet balance and both proceed
+    // to debit. Under READ COMMITTED (Prisma default), both would see
+    // sufficient funds before either debit commits — a double-spend.
+    // Matches the isolation level used in POST /api/bookings, confirm-package-booking,
+    // and the Stripe webhook handler.
+    const MOBILE_BOOKING_TX = {
+      isolationLevel: 'Serializable' as const,
+      maxWait: 5000,
+      timeout: 10000,
+    };
+
     const booking = await prisma.$transaction(async (tx) => {
       // Authoritative wallet balance read — inside the transaction so concurrent
       // requests see a consistent snapshot and cannot double-spend.
@@ -264,7 +276,7 @@ export async function POST(req: NextRequest) {
       }
 
       return newBooking;
-    });
+    }, MOBILE_BOOKING_TX);
 
     // If booking type is PDA_TEST, create a PDA test entry
     if (bookingType === 'PDA_TEST' && testCenterName && testCenterAddress) {
