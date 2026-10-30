@@ -107,47 +107,36 @@ export async function POST(req: NextRequest) {
       // Auto-add to Vercel project so SSL is provisioned and traffic is accepted
       const vercelResult = await addDomainToVercel(domain);
 
-      // WLA-007 FIX: Use updateMany with a CAS-style condition to prevent the
-      // race between the ownership check above (findFirst) and this write.
-      // Two concurrent requests that both pass the findFirst check would both
-      // try to write here. updateMany returns count=0 if another provider has
-      // already claimed the domain since the ownership check ran.
-      // Without this, two providers could both acquire the same verified domain.
-      const claimed = await prisma.provider.updateMany({
-        where: {
-          id: instructor.id,
-          // Only proceed if no other verified owner has appeared since our check
-          AND: [
-            {
-              NOT: {
-                id: { not: instructor.id },
-              }
-            }
-          ]
-        },
-        data: {
-          customDomain: domain,
-          domainVerified: true,
-          domainVerifiedAt: new Date(),
-        },
-      });
-
-      // Double-check: re-verify ownership after the write to detect a lost race
-      const actualOwner = await prisma.provider.findFirst({
-        where: { customDomain: domain, domainVerified: true },
-        select: { id: true },
-      });
-      if (!actualOwner || actualOwner.id !== instructor.id) {
-        // Another provider claimed the domain between our check and write
-        // Roll back our write
-        await prisma.provider.updateMany({
-          where: { id: instructor.id, customDomain: domain },
-          data: { customDomain: null, domainVerified: false, domainVerifiedAt: null },
+      // WLA-007 FIX: Use DB-level partial unique index to prevent concurrent claims.
+      // The migration 20261027000001 creates:
+      //   CREATE UNIQUE INDEX "Provider_customDomain_domainVerified_unique"
+      //   ON "Provider" ("customDomain") WHERE "domainVerified" = true
+      //
+      // This means if another provider has already verified the same domain,
+      // the update below will throw a P2002 (unique constraint violation).
+      // We catch that and return 409.
+      //
+      // The previous code used a tautological updateMany condition that provided
+      // no cross-row protection. The DB index is the only reliable race prevention
+      // because the DNS lookup (100-500ms) is too long for a serializable transaction.
+      try {
+        await prisma.provider.update({
+          where: { id: instructor.id },
+          data: {
+            customDomain: domain,
+            domainVerified: true,
+            domainVerifiedAt: new Date(),
+          },
         });
-        return NextResponse.json(
-          { error: 'This domain was claimed by another account. Please contact support.' },
-          { status: 409 }
-        );
+      } catch (err: any) {
+        // P2002 = unique constraint violation — another provider claimed this domain
+        if (err?.code === 'P2002') {
+          return NextResponse.json(
+            { error: 'This domain was claimed by another account. Please contact support.' },
+            { status: 409 }
+          );
+        }
+        throw err;
       }
 
       return NextResponse.json({
