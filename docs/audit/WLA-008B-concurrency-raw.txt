@@ -12,7 +12,7 @@
 
 [90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-02 — at most one CONFIRMED booking exists after the concurrent race[22m[39m
 [CONC-02] CONFIRMED bookings: [33m1[39m
-  booking cmvuv2jyx000ayh10i3j4lylv price: 60
+  booking cmvv36qu7000a53slr82ezz6t price: 60
 
 [90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-03 — total debits from confirmed wallet transactions ≤ initial balance[22m[39m
 [CONC-03] Total debited: [33m60[39m from [33m1[39m debit transaction(s)
@@ -25,9 +25,10 @@
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-03 — total debits from confirmed wallet transactions ≤ initial balance
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-04 — double-entry invariant: confirmed booking count matches debit transaction count
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-05 — source uses SERIALIZABLE isolation level
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-06 — P2034 is handled as 409 in the route catch block (source check)
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m5 passed[39m[22m[90m (5)[39m
-[2m   Start at [22m 19:00:34
-[2m   Duration [22m 757ms[2m (transform 60ms, setup 44ms, collect 99ms, tests 158ms, environment 0ms, prepare 174ms)[22m
+[2m      Tests [22m [1m[32m6 passed[39m[22m[90m (6)[39m
+[2m   Start at [22m 22:47:46
+[2m   Duration [22m 1.22s[2m (transform 73ms, setup 54ms, collect 106ms, tests 495ms, environment 1ms, prepare 254ms)[22m
 

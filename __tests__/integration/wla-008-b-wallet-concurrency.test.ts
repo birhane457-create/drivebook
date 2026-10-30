@@ -314,4 +314,18 @@ describe('WLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity', () => 
     expect(source).toMatch(/isolationLevel.*Serializable|Serializable.*isolationLevel/)
     expect(source).toMatch(/MOBILE_BOOKING_TX/)
   })
+
+  it('CONC-06 — P2034 is handled as 409 in the route catch block (source check)', () => {
+    const { readFileSync } = require('fs')
+    const { resolve } = require('path')
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/api/bookings/mobile/route.ts'),
+      'utf-8'
+    )
+    // Verify explicit P2034 catch returns 409
+    expect(source).toMatch(/P2034/)
+    expect(source).toMatch(/409/)
+    // Verify withSerializableRetry wraps the transaction (retries before surfacing P2034)
+    expect(source).toMatch(/withSerializableRetry/)
+  })
 })
