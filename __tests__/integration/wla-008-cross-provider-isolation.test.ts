@@ -193,6 +193,24 @@ describe('WLA-008-B: Mobile POST — source verification', () => {
     const debitVarAssign = mobileSource.indexOf('walletIdForDebit = wallet.id', txStart)
     expect(debitVarAssign).toBeGreaterThan(txStart)
   })
+
+  it('B09 — withSerializableRetry wraps the $transaction call', () => {
+    // After retry utility was added, P2034 serialization failures are retried
+    // with exponential backoff before surfacing. The import and call must be present.
+    expect(mobileSource).toMatch(/withSerializableRetry/)
+    expect(mobileSource).toMatch(/operationName.*mobile-booking/)
+  })
+
+  it('B10 — P2034 exhausted returns 409 (not 500)', () => {
+    // After all retries are exhausted a P2034 should surface as 409 to the client
+    // (retryable conflict), not 500 (unexpected error). Matches SLOT_CONFLICT pattern.
+    expect(mobileSource).toMatch(/P2034/)
+    // The P2034 catch must return 409 — find both in the catch block
+    const catchStart = mobileSource.indexOf('if (error?.code')
+    const after = mobileSource.slice(catchStart, catchStart + 200)
+    expect(after).toMatch(/P2034/)
+    expect(after).toMatch(/409/)
+  })
 })
 
 // ─── WLA-008-C: Combined route — source verification ─────────────────────────

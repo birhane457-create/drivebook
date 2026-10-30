@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.67 (WLA-007 fix verified; WLA-008 route inventory complete + sub-findings fixed; 10 WLA findings still open)
+**Version:** 5.68 (WLA-008-B-RUNTIME: SERIALIZABLE isolation added + 5/5 PostgreSQL concurrency tests at b75e37fc; WLA-008 remains OPEN)
 **Last Updated:** 2026-10-30
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -743,7 +743,8 @@ Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, 
 |---|---|---|---|---|---|
 | WLA-008-A-txt | `/api/instructor/invoices/[transactionId]` | Post-fetch IDOR (findUnique then ownership check) | `findFirst({ where: { id, providerId } })`; 404 for null | `2dc5d81a` | **FIX APPLIED** |
 | WLA-008-A-data | `/api/instructor/invoices/[transactionId]/data` | Same post-fetch IDOR pattern (reviewer identified) | `findFirst({ where: { id, providerId } })`; removed 403 branch; 404 for null | `98fb7605` | **FIX APPLIED** |
-| WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap) | Customer ownership via `bookings.some`; wallet balance check, booking create, and debit inside single `$transaction` | `2dc5d81a`, `98fb7605` | **FIX APPLIED** |
+| WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap); default READ COMMITTED isolation allowed double-spend | Customer ownership via `bookings.some`; wallet balance check + booking create + debit inside single `$transaction`; `isolationLevel: 'Serializable'` added (matches pattern in main bookings route, confirm-package-booking, Stripe webhook) | `2dc5d81a`, `98fb7605`, `b75e37fc` | **FIX APPLIED** — SERIALIZABLE isolation source-verified; PostgreSQL concurrency test run (see below) |
+| WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc` | **5/5 REPORTED** — PostgreSQL 16.4, 127.0.0.1:5433; raw log: `docs/audit/WLA-008B-concurrency-raw.txt`. Independent review outstanding. Serialization-failure HTTP response not yet verified. |
 | WLA-008-C | `/api/bookings/combined` POST | No rate limiting → slot-squatting with zero-cost PENDING bookings | `bookingRateLimit` (10/min) before DB; per-user identifier | `2dc5d81a` | **FIX APPLIED** — fail-open limitation documented |
 
 Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
@@ -758,8 +759,21 @@ Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 | `/api/bookings/[id]` methods | PATCH/GET/DELETE ✅ verified; other methods need confirming |
 | 7 other ⚠️ REVIEW routes | See route inventory document |
 
-Test evidence: 24/24 source-inspection tests, `__tests__/integration/wla-008-cross-provider-isolation.test.ts`, commit `98fb7605`.  
-Verification limitation: tests read source files and check structural patterns. No Provider A/B database-level behavioral tests. Full behavioral cross-tenant verification is incomplete.
+Test evidence:
+- Source-inspection: 24/24 tests, `__tests__/integration/wla-008-cross-provider-isolation.test.ts`, commit `98fb7605`
+- PostgreSQL concurrency: 5/5 tests, `__tests__/integration/wla-008-b-wallet-concurrency.test.ts`, commit `b75e37fc`
+  - CONC-01: final balance $20 (not negative) ✓
+  - CONC-02: exactly 1 CONFIRMED booking ✓
+  - CONC-03: total debits ($60) ≤ initial balance ($80) ✓
+  - CONC-04: 1 CONFIRMED = 1 debit (double-entry invariant) ✓
+  - CONC-05: SERIALIZABLE isolation present in source ✓
+  - Reported; not independently re-executed
+
+Verification limitations:
+- Source-inspection tests check structural patterns only — they do not invoke HTTP handlers.
+- Concurrency test demonstrates one-winner outcome but does not verify the losing request's HTTP response or P2034 serialization-failure handling from the route layer.
+- No Provider A/B database-level behavioral tests. Full cross-tenant verification incomplete.
+- 13 ⚠️ REVIEW routes from the inventory still require ownership review.
 
 ### 9.4 — Verification qualification
 
