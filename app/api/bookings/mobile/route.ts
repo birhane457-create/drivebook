@@ -5,6 +5,7 @@ import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 import jwt from 'jsonwebtoken';
 import { availabilityService } from '@/lib/services/availability';
 import { googleCalendarService } from '@/lib/services/googleCalendar';
+import { withSerializableRetry } from '@/lib/utils/transaction-retry';
 
 
 export const dynamic = 'force-dynamic';
@@ -217,7 +218,8 @@ export async function POST(req: NextRequest) {
       timeout: 10000,
     };
 
-    const booking = await prisma.$transaction(async (tx) => {
+    const booking = await withSerializableRetry(
+      () => prisma.$transaction(async (tx) => {
       // Authoritative wallet balance read — inside the transaction so concurrent
       // requests see a consistent snapshot and cannot double-spend.
       let bookingStatus: 'CONFIRMED' | 'PENDING_PAYMENT' = 'PENDING_PAYMENT';
@@ -276,7 +278,9 @@ export async function POST(req: NextRequest) {
       }
 
       return newBooking;
-    }, MOBILE_BOOKING_TX);
+      }, MOBILE_BOOKING_TX),
+      { operationName: 'mobile-booking' }
+    );
 
     // If booking type is PDA_TEST, create a PDA test entry
     if (bookingType === 'PDA_TEST' && testCenterName && testCenterAddress) {
@@ -354,6 +358,17 @@ export async function POST(req: NextRequest) {
 
     if (error.name === 'JsonWebTokenError') {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // WLA-008-B-RUNTIME: P2034 = serialization conflict exhausted after retries.
+    // The concurrent request that won has already committed; the client should
+    // retry. 409 is more informative than 500 and matches the pattern used in
+    // /api/bookings (SLOT_CONFLICT → 409).
+    if (error?.code === 'P2034') {
+      return NextResponse.json(
+        { error: 'Booking could not be confirmed due to a concurrent request. Please try again.' },
+        { status: 409 }
+      );
     }
 
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
