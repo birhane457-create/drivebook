@@ -19,9 +19,12 @@ export async function GET(
 
     const transactionId = params.transactionId;
 
-    // Get transaction with related data
-    const transaction = await (prisma.transaction.findUnique as any)({
-      where: { id: transactionId },
+    // WLA-008-A fix: scope the query to the session's providerId so the DB
+    // never returns another provider's record. Using findFirst with a compound
+    // WHERE is equivalent to findUnique but allows the extra filter without
+    // requiring a composite unique index.
+    const transaction = await (prisma.transaction.findFirst as any)({
+      where: { id: transactionId, providerId: session!.user!.providerId },
       include: {
         provider: {
           select: {
@@ -51,13 +54,11 @@ export async function GET(
       }
     });
 
+    // WLA-008-A: ownership is now enforced at the query level above.
+    // A null result means either the transaction doesn't exist or belongs to
+    // another provider — both cases return 404 to avoid confirming existence.
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
-    }
-
-    // Verify instructor owns this transaction
-    if (transaction.providerId !== session!.user!.providerId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     // Generate simple text invoice

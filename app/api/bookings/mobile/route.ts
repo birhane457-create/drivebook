@@ -134,6 +134,24 @@ export async function POST(req: NextRequest) {
     const start = new Date(startTime);
     const end = new Date(endTime);
 
+    // WLA-008-B fix: verify the customer belongs to this instructor before
+    // creating a booking. An instructor must have at least one booking with
+    // the customer, or the customer must be in their client list.
+    // Using the same scoping logic as /api/instructor/clients/[id].
+    const customer = await prisma.customer.findFirst({
+      where: {
+        id: customerId,
+        bookings: { some: { providerId: decoded.providerId } },
+      },
+      select: { id: true, name: true, phone: true, email: true },
+    });
+    if (!customer) {
+      return NextResponse.json(
+        { error: 'Client not found or does not belong to your clients' },
+        { status: 404 }
+      );
+    }
+
     // Check for double booking
     const hasConflict = await availabilityService.checkDoubleBooking(
       decoded.providerId,
@@ -169,23 +187,75 @@ export async function POST(req: NextRequest) {
     const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
     const price = instructor.hourlyRate * (durationMinutes / 60);
 
-    // Create booking
-    const booking = await prisma.booking.create({
-      data: {
-        providerId: decoded.providerId,
-        customerId,
-        bookingType: bookingType || 'LESSON',
-        startTime: start,
-        endTime: end,
-        pickupAddress: bookingType === 'PDA_TEST' ? testCenterAddress : pickupAddress,
-        dropoffAddress: bookingType === 'PDA_TEST' ? testCenterAddress : (dropoffAddress || pickupAddress),
-        price,
-        notes,
-        status: 'CONFIRMED',
-        createdBy: 'provider',
-      },
-      include: { customer: true,
-      },
+    // WLA-008-B fix: mobile POST must follow the same wallet-check logic as
+    // the web booking route. Instructor-created bookings are PENDING_PAYMENT
+    // when the client's wallet balance is insufficient; CONFIRMED only when
+    // the wallet covers the full price. No booking may be set to CONFIRMED
+    // without a corresponding wallet debit.
+    const clientRecord = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { userId: true },
+    });
+    const clientUserId = clientRecord?.userId ?? null;
+
+    let bookingStatus: 'CONFIRMED' | 'PENDING_PAYMENT' = 'PENDING_PAYMENT';
+    if (clientUserId) {
+      const wallet = await prisma.clientWallet.findUnique({
+        where: { userId: clientUserId },
+        include: { transactions: { where: { status: 'CONFIRMED' } } },
+      });
+      if (wallet) {
+        const credits = wallet.transactions.filter(t => t.type === 'CREDIT').reduce((s, t) => s + Number(t.amount), 0);
+        const debits  = wallet.transactions.filter(t => t.type === 'DEBIT').reduce((s, t) => s + Number(t.amount), 0);
+        if (credits - debits >= price) {
+          bookingStatus = 'CONFIRMED';
+          // Debit the wallet atomically with the booking creation below.
+        }
+      }
+    }
+
+    // Create booking — status and payment reflect wallet check above
+    const booking = await prisma.$transaction(async (tx) => {
+      const newBooking = await tx.booking.create({
+        data: {
+          providerId: decoded.providerId,
+          customerId,
+          bookingType: bookingType || 'LESSON',
+          startTime: start,
+          endTime: end,
+          pickupAddress: bookingType === 'PDA_TEST' ? testCenterAddress : pickupAddress,
+          dropoffAddress: bookingType === 'PDA_TEST' ? testCenterAddress : (dropoffAddress || pickupAddress),
+          price,
+          notes,
+          status: bookingStatus,
+          isPaid: bookingStatus === 'CONFIRMED',
+          paidAt: bookingStatus === 'CONFIRMED' ? new Date() : undefined,
+          createdBy: 'provider',
+        } as any,
+        include: { customer: true },
+      });
+
+      // Debit wallet only when confirmed
+      if (bookingStatus === 'CONFIRMED' && clientUserId) {
+        const wallet = await tx.clientWallet.findUnique({ where: { userId: clientUserId } });
+        if (wallet) {
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'DEBIT',
+              amount: price,
+              description: `Mobile lesson booking — ${start.toLocaleDateString('en-AU')}`,
+              status: 'CONFIRMED',
+            },
+          });
+          await tx.clientWallet.update({
+            where: { id: wallet.id },
+            data: { balance: { decrement: price } },
+          });
+        }
+      }
+
+      return newBooking;
     });
 
     // If booking type is PDA_TEST, create a PDA test entry

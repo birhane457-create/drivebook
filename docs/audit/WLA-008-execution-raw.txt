@@ -1,0 +1,30 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A: Invoice IDOR — source verification[2m > [22mA01 — route uses findFirst (not findUnique) for transaction lookup
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A: Invoice IDOR — source verification[2m > [22mA02 — providerId is included in the WHERE clause of the DB query
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A: Invoice IDOR — source verification[2m > [22mA03 — no separate post-fetch ownership check exists (removed, replaced by DB scope)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A: Invoice IDOR — source verification[2m > [22mA04 — a null result from findFirst returns 404 (not 403), hiding record existence
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB01 — customer ownership check is present (bookings.some + providerId)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB02 — CONFIRMED status is conditional on wallet balance, not hardcoded
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB03 — wallet debit is created when booking is CONFIRMED
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB04 — isPaid reflects computed bookingStatus, not hardcoded
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB05 — customer ownership check fires before booking creation
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC01 — bookingRateLimit is imported
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC02 — checkRateLimit is called inside the POST handler
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC03 — rate limit is applied before any DB query
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC04 — 429 response is returned on rate limit exceeded
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC05 — getRateLimitIdentifier is used to scope limit per user
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008: Regression — secured routes still have correct scoping[2m > [22mR01 — bookings/[id] PATCH still uses session.user.providerId in WHERE clause
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008: Regression — secured routes still have correct scoping[2m > [22mR02 — bookings/batch POST still uses providerId from session (not body)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008: Regression — secured routes still have correct scoping[2m > [22mR03 — schedule-package-hours providerId is used only for redirect URL, not DB query
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m17 passed[39m[22m[90m (17)[39m
+[2m   Start at [22m 16:57:30
+[2m   Duration [22m 695ms[2m (transform 66ms, setup 73ms, collect 60ms, tests 6ms, environment 1ms, prepare 229ms)[22m
+
