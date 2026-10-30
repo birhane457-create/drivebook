@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.65 (Final tracker consistency: section 8.4 OPEN→RESOLVED; PB-POL-02 awaiting→FIX-VERIFIED. Audit scope complete except AI-M-01/02 deferred.)
-**Last Updated:** 2026-10-25
+**Version:** 5.66 (WLA series added to tracker — fixes for WLA-001/003/006/009/010/017 on main; 12 findings still open)
+**Last Updated:** 2026-10-27
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -697,3 +697,54 @@ These items were raised during the audit and verified source-safe. Recorded here
 | Concurrent double-spend (`POST /api/bookings`) | Balance re-checked inside SERIALIZABLE tx; pre-check is fast-reject only | ✅ VERIFIED SAFE |
 | Slot double-booking | Three-layer guard: Booking table + SlotReservation + PostgreSQL GiST constraint | ✅ VERIFIED SAFE |
 | Idempotency (`POST /api/public/bookings/bulk`) | `BookingIdempotencyKey` persisted inside same `$transaction` as `Booking.create` | ✅ VERIFIED SAFE |
+
+---
+
+## Section 9 — White-Label and Account-Separation Findings (WLA Series)
+
+**Audit branch:** `audit/white-label-findings-consolidation`  
+**Source of findings:** Consolidated from Kimi, Claude and GPT source reviews; 18 findings registered WLA-001–WLA-018.  
+**Base commit for branch:** `5945d037` (main at branch creation)  
+**Changes on main:** Fixes for WLA-001, WLA-003, WLA-006, WLA-009, WLA-010, WLA-017 applied to main.
+
+### 9.1 — Findings worked to date (on main)
+
+| ID | Title | Risk | Status | Fix commit | Tests | Notes |
+|---|---|---|---|---|---|---|
+| WLA-001 | Quote checkout path lacked DIRECT-payment-mode guard | P1 | **FIX APPLIED** — awaiting independent review | `0b47689c` | 10/10 source+logic | Guard moved before `acceptQuote()` so no state changes before 503. Matches pattern in create-intent and bulk-booking routes. |
+| WLA-003 | Stripe Checkout return URLs pointed to `/customer-dashboard/bookings` (non-existent route) | P1 | **FIX APPLIED** — awaiting independent review | `f733ae01` | (same suite as WLA-001) | Corrected to `/client-dashboard/bookings` in `lib/services/saas-payment.ts`. |
+| WLA-006 | `domain_already_in_use` treated as successful domain attachment | P1 | **FIX APPLIED** — awaiting independent review | `c8370f89` | 8/8 | Extracted `addDomainToVercel()` to `lib/services/vercel-domains.ts`; `domain_already_in_use` now returns `{ success: false }`. |
+| WLA-009 | PREMIUM tier excluded from subdomain renderer branding despite `whiteLabel: true` entitlement | P2 | **FIX APPLIED** — fix documented and live file confirmed | `f09c6c3d` | 11/11 | Renderer uses `isBrandingEligible` including PREMIUM. `whiteLabel: isPremium` (structure removed). `multiInstructor: false` for all current tiers. Architecture decision in `.kiro/steering/account-architecture.md`. |
+| WLA-010 | Custom-domain middleware missing `/book`, `/privacy`, `/terms` from skip-paths | P1 | **FIX APPLIED** — awaiting independent review | `c65cf3ee` | 10/10 source+logic | `BusinessWebsitePage.tsx` links to these paths; without exemptions they 404 on custom domains. |
+| WLA-017 | `x-custom-domain` header was client-controllable; used for tenant resolution | P1 | **FIX APPLIED** — behavioral verification pending | `73b680ca` | 8/8 source | Page now reads `Host` header; middleware strips client-supplied `x-custom-domain` on own-domain requests. Reviewer note: Host header trust depends on proxy chain. |
+
+### 9.2 — Findings pending verification or policy decision
+
+| ID | Title | Risk | Status | Notes |
+|---|---|---|---|---|
+| WLA-002 | Provider-settlement semantics for SaaS mode | ARCHITECTURAL | OPEN — architecture decision recorded | Overlaps MM-10-A. Pending SaaS payment implementation. |
+| WLA-004 | `application_fee_amount` set without connected-account context | P2 | SOURCE ANALYSIS COMPLETE — runtime verification pending | Stripe test-mode verification requires connected account (not yet approved). Analysis: `docs/audit/WLA-004-SOURCE-ANALYSIS.md`. |
+| WLA-005 | Wallet balance is user-wide, not provider-attributed | ARCHITECTURAL | OPEN — architecture decision required | Whether this is a defect depends on approved white-label wallet contract. |
+| WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | OPEN | Concurrent claim tests not yet run. |
+| WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | OPEN | Requires complete route inventory and Provider A/B negative-access tests. |
+| WLA-011 | Host classification may use substring matching | P2 | OPEN | Deceptive-host tests not yet run. |
+| WLA-012 | BusinessDomain-only fallback passes `businessId` to a provider ID/slug lookup | P2 | OPEN | Runtime staging test required. |
+| WLA-013 | Custom-domain pages inherit global DriveBook metadata | P2 | OPEN | Provider metadata isolation policy must be defined before fix. |
+| WLA-014 | Provider branding has two stores that may diverge | P2 | OPEN | Reconcile BRAND-V-07 first. |
+| WLA-015 | Customer communications may retain DriveBook sender identity | P2 | OPEN | Full template inventory required. |
+| WLA-016 | Customer/provider portal identity may not support full independent branding | P2 | OPEN | Product contract must be defined first. |
+| WLA-018 | Public branding may imply more white-label capability than implemented | P2 | OPEN | Compare external claims to actual features. |
+
+### 9.3 — Verification qualification
+
+All WLA fixes listed above were applied on main. Reported test evidence:
+- WLA-001/003: 10/10 source+logic tests (route-handler invocation blocked by next-auth/next Vitest mock limitation)
+- WLA-006: 8/8 tests (mocked `fetch`; tests the actual extracted utility)
+- WLA-009: 11/11 tests (utility assertions, source checks, pure-logic tests); not browser-level verified
+- WLA-010: 10/10 source+logic tests
+
+Reviewer has not independently rerun these test suites. Behavioral HTTP testing for WLA-010 (deployed custom-domain behavior) and WLA-017 (proxy chain trust) remains pending.
+
+**Architecture decisions on main:**
+- `.kiro/steering/account-architecture.md` — commercial offers vs feature tiers, multi-provider roadmap
+- `.kiro/steering/platform-model.md` — updated feature matrix (multiInstructor disabled, PREMIUM whiteLabel)
