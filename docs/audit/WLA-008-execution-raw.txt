@@ -9,11 +9,18 @@
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A: Invoice IDOR — source verification[2m > [22mA02 — providerId is included in the WHERE clause of the DB query
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A: Invoice IDOR — source verification[2m > [22mA03 — no separate post-fetch ownership check exists (removed, replaced by DB scope)
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A: Invoice IDOR — source verification[2m > [22mA04 — a null result from findFirst returns 404 (not 403), hiding record existence
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A (data): Invoice /data endpoint — source verification[2m > [22mD01 — /data route uses findFirst (not findUnique)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A (data): Invoice /data endpoint — source verification[2m > [22mD02 — providerId is in the WHERE clause of the /data DB query
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A (data): Invoice /data endpoint — source verification[2m > [22mD03 — post-fetch ownership check removed from /data route
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-A (data): Invoice /data endpoint — source verification[2m > [22mD04 — null result returns 404, not 403, in /data route
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB01 — customer ownership check is present (bookings.some + providerId)
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB02 — CONFIRMED status is conditional on wallet balance, not hardcoded
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB03 — wallet debit is created when booking is CONFIRMED
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB04 — isPaid reflects computed bookingStatus, not hardcoded
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB05 — customer ownership check fires before booking creation
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB06 — wallet balance is re-read INSIDE $transaction (concurrent-safe)
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB07 — no outer (pre-transaction) wallet balance check remains
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-B: Mobile POST — source verification[2m > [22mB08 — walletIdForDebit is assigned inside the transaction, not carried in from outside
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC01 — bookingRateLimit is imported
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC02 — checkRateLimit is called inside the POST handler
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC03 — rate limit is applied before any DB query
@@ -24,7 +31,7 @@
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008: Regression — secured routes still have correct scoping[2m > [22mR03 — schedule-package-hours providerId is used only for redirect URL, not DB query
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m17 passed[39m[22m[90m (17)[39m
-[2m   Start at [22m 16:57:30
-[2m   Duration [22m 695ms[2m (transform 66ms, setup 73ms, collect 60ms, tests 6ms, environment 1ms, prepare 229ms)[22m
+[2m      Tests [22m [1m[32m24 passed[39m[22m[90m (24)[39m
+[2m   Start at [22m 17:28:48
+[2m   Duration [22m 730ms[2m (transform 78ms, setup 48ms, collect 83ms, tests 7ms, environment 0ms, prepare 247ms)[22m
 

@@ -1,21 +1,25 @@
 /**
  * WLA-008 Cross-Provider Tenant Isolation Tests
  *
- * Covers three sub-findings discovered during the WLA-008 route inventory:
+ * Covers sub-findings discovered during the WLA-008 route inventory:
  *
  *   WLA-008-A: /api/instructor/invoices/[transactionId]
+ *              /api/instructor/invoices/[transactionId]/data   ← reviewer addition
  *     - Was: findUnique(id) then post-fetch providerId check → IDOR pattern
- *     - Fix: findFirst({ where: { id, providerId } }) → DB-scoped ownership
+ *     - Fix: findFirst({ where: { id, providerId } }) → DB-scoped ownership;
+ *            404 for both "not found" and "belongs to another provider"
  *
  *   WLA-008-B: /api/bookings/mobile POST
  *     - Was: accepted any customerId from body (no ownership check)
- *     - Was: created CONFIRMED bookings with no wallet debit (payment bypass)
- *     - Fix: verify customer belongs to provider; conditional CONFIRMED/PENDING_PAYMENT
- *            with wallet debit
+ *     - Was v1: balance check outside $transaction → race condition (double-spend)
+ *     - Was v1: wallet could vanish between outer check and inner debit
+ *     - Fix v2: balance check, booking create, and wallet debit all inside
+ *               $transaction (atomic, concurrent-safe)
  *
  *   WLA-008-C: /api/bookings/combined POST
  *     - Was: no rate limiting → calendar slot-squatting with zero-cost PENDING bookings
  *     - Fix: bookingRateLimit applied before request processing
+ *     - Limitation: checkRateLimit is fail-open (documented; not further mitigated here)
  */
 
 import { describe, it, test, expect, beforeEach, vi } from 'vitest'
@@ -95,7 +99,38 @@ describe('WLA-008-A: Invoice IDOR — source verification', () => {
   })
 })
 
-// ─── WLA-008-B: Mobile POST — source verification ────────────────────────────
+// ─── WLA-008-A (data): Invoice data endpoint IDOR fix ────────────────────────
+
+describe('WLA-008-A (data): Invoice /data endpoint — source verification', () => {
+  const dataSource = readFileSync(
+    resolve(process.cwd(), 'app/api/instructor/invoices/[transactionId]/data/route.ts'),
+    'utf-8'
+  )
+
+  it('D01 — /data route uses findFirst (not findUnique)', () => {
+    expect(dataSource).toMatch(/findFirst/)
+    expect(dataSource).not.toMatch(/findUnique/)
+  })
+
+  it('D02 — providerId is in the WHERE clause of the /data DB query', () => {
+    expect(dataSource).toMatch(/where:\s*\{[^}]*id:\s*params\.transactionId[^}]*providerId/)
+  })
+
+  it('D03 — post-fetch ownership check removed from /data route', () => {
+    // The old 403 branch must be gone — only the DB-scoped 404 remains
+    expect(dataSource).not.toMatch(/transaction\.providerId\s*!==/)
+    expect(dataSource).not.toMatch(/status:\s*403/)
+  })
+
+  it('D04 — null result returns 404, not 403, in /data route', () => {
+    const nullBlock = dataSource.slice(
+      dataSource.indexOf('if (!transaction)'),
+      dataSource.indexOf('if (!transaction)') + 150
+    )
+    expect(nullBlock).toMatch(/404/)
+    expect(nullBlock).not.toMatch(/403/)
+  })
+})
 
 describe('WLA-008-B: Mobile POST — source verification', () => {
   const mobileSource = readFileSync(
@@ -104,20 +139,12 @@ describe('WLA-008-B: Mobile POST — source verification', () => {
   )
 
   it('B01 — customer ownership check is present (bookings.some + providerId)', () => {
-    // Fix requires the customer to belong to this provider via a prior booking.
-    // This is the same scoping pattern used by /api/instructor/clients/[id].
     expect(mobileSource).toMatch(/bookings.*some.*providerId.*decoded\.providerId/)
   })
 
   it('B02 — CONFIRMED status is conditional on wallet balance, not hardcoded', () => {
-    // Pre-fix: status was hardcoded to 'CONFIRMED' regardless of wallet balance.
-    // Post-fix: bookingStatus is 'CONFIRMED' only when wallet >= price.
     expect(mobileSource).toMatch(/bookingStatus.*CONFIRMED.*PENDING_PAYMENT|PENDING_PAYMENT.*bookingStatus.*CONFIRMED/)
-    // The booking.create data block must use the variable, not the string literal directly
-    // (status: bookingStatus, not status: 'CONFIRMED')
     expect(mobileSource).toMatch(/status:\s*bookingStatus/)
-    // The booking create data must NOT have status: 'CONFIRMED' as a literal —
-    // check specifically in the create data context (after 'data: {')
     const createDataSection = mobileSource.slice(
       mobileSource.indexOf('status: bookingStatus'),
       mobileSource.indexOf('status: bookingStatus') + 50
@@ -126,21 +153,45 @@ describe('WLA-008-B: Mobile POST — source verification', () => {
   })
 
   it('B03 — wallet debit is created when booking is CONFIRMED', () => {
-    // A CONFIRMED booking must have an accompanying wallet DEBIT transaction.
     expect(mobileSource).toMatch(/type:\s*'DEBIT'/)
   })
 
   it('B04 — isPaid reflects computed bookingStatus, not hardcoded', () => {
-    // isPaid must track the computed status, not be a bare true literal.
     expect(mobileSource).toMatch(/isPaid:\s*bookingStatus\s*===\s*'CONFIRMED'/)
   })
 
   it('B05 — customer ownership check fires before booking creation', () => {
-    // Ownership check must appear before prisma.$transaction (booking create).
     const ownershipPos = mobileSource.indexOf('bookings: { some: { providerId: decoded.providerId }')
     const txnPos = mobileSource.indexOf('prisma.$transaction')
     expect(ownershipPos).toBeGreaterThan(0)
     expect(txnPos).toBeGreaterThan(ownershipPos)
+  })
+
+  it('B06 — wallet balance is re-read INSIDE $transaction (concurrent-safe)', () => {
+    // Reviewer finding: balance check outside $transaction allowed two concurrent
+    // requests to both read a sufficient balance before either debit committed.
+    // Fix v2: wallet read uses tx.clientWallet (inside the transaction callback).
+    const txStart = mobileSource.indexOf('prisma.$transaction(async (tx) =>')
+    const walletReadInTx = mobileSource.indexOf('tx.clientWallet.findUnique', txStart)
+    expect(txStart).toBeGreaterThan(0)
+    // tx.clientWallet.findUnique must appear inside the $transaction body
+    expect(walletReadInTx).toBeGreaterThan(txStart)
+  })
+
+  it('B07 — no outer (pre-transaction) wallet balance check remains', () => {
+    // After fix v2, the only clientWallet read is inside the $transaction.
+    // Confirm no prisma.clientWallet.findUnique call appears before the $transaction.
+    const txStart = mobileSource.indexOf('prisma.$transaction(async (tx) =>')
+    const outerWalletRead = mobileSource.lastIndexOf('prisma.clientWallet.findUnique', txStart)
+    expect(outerWalletRead).toBe(-1)
+  })
+
+  it('B08 — walletIdForDebit is assigned inside the transaction, not carried in from outside', () => {
+    // The debit gate variable must be assigned inside the tx callback so it is
+    // consistent with the in-tx balance check result.
+    const txStart = mobileSource.indexOf('prisma.$transaction(async (tx) =>')
+    const debitVarAssign = mobileSource.indexOf('walletIdForDebit = wallet.id', txStart)
+    expect(debitVarAssign).toBeGreaterThan(txStart)
   })
 })
 
