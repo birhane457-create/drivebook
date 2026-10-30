@@ -1,0 +1,20 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC01 | Route source contains post-write ownership re-check
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC02 | Route source contains rollback on lost race
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC03 | Route source uses updateMany (not update) for the claim
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC04 | Route source returns 409 when ownership is lost
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC05 | Pure-logic: two providers claiming simultaneously — only one wins
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC06 | Route source contains WLA-007 fix comment
+ [32m✓[39m __tests__/integration/wla-007-concurrent-domain-claim.test.ts[2m > [22mWLA-007 — Concurrent domain ownership claims[2m > [22mC07 | Existing V-01 ownership check still present (regression guard)
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m   Start at [22m 12:41:42
+[2m   Duration [22m 652ms[2m (transform 56ms, setup 56ms, collect 42ms, tests 3ms, environment 0ms, prepare 239ms)[22m
+
