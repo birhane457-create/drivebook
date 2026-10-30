@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkProviderEligible } from '@/lib/booking/checkProviderEligible'
+import { bookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -82,6 +83,16 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const data = combinedBookingSchema.parse(body)
+
+    // WLA-008-C fix: rate-limit combined booking requests to prevent
+    // slot-squatting. A client who knows an instructor's calendar can fill
+    // every open slot with PENDING (unpaid) bookings at zero cost without
+    // a rate limit. Using the same bookingRateLimit as the single-booking route.
+    const rlId = getRateLimitIdentifier(session!.user!.email ?? 'anon', req.headers.get('x-forwarded-for'), 'combined-booking')
+    const rl = await checkRateLimit(bookingRateLimit, rlId)
+    if (!rl.success) {
+      return NextResponse.json({ error: rl.error }, { status: 429, headers: rl.headers })
+    }
 
     // Verify user and client
     const user = await prisma.user.findUnique({
