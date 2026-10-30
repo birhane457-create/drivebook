@@ -744,7 +744,7 @@ Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, 
 | WLA-008-A-txt | `/api/instructor/invoices/[transactionId]` | Post-fetch IDOR (findUnique then ownership check) | `findFirst({ where: { id, providerId } })`; 404 for null | `2dc5d81a` | **FIX APPLIED** |
 | WLA-008-A-data | `/api/instructor/invoices/[transactionId]/data` | Same post-fetch IDOR pattern (reviewer identified) | `findFirst({ where: { id, providerId } })`; removed 403 branch; 404 for null | `98fb7605` | **FIX APPLIED** |
 | WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap); default READ COMMITTED isolation allowed double-spend | Customer ownership via `bookings.some`; wallet balance check + booking create + debit inside single `$transaction`; `isolationLevel: 'Serializable'` added (matches pattern in main bookings route, confirm-package-booking, Stripe webhook) | `2dc5d81a`, `98fb7605`, `b75e37fc` | **FIX APPLIED** — SERIALIZABLE isolation source-verified; PostgreSQL concurrency test run (see below) |
-| WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc`, `68b4778e` | **13/13 REPORTED** (PostgreSQL 16.4, 127.0.0.1:5433 + mocked handler) — commit `68b4778e`. Tests: 7 PostgreSQL-backed (CONC-01..CONC-07: non-vacuous, exact outcome, balance, debits, double-entry, source), 4 retry behavioral (RETRY-01..04: P2034→retry→success; exhausted; non-retryable; clean), 2 route HTTP (HTTP-01: exhausted P2034→409 confirmed via 3 tx calls in log; HTTP-02: 201). Raw log: `docs/audit/WLA-008B-all-raw.txt`. Independent review outstanding. |
+| WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc`, `68b4778e`, `b5befcf8` | **13/13 REPORTED** (PostgreSQL 16.4, 127.0.0.1:5433 + mocked handler) — commit `b5befcf8` (final test suite + execution evidence). Tests: 7 PostgreSQL-backed (CONC-01..CONC-07: non-vacuous, exact outcome, balance, debits, double-entry, source), 4 retry behavioral (RETRY-01..04: P2034→retry→success; exhausted; non-retryable; clean), 2 route HTTP (HTTP-01: exhausted P2034→409 with exactly 3 $transaction calls; HTTP-02: 201). Raw log: `docs/audit/WLA-008B-all-raw.txt`. Independent review outstanding. |
 | WLA-008-C | `/api/bookings/combined` POST | No rate limiting → slot-squatting with zero-cost PENDING bookings | `bookingRateLimit` (10/min) before DB; per-user identifier | `2dc5d81a` | **FIX APPLIED** — fail-open limitation documented |
 
 Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
@@ -759,7 +759,7 @@ Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 | `/api/bookings/[id]` methods | PATCH/GET/DELETE ✅ verified; other methods need confirming |
 | 7 other ⚠️ REVIEW routes | See route inventory document |
 
-Test evidence (commit `68b4778e`):
+Test evidence (commit `b5befcf8`):
 - Source-inspection: 26/26, `wla-008-cross-provider-isolation.test.ts`
 - PostgreSQL concurrency (7 tests, `wla-008-b-wallet-concurrency.test.ts`):
   - CONC-01: at least one booking row committed (non-vacuous) ✓
@@ -775,7 +775,7 @@ Test evidence (commit `68b4778e`):
   - RETRY-03: non-P2034 rethrown immediately (1 call) ✓
   - RETRY-04: first-call success (1 call) ✓
 - Route HTTP (2 tests, `wla-008-b-mobile-route-http.test.ts`):
-  - HTTP-01: exhausted P2034 → 409; log confirms 3 tx attempts before catch ✓
+  - HTTP-01: exhausted P2034 → 409; $transaction called exactly 3 times ✓
   - HTTP-02: successful booking → 201 with booking data ✓
 
 Verification limitations:

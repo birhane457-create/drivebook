@@ -182,8 +182,8 @@ describe('WLA-008-B: Mobile route HTTP response tests', () => {
     expect(res.status).toBe(409)
     const json = await res.json()
     expect(json.error).toMatch(/concurrent|conflict|try again/i)
-    // $transaction was called at least once (withSerializableRetry retries it)
-    expect(p.$transaction.mock.calls.length).toBeGreaterThanOrEqual(1)
+    // withSerializableRetry default maxRetries=2 → 3 total attempts (1 initial + 2 retries)
+    expect(p.$transaction).toHaveBeenCalledTimes(3)
   })
 
   it('HTTP-02 — successful $transaction → HTTP 201 with booking data', async () => {
