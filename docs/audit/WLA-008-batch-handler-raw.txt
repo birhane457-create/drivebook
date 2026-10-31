@@ -1,0 +1,18 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-008-batch-handler.test.ts[2m > [22mWLA-008-BATCH: Batch handler — Provider A / Provider B cross-tenant[2m > [22mROUTE-01 — handler returns HTTP 200 with all bookings in failed list
+ [32m✓[39m __tests__/integration/wla-008-batch-handler.test.ts[2m > [22mWLA-008-BATCH: Batch handler — Provider A / Provider B cross-tenant[2m > [22mROUTE-02 — no booking.create called for Provider B customer
+ [32m✓[39m __tests__/integration/wla-008-batch-handler.test.ts[2m > [22mWLA-008-BATCH: Batch handler — Provider A / Provider B cross-tenant[2m > [22mROUTE-03 — no wallet debit for Provider B customer
+ [32m✓[39m __tests__/integration/wla-008-batch-handler.test.ts[2m > [22mWLA-008-BATCH: Batch handler — Provider A / Provider B cross-tenant[2m > [22mROUTE-04 — customer.findMany was called with provider-scoped WHERE clause
+ [32m✓[39m __tests__/integration/wla-008-batch-handler.test.ts[2m > [22mWLA-008-BATCH: Batch handler — Provider A / Provider B cross-tenant[2m > [22mROUTE-05 — failed entries report the customer as unavailable to Provider A
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m   Start at [22m 21:58:14
+[2m   Duration [22m 1.18s[2m (transform 195ms, setup 45ms, collect 643ms, tests 13ms, environment 0ms, prepare 180ms)[22m
+

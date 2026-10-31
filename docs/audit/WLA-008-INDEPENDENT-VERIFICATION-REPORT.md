@@ -145,9 +145,11 @@ Each sub-finding lists:
 | Test suite | File | Count | Source inspected | Execution |
 |---|---|---|---|---|
 | Source inspection | `wla-008-cross-provider-isolation.test.ts` | 37 | Yes — structure reviewed | Reported at `b8fd4d63`; not independently re-run |
-| Concurrency + negative-access | `wla-008-b-wallet-concurrency.test.ts` | 10 | Yes — design reviewed | Reported; raw log committed; not independently re-run |
+| Concurrency + negative-access | `wla-008-b-wallet-concurrency.test.ts` | 12 (CONC-01..07=7, NEG-01..03=3, BATCH-01..02=2) | Yes — design reviewed | Reported; raw log committed; not independently re-run |
+| Source check in concurrency file | `wla-008-b-wallet-concurrency.test.ts` | 1 (BATCH-03: source) | Yes | Not a DB test |
 | Retry behavioral | `wla-008-b-mobile-route-http.test.ts` | 4 | Yes — design reviewed | Reported; not independently re-run |
-| Route HTTP | `wla-008-b-mobile-route-http.test.ts` | 2 | Yes — design reviewed | Reported; not independently re-run |
+| Route HTTP (mobile) | `wla-008-b-mobile-route-http.test.ts` | 2 | Yes — design reviewed | Reported; not independently re-run |
+| Batch handler (mocked Prisma) | `wla-008-batch-handler.test.ts` | 5 (ROUTE-01..05) | Yes — design reviewed | Reported; actual POST handler invoked with mocked Prisma |
 
 ---
 
@@ -244,7 +246,7 @@ These should be verified under their respective finding IDs, not as WLA-008 clos
 | Mobile wallet SERIALIZABLE isolation | Source verified |
 | Mobile withSerializableRetry + P2034→409 | Instrumented mock — real retry loop + real error type; no live-DB serialization |
 | Quote route + service mandatory ownership | Source verified |
-| Batch booking customer ownership (new WLA-008-BATCH) | **NEW FINDING during source inspection** — fix applied; BATCH-01..03 PostgreSQL confirmed |
+| Batch booking customer ownership (new WLA-008-BATCH) | **NEW FINDING during source inspection** — fix applied; BATCH-01..02 PostgreSQL DB query confirmed; ROUTE-01..05 actual handler invoked: foreign customer rejected, no booking, no debit |
 | 7 route source inspections | **Source inspected at `0bccc0bb`** — 6 confirmed; batch route required fix |
 | PostgreSQL concurrency (CONC-01..07) | Reported; not independently reproduced |
 | PostgreSQL negative-access (NEG-01..03, BATCH-01..02) | Reported; not independently reproduced |
