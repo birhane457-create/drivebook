@@ -127,14 +127,14 @@ Each sub-finding lists:
 | `/api/instructor/invoices/[transactionId]` | ✅ FIXED | **Source verified** (see WLA-008-A-txt above) |
 | `/api/instructor/invoices/[transactionId]/data` | ✅ FIXED | **Source verified** (see WLA-008-A-data above) |
 | `/api/instructor/quotes/[bookingId]/submit` | ✅ FIXED | **Source verified** (see WLA-008-TENANT above) |
-| `/api/bookings` POST | ✅ SECURED — session-scoped | **Source not independently inspected** — reported by implementation team |
+| `/api/bookings` POST | ✅ SECURED — session-scoped | **Source inspected at `0bccc0bb`** — `providerId` from `session.user.providerId`; customer lookup pre-scoped with `bookings: { some: { providerId } }` |
 | `/api/bookings/[id]` GET/PATCH/DELETE | ✅ SECURED — `bookingWhere.providerId` | **Source inspected at `0bccc0bb`** — `bookingWhere.providerId = providerId` before `findFirst` |
 | `/api/bookings/batch` POST | ✅ SECURED (after fix — WLA-008-BATCH) | **Source inspected at `0bccc0bb`** — customer query was unscoped (new finding); fixed; BATCH-01..02 + ROUTE-01..05 confirm |
 | `/api/bookings/combined` POST | ✅ MITIGATED (rate limit) | **Source verified** (see WLA-008-C above) |
 | `/api/bookings/mobile` POST | ✅ FIXED | **Source verified** (see WLA-008-B above) |
 | `/api/client/schedule-package-hours` | ✅ SECURED — session-scoped | **Source inspected at `0bccc0bb`** — `userId: user.id` for DB query; providerId is redirect URL only |
 | `/api/client/quotes/request` | ✅ BY DESIGN | **Source inspected at `0bccc0bb`** — client-initiated marketplace; `customerId` from session |
-| `/api/client/bookings/create-bulk` | ✅ BY DESIGN | **Source not independently inspected** — T05 source test pattern inspected |
+| `/api/client/bookings/create-bulk` | ✅ BY DESIGN | **Source not independently inspected** — classified via T05 source-pattern test only; direct source read not performed |
 | `/api/client/bookings/[id]` | ✅ SECURED — `customerId: { in: clientIds }` | **Source inspected at `0bccc0bb`** — `findFirst({ where: { id, customerId: { in: clientIds } } })` |
 | `/api/business/branding` | ✅ SECURED — session-scoped | **Source inspected at `0bccc0bb`** — `biz_${session.user.providerId}` throughout |
 
