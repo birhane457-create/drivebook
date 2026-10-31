@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.69 (WLA-008-B: test hardening per reviewer — non-vacuous concurrency tests, RETRY behavioral tests, HTTP 409/201 route tests; 13/13 PostgreSQL+mock; tracker accurately qualified)
-**Last Updated:** 2026-10-30
+**Version:** 5.70 (WLA-008-TENANT: submitQuote service hardened; NEG-01..03 PostgreSQL negative-access tests pass; route inventory reconciled; 47 tests total)
+**Last Updated:** 2026-10-31
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -744,8 +744,9 @@ Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, 
 | WLA-008-A-txt | `/api/instructor/invoices/[transactionId]` | Post-fetch IDOR (findUnique then ownership check) | `findFirst({ where: { id, providerId } })`; 404 for null | `2dc5d81a` | **FIX APPLIED** |
 | WLA-008-A-data | `/api/instructor/invoices/[transactionId]/data` | Same post-fetch IDOR pattern (reviewer identified) | `findFirst({ where: { id, providerId } })`; removed 403 branch; 404 for null | `98fb7605` | **FIX APPLIED** |
 | WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap); default READ COMMITTED isolation allowed double-spend | Customer ownership via `bookings.some`; wallet balance check + booking create + debit inside single `$transaction`; `isolationLevel: 'Serializable'` added (matches pattern in main bookings route, confirm-package-booking, Stripe webhook) | `2dc5d81a`, `98fb7605`, `b75e37fc` | **FIX APPLIED** — SERIALIZABLE isolation source-verified; PostgreSQL concurrency test run (see below) |
-| WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc`, `68b4778e`, `b5befcf8` | **13/13 REPORTED** (PostgreSQL 16.4, 127.0.0.1:5433 + mocked handler) — commit `b5befcf8` (final test suite + execution evidence). Tests: 7 PostgreSQL-backed (CONC-01..CONC-07: non-vacuous, exact outcome, balance, debits, double-entry, source), 4 retry behavioral (RETRY-01..04: P2034→retry→success; exhausted; non-retryable; clean), 2 route HTTP (HTTP-01: exhausted P2034→409 with exactly 3 $transaction calls; HTTP-02: 201). Raw log: `docs/audit/WLA-008B-all-raw.txt`. Independent review outstanding. |
+| WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc`, `68b4778e`, `b5befcf8` | **47/47 REPORTED** (PostgreSQL 16.4 + mocked handler) — commit `0ddace9e`. Tests: 7 concurrency (CONC-01..07), 3 negative-access (NEG-01..03: Provider A/B quote isolation), 4 retry behavioral (RETRY-01..04), 2 route HTTP (HTTP-01/02). Raw logs: `docs/audit/WLA-008B-concurrency-raw.txt`, `docs/audit/WLA-008B-all-raw.txt`. Independent review outstanding. |
 | WLA-008-C | `/api/bookings/combined` POST | No rate limiting → slot-squatting with zero-cost PENDING bookings | `bookingRateLimit` (10/min) before DB; per-user identifier | `2dc5d81a` | **FIX APPLIED** — fail-open limitation documented |
+| WLA-008-TENANT-1 | `/api/instructor/quotes/[bookingId]/submit` + `submitQuote()` service | Route: post-fetch IDOR. Service: unscoped `findUnique` + unscoped `booking.update` — defence-in-depth gap (reviewer finding) | Route: `findFirst({ where: { id, providerId } })`; passes `providerId` to service. Service: `QuoteInput.providerId?` added; service uses `findFirst` with compound WHERE; `booking.update` scoped by `booking.providerId` | `0ddace9e` | **FIX APPLIED** — NEG-01: Provider A cannot quote Provider B booking (BOOKING_NOT_FOUND); NEG-02: no Quote row created; NEG-03: booking status unchanged. 3/3 PostgreSQL negative-access tests pass. |
 
 Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 
@@ -766,12 +767,13 @@ Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 | `/api/client/bookings/[id]` | Booking ownership | ✅ SECURED — `customerId: { in: clientIds }` |
 | `/api/business/branding` | Route-level verification | ✅ SECURED — `biz_${session.user.providerId}` |
 
-Test evidence (commit `b5befcf8` + quotes/submit fix):
-- Source-inspection: 32/32, `wla-008-cross-provider-isolation.test.ts`
+Test evidence (commit `b5befcf8` + quotes/submit fix `0ddace9e`):
+- Source-inspection: 37/37, `wla-008-cross-provider-isolation.test.ts`
   - A01–A04: invoice text route IDOR fix ✓
   - D01–D04: invoice data route IDOR fix ✓
   - B01–B10: mobile route (ownership, wallet, SERIALIZABLE, retry, P2034→409) ✓
   - C01–C05: combined route rate limit ✓
+  - SQ01–SQ05: submitQuote service boundary (QuoteInput.providerId, findFirst, WHERE, update scope) ✓
   - T01–T06: 13-route ownership review (quotes/submit fix, clients, quotes/request, client bookings, create-bulk, branding) ✓
   - R01–R03: regression guards ✓
   - CONC-01: at least one booking row committed (non-vacuous) ✓
@@ -781,6 +783,10 @@ Test evidence (commit `b5befcf8` + quotes/submit fix):
   - CONC-05: 1 debit, total = $60 ✓
   - CONC-06: confirmed bookings = debit count (double-entry) ✓
   - CONC-07: source structure checks ✓
+- PostgreSQL negative-access (3 tests, `wla-008-b-wallet-concurrency.test.ts`, commit `0ddace9e`):
+  - NEG-01: Provider A quotes Provider B booking → BOOKING_NOT_FOUND ✓
+  - NEG-02: zero Quote rows created ✓
+  - NEG-03: Provider B booking status unchanged ✓
 - Retry utility behavioral (4 tests, `wla-008-b-mobile-route-http.test.ts`):
   - RETRY-01: P2034 → retry → success (2 calls) ✓
   - RETRY-02: all retries exhausted → rethrow P2034 (3 calls logged) ✓

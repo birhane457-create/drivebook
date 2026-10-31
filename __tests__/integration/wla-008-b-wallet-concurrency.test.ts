@@ -313,3 +313,145 @@ describe('WLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity', () => 
 
 // ─── Group 2 and Group 3 (RETRY-*, HTTP-*) live in wla-008-b-mobile-route-http.test.ts
 
+
+// ─── WLA-008-TENANT: Provider A / Provider B negative-access test ────────────
+//
+// This group runs against the real PostgreSQL DB. It creates two providers
+// (A and B) and a booking owned by Provider B, then attempts to submit a quote
+// against Provider B's booking using Provider A's session. The test verifies
+// that no quote or booking mutation occurs.
+
+const PREFIX_NEG = 'WLA008NEG'
+
+let providerNegAId: string
+let providerNegBId: string
+let bookingBId: string
+let clientNegUserId: string
+let customerNegId: string
+
+async function cleanupNeg() {
+  await prisma.$executeRawUnsafe(`DELETE FROM "Quote" WHERE "bookingId" = $1`, bookingBId ?? '__none__').catch(() => {})
+  await prisma.booking.deleteMany({ where: { providerId: { in: [providerNegAId ?? '__none__', providerNegBId ?? '__none__'] } } }).catch(() => {})
+  await prisma.customer.deleteMany({ where: { id: customerNegId ?? '__none__' } }).catch(() => {})
+  await prisma.user.deleteMany({
+    where: { email: { in: [
+      `${PREFIX_NEG}-prov-a@test.com`,
+      `${PREFIX_NEG}-prov-b@test.com`,
+      `${PREFIX_NEG}-client@test.com`,
+    ]}},
+  }).catch(() => {})
+  await prisma.provider.deleteMany({
+    where: { id: { in: [providerNegAId ?? '__none__', providerNegBId ?? '__none__'] } },
+  }).catch(() => {})
+}
+
+describe('WLA-008-TENANT: Provider A / Provider B negative-access (quote submission)', () => {
+  beforeAll(async () => {
+    await cleanupNeg()
+
+    // Provider A
+    const userA = await prisma.user.create({
+      data: { email: `${PREFIX_NEG}-prov-a@test.com`, name: 'NEG Provider A', role: 'PROVIDER' },
+    })
+    const provA = await (prisma.provider as any).create({
+      data: {
+        user:               { connect: { id: userA.id } },
+        name:               'NEG Provider A',
+        phone:              '0400000010',
+        hourlyRate:         80,
+        approvalStatus:     'APPROVED',
+        isActive:           true,
+        subscriptionStatus: 'ACTIVE',
+      },
+    })
+    providerNegAId = provA.id
+
+    // Provider B
+    const userB = await prisma.user.create({
+      data: { email: `${PREFIX_NEG}-prov-b@test.com`, name: 'NEG Provider B', role: 'PROVIDER' },
+    })
+    const provB = await (prisma.provider as any).create({
+      data: {
+        user:               { connect: { id: userB.id } },
+        name:               'NEG Provider B',
+        phone:              '0400000011',
+        hourlyRate:         80,
+        approvalStatus:     'APPROVED',
+        isActive:           true,
+        subscriptionStatus: 'ACTIVE',
+      },
+    })
+    providerNegBId = provB.id
+
+    // Client
+    const clientUser = await prisma.user.create({
+      data: { email: `${PREFIX_NEG}-client@test.com`, name: 'NEG Client', role: 'CLIENT' },
+    })
+    clientNegUserId = clientUser.id
+    const customerNeg_raw = `WLA008NEG-cust-${Date.now()}`
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Customer" (id, "userId", name, email, phone, status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, 'ACTIVE', NOW(), NOW())`,
+      customerNeg_raw, clientNegUserId, 'NEG Client',
+      `${PREFIX_NEG}-client@test.com`, '0400000012'
+    )
+    customerNegId = customerNeg_raw
+
+    // Booking owned by Provider B (REQUEST_PENDING — quote-eligible)
+    const bkB = await (prisma.booking as any).create({
+      data: {
+        providerId:  providerNegBId,
+        customerId:  customerNegId,
+        bookingType: 'LESSON',
+        startTime:   new Date(Date.now() + 86_400_000 * 2),
+        endTime:     new Date(Date.now() + 86_400_000 * 2 + 3_600_000),
+        duration:    60,
+        price:       80,
+        status:      'REQUEST_PENDING',
+        createdBy:   'customer',
+      },
+    })
+    bookingBId = bkB.id
+  }, 30000)
+
+  afterAll(async () => {
+    await cleanupNeg()
+  }, 30000)
+
+  it('NEG-01 — submitQuote service throws BOOKING_NOT_FOUND when Provider A tries to quote Provider B booking', async () => {
+    const { submitQuote } = await import('@/lib/services/booking-service')
+
+    const validUntil = new Date(Date.now() + 7 * 86_400_000)
+
+    // Provider A attempts to quote Provider B's booking by passing providerNegAId
+    await expect(
+      submitQuote(
+        {
+          bookingId:   bookingBId,
+          providerId:  providerNegAId,   // Provider A's ID — does NOT own this booking
+          amount:      120,
+          description: 'Attempted cross-provider quote',
+          validUntil,
+        },
+        providerNegAId,
+        'INSTRUCTOR' as any,
+      )
+    ).rejects.toMatchObject({ message: 'Booking not found' })
+  }, 30000)
+
+  it('NEG-02 — no Quote row was created by the failed attempt', async () => {
+    const quotes = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id FROM "Quote" WHERE "bookingId" = $1`,
+      bookingBId
+    )
+    expect(quotes).toHaveLength(0)
+  }, 30000)
+
+  it('NEG-03 — Provider B booking status is unchanged after the failed attempt', async () => {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingBId },
+      select: { status: true },
+    })
+    expect(booking?.status).toBe('REQUEST_PENDING')
+  }, 30000)
+})

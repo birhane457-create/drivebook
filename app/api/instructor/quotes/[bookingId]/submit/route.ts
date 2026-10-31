@@ -68,7 +68,8 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Submit the quote
+    // Submit the quote — pass the authenticated providerId so the service
+    // enforces ownership internally (defence in depth; route already checked).
     const quote = await submitQuote(
       {
         bookingId,
