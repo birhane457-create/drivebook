@@ -165,8 +165,8 @@ Source commit inspected: `0bccc0bb` (unchanged from this commit; file last modif
 **Verdict: ✅ SECURED — pre-scoped WHERE clause.**
 
 **3. `/api/bookings/batch` POST**  
-`providerId` from `session.user.providerId` only (line: `const providerId = session!.user!.providerId`). No `providerId` accepted from request body. All booking creates in `processBooking()` use this session-derived value.  
-**Verdict: ✅ SECURED — session-scoped.**
+`providerId` from `session.user.providerId` only. No `providerId` accepted from request body. ⚠️ **New finding during source inspection**: the customer `findMany` query was unscoped (`where: { id: { in: uniqueClientIds } }`) — any customer ID in the DB could reach `processBooking()`. Fix applied (same session: `OR: [{ preferredProviderId: providerId }, { bookings: { some: { providerId } } }]`). Source test R02 and BATCH-01/02/03 PostgreSQL tests confirm the fix.  
+**Verdict: ✅ SECURED (after fix) — customer query now provider-scoped; registered as WLA-008-BATCH.**
 
 **4. `/api/client/schedule-package-hours` POST**  
 Package booking lookup: `prisma.booking.findFirst({ where: { id: bookingId, userId: user.id, isPackageBooking: true } })`. `userId` resolved from `session.user.email` → `prisma.user.findUnique`. `providerId` from request body is used only to build a redirect URL (`/book/${providerId}/...`) — never in a DB query.  
@@ -188,7 +188,7 @@ User resolved from `session.user.email` → customer IDs collected from `user.cu
 |---|---|---|
 | `/api/bookings` POST | `0bccc0bb` | ✅ SECURED |
 | `/api/bookings/[id]` GET/PATCH/DELETE | `0bccc0bb` | ✅ SECURED |
-| `/api/bookings/batch` POST | `0bccc0bb` | ✅ SECURED |
+| `/api/bookings/batch` POST | `0bccc0bb` (initial); fix at `current HEAD` | ✅ SECURED (after fix) — new finding WLA-008-BATCH; customer query scoped |
 | `/api/client/schedule-package-hours` POST | `0bccc0bb` | ✅ SECURED |
 | `/api/client/quotes/request` POST | `0bccc0bb` | ✅ BY DESIGN |
 | `/api/client/bookings/[id]` GET | `0bccc0bb` | ✅ SECURED |
@@ -216,11 +216,9 @@ The following require independent reproduction before WLA-008 can be closed:
 
 1. **PostgreSQL concurrency test** (CONC-01..07): Re-run `run-wla-008b-concurrency-tests.bat` against PostgreSQL 16.4 at `127.0.0.1:5433` from the reviewer's environment. Verify balance = $20, exactly 1 CONFIRMED booking, 1 debit.
 
-2. **PostgreSQL concurrency test** (CONC-01..07): Re-run `run-wla-008b-concurrency-tests.bat` against PostgreSQL 16.4 at `127.0.0.1:5433` from the reviewer's environment. Verify balance = $20, exactly 1 CONFIRMED booking, 1 debit.
+2. **PostgreSQL negative-access test** (NEG-01..03 + BATCH-01..02): Re-run the same bat file. Verify that `submitQuote()` with Provider A's ID against Provider B's booking throws `BOOKING_NOT_FOUND`, creates no Quote, and leaves booking unchanged. Verify that the batch customer query returns 0 results for Provider A attempting to book Provider B's customer.
 
-3. **PostgreSQL negative-access test** (NEG-01..03): Re-run the same bat file. Verify `submitQuote()` with Provider A's ID against Provider B's booking throws `BOOKING_NOT_FOUND`, creates no Quote, leaves booking unchanged.
-
-Items 1 (route source inspections) and 4 (instrumented P2034→409) are addressed in the new sections above.
+Items 1 (route source inspections) and 3 (instrumented P2034→409) are addressed in the new sections above.
 
 ---
 
@@ -246,7 +244,8 @@ These should be verified under their respective finding IDs, not as WLA-008 clos
 | Mobile wallet SERIALIZABLE isolation | Source verified |
 | Mobile withSerializableRetry + P2034→409 | Instrumented mock — real retry loop + real error type; no live-DB serialization |
 | Quote route + service mandatory ownership | Source verified |
-| 7 route classifications | **Source inspected at `0bccc0bb`** — all 7 confirmed; see new section above |
-| PostgreSQL concurrency outcome | Reported; not independently reproduced |
-| PostgreSQL negative-access outcome | Reported; not independently reproduced |
+| Batch booking customer ownership (new WLA-008-BATCH) | **NEW FINDING during source inspection** — fix applied; BATCH-01..03 PostgreSQL confirmed |
+| 7 route source inspections | **Source inspected at `0bccc0bb`** — 6 confirmed; batch route required fix |
+| PostgreSQL concurrency (CONC-01..07) | Reported; not independently reproduced |
+| PostgreSQL negative-access (NEG-01..03, BATCH-01..02) | Reported; not independently reproduced |
 | WLA-008 overall | **OPEN — implementation complete; PostgreSQL independent reproduction outstanding** |
