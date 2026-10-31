@@ -1,7 +1,8 @@
 # WLA-008 — Independent Verification Report
 
 **Finding:** WLA-008 — Cross-Provider Tenant Isolation  
-**Implementation branch head:** `b8fd4d63` (origin/main)  
+**Report commit:** `3aee1ace` (origin/main, 2026-10-31)  
+**Source inspections in this report use exact per-file commit references listed under each sub-finding. The branch head at time of last implementation commit was `0bccc0bb`; categorisation docs followed at `b8fd4d63`; this report was added at `3aee1ace`.**  
 **Report prepared:** 2026-10-31  
 **Purpose:** Record what has been independently verified, what remains reported-only, and what verifiable evidence exists for each fix. This document is separate from the implementation team's claims so the audit trail remains clear.
 
@@ -158,11 +159,29 @@ The following require independent reproduction before WLA-008 can be closed:
 
 2. **PostgreSQL negative-access test** (NEG-01..03): Re-run the same bat file. Verify `submitQuote()` with Provider A's ID against Provider B's booking throws `BOOKING_NOT_FOUND`, creates no Quote, leaves booking unchanged.
 
-3. **13-route source review** (6 routes not yet independently inspected): Read actual source at `0bccc0bb` for `/api/bookings` POST, `/api/bookings/[id]`, `/api/bookings/batch`, `/api/client/schedule-package-hours`, `/api/client/quotes/request`, `/api/client/bookings/[id]`, `/api/business/branding`.
+3. **Seven route source inspections** (7 routes not yet independently inspected at `0bccc0bb`):
+   - `/api/bookings` POST
+   - `/api/bookings/[id]` GET/PATCH/DELETE
+   - `/api/bookings/batch` POST
+   - `/api/client/schedule-package-hours` POST
+   - `/api/client/quotes/request` POST
+   - `/api/client/bookings/[id]` GET
+   - `/api/business/branding` GET/PUT
 
 4. **Mobile route serialization HTTP behavior**: Confirm HTTP-01 (P2034 → 409) by invoking the route handler with a real or instrumented Prisma client that injects P2034 rather than a mock.
 
-5. **Production migration state**: Confirm WLA-007 partial unique index (`Provider_customDomain_domainVerified_unique`) and WLA-001 schema fields are deployed to production, not only to the test database.
+---
+
+## Cross-finding deployment dependencies (tracked separately)
+
+The following deployment checks are not direct WLA-008 tenant-isolation verifications. They relate to separate findings and are listed here only as cross-references.
+
+| Deployment check | Parent finding |
+|---|---|
+| WLA-007 partial unique index `Provider_customDomain_domainVerified_unique` applied to production DB | WLA-007 |
+| WLA-001 `paymentMode` guard schema fields present in production | WLA-001 |
+
+These should be verified under their respective finding IDs, not as WLA-008 closure criteria.
 
 ---
 
@@ -177,5 +196,5 @@ The following require independent reproduction before WLA-008 can be closed:
 | Quote route + service mandatory ownership | Source verified |
 | PostgreSQL concurrency outcome | Reported; not independently reproduced |
 | PostgreSQL negative-access outcome | Reported; not independently reproduced |
-| 6 route classifications | Reported; not independently source-inspected |
+| 7 route classifications (see section above) | Reported; direct source inspection by reviewer outstanding |
 | WLA-008 overall | **OPEN — implementation complete; independent verification outstanding** |
