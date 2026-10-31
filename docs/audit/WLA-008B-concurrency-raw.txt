@@ -5,37 +5,42 @@
 [90mstdout[2m | unknown test[22m[39m
 📧 Email service mocked for integration tests
 
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[22m[39m
+[CONC] Result A: PENDING_PAYMENT
+[CONC] Result B: CONFIRMED
 
-[31m⎯⎯⎯⎯⎯⎯[1m[7m Failed Suites 1 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-01 — at least one booking was committed (non-vacuous)[22m[39m
+[CONC-01] Total booking rows: [33m2[39m
 
-[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts [2m[ __tests__/integration/wla-008-b-wallet-concurrency.test.ts ][22m
-[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'deleteMany')[39m
-[36m [2m❯[22m cleanup __tests__/integration/wla-008-b-wallet-concurrency.test.ts:[2m56:34[22m[39m
-    [90m 54| [39m
-    [90m 55| [39m[35masync[39m [35mfunction[39m [34mcleanup[39m() {
-    [90m 56| [39m  [35mawait[39m prisma[33m.[39mwalletTransaction[33m.[39m[34mdeleteMany[39m({
-    [90m   | [39m                                 [31m^[39m
-    [90m 57| [39m    where[33m:[39m { wallet[33m:[39m { userId[33m:[39m clientUserId [33m??[39m [32m'__none__'[39m } }[33m,[39m
-    [90m 58| [39m  })[33m.[39m[35mcatch[39m(() [33m=>[39m {})
-[90m [2m❯[22m __tests__/integration/wla-008-b-wallet-concurrency.test.ts:[2m80:9[22m[39m
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-02 — exactly one CONFIRMED (isPaid) booking exists — no double-spend[22m[39m
+[CONC-02] CONFIRMED bookings: [33m1[39m
+  booking cmvw3n3vt000a10r4d049zt8u price: 60
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-03 — the losing result is PENDING_PAYMENT or P2034 (never a second CONFIRMED)[22m[39m
+[CONC-03] Loser status: PENDING_PAYMENT
 
-[31m[1m[7m FAIL [27m[22m[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts [2m[ __tests__/integration/wla-008-b-wallet-concurrency.test.ts ][22m
-[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'deleteMany')[39m
-[36m [2m❯[22m cleanup __tests__/integration/wla-008-b-wallet-concurrency.test.ts:[2m56:34[22m[39m
-    [90m 54| [39m
-    [90m 55| [39m[35masync[39m [35mfunction[39m [34mcleanup[39m() {
-    [90m 56| [39m  [35mawait[39m prisma[33m.[39mwalletTransaction[33m.[39m[34mdeleteMany[39m({
-    [90m   | [39m                                 [31m^[39m
-    [90m 57| [39m    where[33m:[39m { wallet[33m:[39m { userId[33m:[39m clientUserId [33m??[39m [32m'__none__'[39m } }[33m,[39m
-    [90m 58| [39m  })[33m.[39m[35mcatch[39m(() [33m=>[39m {})
-[90m [2m❯[22m __tests__/integration/wla-008-b-wallet-concurrency.test.ts:[2m139:9[22m[39m
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-04 — wallet balance equals initial minus exactly one lesson price[22m[39m
+[CONC-04] Final wallet balance: [33m20[39m
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-05 — total confirmed debits equal one lesson price[22m[39m
+[CONC-05] Total debited: [33m60[39m from [33m1[39m debit(s)
 
-[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
-[2m      Tests [22m [90m (13)[39m
-[2m   Start at [22m 23:02:54
-[2m   Duration [22m 1.44s[2m (transform 184ms, setup 89ms, collect 285ms, tests 8ms, environment 1ms, prepare 438ms)[22m
+[90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-06 — double-entry: confirmed booking count equals debit transaction count[22m[39m
+[CONC-06] Confirmed bookings: [33m1[39m | Debits: [33m1[39m
+
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-01 — at least one booking was committed (non-vacuous)
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-02 — exactly one CONFIRMED (isPaid) booking exists — no double-spend
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-03 — the losing result is PENDING_PAYMENT or P2034 (never a second CONFIRMED)
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-04 — wallet balance equals initial minus exactly one lesson price
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-05 — total confirmed debits equal one lesson price
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-06 — double-entry: confirmed booking count equals debit transaction count
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-07 — source: SERIALIZABLE isolation + withSerializableRetry + P2034→409 present
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-TENANT: Provider A / Provider B negative-access (quote submission)[2m > [22mNEG-01 — submitQuote service throws BOOKING_NOT_FOUND when Provider A tries to quote Provider B booking[33m 437[2mms[22m[39m
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-TENANT: Provider A / Provider B negative-access (quote submission)[2m > [22mNEG-02 — no Quote row was created by the failed attempt
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-TENANT: Provider A / Provider B negative-access (quote submission)[2m > [22mNEG-03 — Provider B booking status is unchanged after the failed attempt
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 15:48:15
+[2m   Duration [22m 1.42s[2m (transform 203ms, setup 45ms, collect 109ms, tests 741ms, environment 0ms, prepare 202ms)[22m
 
