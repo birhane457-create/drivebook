@@ -128,15 +128,15 @@ Each sub-finding lists:
 | `/api/instructor/invoices/[transactionId]/data` | ✅ FIXED | **Source verified** (see WLA-008-A-data above) |
 | `/api/instructor/quotes/[bookingId]/submit` | ✅ FIXED | **Source verified** (see WLA-008-TENANT above) |
 | `/api/bookings` POST | ✅ SECURED — session-scoped | **Source not independently inspected** — reported by implementation team |
-| `/api/bookings/[id]` GET/PATCH/DELETE | ✅ SECURED — `bookingWhere.providerId` | **Source not independently inspected** — R01 test inspected |
-| `/api/bookings/batch` POST | ✅ SECURED — session-scoped | **Source not independently inspected** — R02 test inspected |
+| `/api/bookings/[id]` GET/PATCH/DELETE | ✅ SECURED — `bookingWhere.providerId` | **Source inspected at `0bccc0bb`** — `bookingWhere.providerId = providerId` before `findFirst` |
+| `/api/bookings/batch` POST | ✅ SECURED (after fix — WLA-008-BATCH) | **Source inspected at `0bccc0bb`** — customer query was unscoped (new finding); fixed; BATCH-01..02 + ROUTE-01..05 confirm |
 | `/api/bookings/combined` POST | ✅ MITIGATED (rate limit) | **Source verified** (see WLA-008-C above) |
 | `/api/bookings/mobile` POST | ✅ FIXED | **Source verified** (see WLA-008-B above) |
-| `/api/client/schedule-package-hours` | ✅ SECURED — session-scoped | **Source not independently inspected** — R03 test inspected |
-| `/api/client/quotes/request` | ✅ BY DESIGN | **Source not independently inspected** — T03 test inspected |
-| `/api/client/bookings/create-bulk` | ✅ BY DESIGN | **Source not independently inspected** — T05 test inspected |
-| `/api/client/bookings/[id]` | ✅ SECURED — `customerId: { in: clientIds }` | **Source not independently inspected** — T04 test inspected |
-| `/api/business/branding` | ✅ SECURED — session-scoped | **Source not independently inspected** — T06 test inspected |
+| `/api/client/schedule-package-hours` | ✅ SECURED — session-scoped | **Source inspected at `0bccc0bb`** — `userId: user.id` for DB query; providerId is redirect URL only |
+| `/api/client/quotes/request` | ✅ BY DESIGN | **Source inspected at `0bccc0bb`** — client-initiated marketplace; `customerId` from session |
+| `/api/client/bookings/create-bulk` | ✅ BY DESIGN | **Source not independently inspected** — T05 source test pattern inspected |
+| `/api/client/bookings/[id]` | ✅ SECURED — `customerId: { in: clientIds }` | **Source inspected at `0bccc0bb`** — `findFirst({ where: { id, customerId: { in: clientIds } } })` |
+| `/api/business/branding` | ✅ SECURED — session-scoped | **Source inspected at `0bccc0bb`** — `biz_${session.user.providerId}` throughout |
 
 ---
 
@@ -167,8 +167,8 @@ Source commit inspected: `0bccc0bb` (unchanged from this commit; file last modif
 **Verdict: ✅ SECURED — pre-scoped WHERE clause.**
 
 **3. `/api/bookings/batch` POST**  
-`providerId` from `session.user.providerId` only. No `providerId` accepted from request body. ⚠️ **New finding during source inspection**: the customer `findMany` query was unscoped (`where: { id: { in: uniqueClientIds } }`) — any customer ID in the DB could reach `processBooking()`. Fix applied (same session: `OR: [{ preferredProviderId: providerId }, { bookings: { some: { providerId } } }]`). Source test R02 and BATCH-01/02/03 PostgreSQL tests confirm the fix.  
-**Verdict: ✅ SECURED (after fix) — customer query now provider-scoped; registered as WLA-008-BATCH.**
+`providerId` from `session.user.providerId` only. No `providerId` accepted from request body. ⚠️ **New finding during source inspection at `0bccc0bb`**: the customer `findMany` query was unscoped (`where: { id: { in: uniqueClientIds } }`) — any customer ID in the DB could reach `processBooking()`. Fix applied at commit `b6a3e4f5` (`OR: [{ preferredProviderId: providerId }, { bookings: { some: { providerId } } }]`). Source test R02 confirms the clause is present. BATCH-01/02 confirm the DB query excludes foreign customers. ROUTE-01..05 confirm the actual handler rejects Provider A's request for Provider B's customer (mocked Prisma). BATCH-03 is a source check (not a PostgreSQL test).  
+**Verdict: ✅ SECURED (after fix at `b6a3e4f5`) — registered as WLA-008-BATCH.**
 
 **4. `/api/client/schedule-package-hours` POST**  
 Package booking lookup: `prisma.booking.findFirst({ where: { id: bookingId, userId: user.id, isPackageBooking: true } })`. `userId` resolved from `session.user.email` → `prisma.user.findUnique`. `providerId` from request body is used only to build a redirect URL (`/book/${providerId}/...`) — never in a DB query.  
@@ -190,7 +190,7 @@ User resolved from `session.user.email` → customer IDs collected from `user.cu
 |---|---|---|
 | `/api/bookings` POST | `0bccc0bb` | ✅ SECURED |
 | `/api/bookings/[id]` GET/PATCH/DELETE | `0bccc0bb` | ✅ SECURED |
-| `/api/bookings/batch` POST | `0bccc0bb` (initial); fix at `current HEAD` | ✅ SECURED (after fix) — new finding WLA-008-BATCH; customer query scoped |
+| `/api/bookings/batch` POST | `0bccc0bb` (initial); fix at `b6a3e4f5` | ✅ SECURED (after fix) — new finding WLA-008-BATCH; customer query scoped |
 | `/api/client/schedule-package-hours` POST | `0bccc0bb` | ✅ SECURED |
 | `/api/client/quotes/request` POST | `0bccc0bb` | ✅ BY DESIGN |
 | `/api/client/bookings/[id]` GET | `0bccc0bb` | ✅ SECURED |
@@ -220,7 +220,7 @@ The following require independent reproduction before WLA-008 can be closed:
 
 2. **PostgreSQL negative-access test** (NEG-01..03 + BATCH-01..02): Re-run the same bat file. Verify that `submitQuote()` with Provider A's ID against Provider B's booking throws `BOOKING_NOT_FOUND`, creates no Quote, and leaves booking unchanged. Verify that the batch customer query returns 0 results for Provider A attempting to book Provider B's customer.
 
-Items 1 (route source inspections) and 3 (instrumented P2034→409) are addressed in the new sections above.
+Items 1 and 2 above are the only remaining independent verification requirements. Route source inspections and the instrumented P2034→409 evidence are addressed in the sections above.
 
 ---
 
