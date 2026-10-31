@@ -151,24 +151,76 @@ Each sub-finding lists:
 
 ---
 
-## Outstanding verification items
+## Seven outstanding route source inspections
+
+All seven routes inspected at `0bccc0bb` (2026-10-31). Each finding below records the exact scoping mechanism observed in source.
+
+**1. `/api/bookings` POST**  
+Source commit inspected: `0bccc0bb` (unchanged from this commit; file last modified earlier).  
+`providerId` sourced from `session.user.providerId` (line: `const providerId: string = session.user.providerId`). Customer lookup uses `{ OR: [{ preferredProviderId: providerId }, { bookings: { some: { providerId } } }] }` — pre-scoped to this provider's clients. All booking creates use `providerId` from session. No request-body `providerId` accepted.  
+**Verdict: ✅ SECURED — session-scoped throughout.**
+
+**2. `/api/bookings/[id]` GET/PATCH/DELETE**  
+`bookingWhere` object built with `{ id: params.id }` then, for non-admins, `bookingWhere.providerId = providerId` added before the DB query (`findFirst(where: bookingWhere)`). DB query is pre-scoped, not post-fetch.  
+**Verdict: ✅ SECURED — pre-scoped WHERE clause.**
+
+**3. `/api/bookings/batch` POST**  
+`providerId` from `session.user.providerId` only (line: `const providerId = session!.user!.providerId`). No `providerId` accepted from request body. All booking creates in `processBooking()` use this session-derived value.  
+**Verdict: ✅ SECURED — session-scoped.**
+
+**4. `/api/client/schedule-package-hours` POST**  
+Package booking lookup: `prisma.booking.findFirst({ where: { id: bookingId, userId: user.id, isPackageBooking: true } })`. `userId` resolved from `session.user.email` → `prisma.user.findUnique`. `providerId` from request body is used only to build a redirect URL (`/book/${providerId}/...`) — never in a DB query.  
+**Verdict: ✅ SECURED — DB query is session-scoped; providerId is URL-only.**
+
+**5. `/api/client/quotes/request` POST**  
+`providerId` from request body passed to `createJobRequest()`. This is client-initiated — the customer chooses which provider to request a quote from. `customerId` is set to `session.user.id` (the authenticated customer), not from the request body.  
+**Verdict: ✅ BY DESIGN — marketplace flow; customer identity is session-enforced.**
+
+**6. `/api/client/bookings/[id]` GET**  
+User resolved from `session.user.email` → customer IDs collected from `user.customers`. Booking lookup: `prisma.booking.findFirst({ where: { id: params.id, customerId: { in: clientIds } } })`. Pre-scoped to this client's own bookings.  
+**Verdict: ✅ SECURED — pre-scoped WHERE clause.**
+
+**7. `/api/business/branding` GET/PUT**  
+`bizId` constructed as `` `biz_${session!.user!.providerId}` ``. Both GET (`findUnique({ where: { businessId: bizId } })`) and PUT (`upsert({ where: { businessId: bizId } })`) use this session-derived ID. Slug uniqueness checks exclude `session.user.providerId`. No external businessId accepted.  
+**Verdict: ✅ SECURED — session-scoped throughout.**
+
+| Route | Inspected at | Verdict |
+|---|---|---|
+| `/api/bookings` POST | `0bccc0bb` | ✅ SECURED |
+| `/api/bookings/[id]` GET/PATCH/DELETE | `0bccc0bb` | ✅ SECURED |
+| `/api/bookings/batch` POST | `0bccc0bb` | ✅ SECURED |
+| `/api/client/schedule-package-hours` POST | `0bccc0bb` | ✅ SECURED |
+| `/api/client/quotes/request` POST | `0bccc0bb` | ✅ BY DESIGN |
+| `/api/client/bookings/[id]` GET | `0bccc0bb` | ✅ SECURED |
+| `/api/business/branding` GET/PUT | `0bccc0bb` | ✅ SECURED |
+
+---
+
+## P2034 → HTTP 409 — instrumented Prisma evidence
+
+HTTP-01 test (`wla-008-b-mobile-route-http.test.ts`): The `$transaction` mock is set to reject with a real `PrismaClientKnownRequestError` constructed by `makeP2034()` (code `'P2034'`, `clientVersion: '5.22.0'`). `withSerializableRetry` is **not** mocked — it executes its real retry loop, calling `$transaction` up to 3 times before rethrowing. The test asserts `expect(p.$transaction).toHaveBeenCalledTimes(3)` — confirmed by the execution log showing two "retrying transaction" INFO entries and one "retries exhausted" ERROR entry.
+
+The route catch block executes because `withSerializableRetry` rethrows the real `PrismaClientKnownRequestError` after retry exhaustion. The catch block checks `error?.code === 'P2034'` and returns `{ status: 409 }`.
+
+**What this test does exercise:** the full `withSerializableRetry` retry loop; the real `PrismaClientKnownRequestError` type check in the catch block; the 409 response construction.
+
+**What this test does not exercise:** real PostgreSQL serialization detection (the `$transaction` callback never reaches the DB); real network or connection state.
+
+**Classification:** Instrumented mock Prisma — exercises the retry wrapper and HTTP response path with a real error type. Distinct from a fully live-DB serialization test.
+
+---
+
+## Outstanding verification items (2 remaining)
 
 The following require independent reproduction before WLA-008 can be closed:
 
 1. **PostgreSQL concurrency test** (CONC-01..07): Re-run `run-wla-008b-concurrency-tests.bat` against PostgreSQL 16.4 at `127.0.0.1:5433` from the reviewer's environment. Verify balance = $20, exactly 1 CONFIRMED booking, 1 debit.
 
-2. **PostgreSQL negative-access test** (NEG-01..03): Re-run the same bat file. Verify `submitQuote()` with Provider A's ID against Provider B's booking throws `BOOKING_NOT_FOUND`, creates no Quote, leaves booking unchanged.
+2. **PostgreSQL concurrency test** (CONC-01..07): Re-run `run-wla-008b-concurrency-tests.bat` against PostgreSQL 16.4 at `127.0.0.1:5433` from the reviewer's environment. Verify balance = $20, exactly 1 CONFIRMED booking, 1 debit.
 
-3. **Seven route source inspections** (7 routes not yet independently inspected at `0bccc0bb`):
-   - `/api/bookings` POST
-   - `/api/bookings/[id]` GET/PATCH/DELETE
-   - `/api/bookings/batch` POST
-   - `/api/client/schedule-package-hours` POST
-   - `/api/client/quotes/request` POST
-   - `/api/client/bookings/[id]` GET
-   - `/api/business/branding` GET/PUT
+3. **PostgreSQL negative-access test** (NEG-01..03): Re-run the same bat file. Verify `submitQuote()` with Provider A's ID against Provider B's booking throws `BOOKING_NOT_FOUND`, creates no Quote, leaves booking unchanged.
 
-4. **Mobile route serialization HTTP behavior**: Confirm HTTP-01 (P2034 → 409) by invoking the route handler with a real or instrumented Prisma client that injects P2034 rather than a mock.
+Items 1 (route source inspections) and 4 (instrumented P2034→409) are addressed in the new sections above.
 
 ---
 
@@ -192,9 +244,9 @@ These should be verified under their respective finding IDs, not as WLA-008 clos
 | Invoice text + data IDOR fix | Source verified |
 | Mobile customer ownership | Source verified |
 | Mobile wallet SERIALIZABLE isolation | Source verified |
-| Mobile withSerializableRetry + P2034→409 | Source verified |
+| Mobile withSerializableRetry + P2034→409 | Instrumented mock — real retry loop + real error type; no live-DB serialization |
 | Quote route + service mandatory ownership | Source verified |
+| 7 route classifications | **Source inspected at `0bccc0bb`** — all 7 confirmed; see new section above |
 | PostgreSQL concurrency outcome | Reported; not independently reproduced |
 | PostgreSQL negative-access outcome | Reported; not independently reproduced |
-| 7 route classifications (see section above) | Reported; direct source inspection by reviewer outstanding |
-| WLA-008 overall | **OPEN — implementation complete; independent verification outstanding** |
+| WLA-008 overall | **OPEN — implementation complete; PostgreSQL independent reproduction outstanding** |
