@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.70 (WLA-008-TENANT: submitQuote service hardened; NEG-01..03 PostgreSQL negative-access tests pass; route inventory reconciled; 47 tests total)
+**Version:** 5.71 (WLA-008-TENANT-1: QuoteInput.providerId mandatory; unconditional enforcement; NEG tests re-confirmed at PostgreSQL; 37/37 source + 10/10 DB)
 **Last Updated:** 2026-10-31
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -746,7 +746,7 @@ Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, 
 | WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap); default READ COMMITTED isolation allowed double-spend | Customer ownership via `bookings.some`; wallet balance check + booking create + debit inside single `$transaction`; `isolationLevel: 'Serializable'` added (matches pattern in main bookings route, confirm-package-booking, Stripe webhook) | `2dc5d81a`, `98fb7605`, `b75e37fc` | **FIX APPLIED** — SERIALIZABLE isolation source-verified; PostgreSQL concurrency test run (see below) |
 | WLA-008-B-RUNTIME | Concurrency race: two simultaneous mobile bookings vs $80 wallet | Balance=$80, A=$60, B=$60; combined $120 > $80 → only one can be CONFIRMED | SERIALIZABLE causes one tx to lose; loser gets PENDING_PAYMENT or P2034 | `b75e37fc`, `68b4778e`, `b5befcf8` | **47/47 REPORTED** (PostgreSQL 16.4 + mocked handler) — commit `0ddace9e`. Tests: 7 concurrency (CONC-01..07), 3 negative-access (NEG-01..03: Provider A/B quote isolation), 4 retry behavioral (RETRY-01..04), 2 route HTTP (HTTP-01/02). Raw logs: `docs/audit/WLA-008B-concurrency-raw.txt`, `docs/audit/WLA-008B-all-raw.txt`. Independent review outstanding. |
 | WLA-008-C | `/api/bookings/combined` POST | No rate limiting → slot-squatting with zero-cost PENDING bookings | `bookingRateLimit` (10/min) before DB; per-user identifier | `2dc5d81a` | **FIX APPLIED** — fail-open limitation documented |
-| WLA-008-TENANT-1 | `/api/instructor/quotes/[bookingId]/submit` + `submitQuote()` service | Route: post-fetch IDOR. Service: unscoped `findUnique` + unscoped `booking.update` — defence-in-depth gap (reviewer finding) | Route: `findFirst({ where: { id, providerId } })`; passes `providerId` to service. Service: `QuoteInput.providerId?` added; service uses `findFirst` with compound WHERE; `booking.update` scoped by `booking.providerId` | `0ddace9e` | **FIX APPLIED** — NEG-01: Provider A cannot quote Provider B booking (BOOKING_NOT_FOUND); NEG-02: no Quote row created; NEG-03: booking status unchanged. 3/3 PostgreSQL negative-access tests pass. |
+| WLA-008-TENANT-1 | `/api/instructor/quotes/[bookingId]/submit` + `submitQuote()` service | Route: post-fetch IDOR. Service: unscoped `findUnique` + unscoped `booking.update` — defence-in-depth gap (reviewer finding). v1 fix left `providerId` optional, preserving a bypass path. | v2 fix: `QuoteInput.providerId` made mandatory (required field, no `?`); conditional guard removed; service enforces unconditionally. Route scoped lookup + service boundary both enforce ownership. | `5f309c06` (service hardening), `latest` (mandatory) | **FIX APPLIED** — SQ01–SQ05 source-verified; NEG-01..03 PostgreSQL confirmed: Provider A → BOOKING_NOT_FOUND, zero quotes, booking unchanged. No bypass path. |
 
 Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 
@@ -759,7 +759,7 @@ Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 | `/api/bookings` POST | providerId from session vs body | ✅ SECURED — `session.user.providerId` throughout |
 | `/api/bookings/[id]` GET/PATCH/DELETE | Booking ownership | ✅ SECURED — `bookingWhere.providerId = providerId` |
 | `/api/bookings/batch` POST | Customer ownership | ✅ SECURED — `session.user.providerId` |
-| `/api/bookings/combined` POST | Rate limiting | ✅ FIXED (WLA-008-C) |
+| `/api/bookings/combined` POST | Rate limiting | ✅ MITIGATED — `bookingRateLimit` (10/min) reduces slot-squatting abuse. Not an ownership-isolation fix; rate limiting is a separate abuse-prevention control. |
 | `/api/bookings/mobile` POST | Customer IDOR + payment bypass | ✅ FIXED (WLA-008-B) |
 | `/api/client/schedule-package-hours` | providerId from body | ✅ SECURED — `userId: user.id` scoping; providerId only for redirect URL |
 | `/api/client/quotes/request` | providerId from body | ✅ BY DESIGN — client picks provider (marketplace flow) |
@@ -773,7 +773,7 @@ Test evidence (commit `b5befcf8` + quotes/submit fix `0ddace9e`):
   - D01–D04: invoice data route IDOR fix ✓
   - B01–B10: mobile route (ownership, wallet, SERIALIZABLE, retry, P2034→409) ✓
   - C01–C05: combined route rate limit ✓
-  - SQ01–SQ05: submitQuote service boundary (QuoteInput.providerId, findFirst, WHERE, update scope) ✓
+  - SQ01–SQ05: submitQuote service boundary (route passes providerId, QuoteInput.providerId mandatory not optional, findFirst, unconditional WHERE, update scope) ✓
   - T01–T06: 13-route ownership review (quotes/submit fix, clients, quotes/request, client bookings, create-bulk, branding) ✓
   - R01–R03: regression guards ✓
   - CONC-01: at least one booking row committed (non-vacuous) ✓
