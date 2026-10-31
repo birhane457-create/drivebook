@@ -266,8 +266,16 @@ describe('WLA-008-TENANT: submitQuote service boundary', () => {
     expect(routeSource).toMatch(/providerId:\s*session!\.user!\.providerId/)
   })
 
-  it('SQ02 — QuoteInput interface now includes optional providerId field', () => {
-    expect(serviceSource).toMatch(/providerId\?:\s*string/)
+  it('SQ02 — QuoteInput.providerId is mandatory (no optional marker)', () => {
+    // The field must be required, not optional, so no caller can bypass ownership.
+    // Check that the interface declares providerId without the ? optional marker.
+    const ifaceStart = serviceSource.indexOf('export interface QuoteInput {')
+    const ifaceEnd   = serviceSource.indexOf('}', ifaceStart)
+    const ifaceBody  = serviceSource.slice(ifaceStart, ifaceEnd)
+    // Must have providerId as a required field
+    expect(ifaceBody).toMatch(/providerId:\s*string/)
+    // Must NOT be optional
+    expect(ifaceBody).not.toMatch(/providerId\?:/)
   })
 
   it('SQ03 — submitQuote service uses findFirst (not findUnique) for booking lookup', () => {
@@ -280,11 +288,14 @@ describe('WLA-008-TENANT: submitQuote service boundary', () => {
     expect(fnBody).not.toMatch(/findUnique/)
   })
 
-  it('SQ04 — service WHERE clause includes providerId when caller provides it', () => {
+  it('SQ04 — service enforces providerId unconditionally (no conditional guard)', () => {
     const fnStart = serviceSource.indexOf('export async function submitQuote(')
     const fnEnd   = serviceSource.indexOf('export async function', fnStart + 10)
     const fnBody  = serviceSource.slice(fnStart, fnEnd > fnStart ? fnEnd : fnStart + 3000)
-    expect(fnBody).toMatch(/bookingWhere\.providerId\s*=\s*callerProviderId/)
+    // The lookup must always include providerId — no `if (callerProviderId)` bypass
+    expect(fnBody).toMatch(/where:\s*\{\s*id:\s*bookingId,\s*providerId:\s*callerProviderId/)
+    // The optional-guard pattern must be gone
+    expect(fnBody).not.toMatch(/if\s*\(\s*callerProviderId\s*\)/)
   })
 
   it('SQ05 — booking.update is scoped by booking.providerId inside the transaction', () => {
