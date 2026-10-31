@@ -1,8 +1,19 @@
 # WLA-008 — Cross-Provider Tenant Isolation Route Inventory
 
-**Date:** 2026-10-27
+**Date:** 2026-10-27 (initial) / 2026-10-31 (review complete)
 **Finding:** WLA-008 (OPEN — P1)
 **Scope:** Complete inventory of provider-facing routes that read or write provider-owned resources
+
+## Status as of 2026-10-31
+
+All 13 ⚠️ REVIEW routes have been inspected and classified. See the review results table in section 9.3 of `AUDIT-MASTER-TRACKER.md`.
+
+**Summary of review outcomes:**
+- 5 routes fixed (invoices text, invoices data, mobile booking, combined booking, quotes/submit)
+- 7 routes confirmed secured or by design
+- 1 route (combined) received rate-limiting mitigation
+- Quote service (`submitQuote`) hardened with provider ownership at service layer (defence-in-depth)
+- Negative-access PostgreSQL test confirms Provider A cannot quote Provider B's booking
 
 ## Methodology
 
@@ -125,7 +136,7 @@ Every API route under the following path prefixes was inspected:
 | Category | Count | Status |
 |---|---|---|
 | ✅ SECURED (session-scoped) | 24 | No action needed |
-| ⚠️ REVIEW (request-supplied IDs) | 13 | Needs verification of ownership checks |
+| ⚠️ REVIEW completed | 13 | All reviewed — 5 fixed, 7 secured/by-design, 1 rate-limited. See tracker §9.3 |
 | ℹ️ PUBLIC (no auth, by design) | 10 | Not a tenant isolation concern |
 | 🔒 ADMIN | — | Not inventoried (admin routes are RBAC-gated separately) |
 
@@ -142,8 +153,13 @@ The ⚠️ REVIEW routes are the highest priority. The following are the most cr
 7. `/api/bookings/combined` — Does the combined route verify the providerId from the request matches the eligible provider?
 8. `/api/bookings/mobile` — JWT claim vs request providerId consistency
 
-## Next steps
+## Review status (2026-10-31)
 
-1. Read each ⚠️ REVIEW route source and classify its actual scoping behavior
-2. Build Provider A / Provider B negative-access tests for the highest-priority routes
-3. Document findings and implement fixes for any confirmed isolation gaps
+The 13 ⚠️ REVIEW routes listed above have been inspected. Detailed results and evidence are in `AUDIT-MASTER-TRACKER.md` section 9.3. The full test suite at commit `0ddace9e`+ covers:
+
+- 37 source-inspection tests
+- 10 PostgreSQL-backed behavioral tests (7 concurrency + 3 negative-access)
+- 4 retry utility behavioral tests
+- 2 route HTTP tests
+
+**WLA-008 remains OPEN** pending independent review of the reported evidence.

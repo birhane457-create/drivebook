@@ -248,6 +248,54 @@ describe('WLA-008-C: Combined booking rate limit — source verification', () =>
   })
 })
 
+// ─── WLA-008-TENANT: submitQuote service defence-in-depth ────────────────────
+
+describe('WLA-008-TENANT: submitQuote service boundary', () => {
+  const routeSource = readFileSync(
+    resolve(process.cwd(), 'app/api/instructor/quotes/[bookingId]/submit/route.ts'),
+    'utf-8'
+  )
+  const serviceSource = readFileSync(
+    resolve(process.cwd(), 'lib/services/booking-service.ts'),
+    'utf-8'
+  )
+
+  it('SQ01 — route passes providerId into submitQuote input (defence-in-depth)', () => {
+    // The route's own scoped lookup already checks ownership, but it must also
+    // pass providerId into the service so the service enforces ownership itself.
+    expect(routeSource).toMatch(/providerId:\s*session!\.user!\.providerId/)
+  })
+
+  it('SQ02 — QuoteInput interface now includes optional providerId field', () => {
+    expect(serviceSource).toMatch(/providerId\?:\s*string/)
+  })
+
+  it('SQ03 — submitQuote service uses findFirst (not findUnique) for booking lookup', () => {
+    // findFirst supports compound WHERE; findUnique only accepts unique keys.
+    // Search specifically in the submitQuote function body.
+    const fnStart = serviceSource.indexOf('export async function submitQuote(')
+    const fnEnd   = serviceSource.indexOf('export async function', fnStart + 10)
+    const fnBody  = serviceSource.slice(fnStart, fnEnd > fnStart ? fnEnd : fnStart + 3000)
+    expect(fnBody).toMatch(/findFirst/)
+    expect(fnBody).not.toMatch(/findUnique/)
+  })
+
+  it('SQ04 — service WHERE clause includes providerId when caller provides it', () => {
+    const fnStart = serviceSource.indexOf('export async function submitQuote(')
+    const fnEnd   = serviceSource.indexOf('export async function', fnStart + 10)
+    const fnBody  = serviceSource.slice(fnStart, fnEnd > fnStart ? fnEnd : fnStart + 3000)
+    expect(fnBody).toMatch(/bookingWhere\.providerId\s*=\s*callerProviderId/)
+  })
+
+  it('SQ05 — booking.update is scoped by booking.providerId inside the transaction', () => {
+    // The update must include providerId to prevent mutation of a different provider's booking.
+    const fnStart = serviceSource.indexOf('export async function submitQuote(')
+    const fnEnd   = serviceSource.indexOf('export async function', fnStart + 10)
+    const fnBody  = serviceSource.slice(fnStart, fnEnd > fnStart ? fnEnd : fnStart + 3000)
+    expect(fnBody).toMatch(/where:\s*\{\s*id:\s*bookingId,\s*providerId:\s*booking\.providerId/)
+  })
+})
+
 // ─── WLA-008-TENANT: 13-route ownership review ───────────────────────────────
 
 describe('WLA-008-TENANT: 13-route ownership review results', () => {

@@ -1592,6 +1592,7 @@ export interface JobRequestInput {
 
 export interface QuoteInput {
   bookingId:       string
+  providerId?:     string       // WLA-008-TENANT: when provided, the service enforces ownership
   amount:          number
   description:     string
   lineItems?:      Array<{ label: string; amount: number }>
@@ -1692,7 +1693,7 @@ export async function submitQuote(
   actorRole: ActorRole,
 ): Promise<QuoteResult> {
   const {
-    bookingId, amount, description, lineItems = [],
+    bookingId, providerId: callerProviderId, amount, description, lineItems = [],
     validUntil, depositPercent, customerNotes, internalNotes,
     startTime, endTime,
   } = input
@@ -1700,8 +1701,15 @@ export async function submitQuote(
   if (amount <= 0) throw makeError('SLOT_CONFLICT', 'Quote amount must be greater than zero')
   if (validUntil <= new Date()) throw makeError('SLOT_CONFLICT', 'Quote expiry must be in the future')
 
-  const booking = await (prisma as any).booking.findUnique({
-    where: { id: bookingId },
+  // WLA-008-TENANT: when the caller passes providerId, enforce ownership inside
+  // the service so every caller (not just the API route) is protected.
+  // Using findFirst + compound WHERE mirrors the route-level fix and returns
+  // BOOKING_NOT_FOUND for both "doesn't exist" and "belongs to another provider".
+  const bookingWhere: Record<string, unknown> = { id: bookingId }
+  if (callerProviderId) bookingWhere.providerId = callerProviderId
+
+  const booking = await (prisma as any).booking.findFirst({
+    where: bookingWhere,
     select: {
       id: true, providerId: true, customerId: true, status: true,
       price: true, providerPayout: true,
@@ -1764,7 +1772,9 @@ export async function submitQuote(
     if (endTime)   bookingUpdate.endTime   = endTime
 
     updatedBooking = await (tx as any).booking.update({
-      where: { id: bookingId },
+      // WLA-008-TENANT: scope the update to the verified owner so no other
+      // provider's booking can be mutated even if bookingId is guessed.
+      where: { id: bookingId, providerId: booking.providerId },
       data:  bookingUpdate,
     })
   })
