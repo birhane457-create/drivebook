@@ -1592,7 +1592,10 @@ export interface JobRequestInput {
 
 export interface QuoteInput {
   bookingId:       string
-  providerId?:     string       // WLA-008-TENANT: when provided, the service enforces ownership
+  /** WLA-008-TENANT (mandatory): The service enforces that the booking belongs
+   *  to this provider, unconditionally. Callers that do not have an authenticated
+   *  provider ID (e.g. admin background jobs) must use a separate privileged path. */
+  providerId:      string
   amount:          number
   description:     string
   lineItems?:      Array<{ label: string; amount: number }>
@@ -1701,15 +1704,10 @@ export async function submitQuote(
   if (amount <= 0) throw makeError('SLOT_CONFLICT', 'Quote amount must be greater than zero')
   if (validUntil <= new Date()) throw makeError('SLOT_CONFLICT', 'Quote expiry must be in the future')
 
-  // WLA-008-TENANT: when the caller passes providerId, enforce ownership inside
-  // the service so every caller (not just the API route) is protected.
-  // Using findFirst + compound WHERE mirrors the route-level fix and returns
-  // BOOKING_NOT_FOUND for both "doesn't exist" and "belongs to another provider".
-  const bookingWhere: Record<string, unknown> = { id: bookingId }
-  if (callerProviderId) bookingWhere.providerId = callerProviderId
-
+  // WLA-008-TENANT: providerId is now mandatory. Enforce ownership unconditionally —
+  // no caller can bypass the boundary by omitting the field.
   const booking = await (prisma as any).booking.findFirst({
-    where: bookingWhere,
+    where: { id: bookingId, providerId: callerProviderId },
     select: {
       id: true, providerId: true, customerId: true, status: true,
       price: true, providerPayout: true,

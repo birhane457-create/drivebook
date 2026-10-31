@@ -29,9 +29,9 @@
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC04 — 429 response is returned on rate limit exceeded
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-C: Combined booking rate limit — source verification[2m > [22mC05 — getRateLimitIdentifier is used to scope limit per user
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: submitQuote service boundary[2m > [22mSQ01 — route passes providerId into submitQuote input (defence-in-depth)
- [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: submitQuote service boundary[2m > [22mSQ02 — QuoteInput interface now includes optional providerId field
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: submitQuote service boundary[2m > [22mSQ02 — QuoteInput.providerId is mandatory (no optional marker)
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: submitQuote service boundary[2m > [22mSQ03 — submitQuote service uses findFirst (not findUnique) for booking lookup
- [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: submitQuote service boundary[2m > [22mSQ04 — service WHERE clause includes providerId when caller provides it
+ [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: submitQuote service boundary[2m > [22mSQ04 — service enforces providerId unconditionally (no conditional guard)
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: submitQuote service boundary[2m > [22mSQ05 — booking.update is scoped by booking.providerId inside the transaction
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT01 — /api/instructor/quotes/[bookingId]/submit uses findFirst with providerId (not post-fetch check)
  [32m✓[39m __tests__/integration/wla-008-cross-provider-isolation.test.ts[2m > [22mWLA-008-TENANT: 13-route ownership review results[2m > [22mT02 — /api/instructor/clients/[id] is pre-scoped by bookings.some + providerId
@@ -45,6 +45,6 @@
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m37 passed[39m[22m[90m (37)[39m
-[2m   Start at [22m 15:44:43
-[2m   Duration [22m 883ms[2m (transform 103ms, setup 84ms, collect 70ms, tests 20ms, environment 0ms, prepare 280ms)[22m
+[2m   Start at [22m 16:23:49
+[2m   Duration [22m 654ms[2m (transform 63ms, setup 44ms, collect 61ms, tests 11ms, environment 0ms, prepare 215ms)[22m
 

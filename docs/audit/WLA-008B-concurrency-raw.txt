@@ -14,7 +14,7 @@
 
 [90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-02 — exactly one CONFIRMED (isPaid) booking exists — no double-spend[22m[39m
 [CONC-02] CONFIRMED bookings: [33m1[39m
-  booking cmvw3n3vt000a10r4d049zt8u price: 60
+  booking cmvw4xo97000a10bohjsrgi2c price: 60
 
 [90mstdout[2m | __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22m[2mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22m[2mCONC-03 — the losing result is PENDING_PAYMENT or P2034 (never a second CONFIRMED)[22m[39m
 [CONC-03] Loser status: PENDING_PAYMENT
@@ -35,12 +35,12 @@
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-05 — total confirmed debits equal one lesson price
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-06 — double-entry: confirmed booking count equals debit transaction count
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-B-RUNTIME: Concurrent mobile booking wallet integrity[2m > [22mCONC-07 — source: SERIALIZABLE isolation + withSerializableRetry + P2034→409 present
- [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-TENANT: Provider A / Provider B negative-access (quote submission)[2m > [22mNEG-01 — submitQuote service throws BOOKING_NOT_FOUND when Provider A tries to quote Provider B booking[33m 437[2mms[22m[39m
+ [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-TENANT: Provider A / Provider B negative-access (quote submission)[2m > [22mNEG-01 — submitQuote service throws BOOKING_NOT_FOUND when Provider A tries to quote Provider B booking[33m 367[2mms[22m[39m
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-TENANT: Provider A / Provider B negative-access (quote submission)[2m > [22mNEG-02 — no Quote row was created by the failed attempt
  [32m✓[39m __tests__/integration/wla-008-b-wallet-concurrency.test.ts[2m > [22mWLA-008-TENANT: Provider A / Provider B negative-access (quote submission)[2m > [22mNEG-03 — Provider B booking status is unchanged after the failed attempt
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
-[2m   Start at [22m 15:48:15
-[2m   Duration [22m 1.42s[2m (transform 203ms, setup 45ms, collect 109ms, tests 741ms, environment 0ms, prepare 202ms)[22m
+[2m   Start at [22m 16:24:28
+[2m   Duration [22m 1.45s[2m (transform 182ms, setup 46ms, collect 124ms, tests 716ms, environment 0ms, prepare 199ms)[22m
 
