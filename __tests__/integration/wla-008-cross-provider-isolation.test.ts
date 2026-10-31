@@ -393,6 +393,9 @@ describe('WLA-008: Regression — secured routes still have correct scoping', ()
     expect(source).toMatch(/session!\.user!\.providerId/)
     // Must NOT accept providerId from body
     expect(source).not.toMatch(/body\.providerId\s*|data\.providerId/)
+    // WLA-008-BATCH: customer query must be scoped to this provider's clients
+    // (added after reviewer found the unscoped findMany vulnerability)
+    expect(source).toMatch(/bookings.*some.*providerId/)
   })
 
   it('R03 — schedule-package-hours providerId is used only for redirect URL, not DB query', () => {

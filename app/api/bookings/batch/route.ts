@@ -252,8 +252,19 @@ export async function POST(req: NextRequest) {
 
     const now = new Date()
     const uniqueClientIds = [...new Set(data.bookings.map((b: any) => b.customerId))]
+
+    // WLA-008-BATCH: scope customer lookup to the authenticated provider's own clients.
+    // Without the OR clause, any customer ID in the DB could be used — a caller
+    // could batch-book a customer who belongs to a different provider.
+    // Mirrors the ownership check used in POST /api/bookings (single-booking route).
     const clients = await prisma.customer.findMany({
-      where: { id: { in: uniqueClientIds } },
+      where: {
+        id: { in: uniqueClientIds },
+        OR: [
+          { preferredProviderId: providerId },
+          { bookings: { some: { providerId } } },
+        ],
+      },
       include: { user: true },
     })
     const clientMap = new Map<string, ClientWithUser>(
