@@ -6,16 +6,17 @@
 
 ## Status as of 2026-10-31
 
-All 13 ⚠️ REVIEW routes have been inspected and classified. See the review results table in section 9.3 of `AUDIT-MASTER-TRACKER.md`.
+13 ⚠️ REVIEW routes have been classified. **Direct source inspection was performed for 12 of the 13 routes.** The exception is `/api/client/bookings/create-bulk`, which was classified as "by design" based on a source-pattern test (T05) rather than direct independent source inspection. See the review results table in section 9.3 of `AUDIT-MASTER-TRACKER.md` for the full breakdown.
 
 **Summary of review outcomes (commit `0bccc0bb`):**
 
-| Category | Routes |
-|---|---|
-| IDOR ownership fixes | invoices text, invoices data, mobile booking, quotes/submit + service boundary |
-| Already secured | clients/[id], bookings/[id], bookings/batch, bookings, client/bookings/[id], schedule-package-hours, business/branding |
-| By design (client picks provider) | client/quotes/request, client/bookings/create-bulk |
-| Abuse-prevention mitigation (not an ownership fix) | combined booking — rate-limited (10/min); does not establish tenant ownership |
+| Category | Routes | Directly source-inspected? |
+|---|---|---|
+| IDOR ownership fixes | invoices text, invoices data, mobile booking, quotes/submit + service boundary | Yes |
+| Abuse-prevention mitigation (not an ownership fix) | combined booking — rate-limited | Yes |
+| Already secured | clients/[id], bookings/[id], bookings/batch, bookings, client/bookings/[id], schedule-package-hours, business/branding | Yes |
+| By design (client picks provider) | client/quotes/request | Yes |
+| By design — classified by source-pattern test only | client/bookings/create-bulk | **No — T05 source test; direct inspection not performed** |
 
 - Quote service (`submitQuote`) hardened: `QuoteInput.providerId` is mandatory; ownership enforced unconditionally
 - PostgreSQL negative-access test confirms Provider A cannot quote Provider B's booking
