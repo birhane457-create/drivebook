@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.71 (WLA-008-TENANT-1: QuoteInput.providerId mandatory; unconditional enforcement; NEG tests re-confirmed at PostgreSQL; 37/37 source + 10/10 DB)
+**Version:** 5.72 (WLA-008 implementation phase complete; combined-route category corrected; tracker and inventory consistent; WLA-008 OPEN pending independent verification)
 **Last Updated:** 2026-10-31
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
@@ -726,7 +726,7 @@ These items were raised during the audit and verified source-safe. Recorded here
 | WLA-004 | `application_fee_amount` set without connected-account context | P2 | SOURCE ANALYSIS COMPLETE — runtime verification pending | Stripe test-mode verification requires connected account (not yet approved). Analysis: `docs/audit/WLA-004-SOURCE-ANALYSIS.md`. |
 | WLA-005 | Wallet balance is user-wide, not provider-attributed | ARCHITECTURAL | OPEN — architecture decision required | Whether this is a defect depends on approved white-label wallet contract. |
 | WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | **FIX APPLIED** — reviewer confirmed `b924a144` correct; DB partial unique index + P2002 catch replaces tautological updateMany | `b924a144` | 7/7 source+simulation | Reviewer note: 7/7 tests are source checks and a simulated race, not a real concurrent PostgreSQL test. Migration presence in Git does not independently prove application to production. |
-| WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | **FIXES APPLIED** — route inventory complete (47 routes); 3 sub-findings fixed; open items documented separately | `98fb7605` | 24/24 source | Sub-finding detail below. Remaining route inventory items (13 routes) still require ownership review. Full behavioral Provider A/B tests not yet run. |
+| WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | **IMPLEMENTATION PHASE COMPLETE** — 13-route review done; 4 IDOR fixes + 1 service boundary fix + 1 rate-limit mitigation; 37 source + 10 DB tests; WLA-008 remains OPEN pending independent verification | `0bccc0bb` | 37/37 source + 10/10 DB. Inventory and tracker consistent. |
 | WLA-011 | Host classification may use substring matching | P2 | OPEN | Deceptive-host tests not yet run. |
 | WLA-012 | BusinessDomain-only fallback passes `businessId` to a provider ID/slug lookup | P2 | OPEN | Runtime staging test required. |
 | WLA-013 | Custom-domain pages inherit global DriveBook metadata | P2 | OPEN | Provider metadata isolation policy must be defined before fix. |
@@ -737,7 +737,16 @@ These items were raised during the audit and verified source-safe. Recorded here
 
 ### 9.3 — WLA-008 sub-finding detail
 
-Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, commit `037eea18`).
+Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, commit `037eea18`; review complete at `0bccc0bb`).
+
+**Route review categories (commit `0bccc0bb`):**
+
+| Category | Routes | Count |
+|---|---|---|
+| IDOR ownership fixes | invoices/[id] text, invoices/[id]/data, mobile booking, quotes/submit + service boundary | 4 routes (+ 1 service) |
+| Abuse-prevention mitigation | combined booking (rate-limited; not an ownership fix) | 1 route |
+| Already secured | clients/[id], bookings/[id], bookings, bookings/batch, client/bookings/[id], schedule-package-hours, business/branding | 7 routes |
+| By design | client/quotes/request, client/bookings/create-bulk | 2 routes |
 
 | Sub-ID | Route | Pattern | Fix | Commit | Status |
 |---|---|---|---|---|---|
@@ -759,7 +768,7 @@ Routes still requiring ownership review (from 13 ⚠️ REVIEW in inventory):
 | `/api/bookings` POST | providerId from session vs body | ✅ SECURED — `session.user.providerId` throughout |
 | `/api/bookings/[id]` GET/PATCH/DELETE | Booking ownership | ✅ SECURED — `bookingWhere.providerId = providerId` |
 | `/api/bookings/batch` POST | Customer ownership | ✅ SECURED — `session.user.providerId` |
-| `/api/bookings/combined` POST | Rate limiting | ✅ MITIGATED — `bookingRateLimit` (10/min) reduces slot-squatting abuse. Not an ownership-isolation fix; rate limiting is a separate abuse-prevention control. |
+| `/api/bookings/combined` POST | Rate limiting | ✅ MITIGATED (abuse-prevention, not an ownership fix) — `bookingRateLimit` (10/min) reduces slot-squatting; does not establish tenant ownership. |
 | `/api/bookings/mobile` POST | Customer IDOR + payment bypass | ✅ FIXED (WLA-008-B) |
 | `/api/client/schedule-package-hours` | providerId from body | ✅ SECURED — `userId: user.id` scoping; providerId only for redirect URL |
 | `/api/client/quotes/request` | providerId from body | ✅ BY DESIGN — client picks provider (marketplace flow) |

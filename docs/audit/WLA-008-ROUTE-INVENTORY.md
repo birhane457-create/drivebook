@@ -8,12 +8,17 @@
 
 All 13 ⚠️ REVIEW routes have been inspected and classified. See the review results table in section 9.3 of `AUDIT-MASTER-TRACKER.md`.
 
-**Summary of review outcomes:**
-- 5 routes fixed (invoices text, invoices data, mobile booking, combined booking, quotes/submit)
-- 7 routes confirmed secured or by design
-- 1 route (combined) received rate-limiting mitigation
-- Quote service (`submitQuote`) hardened with provider ownership at service layer (defence-in-depth)
-- Negative-access PostgreSQL test confirms Provider A cannot quote Provider B's booking
+**Summary of review outcomes (commit `0bccc0bb`):**
+
+| Category | Routes |
+|---|---|
+| IDOR ownership fixes | invoices text, invoices data, mobile booking, quotes/submit + service boundary |
+| Already secured | clients/[id], bookings/[id], bookings/batch, bookings, client/bookings/[id], schedule-package-hours, business/branding |
+| By design (client picks provider) | client/quotes/request, client/bookings/create-bulk |
+| Abuse-prevention mitigation (not an ownership fix) | combined booking — rate-limited (10/min); does not establish tenant ownership |
+
+- Quote service (`submitQuote`) hardened: `QuoteInput.providerId` is mandatory; ownership enforced unconditionally
+- PostgreSQL negative-access test confirms Provider A cannot quote Provider B's booking
 
 ## Methodology
 
