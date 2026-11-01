@@ -161,7 +161,7 @@ The ⚠️ REVIEW routes are the highest priority. The following are the most cr
 
 ## Review status (2026-10-31)
 
-The 13 ⚠️ REVIEW routes listed above have been inspected. Detailed results and evidence are in `AUDIT-MASTER-TRACKER.md` section 9.3. The full test suite at commit `0ddace9e`+ covers:
+All 13 ⚠️ REVIEW routes have been classified. Direct source inspection was performed for 12 of the 13; `/api/client/bookings/create-bulk` was classified as "by design" via source-pattern test only (see opening section above). Detailed results and evidence are in `AUDIT-MASTER-TRACKER.md` section 9.3. The full test suite at commit `0ddace9e`+ covers:
 
 - 37 source-inspection tests
 - 10 PostgreSQL-backed behavioral tests (7 concurrency + 3 negative-access)
