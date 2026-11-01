@@ -1,0 +1,15 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-008-batch-handler-pg.test.ts[2m > [22mWLA-008-BATCH-04: Actual batch handler + real PostgreSQL[2m > [22mBATCH-04 — handler rejects Provider B customer; no booking or wallet debit created
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m   Start at [22m 15:55:23
+[2m   Duration [22m 2.14s[2m (transform 311ms, setup 111ms, collect 958ms, tests 181ms, environment 1ms, prepare 344ms)[22m
+
+VITEST_EXIT:0 

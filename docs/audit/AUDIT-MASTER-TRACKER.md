@@ -821,6 +821,16 @@ Verification limitations:
 - No Provider A/B database-level behavioral tests. Full cross-tenant verification incomplete
 - All 13 ⚠️ REVIEW routes from the inventory have been classified; direct source inspection performed for 12 of 13 (`create-bulk` classified via T05 source-pattern test only, not directly inspected); 1 additional IDOR fixed (quotes/submit); see route review table above
 
+**Final PostgreSQL reproduction at `598c86af`+:**
+- CONC-01..06 (6 DB-backed): wallet concurrency reproduced
+- CONC-07 (source check): SERIALIZABLE + retry + P2034→409 present
+- NEG-01..03 (3 DB-backed): quote isolation reproduced
+- BATCH-01..02 (2 DB-backed): scoped query excludes foreign customer
+- BATCH-03 (source check): scoped query source pattern
+- BATCH-04 (1 DB-backed, actual handler + real PostgreSQL): handler rejects Provider B customer; 0 bookings; 0 wallet debits
+- **Total: 12 DB-backed tests + 2 source checks = 14 tests. All pass, exit 0.**
+- Raw logs: `docs/audit/WLA-008-FINAL-PG-REPRO.txt` (CONC+NEG+BATCH-01..03), `docs/audit/WLA-008-BATCH4-PG-RAW.txt` (BATCH-04)
+
 ### 9.4 — Verification qualification
 
 All WLA fixes listed above were applied on main. Reported test evidence:
