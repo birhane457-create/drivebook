@@ -810,7 +810,7 @@ Verification limitations:
 - Concurrency tests use a helper that mirrors route logic but does not call `withSerializableRetry` — isolation property tested directly; retry path tested separately via RETRY-01..04
 - HTTP tests use mocked Prisma; they prove the route handler routes errors correctly but do not connect to PostgreSQL
 - No Provider A/B database-level behavioral tests. Full cross-tenant verification incomplete
-- All 13 ⚠️ REVIEW routes from the inventory have been inspected; 1 additional IDOR fixed (quotes/submit); see route review table above
+- All 13 ⚠️ REVIEW routes from the inventory have been classified; direct source inspection performed for 12 of 13 (`create-bulk` classified via T05 source-pattern test only, not directly inspected); 1 additional IDOR fixed (quotes/submit); see route review table above
 
 ### 9.4 — Verification qualification
 
