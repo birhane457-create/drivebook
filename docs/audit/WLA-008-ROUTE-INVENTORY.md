@@ -1,7 +1,7 @@
 # WLA-008 — Cross-Provider Tenant Isolation Route Inventory
 
 **Date:** 2026-10-27 (initial) / 2026-10-31 (review complete)
-**Finding:** WLA-008 (OPEN — P1)
+**Finding:** WLA-008 (✅ CLOSED — FIX-VERIFIED at `1e2fb7e1`, 2026-10-31)
 **Scope:** Complete inventory of provider-facing routes that read or write provider-owned resources
 
 ## Status as of 2026-10-31
