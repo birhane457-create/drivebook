@@ -1,6 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.81 (WLA-008 final session run: 13+1=14 tests, all VITEST_EXIT:0, PostgreSQL 16.4, 127.0.0.1:5433, 2026-10-31T21:56:29/21:56:41; report stale entries reconciled; 571abadf exact commit recorded)
+**Version:** 5.82 (WLA-008 formally CLOSED — FIX-VERIFIED accepted by reviewer at aa36a4cc; report header + CONC-07 Outstanding row corrected; lifecycle complete)
+**Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
@@ -729,7 +730,7 @@ These items were raised during the audit and verified source-safe. Recorded here
 | WLA-004 | `application_fee_amount` set without connected-account context | P2 | SOURCE ANALYSIS COMPLETE — runtime verification pending | Stripe test-mode verification requires connected account (not yet approved). Analysis: `docs/audit/WLA-004-SOURCE-ANALYSIS.md`. |
 | WLA-005 | Wallet balance is user-wide, not provider-attributed | ARCHITECTURAL | OPEN — architecture decision required | Whether this is a defect depends on approved white-label wallet contract. |
 | WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | **FIX APPLIED** — reviewer confirmed `b924a144` correct; DB partial unique index + P2002 catch replaces tautological updateMany | `b924a144` | 7/7 source+simulation | Reviewer note: 7/7 tests are source checks and a simulated race, not a real concurrent PostgreSQL test. Migration presence in Git does not independently prove application to production. |
-| WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | **IMPLEMENTATION + VERIFICATION COMPLETE** — 13 routes classified (12 directly inspected); 4 IDOR fixes + 1 service boundary fix + 1 rate-limit mitigation + 1 batch customer ownership fix; 14 DB-backed/source tests reproduced; ready for formal closure | `c5621166` | 14 tests (12 DB-backed + 2 source), all pass, exit 0 |
+| WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | **✅ FIX-VERIFIED → CLOSED** — Implementation complete; PostgreSQL verification complete; reviewer accepted FIX-VERIFIED at `aa36a4cc` (2026-10-31). Formal closure: lifecycle FINDING → VERIFIED → FIX → FIX-VERIFIED → CLOSED. | `aa36a4cc` | 14 tests (12 DB-backed + 2 source), VITEST_EXIT:0, 2026-10-31T21:56. Reviewer: "WLA-008 has met the substantive technical verification requirements." |
 | WLA-011 | Host classification may use substring matching | P2 | OPEN | Deceptive-host tests not yet run. |
 | WLA-012 | BusinessDomain-only fallback passes `businessId` to a provider ID/slug lookup | P2 | OPEN | Runtime staging test required. |
 | WLA-013 | Custom-domain pages inherit global DriveBook metadata | P2 | OPEN | Provider metadata isolation policy must be defined before fix. |

@@ -1,8 +1,8 @@
 # WLA-008 — Independent Verification Report
 
 **Finding:** WLA-008 — Cross-Provider Tenant Isolation  
-**Report commit:** `3aee1ace` (original creation), updated through `571abadf` (BATCH-04 strengthened: wallet pre-created, before/after debit count).  
-**Final test run commit:** `571abadf` — BATCH-04 wallet pre-creation + before/after debit count; 1/1 pass, exit 0. PostgreSQL 16.4, 127.0.0.1:5433, `drivebook_test`, 2026-10-31T17:33:55.  
+**Report commit:** `3aee1ace` (original creation), updated through `aa36a4cc` (final session run recorded).  
+**Final test run commit:** `aa36a4cc` (session run at 2026-10-31T21:56:29/21:56:41, PostgreSQL 16.4, 127.0.0.1:5433).  
 **Last updated:** 2026-10-31
 **Purpose:** Record what has been independently verified, what remains reported-only, and what verifiable evidence exists for each fix. This document is separate from the implementation team's claims so the audit trail remains clear.
 
@@ -61,7 +61,7 @@ Each sub-finding lists:
 | `withSerializableRetry` wraps the transaction | **Source verified** | Import and call site verified |
 | P2034 exhausted → HTTP 409 (not 500) | **Source verified** | Catch block pattern verified |
 | B01–B10 source tests pass | **Test design inspected** | 10 structural checks, execution reported |
-| CONC-01..07 PostgreSQL execution | **Reproduced at `598c86af`** — exit 0; balance=$20, 1 CONFIRMED, 1 debit. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt` |
+| CONC-01..07 PostgreSQL execution | **Reproduced at `598c86af`** — exit 0; balance=$20, 1 CONFIRMED, 1 debit; and re-run at `aa36a4cc` session 2026-10-31T21:56:29. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt` |
 | RETRY-01..04 behavioral tests pass | **Test design inspected; execution reported** | Tests invoke `withSerializableRetry` directly with real P2034 errors |
 | HTTP-01 (409 with 3 tx calls) passes | **Test design inspected; execution reported** | Mocked Prisma; asserts `toHaveBeenCalledTimes(3)` |
 | HTTP-02 (201 success) passes | **Test design inspected; execution reported** | Mocked Prisma |
@@ -113,7 +113,7 @@ Each sub-finding lists:
 | NEG-01: Provider A attempt throws BOOKING_NOT_FOUND | **Test design inspected; PostgreSQL execution reported** | Test calls `submitQuote()` directly with `providerNegAId`; raw log committed |
 | NEG-02: zero Quote rows after failed attempt | **Test design inspected; PostgreSQL execution reported** | `$queryRawUnsafe` count assertion |
 | NEG-03: Provider B booking status unchanged | **Test design inspected; PostgreSQL execution reported** | `findUnique` status assertion |
-| PostgreSQL execution independently reproduced | **Outstanding** | Log at `docs/audit/WLA-008B-concurrency-raw.txt`; not re-run by reviewer |
+| PostgreSQL execution independently reproduced | **Reproduced** — `aa36a4cc` session 2026-10-31T21:56:29; 13/13 VITEST_EXIT:0. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt` |
 
 ---
 
