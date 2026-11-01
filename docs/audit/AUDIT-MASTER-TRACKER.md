@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.82 (WLA-008 formally CLOSED — FIX-VERIFIED accepted by reviewer at aa36a4cc; report header + CONC-07 Outstanding row corrected; lifecycle complete)
-**Last Updated:** 2026-10-31
+**Version:** 5.83 (doc corrections: report test-run SHA 571abadf; suite count 12→13 with BATCH-03; route inventory OPEN→CLOSED; A/B result not in committed docs)
+**Last Updated:** 2026-11-01
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31

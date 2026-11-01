@@ -2,7 +2,7 @@
 
 **Finding:** WLA-008 — Cross-Provider Tenant Isolation  
 **Report commit:** `3aee1ace` (original creation), updated through `aa36a4cc` (final session run recorded).  
-**Final test run commit:** `aa36a4cc` (session run at 2026-10-31T21:56:29/21:56:41, PostgreSQL 16.4, 127.0.0.1:5433).  
+**Final test run commit:** `571abadf` — code under test; session re-run at 2026-10-31T21:56:29/21:56:41 recorded at `aa36a4cc`, PostgreSQL 16.4, 127.0.0.1:5433.  
 **Last updated:** 2026-10-31
 **Purpose:** Record what has been independently verified, what remains reported-only, and what verifiable evidence exists for each fix. This document is separate from the implementation team's claims so the audit trail remains clear.
 
@@ -145,13 +145,13 @@ Each sub-finding lists:
 | Test suite | File | Count | Source inspected | Execution |
 |---|---|---|---|---|
 | Source inspection | `wla-008-cross-provider-isolation.test.ts` | 37 | Yes — structure reviewed | Reported at `b8fd4d63`; not independently re-run |
-| Concurrency + negative-access | `wla-008-b-wallet-concurrency.test.ts` | 12 (CONC-01..06=6 DB, CONC-07=1 source, NEG-01..03=3 DB, BATCH-01..02=2 DB) | Yes — design reviewed | **Reproduced** at `598c86af`; CONC-01..06 + NEG-01..03 + BATCH-01..02 = 11 DB-backed; CONC-07 + BATCH-03 = 2 source checks |
+| Concurrency + negative-access | `wla-008-b-wallet-concurrency.test.ts` | 13 (CONC-01..06=6 DB, CONC-07=1 source, NEG-01..03=3 DB, BATCH-01..02=2 DB, BATCH-03=1 source) | Yes — design reviewed | **Reproduced** at `571abadf` (code); session run at `aa36a4cc` 2026-10-31T21:56:29; 13/13 VITEST_EXIT:0. CONC result: A=PENDING_PAYMENT, B=CONFIRMED; balance=$20; 1 debit. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt` |
 | Retry behavioral | `wla-008-b-mobile-route-http.test.ts` | 4 | Yes — design reviewed | Reported; not independently re-run |
 | Route HTTP (mobile) | `wla-008-b-mobile-route-http.test.ts` | 2 | Yes — design reviewed | Reported; not independently re-run |
 | Batch handler (mocked Prisma) | `wla-008-batch-handler.test.ts` | 5 (ROUTE-01..05) | Yes — design reviewed | Reported; actual POST handler invoked with mocked Prisma |
 | Batch handler (real PostgreSQL) | `wla-008-batch-handler-pg.test.ts` | 1 (BATCH-04) | Yes — design reviewed | **Reproduced at `571abadf`** — actual POST handler, real Prisma, wallet pre-created; debitsBefore=debitsAfter; balanceBefore=balanceAfter; 1/1 pass, exit 0 |
 
-**Total: 12 DB-backed tests + 2 source checks = 14 tests. All pass.**
+**Total: 13 (concurrency suite) + 1 (BATCH-04) = 14 tests. 11 DB-backed + 2 source checks in concurrency suite; 1 DB-backed in BATCH-04. All pass.**
 
 ---
 
