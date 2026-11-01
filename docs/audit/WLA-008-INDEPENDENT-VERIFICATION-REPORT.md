@@ -150,7 +150,9 @@ Each sub-finding lists:
 | Retry behavioral | `wla-008-b-mobile-route-http.test.ts` | 4 | Yes — design reviewed | Reported; not independently re-run |
 | Route HTTP (mobile) | `wla-008-b-mobile-route-http.test.ts` | 2 | Yes — design reviewed | Reported; not independently re-run |
 | Batch handler (mocked Prisma) | `wla-008-batch-handler.test.ts` | 5 (ROUTE-01..05) | Yes — design reviewed | Reported; actual POST handler invoked with mocked Prisma |
-| Batch handler (real PostgreSQL) | `wla-008-batch-handler-pg.test.ts` | 1 (BATCH-04) | Yes — design reviewed | **Reproduced at `598c86af`+** — actual POST handler, real Prisma, real PostgreSQL; 1/1 pass, exit 0 |
+| Batch handler (real PostgreSQL) | `wla-008-batch-handler-pg.test.ts` | 1 (BATCH-04) | Yes — design reviewed | **Reproduced at `c5621166`** — actual POST handler, real Prisma, real PostgreSQL; 1/1 pass, exit 0; walletTransaction.count=0 asserted |
+
+**Total: 12 DB-backed tests + 2 source checks = 14 tests. All pass.**
 
 ---
 
@@ -213,15 +215,17 @@ The route catch block executes because `withSerializableRetry` rethrows the real
 
 ---
 
-## Outstanding verification items (2 remaining)
+## Outstanding verification items (0 remaining)
 
-The following require independent reproduction before WLA-008 can be closed:
+All verification items are now addressed:
 
-1. ~~**PostgreSQL concurrency test** (CONC-01..07)~~ **REPRODUCED** — 13/13 passed at `598c86af`, exit 0. PostgreSQL 16.4, 127.0.0.1:5433. Balance=$20, 1 CONFIRMED booking, 1 debit. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt`. Start: 2026-10-31T15:29:28.
+1. ~~PostgreSQL concurrency (CONC-01..07)~~ **REPRODUCED** — 13/13 passed at `598c86af`, exit 0. Balance=$20, 1 CONFIRMED booking, 1 debit.
+2. ~~PostgreSQL negative-access (NEG-01..03 + BATCH-01..02)~~ **REPRODUCED** — same run. Quote isolation confirmed. Batch query exclusion confirmed.
+3. ~~Route source inspections~~ **COMPLETED** — 12 of 13 routes directly inspected at `0bccc0bb`; create-bulk classified via source-pattern test only.
+4. ~~Instrumented P2034→409~~ **COMPLETED** — real retry loop with real PrismaClientKnownRequestError; 3 $transaction calls asserted.
+5. ~~Batch handler with real PostgreSQL (BATCH-04)~~ **REPRODUCED** — actual POST handler, real Prisma, real PostgreSQL; 1/1 pass at `c5621166`; booking count unchanged, wallet balance unchanged, walletTransaction count = 0.
 
-2. ~~**PostgreSQL negative-access test** (NEG-01..03 + BATCH-01..02)~~ **REPRODUCED** — same run. NEG-01: BOOKING_NOT_FOUND. NEG-02: 0 quotes. NEG-03: booking unchanged. BATCH-01: scoped query returns 0. BATCH-02: 0 bookings created.
-
-Items 1 and 2 above are the only remaining independent verification requirements. Route source inspections and the instrumented P2034→409 evidence are addressed in the sections above.
+No outstanding items remain.
 
 ---
 
@@ -249,6 +253,7 @@ These should be verified under their respective finding IDs, not as WLA-008 clos
 | Quote route + service mandatory ownership | Source verified |
 | Batch booking customer ownership (WLA-008-BATCH) | Fix applied; BATCH-01..02 PostgreSQL query; ROUTE-01..05 mocked handler; **BATCH-04 actual handler + real PostgreSQL** |
 | 7 route source inspections | **Source inspected at `0bccc0bb`** — 6 confirmed; batch route required fix |
-| PostgreSQL concurrency (CONC-01..07) | **Reproduced at `598c86af`** — 13/13 passed, exit 0 |
-| PostgreSQL negative-access (NEG-01..03, BATCH-01..02) | **Reproduced at `598c86af`** — same run |
-| WLA-008 overall | **All implementation and verification tasks complete. Ready for closure assessment.** |
+| PostgreSQL concurrency (CONC-01..07) | **Reproduced** — 6 DB-backed + 1 source; exit 0 |
+| PostgreSQL negative-access (NEG-01..03, BATCH-01..02) | **Reproduced** — 5 DB-backed; exit 0 |
+| Batch handler with real PostgreSQL (BATCH-04) | **Reproduced** — actual handler, real Prisma, walletTransaction.count=0; exit 0 |
+| WLA-008 overall | **All implementation and verification tasks complete. Ready for formal closure assessment.** |
