@@ -1,6 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.80 (WLA-008 final: BATCH-04 strengthened with wallet pre-creation + before/after debit count; 1/1 pass exit 0; verification report reconciled; tracker final)
+**Version:** 5.81 (WLA-008 final session run: 13+1=14 tests, all VITEST_EXIT:0, PostgreSQL 16.4, 127.0.0.1:5433, 2026-10-31T21:56:29/21:56:41; report stale entries reconciled; 571abadf exact commit recorded)
+**Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
@@ -755,7 +756,7 @@ Route inventory: 47 routes classified (`docs/audit/WLA-008-ROUTE-INVENTORY.md`, 
 | WLA-008-A-txt | `/api/instructor/invoices/[transactionId]` | Post-fetch IDOR (findUnique then ownership check) | `findFirst({ where: { id, providerId } })`; 404 for null | `2dc5d81a` | **FIX APPLIED** |
 | WLA-008-A-data | `/api/instructor/invoices/[transactionId]/data` | Same post-fetch IDOR pattern (reviewer identified) | `findFirst({ where: { id, providerId } })`; removed 403 branch; 404 for null | `98fb7605` | **FIX APPLIED** |
 | WLA-008-B | `/api/bookings/mobile` POST | Any `customerId` accepted (no ownership check); CONFIRMED without wallet debit (payment bypass); wallet check outside `$transaction` (concurrency gap); default READ COMMITTED isolation allowed double-spend | Customer ownership via `bookings.some`; wallet balance check + booking create + debit inside single `$transaction`; `isolationLevel: 'Serializable'` added (matches pattern in main bookings route, confirm-package-booking, Stripe webhook) | `2dc5d81a`, `98fb7605`, `b75e37fc` | **FIX APPLIED** — SERIALIZABLE isolation source-verified; PostgreSQL concurrency test run (see below) |
-| WLA-008-B-RUNTIME | Concurrency + negative-access + batch handler reproduction | CONC-01..07 + NEG-01..03 + BATCH-01..04 | All DB-backed tests reproduced against PostgreSQL 16.4 | `598c86af` (CONC+NEG+BATCH-01..03); BATCH-04 at current HEAD | **14 tests: 12 DB-backed + 2 source. All pass, exit 0.** BATCH-04 strengthened: wallet pre-created; before/after debit count compared; balance unchanged; debitsBefore=debitsAfter=0. Raw logs: `WLA-008-FINAL-PG-REPRO.txt`, `WLA-008-BATCH4-PG-RAW.txt`. |
+| WLA-008-B-RUNTIME | Concurrency + negative-access + batch handler reproduction | CONC-01..07 + NEG-01..03 + BATCH-01..04 | All DB-backed tests reproduced against PostgreSQL 16.4 | `598c86af` (CONC+NEG+BATCH-01..03), `571abadf` (BATCH-04 strengthened) | **14 tests: 12 DB-backed + 2 source. All pass, exit 0.** BATCH-04 at `571abadf`: actual handler, real Prisma, wallet pre-created, debitsBefore=debitsAfter, balanceBefore=balanceAfter. Raw logs: `WLA-008-FINAL-PG-REPRO.txt`, `WLA-008-BATCH4-PG-RAW.txt`. |
 | WLA-008-C | `/api/bookings/combined` POST | No rate limiting → slot-squatting with zero-cost PENDING bookings | `bookingRateLimit` (10/min) before DB; per-user identifier | `2dc5d81a` | **FIX APPLIED** — fail-open limitation documented |
 | WLA-008-TENANT-1 | `/api/instructor/quotes/[bookingId]/submit` + `submitQuote()` service | Route: post-fetch IDOR. Service: unscoped `findUnique` + unscoped `booking.update` — defence-in-depth gap (reviewer finding). v1 fix left `providerId` optional, preserving a bypass path. | v2 fix: `QuoteInput.providerId` made mandatory (required field, no `?`); conditional guard removed; service enforces unconditionally. Route scoped lookup + service boundary both enforce ownership. | `5f309c06` (service hardening), `0bccc0bb` (mandatory) | **FIX APPLIED** — SQ01–SQ05 source-verified; NEG-01..03 PostgreSQL confirmed: Provider A → BOOKING_NOT_FOUND, zero quotes, booking unchanged. No bypass path. |
 | WLA-008-BATCH | `/api/bookings/batch` POST — customer `findMany` | Customer lookup unscoped: `where: { id: { in: uniqueClientIds } }` — any customer ID in DB reached `processBooking()` regardless of provider relationship. Error message claimed ownership check that did not exist. Found during source inspection at `0bccc0bb`. | Scope customer query: `OR: [{ preferredProviderId: providerId }, { bookings: { some: { providerId } } }]`. Customers excluded by scope return as per-booking failures. | `b6a3e4f5` | **FIX APPLIED** — R02 source test updated; BATCH-01..02 PostgreSQL DB query confirmed; ROUTE-01..05 handler tests: actual POST handler invoked as Provider A, Provider B customer in failed list, booking.create not called, wallet not debited, WHERE clause asserted, error message returned. |
@@ -817,7 +818,10 @@ Test evidence (commit `b5befcf8` + quotes/submit fix `0ddace9e`):
   - HTTP-01: exhausted P2034 → 409; $transaction called exactly 3 times ✓
   - HTTP-02: successful booking → 201 with booking data ✓
 
-Verification limitations:
+- **Final session run 2026-10-31T21:56:29/21:56:41, commit `571abadf`, PostgreSQL 16.4, 127.0.0.1:5433:**
+  - `wla-008-b-wallet-concurrency.test.ts`: 13/13, VITEST_EXIT:0
+  - `wla-008-batch-handler-pg.test.ts` (BATCH-04): 1/1, VITEST_EXIT:0
+  - Raw logs: `WLA-008-FINAL-PG-REPRO.txt`, `WLA-008-BATCH4-PG-RAW.txt`
 - Concurrency tests use a helper that mirrors route logic but does not call `withSerializableRetry` — isolation property tested directly; retry path tested separately via RETRY-01..04
 - HTTP tests use mocked Prisma; they prove the route handler routes errors correctly but do not connect to PostgreSQL
 - No Provider A/B database-level behavioral tests. Full cross-tenant verification incomplete
