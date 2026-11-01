@@ -150,6 +150,7 @@ Each sub-finding lists:
 | Retry behavioral | `wla-008-b-mobile-route-http.test.ts` | 4 | Yes — design reviewed | Reported; not independently re-run |
 | Route HTTP (mobile) | `wla-008-b-mobile-route-http.test.ts` | 2 | Yes — design reviewed | Reported; not independently re-run |
 | Batch handler (mocked Prisma) | `wla-008-batch-handler.test.ts` | 5 (ROUTE-01..05) | Yes — design reviewed | Reported; actual POST handler invoked with mocked Prisma |
+| Batch handler (real PostgreSQL) | `wla-008-batch-handler-pg.test.ts` | 1 (BATCH-04) | Yes — design reviewed | **Reproduced at `598c86af`+** — actual POST handler, real Prisma, real PostgreSQL; 1/1 pass, exit 0 |
 
 ---
 
@@ -246,7 +247,7 @@ These should be verified under their respective finding IDs, not as WLA-008 clos
 | Mobile wallet SERIALIZABLE isolation | Source verified |
 | Mobile withSerializableRetry + P2034→409 | Instrumented mock — real retry loop + real error type; no live-DB serialization |
 | Quote route + service mandatory ownership | Source verified |
-| Batch booking customer ownership (new WLA-008-BATCH) | **NEW FINDING during source inspection** — fix applied; BATCH-01..02 PostgreSQL DB query confirmed; ROUTE-01..05 actual handler invoked: foreign customer rejected, no booking, no debit |
+| Batch booking customer ownership (WLA-008-BATCH) | Fix applied; BATCH-01..02 PostgreSQL query; ROUTE-01..05 mocked handler; **BATCH-04 actual handler + real PostgreSQL** |
 | 7 route source inspections | **Source inspected at `0bccc0bb`** — 6 confirmed; batch route required fix |
 | PostgreSQL concurrency (CONC-01..07) | **Reproduced at `598c86af`** — 13/13 passed, exit 0 |
 | PostgreSQL negative-access (NEG-01..03, BATCH-01..02) | **Reproduced at `598c86af`** — same run |
