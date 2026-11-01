@@ -267,13 +267,29 @@ describe('WLA-008-BATCH-04: Actual batch handler + real PostgreSQL', () => {
     })
     expect(bookingsAfter).toBe(bookingsBefore)  // unchanged
 
-    // No wallet debit occurred
+    // No wallet debit occurred — check both balance and ledger row count
     const walletAfter = await prisma.clientWallet.findUnique({
       where: { userId: clientBUserId },
       select: { balance: true },
     }).catch(() => null)
     const balanceAfter = walletAfter ? Number(walletAfter.balance) : 0
     expect(balanceAfter).toBe(balanceBefore)  // unchanged
+
+    // WLA-008 reviewer requirement: assert no debit row was created in the ledger
+    // Count WalletTransaction DEBIT rows for Client B's wallet before and after.
+    // If no wallet exists, both counts are 0 — still valid (no debit possible).
+    const walletForTxCount = await prisma.clientWallet.findUnique({
+      where: { userId: clientBUserId },
+      select: { id: true },
+    }).catch(() => null)
+    let debitCountAfter = 0
+    if (walletForTxCount) {
+      debitCountAfter = await prisma.walletTransaction.count({
+        where: { walletId: walletForTxCount.id, type: 'DEBIT', status: 'CONFIRMED' },
+      })
+    }
+    // No debit transaction should exist for this customer from Provider A's attempt
+    expect(debitCountAfter).toBe(0)
 
     // The failure entry identifies the customer
     expect(json.failed[0].customerId).toBe(customerBId)
