@@ -116,6 +116,12 @@ let customerBId: string
 let clientBUserId: string
 
 async function cleanup() {
+  await prisma.walletTransaction.deleteMany({
+    where: { wallet: { userId: clientBUserId ?? '__none__' } },
+  }).catch(() => {})
+  await prisma.clientWallet.deleteMany({
+    where: { userId: clientBUserId ?? '__none__' },
+  }).catch(() => {})
   await prisma.booking.deleteMany({
     where: { providerId: { in: [providerAId ?? '__none__', providerBId ?? '__none__'] } },
   }).catch(() => {})
@@ -199,7 +205,21 @@ beforeAll(async () => {
     },
   })
 
-  // Update the mocked session to use the real providerAId
+  // Create a wallet for Client B so the ledger comparison is unambiguous —
+  // wallet existence cannot affect whether the debit count proves anything.
+  // Seed it with a credit so any debit attempt would be recorded.
+  const walletB = await prisma.clientWallet.create({
+    data: { userId: clientBUserId, balance: 200 },
+  })
+  await prisma.walletTransaction.create({
+    data: {
+      walletId:    walletB.id,
+      type:        'CREDIT',
+      amount:      200,
+      description: 'BATCH-04 test seed',
+      status:      'CONFIRMED',
+    },
+  })
   const { getServerSession } = await import('next-auth')
   vi.mocked(getServerSession).mockResolvedValue({
     user: {
@@ -224,12 +244,17 @@ describe('WLA-008-BATCH-04: Actual batch handler + real PostgreSQL', () => {
       where: { providerId: providerAId, customerId: customerBId },
     })
 
-    // Count existing wallet transactions for Client B
-    const walletBefore = await prisma.clientWallet.findUnique({
+    // Record wallet state BEFORE the request — wallet is pre-created in beforeAll
+    // so both counts are unambiguous (wallet definitely exists).
+    const walletB = await prisma.clientWallet.findUnique({
       where: { userId: clientBUserId },
-      select: { balance: true },
-    }).catch(() => null)
-    const balanceBefore = walletBefore ? Number(walletBefore.balance) : 0
+      select: { id: true, balance: true },
+    })
+    if (!walletB) throw new Error('Test setup error: wallet not found for Client B')
+    const balanceBefore  = Number(walletB.balance)
+    const debitsBefore   = await prisma.walletTransaction.count({
+      where: { walletId: walletB.id, type: 'DEBIT', status: 'CONFIRMED' },
+    })
 
     // Build the request: Provider A tries to batch-book Provider B's customer
     const tomorrow = new Date(Date.now() + 86_400_000)
@@ -267,29 +292,19 @@ describe('WLA-008-BATCH-04: Actual batch handler + real PostgreSQL', () => {
     })
     expect(bookingsAfter).toBe(bookingsBefore)  // unchanged
 
-    // No wallet debit occurred — check both balance and ledger row count
-    const walletAfter = await prisma.clientWallet.findUnique({
-      where: { userId: clientBUserId },
+    // Post-request: wallet balance and debit count must be unchanged
+    const walletAfter  = await prisma.clientWallet.findUnique({
+      where: { id: walletB.id },
       select: { balance: true },
-    }).catch(() => null)
-    const balanceAfter = walletAfter ? Number(walletAfter.balance) : 0
-    expect(balanceAfter).toBe(balanceBefore)  // unchanged
+    })
+    const balanceAfter = Number(walletAfter?.balance ?? 0)
+    expect(balanceAfter).toBe(balanceBefore)  // balance unchanged
 
-    // WLA-008 reviewer requirement: assert no debit row was created in the ledger
-    // Count WalletTransaction DEBIT rows for Client B's wallet before and after.
-    // If no wallet exists, both counts are 0 — still valid (no debit possible).
-    const walletForTxCount = await prisma.clientWallet.findUnique({
-      where: { userId: clientBUserId },
-      select: { id: true },
-    }).catch(() => null)
-    let debitCountAfter = 0
-    if (walletForTxCount) {
-      debitCountAfter = await prisma.walletTransaction.count({
-        where: { walletId: walletForTxCount.id, type: 'DEBIT', status: 'CONFIRMED' },
-      })
-    }
-    // No debit transaction should exist for this customer from Provider A's attempt
-    expect(debitCountAfter).toBe(0)
+    const debitsAfter = await prisma.walletTransaction.count({
+      where: { walletId: walletB.id, type: 'DEBIT', status: 'CONFIRMED' },
+    })
+    // No new debit row was created — before/after comparison, wallet pre-existed
+    expect(debitsAfter).toBe(debitsBefore)
 
     // The failure entry identifies the customer
     expect(json.failed[0].customerId).toBe(customerBId)
