@@ -1,8 +1,8 @@
 # WLA-008 — Independent Verification Report
 
 **Finding:** WLA-008 — Cross-Provider Tenant Isolation  
-**Report commit:** `3aee1ace` (original creation), updated through `e69f3ff1` (BATCH-04 wallet assert), final test run at current HEAD.  
-**Final test run commit:** HEAD (strengthened BATCH-04 with pre-existing wallet; wallet pre-created; before/after debit count asserted).  
+**Report commit:** `3aee1ace` (original creation), updated through `571abadf` (BATCH-04 strengthened: wallet pre-created, before/after debit count).  
+**Final test run commit:** `571abadf` — BATCH-04 wallet pre-creation + before/after debit count; 1/1 pass, exit 0. PostgreSQL 16.4, 127.0.0.1:5433, `drivebook_test`, 2026-10-31T17:33:55.  
 **Last updated:** 2026-10-31
 **Purpose:** Record what has been independently verified, what remains reported-only, and what verifiable evidence exists for each fix. This document is separate from the implementation team's claims so the audit trail remains clear.
 
@@ -61,7 +61,7 @@ Each sub-finding lists:
 | `withSerializableRetry` wraps the transaction | **Source verified** | Import and call site verified |
 | P2034 exhausted → HTTP 409 (not 500) | **Source verified** | Catch block pattern verified |
 | B01–B10 source tests pass | **Test design inspected** | 10 structural checks, execution reported |
-| CONC-01..07 PostgreSQL execution | **Test design inspected; execution reported** | Raw log at `docs/audit/WLA-008B-concurrency-raw.txt`; not independently reproduced |
+| CONC-01..07 PostgreSQL execution | **Reproduced at `598c86af`** — exit 0; balance=$20, 1 CONFIRMED, 1 debit. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt` |
 | RETRY-01..04 behavioral tests pass | **Test design inspected; execution reported** | Tests invoke `withSerializableRetry` directly with real P2034 errors |
 | HTTP-01 (409 with 3 tx calls) passes | **Test design inspected; execution reported** | Mocked Prisma; asserts `toHaveBeenCalledTimes(3)` |
 | HTTP-02 (201 success) passes | **Test design inspected; execution reported** | Mocked Prisma |
@@ -149,7 +149,7 @@ Each sub-finding lists:
 | Retry behavioral | `wla-008-b-mobile-route-http.test.ts` | 4 | Yes — design reviewed | Reported; not independently re-run |
 | Route HTTP (mobile) | `wla-008-b-mobile-route-http.test.ts` | 2 | Yes — design reviewed | Reported; not independently re-run |
 | Batch handler (mocked Prisma) | `wla-008-batch-handler.test.ts` | 5 (ROUTE-01..05) | Yes — design reviewed | Reported; actual POST handler invoked with mocked Prisma |
-| Batch handler (real PostgreSQL) | `wla-008-batch-handler-pg.test.ts` | 1 (BATCH-04) | Yes — design reviewed | **Reproduced at `c5621166`** — actual POST handler, real Prisma, real PostgreSQL; 1/1 pass, exit 0; walletTransaction.count=0 asserted |
+| Batch handler (real PostgreSQL) | `wla-008-batch-handler-pg.test.ts` | 1 (BATCH-04) | Yes — design reviewed | **Reproduced at `571abadf`** — actual POST handler, real Prisma, wallet pre-created; debitsBefore=debitsAfter; balanceBefore=balanceAfter; 1/1 pass, exit 0 |
 
 **Total: 12 DB-backed tests + 2 source checks = 14 tests. All pass.**
 
@@ -169,8 +169,8 @@ Source commit inspected: `0bccc0bb` (unchanged from this commit; file last modif
 **Verdict: ✅ SECURED — pre-scoped WHERE clause.**
 
 **3. `/api/bookings/batch` POST**  
-`providerId` from `session.user.providerId` only. No `providerId` accepted from request body. ⚠️ **New finding during source inspection at `0bccc0bb`**: the customer `findMany` query was unscoped (`where: { id: { in: uniqueClientIds } }`) — any customer ID in the DB could reach `processBooking()`. Fix applied at commit `b6a3e4f5` (`OR: [{ preferredProviderId: providerId }, { bookings: { some: { providerId } } }]`). Source test R02 confirms the clause is present. BATCH-01/02 confirm the DB query excludes foreign customers. ROUTE-01..05 confirm the actual handler rejects Provider A's request for Provider B's customer (mocked Prisma). BATCH-03 is a source check (not a PostgreSQL test).  
-**Verdict: ✅ SECURED (after fix at `b6a3e4f5`) — registered as WLA-008-BATCH.**
+`providerId` from `session.user.providerId` only. No `providerId` accepted from request body. ⚠️ **New finding during source inspection at `0bccc0bb`**: the customer `findMany` query was unscoped. Fix applied at `b6a3e4f5`. BATCH-01/02 confirm DB query exclusion. ROUTE-01..05 confirm mocked-handler rejection. BATCH-04 (`571abadf`) confirms actual handler + real PostgreSQL: wallet pre-created, debitsBefore=debitsAfter, balanceBefore=balanceAfter; no new debit row; failure returned.  
+**Verdict: ✅ SECURED (after fix at `b6a3e4f5`; BATCH-04 reproduced at `571abadf`) — registered as WLA-008-BATCH.**
 
 **4. `/api/client/schedule-package-hours` POST**  
 Package booking lookup: `prisma.booking.findFirst({ where: { id: bookingId, userId: user.id, isPackageBooking: true } })`. `userId` resolved from `session.user.email` → `prisma.user.findUnique`. `providerId` from request body is used only to build a redirect URL (`/book/${providerId}/...`) — never in a DB query.  
@@ -222,9 +222,14 @@ All verification items are now addressed:
 2. ~~PostgreSQL negative-access (NEG-01..03 + BATCH-01..02)~~ **REPRODUCED** — same run. Quote isolation confirmed. Batch query exclusion confirmed.
 3. ~~Route source inspections~~ **COMPLETED** — 12 of 13 routes directly inspected at `0bccc0bb`; create-bulk classified via source-pattern test only.
 4. ~~Instrumented P2034→409~~ **COMPLETED** — real retry loop with real PrismaClientKnownRequestError; 3 $transaction calls asserted.
-5. ~~Batch handler with real PostgreSQL (BATCH-04)~~ **REPRODUCED** — actual POST handler, real Prisma, real PostgreSQL; 1/1 pass at `c5621166`; booking count unchanged, wallet balance unchanged, walletTransaction count = 0.
+5. ~~Batch handler with real PostgreSQL (BATCH-04)~~ **REPRODUCED at `571abadf`** — actual POST handler, real Prisma, wallet pre-created; before/after debit count compared; 1/1 pass, exit 0.
 
-No outstanding items remain.
+**Final session run 2026-10-31T21:56:29/21:56:41, commit `571abadf`, PostgreSQL 16.4, 127.0.0.1:5433:**
+- `wla-008-b-wallet-concurrency.test.ts`: 13/13, VITEST_EXIT:0
+- `wla-008-batch-handler-pg.test.ts` (BATCH-04): 1/1, VITEST_EXIT:0
+- Raw logs: `docs/audit/WLA-008-FINAL-PG-REPRO.txt`, `docs/audit/WLA-008-BATCH4-PG-RAW.txt`
+
+No outstanding items remain. Ready for formal closure assessment under AUDIT-PROCESS.md.
 
 ---
 
