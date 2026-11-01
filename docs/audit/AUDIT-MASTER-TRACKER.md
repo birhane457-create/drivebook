@@ -797,6 +797,15 @@ Test evidence (commit `b5befcf8` + quotes/submit fix `0ddace9e`):
   - NEG-01: Provider A quotes Provider B booking → BOOKING_NOT_FOUND ✓
   - NEG-02: zero Quote rows created ✓
   - NEG-03: Provider B booking status unchanged ✓
+- PostgreSQL negative-access (3 tests, `wla-008-b-wallet-concurrency.test.ts`, commit `0bccc0bb`):
+  - NEG-01: Provider A quotes Provider B booking → BOOKING_NOT_FOUND ✓
+  - NEG-02: zero Quote rows created ✓
+  - NEG-03: Provider B booking status unchanged ✓
+- Batch customer ownership (2 DB tests + 1 source, `wla-008-b-wallet-concurrency.test.ts`):
+  - BATCH-01: scoped query excludes Provider B customer from Provider A ✓
+  - BATCH-02: zero bookings created ✓
+  - BATCH-03: source check (not a DB test) ✓
+- **Final reproduction run at `598c86af`: 13/13 passed, exit 0. PostgreSQL 16.4, 127.0.0.1:5433, `drivebook_test`. Start: 2026-10-31T15:29:28. Duration: 4.14s. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt`. Covers CONC-01..07 + NEG-01..03 + BATCH-01..03.**
 - Retry utility behavioral (4 tests, `wla-008-b-mobile-route-http.test.ts`):
   - RETRY-01: P2034 → retry → success (2 calls) ✓
   - RETRY-02: all retries exhausted → rethrow P2034 (3 calls logged) ✓
