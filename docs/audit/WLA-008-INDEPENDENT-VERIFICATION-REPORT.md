@@ -1,9 +1,10 @@
 # WLA-008 — Independent Verification Report
 
 **Finding:** WLA-008 — Cross-Provider Tenant Isolation  
-**Report commit:** `3aee1ace` (original creation), updated through `aa36a4cc` (final session run recorded).  
-**Final test run commit:** `571abadf` — code under test; session re-run at 2026-10-31T21:56:29/21:56:41 recorded at `aa36a4cc`, PostgreSQL 16.4, 127.0.0.1:5433.  
-**Last updated:** 2026-10-31
+**Report commit:** `3aee1ace` (original creation), updated through `ae77ed2b` (final corrections).  
+**Code under test:** `571abadf` — all PostgreSQL tests ran against this commit.  
+**Session evidence recorded at:** `aa36a4cc` — raw logs committed; session timestamps 2026-10-31T21:56:29/21:56:41, PostgreSQL 16.4, 127.0.0.1:5433.  
+**Last updated:** 2026-11-01
 **Purpose:** Record what has been independently verified, what remains reported-only, and what verifiable evidence exists for each fix. This document is separate from the implementation team's claims so the audit trail remains clear.
 
 ---
