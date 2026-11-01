@@ -1,9 +1,9 @@
 # WLA-008 — Independent Verification Report
 
 **Finding:** WLA-008 — Cross-Provider Tenant Isolation  
-**Report commit:** `3aee1ace` (origin/main, 2026-10-31)  
-**Source inspections in this report use exact per-file commit references listed under each sub-finding. The branch head at time of last implementation commit was `0bccc0bb`; categorisation docs followed at `b8fd4d63`; this report was added at `3aee1ace`.**  
-**Report prepared:** 2026-10-31  
+**Report commit:** `3aee1ace` (original creation), updated through `e69f3ff1` (BATCH-04 wallet assert), final test run at current HEAD.  
+**Final test run commit:** HEAD (strengthened BATCH-04 with pre-existing wallet; wallet pre-created; before/after debit count asserted).  
+**Last updated:** 2026-10-31
 **Purpose:** Record what has been independently verified, what remains reported-only, and what verifiable evidence exists for each fix. This document is separate from the implementation team's claims so the audit trail remains clear.
 
 ---
@@ -145,8 +145,7 @@ Each sub-finding lists:
 | Test suite | File | Count | Source inspected | Execution |
 |---|---|---|---|---|
 | Source inspection | `wla-008-cross-provider-isolation.test.ts` | 37 | Yes — structure reviewed | Reported at `b8fd4d63`; not independently re-run |
-| Concurrency + negative-access | `wla-008-b-wallet-concurrency.test.ts` | 12 (CONC-01..07=7, NEG-01..03=3, BATCH-01..02=2) | Yes — design reviewed | Reported; raw log committed; not independently re-run |
-| Source check in concurrency file | `wla-008-b-wallet-concurrency.test.ts` | 1 (BATCH-03: source) | Yes | Not a DB test |
+| Concurrency + negative-access | `wla-008-b-wallet-concurrency.test.ts` | 12 (CONC-01..06=6 DB, CONC-07=1 source, NEG-01..03=3 DB, BATCH-01..02=2 DB) | Yes — design reviewed | **Reproduced** at `598c86af`; CONC-01..06 + NEG-01..03 + BATCH-01..02 = 11 DB-backed; CONC-07 + BATCH-03 = 2 source checks |
 | Retry behavioral | `wla-008-b-mobile-route-http.test.ts` | 4 | Yes — design reviewed | Reported; not independently re-run |
 | Route HTTP (mobile) | `wla-008-b-mobile-route-http.test.ts` | 2 | Yes — design reviewed | Reported; not independently re-run |
 | Batch handler (mocked Prisma) | `wla-008-batch-handler.test.ts` | 5 (ROUTE-01..05) | Yes — design reviewed | Reported; actual POST handler invoked with mocked Prisma |
