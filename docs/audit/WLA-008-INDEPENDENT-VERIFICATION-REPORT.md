@@ -216,9 +216,9 @@ The route catch block executes because `withSerializableRetry` rethrows the real
 
 The following require independent reproduction before WLA-008 can be closed:
 
-1. **PostgreSQL concurrency test** (CONC-01..07): Re-run `run-wla-008b-concurrency-tests.bat` against PostgreSQL 16.4 at `127.0.0.1:5433` from the reviewer's environment. Verify balance = $20, exactly 1 CONFIRMED booking, 1 debit.
+1. ~~**PostgreSQL concurrency test** (CONC-01..07)~~ **REPRODUCED** — 13/13 passed at `598c86af`, exit 0. PostgreSQL 16.4, 127.0.0.1:5433. Balance=$20, 1 CONFIRMED booking, 1 debit. Raw log: `docs/audit/WLA-008-FINAL-PG-REPRO.txt`. Start: 2026-10-31T15:29:28.
 
-2. **PostgreSQL negative-access test** (NEG-01..03 + BATCH-01..02): Re-run the same bat file. Verify that `submitQuote()` with Provider A's ID against Provider B's booking throws `BOOKING_NOT_FOUND`, creates no Quote, and leaves booking unchanged. Verify that the batch customer query returns 0 results for Provider A attempting to book Provider B's customer.
+2. ~~**PostgreSQL negative-access test** (NEG-01..03 + BATCH-01..02)~~ **REPRODUCED** — same run. NEG-01: BOOKING_NOT_FOUND. NEG-02: 0 quotes. NEG-03: booking unchanged. BATCH-01: scoped query returns 0. BATCH-02: 0 bookings created.
 
 Items 1 and 2 above are the only remaining independent verification requirements. Route source inspections and the instrumented P2034→409 evidence are addressed in the sections above.
 
@@ -248,6 +248,6 @@ These should be verified under their respective finding IDs, not as WLA-008 clos
 | Quote route + service mandatory ownership | Source verified |
 | Batch booking customer ownership (new WLA-008-BATCH) | **NEW FINDING during source inspection** — fix applied; BATCH-01..02 PostgreSQL DB query confirmed; ROUTE-01..05 actual handler invoked: foreign customer rejected, no booking, no debit |
 | 7 route source inspections | **Source inspected at `0bccc0bb`** — 6 confirmed; batch route required fix |
-| PostgreSQL concurrency (CONC-01..07) | Reported; not independently reproduced |
-| PostgreSQL negative-access (NEG-01..03, BATCH-01..02) | Reported; not independently reproduced |
-| WLA-008 overall | **OPEN — implementation complete; PostgreSQL independent reproduction outstanding** |
+| PostgreSQL concurrency (CONC-01..07) | **Reproduced at `598c86af`** — 13/13 passed, exit 0 |
+| PostgreSQL negative-access (NEG-01..03, BATCH-01..02) | **Reproduced at `598c86af`** — same run |
+| WLA-008 overall | **All implementation and verification tasks complete. Ready for closure assessment.** |
