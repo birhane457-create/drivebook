@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import SubdomainBookingPage from '@/app/subdomain/[slug]/page';
 import BusinessWebsitePage from '@/components/website/BusinessWebsitePage';
 import { fetchProviderWebsiteData } from '@/lib/website/fetchProviderWebsiteData';
+import { isOwnDomain, normalizeHostname } from '@/lib/utils/host-classification';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,20 +40,19 @@ export default async function CustomDomainPage({
   const hostHeader = headersList.get('host');
   if (!hostHeader) notFound();
 
-  // Strip port if present (e.g. "example.com:443" → "example.com")
-  const customDomain = hostHeader.split(':')[0];
+  // WLA-011 FIX: use shared normalizeHostname (lowercase, strip port, strip trailing dot)
+  // was: hostHeader.split(':')[0] — did not normalize case or trailing dots
+  const customDomain = normalizeHostname(hostHeader);
   if (!customDomain) notFound();
 
-  // WLA-017 FIX: Verify the host is NOT an own domain. If someone visits
+  // WLA-011 FIX: use shared isOwnDomain helper with exact hostname-boundary matching
+  // (was: customDomain.includes(rootDomain) — unsafe substring matching)
+  // Verify the host is NOT an own domain. If someone visits
   // /custom-domain directly on drivebook.com.au, the Host would be an own
   // domain — return 404. This prevents direct access to the page outside
   // of the middleware's custom-domain rewrite flow.
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'drivebook.com.au';
-  const isOwnDomain =
-    customDomain.includes(rootDomain) ||
-    customDomain.includes('localhost') ||
-    customDomain.endsWith('vercel.app');
-  if (isOwnDomain) notFound();
+  if (isOwnDomain(customDomain, rootDomain)) notFound();
 
   // Find the provider who owns this verified custom domain.
   // orderBy domainVerifiedAt DESC ensures deterministic resolution if two providers
