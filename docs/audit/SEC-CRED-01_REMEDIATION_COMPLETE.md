@@ -19,8 +19,8 @@
 During independent audit of commit `44b2843b`, database and Stripe credentials were discovered exposed in 7 files committed to public GitHub repository.
 
 **Exposed Credentials:**
-1. **Supabase Database Password:** `EhWh1cNGN4qzmXi7`
-2. **Stripe Webhook Secret:** `whsec_Y1LremsxnEOw39xSuUor4dx0fEDCkRJo`
+1. **Supabase Database Password:** [REDACTED-SEC-CRED-01]
+2. **Stripe Webhook Secret:** [REDACTED-SEC-CRED-01]
 
 **Root Cause:**
 - Audit documentation included full connection strings for test reproducibility
@@ -63,8 +63,8 @@ All exposed credentials replaced with placeholders:
 **Pattern Applied:**
 ```
 # Before:
-TEST_DATABASE_URL="postgresql://postgres.ikhqphbbilrocsghjyda:EhWh1cNGN4qzmXi7@..."
-STRIPE_WEBHOOK_SECRET="whsec_Y1LremsxnEOw39xSuUor4dx0fEDCkRJo"
+TEST_DATABASE_URL="postgresql://postgres.ikhqphbbilrocsghjyda:[REDACTED-SEC-CRED-01]@..."
+STRIPE_WEBHOOK_SECRET="[REDACTED-SEC-CRED-01]"
 
 # After:
 TEST_DATABASE_URL="postgresql://<REDACTED_USER>:<REDACTED_PASSWORD>@..."
