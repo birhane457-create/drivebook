@@ -117,6 +117,7 @@ export async function fetchBusinessWebsiteData(
       phone: true,
       timezone: true,
       isActive: true,
+      subscriptionTier: true,
       branding: {
         select: {
           logo: true,
@@ -166,6 +167,15 @@ export async function fetchBusinessWebsiteData(
 
   if (!biz) return null;
   if (!biz.isActive) return null;
+
+  // WLA-012: Enforce subscription-tier entitlement for Business website access.
+  // Business websites require STUDIO or PREMIUM tier (same as Provider custom-domain
+  // access in Path 1). This prevents a BASIC or PRO Provider from bypassing the
+  // tier restriction by going through the BusinessDomain fallback (Path 2).
+  // The Business.subscriptionTier is populated from the Provider's tier during
+  // migration (migrate-business-config.ts) and must be STUDIO or PREMIUM.
+  const ENTITLED_TIERS = ['STUDIO', 'PREMIUM', 'BUSINESS'];
+  if (!ENTITLED_TIERS.includes(biz.subscriptionTier ?? '')) return null;
 
   // Unpublished website → null (controlled not-found, not a 404 error)
   const isPublished = biz.website?.publishedAt != null;
