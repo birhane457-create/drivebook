@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import { isOwnDomain, normalizeHostname, isLocalhost } from '@/lib/utils/host-classification'
+import { isOwnDomain, normalizeHostname, isLocalhost, isVercelDomain, extractSubdomain } from '@/lib/utils/host-classification'
 
 // Main middleware function
 export async function middleware(req: NextRequest) {
@@ -76,7 +76,8 @@ export async function middleware(req: NextRequest) {
   // Extract subdomain FIRST — before any public path short-circuits
   // Do NOT extract subdomains from vercel.app preview URLs — the full hostname
   // is not a customer subdomain (e.g. drivebook2-abc123-drivebook.vercel.app)
-  const isVercelPreview = hostname.endsWith('vercel.app')
+  // WLA-011 FIX: use shared isVercelDomain (was: hostname.endsWith('vercel.app') — unsafe)
+  const isVercelPreview = isVercelDomain(hostname)
   const subdomain = isVercelPreview ? null : extractSubdomain(hostname)
 
   // If subdomain exists, rewrite to /subdomain/[slug] (skip API/_next/static)
@@ -156,42 +157,6 @@ export async function middleware(req: NextRequest) {
   return NextResponse.next()
 }
 
-// Extract subdomain from hostname
-// WLA-011 FIX: use shared isLocalhost() for exact hostname-boundary matching
-// (was: host.includes('localhost') — unsafe substring matching)
-function extractSubdomain(hostname: string): string | null {
-  // Normalize: lowercase, strip port, strip trailing dot
-  const host = normalizeHostname(hostname)
-  
-  // Split by dots
-  const parts = host.split('.')
-  
-  // For localhost: john.localhost → "john"
-  if (isLocalhost(host)) {
-    if (host === 'localhost') return null
-    const sub = parts[0]
-    return sub || null
-  }
-  
-  // Known two-part TLDs (e.g. com.au, co.uk, co.nz, org.au)
-  const twoPartTLDs = ['com.au', 'co.uk', 'co.nz', 'org.au', 'net.au', 'id.au']
-  const tld2 = parts.slice(-2).join('.')
-  const isCompoundTLD = twoPartTLDs.includes(tld2)
-
-  // For compound TLD: need 4+ parts for a subdomain (sub.domain.com.au)
-  // For simple TLD: need 3+ parts (sub.domain.com)
-  const minParts = isCompoundTLD ? 4 : 3
-
-  if (parts.length >= minParts) {
-    const subdomain = parts[0]
-    if (subdomain === 'www') {
-      return null
-    }
-    return subdomain
-  }
-
-  return null
-}
 
 export const config = {
   matcher: [

@@ -40,10 +40,29 @@
  [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: isOwnDomain — combined classification[2m > [22mclassifies legitimate custom domains as custom domain
  [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: isOwnDomain — combined classification[2m > [22mnormalizes uppercase, port, and trailing dot before classifying
  [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: isOwnDomain — combined classification[2m > [22mproduces consistent results for middleware and page (same helper)
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mextracts subdomain from compound TLD host
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mextracts subdomain from simple TLD host
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mextracts subdomain from localhost subdomain
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mreturns null for bare domain (compound TLD)
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mreturns null for bare domain (simple TLD)
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mreturns null for www subdomain
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mreturns null for bare localhost
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mreturns null for 2-part host without compound TLD
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: extractSubdomain — subdomain extraction logic[2m > [22mnormalizes case and port before extraction
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mreturns null for legitimate Vercel preview
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mreturns null for complex Vercel preview subdomain
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mreturns null for vercel.app apex
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mextracts from deceptive Vercel suffix (no dot boundary)
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mextracts from notvercel.app (deceptive suffix)
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mextracts subdomain from legitimate non-Vercel host
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mreturns null for bare non-Vercel domain
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mextracts subdomain from localhost subdomain
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mmiddlewareSubdomainDecision returns null whenever isVercelDomain is true
+ [32m✓[39m __tests__/unit/wla-011-host-classification.test.ts[2m > [22mWLA-011: middlewareSubdomainDecision — Vercel preview regression[2m > [22mmiddlewareSubdomainDecision does NOT return null for Vercel-deceptive hosts when they have a subdomain
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m35 passed[39m[22m[90m (35)[39m
-[2m   Start at [22m 23:52:31
-[2m   Duration [22m 2.75s[2m (transform 92ms, setup 138ms, collect 74ms, tests 8ms, environment 0ms, prepare 2.01s)[22m
+[2m      Tests [22m [1m[32m54 passed[39m[22m[90m (54)[39m
+[2m   Start at [22m 00:12:32
+[2m   Duration [22m 681ms[2m (transform 68ms, setup 51ms, collect 82ms, tests 12ms, environment 0ms, prepare 212ms)[22m
 
 VITEST_EXIT:0 
