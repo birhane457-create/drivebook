@@ -36,12 +36,12 @@ model Subscription {
 
 **Test Database Connection** (from `.env`):
 ```
-DATABASE_URL="postgresql://postgres:REDACTED_DB_PASSWORD@db.ikhqphbbilrocsghjyda.supabase.co:5432/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres:[REDACTED-SEE-SEC-CRED-01]@db.ikhqphbbilrocsghjyda.supabase.co:5432/postgres?sslmode=require"
 ```
 
 **Direct Database URL** (from `.env`):
 ```
-DIRECT_URL="postgresql://postgres.ikhqphbbilrocsghjyda:REDACTED_DB_PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+DIRECT_URL="postgresql://postgres.ikhqphbbilrocsghjyda:[REDACTED-SEE-SEC-CRED-01]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
 ```
 
 **Prisma Client:** v5.22.0  

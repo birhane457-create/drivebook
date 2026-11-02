@@ -27,13 +27,13 @@ A live Supabase database credential was committed to the public GitHub repositor
 
 **Exposed Credential:**
 ```
-TEST_DATABASE_URL=postgresql://postgres.ikhqphbbilrocsghjyda:REDACTED_DB_PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+TEST_DATABASE_URL=postgresql://postgres.ikhqphbbilrocsghjyda:[REDACTED-SEC-CRED-01]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
 ```
 
 **Components Exposed:**
 - Database type: PostgreSQL
 - Username: `postgres.ikhqphbbilrocsghjyda`
-- Password: `REDACTED_DB_PASSWORD` ⚠️ COMPROMISED
+- Password: [REDACTED-SEC-CRED-01] ⚠️ COMPROMISED
 - Host: `aws-0-ap-southeast-1.pooler.supabase.com`
 - Port: `5432`
 - Database: `postgres`
@@ -44,8 +44,8 @@ TEST_DATABASE_URL=postgresql://postgres.ikhqphbbilrocsghjyda:REDACTED_DB_PASSWOR
 **CRITICAL:** Comprehensive scan reveals exposure in **SEVEN FILES**:
 
 1. ✅ **`.env.test`** - TRACKED IN GIT (explicitly un-ignored by `!.env.test` in .gitignore)
-   - Database password: `REDACTED_DB_PASSWORD`
-   - **Stripe webhook secret:** `REDACTED_STRIPE_WEBHOOK_SECRET` ⚠️ ALSO COMPROMISED
+   - Database password: [REDACTED-SEC-CRED-01]
+   - **Stripe webhook secret:** [REDACTED-SEC-CRED-01] ⚠️ ALSO COMPROMISED
    
 2. ✅ **`docs/audit/SUB-06-A_AUDIT_EVIDENCE_SUMMARY.md`** - Committed in 44b2843b
    - Full connection string in test command documentation
@@ -61,7 +61,7 @@ TEST_DATABASE_URL=postgresql://postgres.ikhqphbbilrocsghjyda:REDACTED_DB_PASSWOR
 
 6. ✅ **`check-test-db-schema.mjs`** - Committed
    - **Different connection format:** Direct URL (not pooler)
-   - `postgres:REDACTED_DB_PASSWORD@db.ikhqphbbilrocsghjyda.supabase.co:5432/postgres`
+   - `postgres:[REDACTED-SEC-CRED-01]@db.ikhqphbbilrocsghjyda.supabase.co:5432/postgres`
 
 7. ✅ **`docs/pr/CREDENTIAL_ROTATION_CHECKLIST.md`** - Committed
    - Database password documented
@@ -72,8 +72,8 @@ TEST_DATABASE_URL=postgresql://postgres.ikhqphbbilrocsghjyda:REDACTED_DB_PASSWOR
 ### Severity: **CRITICAL++** (ESCALATED)
 
 **Multiple Credentials Exposed:**
-1. ⚠️ **Database Password** - `REDACTED_DB_PASSWORD` (Supabase)
-2. ⚠️ **Stripe Webhook Secret** - `REDACTED_STRIPE_WEBHOOK_SECRET`
+1. ⚠️ **Database Password** - [REDACTED-SEC-CRED-01] (Supabase)
+2. ⚠️ **Stripe Webhook Secret** - [REDACTED-SEC-CRED-01] (Stripe)
 3. ⚠️ **`.env.test` tracked in Git** - Contains both secrets, visible in history
 
 **Reason:**
@@ -198,14 +198,14 @@ git commit -m "security: Remove .env.test from Git tracking - contains secrets"
 **Command:**
 ```bash
 # Search all files in repository for credential fragments
-git grep -i "REDACTED_DB_PASSWORD"  # Database password
-git grep -i "REDACTED_STRIPE_WEBHOOK_SECRET"  # Stripe secret
+git grep -i "[REDACTED-PATTERN-SEC-CRED-01]"  # Database password
+git grep -i "[REDACTED-PATTERN-SEC-CRED-01]"  # Stripe secret
 git grep -i "ikhqphbbilrocsghjyda"  # Database identifier
 git grep -i "aws-0-ap-southeast-1.pooler.supabase"  # Host pattern
 
 # Search all commits in history
-git log -p -S "REDACTED_DB_PASSWORD"
-git log -p -S "REDACTED_STRIPE_WEBHOOK_SECRET"
+git log -p -S "[REDACTED-PATTERN-SEC-CRED-01]"
+git log -p -S "[REDACTED-PATTERN-SEC-CRED-01]"
 ```
 
 **Confirmed Exposures (7 files):**
