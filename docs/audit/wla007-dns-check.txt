@@ -1,0 +1,10 @@
+=== DNS LOOKUP ===
+Project 1 (cxcwixzhcgmcqpdhqpef):
+  NOT FOUND
+Project 2 (ikhqphbbilrocsghjyda):
+  RESOLVED: 2406:da18:1f5e:4102:31e0:2e7f:dfbc:90e5
+
+=== CLI TOOLS ===
+supabase : not found
+vercel : not found
+railway : not found
