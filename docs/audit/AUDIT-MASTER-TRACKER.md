@@ -1,8 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.83 (doc corrections: report test-run SHA 571abadf; suite count 12→13 with BATCH-03; route inventory OPEN→CLOSED; A/B result not in committed docs)
+**Version:** 5.84 (final doc: route inventory OPEN statement removed; tracker note corrected — A=PENDING_PAYMENT B=CONFIRMED is in committed logs; historical test counts labelled)
 **Last Updated:** 2026-11-01
-**Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31
 **Last Updated:** 2026-10-31

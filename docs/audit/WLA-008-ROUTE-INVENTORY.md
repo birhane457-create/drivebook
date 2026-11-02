@@ -159,13 +159,15 @@ The ⚠️ REVIEW routes are the highest priority. The following are the most cr
 7. `/api/bookings/combined` — Does the combined route verify the providerId from the request matches the eligible provider?
 8. `/api/bookings/mobile` — JWT claim vs request providerId consistency
 
-## Review status (2026-10-31)
+## Review status (2026-10-31) — HISTORICAL RECORD
 
-All 13 ⚠️ REVIEW routes have been classified. Direct source inspection was performed for 12 of the 13; `/api/client/bookings/create-bulk` was classified as "by design" via source-pattern test only (see opening section above). Detailed results and evidence are in `AUDIT-MASTER-TRACKER.md` section 9.3. The full test suite at commit `0ddace9e`+ covers:
+> **Note:** WLA-008 is now ✅ CLOSED (FIX-VERIFIED at `1e2fb7e1`). The test counts below reflect the state at the intermediate commit `0ddace9e`+; the final evidence at `571abadf`/`aa36a4cc` records 13+1=14 tests. See `AUDIT-MASTER-TRACKER.md` v5.84 for the authoritative final evidence chain.
+
+All 13 ⚠️ REVIEW routes have been classified. Direct source inspection was performed for 12 of the 13; `/api/client/bookings/create-bulk` was classified as "by design" via source-pattern test only (see opening section above). Detailed results and evidence are in `AUDIT-MASTER-TRACKER.md` section 9.3. The test suite at commit `0ddace9e`+ (intermediate evidence) covered:
 
 - 37 source-inspection tests
 - 10 PostgreSQL-backed behavioral tests (7 concurrency + 3 negative-access)
 - 4 retry utility behavioral tests
 - 2 route HTTP tests
 
-**WLA-008 remains OPEN** pending independent review of the reported evidence.
+**WLA-008 is ✅ CLOSED — FIX-VERIFIED** at commit `1e2fb7e1`. See `AUDIT-MASTER-TRACKER.md` v5.83 for the authoritative closure record.
