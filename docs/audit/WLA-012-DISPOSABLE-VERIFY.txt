@@ -1,0 +1,23 @@
+﻿ provider_id |      provider_name       |   businessId   | business_name  | business_active |  link_type  
+-------------+--------------------------+----------------+----------------+-----------------+-------------
+ prov-a-001  | Provider A               | biz_prov-a-001 | Business A     | t               | biz_pattern
+ prov-b-002  | Provider B               |                |                |                 | unlinked
+ prov-c-003  | Provider C (no business) |                |                |                 | unlinked
+ prov-d-004  | Provider D               | biz_other      | Other Business | t               | pre-linked
+(4 rows)
+
+         conname          
+--------------------------
+ Provider_businessId_fkey
+(1 row)
+
+        indexname        |                                        indexdef                                        
+-------------------------+----------------------------------------------------------------------------------------
+ Provider_businessId_idx | CREATE INDEX "Provider_businessId_idx" ON public."Provider" USING btree ("businessId")
+(1 row)
+
+ case_a_linked | case_b_not_linked | case_c_not_linked | case_d_preserved 
+---------------+-------------------+-------------------+------------------
+             1 |                 1 |                 1 |                1
+(1 row)
+

@@ -28,8 +28,8 @@
  [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-TIER — subscription entitlement enforcement[2m > [22mTIER-02 — BASIC Business returns null (not entitled to custom domain website)
  [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-TIER — subscription entitlement enforcement[2m > [22mTIER-02 — PRO Business returns null (not entitled to custom domain website)
  [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-TIER — subscription entitlement enforcement[2m > [22mTIER-03 — tier entitlement is checked in loader source
- [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-MIGRATION — actual migration file execution[2m > [22mMIGRATION-01 — migration SQL files are syntactically valid and idempotent against test DB
- [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-MIGRATION — actual migration file execution[2m > [22mMIGRATION-02 — backfill SQL handles all four cases correctly
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-MIGRATION — migration SQL verification[2m > [22mMIGRATION-01 — committed migration file SQL content is correct (source check)
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-MIGRATION — migration SQL verification[2m > [22mMIGRATION-02 — backfill SQL handles all four cases (logic test against fixtures, not migration file execution)
  [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-TIER-COMPLETE — full tier coverage[2m > [22mTIER-ENTITLED-STUDIO — STUDIO Business website is accessible
  [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-TIER-COMPLETE — full tier coverage[2m > [22mTIER-ENTITLED-PREMIUM — PREMIUM Business website is accessible
  [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T-TIER-COMPLETE — full tier coverage[2m > [22mTIER-ENTITLED-BUSINESS — BUSINESS Business website is accessible
@@ -39,7 +39,7 @@
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m31 passed[39m[22m[90m (31)[39m
-[2m   Start at [22m 03:28:02
-[2m   Duration [22m 1.23s[2m (transform 96ms, setup 48ms, collect 234ms, tests 357ms, environment 0ms, prepare 207ms)[22m
+[2m   Start at [22m 04:04:07
+[2m   Duration [22m 1.34s[2m (transform 106ms, setup 87ms, collect 164ms, tests 312ms, environment 0ms, prepare 314ms)[22m
 
 VITEST_EXIT:0 

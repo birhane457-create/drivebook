@@ -512,11 +512,12 @@ describe('WLA-012: T-TIER — subscription entitlement enforcement', () => {
   });
 });
 
-describe('WLA-012: T-MIGRATION — actual migration file execution', () => {
-  it('MIGRATION-01 — migration SQL files are syntactically valid and idempotent against test DB', async () => {
-    // Run both migration files against the test DB — they should succeed (or be no-ops
-    // since they were already applied). This tests the committed SQL files directly,
-    // not a manually-repeated fragment.
+describe('WLA-012: T-MIGRATION — migration SQL verification', () => {
+  it('MIGRATION-01 — committed migration file SQL content is correct (source check)', () => {
+    // NOTE: This test reads and inspects the committed migration SQL files.
+    // It does NOT execute the migration files or interact with a database.
+    // Actual execution evidence is in docs/audit/WLA-012-DISPOSABLE-*.txt
+    // (psql -f <file> run against a disposable PostgreSQL database).
     const m1 = readFileSync(
       resolve(process.cwd(), 'prisma/migrations/20261103000001_wla_012_provider_business_fk/migration.sql'),
       'utf-8'
@@ -526,28 +527,31 @@ describe('WLA-012: T-MIGRATION — actual migration file execution', () => {
       'utf-8'
     );
 
-    // Migration 1 uses ADD COLUMN — running again on a DB that already has the column
-    // will produce an error unless it is wrapped. The migration uses ALTER TABLE without
-    // IF NOT EXISTS for the FK. We verify the committed SQL is correctly structured.
+    // Migration 1: adds nullable FK column, FK constraint, and index
     expect(m1).toContain('ADD COLUMN "businessId"');
     expect(m1).toContain('ADD CONSTRAINT "Provider_businessId_fkey"');
     expect(m1).toContain('REFERENCES "Business"("id")');
     expect(m1).toContain('ON DELETE SET NULL');
     expect(m1).toContain('CREATE INDEX "Provider_businessId_idx"');
 
-    // Migration 2 is naturally idempotent via WHERE businessId IS NULL
+    // Migration 2: idempotent backfill via WHERE businessId IS NULL
     expect(m2).toContain('WHERE p."businessId" IS NULL');
     expect(m2).toContain("EXISTS (");
     expect(m2).toContain("b.id = ('biz_' || p.id)");
     expect(m2).toContain('"isActive" = true');
   });
 
-  it('MIGRATION-02 — backfill SQL handles all four cases correctly', async () => {
-    // Create controlled fixtures to verify all four backfill cases:
-    // Case A: Provider with matching active Business → LINK
-    // Case B: Provider with matching inactive Business → NOT LINKED
-    // Case C: Provider with no matching Business → NOT LINKED
-    // Case D: Provider already linked (businessId IS NOT NULL) → NOT OVERWRITTEN
+  it('MIGRATION-02 — backfill SQL handles all four cases (logic test against fixtures, not migration file execution)', async () => {
+    // NOTE: This test exercises the backfill logic using the same SQL fragment
+    // as in the committed migration file, applied to controlled test DB fixtures.
+    // The actual migration file execution (psql -f) is documented in
+    // docs/audit/WLA-012-DISPOSABLE-M1.txt and WLA-012-DISPOSABLE-M2.txt.
+    //
+    // The disposable DB execution verified:
+    //   Case A (active Business)    → UPDATE 1 (linked)
+    //   Case B (inactive Business)  → not updated (not linked)
+    //   Case C (no Business)        → not updated (not linked)
+    //   Case D (already linked)     → not updated (preserved)
 
     const userA = await prisma.user.create({
       data: { email: `${PREFIX}-migA@test.example.com`, name: `${PREFIX} MigA`, role: 'PROVIDER' },
@@ -576,7 +580,7 @@ describe('WLA-012: T-MIGRATION — actual migration file execution', () => {
     await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = ${bizSingleId} WHERE id = ${provD.id}`;
 
     try {
-      // Execute the actual migration SQL from the committed file (Migration 2 logic)
+      // Apply the same SQL logic as migration 2, scoped to test fixtures
       await prisma.$executeRaw`
         UPDATE "Provider" p
         SET "businessId" = ('biz_' || p.id)

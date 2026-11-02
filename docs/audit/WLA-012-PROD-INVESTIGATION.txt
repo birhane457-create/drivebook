@@ -1,0 +1,70 @@
+﻿            id             |          businessId           |    business_id_from_table     |        business_name        
+---------------------------+-------------------------------+-------------------------------+-----------------------------
+ cmuuxw8jb0002zxy882y5vn4l | biz_cmuuxw8jb0002zxy882y5vn4l | biz_cmuuxw8jb0002zxy882y5vn4l | Driving Instructor Platform
+ cmuuxy5c300021wy5toyluih7 | biz_cmuuxy5c300021wy5toyluih7 | biz_cmuuxy5c300021wy5toyluih7 | Driving Instructor Platform
+ cmuuy7d8n000i1wy5cx85ergg | biz_cmuuy7d8n000i1wy5cx85ergg | biz_cmuuy7d8n000i1wy5cx85ergg | Driving Instructor Platform
+ cmuuyc03e000x1wy5cnlqyjdw | biz_cmuuyc03e000x1wy5cnlqyjdw | biz_cmuuyc03e000x1wy5cnlqyjdw | Driving Instructor Platform
+ cmuv3q0ct0004pf9m2zsy1k2t | biz_cmuv3q0ct0004pf9m2zsy1k2t | biz_cmuv3q0ct0004pf9m2zsy1k2t | Driving Instructor Platform
+(5 rows)
+
+        provider_id        |          businessId           | is_biz_pattern 
+---------------------------+-------------------------------+----------------
+ cmuuyc03e000x1wy5cnlqyjdw | biz_cmuuyc03e000x1wy5cnlqyjdw | t
+ cmuuxw8jb0002zxy882y5vn4l | biz_cmuuxw8jb0002zxy882y5vn4l | t
+ cmuuxy5c300021wy5toyluih7 | biz_cmuuxy5c300021wy5toyluih7 | t
+ cmuuy7d8n000i1wy5cx85ergg | biz_cmuuy7d8n000i1wy5cx85ergg | t
+ cmuv3q0ct0004pf9m2zsy1k2t | biz_cmuv3q0ct0004pf9m2zsy1k2t | t
+(5 rows)
+
+ eligible_before_backfill_would_have_been 
+------------------------------------------
+                                        0
+(1 row)
+
+ column_name | data_type | is_nullable 
+-------------+-----------+-------------
+ businessId  | text      | YES
+(1 row)
+
+psql.exe : psql:C:/U
+sers/DEBESAY/AppData
+/Local/Temp/tmpBD02.
+tmp.sql:33: ERROR:  
+relation "provider" 
+does not exist
+At E:\DOC\flowstate-
+wms\AI voice 
+assistance - Copy - 
+Copy - Copy\driveboo
+k\wla012-prod-invest
+igate.ps1:52 char:6
++ $r = & "D:\pg16\bi
+n\psql.exe" -h 
+$dbHost -p $dbPort 
+-d $dbName -U $db 
+...
++      ~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo  
+            : NotS  
+  pecified: (psql   
+ :C:/Users/D...     
+does not exist:    
+String) [], Rem    
+oteException
+    + FullyQualifie 
+   dErrorId : Nati  
+  veCommandError
+ 
+LINE 3: WHERE 
+conrelid = 
+'Provider'::regclass
+                    
+     ^
+        indexname        |                                        indexdef                                        
+-------------------------+----------------------------------------------------------------------------------------
+ Provider_businessId_idx | CREATE INDEX "Provider_businessId_idx" ON public."Provider" USING btree ("businessId")
+(1 row)
+
