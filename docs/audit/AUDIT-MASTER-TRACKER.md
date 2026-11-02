@@ -1,10 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 5.87 (WLA-007: real concurrency test 3/3 pass — DOM-01 index guard, DOM-02..05 concurrent P2002, DOM-06 route HTTP 409; all real PostgreSQL. Production still unknown.)
-**Last Updated:** 2026-11-01
-**Last Updated:** 2026-10-31
-**Last Updated:** 2026-10-31
-**Last Updated:** 2026-10-31
+**Version:** 5.88 (WLA-007: reviewer qualification applied — 3 test cases / 6 DOM checks; commit SHA corrected to 4b7c2014; lifecycle remains DEPLOYMENT GAP — production index unverified.)
+**Last Updated:** 2026-11-02
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -728,7 +725,7 @@ These items were raised during the audit and verified source-safe. Recorded here
 | WLA-002 | Provider-settlement semantics for SaaS mode | ARCHITECTURAL | OPEN — architecture decision recorded | Overlaps MM-10-A. Pending SaaS payment implementation. |
 | WLA-004 | `application_fee_amount` set without connected-account context | P2 | SOURCE ANALYSIS COMPLETE — runtime verification pending | Stripe test-mode verification requires connected account (not yet approved). Analysis: `docs/audit/WLA-004-SOURCE-ANALYSIS.md`. |
 | WLA-005 | Wallet balance is user-wide, not provider-attributed | ARCHITECTURAL | OPEN — architecture decision required | Whether this is a defect depends on approved white-label wallet contract. |
-| WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | **FIX APPLIED — TEST DB VERIFIED** — Index applied to test DB 2026-11-01; concurrent Prisma test + real route handler HTTP 409 confirmed. Production unknown; pipeline-defined commands do not apply index. | `b924a144` | 3 PostgreSQL behavioral tests (DOM-01..DOM-06) | **Test DB 2026-11-01**: index applied (pg_indexes confirmed); 3/3 pass exit 0 (DOM-01: index guard; DOM-02..05: concurrent P2002; DOM-06: route handler HTTP 409). Production still requires duplicate check + application + verification. See `docs/audit/WLA-007-DEPLOYMENT-EVIDENCE.md`. |
+| WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | **DEPLOYMENT GAP — OPEN** — Fix applied to test DB (index + route P2002 catch); real PostgreSQL concurrency test passes (3 test cases / 6 DOM checks). Production index state unverified; migration not auto-applied by any pipeline-defined command. | `4b7c2014` | 3 test cases (6 DOM checks: DOM-01 index guard; DOM-02..05 concurrent P2002 single verified owner; DOM-06 route handler HTTP 409) | **Test DB 2026-11-01**: index applied (pg_indexes confirmed); 3 test cases pass, 6 DOM checks pass, exit 0 (DOM-01: index guard; DOM-02..05: concurrent P2002, one owner, loser unchanged; DOM-06: route handler HTTP 409). Reviewer inspected commit + test source; did not execute suite. Production still requires duplicate check + application + verification. See `docs/audit/WLA-007-DEPLOYMENT-EVIDENCE.md`. |
 | WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | **✅ FIX-VERIFIED → CLOSED** — Implementation complete; PostgreSQL verification complete; reviewer accepted FIX-VERIFIED at `aa36a4cc` (2026-10-31). Formal closure: lifecycle FINDING → VERIFIED → FIX → FIX-VERIFIED → CLOSED. | `aa36a4cc` | 14 tests (12 DB-backed + 2 source), VITEST_EXIT:0, 2026-10-31T21:56. Reviewer: "WLA-008 has met the substantive technical verification requirements." |
 | WLA-011 | Host classification may use substring matching | P2 | OPEN | Deceptive-host tests not yet run. |
 | WLA-012 | BusinessDomain-only fallback passes `businessId` to a provider ID/slug lookup | P2 | OPEN | Runtime staging test required. |
