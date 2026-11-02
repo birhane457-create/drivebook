@@ -138,6 +138,10 @@ model Provider {
   yearsExperience           Int?
   domainVerified            Boolean            @default(false)
   domainVerifiedAt          DateTime?
+  // WLA-012: optional FK to Business — one Business can have multiple Providers.
+  // Null for standalone/individual Providers that are not part of a Business.
+  // The biz_ migration convention is replaced by this proper relation.
+  businessId                String?
   // V-11 FIX: add @unique to match BusinessBranding.customSlug policy.
   // The business branding PUT checks BusinessBranding uniqueness then mirrors
   // the slug to Provider. Without this constraint a legacy PUT could create
@@ -169,6 +173,8 @@ model Provider {
   cardOrders                CardOrder[]
   voiceLineRecord           TwilioPhoneNumber? @relation("AssignedToProvider")
   quotes                    Quote[]
+  // WLA-012: optional relation to Business
+  business                  Business?          @relation(fields: [businessId], references: [id])
 
   @@index([state, suburb])
 }
@@ -1056,6 +1062,8 @@ model Business {
   services     BusinessService[]
   domains      BusinessDomain[]
   website      BusinessWebsite?
+  // WLA-012: Providers that belong to this Business (one-to-many)
+  providers    Provider[]
 
   @@index([subscriptionTier])
   @@index([isActive])
