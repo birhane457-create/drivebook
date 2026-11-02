@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { isOwnDomain, normalizeHostname, isLocalhost } from '@/lib/utils/host-classification'
 
 // Main middleware function
 export async function middleware(req: NextRequest) {
-  const hostname = req.headers.get('host') || ''
+  // WLA-011 FIX: normalize hostname once — lowercase, strip port, strip trailing dot.
+  // All downstream checks use the normalized value.
+  const hostname = normalizeHostname(req.headers.get('host') || '')
   const url = req.nextUrl.clone()
 
   // ── MAINTENANCE MODE ──────────────────────────────────────────────────────
@@ -36,11 +39,11 @@ export async function middleware(req: NextRequest) {
 
   // ── CUSTOM DOMAIN (Studio tier) ──────────────────────────────────────────
   // If the host is not our own domain, treat it as a custom domain booking page
-  const isOwnDomain = 
-    hostname.includes(process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'drivebook.com.au') || 
-    hostname.includes('localhost') || 
-    hostname.endsWith('vercel.app')  // all *.vercel.app preview/production URLs
-  if (!isOwnDomain) {
+  // WLA-011 FIX: use shared helper with exact hostname-boundary matching
+  // (was: hostname.includes(rootDomain) — unsafe substring matching)
+  const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'drivebook.com.au'
+  const isOwnDomainResult = isOwnDomain(hostname, rootDomain)
+  if (!isOwnDomainResult) {
     // WLA-010 FIX: added /book, /privacy, /terms to skip-paths.
     // BusinessWebsitePage.tsx links to /book/{provider.id}, /privacy and /terms.
     // Without these exemptions those links are rewritten to /custom-domain/book/...,
@@ -53,7 +56,7 @@ export async function middleware(req: NextRequest) {
       const rest = url.pathname === '/' ? '' : url.pathname
       url.pathname = `/custom-domain${rest}`
       const response = NextResponse.rewrite(url)
-      response.headers.set('x-custom-domain', hostname.split(':')[0])
+      response.headers.set('x-custom-domain', hostname)
       return response
     }
     return NextResponse.next()
@@ -154,19 +157,20 @@ export async function middleware(req: NextRequest) {
 }
 
 // Extract subdomain from hostname
+// WLA-011 FIX: use shared isLocalhost() for exact hostname-boundary matching
+// (was: host.includes('localhost') — unsafe substring matching)
 function extractSubdomain(hostname: string): string | null {
-  // Remove port if present
-  const host = hostname.split(':')[0]
+  // Normalize: lowercase, strip port, strip trailing dot
+  const host = normalizeHostname(hostname)
   
   // Split by dots
   const parts = host.split('.')
   
   // For localhost: john.localhost → "john"
-  if (host.includes('localhost')) {
-    if (parts.length > 1 && parts[0] !== 'localhost') {
-      return parts[0]
-    }
-    return null
+  if (isLocalhost(host)) {
+    if (host === 'localhost') return null
+    const sub = parts[0]
+    return sub || null
   }
   
   // Known two-part TLDs (e.g. com.au, co.uk, co.nz, org.au)
