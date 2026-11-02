@@ -1,0 +1,8 @@
+ customDomain | dup_count 
+--------------+-----------
+(0 rows)
+
+ indexname | indexdef 
+-----------+----------
+(0 rows)
+

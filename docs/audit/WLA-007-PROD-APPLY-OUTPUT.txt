@@ -1,0 +1,6 @@
+CREATE INDEX
+ schemaname | tablename |                  indexname                  |                                                                      indexdef                                                                       
+------------+-----------+---------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ public     | Provider  | Provider_customDomain_domainVerified_unique | CREATE UNIQUE INDEX "Provider_customDomain_domainVerified_unique" ON public."Provider" USING btree ("customDomain") WHERE ("domainVerified" = true)
+(1 row)
+
