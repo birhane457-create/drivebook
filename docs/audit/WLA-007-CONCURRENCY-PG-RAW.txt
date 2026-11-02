@@ -1,0 +1,17 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-007-domain-concurrency-pg.test.ts[2m > [22mWLA-007: Domain claim concurrency — real PostgreSQL[2m > [22mDOM-01 — guard: partial unique index is present in the database
+ [32m✓[39m __tests__/integration/wla-007-domain-concurrency-pg.test.ts[2m > [22mWLA-007: Domain claim concurrency — real PostgreSQL[2m > [22mDOM-02..DOM-05 — concurrent Prisma updates; exactly one verified owner
+ [32m✓[39m __tests__/integration/wla-007-domain-concurrency-pg.test.ts[2m > [22mWLA-007: Domain claim concurrency — real PostgreSQL[2m > [22mDOM-06 — route handler: real Prisma + real PostgreSQL; loser returns HTTP 409
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 16:01:20
+[2m   Duration [22m 3.10s[2m (transform 235ms, setup 107ms, collect 961ms, tests 232ms, environment 0ms, prepare 1.29s)[22m
+
+VITEST_EXIT:0 

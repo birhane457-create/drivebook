@@ -68,7 +68,7 @@ public     | Provider  | Provider_customDomain_domainVerified_unique  | CREATE U
 
 Neither `prisma db push` nor `prisma migrate deploy` is executed in either pipeline. The `prisma generate` step only regenerates the TypeScript client — it makes no database changes.
 
-**Conclusion:** The partial unique index has never been applied to any environment via the deployment pipeline. Manual SQL execution (as done above for the test DB) is required.
+**Conclusion:** The repository-defined deployment commands (Vercel `vercel-build`, Railway `build`) do not apply the partial unique index. Whether other deployment mechanisms (Vercel project overrides, Railway service overrides, external scripts) apply it is not established by this investigation. The safe statement is: **these repository-committed build commands do not apply this index**. Production state must be confirmed independently.
 
 ---
 
