@@ -1,0 +1,14 @@
+﻿psql.exe : 
+psql:C:/Users/DEBESAY/AppData/Local/Temp/tmp3CAF.tmp.sql:10: ERROR:  
+column "businessId" does not exist
+At E:\DOC\flowstate-wms\AI voice assistance - Copy - Copy - 
+Copy\drivebook\wla012-prod-apply.ps1:23 char:12
++     $pre = & "D:\pg16\bin\psql.exe" -h $Matches[3] -p $Matches[4] -d 
+ ...
++            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (psql:C:/Users/D... does n 
+   ot exist:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+LINE 6:   (SELECT COUNT(*) FROM "Provider" WHERE "businessId" IS NOT...
+                                                 ^

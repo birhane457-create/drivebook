@@ -1,0 +1,10 @@
+﻿ providers_linked | providers_still_eligible | broken_fk_violations 
+------------------+--------------------------+----------------------
+ 5                | 0                        | 0
+(1 row)
+
+        indexname        |                                        indexdef                                        
+-------------------------+----------------------------------------------------------------------------------------
+ Provider_businessId_idx | CREATE INDEX "Provider_businessId_idx" ON public."Provider" USING btree ("businessId")
+(1 row)
+
