@@ -114,7 +114,9 @@ Do not claim `_prisma_migrations` as proof of index presence unless `prisma migr
 
 1. ✅ Test DB: partial unique index applied and confirmed (this session)
 2. ⬜ Production DB: duplicate check → index application → pg_indexes confirmation
-3. ⬜ Concurrency test: two providers verify same domain; one gets HTTP 409; only one verified owner remains
-4. ⬜ Evidence preserved: pg_indexes output, deployment record, test execution log
+3. ✅ Concurrency test: 3 test cases (6 DOM checks) — DOM-01 index guard; DOM-02..05 concurrent P2002, one verified owner, loser unchanged; DOM-06 route handler HTTP 409. Exit 0, 2026-11-01T16:01:20. Raw log: `docs/audit/WLA-007-CONCURRENCY-PG-RAW.txt`. Commit: `4b7c2014`.
+4. ✅ Evidence preserved: pg_indexes output (§3), deployment record (§2), test execution log (`WLA-007-CONCURRENCY-PG-RAW.txt`)
 
-WLA-007 remains **DEPLOYMENT GAP — OPEN** until steps 2–4 are complete.
+> **Reviewer qualification:** Test source was inspected by the reviewer; suite was not independently re-executed. Test DB connection is hardcoded to `127.0.0.1:5433/drivebook_test`, which proves test design but not production environment coverage.
+
+WLA-007 remains **DEPLOYMENT GAP — OPEN** until step 2 is complete.
