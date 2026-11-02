@@ -80,6 +80,7 @@ async function createBusiness(overrides?: Record<string, any>) {
       timezone: 'Australia/Perth',
       isActive: true,
       paymentModel: 'saas',
+      subscriptionTier: 'STUDIO',   // default to entitled tier; override for non-entitled tests
       ...overrides,
     },
   });
@@ -264,29 +265,41 @@ describe('WLA-012: resolveBusinessDomain', () => {
   }, 10000);
 });
 
-describe('WLA-012: T06 — database error propagation', () => {
-  it('resolveBusinessDomain does not swallow database errors', async () => {
-    // Verify that resolveBusinessDomain does NOT have a .catch(() => null)
-    // by inspecting the source of the loader
-    const loaderSource = readFileSync(
-      resolve(process.cwd(), 'lib/website/fetchBusinessWebsiteData.ts'),
-      'utf-8'
-    );
-    // The function should not have a broad catch-all that returns null on DB error
-    expect(loaderSource).not.toContain('.catch(() => null)');
-    expect(loaderSource).not.toContain('.catch(()=>null)');
-    // The comment documents the intended behaviour
-    expect(loaderSource).toContain('Throws on database errors');
-  });
+describe('WLA-012: T06 — database error propagation (genuine failure injection)', () => {
+  it('resolveBusinessDomain propagates database errors instead of swallowing them', async () => {
+    // Inject a database failure by mocking the Prisma client's businessDomain.findFirst
+    // to reject with a connection-style error.
+    const originalFindFirst = (prisma.businessDomain as any).findFirst;
+    const dbError = new Error('Connection timeout: could not reach database server');
 
-  it('fetchBusinessWebsiteData does not swallow database errors', async () => {
-    const loaderSource = readFileSync(
-      resolve(process.cwd(), 'lib/website/fetchBusinessWebsiteData.ts'),
-      'utf-8'
-    );
-    expect(loaderSource).not.toContain('.catch(() => null)');
-    expect(loaderSource).toContain('Throws on database errors');
-  });
+    try {
+      (prisma.businessDomain as any).findFirst = vi.fn().mockRejectedValue(dbError);
+      // resolveBusinessDomain should propagate the error, NOT return null
+      await expect(resolveBusinessDomain('any-domain.example.com')).rejects.toThrow(
+        'Connection timeout'
+      );
+    } finally {
+      // Restore original method
+      (prisma.businessDomain as any).findFirst = originalFindFirst;
+    }
+  }, 10000);
+
+  it('fetchBusinessWebsiteData propagates database errors instead of swallowing them', async () => {
+    // Inject a database failure by mocking prisma.business.findUnique
+    const originalFindUnique = (prisma.business as any).findUnique;
+    const dbError = new Error('Connection reset: ECONNRESET during query');
+
+    try {
+      (prisma.business as any).findUnique = vi.fn().mockRejectedValue(dbError);
+      // fetchBusinessWebsiteData should propagate the error, NOT return null
+      await expect(
+        fetchBusinessWebsiteData('any-business-id', 'https://any.example.com')
+      ).rejects.toThrow('ECONNRESET');
+    } finally {
+      // Restore original method
+      (prisma.business as any).findUnique = originalFindUnique;
+    }
+  }, 10000);
 });
 
 describe('WLA-012: source inspection — page routing', () => {
@@ -337,5 +350,164 @@ describe('WLA-012: source inspection — page routing', () => {
     expect(pageSource).toContain('<BusinessWebsitePage');
     // Driving fallback preserved
     expect(pageSource).toContain('SubdomainBookingPage');
+  });
+});
+
+describe('WLA-012: T-BACKFILL — biz_ convention backfill verification', () => {
+  it('BACKFILL-01 — backfill SQL links Provider using biz_ convention', async () => {
+    // Create a legacy Business using the exact biz_ convention from migrate-business-config.ts
+    const legacyUser = await prisma.user.create({
+      data: { email: `${PREFIX}-legacy@test.example.com`, name: `${PREFIX} Legacy`, role: 'PROVIDER' },
+    });
+    const legacyProv = await (prisma.provider as any).create({
+      data: {
+        user: { connect: { id: legacyUser.id } },
+        name: `${PREFIX} Legacy Provider`,
+        phone: '0400000099',
+        hourlyRate: 80,
+        isActive: true,
+        approvalStatus: 'APPROVED',
+        subscriptionStatus: 'ACTIVE',
+        subscriptionTier: 'STUDIO',
+      },
+    });
+
+    // Create Business using the biz_ convention (exact migration convention)
+    const legacyBiz = await (prisma.business as any).create({
+      data: {
+        id: `biz_${legacyProv.id}`,
+        name: `${PREFIX} Legacy Business`,
+        supportEmail: `${PREFIX}-legacy-biz@test.example.com`,
+        timezone: 'Australia/Perth',
+        isActive: true,
+        paymentModel: 'saas',
+        subscriptionTier: 'STUDIO',
+      },
+    });
+
+    try {
+      // Verify the Provider is NOT yet linked (simulates pre-backfill state)
+      const beforeBackfill = await prisma.$queryRaw<any[]>`
+        SELECT "businessId" FROM "Provider" WHERE id = ${legacyProv.id}
+      `;
+      expect(beforeBackfill[0].businessId).toBeNull();
+
+      // Apply the backfill SQL
+      await prisma.$executeRaw`
+        UPDATE "Provider" p
+        SET "businessId" = ('biz_' || p.id)
+        WHERE p."businessId" IS NULL
+          AND EXISTS (
+            SELECT 1 FROM "Business" b
+            WHERE b.id = ('biz_' || p.id)
+              AND b."isActive" = true
+          )
+          AND p.id = ${legacyProv.id}
+      `;
+
+      // Verify Provider is now linked
+      const afterBackfill = await prisma.$queryRaw<any[]>`
+        SELECT "businessId" FROM "Provider" WHERE id = ${legacyProv.id}
+      `;
+      expect(afterBackfill[0].businessId).toBe(`biz_${legacyProv.id}`);
+      expect(afterBackfill[0].businessId).toBe(legacyBiz.id);
+
+    } finally {
+      // Cleanup
+      await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${legacyProv.id}`.catch(() => {});
+      await (prisma.business as any).delete({ where: { id: legacyBiz.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: legacyUser.id } }).catch(() => {});
+    }
+  }, 30000);
+
+  it('BACKFILL-02 — backfill SQL does not overwrite existing businessId', async () => {
+    // Create Provider already linked to a Business (not via biz_ convention)
+    const user2 = await prisma.user.create({
+      data: { email: `${PREFIX}-backfill2@test.example.com`, name: `${PREFIX} Backfill2`, role: 'PROVIDER' },
+    });
+    const prov2 = await (prisma.provider as any).create({
+      data: {
+        user: { connect: { id: user2.id } },
+        name: `${PREFIX} Backfill2`,
+        phone: '0400000099',
+        hourlyRate: 80,
+        isActive: true,
+        approvalStatus: 'APPROVED',
+        subscriptionStatus: 'ACTIVE',
+        subscriptionTier: 'STUDIO',
+      },
+    });
+    const biz2 = await (prisma.business as any).create({
+      data: {
+        id: `biz_${prov2.id}`,
+        name: `${PREFIX} Backfill2 Business`,
+        supportEmail: `${PREFIX}-backfill2-biz@test.example.com`,
+        timezone: 'Australia/Perth',
+        isActive: true,
+        paymentModel: 'saas',
+        subscriptionTier: 'STUDIO',
+      },
+    });
+
+    try {
+      // Pre-link to a different business (simulates already-linked state)
+      await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = ${bizSingleId} WHERE id = ${prov2.id}`;
+
+      // Apply backfill — should NOT update because businessId IS NOT NULL
+      const affected = await prisma.$executeRaw`
+        UPDATE "Provider" p
+        SET "businessId" = ('biz_' || p.id)
+        WHERE p."businessId" IS NULL
+          AND p.id = ${prov2.id}
+      `;
+      // Affected should be 0 (not overwritten)
+      expect(Number(affected)).toBe(0);
+
+      // businessId should still be the original value
+      const result = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${prov2.id}`;
+      expect(result[0].businessId).toBe(bizSingleId);
+
+    } finally {
+      await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${prov2.id}`.catch(() => {});
+      await (prisma.business as any).delete({ where: { id: biz2.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: user2.id } }).catch(() => {});
+    }
+  }, 30000);
+});
+
+describe('WLA-012: T-TIER — subscription entitlement enforcement', () => {
+  const ENTITLED_TIERS = ['STUDIO', 'PREMIUM'];
+  const NON_ENTITLED_TIERS = ['BASIC', 'PRO'];
+
+  it('TIER-01 — STUDIO Business website is accessible', async () => {
+    // bizSingleId is STUDIO (set in beforeAll)
+    const data = await fetchBusinessWebsiteData(bizSingleId, `https://${DOMAIN_SINGLE}`);
+    expect(data).not.toBeNull();
+  }, 15000);
+
+  for (const tier of NON_ENTITLED_TIERS) {
+    it(`TIER-02 — ${tier} Business returns null (not entitled to custom domain website)`, async () => {
+      const biz = await createBusiness({ name: `${PREFIX} ${tier} Tier`, subscriptionTier: tier });
+      await publishBusiness(biz.id);
+      try {
+        const data = await fetchBusinessWebsiteData(biz.id, `https://test-${tier.toLowerCase()}.example.com`);
+        expect(data).toBeNull();
+      } finally {
+        await (prisma.business as any).delete({ where: { id: biz.id } }).catch(() => {});
+      }
+    }, 15000);
+  }
+
+  it('TIER-03 — tier entitlement is checked in loader source', () => {
+    const loaderSource = readFileSync(
+      resolve(process.cwd(), 'lib/website/fetchBusinessWebsiteData.ts'),
+      'utf-8'
+    );
+    // Loader must enforce tier restriction
+    expect(loaderSource).toContain('ENTITLED_TIERS');
+    expect(loaderSource).toContain('STUDIO');
+    expect(loaderSource).toContain('PREMIUM');
+    // Must return null for non-entitled tiers
+    expect(loaderSource).toContain("ENTITLED_TIERS.includes(biz.subscriptionTier");
   });
 });

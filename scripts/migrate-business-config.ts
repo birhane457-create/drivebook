@@ -188,6 +188,18 @@ async function main() {
         }
       }
 
+      // 8. WLA-012: Link Provider to its Business via the new businessId FK.
+      // This replaces the implicit biz_ string convention with a proper FK.
+      // Only updates if not already linked (safe to re-run).
+      if (!instructor.businessId) {
+        await prisma.$executeRaw`
+          UPDATE "Provider"
+          SET "businessId" = ${bizId}
+          WHERE id = ${instructor.id}
+            AND "businessId" IS NULL
+        `
+      }
+
       created++
       if (created % 10 === 0) console.log(`  Migrated ${created}/${instructors.length}...`)
 
