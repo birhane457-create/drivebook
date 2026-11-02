@@ -1,0 +1,31 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: fetchBusinessWebsiteData[2m > [22mT01 — migrated single-provider Business returns correct website data
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: fetchBusinessWebsiteData[2m > [22mT02 — standalone Business renders without a Provider
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: fetchBusinessWebsiteData[2m > [22mT03 — multi-provider Business returns only its own Providers
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: fetchBusinessWebsiteData[2m > [22mT04 — unpublished Business returns null
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: fetchBusinessWebsiteData[2m > [22mT04b — inactive Business returns null
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: fetchBusinessWebsiteData[2m > [22mT04c — nonexistent Business ID returns null
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: fetchBusinessWebsiteData[2m > [22mT07 — cross-tenant: loading Business A does not return Providers from Business B
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: resolveBusinessDomain[2m > [22mT05 — unverified domain returns null (no public website access)
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: resolveBusinessDomain[2m > [22mT01 / T02 / T03 — verified domain resolves to correct Business ID
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: resolveBusinessDomain[2m > [22munknown domain returns null
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T06 — database error propagation[2m > [22mresolveBusinessDomain does not swallow database errors
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: T06 — database error propagation[2m > [22mfetchBusinessWebsiteData does not swallow database errors
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: source inspection — page routing[2m > [22mT08 — page uses resolveBusinessDomain (not raw prisma.businessDomain.findFirst)
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: source inspection — page routing[2m > [22mT09 — page uses fetchBusinessWebsiteData for Business path
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: source inspection — page routing[2m > [22mT10 — .catch(() => null) removed from BusinessDomain path
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: source inspection — page routing[2m > [22mT11 — BusinessPublicPage is imported and used for Business path
+ [32m✓[39m __tests__/unit/wla-012-business-website.test.ts[2m > [22mWLA-012: source inspection — page routing[2m > [22mT12 — Provider path (Path 1) is preserved
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m17 passed[39m[22m[90m (17)[39m
+[2m   Start at [22m 02:20:45
+[2m   Duration [22m 1.10s[2m (transform 72ms, setup 49ms, collect 122ms, tests 254ms, environment 0ms, prepare 207ms)[22m
+
+VITEST_EXIT:0 

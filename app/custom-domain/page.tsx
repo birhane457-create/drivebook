@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 import SubdomainBookingPage from '@/app/subdomain/[slug]/page';
 import BusinessWebsitePage from '@/components/website/BusinessWebsitePage';
+import BusinessPublicPage from '@/components/website/BusinessPublicPage';
 import { fetchProviderWebsiteData } from '@/lib/website/fetchProviderWebsiteData';
+import { fetchBusinessWebsiteData, resolveBusinessDomain } from '@/lib/website/fetchBusinessWebsiteData';
 import { isOwnDomain, normalizeHostname } from '@/lib/utils/host-classification';
 
 export const dynamic = 'force-dynamic';
@@ -18,13 +20,22 @@ export const dynamic = 'force-dynamic';
  * so it cannot be spoofed on a secure connection. The `x-custom-domain`
  * header is ignored for tenant resolution.
  *
+ * WLA-012 FIX: BusinessDomain fallback now uses fetchBusinessWebsiteData()
+ * which loads Business-owned data directly. The previous code passed a
+ * Business ID to fetchProviderWebsiteData(), which only queries Provider.id /
+ * Provider.customSlug — those never match a Business ID.
+ *
+ * Also fixed: the .catch(() => null) that silently converted database errors
+ * to 404 responses has been replaced with explicit error propagation.
+ *
  * Resolution order:
  *   1. Read the Host header (TLS-verified, not spoofable)
- *   2. Strip port if present
- *   3. Verify it's NOT an own domain (defensive — if it is, return 404)
- *   4. Find provider by their customDomain field
- *   5. If they have custom BusinessConfig → render with generic BusinessWebsitePage
- *   6. Otherwise → render with the driving-specific SubdomainBookingPage (fallback)
+ *   2. Normalize and verify it's NOT an own domain
+ *   3. Find Provider by customDomain (STUDIO/PREMIUM only)
+ *   4. If found → render with BusinessWebsitePage (Provider path, unchanged)
+ *   5. If not found → resolve via BusinessDomain table
+ *   6. If Business found → render with BusinessPublicPage (Business path)
+ *   7. Otherwise → 404
  */
 export default async function CustomDomainPage({
   searchParams,
@@ -33,27 +44,19 @@ export default async function CustomDomainPage({
 }) {
   const headersList = headers();
 
-  // WLA-017 FIX: Use the Host header (TLS-verified) instead of the
-  // client-controllable x-custom-domain header. The Host header is set by
-  // the browser and verified by the TLS certificate — it cannot be spoofed
-  // on a secure connection. The x-custom-domain header is ignored.
+  // WLA-017 FIX: Use the Host header (TLS-verified, not spoofable)
   const hostHeader = headersList.get('host');
   if (!hostHeader) notFound();
 
-  // WLA-011 FIX: use shared normalizeHostname (lowercase, strip port, strip trailing dot)
-  // was: hostHeader.split(':')[0] — did not normalize case or trailing dots
+  // WLA-011 FIX: normalize hostname (lowercase, strip port, strip trailing dot)
   const customDomain = normalizeHostname(hostHeader);
   if (!customDomain) notFound();
 
-  // WLA-011 FIX: use shared isOwnDomain helper with exact hostname-boundary matching
-  // (was: customDomain.includes(rootDomain) — unsafe substring matching)
-  // Verify the host is NOT an own domain. If someone visits
-  // /custom-domain directly on drivebook.com.au, the Host would be an own
-  // domain — return 404. This prevents direct access to the page outside
-  // of the middleware's custom-domain rewrite flow.
+  // WLA-011 FIX: exact hostname-boundary matching (was: unsafe .includes())
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'drivebook.com.au';
   if (isOwnDomain(customDomain, rootDomain)) notFound();
 
+  // ── Path 1: Provider-owned custom domain ────────────────────────────────────
   // Find the provider who owns this verified custom domain.
   // orderBy domainVerifiedAt DESC ensures deterministic resolution if two providers
   // somehow share a customDomain (legacy data). The ownership check in the verify
@@ -68,42 +71,47 @@ export default async function CustomDomainPage({
     select: { id: true, customSlug: true },
   });
 
-  if (!instructor) {
-    // Also check BusinessDomain table (for businesses set up via Business Config)
-    const bizDomain = await (prisma as any).businessDomain?.findFirst?.({
-      where: { host: customDomain, verified: true },
-      select: { businessId: true, business: { select: { id: true } } },
-    }).catch(() => null)
+  if (instructor) {
+    // Try generic Business renderer first (customised config)
+    try {
+      const slug = instructor.customSlug ?? instructor.id;
+      const websiteData = await fetchProviderWebsiteData(slug, rootDomain);
+      if (websiteData) {
+        const { config } = websiteData;
+        const isCustomised =
+          config.terminology.provider !== 'provider' ||
+          config.terminology.booking !== 'Lesson';
+        if (isCustomised) {
+          return (
+            <BusinessWebsitePage {...websiteData} canonicalUrl={`https://${customDomain}`} />
+          );
+        }
+      }
+    } catch {
+      // Fall through to driving-specific page on loader error
+    }
 
-    if (!bizDomain) notFound()
-
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'drivebook.com.au'
-    const websiteData = await fetchProviderWebsiteData(bizDomain.businessId, rootDomain)
-    if (!websiteData) notFound()
-
-    return <BusinessWebsitePage {...websiteData} canonicalUrl={`https://${customDomain}`} />
+    // Fall back to driving-specific page
+    return SubdomainBookingPage({
+      params: { slug: instructor.customSlug ?? instructor.id },
+      searchParams,
+    });
   }
 
-  // Try generic renderer first
-  try {
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'drivebook.com.au'
-    const slug = instructor.customSlug ?? instructor.id
-    const websiteData = await fetchProviderWebsiteData(slug, rootDomain)
+  // ── Path 2: Business-owned custom domain (WLA-012 FIX) ──────────────────────
+  // resolveBusinessDomain throws on DB errors (does not swallow as null).
+  // Returns null only when no verified BusinessDomain record exists for the host.
+  const businessId = await resolveBusinessDomain(customDomain);
+  if (!businessId) notFound();
 
-    if (websiteData) {
-      const { config } = websiteData
-      const isCustomised =
-        config.terminology.provider !== 'provider' ||
-        config.terminology.booking !== 'Lesson'
-      if (isCustomised) {
-        return <BusinessWebsitePage {...websiteData} canonicalUrl={`https://${customDomain}`} />
-      }
-    }
-  } catch { /* fall through */ }
+  // Load Business website data — throws on DB errors, returns null for
+  // not-found, inactive Business, or unpublished website.
+  const businessData = await fetchBusinessWebsiteData(
+    businessId,
+    `https://${customDomain}`
+  );
 
-  // Fall back to driving-specific page
-  return SubdomainBookingPage({
-    params: { slug: instructor.customSlug ?? instructor.id },
-    searchParams,
-  });
+  if (!businessData) notFound();
+
+  return <BusinessPublicPage data={businessData} />;
 }
