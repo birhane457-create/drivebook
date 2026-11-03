@@ -31,10 +31,12 @@
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC05 — deceptive host is NOT classified as own domain
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC06 — empty or malformed host is NOT classified as own domain
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC07 — host with port is handled
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 v4: Business metadata path null safety[2m > [22mA14 -- Business path uses null not undefined for absent description and ogImage
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 v4: Business metadata path null safety[2m > [22mA15 -- Business path has no ?? undefined patterns
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m26 passed[39m[22m[90m (26)[39m
-[2m   Start at [22m 18:07:15
-[2m   Duration [22m 722ms[2m (transform 68ms, setup 48ms, collect 71ms, tests 7ms, environment 0ms, prepare 263ms)[22m
+[2m      Tests [22m [1m[32m28 passed[39m[22m[90m (28)[39m
+[2m   Start at [22m 19:30:47
+[2m   Duration [22m 647ms[2m (transform 66ms, setup 49ms, collect 83ms, tests 7ms, environment 0ms, prepare 202ms)[22m
 
 VITEST_EXIT:0 

@@ -120,8 +120,10 @@ export async function generateMetadata(): Promise<Metadata> {
   if (!biz) return noTenantMetadata();
 
   const title = biz.website?.seoTitle ?? biz.name;
-  const description = biz.website?.seoDesc ?? undefined;
-  const ogImage = biz.website?.seoImage ?? undefined;
+  // Use null (not undefined) when values are absent — undefined is not a reliable
+  // override of inherited parent metadata fields in Next.js.
+  const description = biz.website?.seoDesc ?? null;
+  const ogImage = biz.website?.seoImage ?? null;
   const tenantBase = new URL(`https://${customDomain}`);
 
   return {
