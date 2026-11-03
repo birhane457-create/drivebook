@@ -19,6 +19,13 @@ export const dynamic = 'force-dynamic';
  * Unverified or unknown domains return minimal metadata without
  * DriveBook branding leakage.
  *
+ * Inheritance overrides:
+ *   - title.absolute: prevents root "%s | DriveBook" template from appending
+ *   - metadataBase: set to custom domain so relative image URLs resolve correctly
+ *   - keywords: null — neutralises inherited DriveBook-specific keywords
+ *   - authors/creator/publisher: null — neutralises DriveBook identity
+ *   - icons: null — prevents DriveBook favicon inheritance
+ *
  * Resolution order matches the page rendering:
  *   1. Provider with verified customDomain (STUDIO/PREMIUM)
  *   2. Verified BusinessDomain
@@ -27,14 +34,14 @@ export const dynamic = 'force-dynamic';
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = headers();
   const hostHeader = headersList.get('host');
-  if (!hostHeader) return { title: 'Website' };
+  if (!hostHeader) return noTenantMetadata();
 
   const customDomain = normalizeHostname(hostHeader);
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'drivebook.com.au';
 
   // Defensive: if the host is an own domain, this page should not be reached
   // (middleware would not rewrite it). Return minimal metadata.
-  if (isOwnDomain(customDomain, rootDomain)) return { title: 'Website' };
+  if (isOwnDomain(customDomain, rootDomain)) return noTenantMetadata();
 
   // Path 1: Provider with verified custom domain
   const instructor = await prisma.provider.findFirst({
@@ -49,24 +56,32 @@ export async function generateMetadata(): Promise<Metadata> {
       businessName: true,
       bio: true,
       serviceAreas: true,
-      averageRating: true,
-      totalReviews: true,
       profileImage: true,
-      customSlug: true,
     },
   });
 
   if (instructor) {
     const { getDisplayName } = await import('@/lib/utils/account');
     const displayName = getDisplayName(instructor as any);
+    // Use absolute title to prevent root "%s | DriveBook" template from applying
     const title = `${displayName} | Book Online`;
     const description = instructor.bio
       ? instructor.bio.slice(0, 155)
       : `Book online with ${displayName}${instructor.serviceAreas ? ` in ${instructor.serviceAreas}` : ''}.`;
 
+    // metadataBase set to the custom domain — relative image URLs (e.g. profileImage)
+    // will resolve against the provider's domain, not drivebook.com.au
+    const tenantBase = new URL(`https://${customDomain}`);
+
     return {
-      title,
+      metadataBase: tenantBase,
+      title: { absolute: title },    // absolute prevents root template from appending "| DriveBook"
       description,
+      keywords: null,                 // neutralise inherited DriveBook-specific keywords
+      authors: null,                  // neutralise inherited DriveBook authors
+      creator: null,                  // neutralise inherited "DriveBook"
+      publisher: null,                // neutralise inherited "DriveBook"
+      icons: null,                    // suppress DriveBook favicon inheritance
       openGraph: {
         title,
         description,
@@ -90,7 +105,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   // Path 2: Verified BusinessDomain
   const businessId = await resolveBusinessDomain(customDomain);
-  if (!businessId) return { title: 'Website' };
+  if (!businessId) return noTenantMetadata();
 
   const biz = await prisma.business.findUnique({
     where: { id: businessId },
@@ -102,15 +117,22 @@ export async function generateMetadata(): Promise<Metadata> {
     },
   }) as any;
 
-  if (!biz) return { title: 'Website' };
+  if (!biz) return noTenantMetadata();
 
   const title = biz.website?.seoTitle ?? biz.name;
   const description = biz.website?.seoDesc ?? undefined;
   const ogImage = biz.website?.seoImage ?? undefined;
+  const tenantBase = new URL(`https://${customDomain}`);
 
   return {
-    title,
+    metadataBase: tenantBase,
+    title: { absolute: title },      // absolute prevents root template
     description,
+    keywords: null,                   // neutralise DriveBook keywords
+    authors: null,
+    creator: null,
+    publisher: null,
+    icons: null,
     openGraph: {
       title,
       description,
@@ -127,6 +149,22 @@ export async function generateMetadata(): Promise<Metadata> {
     alternates: {
       canonical: `https://${customDomain}`,
     },
+  };
+}
+
+/**
+ * Minimal metadata for unresolved/unknown domains.
+ * Overrides inherited DriveBook fields without exposing tenant information.
+ */
+function noTenantMetadata(): Metadata {
+  return {
+    title: { absolute: 'Website' },
+    description: undefined,
+    keywords: null,
+    authors: null,
+    creator: null,
+    publisher: null,
+    icons: null,
   };
 }
 
