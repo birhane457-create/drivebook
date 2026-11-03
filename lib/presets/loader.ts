@@ -178,9 +178,15 @@ export async function createBusinessFromTemplate(
     })
   }
 
-  // Note: Provider-Business relationship not yet implemented in schema
-  // Providers are currently independent entities
-  // TODO: Add businessId field to Provider schema when multi-provider businesses are supported
+  // Note: Provider-Business relationship — set Provider.businessId to link this Provider
+  // to the newly created Business. Uses raw SQL to avoid dependency on Prisma client
+  // binary being regenerated (WLA-012: Provider.businessId added in migration 20261103000001).
+  await tx.$executeRaw`
+    UPDATE "Provider"
+    SET "businessId" = ${businessId}
+    WHERE id = ${providerId}
+      AND "businessId" IS NULL
+  `
 }
 
 /**

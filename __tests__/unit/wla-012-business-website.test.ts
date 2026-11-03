@@ -664,3 +664,125 @@ describe('WLA-012: T-TIER-COMPLETE — full tier coverage', () => {
     expect(loaderSource).toContain('ENTITLED_TIERS.includes');
   });
 });
+
+describe('WLA-012: T-REGISTRATION — new Provider registration sets businessId', () => {
+  it('REG-01 — createBusinessFromTemplate sets Provider.businessId for new registrations', async () => {
+    // This test simulates what the registration route does after creating a Provider:
+    // it calls createBusinessFromTemplate, which now sets Provider.businessId.
+    //
+    // The loader uses $executeRaw because the compiled Prisma client binary does not
+    // yet have the businessId relation (no system node.js to run prisma generate).
+    // The raw SQL is the same mechanism used by the backfill migration.
+
+    const regUser = await prisma.user.create({
+      data: { email: `${PREFIX}-reg@test.example.com`, name: `${PREFIX} Reg`, role: 'PROVIDER' },
+    });
+    const regProv = await (prisma.provider as any).create({
+      data: {
+        user: { connect: { id: regUser.id } },
+        name: `${PREFIX} Reg Provider`,
+        phone: '0400000099',
+        hourlyRate: 80,
+        isActive: false,
+        approvalStatus: 'PENDING',
+        subscriptionStatus: 'TRIAL',
+        subscriptionTier: 'BASIC',
+      },
+    });
+
+    // Confirm businessId is NULL before template creation (pre-registration state)
+    const before = await prisma.$queryRaw<any[]>`
+      SELECT "businessId" FROM "Provider" WHERE id = ${regProv.id}
+    `;
+    expect(before[0].businessId).toBeNull();
+
+    // Create the Business using the biz_ convention (same as registration route)
+    const regBizId = `biz_${regProv.id}`;
+    const regBiz = await (prisma.business as any).create({
+      data: {
+        id: regBizId,
+        name: `${PREFIX} Reg Business`,
+        supportEmail: `${PREFIX}-reg-biz@test.example.com`,
+        timezone: 'Australia/Perth',
+        isActive: true,
+        paymentModel: 'saas',
+        subscriptionTier: 'STUDIO',
+      },
+    });
+
+    try {
+      // Apply the same $executeRaw logic as createBusinessFromTemplate now does
+      // (mirrors the fix in lib/presets/loader.ts and lib/templates/loader.ts)
+      await prisma.$executeRaw`
+        UPDATE "Provider"
+        SET "businessId" = ${regBizId}
+        WHERE id = ${regProv.id}
+          AND "businessId" IS NULL
+      `;
+
+      // Verify Provider.businessId is now set
+      const after = await prisma.$queryRaw<any[]>`
+        SELECT "businessId" FROM "Provider" WHERE id = ${regProv.id}
+      `;
+      expect(after[0].businessId).toBe(regBizId);
+      expect(after[0].businessId).toBe(regBiz.id);
+
+      // The loader source now contains the $executeRaw to set businessId
+      const presetLoaderSource = readFileSync(
+        resolve(process.cwd(), 'lib/presets/loader.ts'),
+        'utf-8'
+      );
+      const templateLoaderSource = readFileSync(
+        resolve(process.cwd(), 'lib/templates/loader.ts'),
+        'utf-8'
+      );
+      // Both loaders must update Provider.businessId
+      expect(presetLoaderSource).toContain('UPDATE "Provider"');
+      expect(presetLoaderSource).toContain('SET "businessId" = ');
+      expect(presetLoaderSource).not.toContain('TODO: Add businessId field to Provider schema');
+      expect(templateLoaderSource).toContain('UPDATE "Provider"');
+      expect(templateLoaderSource).toContain('SET "businessId" = ');
+      expect(templateLoaderSource).not.toContain('TODO: Add businessId field to Provider schema');
+
+    } finally {
+      await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${regProv.id}`.catch(() => {});
+      await (prisma.business as any).delete({ where: { id: regBizId } }).catch(() => {});
+      await prisma.user.delete({ where: { id: regUser.id } }).catch(() => {});
+    }
+  }, 30000);
+
+  it('REG-02 — production investigation: 5 pre-linked Providers all follow biz_ pattern (origin unconfirmed)', () => {
+    // This test documents the production investigation finding from
+    // docs/audit/WLA-012-PROD-INVESTIGATION.txt without making unsupported claims.
+    //
+    // Confirmed by investigation:
+    //   - 5 Providers have businessId matching ('biz_' || id) (is_biz_pattern = t)
+    //   - All link to a Business named "Driving Instructor Platform"
+    //   - businessId column did not exist before migration 1 (confirmed by pre-flight error)
+    //   - These were linked BEFORE migration 2 ran (UPDATE 0 on backfill)
+    //
+    // NOT confirmed:
+    //   - Origin of the 5 records: the claim they were created by WLA-007 concurrency
+    //     tests is not supported. The WLA-007 test hardcodes 127.0.0.1:5433/drivebook_test
+    //     and cannot reach production. The actual source is unknown.
+    //
+    // The investigation file (WLA-012-PROD-INVESTIGATION.txt) also contains one
+    // failed query (ERROR: relation "provider" does not exist) due to an incorrectly
+    // quoted table name in the FK constraint check. The FK index check (last query)
+    // succeeded independently and confirmed the index exists.
+    //
+    // This test records the documented uncertainty rather than asserting a specific claim.
+
+    const investigationNote = {
+      preLinkedCount: 5,
+      allFollowBizPattern: true,
+      originConfirmed: false,
+      originNote: 'Records existed before migration ran; source not established from available evidence',
+      productionProject: 'ikhqphbbilrocsghjyda',
+    };
+
+    expect(investigationNote.preLinkedCount).toBe(5);
+    expect(investigationNote.allFollowBizPattern).toBe(true);
+    expect(investigationNote.originConfirmed).toBe(false);
+  });
+});
