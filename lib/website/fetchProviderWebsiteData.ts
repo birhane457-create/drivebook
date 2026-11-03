@@ -59,6 +59,9 @@ export async function fetchProviderWebsiteData(
       subscriptionTier: true,
       customSlug: true,
       customDomain: true,
+      // WLA-014: Provider branding fields no longer override BusinessBranding.
+      // They remain selected for potential backward-compat rendering paths
+      // (e.g. driving-specific renderer) but are not used by fetchProviderWebsiteData.
       brandLogo: true,
       brandColorPrimary: true,
       brandColorSecondary: true,
@@ -77,21 +80,13 @@ export async function fetchProviderWebsiteData(
     instructor.subscriptionStatus === 'ACTIVE' ||
     (instructor.subscriptionStatus === 'TRIAL' && !trialExpired)
 
-  // Load BusinessConfig — tries DB first, falls back to driving template
-  // Load BusinessConfig — tries DB first, falls back to driving template
+  // Load BusinessConfig — tries DB first, falls back to driving template.
+  // WLA-014 FIX: BusinessBranding is the canonical branding store.
+  // The previous override shim (which unconditionally replaced BusinessBranding colours
+  // with Provider.brandColorPrimary/Secondary) has been removed.
+  // The canonical read path is now: BusinessBranding → resolveProviderBranding fallback.
+  // fetchProviderWebsiteData uses getBusinessConfig which reads from BusinessBranding directly.
   const config = await getBusinessConfig({ providerId: instructor.id })
-
-  // Override branding from Instructor fields if not in BusinessConfig yet
-  // (during migration period before Business tables are fully populated)
-  if (!config.branding.logo && instructor.brandLogo) {
-    config.branding.logo = instructor.brandLogo
-  }
-  if (instructor.brandColorPrimary) {
-    config.branding.primaryColour = instructor.brandColorPrimary
-  }
-  if (instructor.brandColorSecondary) {
-    config.branding.secondaryColour = instructor.brandColorSecondary
-  }
 
   // Display name
   const displayName = instructor.businessName?.trim() || instructor.name

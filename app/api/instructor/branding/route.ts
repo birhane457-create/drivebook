@@ -164,35 +164,24 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    // V-07 FIX: Sync branding fields from Provider to BusinessBranding.
-    // Without this, writing via the legacy PUT leaves BusinessBranding stale,
-    // causing divergence between the two branding sources of truth.
-    // Only syncs if a BusinessBranding record exists for this provider's business.
-    const bizId = `biz_${instructor.id}`;
+    // WLA-014 FIX: Upsert BusinessBranding (canonical store) from Provider write.
+    // Replaces V-07 conditional sync (which only updated if record existed).
+    // BusinessBranding is now the authoritative store; create it if absent.
     try {
-      const existingBranding = await (prisma as any).businessBranding.findUnique({
-        where: { businessId: bizId },
-        select: { businessId: true },
-      });
-      if (existingBranding) {
-        await (prisma as any).businessBranding.update({
-          where: { businessId: bizId },
-          data: {
-            // Only sync fields that were explicitly provided in the PUT body.
-            // BusinessBranding.primaryColour is NOT NULL — never write null unless
-            // brandColorPrimary was explicitly cleared (null sent, not merely absent).
-            ...(brandLogo !== undefined && { logo: brandLogo || null }),
-            ...(brandColorPrimary !== undefined && { primaryColour: brandColorPrimary || '#3B82F6' }),
-            ...(brandColorSecondary !== undefined && { secondaryColour: brandColorSecondary || null }),
-            ...(customSlug !== undefined && { customSlug: customSlug || null }),
-            ...(showBrandingOnBookingPage !== undefined && { showPlatformBranding: showBrandingOnBookingPage !== true }),
-            ...(customDomain !== undefined && { customDomain: customDomain || null }),
-          },
-        });
-      }
+      const { upsertBusinessBranding } = await import('@/lib/branding/resolution')
+      await upsertBusinessBranding(instructor.id, {
+        ...(brandLogo !== undefined && { logo: brandLogo || null }),
+        ...(brandColorPrimary !== undefined && { primaryColour: brandColorPrimary || '#3B82F6' }),
+        ...(brandColorSecondary !== undefined && { secondaryColour: brandColorSecondary || null }),
+        ...(customSlug !== undefined && { customSlug: customSlug || null }),
+        // Inversion applied once in upsertBusinessBranding via showPlatformBranding field.
+        ...(showBrandingOnBookingPage !== undefined && {
+          showPlatformBranding: showBrandingOnBookingPage !== true,
+        }),
+      })
     } catch (syncErr) {
-      // Log sync errors in development but don't fail the request.
-      console.error('[V-07 sync] BusinessBranding sync error:', syncErr instanceof Error ? syncErr.message : String(syncErr));
+      // Log but don't fail — Provider update already succeeded.
+      console.error('[WLA-014] BusinessBranding upsert error:', syncErr instanceof Error ? syncErr.message : String(syncErr))
     }
 
     return NextResponse.json({ success: true, branding: updated });
