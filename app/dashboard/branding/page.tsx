@@ -221,6 +221,14 @@ export default function BrandingPage() {
       if (!profileRes.ok) errors.push('Failed to save social links');
       if (errors.length > 0) throw new Error(errors.join(' · '));
 
+      // WLA-014 v3: check for HTTP 207 partial write even when brandRes.ok is true.
+      // HTTP 207 is a 2xx response (.ok === true) but indicates the Provider was saved
+      // while the canonical BusinessBranding write failed. Do not show "All settings saved!".
+      if (brandRes.status === 207) {
+        const body = await brandRes.json();
+        throw new Error(body.error || 'Your branding was partially saved. Please try saving again to sync all settings.');
+      }
+
       setMessage('All settings saved!');
       setBrandLogo(logoUrl);
       setLogoFile(null);
