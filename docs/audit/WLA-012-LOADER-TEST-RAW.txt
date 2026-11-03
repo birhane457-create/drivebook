@@ -1,0 +1,21 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/integration/wla-012-loader-registration.test.ts[2m > [22mWLA-012 REQ-1: createBusinessFromTemplate from lib/presets/loader.ts[2m > [22mREG-LOADER-01 — calling createBusinessFromTemplate sets Provider.businessId to biz_${providerId}
+ [32m✓[39m __tests__/integration/wla-012-loader-registration.test.ts[2m > [22mWLA-012 REQ-2: lib/templates/loader.ts — production path status[2m > [22mREG-LOADER-02a — lib/presets/loader.ts is the active production path (register/route.ts imports it)
+ [32m✓[39m __tests__/integration/wla-012-loader-registration.test.ts[2m > [22mWLA-012 REQ-2: lib/templates/loader.ts — production path status[2m > [22mREG-LOADER-02b — lib/templates/loader.ts is NOT imported by any active production route
+ [32m✓[39m __tests__/integration/wla-012-loader-registration.test.ts[2m > [22mWLA-012 REQ-3: Recovery and retry scenarios[2m > [22mREQ-3a — createBusinessFromTemplate(success): Business created and Provider.businessId set
+ [32m✓[39m __tests__/integration/wla-012-loader-registration.test.ts[2m > [22mWLA-012 REQ-3: Recovery and retry scenarios[2m > [22mREQ-3b — retry after partial failure: re-running createBusinessFromTemplate repairs Provider.businessId
+ [32m✓[39m __tests__/integration/wla-012-loader-registration.test.ts[2m > [22mWLA-012 REQ-3: Recovery and retry scenarios[2m > [22mREQ-3c — existing non-null businessId is NOT overwritten on retry
+ [32m✓[39m __tests__/integration/wla-012-loader-registration.test.ts[2m > [22mWLA-012 REQ-3: Recovery and retry scenarios[2m > [22mREQ-3d — createBusinessFromTemplate upsert guard prevents Business record duplication on retry
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m   Start at [22m 10:34:19
+[2m   Duration [22m 1.03s[2m (transform 94ms, setup 60ms, collect 160ms, tests 245ms, environment 0ms, prepare 214ms)[22m
+
+VITEST_EXIT:0 
