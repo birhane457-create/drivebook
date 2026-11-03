@@ -1,0 +1,36 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part B: Root layout — conditional platform scripts[2m > [22mB01 — root layout imports isOwnDomain and normalizeHostname
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part B: Root layout — conditional platform scripts[2m > [22mB02 — root layout reads host header and computes showPlatformScripts
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part B: Root layout — conditional platform scripts[2m > [22mB03 — Organization JSON-LD is inside showPlatformScripts conditional
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part B: Root layout — conditional platform scripts[2m > [22mB04 — Google Ads tracking is inside showPlatformScripts conditional
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part B: Root layout — conditional platform scripts[2m > [22mB05 — RSS feed link is inside showPlatformScripts conditional
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part B: Root layout — conditional platform scripts[2m > [22mB06 — WebSite schema JSON-LD is inside showPlatformScripts conditional
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA01 — custom-domain page exports generateMetadata
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA02 — generateMetadata resolves Provider with verified customDomain
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA03 — generateMetadata resolves verified BusinessDomain as fallback
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA04 — generateMetadata returns tenant-specific title (not DriveBook)
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA05 — generateMetadata sets canonical to the custom domain (not drivebook.com.au)
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA06 — generateMetadata returns OpenGraph with tenant siteName
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA07 — generateMetadata does not fall back to DriveBook metadata for unknown domains
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA08 — generateMetadata checks isOwnDomain defensively
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA09 — generateMetadata only uses verified domain records
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC01 — main DriveBook domain is classified as own domain
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC02 — DriveBook subdomain is classified as own domain
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC03 — Vercel preview is classified as own domain
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC04 — custom domain is NOT classified as own domain
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC05 — deceptive host is NOT classified as own domain
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC06 — empty or malformed host is NOT classified as own domain
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC07 — host with port is handled
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m22 passed[39m[22m[90m (22)[39m
+[2m   Start at [22m 17:18:46
+[2m   Duration [22m 724ms[2m (transform 64ms, setup 48ms, collect 70ms, tests 7ms, environment 0ms, prepare 250ms)[22m
+
+VITEST_EXIT:0 
