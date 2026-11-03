@@ -134,15 +134,19 @@ export async function resolveProviderBranding(providerId: string): Promise<Resol
 /**
  * Upsert BusinessBranding for a given Provider.
  * Creates the record if it does not exist (replacing the V-07 conditional sync).
+ * Also creates the parent Business record if absent (satisfies FK constraint).
  *
  * Field name mapping (Provider → BusinessBranding):
  *   brandLogo              → logo
  *   brandColorPrimary      → primaryColour
  *   brandColorSecondary    → secondaryColour
- *   showBrandingOnBookingPage → showPlatformBranding (inverted)
  *   customSlug             → customSlug (same)
  *
- * The inversion is applied once here. No other code should invert this flag.
+ * NOTE ON INVERSION: This function accepts `showPlatformBranding` directly.
+ * The CALLER is responsible for converting `showBrandingOnBookingPage` to
+ * `showPlatformBranding` using the inversion:
+ *   showPlatformBranding = !showBrandingOnBookingPage
+ * Do NOT invert inside this helper — that would apply the inversion twice.
  */
 export async function upsertBusinessBranding(
   providerId: string,
@@ -167,18 +171,30 @@ export async function upsertBusinessBranding(
   })
   if (!existingBusiness) {
     // Create a minimal Business record to satisfy the FK constraint.
-    // This handles the case where the migration script hasn't been run yet.
+    // This handles the case where the migration script has not yet been run for this Provider.
+    //
+    // IMPORTANT: paymentModel is derived from Provider.businessModel (the onboarding value),
+    // NOT hardcoded to 'saas'. A MARKETPLACE provider must not receive a 'saas' Business.
+    // paymentMode MARKETPLACE → Business.paymentModel 'marketplace'
+    // paymentMode DIRECT/SAAS  → Business.paymentModel 'saas'
     const provider = await prisma.provider.findUnique({
       where: { id: providerId },
-      select: { name: true, user: { select: { email: true } } },
+      select: {
+        name: true,
+        businessModel: true,     // "MARKETPLACE" or "SAAS"
+        user: { select: { email: true } },
+      },
     }) as any
+
+    const paymentModel = provider?.businessModel === 'MARKETPLACE' ? 'marketplace' : 'saas'
+
     await (prisma as any).business.create({
       data: {
         id: bizId,
         name: provider?.businessName ?? provider?.name ?? 'My Business',
         supportEmail: provider?.user?.email ?? `noreply@${bizId}.local`,
         timezone: 'Australia/Perth',
-        paymentModel: 'saas',
+        paymentModel,        // derived from Provider onboarding value, never hardcoded
         isActive: true,
       },
     }).catch(() => {}) // ignore if already created by concurrent call
