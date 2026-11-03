@@ -43,7 +43,9 @@ export async function loadTemplateConfig(businessType: string): Promise<Business
 
 /**
  * Create Business + populate all Business* tables from a template.
- * Called during registration inside a transaction.
+ * Called during registration OUTSIDE the main prisma.$transaction.
+ * If this function fails, the User/Provider/Subscription are already committed.
+ * Recovery is manual — see docs/DOCROLEBASE/00-overview/BUSINESS_TYPES_STATUS.md.
  */
 export async function createBusinessFromTemplate(
   tx: any, // PrismaClient transaction
