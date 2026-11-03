@@ -211,3 +211,21 @@ describe('WLA-013: isOwnDomain classification for layout conditional', () => {
     expect(isOwnDomain('provider.com:443', ROOT)).toBe(false);
   });
 });
+
+describe('WLA-013 v4: Business metadata path null safety', () => {
+  it('A14 -- Business path uses null not undefined for absent description and ogImage', () => {
+    // biz.website?.seoDesc ?? null prevents undefined from inheriting parent DriveBook description
+    // biz.website?.seoImage ?? null prevents undefined from failing OG image resolution
+    expect(customDomainSource).toContain('biz.website?.seoDesc ?? null');
+    expect(customDomainSource).toContain('biz.website?.seoImage ?? null');
+  });
+
+  it('A15 -- Business path has no ?? undefined patterns', () => {
+    // No field in the Business metadata path should fall back to undefined.
+    // Extract the Business path section from generateMetadata to verify.
+    const bizStart = customDomainSource.indexOf('const title = biz.website?.seoTitle');
+    const bizEnd = customDomainSource.indexOf('function noTenantMetadata');
+    const bizSection = customDomainSource.slice(bizStart, bizEnd);
+    expect(bizSection).not.toContain('?? undefined');
+  });
+});
