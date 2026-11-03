@@ -24,10 +24,17 @@
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-E: Inversion comment is accurate[2m > [22mE01 -- upsertBusinessBranding comment says caller applies inversion (not the helper)
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-E: Inversion comment is accurate[2m > [22mE02 -- instructor route applies inversion before calling upsertBusinessBranding
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-D corrected: 207 partial-write path exists[2m > [22mD01b -- instructor route has explicit 207 response for BusinessBranding upsert failure
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity via Provider.businessId[2m > [22mB01 -- resolveBusinessId uses Provider.businessId when available (real DB)
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity via Provider.businessId[2m > [22mB02 -- resolveBusinessId falls back to biz_ for existing migrated records (real DB)
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity via Provider.businessId[2m > [22mB03 -- upsertBusinessBranding links Provider.businessId after creating new Business
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: GET returns canonical branding[2m > [22mG01 -- instructor branding GET endpoint uses resolveProviderBranding (source check)
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Dashboard detects HTTP 207 partial write[2m > [22mD02 -- dashboard handleSave checks for status 207 before showing success
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Dashboard detects HTTP 207 partial write[2m > [22mD03 -- dashboard does NOT show success when 207 partial write occurs
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity is transitional (biz_ only for legacy)[2m > [22mARCH01 -- resolution service documents biz_ as transitional, not permanent
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m19 passed[39m[22m[90m (19)[39m
-[2m   Start at [22m 23:50:24
-[2m   Duration [22m 1.12s[2m (transform 84ms, setup 49ms, collect 149ms, tests 215ms, environment 0ms, prepare 268ms)[22m
+[2m      Tests [22m [1m[32m26 passed[39m[22m[90m (26)[39m
+[2m   Start at [22m 00:51:26
+[2m   Duration [22m 901ms[2m (transform 81ms, setup 46ms, collect 132ms, tests 241ms, environment 0ms, prepare 180ms)[22m
 
 VITEST_EXIT:0 

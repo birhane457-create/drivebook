@@ -17,17 +17,19 @@ export async function GET(req: NextRequest) {
         ? { id: session!.user!.providerId }
         : { userId: session!.user!.id },
       select: {
-        brandLogo: true,
-        brandColorPrimary: true,
-        brandColorSecondary: true,
-        showBrandingOnBookingPage: true,
-        customSlug: true,
+        id: true,
         customDomain: true,
         domainVerified: true,
         domainVerifiedAt: true,
         subscriptionTier: true,
         accountType: true,
         businessName: true,
+        // Legacy fields retained for backward compatibility if canonical is absent
+        brandLogo: true,
+        brandColorPrimary: true,
+        brandColorSecondary: true,
+        showBrandingOnBookingPage: true,
+        customSlug: true,
       },
     });
 
@@ -35,7 +37,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    return NextResponse.json(instructor);
+    // WLA-014 v3: GET returns canonical branding from BusinessBranding store.
+    // Translates field names back to legacy Provider names so the dashboard
+    // remains backward-compatible (it reads brandLogo, brandColorPrimary etc).
+    const { resolveProviderBranding } = await import('@/lib/branding/resolution')
+    const canonical = await resolveProviderBranding(instructor.id)
+
+    return NextResponse.json({
+      // Canonical branding fields (translated to Provider field names for dashboard compat)
+      brandLogo:                canonical.logo,
+      brandColorPrimary:        canonical.primaryColour,
+      brandColorSecondary:      canonical.secondaryColour,
+      showBrandingOnBookingPage: !canonical.showPlatformBranding,  // inversion
+      customSlug:               canonical.customSlug,
+      // Non-branding fields always from Provider
+      customDomain:             instructor.customDomain,
+      domainVerified:           instructor.domainVerified,
+      domainVerifiedAt:         instructor.domainVerifiedAt,
+      subscriptionTier:         instructor.subscriptionTier,
+      accountType:              instructor.accountType,
+      businessName:             instructor.businessName,
+      // Diagnostic: let the client know where branding came from
+      brandingSource:           canonical.source,
+    });
   } catch (error) {
     console.error('Error fetching branding:', error);
     return NextResponse.json({ error: 'Failed to fetch branding settings' }, { status: 500 });

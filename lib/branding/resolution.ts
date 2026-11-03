@@ -9,14 +9,18 @@
  *     compatibility fields during migration — not independent authorities.
  *   - Both renderers (subdomain + custom-domain) use this service.
  *
- * Resolution order:
- *   1. BusinessBranding record for `biz_${providerId}` — canonical.
+ * Business identity resolution order (WLA-014 v3):
+ *   1. Provider.businessId (explicit FK relationship — canonical for new records)
+ *   2. Legacy biz_${providerId} convention (migration fallback for existing records)
+ *
+ * The biz_ convention is TRANSITIONAL only. New Business records should use
+ * independently generated IDs persisted via Provider.businessId.
+ *
+ * Branding resolution order:
+ *   1. BusinessBranding via resolved businessId — canonical.
  *   2. Provider fields as fallback ONLY when no BusinessBranding record exists.
  *      This handles pre-migration providers where BusinessBranding was never populated.
  *   3. Defaults from the driving template.
- *
- * The Provider-override shim in fetchProviderWebsiteData.ts that unconditionally
- * overwrote BusinessBranding colours has been replaced by this service.
  */
 
 import { prisma } from '@/lib/prisma'
@@ -31,11 +35,48 @@ export interface ResolvedBranding {
   theme: 'light' | 'dark'
   showPlatformBranding: boolean
   customSlug: string | null
-  /** True when branding came from BusinessBranding (canonical). False = Provider fallback. */
+  /** Identifies the origin of the resolved branding. */
   source: 'businessBranding' | 'provider' | 'default'
+  /** The businessId used to resolve branding (for diagnostic/logging). */
+  resolvedBusinessId: string | null
 }
 
 const DEFAULT_PRIMARY = '#3B82F6'
+
+// ── Business identity resolution ──────────────────────────────────────────────
+
+/**
+ * Resolve the canonical Business ID for a given Provider.
+ *
+ * Uses Provider.businessId (explicit FK) first.
+ * Falls back to biz_${providerId} ONLY for existing migrated records.
+ *
+ * The biz_ convention is TRANSITIONAL. New Business records must not use it
+ * as the permanent identity rule.
+ */
+export async function resolveBusinessId(providerId: string): Promise<string | null> {
+  const provider = await prisma.provider.findUnique({
+    where: { id: providerId },
+    select: { businessId: true } as any,
+  }) as any
+
+  // 1. Explicit FK relationship (canonical for new records)
+  if (provider?.businessId) {
+    return provider.businessId
+  }
+
+  // 2. Legacy biz_ convention (fallback for existing migrated records only)
+  const legacyBizId = `biz_${providerId}`
+  const legacyBusiness = await (prisma as any).business.findUnique({
+    where: { id: legacyBizId },
+    select: { id: true },
+  })
+  if (legacyBusiness) {
+    return legacyBizId
+  }
+
+  return null
+}
 
 // ── Main resolver ─────────────────────────────────────────────────────────────
 
@@ -47,40 +88,43 @@ const DEFAULT_PRIMARY = '#3B82F6'
  * (pre-migration providers).
  */
 export async function resolveProviderBranding(providerId: string): Promise<ResolvedBranding> {
-  const bizId = `biz_${providerId}`
+  const businessId = await resolveBusinessId(providerId)
 
   // 1. Try BusinessBranding (canonical)
-  const biz = await (prisma as any).businessBranding.findUnique({
-    where: { businessId: bizId },
-    select: {
-      logo: true,
-      primaryColour: true,
-      secondaryColour: true,
-      fontFamily: true,
-      theme: true,
-      showPlatformBranding: true,
-      customSlug: true,
-    },
-  }) as {
-    logo: string | null
-    primaryColour: string
-    secondaryColour: string | null
-    fontFamily: string | null
-    theme: string
-    showPlatformBranding: boolean
-    customSlug: string | null
-  } | null
+  if (businessId) {
+    const biz = await (prisma as any).businessBranding.findUnique({
+      where: { businessId },
+      select: {
+        logo: true,
+        primaryColour: true,
+        secondaryColour: true,
+        fontFamily: true,
+        theme: true,
+        showPlatformBranding: true,
+        customSlug: true,
+      },
+    }) as {
+      logo: string | null
+      primaryColour: string
+      secondaryColour: string | null
+      fontFamily: string | null
+      theme: string
+      showPlatformBranding: boolean
+      customSlug: string | null
+    } | null
 
-  if (biz) {
-    return {
-      logo: biz.logo ?? null,
-      primaryColour: biz.primaryColour ?? DEFAULT_PRIMARY,
-      secondaryColour: biz.secondaryColour ?? null,
-      fontFamily: biz.fontFamily ?? null,
-      theme: (biz.theme === 'dark' ? 'dark' : 'light'),
-      showPlatformBranding: biz.showPlatformBranding ?? true,
-      customSlug: biz.customSlug ?? null,
-      source: 'businessBranding',
+    if (biz) {
+      return {
+        logo: biz.logo ?? null,
+        primaryColour: biz.primaryColour ?? DEFAULT_PRIMARY,
+        secondaryColour: biz.secondaryColour ?? null,
+        fontFamily: biz.fontFamily ?? null,
+        theme: (biz.theme === 'dark' ? 'dark' : 'light'),
+        showPlatformBranding: biz.showPlatformBranding ?? true,
+        customSlug: biz.customSlug ?? null,
+        source: 'businessBranding',
+        resolvedBusinessId: businessId,
+      }
     }
   }
 
@@ -113,6 +157,7 @@ export async function resolveProviderBranding(providerId: string): Promise<Resol
       showPlatformBranding: !provider.showBrandingOnBookingPage,
       customSlug: provider.customSlug ?? null,
       source: 'provider',
+      resolvedBusinessId: businessId,
     }
   }
 
@@ -126,6 +171,7 @@ export async function resolveProviderBranding(providerId: string): Promise<Resol
     showPlatformBranding: true,
     customSlug: null,
     source: 'default',
+    resolvedBusinessId: null,
   }
 }
 
@@ -135,6 +181,12 @@ export async function resolveProviderBranding(providerId: string): Promise<Resol
  * Upsert BusinessBranding for a given Provider.
  * Creates the record if it does not exist (replacing the V-07 conditional sync).
  * Also creates the parent Business record if absent (satisfies FK constraint).
+ *
+ * Business ID resolution (WLA-014 v3):
+ *   1. Provider.businessId (explicit FK — use when present)
+ *   2. biz_${providerId} legacy convention (fallback for existing migrated records)
+ *   3. Create a new Business with biz_ ID only when no explicit relationship exists
+ *      and no legacy record was found — this is the transitional creation path.
  *
  * Field name mapping (Provider → BusinessBranding):
  *   brandLogo              → logo
@@ -160,44 +212,73 @@ export async function upsertBusinessBranding(
     customSlug?: string | null
   }
 ): Promise<void> {
-  const bizId = `biz_${providerId}`
+  // Resolve the Business ID via the explicit FK first, then legacy fallback
+  let bizId = await resolveBusinessId(providerId)
 
-  // Ensure the parent Business record exists before upserting BusinessBranding.
-  // BusinessBranding has a FK to Business (BusinessBranding_businessId_fkey).
-  // This is a no-op if the Business record already exists.
-  const existingBusiness = await (prisma as any).business.findUnique({
-    where: { id: bizId },
-    select: { id: true },
-  })
-  if (!existingBusiness) {
-    // Create a minimal Business record to satisfy the FK constraint.
-    // This handles the case where the migration script has not yet been run for this Provider.
+  if (!bizId) {
+    // No existing Business relationship — create one using the transitional biz_ convention.
+    // This is the legacy creation path for providers without an explicit FK yet.
     //
-    // IMPORTANT: paymentModel is derived from Provider.businessModel (the onboarding value),
-    // NOT hardcoded to 'saas'. A MARKETPLACE provider must not receive a 'saas' Business.
-    // paymentMode MARKETPLACE → Business.paymentModel 'marketplace'
-    // paymentMode DIRECT/SAAS  → Business.paymentModel 'saas'
+    // IMPORTANT: paymentModel is derived from Provider.businessModel (the onboarding value).
+    // A MARKETPLACE provider must NOT receive a 'saas' Business.
+    // Supported mappings: MARKETPLACE → 'marketplace', SAAS/anything-else → 'saas'.
+    // Unknown values (neither MARKETPLACE nor SAAS) also fall back to 'saas' with a warning.
     const provider = await prisma.provider.findUnique({
       where: { id: providerId },
       select: {
         name: true,
-        businessModel: true,     // "MARKETPLACE" or "SAAS"
+        businessModel: true,    // "MARKETPLACE" or "SAAS"
         user: { select: { email: true } },
       },
     }) as any
 
+    const legacyBizId = `biz_${providerId}`
+
+    const SUPPORTED_MODELS = ['MARKETPLACE', 'SAAS', 'marketplace', 'saas']
+    if (provider?.businessModel && !SUPPORTED_MODELS.includes(provider.businessModel)) {
+      console.warn(`[WLA-014] Unexpected businessModel '${provider.businessModel}' for Provider ${providerId}; defaulting to 'saas'`)
+    }
     const paymentModel = provider?.businessModel === 'MARKETPLACE' ? 'marketplace' : 'saas'
 
-    await (prisma as any).business.create({
-      data: {
-        id: bizId,
-        name: provider?.businessName ?? provider?.name ?? 'My Business',
-        supportEmail: provider?.user?.email ?? `noreply@${bizId}.local`,
-        timezone: 'Australia/Perth',
-        paymentModel,        // derived from Provider onboarding value, never hardcoded
-        isActive: true,
-      },
-    }).catch(() => {}) // ignore if already created by concurrent call
+    try {
+      await (prisma as any).business.create({
+        data: {
+          id: legacyBizId,
+          name: provider?.businessName ?? provider?.name ?? 'My Business',
+          supportEmail: provider?.user?.email ?? `noreply@${legacyBizId}.local`,
+          timezone: 'Australia/Perth',
+          paymentModel,
+          isActive: true,
+        },
+      })
+    } catch (createErr: any) {
+      if (createErr?.code === 'P2002') {
+        // Duplicate key — Business was concurrently created. Re-read to confirm it exists.
+        const existing = await (prisma as any).business.findUnique({
+          where: { id: legacyBizId },
+          select: { id: true },
+        })
+        if (!existing) {
+          // Truly unexpected — creation failed and the record doesn't exist
+          throw new Error(`[WLA-014] Business creation failed and record not found: ${legacyBizId}`)
+        }
+        // Concurrent creation race — safe to continue
+      } else {
+        throw createErr  // propagate non-duplicate errors
+      }
+    }
+
+    bizId = legacyBizId
+
+    // Link the Provider to its newly created Business via the explicit FK.
+    // This ensures future lookups use Provider.businessId rather than the biz_ convention.
+    await prisma.$executeRaw`
+      UPDATE "Provider" SET "businessId" = ${bizId}
+      WHERE id = ${providerId} AND "businessId" IS NULL
+    `.catch(err => {
+      // Non-fatal: if this fails, the biz_ convention still works as fallback
+      console.warn(`[WLA-014] Could not set Provider.businessId for ${providerId}:`, err instanceof Error ? err.message : String(err))
+    })
   }
 
   await (prisma as any).businessBranding.upsert({

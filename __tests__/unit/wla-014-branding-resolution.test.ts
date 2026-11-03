@@ -62,22 +62,55 @@ async function createFixtureProvider(label: string) {
 }
 
 async function cleanup() {
-  // Use raw SQL to clean up all WLA014B test fixtures
+  // Use raw SQL to clean up all WLA014B test fixtures (case-insensitive via ILIKE)
+  // Step 1: Null out Provider.businessId to remove FK dependency
   await prisma.$executeRaw`
     UPDATE "Provider" SET "businessId" = NULL
-    WHERE "userId" IN (SELECT id FROM "User" WHERE email LIKE 'wla014b-%')
+    WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
   `.catch(() => {})
+  // Step 2: Delete BusinessBranding for all test-related businesses (biz_ and explicit-biz-)
   await prisma.$executeRaw`
-    DELETE FROM "BusinessBranding" WHERE "businessId" LIKE 'biz_%'
-    AND "businessId" IN (
+    DELETE FROM "BusinessBranding"
+    WHERE "businessId" IN (
       SELECT 'biz_' || p.id FROM "Provider" p
       JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE 'WLA014B-%'
+      WHERE u.email ILIKE ${PREFIX + '-%'}
+    ) OR "businessId" IN (
+      SELECT 'explicit-biz-' || p.id FROM "Provider" p
+      JOIN "User" u ON u.id = p."userId"
+      WHERE u.email ILIKE ${PREFIX + '-%'}
     )
   `.catch(() => {})
-  await prisma.user.deleteMany({
-    where: { email: { startsWith: `${PREFIX.toLowerCase()}-` } },
-  }).catch(() => {})
+  // Step 3: Delete Business records for test providers (biz_ and explicit-biz-)
+  await prisma.$executeRaw`
+    DELETE FROM "Business"
+    WHERE id IN (
+      SELECT 'biz_' || p.id FROM "Provider" p
+      JOIN "User" u ON u.id = p."userId"
+      WHERE u.email ILIKE ${PREFIX + '-%'}
+    ) OR id IN (
+      SELECT 'explicit-biz-' || p.id FROM "Provider" p
+      JOIN "User" u ON u.id = p."userId"
+      WHERE u.email ILIKE ${PREFIX + '-%'}
+    ) OR id LIKE 'biz_%' AND id IN (
+      SELECT 'biz_' || p.id FROM "Provider" p
+      JOIN "User" u ON u.id = p."userId"
+      WHERE u.email ILIKE ${PREFIX + '-%'}
+    )
+  `.catch(() => {})
+  // Step 4: Delete orphaned explicit-biz- Business records (not linked to a Provider)
+  await prisma.$executeRaw`
+    DELETE FROM "Business" WHERE id LIKE 'explicit-biz-%'
+  `.catch(() => {})
+  // Step 5: Delete Providers for test users
+  await prisma.$executeRaw`
+    DELETE FROM "Provider"
+    WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
+  `.catch(() => {})
+  // Step 6: Delete test Users
+  await prisma.$executeRaw`
+    DELETE FROM "User" WHERE email ILIKE ${PREFIX + '-%'}
+  `.catch(() => {})
 }
 
 beforeAll(async () => { await cleanup() }, 30000)
@@ -348,5 +381,132 @@ describe('WLA-014 Issue-D corrected: 207 partial-write path exists', () => {
     expect(routeSource).toContain('success: true, branding: updated')
     // The failure catch must not silently continue to the success return
     expect(routeSource).toContain('[WLA-014] BusinessBranding upsert failed')
+  })
+})
+
+// WLA-014 v3: Business identity, GET canonical, Dashboard 207 handling
+describe('WLA-014 v3: Business identity via Provider.businessId', () => {
+  it('B01 -- resolveBusinessId uses Provider.businessId when available (real DB)', async () => {
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const { providerId, userId } = await createFixtureProvider('bizid')
+    try {
+      // Set Provider.businessId to an explicit non-biz_ value
+      const explicitBizId = `explicit-biz-${providerId}`
+      await (prisma.business as any).create({
+        data: {
+          id: explicitBizId,
+          name: `${PREFIX} Explicit Biz`,
+          supportEmail: `${PREFIX}-explicit@test.example.com`,
+          timezone: 'Australia/Perth',
+          isActive: true,
+          paymentModel: 'saas',
+        },
+      })
+      await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = ${explicitBizId} WHERE id = ${providerId}`
+      const resolved = await resolveBusinessId(providerId)
+      // Must use the explicit FK, not biz_ derivation
+      expect(resolved).toBe(explicitBizId)
+      expect(resolved).not.toBe(`biz_${providerId}`)
+    } finally {
+      await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${providerId}`.catch(() => {})
+      await (prisma.business as any).deleteMany({ where: { id: { contains: 'explicit-biz' } } }).catch(() => {})
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 20000)
+
+  it('B02 -- resolveBusinessId falls back to biz_ for existing migrated records (real DB)', async () => {
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const { providerId, userId } = await createFixtureProvider('legacybiz')
+    const legacyBizId = `biz_${providerId}`
+    try {
+      // Create legacy Business with biz_ ID; Provider.businessId remains null
+      await (prisma.business as any).create({
+        data: {
+          id: legacyBizId,
+          name: `${PREFIX} Legacy Biz`,
+          supportEmail: `${PREFIX}-legacy2@test.example.com`,
+          timezone: 'Australia/Perth',
+          isActive: true,
+          paymentModel: 'saas',
+        },
+      })
+      const resolved = await resolveBusinessId(providerId)
+      expect(resolved).toBe(legacyBizId)
+    } finally {
+      await (prisma.business as any).delete({ where: { id: legacyBizId } }).catch(() => {})
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 20000)
+
+  it('B03 -- upsertBusinessBranding links Provider.businessId after creating new Business', async () => {
+    const { providerId, userId } = await createFixtureProvider('linkbiz')
+    const legacyBizId = `biz_${providerId}`
+    try {
+      // No existing Business -- upsertBusinessBranding should create one and set businessId
+      await upsertBusinessBranding(providerId, { primaryColour: '#ABCDEF' })
+      // Provider.businessId must now be set
+      const row = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${providerId}`
+      expect(row[0].businessId).toBe(legacyBizId)
+    } finally {
+      await (prisma.businessBranding as any).delete({ where: { businessId: legacyBizId } }).catch(() => {})
+      await (prisma.business as any).delete({ where: { id: legacyBizId } }).catch(() => {})
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 20000)
+})
+
+describe('WLA-014 v3: GET returns canonical branding', () => {
+  it('G01 -- instructor branding GET endpoint uses resolveProviderBranding (source check)', () => {
+    const routeSource = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/branding/route.ts'), 'utf-8'
+    )
+    expect(routeSource).toContain('resolveProviderBranding')
+    expect(routeSource).toContain('WLA-014 v3')
+    expect(routeSource).toContain('brandingSource')
+    // Inversion must be applied on GET return (showPlatformBranding -> showBrandingOnBookingPage)
+    expect(routeSource).toContain('!canonical.showPlatformBranding')
+  })
+})
+
+describe('WLA-014 v3: Dashboard detects HTTP 207 partial write', () => {
+  it('D02 -- dashboard handleSave checks for status 207 before showing success', () => {
+    const dashSource = readFileSync(
+      resolve(process.cwd(), 'app/dashboard/branding/page.tsx'), 'utf-8'
+    )
+    // Dashboard must check brandRes.status === 207
+    expect(dashSource).toContain('brandRes.status === 207')
+    // Must throw an error (not set success message) on 207
+    expect(dashSource).toContain('Please try saving again')
+    // All settings saved must only appear AFTER the 207 check
+    const check207Pos = dashSource.indexOf('brandRes.status === 207')
+    const successPos = dashSource.indexOf("setMessage('All settings saved!')")
+    expect(check207Pos).toBeGreaterThan(0)
+    expect(successPos).toBeGreaterThan(check207Pos)
+  })
+
+  it('D03 -- dashboard does NOT show success when 207 partial write occurs', () => {
+    const dashSource = readFileSync(
+      resolve(process.cwd(), 'app/dashboard/branding/page.tsx'), 'utf-8'
+    )
+    // The 207 block must throw (converting to setError), not fall through to setMessage
+    const check207Block = dashSource.slice(
+      dashSource.indexOf('brandRes.status === 207'),
+      dashSource.indexOf("setMessage('All settings saved!')")
+    )
+    expect(check207Block).toContain('throw new Error')
+  })
+})
+
+describe('WLA-014 v3: Business identity is transitional (biz_ only for legacy)', () => {
+  it('ARCH01 -- resolution service documents biz_ as transitional, not permanent', () => {
+    const resolutionSource = readFileSync(
+      resolve(process.cwd(), 'lib/branding/resolution.ts'), 'utf-8'
+    )
+    // Must document that biz_ is transitional
+    expect(resolutionSource).toContain('TRANSITIONAL')
+    // Must show the preferred path uses Provider.businessId
+    expect(resolutionSource).toContain('Provider.businessId')
+    // Must not claim biz_ is the canonical identity model
+    expect(resolutionSource).not.toContain('biz_ is canonical')
   })
 })
