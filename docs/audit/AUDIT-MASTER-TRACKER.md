@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.01 (WLA-012 v7: REQ-2 upgraded to repository-wide audit (zero imports confirmed); REQ-3b documents manual recovery; REQ-3c now calls actual createBusinessFromTemplate(); 7 tests pass exit 0. Awaiting reviewer inspection.)
+**Version:** 6.02 (WLA-012 v8: recovery documentation corrected — no admin panel implication; operator-run script procedure documented; stale "inside a transaction" comment fixed in both loaders. Awaiting final review.)
 **Last Updated:** 2026-11-03
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  

@@ -37,18 +37,46 @@ The `Provider.businessType` field accepts multiple values, but only `INDIVIDUAL`
 
 ---
 
-## Registration Flow — Lazy Repair Invariant
+## Registration Flow — Manual Recovery
 
 At provider registration, `createBusinessFromTemplate()` runs **outside** the main `prisma.$transaction`. If it fails:
 
 - The User, Provider, and Subscription rows are committed (the transaction already succeeded)
 - The Business configuration rows may be absent
+- `Provider.businessId` will remain NULL (the relationship is set at the end of `createBusinessFromTemplate`)
 - The provider account is functional (bookings, payments, payouts all work)
-- Business configuration features (branding, custom domain) will be unavailable until manually repaired
+- Business configuration features (branding, custom domain, Business website) will be unavailable until manually repaired
 
-**Detection:** A provider with `businessType = 'DRIVING_SCHOOL'` or `'CORPORATE'` that has no corresponding `Business` row in `business-config-schema.prisma` is in a partially-initialised state.
+**Detection:** A Provider with no corresponding `Business` row is in a partially-initialised state. Query:
 
-**Repair:** Re-run `createBusinessFromTemplate(providerId)` via the admin panel or a one-off script.
+```sql
+SELECT p.id, p.name, p."businessId"
+FROM "Provider" p
+LEFT JOIN "Business" b ON b.id = p."businessId"
+WHERE p."businessId" IS NULL
+  AND EXISTS (
+    SELECT 1 FROM "Business" b2
+    WHERE b2.id = ('biz_' || p.id) AND b2."isActive" = true
+  );
+```
+
+**Repair (manual — no admin panel endpoint exists):**
+
+Recovery currently requires an operator-run script or engineering intervention. There is no admin panel or automated cron that triggers repair.
+
+To repair a specific Provider:
+
+1. Identify the affected Provider ID (see detection query above).
+2. Load the appropriate template config for the Provider's business type.
+3. Call `createBusinessFromTemplate(prisma, 'biz_' + providerId, providerId, config)`.
+   - The function uses `upsert` for Business records — safe to re-run without duplication.
+   - The `$executeRaw` sets `Provider.businessId` only if it is currently NULL — safe to re-run.
+4. Verify the relationship afterward:
+
+```sql
+SELECT id, "businessId" FROM "Provider" WHERE id = '<providerId>';
+-- Expected: businessId = 'biz_<providerId>'
+```
 
 ---
 
