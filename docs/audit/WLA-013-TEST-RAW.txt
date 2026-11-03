@@ -14,12 +14,16 @@
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA01 — custom-domain page exports generateMetadata
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA02 — generateMetadata resolves Provider with verified customDomain
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA03 — generateMetadata resolves verified BusinessDomain as fallback
- [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA04 — generateMetadata returns tenant-specific title (not DriveBook)
- [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA05 — generateMetadata sets canonical to the custom domain (not drivebook.com.au)
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA04 — generateMetadata returns absolute title to prevent root template
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA05 — generateMetadata sets canonical to the custom domain
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA06 — generateMetadata returns OpenGraph with tenant siteName
- [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA07 — generateMetadata does not fall back to DriveBook metadata for unknown domains
- [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA08 — generateMetadata checks isOwnDomain defensively
- [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA09 — generateMetadata only uses verified domain records
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA07 — generateMetadata neutralises inherited DriveBook keywords
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA08 — generateMetadata neutralises inherited DriveBook identity fields
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA09 — generateMetadata sets metadataBase to custom domain (not drivebook.com.au)
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA10 — generateMetadata suppresses DriveBook favicon inheritance
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA11 — noTenantMetadata helper overrides all inherited fields for unknown domains
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA12 — generateMetadata checks isOwnDomain defensively
+ [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013 Part A: Custom-domain page — generateMetadata[2m > [22mA13 — generateMetadata only uses verified domain records
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC01 — main DriveBook domain is classified as own domain
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC02 — DriveBook subdomain is classified as own domain
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC03 — Vercel preview is classified as own domain
@@ -29,8 +33,8 @@
  [32m✓[39m __tests__/unit/wla-013-metadata-isolation.test.ts[2m > [22mWLA-013: isOwnDomain classification for layout conditional[2m > [22mC07 — host with port is handled
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m22 passed[39m[22m[90m (22)[39m
-[2m   Start at [22m 17:18:46
-[2m   Duration [22m 724ms[2m (transform 64ms, setup 48ms, collect 70ms, tests 7ms, environment 0ms, prepare 250ms)[22m
+[2m      Tests [22m [1m[32m26 passed[39m[22m[90m (26)[39m
+[2m   Start at [22m 17:51:21
+[2m   Duration [22m 616ms[2m (transform 60ms, setup 47ms, collect 80ms, tests 7ms, environment 0ms, prepare 190ms)[22m
 
 VITEST_EXIT:0 
