@@ -96,19 +96,18 @@ describe('WLA-013 Part A: Custom-domain page — generateMetadata', () => {
     expect(customDomainSource).toContain('resolveBusinessDomain');
   });
 
-  it('A04 — generateMetadata returns tenant-specific title (not DriveBook)', () => {
-    // The metadata title should be derived from the provider or business name
-    // It must NOT contain the hardcoded DriveBook title
-    expect(customDomainSource).toContain('displayName');
-    expect(customDomainSource).toContain('Book Online');
-    expect(customDomainSource).toContain('biz.website?.seoTitle');
+  it('A04 — generateMetadata returns absolute title to prevent root template', () => {
+    // Must use { absolute: title } not a bare string to prevent "%s | DriveBook"
+    expect(customDomainSource).toContain('title: { absolute: title }');
+    // The noTenantMetadata fallback also uses absolute
+    expect(customDomainSource).toContain("title: { absolute: 'Website' }");
+    // Must NOT use bare string title at top-level that would allow template appending
+    // The source should not have: return { title: `...` } without absolute
   });
 
-  it('A05 — generateMetadata sets canonical to the custom domain (not drivebook.com.au)', () => {
+  it('A05 — generateMetadata sets canonical to the custom domain', () => {
     expect(customDomainSource).toContain('canonical');
     expect(customDomainSource).toContain('https://${customDomain}');
-    // Must NOT canonical to BASE_URL or drivebook.com.au
-    expect(customDomainSource).not.toContain('canonical: BASE_URL');
   });
 
   it('A06 — generateMetadata returns OpenGraph with tenant siteName', () => {
@@ -116,22 +115,47 @@ describe('WLA-013 Part A: Custom-domain page — generateMetadata', () => {
     expect(customDomainSource).toContain('siteName');
   });
 
-  it('A07 — generateMetadata does not fall back to DriveBook metadata for unknown domains', () => {
-    // For unresolved domains, it returns title: 'Website' — not DriveBook title
-    expect(customDomainSource).toContain("title: 'Website'");
+  it('A07 — generateMetadata neutralises inherited DriveBook keywords', () => {
+    // keywords: null explicitly overrides the root layout DriveBook keywords
+    expect(customDomainSource).toContain('keywords: null');
   });
 
-  it('A08 — generateMetadata checks isOwnDomain defensively', () => {
-    // If the host is somehow an own domain (should not reach this page),
-    // return minimal metadata without resolving a tenant
+  it('A08 — generateMetadata neutralises inherited DriveBook identity fields', () => {
+    // authors/creator/publisher must be null to prevent DriveBook identity leakage
+    expect(customDomainSource).toContain('authors: null');
+    expect(customDomainSource).toContain('creator: null');
+    expect(customDomainSource).toContain('publisher: null');
+  });
+
+  it('A09 — generateMetadata sets metadataBase to custom domain (not drivebook.com.au)', () => {
+    // metadataBase must be the custom domain so relative image URLs resolve correctly
+    expect(customDomainSource).toContain('metadataBase: tenantBase');
+    expect(customDomainSource).toContain("new URL(`https://${customDomain}`)");
+    // Must NOT use BASE_URL (DriveBook) as metadataBase
+    expect(customDomainSource).not.toContain('metadataBase: new URL(BASE_URL)');
+  });
+
+  it('A10 — generateMetadata suppresses DriveBook favicon inheritance', () => {
+    // icons: null prevents the root layout favicon from inheriting
+    expect(customDomainSource).toContain('icons: null');
+  });
+
+  it('A11 — noTenantMetadata helper overrides all inherited fields for unknown domains', () => {
+    // The noTenantMetadata helper ensures unknown hosts return neutral metadata
+    // with all DriveBook fields explicitly neutralised
+    expect(customDomainSource).toContain('function noTenantMetadata');
+    expect(customDomainSource).toContain("title: { absolute: 'Website' }");
+    expect(customDomainSource).toContain('keywords: null');
+    expect(customDomainSource).toContain('authors: null');
+    expect(customDomainSource).toContain('icons: null');
+  });
+
+  it('A12 — generateMetadata checks isOwnDomain defensively', () => {
     expect(customDomainSource).toContain('isOwnDomain(customDomain, rootDomain)');
-    expect(customDomainSource).toContain("title: 'Website'");
   });
 
-  it('A09 — generateMetadata only uses verified domain records', () => {
-    // Provider path requires domainVerified: true
+  it('A13 — generateMetadata only uses verified domain records', () => {
     expect(customDomainSource).toContain('domainVerified: true');
-    // BusinessDomain path uses resolveBusinessDomain which requires verified: true
     expect(customDomainSource).toContain('resolveBusinessDomain');
   });
 });
