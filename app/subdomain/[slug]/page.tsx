@@ -171,19 +171,24 @@ export default async function SubdomainBookingPage({
     subStatus === 'ACTIVE' ||
     (subStatus === 'TRIAL' && !trialExpired);
 
-  // White-label branding is a subscription entitlement, not an account-structure flag.
-  // Architecture decision 2026-10-27: PREMIUM includes full white-label for a single
-  // provider. PRO and STUDIO also have branding access. Future BUSINESS-tier inheritance
-  // is not implied until a separate feature matrix is approved.
+  // WLA-014 FIX: resolve branding from canonical BusinessBranding store.
+  // Previously this renderer read Provider.brandLogo/brandColorPrimary/etc directly.
+  // resolveProviderBranding() reads BusinessBranding first and falls back to Provider
+  // fields only when no BusinessBranding record exists (pre-migration providers).
+  const { resolveProviderBranding } = await import('@/lib/branding/resolution')
+  const canonicalBranding = await resolveProviderBranding(instructor.id)
+
   const isBrandingEligible =
     instructor.subscriptionTier === 'PRO' ||
     instructor.subscriptionTier === 'STUDIO' ||
     instructor.subscriptionTier === 'PREMIUM';
-  const hasBranding = isBrandingEligible && instructor.showBrandingOnBookingPage;
-  const brandLogo = hasBranding ? instructor.brandLogo : null;
+  // showPlatformBranding=false means the provider wants their own branding shown
+  // (canonical store uses the inverted sense compared to Provider.showBrandingOnBookingPage)
+  const hasBranding = isBrandingEligible && !canonicalBranding.showPlatformBranding;
+  const brandLogo = hasBranding ? canonicalBranding.logo : null;
   // Colors apply regardless of tier — fall back to defaults if not set
-  const primary = instructor.brandColorPrimary || '#3B82F6';
-  const secondary = instructor.brandColorSecondary || '#10B981';
+  const primary = canonicalBranding.primaryColour || '#3B82F6';
+  const secondary = canonicalBranding.secondaryColour || '#10B981';
 
   // All tiers: optional display/trading name shown in place of personal name on all student-facing surfaces
   // Uses the centralised getDisplayName utility — never use instructor.name directly here.

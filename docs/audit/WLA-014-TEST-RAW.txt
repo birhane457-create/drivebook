@@ -17,10 +17,17 @@
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 S: Source-level verification[2m > [22mS03 -- resolution service defines BusinessBranding as authoritative source
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 S: Source-level verification[2m > [22mS04 -- resolution service does not invert showPlatformBranding in upsertBusinessBranding
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 S03-corrected: resolution service authoritative source[2m > [22mS03b -- resolution service source field values are present
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-A: Business creation preserves paymentModel from Provider[2m > [22mA01 -- upsertBusinessBranding source derives paymentModel from Provider.businessModel
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-C: Driving-specific renderer uses canonical BusinessBranding[2m > [22mC01 -- subdomain page imports resolveProviderBranding
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-C: Driving-specific renderer uses canonical BusinessBranding[2m > [22mC02 -- subdomain page no longer reads Provider branding fields directly for rendering
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-D: Partial-write is surfaced to the caller[2m > [22mD01 -- instructor branding route returns 207 on BusinessBranding upsert failure
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-E: Inversion comment is accurate[2m > [22mE01 -- upsertBusinessBranding comment says caller applies inversion (not the helper)
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-E: Inversion comment is accurate[2m > [22mE02 -- instructor route applies inversion before calling upsertBusinessBranding
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 Issue-D corrected: 207 partial-write path exists[2m > [22mD01b -- instructor route has explicit 207 response for BusinessBranding upsert failure
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m12 passed[39m[22m[90m (12)[39m
-[2m   Start at [22m 22:27:32
-[2m   Duration [22m 985ms[2m (transform 81ms, setup 53ms, collect 143ms, tests 222ms, environment 0ms, prepare 202ms)[22m
+[2m      Tests [22m [1m[32m19 passed[39m[22m[90m (19)[39m
+[2m   Start at [22m 23:50:24
+[2m   Duration [22m 1.12s[2m (transform 84ms, setup 49ms, collect 149ms, tests 215ms, environment 0ms, prepare 268ms)[22m
 
 VITEST_EXIT:0 

@@ -167,6 +167,11 @@ export async function PUT(req: NextRequest) {
     // WLA-014 FIX: Upsert BusinessBranding (canonical store) from Provider write.
     // Replaces V-07 conditional sync (which only updated if record existed).
     // BusinessBranding is now the authoritative store; create it if absent.
+    // The caller (this route) performs the showBrandingOnBookingPage → showPlatformBranding
+    // inversion BEFORE calling upsertBusinessBranding (inversion must not be applied twice).
+    // WLA-014 Issue D: if the BusinessBranding upsert fails, report the error to the caller
+    // rather than silently returning success. The Provider update already succeeded,
+    // so the response reflects a partial-write state that the client can retry.
     try {
       const { upsertBusinessBranding } = await import('@/lib/branding/resolution')
       await upsertBusinessBranding(instructor.id, {
@@ -174,14 +179,21 @@ export async function PUT(req: NextRequest) {
         ...(brandColorPrimary !== undefined && { primaryColour: brandColorPrimary || '#3B82F6' }),
         ...(brandColorSecondary !== undefined && { secondaryColour: brandColorSecondary || null }),
         ...(customSlug !== undefined && { customSlug: customSlug || null }),
-        // Inversion applied once in upsertBusinessBranding via showPlatformBranding field.
+        // Inversion applied here (caller responsibility per upsertBusinessBranding contract).
         ...(showBrandingOnBookingPage !== undefined && {
           showPlatformBranding: showBrandingOnBookingPage !== true,
         }),
       })
     } catch (syncErr) {
-      // Log but don't fail — Provider update already succeeded.
-      console.error('[WLA-014] BusinessBranding upsert error:', syncErr instanceof Error ? syncErr.message : String(syncErr))
+      // BusinessBranding write failed after Provider write succeeded.
+      // Return a partial-success response so the client knows to retry.
+      console.error('[WLA-014] BusinessBranding upsert failed:', syncErr instanceof Error ? syncErr.message : String(syncErr))
+      return NextResponse.json({
+        success: false,
+        partialWrite: true,
+        branding: updated,
+        error: 'Branding preferences saved to your profile, but the shared configuration could not be updated. Please try saving again.',
+      }, { status: 207 }) // 207 Multi-Status: partial success
     }
 
     return NextResponse.json({ success: true, branding: updated });

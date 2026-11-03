@@ -255,3 +255,98 @@ describe('WLA-014 S03-corrected: resolution service authoritative source', () =>
     expect(resolutionSource).toContain('showPlatformBranding: !provider.showBrandingOnBookingPage')
   })
 })
+
+// Issue A: paymentModel preservation
+describe('WLA-014 Issue-A: Business creation preserves paymentModel from Provider', () => {
+  it('A01 -- upsertBusinessBranding source derives paymentModel from Provider.businessModel', () => {
+    // The upsertBusinessBranding source must NOT hardcode paymentModel: 'saas'.
+    // It must read the Provider's businessModel field and map it correctly.
+    const resolutionSource = readFileSync(
+      resolve(process.cwd(), 'lib/branding/resolution.ts'), 'utf-8'
+    )
+    expect(resolutionSource).not.toContain("paymentModel: 'saas'")
+    expect(resolutionSource).toContain("paymentModel")
+    // Must derive from Provider field, not hardcode
+    expect(resolutionSource).toContain('businessModel')
+    expect(resolutionSource).toContain("'marketplace'")
+  })
+})
+
+// Issue C: driving-specific renderer uses canonical branding
+describe('WLA-014 Issue-C: Driving-specific renderer uses canonical BusinessBranding', () => {
+  it('C01 -- subdomain page imports resolveProviderBranding', () => {
+    const subdomainSource = readFileSync(
+      resolve(process.cwd(), 'app/subdomain/[slug]/page.tsx'), 'utf-8'
+    )
+    expect(subdomainSource).toContain('resolveProviderBranding')
+    expect(subdomainSource).toContain('WLA-014 FIX')
+  })
+
+  it('C02 -- subdomain page no longer reads Provider branding fields directly for rendering', () => {
+    const subdomainSource = readFileSync(
+      resolve(process.cwd(), 'app/subdomain/[slug]/page.tsx'), 'utf-8'
+    )
+    // The canonicalBranding object must be used, not instructor.brandLogo directly
+    expect(subdomainSource).toContain('canonicalBranding.logo')
+    expect(subdomainSource).toContain('canonicalBranding.primaryColour')
+    expect(subdomainSource).toContain('canonicalBranding.secondaryColour')
+    expect(subdomainSource).toContain('canonicalBranding.showPlatformBranding')
+    // Must NOT use old direct reads for branding render decisions
+    expect(subdomainSource).not.toContain('instructor.showBrandingOnBookingPage')
+    expect(subdomainSource).not.toContain('instructor.brandLogo')
+    expect(subdomainSource).not.toContain('instructor.brandColorPrimary')
+    expect(subdomainSource).not.toContain('instructor.brandColorSecondary')
+  })
+})
+
+// Issue D: partial-write surfacing
+describe('WLA-014 Issue-D: Partial-write is surfaced to the caller', () => {
+  it('D01 -- instructor branding route returns 207 on BusinessBranding upsert failure', () => {
+    const routeSource = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/branding/route.ts'), 'utf-8'
+    )
+    // Must NOT silently swallow the error
+    expect(routeSource).toContain('partialWrite: true') // D01: 207 path exists
+    // Must return a non-200 status on failure
+    expect(routeSource).toContain('partialWrite: true')
+    expect(routeSource).toContain('status: 207')
+  })
+})
+
+// Issue E: inversion comment correctness
+describe('WLA-014 Issue-E: Inversion comment is accurate', () => {
+  it('E01 -- upsertBusinessBranding comment says caller applies inversion (not the helper)', () => {
+    const resolutionSource = readFileSync(
+      resolve(process.cwd(), 'lib/branding/resolution.ts'), 'utf-8'
+    )
+    // The corrected comment states the caller is responsible for inversion
+    expect(resolutionSource).toContain('CALLER is responsible')
+    // The old wrong comment (inversion applied inside the helper) must be gone
+    expect(resolutionSource).not.toContain('The inversion is applied once here')
+  })
+
+  it('E02 -- instructor route applies inversion before calling upsertBusinessBranding', () => {
+    const routeSource = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/branding/route.ts'), 'utf-8'
+    )
+    // The inversion is done in the instructor route, not in the helper
+    expect(routeSource).toContain('showBrandingOnBookingPage !== true')
+    expect(routeSource).toContain('Inversion applied here')
+  })
+})
+
+// D01 fix: verify 207 path exists (not that success:true is absent from the whole file)
+describe('WLA-014 Issue-D corrected: 207 partial-write path exists', () => {
+  it('D01b -- instructor route has explicit 207 response for BusinessBranding upsert failure', () => {
+    const routeSource = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/branding/route.ts'), 'utf-8'
+    )
+    // The catch block must return 207 with partialWrite flag
+    expect(routeSource).toContain('partialWrite: true')
+    expect(routeSource).toContain('status: 207')
+    // And the normal success path must still return success: true
+    expect(routeSource).toContain('success: true, branding: updated')
+    // The failure catch must not silently continue to the success return
+    expect(routeSource).toContain('[WLA-014] BusinessBranding upsert failed')
+  })
+})
