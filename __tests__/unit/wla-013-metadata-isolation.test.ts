@@ -140,14 +140,29 @@ describe('WLA-013 Part A: Custom-domain page — generateMetadata', () => {
     expect(customDomainSource).toContain('icons: null');
   });
 
-  it('A11 — noTenantMetadata helper overrides all inherited fields for unknown domains', () => {
-    // The noTenantMetadata helper ensures unknown hosts return neutral metadata
-    // with all DriveBook fields explicitly neutralised
+  it('A11 — noTenantMetadata helper overrides ALL inherited DriveBook fields', () => {
+    // The noTenantMetadata helper must neutralise every inherited DriveBook field
+    // to prevent leakage when the domain is unresolved or unknown.
+    // All fields verified as null-accepting per Next.js Metadata type.
     expect(customDomainSource).toContain('function noTenantMetadata');
     expect(customDomainSource).toContain("title: { absolute: 'Website' }");
+    // description: null (not undefined — undefined is not a reliable override)
+    expect(customDomainSource).toContain('description: null');
     expect(customDomainSource).toContain('keywords: null');
     expect(customDomainSource).toContain('authors: null');
     expect(customDomainSource).toContain('icons: null');
+    // openGraph: null — prevents DriveBook OG site name/image/title inheriting
+    expect(customDomainSource).toContain('openGraph: null');
+    // twitter: null — prevents DriveBook Twitter card/image/title inheriting
+    expect(customDomainSource).toContain('twitter: null');
+    // alternates: null — prevents DriveBook canonical URL inheriting
+    expect(customDomainSource).toContain('alternates: null');
+    // Must NOT use description: undefined (not a reliable override)
+    const noTenantBlock = customDomainSource.slice(
+      customDomainSource.indexOf('function noTenantMetadata'),
+      customDomainSource.indexOf('function noTenantMetadata') + 400
+    );
+    expect(noTenantBlock).not.toContain('description: undefined');
   });
 
   it('A12 — generateMetadata checks isOwnDomain defensively', () => {

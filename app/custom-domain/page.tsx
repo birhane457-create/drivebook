@@ -154,17 +154,22 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /**
  * Minimal metadata for unresolved/unknown domains.
- * Overrides inherited DriveBook fields without exposing tenant information.
+ * Explicitly overrides all inherited DriveBook fields — null is type-safe
+ * per Next.js Metadata type (openGraph, twitter, alternates, description
+ * all accept null per metadata-interface.d.ts).
  */
 function noTenantMetadata(): Metadata {
   return {
     title: { absolute: 'Website' },
-    description: undefined,
+    description: null,
     keywords: null,
     authors: null,
     creator: null,
     publisher: null,
     icons: null,
+    openGraph: null,
+    twitter: null,
+    alternates: null,
   };
 }
 
