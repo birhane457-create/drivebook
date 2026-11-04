@@ -9,12 +9,13 @@
  *     compatibility fields during migration — not independent authorities.
  *   - Both renderers (subdomain + custom-domain) use this service.
  *
- * Business identity resolution order (WLA-014 v3):
+ * Business identity resolution order (WLA-014 v4):
  *   1. Provider.businessId (explicit FK relationship — canonical for new records)
- *   2. Legacy biz_${providerId} convention (migration fallback for existing records)
+ *   2. Legacy biz_${providerId} convention (fallback for EXISTING migrated records only)
  *
- * The biz_ convention is TRANSITIONAL only. New Business records should use
- * independently generated IDs persisted via Provider.businessId.
+ * The biz_ convention is TRANSITIONAL only. New Business records receive
+ * independent auto-generated IDs (cuid) and are linked via Provider.businessId.
+ * biz_ is never used for new record creation.
  *
  * Branding resolution order:
  *   1. BusinessBranding via resolved businessId — canonical.
@@ -182,11 +183,13 @@ export async function resolveProviderBranding(providerId: string): Promise<Resol
  * Creates the record if it does not exist (replacing the V-07 conditional sync).
  * Also creates the parent Business record if absent (satisfies FK constraint).
  *
- * Business ID resolution (WLA-014 v3):
+ * Business ID resolution (WLA-014 v4):
  *   1. Provider.businessId (explicit FK — use when present)
- *   2. biz_${providerId} legacy convention (fallback for existing migrated records)
- *   3. Create a new Business with biz_ ID only when no explicit relationship exists
- *      and no legacy record was found — this is the transitional creation path.
+ *   2. biz_${providerId} legacy convention (fallback for EXISTING migrated records only)
+ *   3. Create a new Business with an INDEPENDENT auto-generated ID (cuid).
+ *      New Business records must NOT use the biz_ convention — that is TRANSITIONAL
+ *      only, reserved for pre-existing legacy records. The new ID is persisted to
+ *      Provider.businessId so future lookups use the explicit FK.
  *
  * Field name mapping (Provider → BusinessBranding):
  *   brandLogo              → logo
@@ -216,13 +219,9 @@ export async function upsertBusinessBranding(
   let bizId = await resolveBusinessId(providerId)
 
   if (!bizId) {
-    // No existing Business relationship — create one using the transitional biz_ convention.
-    // This is the legacy creation path for providers without an explicit FK yet.
-    //
-    // IMPORTANT: paymentModel is derived from Provider.businessModel (the onboarding value).
-    // A MARKETPLACE provider must NOT receive a 'saas' Business.
-    // Supported mappings: MARKETPLACE → 'marketplace', SAAS/anything-else → 'saas'.
-    // Unknown values (neither MARKETPLACE nor SAAS) also fall back to 'saas' with a warning.
+    // No existing Business relationship — create one with an INDEPENDENT ID.
+    // Do NOT use the biz_ convention for new records. That is TRANSITIONAL,
+    // reserved for pre-existing legacy records only.
     const provider = await prisma.provider.findUnique({
       where: { id: providerId },
       select: {
@@ -232,53 +231,54 @@ export async function upsertBusinessBranding(
       },
     }) as any
 
-    const legacyBizId = `biz_${providerId}`
-
     const SUPPORTED_MODELS = ['MARKETPLACE', 'SAAS', 'marketplace', 'saas']
     if (provider?.businessModel && !SUPPORTED_MODELS.includes(provider.businessModel)) {
       console.warn(`[WLA-014] Unexpected businessModel '${provider.businessModel}' for Provider ${providerId}; defaulting to 'saas'`)
     }
     const paymentModel = provider?.businessModel === 'MARKETPLACE' ? 'marketplace' : 'saas'
 
-    try {
-      await (prisma as any).business.create({
-        data: {
-          id: legacyBizId,
-          name: provider?.businessName ?? provider?.name ?? 'My Business',
-          supportEmail: provider?.user?.email ?? `noreply@${legacyBizId}.local`,
-          timezone: 'Australia/Perth',
-          paymentModel,
-          isActive: true,
-        },
-      })
-    } catch (createErr: any) {
-      if (createErr?.code === 'P2002') {
-        // Duplicate key — Business was concurrently created. Re-read to confirm it exists.
-        const existing = await (prisma as any).business.findUnique({
-          where: { id: legacyBizId },
-          select: { id: true },
-        })
-        if (!existing) {
-          // Truly unexpected — creation failed and the record doesn't exist
-          throw new Error(`[WLA-014] Business creation failed and record not found: ${legacyBizId}`)
-        }
-        // Concurrent creation race — safe to continue
-      } else {
-        throw createErr  // propagate non-duplicate errors
-      }
-    }
-
-    bizId = legacyBizId
+    // Create Business with auto-generated ID (no explicit id field — Prisma uses @default(cuid()))
+    const newBusiness = await (prisma as any).business.create({
+      data: {
+        name: provider?.businessName ?? provider?.name ?? 'My Business',
+        supportEmail: provider?.user?.email ?? `noreply@drivebook.local`,
+        timezone: 'Australia/Perth',
+        paymentModel,
+        isActive: true,
+      },
+    })
+    bizId = newBusiness.id
 
     // Link the Provider to its newly created Business via the explicit FK.
-    // This ensures future lookups use Provider.businessId rather than the biz_ convention.
-    await prisma.$executeRaw`
+    // The WHERE "businessId" IS NULL clause ensures only the first concurrent
+    // request wins; subsequent requests find the FK already set.
+    const rowsAffected = await prisma.$executeRaw`
       UPDATE "Provider" SET "businessId" = ${bizId}
       WHERE id = ${providerId} AND "businessId" IS NULL
-    `.catch(err => {
-      // Non-fatal: if this fails, the biz_ convention still works as fallback
-      console.warn(`[WLA-014] Could not set Provider.businessId for ${providerId}:`, err instanceof Error ? err.message : String(err))
-    })
+    `
+
+    if (rowsAffected === 0) {
+      // A concurrent request already set Provider.businessId — re-read to get the actual value.
+      const reRead = await prisma.provider.findUnique({
+        where: { id: providerId },
+        select: { businessId: true } as any,
+      }) as any
+
+      if (reRead?.businessId) {
+        // Clean up the orphaned Business we just created (the concurrent request's Business wins)
+        await (prisma as any).business.delete({ where: { id: bizId } }).catch(() => {})
+        bizId = reRead.businessId
+      } else {
+        // Provider.businessId is still null — this is unexpected and means the FK
+        // assignment failed without a concurrent setter. Log at error level so the
+        // failure is observable and recoverable (admin can run the SQL manually).
+        console.error(
+          `[WLA-014] Failed to set Provider.businessId for ${providerId}. ` +
+          `Business ${bizId} was created but is not linked. ` +
+          `Manual recovery: UPDATE "Provider" SET "businessId" = '${bizId}' WHERE id = '${providerId}'`
+        )
+      }
+    }
   }
 
   await (prisma as any).businessBranding.upsert({
