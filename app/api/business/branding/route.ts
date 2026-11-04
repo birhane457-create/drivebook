@@ -94,30 +94,42 @@ export async function PUT(req: NextRequest) {
     // table does not have a customDomain column. Extract it before upsert.
     const { customDomain: _domainForProvider, ...brandingData } = parsed.data;
 
-    const branding = await (prisma as any).businessBranding.upsert({
-      where: { businessId: bizId },
-      create: { businessId: bizId, ...brandingData },
-      update: brandingData,
-    })
+    // WLA-014-SLUG: Wrap the two writes in a transaction so a failure on the
+    // Provider mirror cannot leave BusinessBranding and Provider inconsistent.
+    // If the slug is concurrently claimed between the check and the write, P2002
+    // is caught by the outer handler and surfaced as 409 Conflict.
+    let branding: any
+    await prisma.$transaction(async (tx) => {
+      branding = await (tx as any).businessBranding.upsert({
+        where: { businessId: bizId },
+        create: { businessId: bizId, ...brandingData },
+        update: brandingData,
+      })
 
-    // Mirror back to Instructor for backward compatibility
-    await prisma.provider.updateMany({
-      where: { id: session!.user!.providerId },
-      data: {
-        brandLogo:            parsed.data.logo          ?? undefined,
-        brandColorPrimary:    parsed.data.primaryColour ?? undefined,
-        brandColorSecondary:  parsed.data.secondaryColour ?? undefined,
-        customSlug:           parsed.data.customSlug    ?? undefined,
-        // V-03 FIX: mirror customDomain to Provider (was previously dropped by Zod).
-        // domainVerified is NOT set here — verification still requires DNS check
-        // via /api/instructor/domain/verify.
-        customDomain:         parsed.data.customDomain  ?? undefined,
-        showBrandingOnBookingPage: parsed.data.showPlatformBranding === false,
-      },
+      // Mirror back to Provider for backward compatibility
+      await tx.provider.updateMany({
+        where: { id: session!.user!.providerId },
+        data: {
+          brandLogo:            parsed.data.logo          ?? undefined,
+          brandColorPrimary:    parsed.data.primaryColour ?? undefined,
+          brandColorSecondary:  parsed.data.secondaryColour ?? undefined,
+          customSlug:           parsed.data.customSlug    ?? undefined,
+          // V-03 FIX: mirror customDomain to Provider (was previously dropped by Zod).
+          // domainVerified is NOT set here — verification still requires DNS check
+          // via /api/instructor/domain/verify.
+          customDomain:         parsed.data.customDomain  ?? undefined,
+          showBrandingOnBookingPage: parsed.data.showPlatformBranding === false,
+        },
+      })
     })
 
     return NextResponse.json({ success: true, branding })
   } catch (err) {
+    // WLA-014-SLUG: P2002 means the unique index caught a concurrent slug claim.
+    // Return 409 Conflict rather than a generic 500.
+    if ((err as any)?.code === 'P2002' && (err as any)?.meta?.target?.toString().includes('customSlug')) {
+      return NextResponse.json({ error: 'This URL slug is already taken. Please choose another.' }, { status: 409 })
+    }
     console.error('[PUT /api/business/branding]', err)
     return NextResponse.json({ error: 'Failed to update branding' }, { status: 500 })
   }
