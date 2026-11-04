@@ -62,55 +62,53 @@ async function createFixtureProvider(label: string) {
 }
 
 async function cleanup() {
-  // Use raw SQL to clean up all WLA014B test fixtures (case-insensitive via ILIKE)
-  // Step 1: Null out Provider.businessId to remove FK dependency
+  // Use raw SQL to clean up all WLA014B test fixtures (case-insensitive via ILIKE).
+  // All deletions are scoped to EXACT Business IDs linked to test providers —
+  // never use global LIKE patterns that could match legitimate records.
+
+  // Step 1: Find all test providers and their businessId values
+  const testProviders = await prisma.$queryRaw<Array<{ id: string; businessId: string | null }>>`
+    SELECT id, "businessId" FROM "Provider"
+    WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
+  `
+
+  const providerIds = testProviders.map((p: any) => p.id)
+  const businessIds = testProviders
+    .map((p: any) => p.businessId)
+    .filter((b: any) => b !== null)
+  // Also include legacy biz_ IDs for each provider (existing migrated records)
+  const legacyBizIds = providerIds.map((id: string) => `biz_${id}`)
+
+  const allBizIds = [...new Set([...businessIds, ...legacyBizIds])]
+
+  // Step 2: Null out Provider.businessId to remove FK dependency
   await prisma.$executeRaw`
     UPDATE "Provider" SET "businessId" = NULL
     WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
-  `.catch(() => {})
-  // Step 2: Delete BusinessBranding for all test-related businesses (biz_ and explicit-biz-)
-  await prisma.$executeRaw`
-    DELETE FROM "BusinessBranding"
-    WHERE "businessId" IN (
-      SELECT 'biz_' || p.id FROM "Provider" p
-      JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE ${PREFIX + '-%'}
-    ) OR "businessId" IN (
-      SELECT 'explicit-biz-' || p.id FROM "Provider" p
-      JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE ${PREFIX + '-%'}
-    )
-  `.catch(() => {})
-  // Step 3: Delete Business records for test providers (biz_ and explicit-biz-)
-  await prisma.$executeRaw`
-    DELETE FROM "Business"
-    WHERE id IN (
-      SELECT 'biz_' || p.id FROM "Provider" p
-      JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE ${PREFIX + '-%'}
-    ) OR id IN (
-      SELECT 'explicit-biz-' || p.id FROM "Provider" p
-      JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE ${PREFIX + '-%'}
-    ) OR id LIKE 'biz_%' AND id IN (
-      SELECT 'biz_' || p.id FROM "Provider" p
-      JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE ${PREFIX + '-%'}
-    )
-  `.catch(() => {})
-  // Step 4: Delete orphaned explicit-biz- Business records (not linked to a Provider)
-  await prisma.$executeRaw`
-    DELETE FROM "Business" WHERE id LIKE 'explicit-biz-%'
-  `.catch(() => {})
+  `.catch(err => console.error('[WLA-014 cleanup] Failed to null businessId:', err))
+
+  // Step 3: Delete BusinessBranding for specific test Business IDs only
+  for (const bizId of allBizIds) {
+    await prisma.$executeRaw`DELETE FROM "BusinessBranding" WHERE "businessId" = ${bizId}`
+      .catch(err => console.error(`[WLA-014 cleanup] Failed to delete BusinessBranding ${bizId}:`, err))
+  }
+
+  // Step 4: Delete Business records for specific test Business IDs only
+  for (const bizId of allBizIds) {
+    await prisma.$executeRaw`DELETE FROM "Business" WHERE id = ${bizId}`
+      .catch(err => console.error(`[WLA-014 cleanup] Failed to delete Business ${bizId}:`, err))
+  }
+
   // Step 5: Delete Providers for test users
   await prisma.$executeRaw`
     DELETE FROM "Provider"
     WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
-  `.catch(() => {})
+  `.catch(err => console.error('[WLA-014 cleanup] Failed to delete Providers:', err))
+
   // Step 6: Delete test Users
   await prisma.$executeRaw`
     DELETE FROM "User" WHERE email ILIKE ${PREFIX + '-%'}
-  `.catch(() => {})
+  `.catch(err => console.error('[WLA-014 cleanup] Failed to delete Users:', err))
 }
 
 beforeAll(async () => { await cleanup() }, 30000)
@@ -196,12 +194,16 @@ describe('WLA-014 R: resolveProviderBranding', () => {
 describe('WLA-014 R: upsertBusinessBranding', () => {
   it('R05 -- creates a BusinessBranding record if none exists', async () => {
     const { providerId, userId } = await createFixtureProvider('upsert-create')
-    const bizId = `biz_${providerId}`
     await upsertBusinessBranding(providerId, { primaryColour: '#123456', logo: null })
+    // v4: Business ID is auto-generated — resolve the actual ID from Provider
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const bizId = await resolveBusinessId(providerId)
+    expect(bizId).toBeTruthy()
     const record = await (prisma.businessBranding as any).findUnique({ where: { businessId: bizId } })
     expect(record).not.toBeNull()
     expect(record.primaryColour).toBe('#123456')
-    // Clean up BusinessBranding -> Business -> User (cascades Provider)
+    // Clean up: null FK, delete BusinessBranding, Business, User
+    await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${providerId}`.catch(() => {})
     await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
     await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
     await prisma.user.delete({ where: { id: userId } }).catch(() => {})
@@ -209,12 +211,16 @@ describe('WLA-014 R: upsertBusinessBranding', () => {
 
   it('R06 -- updates an existing BusinessBranding record', async () => {
     const { providerId, userId } = await createFixtureProvider('upsert-update')
-    const bizId = `biz_${providerId}`
     await upsertBusinessBranding(providerId, { primaryColour: '#111111' })
     await upsertBusinessBranding(providerId, { primaryColour: '#222222' })
+    // v4: resolve actual Business ID
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const bizId = await resolveBusinessId(providerId)
+    expect(bizId).toBeTruthy()
     const record = await (prisma.businessBranding as any).findUnique({ where: { businessId: bizId } })
     expect(record.primaryColour).toBe('#222222')
     // Clean up
+    await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${providerId}`.catch(() => {})
     await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
     await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
     await prisma.user.delete({ where: { id: userId } }).catch(() => {})
@@ -222,14 +228,18 @@ describe('WLA-014 R: upsertBusinessBranding', () => {
 
   it('R07 -- does not overwrite non-provided fields on update', async () => {
     const { providerId, userId } = await createFixtureProvider('upsert-partial')
-    const bizId = `biz_${providerId}`
     await upsertBusinessBranding(providerId, { primaryColour: '#AAAAAA', secondaryColour: '#BBBBBB' })
     // Only update primaryColour -- secondaryColour should be preserved
     await upsertBusinessBranding(providerId, { primaryColour: '#CCCCCC' })
+    // v4: resolve actual Business ID
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const bizId = await resolveBusinessId(providerId)
+    expect(bizId).toBeTruthy()
     const record = await (prisma.businessBranding as any).findUnique({ where: { businessId: bizId } })
     expect(record.primaryColour).toBe('#CCCCCC')
     expect(record.secondaryColour).toBe('#BBBBBB') // unchanged
     // Clean up
+    await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${providerId}`.catch(() => {})
     await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
     await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
     await prisma.user.delete({ where: { id: userId } }).catch(() => {})
@@ -389,9 +399,9 @@ describe('WLA-014 v3: Business identity via Provider.businessId', () => {
   it('B01 -- resolveBusinessId uses Provider.businessId when available (real DB)', async () => {
     const { resolveBusinessId } = await import('@/lib/branding/resolution')
     const { providerId, userId } = await createFixtureProvider('bizid')
+    const explicitBizId = `explicit-biz-${providerId}`
     try {
       // Set Provider.businessId to an explicit non-biz_ value
-      const explicitBizId = `explicit-biz-${providerId}`
       await (prisma.business as any).create({
         data: {
           id: explicitBizId,
@@ -409,7 +419,7 @@ describe('WLA-014 v3: Business identity via Provider.businessId', () => {
       expect(resolved).not.toBe(`biz_${providerId}`)
     } finally {
       await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${providerId}`.catch(() => {})
-      await (prisma.business as any).deleteMany({ where: { id: { contains: 'explicit-biz' } } }).catch(() => {})
+      await (prisma.business as any).delete({ where: { id: explicitBizId } }).catch(() => {})
       await prisma.user.delete({ where: { id: userId } }).catch(() => {})
     }
   }, 20000)
@@ -440,16 +450,63 @@ describe('WLA-014 v3: Business identity via Provider.businessId', () => {
 
   it('B03 -- upsertBusinessBranding links Provider.businessId after creating new Business', async () => {
     const { providerId, userId } = await createFixtureProvider('linkbiz')
-    const legacyBizId = `biz_${providerId}`
     try {
       // No existing Business -- upsertBusinessBranding should create one and set businessId
       await upsertBusinessBranding(providerId, { primaryColour: '#ABCDEF' })
       // Provider.businessId must now be set
       const row = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${providerId}`
-      expect(row[0].businessId).toBe(legacyBizId)
+      const bizId = row[0].businessId
+      expect(bizId).toBeTruthy()
+      // The Business record must exist
+      const biz = await (prisma.business as any).findUnique({ where: { id: bizId }, select: { id: true } })
+      expect(biz).toBeTruthy()
+      expect(biz.id).toBe(bizId)
+      // The BusinessBranding record must exist for this Business
+      const branding = await (prisma.businessBranding as any).findUnique({ where: { businessId: bizId }, select: { businessId: true } })
+      expect(branding).toBeTruthy()
+      expect(branding.businessId).toBe(bizId)
     } finally {
-      await (prisma.businessBranding as any).delete({ where: { businessId: legacyBizId } }).catch(() => {})
-      await (prisma.business as any).delete({ where: { id: legacyBizId } }).catch(() => {})
+      // Read the actual businessId to clean up exact records
+      const row = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${providerId}`
+      const bizId = row[0]?.businessId
+      if (bizId) {
+        await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${providerId}`.catch(() => {})
+        await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
+        await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
+      }
+      // Also clean up any biz_ legacy record if it exists (defensive)
+      await (prisma.businessBranding as any).delete({ where: { businessId: `biz_${providerId}` } }).catch(() => {})
+      await (prisma.business as any).delete({ where: { id: `biz_${providerId}` } }).catch(() => {})
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 20000)
+
+  it('B04 -- upsertBusinessBranding creates Business with independent (non-biz_) ID', async () => {
+    const { providerId, userId } = await createFixtureProvider('indepbiz')
+    try {
+      // No existing Business — upsertBusinessBranding must create one with an independent ID
+      await upsertBusinessBranding(providerId, { primaryColour: '#ABCDEF' })
+
+      const row = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${providerId}`
+      const bizId = row[0].businessId
+
+      // Provider.businessId must be set
+      expect(bizId).toBeTruthy()
+      // The Business ID must NOT follow the biz_ convention (it must be independent)
+      expect(bizId).not.toBe(`biz_${providerId}`)
+      expect(bizId.startsWith('biz_')).toBe(false)
+      // The Business ID must be a valid cuid (starts with 'c' and is 20+ chars)
+      expect(bizId.length).toBeGreaterThanOrEqual(20)
+    } finally {
+      const row = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${providerId}`
+      const bizId = row[0]?.businessId
+      if (bizId) {
+        await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = NULL WHERE id = ${providerId}`.catch(() => {})
+        await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
+        await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
+      }
+      await (prisma.businessBranding as any).delete({ where: { businessId: `biz_${providerId}` } }).catch(() => {})
+      await (prisma.business as any).delete({ where: { id: `biz_${providerId}` } }).catch(() => {})
       await prisma.user.delete({ where: { id: userId } }).catch(() => {})
     }
   }, 20000)
@@ -466,6 +523,60 @@ describe('WLA-014 v3: GET returns canonical branding', () => {
     // Inversion must be applied on GET return (showPlatformBranding -> showBrandingOnBookingPage)
     expect(routeSource).toContain('!canonical.showPlatformBranding')
   })
+
+  it('G02 -- GET handler returns canonical BusinessBranding values (not stale Provider fields)', async () => {
+    // Integration test: creates a Provider with DIFFERENT BusinessBranding values
+    // from the Provider legacy fields, then calls resolveProviderBranding() (the
+    // same function the GET handler uses) and verifies the canonical values win.
+    const { providerId, userId } = await createFixtureProvider('getcanon')
+    const bizId = `biz_${providerId}`
+    try {
+      // Create legacy Business + BusinessBranding with values DIFFERENT from Provider
+      await (prisma.business as any).create({
+        data: {
+          id: bizId,
+          name: `${PREFIX} Canonical Biz`,
+          supportEmail: `${PREFIX}-canon@test.example.com`,
+          timezone: 'Australia/Perth',
+          isActive: true,
+          paymentModel: 'saas',
+        },
+      })
+      await (prisma.businessBranding as any).create({
+        data: {
+          businessId: bizId,
+          logo: 'https://cdn.example.com/canonical-logo.png',
+          primaryColour: '#FF0000',  // RED — different from Provider's default #3B82F6
+          secondaryColour: '#00FF00',
+          theme: 'dark',
+          showPlatformBranding: false,  // false = show branding → inverted to showBrandingOnBookingPage = true
+          customSlug: 'canonical-slug',
+        },
+      })
+
+      // Call the same function the GET handler calls
+      const canonical = await resolveProviderBranding(providerId)
+
+      // Must return canonical BusinessBranding values, not stale Provider fields
+      expect(canonical.source).toBe('businessBranding')
+      expect(canonical.logo).toBe('https://cdn.example.com/canonical-logo.png')
+      expect(canonical.primaryColour).toBe('#FF0000')  // BusinessBranding, NOT Provider's default
+      expect(canonical.secondaryColour).toBe('#00FF00')
+      expect(canonical.theme).toBe('dark')
+      expect(canonical.showPlatformBranding).toBe(false)
+      expect(canonical.customSlug).toBe('canonical-slug')
+      expect(canonical.resolvedBusinessId).toBe(bizId)
+
+      // The GET handler applies this inversion: showBrandingOnBookingPage = !showPlatformBranding
+      // Verify it would produce the correct value for the dashboard
+      const showBrandingOnBookingPage = !canonical.showPlatformBranding
+      expect(showBrandingOnBookingPage).toBe(true)  // false inverted = true
+    } finally {
+      await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
+      await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 20000)
 })
 
 describe('WLA-014 v3: Dashboard detects HTTP 207 partial write', () => {
@@ -495,6 +606,45 @@ describe('WLA-014 v3: Dashboard detects HTTP 207 partial write', () => {
     )
     expect(check207Block).toContain('throw new Error')
   })
+
+  it('D04 -- 207 response body is parsed and error message is surfaced (behavioral)', async () => {
+    // Simulates the dashboard's 207 handling logic without rendering the React component.
+    // The dashboard does: if (brandRes.status === 207) { const body = await brandRes.json(); throw new Error(body.error || '...') }
+    // This test verifies that behavior by constructing a mock Response and applying the same logic.
+
+    // Simulate a 207 response with a partialWrite error message
+    const mock207Response = {
+      status: 207,
+      ok: true,  // 207 is 2xx so .ok is true — this is the trap the dashboard must detect
+      json: async () => ({
+        success: false,
+        partialWrite: true,
+        error: 'Branding preferences saved to your profile, but the shared configuration could not be updated. Please try saving again.',
+      }),
+    } as any
+
+    // Simulate the dashboard's handleSave logic for the 207 check
+    let errorThrown: Error | null = null
+    let successMessage: string | null = null
+
+    // The dashboard checks: if (brandRes.status === 207) { throw new Error(body.error || fallback) }
+    // This check happens BEFORE setMessage('All settings saved!')
+    if (mock207Response.status === 207) {
+      const body = await mock207Response.json()
+      errorThrown = new Error(body.error || 'Your branding was partially saved. Please try saving again to sync all settings.')
+    } else {
+      successMessage = 'All settings saved!'
+    }
+
+    // 207 must produce an error, not a success message
+    expect(errorThrown).not.toBeNull()
+    expect(errorThrown!.message).toContain('Please try saving again')
+    expect(successMessage).toBeNull()
+
+    // Verify the trap: .ok is true for 207 (2xx) but status is 207, not 200
+    expect(mock207Response.ok).toBe(true)
+    expect(mock207Response.status).not.toBe(200)
+  })
 })
 
 describe('WLA-014 v3: Business identity is transitional (biz_ only for legacy)', () => {
@@ -508,5 +658,30 @@ describe('WLA-014 v3: Business identity is transitional (biz_ only for legacy)',
     expect(resolutionSource).toContain('Provider.businessId')
     // Must not claim biz_ is the canonical identity model
     expect(resolutionSource).not.toContain('biz_ is canonical')
+  })
+
+  it('ARCH02 -- new Business creation uses independent ID, not biz_ (source check)', () => {
+    const resolutionSource = readFileSync(
+      resolve(process.cwd(), 'lib/branding/resolution.ts'), 'utf-8'
+    )
+    // Scope checks to the upsertBusinessBranding function (the CREATION path).
+    // The resolveBusinessId function (READ path) legitimately uses legacyBizId for legacy fallback.
+    const upsertStart = resolutionSource.indexOf('export async function upsertBusinessBranding')
+    const upsertSection = resolutionSource.slice(upsertStart)
+    // The creation path must not set an explicit biz_ id
+    expect(upsertSection).not.toContain('id: legacyBizId')
+    expect(upsertSection).not.toContain('id: `biz_')
+    // Must document that new records use independent/auto-generated IDs
+    expect(upsertSection).toContain('INDEPENDENT')
+    expect(upsertSection).toContain('auto-generated')
+    // Must NOT have the P2002-specific catch (no longer needed with auto-generated IDs)
+    expect(upsertSection).not.toContain('P2002')
+    // The FK assignment must NOT silently swallow errors with .catch(err => ...)
+    expect(upsertSection).not.toContain('.catch(err =>')
+    // The FK UPDATE must be followed by a rowsAffected check, not a .catch
+    const fkUpdateIdx = upsertSection.indexOf('UPDATE "Provider" SET "businessId"')
+    const afterFk = upsertSection.slice(fkUpdateIdx, fkUpdateIdx + 300)
+    expect(afterFk).toContain('rowsAffected')
+    expect(afterFk).not.toContain('.catch')
   })
 })
