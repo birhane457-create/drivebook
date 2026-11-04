@@ -139,24 +139,14 @@ export async function PUT(req: NextRequest) {
           { status: 400 }
         );
       }
-      // Check both tables for an existing claim on this slug.
-      // The check-before-write is a best-effort guard; the DB unique index is the
-      // safety net. A concurrent claim will be caught at the write stage via P2002.
+      // Best-effort pre-check for a clear error message before the transaction.
+      // The authoritative uniqueness check is the SlugRegistry.claimSlug() call
+      // inside the transaction below (P2002 → 409 if slug is taken cross-table).
       const existingProvider = await prisma.provider.findFirst({
         where: { customSlug, id: { not: instructor.id } },
         select: { id: true },
       });
       if (existingProvider) {
-        return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 400 });
-      }
-      // WLA-014-SLUG: also check BusinessBranding — a slug unique in Provider can
-      // collide with an existing BusinessBranding slug (separate unique indexes,
-      // no cross-table constraint).
-      const existingBranding = await (prisma as any).businessBranding.findFirst({
-        where: { customSlug, NOT: { businessId: `biz_${instructor.id}` } },
-        select: { businessId: true },
-      });
-      if (existingBranding) {
         return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 400 });
       }
     }
@@ -170,37 +160,54 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid secondary color format. Use hex (#RRGGBB)' }, { status: 400 });
     }
 
-    const updated = await prisma.provider.update({
+    // WLA-014-SLUG: Read the provider's current slug before writing, so we can
+    // release the old registry entry and claim the new one atomically.
+    const currentProvider = await prisma.provider.findUnique({
       where: { id: instructor.id },
-      data: {
-        brandLogo: brandLogo || null,
-        brandColorPrimary: brandColorPrimary || null,
-        brandColorSecondary: brandColorSecondary || null,
-        showBrandingOnBookingPage: showBrandingOnBookingPage === true,
-        customSlug: customSlug || null,
-        // V-15 FIX: when customDomain changes, reset domainVerified to false.
-        // The previous domain was verified via DNS; the new domain has not been
-        // verified and must not inherit the prior verified state.
-        // Only reset when customDomain is explicitly provided in the request body.
-        ...(customDomain !== undefined && {
-          customDomain: customDomain || null,
-          domainVerified: false,
-          domainVerifiedAt: null,
-        }),
-        ...(cleanBusinessName !== undefined && { businessName: cleanBusinessName }),
-      },
-      select: {
-        brandLogo: true,
-        brandColorPrimary: true,
-        brandColorSecondary: true,
-        showBrandingOnBookingPage: true,
-        customSlug: true,
-        customDomain: true,
-        domainVerified: true,
-        domainVerifiedAt: true,
-        businessName: true,
-      },
-    });
+      select: { customSlug: true } as any,
+    }) as any
+    const oldSlug: string | null = currentProvider?.customSlug ?? null
+    const newSlug: string | null = customSlug !== undefined ? (customSlug || null) : oldSlug
+
+    // Wrap the Provider update + slug registry update in a single transaction.
+    // claimSlug() throws P2002 if the slug is already claimed by any owner
+    // (Provider or BusinessBranding), making the cross-table race impossible.
+    let updated: any
+    await prisma.$transaction(async (tx) => {
+      if (newSlug !== oldSlug) {
+        const { updateSlugClaim } = await import('@/lib/branding/slug-registry')
+        await updateSlugClaim(tx, 'provider', instructor.id, oldSlug, newSlug)
+      }
+
+      updated = await tx.provider.update({
+        where: { id: instructor.id },
+        data: {
+          brandLogo: brandLogo || null,
+          brandColorPrimary: brandColorPrimary || null,
+          brandColorSecondary: brandColorSecondary || null,
+          showBrandingOnBookingPage: showBrandingOnBookingPage === true,
+          customSlug: customSlug || null,
+          // V-15 FIX: when customDomain changes, reset domainVerified to false.
+          ...(customDomain !== undefined && {
+            customDomain: customDomain || null,
+            domainVerified: false,
+            domainVerifiedAt: null,
+          }),
+          ...(cleanBusinessName !== undefined && { businessName: cleanBusinessName }),
+        },
+        select: {
+          brandLogo: true,
+          brandColorPrimary: true,
+          brandColorSecondary: true,
+          showBrandingOnBookingPage: true,
+          customSlug: true,
+          customDomain: true,
+          domainVerified: true,
+          domainVerifiedAt: true,
+          businessName: true,
+        },
+      })
+    })
 
     // WLA-014 FIX: Upsert BusinessBranding (canonical store) from Provider write.
     // Replaces V-07 conditional sync (which only updated if record existed).
@@ -236,10 +243,14 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ success: true, branding: updated });
   } catch (error) {
-    // WLA-014-SLUG: P2002 means the unique index caught a concurrent slug claim.
-    // Return 409 Conflict rather than a generic 500.
-    if ((error as any)?.code === 'P2002' && (error as any)?.meta?.target?.includes('customSlug')) {
-      return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 409 });
+    // WLA-014-SLUG: P2002 on 'slug' means the SlugRegistry caught a concurrent
+    // cross-table claim. P2002 on 'customSlug' means the per-table index caught
+    // an in-table duplicate. Both surface as 409 Conflict.
+    if ((error as any)?.code === 'P2002') {
+      const target = (error as any)?.meta?.target?.toString() ?? ''
+      if (target.includes('customSlug') || target.includes('slug')) {
+        return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 409 });
+      }
     }
     console.error('Error updating branding:', error);
     return NextResponse.json({ error: 'Failed to update branding settings' }, { status: 500 });
