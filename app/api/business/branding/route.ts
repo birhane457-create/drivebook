@@ -94,12 +94,25 @@ export async function PUT(req: NextRequest) {
     // table does not have a customDomain column. Extract it before upsert.
     const { customDomain: _domainForProvider, ...brandingData } = parsed.data;
 
-    // WLA-014-SLUG: Wrap the two writes in a transaction so a failure on the
-    // Provider mirror cannot leave BusinessBranding and Provider inconsistent.
-    // If the slug is concurrently claimed between the check and the write, P2002
-    // is caught by the outer handler and surfaced as 409 Conflict.
+    // WLA-014-SLUG: Read the current slug from BusinessBranding before the transaction
+    // so we can release the old registry entry and claim the new one atomically.
+    const currentBranding = await (prisma as any).businessBranding.findUnique({
+      where: { businessId: bizId },
+      select: { customSlug: true },
+    })
+    const oldSlug: string | null = currentBranding?.customSlug ?? null
+    const newSlug: string | null = parsed.data.customSlug !== undefined ? (parsed.data.customSlug || null) : oldSlug
+
+    // WLA-014-SLUG: Wrap the two writes + slug registry update in a transaction.
+    // claimSlug() throws P2002 if the slug is already claimed by any owner
+    // (Provider or BusinessBranding), making the cross-table race impossible.
     let branding: any
     await prisma.$transaction(async (tx) => {
+      if (newSlug !== oldSlug) {
+        const { updateSlugClaim } = await import('@/lib/branding/slug-registry')
+        await updateSlugClaim(tx, 'businessBranding', bizId, oldSlug, newSlug)
+      }
+
       branding = await (tx as any).businessBranding.upsert({
         where: { businessId: bizId },
         create: { businessId: bizId, ...brandingData },
@@ -125,10 +138,14 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ success: true, branding })
   } catch (err) {
-    // WLA-014-SLUG: P2002 means the unique index caught a concurrent slug claim.
-    // Return 409 Conflict rather than a generic 500.
-    if ((err as any)?.code === 'P2002' && (err as any)?.meta?.target?.toString().includes('customSlug')) {
-      return NextResponse.json({ error: 'This URL slug is already taken. Please choose another.' }, { status: 409 })
+    // WLA-014-SLUG: P2002 on 'slug' means the SlugRegistry caught a concurrent
+    // cross-table claim. P2002 on 'customSlug' means the per-table index caught
+    // an in-table duplicate. Both surface as 409 Conflict.
+    if ((err as any)?.code === 'P2002') {
+      const target = (err as any)?.meta?.target?.toString() ?? ''
+      if (target.includes('customSlug') || target.includes('slug')) {
+        return NextResponse.json({ error: 'This URL slug is already taken. Please choose another.' }, { status: 409 })
+      }
     }
     console.error('[PUT /api/business/branding]', err)
     return NextResponse.json({ error: 'Failed to update branding' }, { status: 500 })
