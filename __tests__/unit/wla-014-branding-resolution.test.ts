@@ -65,6 +65,12 @@ async function cleanup() {
   // Use raw SQL to clean up all WLA014B test fixtures (case-insensitive via ILIKE).
   // All deletions are scoped to EXACT Business IDs linked to test providers —
   // never use global LIKE patterns that could match legitimate records.
+  //
+  // Cleanup failures are collected and thrown as an aggregate error so the
+  // test suite fails if any leftover data remains. Silent error swallowing
+  // would allow stale fixtures to cause false-positive passes.
+
+  const errors: string[] = []
 
   // Step 1: Find all test providers and their businessId values
   const testProviders = await prisma.$queryRaw<Array<{ id: string; businessId: string | null }>>`
@@ -82,33 +88,58 @@ async function cleanup() {
   const allBizIds = [...new Set([...businessIds, ...legacyBizIds])]
 
   // Step 2: Null out Provider.businessId to remove FK dependency
-  await prisma.$executeRaw`
-    UPDATE "Provider" SET "businessId" = NULL
-    WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
-  `.catch(err => console.error('[WLA-014 cleanup] Failed to null businessId:', err))
+  try {
+    await prisma.$executeRaw`
+      UPDATE "Provider" SET "businessId" = NULL
+      WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
+    `
+  } catch (err) {
+    errors.push(`Step 2 (null businessId): ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   // Step 3: Delete BusinessBranding for specific test Business IDs only
   for (const bizId of allBizIds) {
-    await prisma.$executeRaw`DELETE FROM "BusinessBranding" WHERE "businessId" = ${bizId}`
-      .catch(err => console.error(`[WLA-014 cleanup] Failed to delete BusinessBranding ${bizId}:`, err))
+    try {
+      await prisma.$executeRaw`DELETE FROM "BusinessBranding" WHERE "businessId" = ${bizId}`
+    } catch (err) {
+      errors.push(`Step 3 (delete BusinessBranding ${bizId}): ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   // Step 4: Delete Business records for specific test Business IDs only
   for (const bizId of allBizIds) {
-    await prisma.$executeRaw`DELETE FROM "Business" WHERE id = ${bizId}`
-      .catch(err => console.error(`[WLA-014 cleanup] Failed to delete Business ${bizId}:`, err))
+    try {
+      await prisma.$executeRaw`DELETE FROM "Business" WHERE id = ${bizId}`
+    } catch (err) {
+      errors.push(`Step 4 (delete Business ${bizId}): ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   // Step 5: Delete Providers for test users
-  await prisma.$executeRaw`
-    DELETE FROM "Provider"
-    WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
-  `.catch(err => console.error('[WLA-014 cleanup] Failed to delete Providers:', err))
+  try {
+    await prisma.$executeRaw`
+      DELETE FROM "Provider"
+      WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
+    `
+  } catch (err) {
+    errors.push(`Step 5 (delete Providers): ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   // Step 6: Delete test Users
-  await prisma.$executeRaw`
-    DELETE FROM "User" WHERE email ILIKE ${PREFIX + '-%'}
-  `.catch(err => console.error('[WLA-014 cleanup] Failed to delete Users:', err))
+  try {
+    await prisma.$executeRaw`
+      DELETE FROM "User" WHERE email ILIKE ${PREFIX + '-%'}
+    `
+  } catch (err) {
+    errors.push(`Step 6 (delete Users): ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  if (errors.length > 0) {
+    throw new Error(
+      `[WLA-014 cleanup] ${errors.length} cleanup error(s) — test isolation may be compromised:\n` +
+      errors.join('\n')
+    )
+  }
 }
 
 beforeAll(async () => { await cleanup() }, 30000)
@@ -524,7 +555,7 @@ describe('WLA-014 v3: GET returns canonical branding', () => {
     expect(routeSource).toContain('!canonical.showPlatformBranding')
   })
 
-  it('G02 -- GET handler returns canonical BusinessBranding values (not stale Provider fields)', async () => {
+  it('G02 -- resolveProviderBranding returns canonical BusinessBranding values when they differ from Provider fields (DB-backed)', async () => {
     // Integration test: creates a Provider with DIFFERENT BusinessBranding values
     // from the Provider legacy fields, then calls resolveProviderBranding() (the
     // same function the GET handler uses) and verifies the canonical values win.
@@ -607,7 +638,7 @@ describe('WLA-014 v3: Dashboard detects HTTP 207 partial write', () => {
     expect(check207Block).toContain('throw new Error')
   })
 
-  it('D04 -- 207 response body is parsed and error message is surfaced (behavioral)', async () => {
+  it('D04 -- 207 response handling logic produces error not success (logic simulation, not React component test)', async () => {
     // Simulates the dashboard's 207 handling logic without rendering the React component.
     // The dashboard does: if (brandRes.status === 207) { const body = await brandRes.json(); throw new Error(body.error || '...') }
     // This test verifies that behavior by constructing a mock Response and applying the same logic.
@@ -676,12 +707,31 @@ describe('WLA-014 v3: Business identity is transitional (biz_ only for legacy)',
     expect(upsertSection).toContain('auto-generated')
     // Must NOT have the P2002-specific catch (no longer needed with auto-generated IDs)
     expect(upsertSection).not.toContain('P2002')
-    // The FK assignment must NOT silently swallow errors with .catch(err => ...)
-    expect(upsertSection).not.toContain('.catch(err =>')
     // The FK UPDATE must be followed by a rowsAffected check, not a .catch
     const fkUpdateIdx = upsertSection.indexOf('UPDATE "Provider" SET "businessId"')
     const afterFk = upsertSection.slice(fkUpdateIdx, fkUpdateIdx + 300)
     expect(afterFk).toContain('rowsAffected')
     expect(afterFk).not.toContain('.catch')
+    // Note: .catch(err =>) is allowed on the orphaned Business cleanup in the failure path,
+    // but NOT on the FK UPDATE itself (checked above).
+  })
+
+  it('ARCH03 -- FK assignment failure throws error and cleans up orphaned Business (source check)', () => {
+    const resolutionSource = readFileSync(
+      resolve(process.cwd(), 'lib/branding/resolution.ts'), 'utf-8'
+    )
+    const upsertStart = resolutionSource.indexOf('export async function upsertBusinessBranding')
+    const upsertSection = resolutionSource.slice(upsertStart)
+    // The failure path (rowsAffected === 0 and re-read returns null) must throw,
+    // not just log. Logging is not a substitute for enforcing the invariant.
+    const elseBranch = upsertSection.slice(
+      upsertSection.indexOf('FK assignment failed'),
+      upsertSection.indexOf('businessBranding.upsert')
+    )
+    expect(elseBranch).toContain('throw new Error')
+    // The orphaned Business must be cleaned up before throwing
+    expect(elseBranch).toContain('business.delete')
+    // Must NOT continue to the branding write after the throw
+    // (The throw is before businessBranding.upsert, verified by the slice boundary)
   })
 })
