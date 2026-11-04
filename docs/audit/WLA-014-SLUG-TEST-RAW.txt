@@ -1,0 +1,24 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG IDX: Unique constraint source verification[2m > [22mIDX01 -- Provider.customSlug has @unique in schema.prisma
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG IDX: Unique constraint source verification[2m > [22mIDX02 -- Migration creates Provider_customSlug_key unique index
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG P2002: Concurrent claim error handling (source checks)[2m > [22mP2002A -- Instructor branding PUT catches P2002 on customSlug and returns 409
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG P2002: Concurrent claim error handling (source checks)[2m > [22mP2002B -- Business branding PUT catches P2002 on customSlug and returns 409
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG CROSS: Cross-table slug uniqueness enforcement (source checks)[2m > [22mCROSS01 -- Instructor branding PUT checks BusinessBranding before writing
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG CROSS: Cross-table slug uniqueness enforcement (source checks)[2m > [22mCROSS02 -- Business branding PUT checks both Provider and BusinessBranding (V-16 FIX)
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG TX: Business branding two-step write atomicity (source check)[2m > [22mTX01 -- Business branding PUT wraps BusinessBranding upsert and Provider mirror in a transaction
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG DB: Unique index enforcement (real DB)[2m > [22mDB01 -- Provider unique index rejects a duplicate customSlug
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG DB: Unique index enforcement (real DB)[2m > [22mDB02 -- BusinessBranding unique index rejects a duplicate customSlug
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG DB: Unique index enforcement (real DB)[2m > [22mDB03 -- Cross-table: same slug can appear in both Provider and BusinessBranding without a cross-table constraint
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m10 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 20:07:35
+[2m   Duration [22m 914ms[2m (transform 70ms, setup 48ms, collect 120ms, tests 158ms, environment 0ms, prepare 213ms)[22m
+
+VITEST_EXIT:0 

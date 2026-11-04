@@ -139,10 +139,24 @@ export async function PUT(req: NextRequest) {
           { status: 400 }
         );
       }
-      const existing = await prisma.provider.findFirst({
+      // Check both tables for an existing claim on this slug.
+      // The check-before-write is a best-effort guard; the DB unique index is the
+      // safety net. A concurrent claim will be caught at the write stage via P2002.
+      const existingProvider = await prisma.provider.findFirst({
         where: { customSlug, id: { not: instructor.id } },
+        select: { id: true },
       });
-      if (existing) {
+      if (existingProvider) {
+        return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 400 });
+      }
+      // WLA-014-SLUG: also check BusinessBranding — a slug unique in Provider can
+      // collide with an existing BusinessBranding slug (separate unique indexes,
+      // no cross-table constraint).
+      const existingBranding = await (prisma as any).businessBranding.findFirst({
+        where: { customSlug, NOT: { businessId: `biz_${instructor.id}` } },
+        select: { businessId: true },
+      });
+      if (existingBranding) {
         return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 400 });
       }
     }
@@ -222,6 +236,11 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ success: true, branding: updated });
   } catch (error) {
+    // WLA-014-SLUG: P2002 means the unique index caught a concurrent slug claim.
+    // Return 409 Conflict rather than a generic 500.
+    if ((error as any)?.code === 'P2002' && (error as any)?.meta?.target?.includes('customSlug')) {
+      return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 409 });
+    }
     console.error('Error updating branding:', error);
     return NextResponse.json({ error: 'Failed to update branding settings' }, { status: 500 });
   }

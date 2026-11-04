@@ -1,0 +1,12 @@
+[verify] Connecting to production database...
+[verify] Provider_customSlug_key index: EXISTS
+[verify]   Definition: CREATE UNIQUE INDEX "Provider_customSlug_key" ON public."Provider" USING btree ("customSlug")
+[verify] BusinessBranding_customSlug_key index: EXISTS
+[verify]   Definition: CREATE UNIQUE INDEX "BusinessBranding_customSlug_key" ON public."BusinessBranding" USING btree ("customSlug")
+[verify] Provider duplicate slugs: 0
+[verify] BusinessBranding duplicate slugs: 0
+[verify] Cross-table slug collisions: 0
+[verify] Provider non-null slugs: 1
+[verify] BusinessBranding non-null slugs: 1
+[verify] Done
+EXIT:0 
