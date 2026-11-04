@@ -269,13 +269,19 @@ export async function upsertBusinessBranding(
         await (prisma as any).business.delete({ where: { id: bizId } }).catch(() => {})
         bizId = reRead.businessId
       } else {
-        // Provider.businessId is still null — this is unexpected and means the FK
-        // assignment failed without a concurrent setter. Log at error level so the
-        // failure is observable and recoverable (admin can run the SQL manually).
-        console.error(
-          `[WLA-014] Failed to set Provider.businessId for ${providerId}. ` +
-          `Business ${bizId} was created but is not linked. ` +
-          `Manual recovery: UPDATE "Provider" SET "businessId" = '${bizId}' WHERE id = '${providerId}'`
+        // FK assignment failed without a concurrent setter — this is a data integrity
+        // error. The Business was created but cannot be linked to the Provider.
+        // Clean up the orphaned Business, then throw so the route can return a
+        // failure or partial-write response. Logging alone is insufficient — the
+        // invariant must be enforced, not merely observed.
+        await (prisma as any).business.delete({ where: { id: bizId } })
+          .catch(err => console.error(
+            `[WLA-014] Failed to clean up orphaned Business ${bizId}:`,
+            err instanceof Error ? err.message : String(err)
+          ))
+        throw new Error(
+          `[WLA-014] Failed to link Business to Provider ${providerId}. ` +
+          `The Business record was cleaned up. Please retry the branding save.`
         )
       }
     }
