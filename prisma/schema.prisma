@@ -1111,6 +1111,25 @@ model BusinessBranding {
   @@index([customSlug])
 }
 
+// WLA-014-SLUG: Global slug registry providing a single cross-table unique constraint.
+// Prevents the race condition where two concurrent requests could claim the same
+// slug via different tables (Provider and BusinessBranding have independent indexes).
+// All slug claims must be registered here first. The @unique on `slug` is the
+// authoritative cross-table uniqueness enforcement.
+// 
+// ownerType: 'provider' | 'businessBranding'
+// ownerId: the id of the owning record (Provider.id or BusinessBranding.businessId)
+model SlugRegistry {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  ownerType String   // 'provider' | 'businessBranding'
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerType, ownerId])
+}
+
 model BusinessCapabilities {
   id                   String   @id @default(cuid())
   businessId           String   @unique
