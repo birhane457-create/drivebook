@@ -29,16 +29,17 @@
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity via Provider.businessId[2m > [22mB03 -- upsertBusinessBranding links Provider.businessId after creating new Business
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity via Provider.businessId[2m > [22mB04 -- upsertBusinessBranding creates Business with independent (non-biz_) ID
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: GET returns canonical branding[2m > [22mG01 -- instructor branding GET endpoint uses resolveProviderBranding (source check)
- [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: GET returns canonical branding[2m > [22mG02 -- GET handler returns canonical BusinessBranding values (not stale Provider fields)
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: GET returns canonical branding[2m > [22mG02 -- resolveProviderBranding returns canonical BusinessBranding values when they differ from Provider fields (DB-backed)
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Dashboard detects HTTP 207 partial write[2m > [22mD02 -- dashboard handleSave checks for status 207 before showing success
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Dashboard detects HTTP 207 partial write[2m > [22mD03 -- dashboard does NOT show success when 207 partial write occurs
- [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Dashboard detects HTTP 207 partial write[2m > [22mD04 -- 207 response body is parsed and error message is surfaced (behavioral)
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Dashboard detects HTTP 207 partial write[2m > [22mD04 -- 207 response handling logic produces error not success (logic simulation, not React component test)
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity is transitional (biz_ only for legacy)[2m > [22mARCH01 -- resolution service documents biz_ as transitional, not permanent
  [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity is transitional (biz_ only for legacy)[2m > [22mARCH02 -- new Business creation uses independent ID, not biz_ (source check)
+ [32m✓[39m __tests__/unit/wla-014-branding-resolution.test.ts[2m > [22mWLA-014 v3: Business identity is transitional (biz_ only for legacy)[2m > [22mARCH03 -- FK assignment failure throws error and cleans up orphaned Business (source check)
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m30 passed[39m[22m[90m (30)[39m
-[2m   Start at [22m 01:13:28
-[2m   Duration [22m 1.56s[2m (transform 120ms, setup 60ms, collect 171ms, tests 435ms, environment 0ms, prepare 327ms)[22m
+[2m      Tests [22m [1m[32m31 passed[39m[22m[90m (31)[39m
+[2m   Start at [22m 18:08:36
+[2m   Duration [22m 1.85s[2m (transform 134ms, setup 88ms, collect 236ms, tests 678ms, environment 0ms, prepare 342ms)[22m
 
 VITEST_EXIT:0 
