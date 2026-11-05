@@ -1,0 +1,6 @@
+=== Applying migration 20261104000001: SlugRegistry table === 
+Script executed successfully.
+M1_EXIT:0 
+=== Applying migration 20261104000002: ownership backfill === 
+Script executed successfully.
+M2_EXIT:0 
