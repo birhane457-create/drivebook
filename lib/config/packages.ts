@@ -194,7 +194,7 @@ export const PREDEFINED_PACKAGES = [
 
 export type PredefinedPackage = typeof PREDEFINED_PACKAGES[number];
 
-export const PLATFORM_FEE_PERCENTAGE = DEFAULT_SETTINGS.platformFeePercentage; // 3.6% platform processing fee
+export const PLATFORM_FEE_PERCENTAGE = DEFAULT_SETTINGS.platformFeePercentage; // DriveBook platform fee (default 3.6%)
 
 /**
  * resolveDiscountTierMinHours(purchasedHours)

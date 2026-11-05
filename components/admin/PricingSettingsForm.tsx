@@ -153,7 +153,7 @@ export default function PricingSettingsForm() {
       {/* Platform Fee */}
       <Section icon={<DollarSign className="h-5 w-5" />} title="Platform Fee" color="text-blue-700">
         <div className="max-w-xs">
-          <Field label="Processing fee charged to clients (%)" hint="Added on top of the booking amount at checkout">
+          <Field label="DriveBook platform fee charged to clients (%)" hint="Added on top of the booking amount at checkout">
             <NumInput value={s.platformFeePercentage} onChange={v => set({ platformFeePercentage: v })} step={0.1} min={0} max={10} />
           </Field>
         </div>
