@@ -1,8 +1,8 @@
 # WLA-015 — Customer Communications Sender Identity Inventory
 
 **Audit date:** 2026-11-04  
-**Commit inspected:** 04469766 (origin/main)  
-**Status:** SOURCE INVENTORY COMPLETE — No implementation changes made
+**Source inspected:** b2c26ab2 (v3) — inventory updated for v3/v4  
+**Status:** FIX APPLIED (v4) — all booking-level paths use getProviderBookingsSender
 
 ---
 
