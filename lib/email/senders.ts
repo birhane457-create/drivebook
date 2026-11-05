@@ -62,9 +62,10 @@ export function formatSender(key: SenderKey): string {
  * The email address is always bookings@drivebook.com.au — deliverability and DKIM
  * signing are unchanged. Only the display name seen by the recipient changes.
  *
- * Architecture note: White-label entitlement is PREMIUM tier only.
- * accountType=BUSINESS does not grant whiteLabel per the architecture decision
- * recorded in lib/utils/account.ts (getAccountFeatures.whiteLabel = isPremium).
+ * Architecture note: White-label entitlement uses getAccountFeatures().whiteLabel,
+ * which is PREMIUM tier only. accountType=BUSINESS does not grant whiteLabel.
+ * This avoids duplicating the entitlement rule — the central abstraction in
+ * lib/utils/account.ts is the single source of truth.
  *
  * @example
  *   // PREMIUM provider with businessName
@@ -75,14 +76,18 @@ export function formatSender(key: SenderKey): string {
  *   getProviderBookingsSender({ subscriptionTier: 'PRO', businessName: null, name: 'John' })
  *   → 'DriveBook Bookings <bookings@drivebook.com.au>'
  */
+import { getAccountFeatures } from '@/lib/utils/account'
+
 export function getProviderBookingsSender(provider?: {
   subscriptionTier?: string | null
   businessName?: string | null
 } | null): string {
   if (!provider) return formatSender('bookings')
-  const isPremium = provider.subscriptionTier === 'PREMIUM'
+  // WLA-015 FIX: Use the central feature abstraction, not a direct tier check.
+  // getAccountFeatures.whiteLabel = isPremium per the architecture rule.
+  const { whiteLabel } = getAccountFeatures(provider)
   const businessName = provider.businessName?.trim()
-  if (isPremium && businessName) {
+  if (whiteLabel && businessName) {
     return `${businessName} via DriveBook <${SENDERS.bookings.email}>`
   }
   return formatSender('bookings')
