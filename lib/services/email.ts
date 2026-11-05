@@ -1,6 +1,6 @@
 ﻿import nodemailer from 'nodemailer'
 import { resolveTimezone, timezoneFromState, formatLocalDate, formatLocalTime, DEFAULT_TIMEZONE } from '@/lib/utils/timezone'
-import { formatSender } from '@/lib/email/senders'
+import { formatSender, getProviderBookingsSender } from '@/lib/email/senders'
 import { EMAIL_EVENTS, type EmailEvent } from '@/lib/email/registry'
 import { type EmailContext, resolveSender, resolveReplyTo } from '@/lib/email/context'
 import { getDisplayName, type DisplayIdentitySource } from '@/lib/branding/getDisplayIdentity'
@@ -55,7 +55,8 @@ class EmailService {
 
     // Email to client
     await this.transporter.sendMail({
-      from: formatSender('bookings'),
+      // WLA-015 FIX: use provider's business name in From display for PREMIUM tier
+      from: getProviderBookingsSender(data.provider),
       to: customerEmail,
       subject: ((data as any).bookingLabel ?? 'Appointment') + ' Confirmed',
       html: `
@@ -154,7 +155,8 @@ class EmailService {
 
     // Email to instructor
     await this.transporter.sendMail({
-      from: formatSender('bookings'),
+      // WLA-015 FIX: use provider's business name in From display for PREMIUM tier
+      from: getProviderBookingsSender(data.provider),
       to: instructorEmail,
       subject: `New Booking: ${customerName}`,
       html: `
@@ -215,9 +217,10 @@ class EmailService {
     const providerName = data.provider ? getDisplayName(data.provider) : instructorName
 
     await this.transporter.sendMail({
-      from: formatSender('bookings'),
+      // WLA-015 FIX: use provider's business name in From display for PREMIUM tier
+      from: getProviderBookingsSender(data.provider),
       to: customerEmail,
-      subject: 'Ã°Å¸Å½Â¯ Driving Test Tomorrow - Good Luck!',
+      subject: '🎯 Driving Test Tomorrow - Good Luck!',
       html: `
         <!DOCTYPE html>
         <html>
@@ -720,11 +723,14 @@ The DriveBook Team
     hoursUsed: number
     calculatedRefund: number
     bookingId: string
+    /** WLA-015 FIX: optional provider for white-label From display */
+    provider?: { subscriptionTier?: string | null; businessName?: string | null } | null
   }) {
     const { customerName, customerEmail, instructorName, packageHours, hoursUsed, calculatedRefund, bookingId } = data
 
     await this.transporter.sendMail({
-      from: formatSender('bookings'),
+      // WLA-015 FIX: use provider's business name in From display for PREMIUM tier
+      from: getProviderBookingsSender(data.provider),
       to: customerEmail,
       subject: 'Cancellation Request Received - Under Review',
       html: `
@@ -880,11 +886,14 @@ The DriveBook Team
     refundAmount: number
     stripeRefundId: string
     adminNote?: string
+    /** WLA-015 FIX: optional provider for white-label From display */
+    provider?: { subscriptionTier?: string | null; businessName?: string | null } | null
   }) {
     const { customerName, customerEmail, instructorName, refundAmount, stripeRefundId, adminNote } = data
 
     await this.transporter.sendMail({
-      from: formatSender('bookings'),
+      // WLA-015 FIX: use provider's business name in From display for PREMIUM tier
+      from: getProviderBookingsSender(data.provider),
       to: customerEmail,
       subject: 'Cancellation Approved - Refund Issued',
       html: `
@@ -961,11 +970,14 @@ The DriveBook Team
     instructorName: string
     rejectionReason: string
     bookingId: string
+    /** WLA-015 FIX: optional provider for white-label From display */
+    provider?: { subscriptionTier?: string | null; businessName?: string | null } | null
   }) {
     const { customerName, customerEmail, instructorName, rejectionReason, bookingId } = data
 
     await this.transporter.sendMail({
-      from: formatSender('bookings'),
+      // WLA-015 FIX: use provider's business name in From display for PREMIUM tier
+      from: getProviderBookingsSender(data.provider),
       to: customerEmail,
       subject: 'Cancellation Request Update',
       html: `

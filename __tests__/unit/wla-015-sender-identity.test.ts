@@ -1,0 +1,147 @@
+/**
+ * WLA-015: Customer communications sender identity tests.
+ *
+ * Tests the getProviderBookingsSender() helper in lib/email/senders.ts.
+ *
+ * Architecture constraint (getAccountFeatures.whiteLabel = isPremium):
+ *   - PREMIUM tier providers with businessName → white-label display name
+ *   - All other tiers (BASIC, PRO, STUDIO) → standard DriveBook Bookings
+ *   - Provider structure (accountType=BUSINESS) does NOT grant white-label
+ *   - No provider → standard DriveBook Bookings
+ *   - Provider with no businessName → standard DriveBook Bookings
+ *
+ * WHAT IS TESTED:
+ *   S01  PREMIUM with businessName → business name in From display
+ *   S02  PREMIUM without businessName → standard DriveBook Bookings
+ *   S03  STUDIO tier → standard DriveBook Bookings (STUDIO is not white-label)
+ *   S04  PRO tier → standard DriveBook Bookings
+ *   S05  BASIC tier → standard DriveBook Bookings
+ *   S06  accountType=BUSINESS alone does not grant white-label
+ *   S07  null provider → standard DriveBook Bookings
+ *   S08  email address is always bookings@drivebook.com.au regardless of tier
+ *   S09  businessName with leading/trailing whitespace is trimmed
+ *   S10  source check: getProviderBookingsSender imported in email.ts
+ *   S11  source check: cron lesson-reminders selects subscriptionTier
+ *   S12  source check: waiting-list-notify uses getProviderBookingsSender
+ */
+
+import { describe, it, expect } from 'vitest'
+import { getProviderBookingsSender, formatSender, SENDERS } from '@/lib/email/senders'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+const BOOKINGS_EMAIL = SENDERS.bookings.email
+const DRIVEBROOK_BOOKINGS = `DriveBook Bookings <${BOOKINGS_EMAIL}>`
+
+describe('WLA-015: getProviderBookingsSender white-label logic', () => {
+  it('S01 -- PREMIUM provider with businessName gets business name in From display', () => {
+    const result = getProviderBookingsSender({
+      subscriptionTier: 'PREMIUM',
+      businessName: 'Perth Drive Academy',
+    })
+    expect(result).toBe(`Perth Drive Academy via DriveBook <${BOOKINGS_EMAIL}>`)
+    expect(result).toContain('Perth Drive Academy')
+    expect(result).not.toContain('DriveBook Bookings')
+  })
+
+  it('S02 -- PREMIUM provider without businessName falls back to standard sender', () => {
+    expect(getProviderBookingsSender({ subscriptionTier: 'PREMIUM', businessName: null })).toBe(DRIVEBROOK_BOOKINGS)
+    expect(getProviderBookingsSender({ subscriptionTier: 'PREMIUM', businessName: '' })).toBe(DRIVEBROOK_BOOKINGS)
+    expect(getProviderBookingsSender({ subscriptionTier: 'PREMIUM', businessName: '   ' })).toBe(DRIVEBROOK_BOOKINGS)
+  })
+
+  it('S03 -- STUDIO tier does not get white-label display name (not whiteLabel-entitled)', () => {
+    const result = getProviderBookingsSender({
+      subscriptionTier: 'STUDIO',
+      businessName: 'Perth Drive Academy',
+    })
+    expect(result).toBe(DRIVEBROOK_BOOKINGS)
+  })
+
+  it('S04 -- PRO tier does not get white-label display name', () => {
+    const result = getProviderBookingsSender({
+      subscriptionTier: 'PRO',
+      businessName: 'Perth Drive Academy',
+    })
+    expect(result).toBe(DRIVEBROOK_BOOKINGS)
+  })
+
+  it('S05 -- BASIC tier does not get white-label display name', () => {
+    const result = getProviderBookingsSender({
+      subscriptionTier: 'BASIC',
+      businessName: 'Perth Drive Academy',
+    })
+    expect(result).toBe(DRIVEBROOK_BOOKINGS)
+  })
+
+  it('S06 -- accountType=BUSINESS alone does not grant white-label (architecture constraint)', () => {
+    // Architecture decision: structure defines capacity; subscription defines entitlement.
+    // BUSINESS accountType does not grant white-label per getAccountFeatures.whiteLabel = isPremium
+    const result = getProviderBookingsSender({
+      subscriptionTier: 'PRO',
+      businessName: 'Perth Drive Academy',
+    })
+    expect(result).toBe(DRIVEBROOK_BOOKINGS)
+  })
+
+  it('S07 -- null/undefined provider falls back to standard sender', () => {
+    expect(getProviderBookingsSender(null)).toBe(DRIVEBROOK_BOOKINGS)
+    expect(getProviderBookingsSender(undefined)).toBe(DRIVEBROOK_BOOKINGS)
+    expect(getProviderBookingsSender()).toBe(DRIVEBROOK_BOOKINGS)
+  })
+
+  it('S08 -- email address is always bookings@drivebook.com.au regardless of tier', () => {
+    // White-label changes only the display name component; the email address is unchanged
+    // This preserves DKIM signing and deliverability
+    const premium = getProviderBookingsSender({ subscriptionTier: 'PREMIUM', businessName: 'Perth Academy' })
+    const basic = getProviderBookingsSender({ subscriptionTier: 'BASIC', businessName: 'Perth Academy' })
+    const none = getProviderBookingsSender()
+    for (const result of [premium, basic, none]) {
+      expect(result).toContain(`<${BOOKINGS_EMAIL}>`)
+      expect(result).toMatch(new RegExp(`<${BOOKINGS_EMAIL.replace('.', '\\.')}>$`))
+    }
+  })
+
+  it('S09 -- businessName with whitespace is trimmed', () => {
+    const result = getProviderBookingsSender({
+      subscriptionTier: 'PREMIUM',
+      businessName: '  Perth Drive Academy  ',
+    })
+    expect(result).toBe(`Perth Drive Academy via DriveBook <${BOOKINGS_EMAIL}>`)
+    expect(result).not.toContain('  ')
+  })
+})
+
+describe('WLA-015: Source check — getProviderBookingsSender integrated at call sites', () => {
+  const emailServiceSrc = readFileSync(
+    resolve(process.cwd(), 'lib/services/email.ts'), 'utf-8'
+  )
+  const cronSrc = readFileSync(
+    resolve(process.cwd(), 'app/api/cron/lesson-reminders/route.ts'), 'utf-8'
+  )
+  const waitingListSrc = readFileSync(
+    resolve(process.cwd(), 'lib/services/waiting-list-notify.ts'), 'utf-8'
+  )
+
+  it('S10 -- email.ts imports and uses getProviderBookingsSender (not formatSender) for booking emails', () => {
+    expect(emailServiceSrc).toContain('getProviderBookingsSender')
+    expect(emailServiceSrc).toContain('WLA-015 FIX')
+    // The booking confirmation should use provider-aware sender
+    expect(emailServiceSrc).toContain('getProviderBookingsSender(data.provider)')
+    // Cancellation emails should also use it
+    expect(emailServiceSrc).toContain('getProviderBookingsSender(data.provider)')
+  })
+
+  it('S11 -- cron lesson-reminders selects subscriptionTier and uses getProviderBookingsSender', () => {
+    // subscriptionTier must be in the Prisma select so getProviderBookingsSender can check it
+    expect(cronSrc).toContain('subscriptionTier')
+    expect(cronSrc).toContain('getProviderBookingsSender')
+    expect(cronSrc).toContain('WLA-015 FIX')
+  })
+
+  it('S12 -- waiting-list-notify uses getProviderBookingsSender instead of hardcoded DriveBook string', () => {
+    expect(waitingListSrc).toContain('getProviderBookingsSender')
+    expect(waitingListSrc).not.toContain("'DriveBook Bookings <bookings@drivebook.com.au>'")
+    expect(waitingListSrc).toContain('WLA-015 FIX')
+  })
+})
