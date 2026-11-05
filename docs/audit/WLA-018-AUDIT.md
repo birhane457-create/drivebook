@@ -1,7 +1,7 @@
 # WLA-018 — Public Branding Claims Audit
 
 **Audit date:** 2026-11-05  
-**Source inspected:** 125fe814 (WLA-018 v3 fix commit)  
+**Source inspected:** 31a3ada0 (WLA-018 v4 fix commit)  
 **Status:** FIX APPLIED (v4) — all fee terminology corrected, dynamic pricing, audit references updated; pending review
 
 ---
@@ -33,6 +33,19 @@ The v3 review found additional "processing fee" references in customer-facing su
 ### Invoice "Processing fees" at $0.00
 
 **Assessment:** Invoice components (`InvoiceLayout.tsx`, `ReceiptH_WeeklyEarnings.tsx`, `ReceiptI_InstructorInvoice.tsx`) display "Processing fees: $0.00". These are a separate concept from the DriveBook platform fee — they represent Stripe's processing charges (currently $0 in this pricing model). No change needed.
+
+**Source evidence:** `lib/services/receipt/builder.ts` classifies line items by type:
+- `LineItemType.PLATFORM_FEE` → `SupplierType.PLATFORM`, always taxable — this is the DriveBook 3.6% fee
+- `LineItemType.COMMISSION` → `SupplierType.PLATFORM`, always taxable — this is the tier commission (10-15%)
+- `LineItemType.FVV` → `SupplierType.NONE`, never taxable — free-value-void items
+- `LineItemType.SERVICE` → `SupplierType.PROVIDER`, taxable if provider GST-registered
+
+The invoice display components use separate line items: "Platform commission (12%)" for the commission and "Processing fees: $0.00" for Stripe processing charges. The DriveBook platform fee is not displayed in these instructor-facing invoices because it is charged to the customer, not deducted from the instructor's earnings. These are genuinely separate accounting fields, not hardcoded placeholders.
+
+### Internal documentation corrected
+
+- `docs/DOCROLEBASE/03-instructor/BOOKINGS.md`: "Platform processing fee" → "DriveBook platform fee"
+- `docs/INDEX.md`: "Platform Fee" → "DriveBook Platform Fee" with "(charged to customer, admin-configurable)" qualifier
 
 ---
 

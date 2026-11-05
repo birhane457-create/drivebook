@@ -123,7 +123,7 @@ Only available on upcoming CONFIRMED bookings. To change date/time/duration, use
 
 Sends the client an email with a pre-filled wallet top-up link. The email shows:
 - Lesson cost breakdown
-- Platform processing fee
+- DriveBook platform fee
 - Total amount to add
 - Direct link to `/client-dashboard/wallet?topup=[amount]`
 
