@@ -1,0 +1,26 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mE:/DOC/flowstate-wms/AI voice assistance - Copy - Copy - Copy/drivebook[39m
+
+[90mstdout[2m | unknown test[22m[39m
+📧 Email service mocked for integration tests
+
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS01 -- PREMIUM provider with businessName gets business name in From display
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS02 -- PREMIUM provider without businessName falls back to standard sender
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS03 -- STUDIO tier does not get white-label display name (not whiteLabel-entitled)
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS04 -- PRO tier does not get white-label display name
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS05 -- BASIC tier does not get white-label display name
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS06 -- accountType=BUSINESS alone does not grant white-label (architecture constraint)
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS07 -- null/undefined provider falls back to standard sender
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS08 -- email address is always bookings@drivebook.com.au regardless of tier
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS09 -- businessName with whitespace is trimmed
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS10 -- email.ts imports and uses getProviderBookingsSender (not formatSender) for booking emails
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS11 -- cron lesson-reminders selects subscriptionTier and uses getProviderBookingsSender
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS12 -- waiting-list-notify uses getProviderBookingsSender instead of hardcoded DriveBook string
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m12 passed[39m[22m[90m (12)[39m
+[2m   Start at [22m 21:35:13
+[2m   Duration [22m 715ms[2m (transform 61ms, setup 49ms, collect 67ms, tests 6ms, environment 0ms, prepare 231ms)[22m
+
+VITEST_EXIT:0 

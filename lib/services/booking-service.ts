@@ -1141,6 +1141,7 @@ export async function approveCancellation(
         refundAmount,
         stripeRefundId: stripeRefund.id,
         adminNote,
+        provider: booking.provider,  // WLA-015 FIX: pass provider for white-label From display
       })
     } catch (emailError) {
       console.error('[BookingService] Approval email failed (non-critical):', emailError)
@@ -1226,6 +1227,7 @@ export async function rejectCancellation(
         instructorName: bookingWithDetails.provider.name,
         rejectionReason: reason,
         bookingId,
+        provider: bookingWithDetails.provider,  // WLA-015 FIX: pass provider for white-label From display
       })
     }
   } catch (emailError) {
