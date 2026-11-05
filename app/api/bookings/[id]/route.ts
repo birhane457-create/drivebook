@@ -6,6 +6,7 @@ import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { logBookingAction, AuditAction, ActorRole } from '@/lib/services/auditLogger'
 import { writeAuditLog } from '@/lib/services/audit'
 import { emailService } from '@/lib/services/email'
+import { getProviderBookingsSender } from '@/lib/email/senders'
 import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 import { bookingActionRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { z } from 'zod'
@@ -519,7 +520,7 @@ export async function DELETE(
 
       try {
         await emailService.sendGenericEmail({
-          from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+          from: getProviderBookingsSender(booking.provider),  // WLA-015 FIX
           to: booking.customer.email,
           subject: `Booking Cancelled — ${bookingDateStr}`,
           html: `

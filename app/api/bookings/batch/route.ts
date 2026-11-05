@@ -12,6 +12,7 @@ import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/
 import { getCommissionRate, getPlatformFeeRate } from '@/lib/services/platform-pricing'
 import { checkSubscriptionAccess } from '@/lib/middleware/subscriptionValidation'
 import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
+import { getProviderBookingsSender } from '@/lib/email/senders'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -205,6 +206,7 @@ export async function POST(req: NextRequest) {
         subscriptionStatus: true,
         subscriptionTier: true,
         syncGoogleCalendar: true,
+        businessName: true,  // WLA-015 FIX: needed for white-label email sender
         hourlyRate: true,
         timezone: true,
         state: true,
@@ -544,9 +546,9 @@ async function createPendingBooking(ctx: {
     const actionLabel = 'Set up your account & Top Up ?'
 
     await emailService.sendGenericEmail({
-      from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+      from: getProviderBookingsSender(instructor),  // WLA-015 FIX
       to: customer.email,
-      subject: `?? ${instructor.name} booked a lesson ï¿½ top up to confirm`,
+      subject: `📅 ${instructor.name} booked a lesson — top up to confirm`,
       html: `
         <h2>Lesson Booked for You</h2>
         <p>Hi ${customer.name},</p>
@@ -784,9 +786,9 @@ async function createConfirmedBooking(ctx: {
 
   try {
     await emailService.sendGenericEmail({
-      from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+      from: getProviderBookingsSender(instructor),  // WLA-015 FIX
       to: customer.email,
-      subject: `? Lesson Confirmed ï¿½ ${startTime.toLocaleDateString('en-AU', { month: 'long', day: 'numeric', timeZone: instructorTimezone })}`,
+      subject: `✅ Lesson Confirmed — ${startTime.toLocaleDateString('en-AU', { month: 'long', day: 'numeric', timeZone: instructorTimezone })}`,
       html: `
         <h2>Lesson Confirmed</h2>
         <p>Hi ${customer.name},</p>
