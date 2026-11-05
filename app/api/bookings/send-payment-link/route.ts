@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
                 <td style="padding:10px 12px;border:1px solid #e5e7eb;text-align:right">$${lessonCost.toFixed(2)}</td>
               </tr>
               <tr style="background:#fafafa">
-                <td style="padding:10px 12px;border:1px solid #e5e7eb;color:#6b7280;font-size:13px">Platform processing fee (${(feeRate * 100).toFixed(1)}%) <span style="font-size:11px;color:#9ca3af">excl. GST</span></td>
+                <td style="padding:10px 12px;border:1px solid #e5e7eb;color:#6b7280;font-size:13px">DriveBook platform fee (${(feeRate * 100).toFixed(1)}%) <span style="font-size:11px;color:#9ca3af">excl. GST</span></td>
                 <td style="padding:10px 12px;border:1px solid #e5e7eb;text-align:right;color:#6b7280;font-size:13px">$${platformFeeAmt.toFixed(2)}</td>
               </tr>
               <tr style="background:#eff6ff">
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
             Once you've topped up, let your instructor know and they'll confirm the booking.
           </p>
           <p style="color:#9ca3af;font-size:12px;margin-top:8px">
-            The top-up amount includes the platform processing fee (${(feeRate * 100).toFixed(1)}%, excl. GST).
+            The top-up amount includes the DriveBook platform fee (${(feeRate * 100).toFixed(1)}%, excl. GST).
           </p>
         </div>
       `
