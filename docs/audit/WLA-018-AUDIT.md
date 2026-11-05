@@ -1,8 +1,42 @@
 # WLA-018 — Public Branding Claims Audit
 
 **Audit date:** 2026-11-05  
-**Source inspected:** f1bec8ad → pending WLA-018 fix commit  
-**Product contract:** WLA-016 (marketplace branding vs SaaS white-label)
+**Source inspected:** 2d581584 (WLA-018 v1 fix commit)  
+**Status:** FIX APPLIED (v2) — white-label wording corrected; multi-professional and pricing labels corrected; pending review
+
+---
+
+## v2 Corrections (in addition to v1 white-label wording)
+
+### STUDIO multi-professional claim
+
+**Marketing location:** `app/pricing/page.tsx` STUDIO card — "👥 Multi-Professional" and "Team management"
+
+**Actual entitlement:** `getAccountFeatures().multiInstructor = false` for all tiers. `subscriptions.ts` STUDIO `limits.providers: 1`. Multi-provider is not implemented.
+
+**Correction applied:** Removed both items from the STUDIO pricing card. Replaced with the remaining accurate features (Custom Domain, Branded marketplace experience).
+
+### Features page multi-professional claim
+
+**Marketing location:** `app/features/calendar/page.tsx` — "Multi-Professional Support" heading with "Manage multiple team calendars from one dashboard."
+
+**Actual entitlement:** Multi-provider not implemented.
+
+**Correction applied:** Changed to "Business Profiles" with "Operate under your own business identity with custom branding. Multi-provider team management is coming soon for business accounts."
+
+### Pricing percentage label
+
+**Marketing location:** `app/pricing/page.tsx` — all three tiers show "3.6% per booking"
+
+**Actual meaning:** 3.6% is the platform processing fee (covers Stripe payment processing), not the commission rate. Commission rates (15%/12%/11%/10%) are separate and shown in the subscription config features list. The pricing page does not show commission rates.
+
+**Correction applied:** Changed "per booking" to "platform processing fee" on all three pricing cards.
+
+### Instructor terms page
+
+**Location:** `app/instructor-terms/page.tsx` line 142 — uses future tense: "DriveBook may introduce additional business management features in future releases, including multiple providers..."
+
+**Assessment:** Correctly qualified as future. No change needed.
 
 ---
 

@@ -47,9 +47,9 @@ export default function CalendarFeaturePage() {
 
           <div className="border border-border rounded-xl p-6 bg-card">
             <Users className="h-10 w-10 text-violet-600 mb-4" />
-            <h3 className="text-xl font-bold mb-2">Multi-Professional Support</h3>
+            <h3 className="text-xl font-bold mb-2">Business Profiles</h3>
             <p className="text-muted-foreground">
-              Manage multiple team calendars from one dashboard. Perfect for businesses with multiple service providers.
+              Operate under your own business identity with custom branding. Multi-provider team management is coming soon for business accounts.
             </p>
           </div>
 
