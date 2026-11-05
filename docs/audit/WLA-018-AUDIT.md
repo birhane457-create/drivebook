@@ -2,7 +2,9 @@
 
 **Audit date:** 2026-11-05  
 **Source inspected:** 31a3ada0 (WLA-018 v4 fix commit)  
-**Status:** FIX APPLIED (v4) — all fee terminology corrected, dynamic pricing, audit references updated; pending review
+**Evidence sync:** 79792512  
+**Status:** ✅ FIX-VERIFIED (source level) — reviewer accepted 2026-11-06  
+**Qualifications:** (1) Committed source inspected; deployed production website not independently verified. (2) Checkout/payment flows not independently executed. (3) No automated tests — finding concerns marketing and configuration consistency. (4) Lessons page retains informational 3.6% default with explanatory note.
 
 ---
 
