@@ -186,77 +186,70 @@ export async function PUT(req: NextRequest) {
     // which will create the Business and link Provider.businessId atomically.
     const registryOwnerId = resolvedBizId
 
-    // Wrap the Provider update + slug registry update in a single transaction.
-    // claimSlug() throws P2002 if the slug is already claimed by any owner.
+    // WLA-014-SLUG v5: Wrap the Provider update AND the canonical BusinessBranding
+    // upsert (including slug registry) in a SINGLE transaction. If the registry
+    // claim fails (P2002), the entire transaction rolls back — the Provider's
+    // customSlug is NOT left in an inconsistent state.
     let updated: any
-    await prisma.$transaction(async (tx) => {
-      if (slugIsBeingChanged && newSlug !== oldSlug && registryOwnerId) {
-        const { updateSlugClaim } = await import('@/lib/branding/slug-registry')
-        await updateSlugClaim(tx, 'businessBranding', registryOwnerId, oldSlug, newSlug)
-      }
-
-      updated = await tx.provider.update({
-        where: { id: instructor.id },
-        data: {
-          brandLogo: brandLogo || null,
-          brandColorPrimary: brandColorPrimary || null,
-          brandColorSecondary: brandColorSecondary || null,
-          showBrandingOnBookingPage: showBrandingOnBookingPage === true,
-          // WLA-014-SLUG: only write customSlug when it was explicitly included in the request.
-          // Omitting the field must not clear an existing slug or corrupt the registry.
-          ...(slugIsBeingChanged && { customSlug: customSlug || null }),
-          // V-15 FIX: when customDomain changes, reset domainVerified to false.
-          ...(customDomain !== undefined && {
-            customDomain: customDomain || null,
-            domainVerified: false,
-            domainVerifiedAt: null,
-          }),
-          ...(cleanBusinessName !== undefined && { businessName: cleanBusinessName }),
-        },
-        select: {
-          brandLogo: true,
-          brandColorPrimary: true,
-          brandColorSecondary: true,
-          showBrandingOnBookingPage: true,
-          customSlug: true,
-          customDomain: true,
-          domainVerified: true,
-          domainVerifiedAt: true,
-          businessName: true,
-        },
-      })
-    })
-
-    // WLA-014 FIX: Upsert BusinessBranding (canonical store) from Provider write.
-    // Replaces V-07 conditional sync (which only updated if record existed).
-    // BusinessBranding is now the authoritative store; create it if absent.
-    // The caller (this route) performs the showBrandingOnBookingPage → showPlatformBranding
-    // inversion BEFORE calling upsertBusinessBranding (inversion must not be applied twice).
-    // WLA-014 Issue D: if the BusinessBranding upsert fails, report the error to the caller
-    // rather than silently returning success. The Provider update already succeeded,
-    // so the response reflects a partial-write state that the client can retry.
     try {
-      const { upsertBusinessBranding } = await import('@/lib/branding/resolution')
-      await upsertBusinessBranding(instructor.id, {
-        ...(brandLogo !== undefined && { logo: brandLogo || null }),
-        ...(brandColorPrimary !== undefined && { primaryColour: brandColorPrimary || '#3B82F6' }),
-        ...(brandColorSecondary !== undefined && { secondaryColour: brandColorSecondary || null }),
-        ...(customSlug !== undefined && { customSlug: customSlug || null }),
-        // Inversion applied here (caller responsibility per upsertBusinessBranding contract).
-        ...(showBrandingOnBookingPage !== undefined && {
-          showPlatformBranding: showBrandingOnBookingPage !== true,
-        }),
+      await prisma.$transaction(async (tx) => {
+        // 1. Slug registry update (only if we have a resolved bizId)
+        if (slugIsBeingChanged && newSlug !== oldSlug && registryOwnerId) {
+          const { updateSlugClaim } = await import('@/lib/branding/slug-registry')
+          await updateSlugClaim(tx, 'businessBranding', registryOwnerId, oldSlug, newSlug)
+        }
+
+        // 2. Provider update (legacy compat fields + customSlug)
+        updated = await tx.provider.update({
+          where: { id: instructor.id },
+          data: {
+            brandLogo: brandLogo || null,
+            brandColorPrimary: brandColorPrimary || null,
+            brandColorSecondary: brandColorSecondary || null,
+            showBrandingOnBookingPage: showBrandingOnBookingPage === true,
+            ...(slugIsBeingChanged && { customSlug: customSlug || null }),
+            ...(customDomain !== undefined && {
+              customDomain: customDomain || null,
+              domainVerified: false,
+              domainVerifiedAt: null,
+            }),
+            ...(cleanBusinessName !== undefined && { businessName: cleanBusinessName }),
+          },
+          select: {
+            brandLogo: true,
+            brandColorPrimary: true,
+            brandColorSecondary: true,
+            showBrandingOnBookingPage: true,
+            customSlug: true,
+            customDomain: true,
+            domainVerified: true,
+            domainVerifiedAt: true,
+            businessName: true,
+          },
+        })
+
+        // 3. Canonical BusinessBranding upsert + slug registry (inside the same tx)
+        const { upsertBusinessBranding } = await import('@/lib/branding/resolution')
+        await upsertBusinessBranding(instructor.id, {
+          ...(brandLogo !== undefined && { logo: brandLogo || null }),
+          ...(brandColorPrimary !== undefined && { primaryColour: brandColorPrimary || '#3B82F6' }),
+          ...(brandColorSecondary !== undefined && { secondaryColour: brandColorSecondary || null }),
+          ...(customSlug !== undefined && { customSlug: customSlug || null }),
+          ...(showBrandingOnBookingPage !== undefined && {
+            showPlatformBranding: showBrandingOnBookingPage !== true,
+          }),
+        }, tx)  // Pass the outer tx so everything is atomic
       })
-    } catch (syncErr) {
-      // BusinessBranding write failed after Provider write succeeded.
-      // Return a partial-success response so the client knows to retry.
-      console.error('[WLA-014] BusinessBranding upsert failed:', syncErr instanceof Error ? syncErr.message : String(syncErr))
-      return NextResponse.json({
-        success: false,
-        partialWrite: true,
-        branding: updated,
-        error: 'Branding preferences saved to your profile, but the shared configuration could not be updated. Please try saving again.',
-      }, { status: 207 }) // 207 Multi-Status: partial success
+    } catch (txErr: any) {
+      // Transaction failed — both Provider and BusinessBranding rolled back.
+      // If it's a P2002 on slug, surface as 409.
+      if (txErr?.code === 'P2002') {
+        const target = txErr?.meta?.target?.toString() ?? ''
+        if (target.includes('customSlug') || target.includes('slug')) {
+          return NextResponse.json({ error: 'This slug is already taken. Please choose another.' }, { status: 409 })
+        }
+      }
+      throw txErr
     }
 
     return NextResponse.json({ success: true, branding: updated });
