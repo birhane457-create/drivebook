@@ -104,7 +104,7 @@ Auto-loaded by Kiro IDE when working on the project:
 | **Payments** | Stripe + Stripe Connect |
 | **Timezone** | Australia/Perth (AWST, UTC+8) |
 | **Currency** | AUD |
-| **Platform Fee** | 3.6% of booking total |
+| **DriveBook Platform Fee** | 3.6% of booking total (charged to customer, admin-configurable) |
 | **Commission** | 10-15% (tier-dependent) |
 
 ## Recent Updates
