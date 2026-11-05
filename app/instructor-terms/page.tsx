@@ -200,13 +200,13 @@ export default function InstructorTermsPage() {
               </ul>
 
               <h3 id="commission" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Commission</h3>
-              <p className="mb-2">11. DriveBook deducts a commission from each completed booking payment. Commission is calculated as a percentage of the lesson price (excluding the platform processing fee).</p>
+              <p className="mb-2">11. DriveBook deducts a commission from each completed booking payment. Commission is calculated as a percentage of the lesson price (excluding the DriveBook platform fee).</p>
               <ul className="list-none pl-6 space-y-2 mb-4">
                 <li>11.1. Commission rates are as set out in clause 10 above and may vary by subscription tier.</li>
                 <li>11.2. An additional new student bonus commission applies to the first booking with each new client (BASIC: 8%, PRO/STUDIO: 10%).</li>
                 <li>11.3. Commission rates may be adjusted by DriveBook with 30 days written notice. Changes apply to new bookings created after the effective date.</li>
                 <li>11.4. Commission is deducted automatically at the time of payment processing. The Instructor's payout is the lesson price minus commission.</li>
-                <li>11.5. DriveBook may also charge a platform processing fee (currently 3.6%) on each transaction. This fee is separate from commission and is charged to the learner.</li>
+                <li>11.5. DriveBook may also charge a DriveBook platform fee (currently 3.6%) on each transaction. This fee is separate from commission and is charged to the learner.</li>
               </ul>
 
               <h3 id="payouts" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Payout Terms</h3>

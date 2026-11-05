@@ -451,7 +451,7 @@ export default function DrivingLessonsPage() {
               <div className="flex items-start gap-3 bg-secondary/40 border border-border rounded-xl p-4 text-left mb-5">
                 <CreditCard className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">DriveBook platform fee:</span> 3.6% applied at checkout, charged to the customer in addition to the service price. This covers payment processing, platform support, and SMS confirmations.
+                  <span className="font-semibold text-foreground">DriveBook platform fee:</span> 3.6% applied at checkout, charged to the customer in addition to the service price. This covers payment processing, platform support, and SMS confirmations. <span className="text-xs">(The actual rate is configurable by DriveBook and is shown at checkout.)</span>
                 </p>
               </div>
               <Link

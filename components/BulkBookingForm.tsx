@@ -471,7 +471,7 @@ export default function BulkBookingForm({
                 </div>
               )}
               <div className="flex justify-between text-muted-foreground/60">
-                <span>Platform fee (3.6%)</span>
+                <span>DriveBook platform fee (3.6%)</span>
                 <span>${summaryPricing.platformFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-base border-t pt-2 mt-1">
@@ -980,7 +980,7 @@ export default function BulkBookingForm({
                 </div>
               )}
               <div className="flex justify-between text-muted-foreground/60">
-                <span>Platform fee (3.6%)</span>
+                <span>DriveBook platform fee (3.6%)</span>
                 <span>+${summaryPricing.platformFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-base pt-2 border-t">

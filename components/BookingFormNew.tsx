@@ -783,7 +783,7 @@ export default function BookingForm({
                 {insufficientBalance.customerName} has <strong>${insufficientBalance.currentBalance.toFixed(2)}</strong> but needs <strong>${insufficientBalance.required.toFixed(2)}</strong> for this lesson.
               </p>
               <p className="text-sm text-destructive">
-                They need to top up <strong>${insufficientBalance.topUpAmount.toFixed(2)}</strong> (includes 3.6% platform fee).
+                They need to top up <strong>${insufficientBalance.topUpAmount.toFixed(2)}</strong> (includes DriveBook platform fee).
               </p>
             </div>
           </div>

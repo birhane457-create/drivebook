@@ -1,8 +1,38 @@
 # WLA-018 — Public Branding Claims Audit
 
 **Audit date:** 2026-11-05  
-**Source inspected:** a24a26ee (WLA-018 v2 fix commit)  
-**Status:** FIX APPLIED (v3) — fee wording corrected, dynamic pricing, audit references updated; pending review
+**Source inspected:** 125fe814 (WLA-018 v3 fix commit)  
+**Status:** FIX APPLIED (v4) — all fee terminology corrected, dynamic pricing, audit references updated; pending review
+
+---
+
+## v4 Corrections (in addition to v1-v3)
+
+### Remaining fee terminology corrected
+
+The v3 review found additional "processing fee" references in customer-facing surfaces. All have been corrected:
+
+| File | Old wording | New wording | Surface |
+|---|---|---|---|
+| `app/api/bookings/send-payment-link/route.ts` (table row) | "Platform processing fee" | "DriveBook platform fee" | Customer payment-link email |
+| `app/api/bookings/send-payment-link/route.ts` (footer) | "platform processing fee" | "DriveBook platform fee" | Same email footer |
+| `app/client-dashboard/help/page.tsx` (FAQ question) | "What is the platform processing fee?" | "What is the DriveBook platform fee?" | Customer help FAQ |
+| `app/client-dashboard/help/page.tsx` (payment link answer) | "lesson cost + processing fee" | "lesson cost + DriveBook platform fee" | Customer help FAQ |
+| `app/instructor-terms/page.tsx` (clause 11) | "platform processing fee" | "DriveBook platform fee" | Instructor terms (2 instances) |
+| `lib/config/packages.ts` (comment) | "platform processing fee" | "DriveBook platform fee" | Code comment |
+| `components/admin/PricingSettingsForm.tsx` | "Processing fee charged to clients" | "DriveBook platform fee charged to clients" | Admin settings |
+| `components/BulkBookingForm.tsx` (2 instances) | "Platform fee (3.6%)" | "DriveBook platform fee (3.6%)" | Customer bulk booking form |
+| `components/BookingFormNew.tsx` | "includes 3.6% platform fee" | "includes DriveBook platform fee" | Customer booking form |
+
+### Lessons page hardcoded 3.6%
+
+**Issue:** `app/lessons/page.tsx` is a client component — cannot fetch server-side platform fee.
+
+**Resolution:** Retained 3.6% as the displayed default with an added note: "(The actual rate is configurable by DriveBook and is shown at checkout.)" This makes clear that the displayed rate is informational and the authoritative rate is applied at checkout from `PlatformSettings`.
+
+### Invoice "Processing fees" at $0.00
+
+**Assessment:** Invoice components (`InvoiceLayout.tsx`, `ReceiptH_WeeklyEarnings.tsx`, `ReceiptI_InstructorInvoice.tsx`) display "Processing fees: $0.00". These are a separate concept from the DriveBook platform fee — they represent Stripe's processing charges (currently $0 in this pricing model). No change needed.
 
 ---
 

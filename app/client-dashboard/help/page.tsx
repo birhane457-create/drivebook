@@ -49,10 +49,10 @@ const faqs = [
       },
       {
         q: 'I received a payment link from my instructor — what do I do?',
-        a: 'Click the link in the email. It will pre-fill the exact amount needed (lesson cost + processing fee). Once you top up, let your instructor know and they\'ll confirm the booking.',
+        a: 'Click the link in the email. It will pre-fill the exact amount needed (lesson cost + DriveBook platform fee). Once you top up, let your instructor know and they\'ll confirm the booking.',
       },
       {
-        q: 'What is the platform processing fee?',
+        q: 'What is the DriveBook platform fee?',
         a: 'A DriveBook platform fee (currently 3.6%) is applied when you top up your wallet. This covers payment processing costs. It\'s shown clearly before you confirm any top-up.',
       },
       {
