@@ -55,8 +55,12 @@ const DEFAULT_PRIMARY = '#3B82F6'
  * The biz_ convention is TRANSITIONAL. New Business records must not use it
  * as the permanent identity rule.
  */
-export async function resolveBusinessId(providerId: string): Promise<string | null> {
-  const provider = await prisma.provider.findUnique({
+export async function resolveBusinessId(
+  providerId: string,
+  tx?: any  // WLA-014-SLUG v5: accept transaction client for tx-aware reads
+): Promise<string | null> {
+  const db = tx ?? prisma
+  const provider = await db.provider.findUnique({
     where: { id: providerId },
     select: { businessId: true } as any,
   }) as any
@@ -68,7 +72,7 @@ export async function resolveBusinessId(providerId: string): Promise<string | nu
 
   // 2. Legacy biz_ convention (fallback for existing migrated records only)
   const legacyBizId = `biz_${providerId}`
-  const legacyBusiness = await (prisma as any).business.findUnique({
+  const legacyBusiness = await (db as any).business.findUnique({
     where: { id: legacyBizId },
     select: { id: true },
   })
@@ -219,8 +223,9 @@ export async function upsertBusinessBranding(
   // Use the provided transaction client, or the global prisma if no tx is passed
   const db = existingTx ?? prisma
 
-  // Resolve the Business ID via the explicit FK first, then legacy fallback
-  let bizId = await resolveBusinessId(providerId)
+  // Resolve the Business ID via the explicit FK first, then legacy fallback.
+  // WLA-014-SLUG v5: pass the transaction client so reads participate in the tx.
+  let bizId = await resolveBusinessId(providerId, db)
 
   if (!bizId) {
     // No existing Business relationship — create one with an INDEPENDENT ID.

@@ -1,6 +1,6 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.21 (WLA-014-SLUG v5: instructor PUT now merges Provider update + upsertBusinessBranding into a single transaction; P2002 on slug registry rolls back Provider.customSlug — no inconsistent partial write; upsertBusinessBranding accepts optional tx parameter; FAIL01 regression test proves rollback; NEW02 description corrected; 25/25 tests pass exit 0 PGlite.)
+**Version:** 6.22 (WLA-014-SLUG v5 final: resolveBusinessId accepts optional tx param; upsertBusinessBranding passes db (tx client) to resolveBusinessId so all reads inside a transaction use the tx-aware client; TX05 source check confirms boundary; cleanup uses $executeRawUnsafe (string-based) to avoid PGlite 42P05; 26/26 tests pass exit 0 PGlite.)
 **Last Updated:** 2026-11-03
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
