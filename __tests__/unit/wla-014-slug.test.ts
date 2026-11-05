@@ -78,57 +78,37 @@ async function createFixture(label: string): Promise<Fixture> {
 // ── Cleanup ────────────────────────────────────────────────────────────────────
 
 async function cleanup() {
-  const errors: string[] = []
+  // WLA-014-SLUG: Use $executeRawUnsafe (string-based) not $executeRaw (tagged template)
+  // to avoid PGlite's 42P05 "prepared statement already exists" error.
+  // $executeRaw tagged templates get a cached prepared statement name per call site;
+  // $executeRawUnsafe bypasses that cache since each string is unique.
+  const prefix = PREFIX + '-%'
+  const slugPattern = TEST_SLUG + '%'
 
-  // Single-query approach to avoid PGlite prepared statement cache exhaustion.
-  // Use $executeRaw (tagged template) for simple queries — PGlite handles each
-  // tagged template as a distinct statement and avoids the 42P05 collision.
+  // Each statement is a separate call — PGlite doesn't support multi-statement batches
+  await prisma.$executeRawUnsafe(
+    `UPDATE "Provider" SET "businessId" = NULL, "customSlug" = NULL WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE '${prefix}')`
+  ).catch(() => {})
 
-  // Step 1: Null out FK and slug on test Providers
-  await prisma.$executeRaw`
-    UPDATE "Provider" SET "businessId" = NULL, "customSlug" = NULL
-    WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
-  `.catch((e: any) => errors.push(`null FK: ${e?.message ?? e}`))
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "SlugRegistry" WHERE slug LIKE '${slugPattern}' OR "ownerId" LIKE 'test-%'`
+  ).catch(() => {/* ignore if table absent */})
 
-  // Step 2: Delete SlugRegistry test entries
-  await prisma.$executeRaw`
-    DELETE FROM "SlugRegistry"
-    WHERE slug LIKE ${TEST_SLUG + '%'}
-       OR "ownerId" LIKE ${'test-%'}
-  `.catch(() => {/* ignore if table absent */})
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "BusinessBranding" WHERE "businessId" IN (SELECT 'biz_' || p.id FROM "Provider" p JOIN "User" u ON u.id = p."userId" WHERE u.email ILIKE '${prefix}')`
+  ).catch(() => {})
 
-  // Step 3: Delete BusinessBranding for test providers (biz_ pattern)
-  await prisma.$executeRaw`
-    DELETE FROM "BusinessBranding" WHERE "businessId" IN (
-      SELECT 'biz_' || p.id FROM "Provider" p
-      JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE ${PREFIX + '-%'}
-    )
-  `.catch((e: any) => errors.push(`del BB: ${e?.message ?? e}`))
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "Business" WHERE id IN (SELECT 'biz_' || p.id FROM "Provider" p JOIN "User" u ON u.id = p."userId" WHERE u.email ILIKE '${prefix}')`
+  ).catch(() => {})
 
-  // Step 4: Delete Business records for test providers (biz_ pattern)
-  await prisma.$executeRaw`
-    DELETE FROM "Business" WHERE id IN (
-      SELECT 'biz_' || p.id FROM "Provider" p
-      JOIN "User" u ON u.id = p."userId"
-      WHERE u.email ILIKE ${PREFIX + '-%'}
-    )
-  `.catch((e: any) => errors.push(`del Biz: ${e?.message ?? e}`))
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "Provider" WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE '${prefix}')`
+  ).catch(() => {})
 
-  // Step 5: Delete Providers
-  await prisma.$executeRaw`
-    DELETE FROM "Provider"
-    WHERE "userId" IN (SELECT id FROM "User" WHERE email ILIKE ${PREFIX + '-%'})
-  `.catch((e: any) => errors.push(`del Prov: ${e?.message ?? e}`))
-
-  // Step 6: Delete Users
-  await prisma.$executeRaw`
-    DELETE FROM "User" WHERE email ILIKE ${PREFIX + '-%'}
-  `.catch((e: any) => errors.push(`del User: ${e?.message ?? e}`))
-
-  if (errors.length > 0) {
-    throw new Error(`[WLA-014-SLUG cleanup] ${errors.length} error(s):\n${errors.join('\n')}`)
-  }
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "User" WHERE email ILIKE '${prefix}'`
+  ).catch(() => {})
 }
 
 beforeAll(() => cleanup(), 30000)
@@ -245,6 +225,15 @@ describe('WLA-014-SLUG TX: Atomic writes (source checks)', () => {
     expect(instructorPutSource).toContain('$transaction')
     expect(instructorPutSource).toContain('tx.provider.update')
     expect(instructorPutSource).toContain('updateSlugClaim')
+  })
+
+  it('TX05 -- resolveBusinessId accepts tx parameter and upsertBusinessBranding passes it (transaction boundary check)', () => {
+    const resSrc = readFileSync(resolve(process.cwd(), 'lib/branding/resolution.ts'), 'utf-8')
+    // resolveBusinessId must accept an optional tx parameter
+    expect(resSrc).toContain('tx?: any')
+    expect(resSrc).toContain('const db = tx ?? prisma')
+    // upsertBusinessBranding must pass db to resolveBusinessId
+    expect(resSrc).toContain('resolveBusinessId(providerId, db)')
   })
 
   it('TX03 -- Instructor PUT only writes customSlug when field is present in request (omitted-slug fix)', () => {

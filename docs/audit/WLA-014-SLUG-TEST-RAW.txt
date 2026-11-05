@@ -15,6 +15,7 @@
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG CROSS: Cross-table slug uniqueness enforcement (source checks)[2m > [22mCROSS02 -- Business branding PUT uses resolveBusinessId (not hardcoded biz_) and unified registry ownership
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG TX: Atomic writes (source checks)[2m > [22mTX01 -- Business branding PUT wraps BusinessBranding upsert, Provider mirror, and registry update in a transaction
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG TX: Atomic writes (source checks)[2m > [22mTX02 -- Instructor branding PUT wraps Provider update and registry update in a transaction
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG TX: Atomic writes (source checks)[2m > [22mTX05 -- resolveBusinessId accepts tx parameter and upsertBusinessBranding passes it (transaction boundary check)
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG TX: Atomic writes (source checks)[2m > [22mTX03 -- Instructor PUT only writes customSlug when field is present in request (omitted-slug fix)
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG TX: Atomic writes (source checks)[2m > [22mTX04 -- Business PUT only writes customSlug when field is present in request (omitted-slug fix)
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG REG: SlugRegistry cross-table uniqueness (real DB)[2m > [22mREG01 -- claimSlug() creates a SlugRegistry row
@@ -32,8 +33,8 @@
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)[2m > [22mCROSS-ROUTE01 -- slug claimed by one bizId blocks the same slug from a different bizId
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m25 passed[39m[22m[90m (25)[39m
-[2m   Start at [22m 14:48:57
-[2m   Duration [22m 2.22s[2m (transform 149ms, setup 88ms, collect 191ms, tests 436ms, environment 0ms, prepare 1.16s)[22m
+[2m      Tests [22m [1m[32m26 passed[39m[22m[90m (26)[39m
+[2m   Start at [22m 18:16:58
+[2m   Duration [22m 1.34s[2m (transform 138ms, setup 66ms, collect 159ms, tests 460ms, environment 0ms, prepare 181ms)[22m
 
 VITEST_EXIT:0 
