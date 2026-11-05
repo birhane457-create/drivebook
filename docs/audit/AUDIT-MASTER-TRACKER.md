@@ -1,6 +1,6 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.20 (WLA-014-SLUG v4: upsertBusinessBranding now registers slug in SlugRegistry atomically inside transaction — first-time Business creation cannot write a slug without a registry claim; NEW01/NEW02 regression tests prove first-time path; OMIT01/CLEAR01 descriptions corrected to registry service level; production migrations 20261104000001 + 20261104000002 applied and verified; 24/24 tests pass exit 0 PGlite.)
+**Version:** 6.21 (WLA-014-SLUG v5: instructor PUT now merges Provider update + upsertBusinessBranding into a single transaction; P2002 on slug registry rolls back Provider.customSlug — no inconsistent partial write; upsertBusinessBranding accepts optional tx parameter; FAIL01 regression test proves rollback; NEW02 description corrected; 25/25 tests pass exit 0 PGlite.)
 **Last Updated:** 2026-11-03
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  

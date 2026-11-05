@@ -385,7 +385,7 @@ describe('WLA-014-SLUG NEW: First-time Business creation registers slug (real DB
     }
   }, 30000)
 
-  it('NEW02 -- second concurrent upsert for the same slug is rejected via SlugRegistry (P2002)', async () => {
+  it('NEW02 -- subsequent claim for the same slug by a different Business is rejected (P2002, sequential not concurrent)', async () => {
     // Once a slug is registered via upsertBusinessBranding, a subsequent attempt
     // by a different Business to claim the same slug must fail with P2002.
     const { claimSlug } = await import('@/lib/branding/slug-registry')
@@ -415,6 +415,81 @@ describe('WLA-014-SLUG NEW: First-time Business creation registers slug (real DB
         await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
       }
       await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 30000)
+})
+
+// ── V5: Atomic Provider + BusinessBranding regression tests ─────────────────
+
+describe('WLA-014-SLUG V5: Atomic failure rollback (real DB)', () => {
+  it('FAIL01 -- instructor upsertBusinessBranding with tx: P2002 on slug rolls back Provider.customSlug', async () => {
+    // Regression: if upsertBusinessBranding is called inside the instructor
+    // route's transaction and the slug registry rejects (P2002), the Provider
+    // update must also roll back — Provider.customSlug must NOT be left set.
+    const { upsertBusinessBranding } = await import('@/lib/branding/resolution')
+    const { claimSlug } = await import('@/lib/branding/slug-registry')
+
+    // Provider A: already has a Business and a slug registered
+    const { providerId: pAId, userId: uAId } = await createFixture('fail01a')
+    const bizAId = `biz_${pAId}`
+    const slugA = TEST_SLUG + '-fail01-a'
+    try {
+      await (prisma.business as any).create({
+        data: { id: bizAId, name: 'Fail01 Biz A', supportEmail: 'fail01a@test.local', timezone: 'Australia/Perth', paymentModel: 'saas', isActive: true },
+      })
+      await (prisma.businessBranding as any).create({
+        data: { businessId: bizAId, primaryColour: '#FF0000', showPlatformBranding: true, customSlug: slugA },
+      })
+      await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = ${bizAId} WHERE id = ${pAId}`
+      await prisma.$transaction(async (tx) => {
+        await claimSlug(tx, slugA, 'businessBranding', bizAId)
+      })
+
+      // Provider B: tries to claim the same slug via upsertBusinessBranding
+      const { providerId: pBId, userId: uBId } = await createFixture('fail01b')
+      const bizBId = `biz_${pBId}`
+      try {
+        await (prisma.business as any).create({
+          data: { id: bizBId, name: 'Fail01 Biz B', supportEmail: 'fail01b@test.local', timezone: 'Australia/Perth', paymentModel: 'saas', isActive: true },
+        })
+        await (prisma.businessBranding as any).create({
+          data: { businessId: bizBId, primaryColour: '#00FF00', showPlatformBranding: true },
+        })
+        await prisma.$executeRaw`UPDATE "Provider" SET "businessId" = ${bizBId} WHERE id = ${pBId}`
+
+        // Attempt to upsert with the same slug — must fail P2002
+        let caught: any = null
+        try {
+          await upsertBusinessBranding(pBId, { customSlug: slugA, primaryColour: '#0000FF' })
+        } catch (err) {
+          caught = err
+        }
+        expect(caught).not.toBeNull()
+        expect(caught?.code).toBe('P2002')
+
+        // Verify Provider B's customSlug was NOT set (transaction rolled back)
+        const provB = await (prisma.provider as any).findUnique({
+          where: { id: pBId },
+          select: { customSlug: true },
+        })
+        expect(provB?.customSlug).toBeNull()
+
+        // Verify BusinessBranding for B was NOT updated with the slug
+        const bbB = await (prisma.businessBranding as any).findUnique({
+          where: { businessId: bizBId },
+          select: { customSlug: true },
+        })
+        expect(bbB?.customSlug).toBeNull()
+      } finally {
+        await (prisma.businessBranding as any).delete({ where: { businessId: bizBId } }).catch(() => {})
+        await (prisma.business as any).delete({ where: { id: bizBId } }).catch(() => {})
+        await prisma.user.delete({ where: { id: uBId } }).catch(() => {})
+      }
+    } finally {
+      await prisma.$executeRaw`DELETE FROM "SlugRegistry" WHERE slug = ${slugA}`.catch(() => {})
+      await (prisma.businessBranding as any).delete({ where: { businessId: bizAId } }).catch(() => {})
+      await (prisma.business as any).delete({ where: { id: bizAId } }).catch(() => {})
+      await prisma.user.delete({ where: { id: uAId } }).catch(() => {})
     }
   }, 30000)
 })
