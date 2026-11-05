@@ -75,8 +75,6 @@ describe('WLA-015: getProviderBookingsSender white-label logic', () => {
   })
 
   it('S06 -- accountType=BUSINESS alone does not grant white-label (architecture constraint)', () => {
-    // Architecture decision: structure defines capacity; subscription defines entitlement.
-    // BUSINESS accountType does not grant white-label per getAccountFeatures.whiteLabel = isPremium
     const result = getProviderBookingsSender({
       subscriptionTier: 'PRO',
       businessName: 'Perth Drive Academy',
@@ -91,8 +89,6 @@ describe('WLA-015: getProviderBookingsSender white-label logic', () => {
   })
 
   it('S08 -- email address is always bookings@drivebook.com.au regardless of tier', () => {
-    // White-label changes only the display name component; the email address is unchanged
-    // This preserves DKIM signing and deliverability
     const premium = getProviderBookingsSender({ subscriptionTier: 'PREMIUM', businessName: 'Perth Academy' })
     const basic = getProviderBookingsSender({ subscriptionTier: 'BASIC', businessName: 'Perth Academy' })
     const none = getProviderBookingsSender()
@@ -109,6 +105,18 @@ describe('WLA-015: getProviderBookingsSender white-label logic', () => {
     })
     expect(result).toBe(`Perth Drive Academy via DriveBook <${BOOKINGS_EMAIL}>`)
     expect(result).not.toContain('  ')
+  })
+
+  it('S09b -- getProviderBookingsSender uses getAccountFeatures (central abstraction, not direct tier check)', () => {
+    // Architecture rule: never check plan === 'PREMIUM' directly in product code.
+    // Always use getAccountFeatures().
+    const sendersSrc = readFileSync(
+      resolve(process.cwd(), 'lib/email/senders.ts'), 'utf-8'
+    )
+    expect(sendersSrc).toContain('getAccountFeatures')
+    expect(sendersSrc).toContain('whiteLabel')
+    // Must NOT contain a direct tier check
+    expect(sendersSrc).not.toContain("subscriptionTier === 'PREMIUM'")
   })
 })
 

@@ -14,6 +14,7 @@
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS07 -- null/undefined provider falls back to standard sender
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS08 -- email address is always bookings@drivebook.com.au regardless of tier
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS09 -- businessName with whitespace is trimmed
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: getProviderBookingsSender white-label logic[2m > [22mS09b -- getProviderBookingsSender uses getAccountFeatures (central abstraction, not direct tier check)
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS10 -- email.ts imports and uses getProviderBookingsSender (not formatSender) for booking emails
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS11 -- cron lesson-reminders selects subscriptionTier and uses getProviderBookingsSender
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS12 -- waiting-list-notify uses getProviderBookingsSender instead of hardcoded DriveBook string
@@ -26,8 +27,8 @@
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015 v3: Remaining booking-level email paths (source checks)[2m > [22mS19 -- batch/route.ts uses getProviderBookingsSender for customer lesson emails (instructor has businessName)
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m19 passed[39m[22m[90m (19)[39m
-[2m   Start at [22m 23:13:31
-[2m   Duration [22m 592ms[2m (transform 60ms, setup 48ms, collect 52ms, tests 6ms, environment 0ms, prepare 190ms)[22m
+[2m      Tests [22m [1m[32m20 passed[39m[22m[90m (20)[39m
+[2m   Start at [22m 23:56:35
+[2m   Duration [22m 818ms[2m (transform 72ms, setup 53ms, collect 115ms, tests 8ms, environment 0ms, prepare 248ms)[22m
 
 VITEST_EXIT:0 
