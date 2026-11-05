@@ -2,13 +2,17 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import PublicNav from '@/components/PublicNav';
 import { Check } from 'lucide-react';
+import { getPlatformFeeRate } from '@/lib/services/platform-pricing';
 
 export const metadata = {
   title: 'Pricing | DriveBook',
   description: 'Simple, transparent pricing for service professionals',
 };
 
-export default function PricingPage() {
+// WLA-018 FIX: Fetch the actual platform fee from PlatformSettings (admin-configurable).
+// Previously hardcoded 3.6% which could become stale if an admin changes the rate.
+export default async function PricingPage() {
+  const platformFeePct = await getPlatformFeeRate().catch(() => 3.6);
   return (
     <div className="light min-h-screen bg-background text-foreground">
       <PublicNav />
@@ -30,8 +34,8 @@ export default function PricingPage() {
           <div className="border border-border rounded-xl p-8 bg-card hover:shadow-lg transition-shadow">
             <div className="mb-6">
               <h3 className="text-2xl font-bold mb-2">Starter</h3>
-              <div className="text-4xl font-bold mb-2">3.6%</div>
-              <p className="text-muted-foreground">platform processing fee</p>
+              <div className="text-4xl font-bold mb-2">{platformFeePct}%</div>
+              <p className="text-muted-foreground">DriveBook platform fee</p>
             </div>
 
             <ul className="space-y-3 mb-8">
@@ -70,8 +74,8 @@ export default function PricingPage() {
 
             <div className="mb-6">
               <h3 className="text-2xl font-bold mb-2">PRO</h3>
-              <div className="text-4xl font-bold mb-2">3.6%</div>
-              <p className="text-muted-foreground">platform processing fee</p>
+              <div className="text-4xl font-bold mb-2">{platformFeePct}%</div>
+              <p className="text-muted-foreground">DriveBook platform fee</p>
             </div>
 
             <ul className="space-y-3 mb-8">
@@ -106,8 +110,8 @@ export default function PricingPage() {
           <div className="border border-border rounded-xl p-8 bg-card hover:shadow-lg transition-shadow">
             <div className="mb-6">
               <h3 className="text-2xl font-bold mb-2">STUDIO</h3>
-              <div className="text-4xl font-bold mb-2">3.6%</div>
-              <p className="text-muted-foreground">platform processing fee</p>
+              <div className="text-4xl font-bold mb-2">{platformFeePct}%</div>
+              <p className="text-muted-foreground">DriveBook platform fee</p>
             </div>
 
             <ul className="space-y-3 mb-8">
