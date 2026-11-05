@@ -31,7 +31,7 @@ export default function PricingPage() {
             <div className="mb-6">
               <h3 className="text-2xl font-bold mb-2">Starter</h3>
               <div className="text-4xl font-bold mb-2">3.6%</div>
-              <p className="text-muted-foreground">per booking</p>
+              <p className="text-muted-foreground">platform processing fee</p>
             </div>
 
             <ul className="space-y-3 mb-8">
@@ -71,7 +71,7 @@ export default function PricingPage() {
             <div className="mb-6">
               <h3 className="text-2xl font-bold mb-2">PRO</h3>
               <div className="text-4xl font-bold mb-2">3.6%</div>
-              <p className="text-muted-foreground">per booking</p>
+              <p className="text-muted-foreground">platform processing fee</p>
             </div>
 
             <ul className="space-y-3 mb-8">
@@ -107,7 +107,7 @@ export default function PricingPage() {
             <div className="mb-6">
               <h3 className="text-2xl font-bold mb-2">STUDIO</h3>
               <div className="text-4xl font-bold mb-2">3.6%</div>
-              <p className="text-muted-foreground">per booking</p>
+              <p className="text-muted-foreground">platform processing fee</p>
             </div>
 
             <ul className="space-y-3 mb-8">
@@ -117,19 +117,11 @@ export default function PricingPage() {
               </li>
               <li className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-violet-600 flex-shrink-0 mt-0.5" />
-                <span className="font-semibold">👥 Multi-Professional</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-violet-600 flex-shrink-0 mt-0.5" />
                 <span className="font-semibold">🌐 Custom Domain</span>
               </li>
               <li className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                 <span>Branded marketplace experience</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <span>Team management</span>
               </li>
             </ul>
 
