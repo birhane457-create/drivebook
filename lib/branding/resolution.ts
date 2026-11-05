@@ -213,8 +213,12 @@ export async function upsertBusinessBranding(
     theme?: 'light' | 'dark'
     showPlatformBranding?: boolean
     customSlug?: string | null
-  }
+  },
+  existingTx?: any  // WLA-014-SLUG v5: accept outer transaction to merge with Provider update
 ): Promise<void> {
+  // Use the provided transaction client, or the global prisma if no tx is passed
+  const db = existingTx ?? prisma
+
   // Resolve the Business ID via the explicit FK first, then legacy fallback
   let bizId = await resolveBusinessId(providerId)
 
@@ -222,7 +226,7 @@ export async function upsertBusinessBranding(
     // No existing Business relationship — create one with an INDEPENDENT ID.
     // Do NOT use the biz_ convention for new records. That is TRANSITIONAL,
     // reserved for pre-existing legacy records only.
-    const provider = await prisma.provider.findUnique({
+    const provider = await db.provider.findUnique({
       where: { id: providerId },
       select: {
         name: true,
@@ -238,7 +242,7 @@ export async function upsertBusinessBranding(
     const paymentModel = provider?.businessModel === 'MARKETPLACE' ? 'marketplace' : 'saas'
 
     // Create Business with auto-generated ID (no explicit id field — Prisma uses @default(cuid()))
-    const newBusiness = await (prisma as any).business.create({
+    const newBusiness = await (db as any).business.create({
       data: {
         name: provider?.businessName ?? provider?.name ?? 'My Business',
         supportEmail: provider?.user?.email ?? `noreply@drivebook.local`,
@@ -252,21 +256,21 @@ export async function upsertBusinessBranding(
     // Link the Provider to its newly created Business via the explicit FK.
     // The WHERE "businessId" IS NULL clause ensures only the first concurrent
     // request wins; subsequent requests find the FK already set.
-    const rowsAffected = await prisma.$executeRaw`
+    const rowsAffected = await db.$executeRaw`
       UPDATE "Provider" SET "businessId" = ${bizId}
       WHERE id = ${providerId} AND "businessId" IS NULL
     `
 
     if (rowsAffected === 0) {
       // A concurrent request already set Provider.businessId — re-read to get the actual value.
-      const reRead = await prisma.provider.findUnique({
+      const reRead = await db.provider.findUnique({
         where: { id: providerId },
         select: { businessId: true } as any,
       }) as any
 
       if (reRead?.businessId) {
         // Clean up the orphaned Business we just created (the concurrent request's Business wins)
-        await (prisma as any).business.delete({ where: { id: bizId } }).catch(() => {})
+        await (db as any).business.delete({ where: { id: bizId } }).catch(() => {})
         bizId = reRead.businessId
       } else {
         // FK assignment failed without a concurrent setter — this is a data integrity
@@ -274,7 +278,7 @@ export async function upsertBusinessBranding(
         // Clean up the orphaned Business, then throw so the route can return a
         // failure or partial-write response. Logging alone is insufficient — the
         // invariant must be enforced, not merely observed.
-        await (prisma as any).business.delete({ where: { id: bizId } })
+        await (db as any).business.delete({ where: { id: bizId } })
           .catch(err => console.error(
             `[WLA-014] Failed to clean up orphaned Business ${bizId}:`,
             err instanceof Error ? err.message : String(err)
@@ -287,9 +291,9 @@ export async function upsertBusinessBranding(
     }
   }
 
-  // Read existing BusinessBranding slug before the transaction so we can
+  // Read existing BusinessBranding slug before the write so we can
   // maintain the registry atomically with the upsert.
-  const existingBranding = bizId ? await (prisma as any).businessBranding.findUnique({
+  const existingBranding = bizId ? await (db as any).businessBranding.findUnique({
     where: { businessId: bizId },
     select: { customSlug: true },
   }) : null
@@ -297,10 +301,9 @@ export async function upsertBusinessBranding(
   const slugIsBeingChanged = fields.customSlug !== undefined
   const newSlug: string | null = slugIsBeingChanged ? (fields.customSlug ?? null) : oldSlug
 
-  // Wrap the BusinessBranding upsert and slug registry update in a single transaction.
-  // This ensures a customSlug cannot be written to BusinessBranding without a
-  // corresponding registry entry (preventing the first-time creation gap).
-  await prisma.$transaction(async (tx) => {
+  // WLA-014-SLUG v5: If an outer transaction is provided, execute directly on it.
+  // If no outer tx, create an inner transaction for atomicity.
+  const doBrandingWrite = async (tx: any) => {
     if (slugIsBeingChanged && newSlug !== oldSlug) {
       const { updateSlugClaim } = await import('./slug-registry')
       await updateSlugClaim(tx, 'businessBranding', bizId!, oldSlug, newSlug)
@@ -328,5 +331,13 @@ export async function upsertBusinessBranding(
         ...(fields.customSlug !== undefined && { customSlug: fields.customSlug }),
       },
     })
-  })
+  }
+
+  if (existingTx) {
+    // Running inside an outer transaction — execute directly
+    await doBrandingWrite(existingTx)
+  } else {
+    // No outer transaction — create an inner one for atomicity
+    await prisma.$transaction(async (tx) => { await doBrandingWrite(tx) })
+  }
 }
