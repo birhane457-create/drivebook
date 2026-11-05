@@ -395,7 +395,7 @@ export default function SubscriptionPlans({
     { tier: 'BASIC',    plan: SUBSCRIPTION_PLANS.BASIC,    badge: null,             badgeColor: '',              highlight: false, comingSoon: false },
     { tier: 'PRO',      plan: SUBSCRIPTION_PLANS.PRO,      badge: 'POPULAR',        badgeColor: 'bg-primary',    highlight: true,  comingSoon: false },
     { tier: 'STUDIO',   plan: SUBSCRIPTION_PLANS.STUDIO,   badge: 'CUSTOM DOMAIN',  badgeColor: 'bg-indigo-600', highlight: false, comingSoon: false },
-    { tier: 'PREMIUM',  plan: SUBSCRIPTION_PLANS.PREMIUM,  badge: 'WHITE LABEL',    badgeColor: 'bg-purple-600', highlight: false, comingSoon: false },
+    { tier: 'PREMIUM',  plan: SUBSCRIPTION_PLANS.PREMIUM,  badge: 'BRANDED',        badgeColor: 'bg-purple-600', highlight: false, comingSoon: false },
     { tier: 'BUSINESS', plan: null,                         badge: 'COMING SOON',    badgeColor: 'bg-rose-600',   highlight: false, comingSoon: true  },
   ];
 
@@ -496,7 +496,7 @@ export default function SubscriptionPlans({
                   {tier === 'BASIC'    && 'Individual instructor'}
                   {tier === 'PRO'      && 'Growing your business'}
                   {tier === 'STUDIO'   && 'Your own branded domain'}
-                  {tier === 'PREMIUM'  && 'Full white-label, direct payments'}
+                  {tier === 'PREMIUM'  && 'Enhanced marketplace branding'}
                   {tier === 'BUSINESS' && 'Multi-provider — schools & agencies'}
                 </p>
 
@@ -628,8 +628,8 @@ export default function SubscriptionPlans({
             <p className="text-sm text-gray-600 mt-1">Studio+: your own branded URL</p>
           </div>
           <div>
-            <div className="text-2xl font-bold text-blue-600">White label</div>
-            <p className="text-sm text-gray-600 mt-1">Premium: 0% commission, direct payments</p>
+            <div className="text-2xl font-bold text-blue-600">Branded</div>
+            <p className="text-sm text-gray-600 mt-1">Premium: enhanced marketplace branding</p>
           </div>
           <div className="opacity-60">
             <div className="text-2xl font-bold text-rose-500">Multi-provider</div>

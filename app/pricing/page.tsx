@@ -125,7 +125,7 @@ export default function PricingPage() {
               </li>
               <li className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <span>White-label experience</span>
+                <span>Branded marketplace experience</span>
               </li>
               <li className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />

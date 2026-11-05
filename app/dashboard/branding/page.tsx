@@ -543,7 +543,7 @@ export default function BrandingPage() {
                   className="mt-1 h-4 w-4 text-purple-600 focus:ring-violet-500 border-border rounded" />
                 <label htmlFor="showBranding" className="text-sm text-foreground">
                   <span className="font-medium">Show logo & colors on booking page</span>
-                  <p className="text-muted-foreground/60 mt-0.5 text-xs">White-labels your booking page with your brand</p>
+                  <p className="text-muted-foreground/60 mt-0.5 text-xs">Brands your booking page with your logo and colors</p>
                 </label>
               </div>
             </div>
