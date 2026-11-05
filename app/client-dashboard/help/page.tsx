@@ -45,7 +45,7 @@ const faqs = [
       },
       {
         q: 'How do I add credits?',
-        a: 'Go to Wallet → Add Credits. You can add any amount. A small platform processing fee (3.6%) is included in the top-up to cover payment processing costs.',
+        a: 'Go to Wallet → Add Credits. You can add any amount. A DriveBook platform fee (currently 3.6%) is included in the top-up to cover payment processing costs.',
       },
       {
         q: 'I received a payment link from my instructor — what do I do?',
@@ -53,7 +53,7 @@ const faqs = [
       },
       {
         q: 'What is the platform processing fee?',
-        a: 'A 3.6% fee is applied when you top up your wallet. This covers payment processing costs. It\'s shown clearly before you confirm any top-up.',
+        a: 'A DriveBook platform fee (currently 3.6%) is applied when you top up your wallet. This covers payment processing costs. It\'s shown clearly before you confirm any top-up.',
       },
       {
         q: 'Can I get a refund to my wallet?',

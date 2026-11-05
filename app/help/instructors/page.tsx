@@ -117,7 +117,7 @@ export default function InstructorHelpPage() {
               <p className="text-muted-foreground text-sm mt-3"><strong>How earnings work:</strong></p>
               <ol className="list-decimal list-inside space-y-1 ml-2">
                 <li>Student pays $100 for a lesson</li>
-                <li>Platform takes 3.6% fee = $3.60</li>
+                <li>Platform takes DriveBook platform fee (currently 3.6%) = $3.60</li>
                 <li>Remaining: $96.40</li>
                 <li>Your tier takes commission (e.g., Pro 12% = $11.57)</li>
                 <li>You receive: $84.83</li>

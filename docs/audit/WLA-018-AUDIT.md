@@ -1,8 +1,47 @@
 # WLA-018 — Public Branding Claims Audit
 
 **Audit date:** 2026-11-05  
-**Source inspected:** 2d581584 (WLA-018 v1 fix commit)  
-**Status:** FIX APPLIED (v2) — white-label wording corrected; multi-professional and pricing labels corrected; pending review
+**Source inspected:** a24a26ee (WLA-018 v2 fix commit)  
+**Status:** FIX APPLIED (v3) — fee wording corrected, dynamic pricing, audit references updated; pending review
+
+---
+
+## v3 Corrections (in addition to v1 white-label wording and v2 multi-professional removal)
+
+### Fee description corrected
+
+**Issue:** "platform processing fee" implies it's Stripe's charge. The 3.6% is DriveBook platform fee revenue, charged to the customer in addition to the service price.
+
+**Corrections applied:**
+- `app/pricing/page.tsx`: "platform processing fee" → "DriveBook platform fee" on all three cards
+- `app/lessons/page.tsx`: "Platform fee: 3.6%..." → "DriveBook platform fee: 3.6% applied at checkout, charged to the customer in addition to the service price..."
+- `app/client-dashboard/help/page.tsx`: "platform processing fee (3.6%)" → "DriveBook platform fee (currently 3.6%)" (two instances)
+- `app/help/instructors/page.tsx`: "Platform takes 3.6% fee" → "Platform takes DriveBook platform fee (currently 3.6%)"
+
+### Hardcoded 3.6% replaced with dynamic value
+
+**Issue:** `app/pricing/page.tsx` hardcoded "3.6%" but the actual fee is admin-configurable via `PlatformSettings.platformFeePercentage` (default 3.6%).
+
+**Correction applied:**
+- `app/pricing/page.tsx` converted to async server component
+- Imports `getPlatformFeeRate` from `lib/services/platform-pricing.ts`
+- Fetches the actual platform fee percentage from `PlatformSettings` (DB) or falls back to 3.6% if DB unavailable
+- All three pricing cards now display `{platformFeePct}%` instead of hardcoded "3.6%"
+
+### Audit references updated
+
+- `WLA-018-AUDIT.md`: source inspected changed to `a24a26ee`
+- Tracker WLA-018 row: fix commit updated to `a24a26ee`, version 6.32
+
+### Public surfaces inspected for fee terminology
+
+| File | Old wording | New wording | Status |
+|---|---|---|---|
+| `app/pricing/page.tsx` (3 cards) | "3.6% / platform processing fee" | Dynamic `{platformFeePct}% / DriveBook platform fee` | ✅ FIXED |
+| `app/lessons/page.tsx` | "Platform fee: 3.6% applied at checkout. This covers secure payment processing..." | "DriveBook platform fee: 3.6% applied at checkout, charged to the customer in addition to the service price..." | ✅ FIXED |
+| `app/client-dashboard/help/page.tsx` (2 instances) | "platform processing fee (3.6%)" / "A 3.6% fee..." | "DriveBook platform fee (currently 3.6%)" | ✅ FIXED |
+| `app/help/instructors/page.tsx` | "Platform takes 3.6% fee" | "Platform takes DriveBook platform fee (currently 3.6%)" | ✅ FIXED |
+| `app/instructor-terms/page.tsx` | "platform processing fee (currently 3.6%)" | No change — already correct wording with "currently" qualifier | ✅ Already correct |
 
 ---
 
