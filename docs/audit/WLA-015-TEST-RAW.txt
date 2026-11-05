@@ -20,10 +20,14 @@
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS13 -- app/api/bookings/route.ts passes provider to sendBookingConfirmation (caller integration)
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS14 -- app/api/public/bookings/route.ts passes provider to sendBookingConfirmation (caller integration)
  [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015: Source check — getProviderBookingsSender integrated at call sites[2m > [22mS15 -- checkProviderEligible returns businessName for white-label sender resolution
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015 v3: Remaining booking-level email paths (source checks)[2m > [22mS16 -- bookings/[id]/cancel/route.ts uses getProviderBookingsSender for cancellation emails
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015 v3: Remaining booking-level email paths (source checks)[2m > [22mS17 -- bookings/[id]/route.ts uses getProviderBookingsSender for PATCH cancellation email
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015 v3: Remaining booking-level email paths (source checks)[2m > [22mS18 -- bookings/route.ts uses getProviderBookingsSender for top-up prompt (instructor has businessName)
+ [32m✓[39m __tests__/unit/wla-015-sender-identity.test.ts[2m > [22mWLA-015 v3: Remaining booking-level email paths (source checks)[2m > [22mS19 -- batch/route.ts uses getProviderBookingsSender for customer lesson emails (instructor has businessName)
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m15 passed[39m[22m[90m (15)[39m
-[2m   Start at [22m 22:08:56
-[2m   Duration [22m 877ms[2m (transform 81ms, setup 63ms, collect 70ms, tests 5ms, environment 0ms, prepare 309ms)[22m
+[2m      Tests [22m [1m[32m19 passed[39m[22m[90m (19)[39m
+[2m   Start at [22m 23:13:31
+[2m   Duration [22m 592ms[2m (transform 60ms, setup 48ms, collect 52ms, tests 6ms, environment 0ms, prepare 190ms)[22m
 
 VITEST_EXIT:0 

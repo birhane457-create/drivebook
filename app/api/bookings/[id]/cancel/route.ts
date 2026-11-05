@@ -8,6 +8,7 @@ import { getNotifChannels } from '@/lib/config/platform-settings'
 import { createRefundTask } from '@/lib/services/taskManager'
 import { enqueueNotification } from '@/lib/services/notificationRetry'
 import { getDisplayName } from '@/lib/utils/account'
+import { getProviderBookingsSender } from '@/lib/email/senders'
 import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 import { cancelBooking } from '@/lib/services/booking-service'
 
@@ -107,7 +108,7 @@ export async function POST(
         : 'No refund applies — less than 24 hours notice.'
 
       emailService.sendGenericEmail({
-        from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+        from: getProviderBookingsSender(booking.provider),  // WLA-015 FIX
         to: booking.customer.email,
         subject: `Booking Cancelled — ${bookingDateStr}`,
         html: `<h2>Your booking has been cancelled</h2><p>Hi ${booking.customer.name},</p><p>Your booking with <strong>${getDisplayName(booking.provider)}</strong> on ${bookingDateStr} has been cancelled.</p><p>${refundNote}</p>`,
@@ -162,7 +163,7 @@ export async function POST(
 
     if (cancelChannels.email && booking.provider?.user?.email) {
       emailService.sendGenericEmail({
-        from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+        from: getProviderBookingsSender(booking.provider),  // WLA-015 FIX
         to: booking.provider.user.email,
         subject: `Booking Cancelled — ${booking.customer?.name || booking.customerName || 'Client'}`,
         html: `<h2>Booking Cancelled</h2><p>Hi ${booking.provider.name},</p><p>A booking with <strong>${booking.customer?.name || booking.customerName || 'Client'}</strong> on ${bookingDateStr} has been cancelled.</p>`,
