@@ -97,8 +97,8 @@ const CAPABILITY_MESSAGES: Record<keyof Capabilities, CapabilityMessage> = {
     ctaHref: '/dashboard/subscription',
   },
   canUseWhiteLabel: {
-    label:   'White-label branding',
-    reason:  'Full white-label requires a Premium plan',
+    label:   'Branded marketplace experience',
+    reason:  'Enhanced marketplace branding requires a Premium plan',
     cta:     'Upgrade to Premium →',
     ctaHref: '/dashboard/subscription',
   },
