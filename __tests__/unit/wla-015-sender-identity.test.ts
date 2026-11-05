@@ -173,3 +173,39 @@ describe('WLA-015: Source check — getProviderBookingsSender integrated at call
     expect(eligibleSrc).toContain('.businessName')
   })
 })
+
+describe('WLA-015 v3: Remaining booking-level email paths (source checks)', () => {
+  const cancelSrc = readFileSync(
+    resolve(process.cwd(), 'app/api/bookings/[id]/cancel/route.ts'), 'utf-8'
+  )
+  const idRouteSrc = readFileSync(
+    resolve(process.cwd(), 'app/api/bookings/[id]/route.ts'), 'utf-8'
+  )
+  const bookingsRouteSrc = readFileSync(
+    resolve(process.cwd(), 'app/api/bookings/route.ts'), 'utf-8'
+  )
+  const batchSrc = readFileSync(
+    resolve(process.cwd(), 'app/api/bookings/batch/route.ts'), 'utf-8'
+  )
+
+  it('S16 -- bookings/[id]/cancel/route.ts uses getProviderBookingsSender for cancellation emails', () => {
+    expect(cancelSrc).toContain('getProviderBookingsSender')
+    expect(cancelSrc).not.toContain("'DriveBook Bookings <bookings@drivebook.com.au>'")
+  })
+
+  it('S17 -- bookings/[id]/route.ts uses getProviderBookingsSender for PATCH cancellation email', () => {
+    expect(idRouteSrc).toContain('getProviderBookingsSender')
+    expect(idRouteSrc).not.toContain("'DriveBook Bookings <bookings@drivebook.com.au>'")
+  })
+
+  it('S18 -- bookings/route.ts uses getProviderBookingsSender for top-up prompt (instructor has businessName)', () => {
+    expect(bookingsRouteSrc).toContain('getProviderBookingsSender(instructor)')
+    expect(bookingsRouteSrc).toContain('businessName: true')
+  })
+
+  it('S19 -- batch/route.ts uses getProviderBookingsSender for customer lesson emails (instructor has businessName)', () => {
+    expect(batchSrc).toContain('getProviderBookingsSender(instructor)')
+    expect(batchSrc).toContain('businessName: true')
+    // send-payment-link and instructor batch summary remain platform-level (documented scope decision)
+  })
+})

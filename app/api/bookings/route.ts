@@ -21,6 +21,7 @@ import { recordBookingPayment } from '@/lib/services/ledger-operations'
 import { enqueueNotification, drainRetryQueueAsync } from '@/lib/services/notificationRetry'
 import { z } from 'zod'
 import { getDisplayName } from '@/lib/utils/account'
+import { getProviderBookingsSender } from '@/lib/email/senders'
 import { DEFAULT_TIMEZONE, resolveTimezone, timezoneFromState } from '@/lib/utils/timezone'
 import type { Prisma } from '@prisma/client'
 import { withSerializableRetry } from '@/lib/utils/transaction-retry'
@@ -189,6 +190,7 @@ export async function POST(req: NextRequest) {
         subscriptionStatus: true,
         subscriptionTier: true,
         syncGoogleCalendar: true,
+        businessName: true,  // WLA-015 FIX: needed for white-label email sender
         hourlyRate: true,
         timezone: true,
         state: true,
@@ -321,7 +323,7 @@ export async function POST(req: NextRequest) {
         const actionLabel = 'Set up your account & Top Up'
 
         await emailService.sendGenericEmail({
-          from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+          from: getProviderBookingsSender(instructor),  // WLA-015 FIX
           to: client.email,
           subject: `${instructor.name} booked a lesson for you — top up to confirm`,
           html: `
