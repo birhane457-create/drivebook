@@ -1,13 +1,14 @@
-# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v3)
+# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v4)
 
 **Finding ID:** WLA-002  
 **Category:** ARCHITECTURAL  
 **Risk:** Not a runtime defect in current code. An undocumented design boundary whose absence becomes a code defect when DIRECT mode is activated.  
-**Status:** ARCHITECTURE DECISION DEFINED (v3) — pending reviewer acceptance  
+**Status:** ARCHITECTURE DECISION DEFINED (v4) — pending reviewer acceptance  
 **v1 authored:** 2026-11-06 — NOT ACCEPTED (reviewer: dispute liability incorrectly assigned to instructor)  
 **v2 authored:** 2026-11-06 — NOT ACCEPTED (reviewer: AU rate stale; DIRECT dispute ledger contradicts section 6.5)  
-**v3 authored:** 2026-11-06  
-**v2 rejection reason:** AU processing rate used 1.65% + $0.30 (stale); section 6.3 `PlatformLedger` impact row stated `DISPUTE_LOST → totalCollected -= disputedAmount`, directly contradicting section 6.5 which correctly prohibits any `totalCollected` mutation for DIRECT bookings; Model A rationale overstated Stripe's position on Express accounts without precise documentation; dispute countered fee (A$25) omitted from dispute economics.
+**v3 authored:** 2026-11-06 — NOT ACCEPTED (reviewer: refund economics incorrect; G10 design insufficient)  
+**v4 authored:** 2026-11-06  
+**v3 rejection reason:** (1) Refund loss figure −$1.28 was arithmetically incorrect — should be −$1.58 (Option B) or $0.00 (Option C) or +$0.30 (Option A); ADR conflated the three options without naming them or stating that refund policy is a product decision; 3.6% Marketplace platform surcharge not explicitly excluded from DIRECT mode. (2) G10 was named but not designed — the reviewer required a full reconciliation model covering gross charge, connected-account transfer, application fee, Stripe processing fee, refunds, transfer reversals, dispute debits/fees, outcomes, and recoveries.
 
 **Sources inspected (code):**  
 - `lib/services/stripe.ts` — `createConnectAccount()` — `type: 'express'`, `country: 'AU'`  
@@ -300,7 +301,7 @@ and operational complexity, not fundamentally different total exposure.
 | Stripe processing (1.70% + A$0.30, domestic) | DriveBook | DriveBook (destination charge uses platform pricing) |
 | DriveBook commission | Tier-based 10–15% | Zero |
 | DriveBook `application_fee_amount` | Implicit (retained from settlement) | Explicit: recommended 2.5% of lesson price |
-| Platform fee surcharge to student | 3.6% (passed on to student) | Subject to product decision — see section 6.5 |
+| Platform fee surcharge to student | 3.6% (passed on to student) | **Does not apply** — DIRECT mode does not charge students the 3.6% Marketplace surcharge. DriveBook earns only the 2.5% `application_fee_amount` deducted from the instructor's portion. No separate surcharge is added to the student's charge amount. |
 
 ### 6.3 Dispute and Chargeback Handling (CORRECTED from v1)
 
@@ -325,34 +326,86 @@ and operational complexity, not fundamentally different total exposure.
 
 ### 6.4 Refund Procedure (CORRECTED from v1)
 
+**Fee distinctions relevant to DIRECT refunds:**
+
+| Fee type | Mode | Refundable? |
+|---|---|---|
+| 3.6% Marketplace student platform surcharge | PLATFORM only | Not applicable to DIRECT — this fee does not exist in DIRECT mode |
+| 2.5% DIRECT `application_fee_amount` | DIRECT only | Depends on refund policy choice — three options below |
+| Stripe processing cost (1.70% + $0.30) | Both | Never returned by Stripe regardless of charge type or refund policy |
+
 **For destination charges, refunds debit the DriveBook platform account by default. To recover from the connected account, `reverse_transfer: true` is mandatory.**
 
+**DIRECT application fee refund policy — three options (product decision required):**
+
+**Option A — Retain the full application fee on any refund (recommended for Stripe-cost recovery):**
 ```typescript
-// CORRECT refund procedure for DIRECT (destination charge) bookings:
 await stripe.refunds.create({
   charge: chargeId,
-  amount: refundAmountInCents,   // partial or full
-  reverse_transfer: true,        // MANDATORY — recover from connected account
-  refund_application_fee: true,  // return application fee proportionally
+  amount: refundAmountInCents,
+  reverse_transfer: true,         // MANDATORY — recover from connected account
+  // refund_application_fee omitted (defaults to false) — DriveBook retains the 2.5% fee
 });
-// Note: refund_application_fee refunds proportionally, e.g. 40% refund → 40% of fee refunded
-// Stripe's sunk processing cost (1.70% + $0.30) is not returned by Stripe in any refund
 ```
+- Student receives full lesson amount refund from connected account (via reversal)
+- DriveBook retains $1.88 application fee
+- Stripe's $1.58 processing cost is non-refundable
+- DriveBook net on full refund: $1.88 − $1.58 = **+$0.30** (break-even with the original margin)
+- Instructor bears the full reversal from their connected account balance
 
-**Omitting `reverse_transfer: true` leaves the connected account with the lesson funds
-while DriveBook's balance absorbs the full refund.** This is not a product decision — it is
-a required parameter for DIRECT refunds.
+**Option B — Refund the application fee proportionally (simplest for students; worst for DriveBook):**
+```typescript
+await stripe.refunds.create({
+  charge: chargeId,
+  amount: refundAmountInCents,
+  reverse_transfer: true,         // MANDATORY
+  refund_application_fee: true,   // returns 2.5% fee proportionally to connected account
+});
+// refund_application_fee: true passes the fee back to the connected account, not directly to student
+```
+- DriveBook returns $1.88 application fee (full refund case)
+- DriveBook already paid $1.58 Stripe processing cost (non-refundable)
+- DriveBook net on full refund: $0.00 received (fee returned) − $1.58 sunk cost = **−$1.58**
+- This is the full Stripe processing cost lost; not $1.28 as stated in v3 (v3 error: subtracted margin from cost rather than computing position from zero)
 
-**What happens to the application fee on refund:**
-- `refund_application_fee: true` refunds the fee proportionally
-- The Stripe processing cost (1.70% + $0.30 of the original charge) is non-refundable — Stripe does not return it on any refund
-- DriveBook's net cost on a full refund: the Stripe processing cost of the original charge (~1.70% + $0.30)
+**Option C — Partial application fee refund (returns only DriveBook's net margin; retains Stripe sunk cost):**
+```typescript
+// Step 1: Full customer refund, no application fee return
+await stripe.refunds.create({
+  charge: chargeId,
+  amount: refundAmountInCents,
+  reverse_transfer: true,
+  // refund_application_fee: false (default)
+});
+// Step 2: Refund only DriveBook's net margin (~$0.30) back to instructor
+const stripeSunkCents = Math.round(chargeAmountCents * 0.017) + 30; // 1.70% + $0.30
+const appFeeCents = Math.round(chargeAmountCents * 0.025);
+const driveBookNetCents = appFeeCents - stripeSunkCents; // ~$0.30 on $75
+if (driveBookNetCents > 0) {
+  await stripe.applicationFeeRefunds.create(directApplicationFeeId, {
+    amount: driveBookNetCents,
+  });
+}
+```
+- DriveBook retains the Stripe sunk cost ($1.58), returns only its margin ($0.30)
+- Net on full refund: $0.00 (breaks even; Stripe cost recovered from retained fee)
+- Requires `Booking.directApplicationFeeId` (G05 precondition) — needed here for `applicationFeeRefunds.create()`
+- More complex; two API calls
+
+**ADR decision: the refund policy choice is a product decision.** This ADR does not make it — that decision belongs to the product and finance teams before DIRECT mode launches. However, the three options and their exact financial outcomes are defined above so the implementation is not written without it. The default code path (omitting `reverse_transfer`, omitting `refund_application_fee`) is wrong in all three options because it leaves the connected account with the funds while DriveBook bears the full refund cost.
 
 **`directApplicationFeeId` requirement:**
-- The `application_fee` object ID is returned by Stripe on the charge after `payment_intent.succeeded`
-- If `refund_application_fee: true` is used on the refund (not a separate `applicationFeeRefunds.create()`), the `application_fee` ID is not separately needed — Stripe handles it automatically via the `charge` ID
-- `directApplicationFeeId` on `Booking` is still useful for auditing and reconciliation purposes but is not required for the `reverse_transfer + refund_application_fee` approach
-- Recommendation: store it as `Booking.directApplicationFeeId String?` for audit completeness; it is not a hard blocker for the refund procedure
+- Required for Option C (`applicationFeeRefunds.create()`); not required for Options A or B
+- The `application_fee` object ID is available from the Stripe charge after `payment_intent.succeeded`
+- Recommendation: store it as `Booking.directApplicationFeeId String?` regardless of which option is chosen — it provides audit evidence and enables switching between options
+
+**Summary of full-refund DriveBook net position by option ($75 lesson):**
+
+| Option | Application fee retained | Stripe cost lost | DriveBook net | Instructor net after reversal |
+|---|---|---|---|---|
+| A — Retain fee | $1.88 | $1.58 | **+$0.30** | $75.00 − $1.88 − $1.88 = $71.24 (loses original fee + reversal) |
+| B — Return fee | $0.00 | $1.58 | **−$1.58** | $75.00 (fully made whole) |
+| C — Return margin only | $1.58 (sunk) | $0.00 net | **$0.00** | $75.00 − $0.30 = $74.70 |
 
 ### 6.5 Ledger Invariants — What Must NOT Change for DIRECT Bookings
 
@@ -370,16 +423,99 @@ DriveBook's balance. The full booking amount does not.
 | `LedgerEntry.PAYOUT_PAID` | Created on Stripe transfer | **DO NOT CREATE** (no payout) |
 | `LedgerEntry.REFUND_ISSUED` (for full amount) | Created on refund | **DO NOT CREATE** for full amount |
 
-**What to do instead:** An application-fee sub-ledger or separate LedgerEntry type is needed
-to track `application_fee_amount` received per DIRECT booking. This does not exist in the
-current schema and must be designed before DIRECT mode is activated. Until it is designed,
-DIRECT bookings must not write any entries to the existing `PlatformLedger` fields.
+**What to do instead:** The `DirectSettlementEntry` model (G10) must be designed and added to the schema before DIRECT mode is activated. See section 6.5-A below for the full reconciliation model.
 
-**Dispute LedgerEntries for DIRECT:** When a DIRECT booking is disputed, DriveBook is
-debited the full disputed amount from its platform balance (Stripe mechanics). The
-application-fee sub-ledger should record the debit. The existing `DISPUTE_OPENED` /
-`DISPUTE_WON` / `DISPUTE_LOST` entries may be reused but must be scoped to the application
-fee amount only, not the full booking amount.
+**Dispute LedgerEntries for DIRECT:** DIRECT dispute amounts must be recorded in `DirectSettlementEntry` (G10) only. The existing `DISPUTE_OPENED` / `DISPUTE_WON` / `DISPUTE_LOST` LedgerEntry types must not be written for DIRECT bookings — they implicitly reference `PlatformLedger` aggregates that were never incremented for DIRECT bookings.
+
+### 6.5-A DIRECT Settlement Reconciliation Model (G10 — design)
+
+The `PlatformLedger` / `LedgerEntry` pair tracks full-amount PLATFORM settlement. DIRECT settlement has a different structure: DriveBook receives only the `application_fee_amount`; the full lesson amount is a settlement movement between the student, DriveBook's Stripe account, and the connected account that DriveBook must be able to reconcile but does not retain.
+
+**Proposed schema (not yet implemented — precondition G10):**
+
+```prisma
+// Tracks every settlement movement for a DIRECT-mode booking.
+// Amounts are in AUD cents. Positive = cash in to DriveBook; negative = cash out.
+model DirectSettlementEntry {
+  id                String   @id @default(cuid())
+  bookingId         String
+  booking           Booking  @relation(fields: [bookingId], references: [id])
+  providerId        String
+  entryType         DirectSettlementEntryType
+  amountCents       Int      // signed: + = received by DriveBook, - = paid out by DriveBook
+  stripeObjectId    String?  // PaymentIntent, Refund, Transfer, TransferReversal, Dispute ID
+  stripeObjectType  String?  // e.g. "payment_intent", "refund", "transfer_reversal", "dispute"
+  note              String?
+  createdAt         DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([providerId])
+}
+
+enum DirectSettlementEntryType {
+  // Charge lifecycle
+  CHARGE_CREATED           // gross student charge amount — informational, not DriveBook revenue
+  CONNECTED_TRANSFER       // funds transferred to connected account — negative, not DriveBook cash
+  APPLICATION_FEE_RECEIVED // 2.5% application fee received by DriveBook — positive
+  STRIPE_PROCESSING_FEE    // Stripe's 1.70% + $0.30 deducted from application fee — negative
+
+  // Refund lifecycle
+  REFUND_TRANSFER_REVERSED // transfer_reversal recovered from connected account — positive
+  REFUND_TO_STUDENT        // full refund debited from DriveBook platform account — negative
+  APPLICATION_FEE_REFUNDED // application fee returned (if refund_application_fee: true) — negative
+  APPLICATION_FEE_MARGIN_REFUNDED // Option C: only net margin returned — negative
+
+  // Dispute lifecycle
+  DISPUTE_DEBIT            // disputed amount debited from DriveBook platform balance — negative
+  DISPUTE_FEE_RECEIVED     // A$25 dispute received fee — negative
+  DISPUTE_FEE_COUNTERED    // A$25 dispute countered fee (if contested) — negative
+  DISPUTE_TRANSFER_REVERSED // transfer_reversal on dispute loss — positive recovery
+  DISPUTE_RESOLVED_WON     // disputed amount returned to DriveBook balance — positive
+  DISPUTE_FEE_COUNTERED_RETURNED // A$25 countered fee returned on dispute win — positive
+}
+```
+
+**Entry-type to settlement movement mapping:**
+
+| Entry type | When written | Amount sign | DriveBook cash impact |
+|---|---|---|---|
+| `CHARGE_CREATED` | `payment_intent.succeeded` | — (informational) | None — full amount passes through |
+| `CONNECTED_TRANSFER` | `payment_intent.succeeded` | Negative (lesson amount − app fee) | None — not DriveBook cash; records outflow for reconciliation |
+| `APPLICATION_FEE_RECEIVED` | `payment_intent.succeeded` | **Positive** | +2.5% = DriveBook revenue |
+| `STRIPE_PROCESSING_FEE` | `payment_intent.succeeded` | **Negative** | −1.70% − $0.30 = Stripe deduction |
+| `REFUND_TRANSFER_REVERSED` | refund webhook, transfer reversal confirmed | Positive | +lesson amount (or partial) recovered from connected account |
+| `REFUND_TO_STUDENT` | refund webhook | Negative | −lesson amount (or partial) debited from platform |
+| `APPLICATION_FEE_REFUNDED` | refund webhook (Option B) | Negative | −2.5% fee returned |
+| `APPLICATION_FEE_MARGIN_REFUNDED` | manual API call (Option C) | Negative | −net margin returned |
+| `DISPUTE_DEBIT` | `charge.dispute.created` | Negative | −full disputed amount debited |
+| `DISPUTE_FEE_RECEIVED` | `charge.dispute.created` | Negative | −A$25 |
+| `DISPUTE_FEE_COUNTERED` | dispute response submitted | Negative | −A$25 |
+| `DISPUTE_TRANSFER_REVERSED` | transfer reversal on dispute loss | Positive | +recovered from connected account |
+| `DISPUTE_RESOLVED_WON` | `charge.dispute.closed` (won) | Positive | +full disputed amount returned |
+| `DISPUTE_FEE_COUNTERED_RETURNED` | `charge.dispute.closed` (won) | Positive | +A$25 countered fee returned |
+
+**Reconciliation invariants for a settled DIRECT booking (no refund, no dispute):**
+```
+APPLICATION_FEE_RECEIVED + STRIPE_PROCESSING_FEE = DriveBook net margin
+= 2.5% × chargeAmount − (1.70% × chargeAmount + $0.30)
+≈ $0.30 on $75
+
+CHARGE_CREATED amount = CONNECTED_TRANSFER + APPLICATION_FEE_RECEIVED
+(sum of the two outgoing parts equals the gross charge)
+```
+
+**Reconciliation invariants for a fully refunded DIRECT booking (Option B):**
+```
+net DriveBook position = APPLICATION_FEE_RECEIVED
+                       + STRIPE_PROCESSING_FEE (negative)
+                       + APPLICATION_FEE_REFUNDED (negative)
+                       + REFUND_TRANSFER_REVERSED (positive)
+                       + REFUND_TO_STUDENT (negative)
+= $1.88 − $1.58 − $1.88 + $73.12 − $73.12 = −$1.58
+(DriveBook loses the Stripe processing cost)
+```
+
+This schema does not exist in the current codebase. It must be added to `prisma/schema.prisma` and the corresponding service layer written before DIRECT mode is activated. This is precondition G10.
 
 ### 6.6 Payout Queue Exclusion
 
@@ -393,26 +529,31 @@ the connected account, resulting in a double-payment to the instructor and a neg
 **Stripe Australia domestic card processing (current rate as of 6 November 2026, per reviewer inspection of stripe.com/AU/pricing):**  
 1.70% + A$0.30 per successful online charge
 
-**Note on rate history:** Stripe reduced AU domestic online rates from 1.75% to 1.70% in April 2024, then to 1.65% in a subsequent update visible on the pricing page at the time of v2 drafting. The reviewer confirmed 1.70% + $0.30 as the current rate on 6 November 2026. The authoritative source is [stripe.com/AU/pricing](https://stripe.com/AU/pricing), which should be checked at implementation time.
+**Note on rate history:** Stripe reduced AU domestic online rates from 1.75% to 1.70% in April 2024. The rate must be confirmed against the authoritative [stripe.com/AU/pricing](https://stripe.com/AU/pricing) at implementation time.
 
-**Per $75 lesson (DIRECT mode, domestic card):**
+**Per $75 lesson (DIRECT mode, domestic card, successful transaction):**
 
 | Item | Calculation | Amount |
 |---|---|---|
 | Student pays | — | $75.00 |
+| Instructor receives | $75.00 − application fee | $73.12 |
 | `application_fee_amount` (2.5%) | 2.5% × $75.00 | $1.875 (= $1.88 rounded) |
-| Stripe processing cost (1.70% + $0.30) | 1.70% × $75.00 + $0.30 | $1.58 |
-| Stripe deducts from application fee | $1.58 from $1.88 | $1.58 |
-| DriveBook net margin | $1.88 − $1.58 | **$0.30** |
-| Instructor nets | $75.00 − $1.88 | $73.12 |
-| On full refund, DriveBook loses | Stripe sunk cost (not refunded) | $1.58 |
-| On full refund, DriveBook net | $0.30 − $1.58 | **−$1.28** per refund |
+| Stripe deducts from application fee (1.70% + $0.30) | 1.70% × $75.00 + $0.30 | $1.58 |
+| **DriveBook net margin** | $1.88 − $1.58 | **$0.30** |
 
-**Note on refund economics:** With `refund_application_fee: true`, the $1.88 application fee
-is refunded proportionally. DriveBook still paid $1.58 to Stripe on the original charge,
-which is non-refundable. On a full refund, DriveBook loses $1.28.
+**Per $75 lesson, on full refund — net DriveBook position by refund option:**
 
-**Rate note:** The 2.5% application fee remains viable at this rate — DriveBook earns a small positive margin ($0.30) per successful transaction. The rate should be revisited if Stripe's AU pricing changes materially. The rate must be confirmed against the current Stripe AU pricing page at implementation time.
+| Refund option | Application fee outcome | Stripe processing sunk cost | DriveBook net on full refund |
+|---|---|---|---|
+| A — Retain fee | DriveBook keeps $1.88 | −$1.58 (non-refundable) | **+$0.30** (same as margin) |
+| B — Return fee | DriveBook returns $1.88 | −$1.58 (non-refundable) | **−$1.58** (full Stripe cost) |
+| C — Return margin only | DriveBook keeps $1.58 (sunk), returns $0.30 | $0.00 net | **$0.00** |
+
+**Correction from v3:** v3 stated "On full refund, DriveBook net = −$1.28." That was incorrect. The correct figure for Option B (return fee) is −$1.58 — the full Stripe processing cost lost. The $1.28 was produced by the formula $0.30 − $1.58, which misrepresents the position as "margin lost plus cost lost." The correct framing is: DriveBook received $1.88, returned $1.88 (fee), and paid $1.58 to Stripe; net = −$1.58. Option A breaks even with the margin; Option C breaks even overall.
+
+**The 3.6% Marketplace platform surcharge does not exist in DIRECT mode.** DIRECT students pay the lesson price only. DriveBook earns only the 2.5% `application_fee_amount`. There is no separate student-facing surcharge to offset Stripe processing costs.
+
+**Rate note:** The 2.5% fee produces a positive margin ($0.30) per successful transaction. The refund policy choice determines whether that margin is retained or surrendered on cancellation. The rate and refund policy must be confirmed before DIRECT launches.
 
 **Per $75 lesson, per-dispute cost to DriveBook:**
 
@@ -426,9 +567,9 @@ which is non-refundable. On a full refund, DriveBook loses $1.28.
 | Net loss to DriveBook on lost dispute, connected account solvent, contested | $25.00 received fee + $25.00 countered fee + $1.88 = **$51.88** |
 | Net loss to DriveBook on lost dispute, connected account empty | $25.00 + $75.00 = **$100.00** (+ $25.00 if contested) |
 
-This risk profile is the same in kind as PLATFORM mode (DriveBook loses the full amount if
-connected account is empty), but the frequency is expected to be lower for PREMIUM tier
-instructors with established businesses.
+Note: the application fee amount ($1.88) in the dispute loss figures assumes the application fee is forfeited (Stripe does not return it on a dispute loss). DriveBook also cannot recover the Stripe processing cost ($1.58) on a dispute loss.
+
+This risk profile is the same in kind as PLATFORM mode (DriveBook loses the full amount if the connected account is empty), but the expected frequency is lower for PREMIUM tier instructors with established businesses.
 
 ---
 
