@@ -160,23 +160,39 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid secondary color format. Use hex (#RRGGBB)' }, { status: 400 });
     }
 
-    // WLA-014-SLUG: Read the provider's current slug before writing, so we can
-    // release the old registry entry and claim the new one atomically.
+    // WLA-014-SLUG: Read the provider's current slug before writing.
+    // Resolve the canonical Business ID so both routes share the same registry
+    // ownership identity: ownerType='businessBranding', ownerId=resolvedBizId.
+    // This prevents stale registry entries when slugs are set via either route.
     const currentProvider = await prisma.provider.findUnique({
       where: { id: instructor.id },
       select: { customSlug: true } as any,
     }) as any
     const oldSlug: string | null = currentProvider?.customSlug ?? null
-    const newSlug: string | null = customSlug !== undefined ? (customSlug || null) : oldSlug
+
+    // Distinguish omitted (undefined) from explicitly cleared ('' → null).
+    // When customSlug is omitted from the request, preserve the existing value
+    // in the registry — do not release a claim that was never changed.
+    const slugIsBeingChanged = customSlug !== undefined
+    const newSlug: string | null = slugIsBeingChanged ? (customSlug || null) : oldSlug
+
+    // Resolve the canonical Business ID for registry ownership.
+    // Both routes must use the same (ownerType, ownerId) for the same entity.
+    // Using ('businessBranding', resolvedBizId) is stable regardless of which route writes.
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const resolvedBizId = await resolveBusinessId(instructor.id)
+    // resolvedBizId may be null if no Business has been created yet (first save).
+    // In that case we defer slug registry to the upsertBusinessBranding() call below,
+    // which will create the Business and link Provider.businessId atomically.
+    const registryOwnerId = resolvedBizId
 
     // Wrap the Provider update + slug registry update in a single transaction.
-    // claimSlug() throws P2002 if the slug is already claimed by any owner
-    // (Provider or BusinessBranding), making the cross-table race impossible.
+    // claimSlug() throws P2002 if the slug is already claimed by any owner.
     let updated: any
     await prisma.$transaction(async (tx) => {
-      if (newSlug !== oldSlug) {
+      if (slugIsBeingChanged && newSlug !== oldSlug && registryOwnerId) {
         const { updateSlugClaim } = await import('@/lib/branding/slug-registry')
-        await updateSlugClaim(tx, 'provider', instructor.id, oldSlug, newSlug)
+        await updateSlugClaim(tx, 'businessBranding', registryOwnerId, oldSlug, newSlug)
       }
 
       updated = await tx.provider.update({
@@ -186,7 +202,9 @@ export async function PUT(req: NextRequest) {
           brandColorPrimary: brandColorPrimary || null,
           brandColorSecondary: brandColorSecondary || null,
           showBrandingOnBookingPage: showBrandingOnBookingPage === true,
-          customSlug: customSlug || null,
+          // WLA-014-SLUG: only write customSlug when it was explicitly included in the request.
+          // Omitting the field must not clear an existing slug or corrupt the registry.
+          ...(slugIsBeingChanged && { customSlug: customSlug || null }),
           // V-15 FIX: when customDomain changes, reset domainVerified to false.
           ...(customDomain !== undefined && {
             customDomain: customDomain || null,

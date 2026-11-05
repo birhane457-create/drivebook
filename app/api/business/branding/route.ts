@@ -40,7 +40,12 @@ export async function GET(req: NextRequest) {
     if (!session?.user?.providerId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const bizId = `biz_${session!.user!.providerId}`
+    // WLA-014-SLUG v3: Resolve the canonical Business ID (not hardcoded biz_)
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const bizId = await resolveBusinessId(session!.user!.providerId)
+    if (!bizId) {
+      return NextResponse.json({}, { status: 200 })  // No Business yet — return empty
+    }
     const branding = await (prisma as any).businessBranding.findUnique({ where: { businessId: bizId } })
     return NextResponse.json(branding ?? {})
   } catch (err) {
@@ -62,7 +67,21 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 })
     }
 
-    const bizId = `biz_${session!.user!.providerId}`
+    // WLA-014-SLUG v3: Resolve the canonical Business ID via the Provider FK
+    // (Provider.businessId first, biz_ legacy fallback). Both routes must use
+    // the same identity — hardcoding biz_${providerId} is wrong for providers
+    // whose Business ID is an independent cuid.
+    const { resolveBusinessId } = await import('@/lib/branding/resolution')
+    const bizId = await resolveBusinessId(session!.user!.providerId)
+
+    if (!bizId) {
+      // No Business relationship yet — cannot write to BusinessBranding.
+      // The instructor route creates the Business via upsertBusinessBranding();
+      // the business branding route requires an existing relationship.
+      return NextResponse.json({
+        error: 'Business profile not found. Please save your instructor branding first to initialise the relationship.',
+      }, { status: 404 })
+    }
 
     // Slug uniqueness check
     if (parsed.data.customSlug) {
@@ -94,21 +113,22 @@ export async function PUT(req: NextRequest) {
     // table does not have a customDomain column. Extract it before upsert.
     const { customDomain: _domainForProvider, ...brandingData } = parsed.data;
 
-    // WLA-014-SLUG: Read the current slug from BusinessBranding before the transaction
-    // so we can release the old registry entry and claim the new one atomically.
+    // WLA-014-SLUG: Read the current slug from BusinessBranding before the transaction.
+    // Distinguish omitted (undefined) from explicitly cleared ('' → null).
     const currentBranding = await (prisma as any).businessBranding.findUnique({
       where: { businessId: bizId },
       select: { customSlug: true },
     })
     const oldSlug: string | null = currentBranding?.customSlug ?? null
-    const newSlug: string | null = parsed.data.customSlug !== undefined ? (parsed.data.customSlug || null) : oldSlug
+    const slugIsBeingChanged = parsed.data.customSlug !== undefined
+    const newSlug: string | null = slugIsBeingChanged ? (parsed.data.customSlug || null) : oldSlug
 
     // WLA-014-SLUG: Wrap the two writes + slug registry update in a transaction.
-    // claimSlug() throws P2002 if the slug is already claimed by any owner
-    // (Provider or BusinessBranding), making the cross-table race impossible.
+    // Registry uses ownerType='businessBranding', ownerId=bizId — same identity as
+    // the instructor route (which also resolves bizId before registering).
     let branding: any
     await prisma.$transaction(async (tx) => {
-      if (newSlug !== oldSlug) {
+      if (slugIsBeingChanged && newSlug !== oldSlug) {
         const { updateSlugClaim } = await import('@/lib/branding/slug-registry')
         await updateSlugClaim(tx, 'businessBranding', bizId, oldSlug, newSlug)
       }
@@ -119,17 +139,18 @@ export async function PUT(req: NextRequest) {
         update: brandingData,
       })
 
-      // Mirror back to Provider for backward compatibility
+      // Mirror back to Provider for backward compatibility.
+      // WLA-014-SLUG: Only write customSlug when it was explicitly included in
+      // the request (slugIsBeingChanged). Omitting the field must not clear an
+      // existing Provider.customSlug or leave registry inconsistent.
       await tx.provider.updateMany({
         where: { id: session!.user!.providerId },
         data: {
           brandLogo:            parsed.data.logo          ?? undefined,
           brandColorPrimary:    parsed.data.primaryColour ?? undefined,
           brandColorSecondary:  parsed.data.secondaryColour ?? undefined,
-          customSlug:           parsed.data.customSlug    ?? undefined,
+          ...(slugIsBeingChanged && { customSlug: parsed.data.customSlug ?? null }),
           // V-03 FIX: mirror customDomain to Provider (was previously dropped by Zod).
-          // domainVerified is NOT set here — verification still requires DNS check
-          // via /api/instructor/domain/verify.
           customDomain:         parsed.data.customDomain  ?? undefined,
           showBrandingOnBookingPage: parsed.data.showPlatformBranding === false,
         },
