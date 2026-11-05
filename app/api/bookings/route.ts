@@ -667,6 +667,7 @@ export async function POST(req: NextRequest) {
         startTime: booking.startTime!,
         endTime: booking.endTime!,
         pickupAddress: booking.pickupAddress || undefined,
+        provider: booking.provider,  // WLA-015 FIX: pass provider for white-label From display
       })
     } catch (e) {
       logger.error('Email confirmation failed — attempting SMS + in-app fallback', {

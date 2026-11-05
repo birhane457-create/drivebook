@@ -96,6 +96,7 @@ export async function checkProviderEligible(
       paymentMode:        true,
       businessModel:      true,
       accountType:        true,
+      businessName:       true,  // WLA-015 FIX: needed for white-label email sender
       syncGoogleCalendar: true,
       userId:             true,
       timezone:           true,
@@ -180,6 +181,7 @@ export async function checkProviderEligible(
       paymentMode:        (raw as any).paymentMode ?? 'PLATFORM',
       businessModel:      (raw as any).businessModel ?? 'MARKETPLACE',
       accountType:        (raw as any).accountType ?? 'INDIVIDUAL',
+      businessName:       (raw as any).businessName ?? null,  // WLA-015 FIX
       syncGoogleCalendar: (raw as any).syncGoogleCalendar ?? false,
       userId:             raw.userId ?? null,
       timezone:           (raw as any).timezone ?? null,

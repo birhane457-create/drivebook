@@ -122,18 +122,23 @@ describe('WLA-015: Source check — getProviderBookingsSender integrated at call
   const waitingListSrc = readFileSync(
     resolve(process.cwd(), 'lib/services/waiting-list-notify.ts'), 'utf-8'
   )
+  const bookingsRouteSrc = readFileSync(
+    resolve(process.cwd(), 'app/api/bookings/route.ts'), 'utf-8'
+  )
+  const publicBookingsSrc = readFileSync(
+    resolve(process.cwd(), 'app/api/public/bookings/route.ts'), 'utf-8'
+  )
+  const eligibleSrc = readFileSync(
+    resolve(process.cwd(), 'lib/booking/checkProviderEligible.ts'), 'utf-8'
+  )
 
   it('S10 -- email.ts imports and uses getProviderBookingsSender (not formatSender) for booking emails', () => {
     expect(emailServiceSrc).toContain('getProviderBookingsSender')
     expect(emailServiceSrc).toContain('WLA-015 FIX')
-    // The booking confirmation should use provider-aware sender
-    expect(emailServiceSrc).toContain('getProviderBookingsSender(data.provider)')
-    // Cancellation emails should also use it
     expect(emailServiceSrc).toContain('getProviderBookingsSender(data.provider)')
   })
 
   it('S11 -- cron lesson-reminders selects subscriptionTier and uses getProviderBookingsSender', () => {
-    // subscriptionTier must be in the Prisma select so getProviderBookingsSender can check it
     expect(cronSrc).toContain('subscriptionTier')
     expect(cronSrc).toContain('getProviderBookingsSender')
     expect(cronSrc).toContain('WLA-015 FIX')
@@ -143,5 +148,28 @@ describe('WLA-015: Source check — getProviderBookingsSender integrated at call
     expect(waitingListSrc).toContain('getProviderBookingsSender')
     expect(waitingListSrc).not.toContain("'DriveBook Bookings <bookings@drivebook.com.au>'")
     expect(waitingListSrc).toContain('WLA-015 FIX')
+  })
+
+  it('S13 -- app/api/bookings/route.ts passes provider to sendBookingConfirmation (caller integration)', () => {
+    const callIdx = bookingsRouteSrc.indexOf('sendBookingConfirmation({')
+    expect(callIdx).toBeGreaterThan(0)
+    const callBlock = bookingsRouteSrc.slice(callIdx, callIdx + 500)
+    expect(callBlock).toContain('provider:')
+    expect(callBlock).toContain('booking.provider')
+  })
+
+  it('S14 -- app/api/public/bookings/route.ts passes provider to sendBookingConfirmation (caller integration)', () => {
+    const callIdx = publicBookingsSrc.indexOf('sendBookingConfirmation({')
+    expect(callIdx).toBeGreaterThan(0)
+    const callBlock = publicBookingsSrc.slice(callIdx, callIdx + 500)
+    expect(callBlock).toContain('provider:')
+    expect(callBlock).toContain('instructor')
+  })
+
+  it('S15 -- checkProviderEligible returns businessName for white-label sender resolution', () => {
+    expect(eligibleSrc).toContain('businessName')
+    // The return object must include businessName from raw
+    expect(eligibleSrc).toContain('businessName:')
+    expect(eligibleSrc).toContain('.businessName')
   })
 })

@@ -306,7 +306,8 @@ export async function POST(req: NextRequest) {
       instructorPhone: instructorPhone,
       startTime,
       endTime,
-      pickupAddress: data.pickupAddress
+      pickupAddress: data.pickupAddress,
+      provider: instructor,  // WLA-015 FIX: pass provider for white-label From display
     })
 
     // Audit log
