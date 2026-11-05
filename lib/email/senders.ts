@@ -51,3 +51,39 @@ export function formatSender(key: SenderKey): string {
   const { name, email } = SENDERS[key]
   return `${name} <${email}>`
 }
+
+/**
+ * WLA-015 FIX: Returns a booking sender with the provider's business name in the
+ * display component when the provider has PREMIUM white-label entitlement.
+ *
+ * Only PREMIUM tier providers with a non-empty businessName receive the white-label
+ * display name. All other providers receive the standard DriveBook Bookings sender.
+ *
+ * The email address is always bookings@drivebook.com.au — deliverability and DKIM
+ * signing are unchanged. Only the display name seen by the recipient changes.
+ *
+ * Architecture note: White-label entitlement is PREMIUM tier only.
+ * accountType=BUSINESS does not grant whiteLabel per the architecture decision
+ * recorded in lib/utils/account.ts (getAccountFeatures.whiteLabel = isPremium).
+ *
+ * @example
+ *   // PREMIUM provider with businessName
+ *   getProviderBookingsSender({ subscriptionTier: 'PREMIUM', businessName: 'Perth Drive Academy', name: 'John' })
+ *   → 'Perth Drive Academy via DriveBook <bookings@drivebook.com.au>'
+ *
+ *   // PRO/STUDIO/BASIC provider or provider without businessName
+ *   getProviderBookingsSender({ subscriptionTier: 'PRO', businessName: null, name: 'John' })
+ *   → 'DriveBook Bookings <bookings@drivebook.com.au>'
+ */
+export function getProviderBookingsSender(provider?: {
+  subscriptionTier?: string | null
+  businessName?: string | null
+} | null): string {
+  if (!provider) return formatSender('bookings')
+  const isPremium = provider.subscriptionTier === 'PREMIUM'
+  const businessName = provider.businessName?.trim()
+  if (isPremium && businessName) {
+    return `${businessName} via DriveBook <${SENDERS.bookings.email}>`
+  }
+  return formatSender('bookings')
+}

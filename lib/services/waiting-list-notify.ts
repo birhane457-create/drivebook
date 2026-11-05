@@ -66,8 +66,9 @@ export async function notifyWaitingList(event: SlotOpenedEvent): Promise<void> {
     // Send email as backup
     if (entry.customerEmail) {
       const { emailService } = await import('@/lib/services/email')
+      const { getProviderBookingsSender } = await import('@/lib/email/senders')
       await emailService.sendGenericEmail({
-        from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+        from: getProviderBookingsSender(instructor),  // WLA-015 FIX: white-label display for PREMIUM tier
         to: entry.customerEmail,
         subject: `A lesson slot has opened up with ${instructorName}`,
         html: `

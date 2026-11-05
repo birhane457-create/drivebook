@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         startTime: { gte: windowStart, lte: windowEnd },
       },
       include: {
-        provider: { select: { userId: true, name: true, businessName: true, accountType: true, phone: true, timezone: true } },
+        provider: { select: { userId: true, name: true, businessName: true, accountType: true, subscriptionTier: true, phone: true, timezone: true } },
         customer: { include: { user: { select: { id: true, email: true } } } },
       },
     });
@@ -125,8 +125,9 @@ export async function GET(req: NextRequest) {
             const tz = resolveTimezone(booking.provider?.timezone ?? DEFAULT_TIMEZONE);
             const dateStr = startTime.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
             const timeStr = startTime.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+            const { getProviderBookingsSender } = await import('@/lib/email/senders');
             await emailService.sendGenericEmail({
-              from: 'DriveBook Bookings <bookings@drivebook.com.au>',
+              from: getProviderBookingsSender(booking.provider),  // WLA-015 FIX: white-label display for PREMIUM tier
               to: offlineEmail,
               subject: `Reminder: Driving lesson tomorrow with ${instructorName}`,
               html: `
