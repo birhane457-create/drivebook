@@ -18,7 +18,10 @@ export type AccountType = 'INDIVIDUAL' | 'BUSINESS'
 export type PaymentMode = 'PLATFORM' | 'DIRECT'
 
 export interface AccountFeatures {
-  /** Full white-label — no DriveBook branding on any customer-facing surface */
+  /** Marketplace branding — provider's business name appears on customer-facing surfaces.
+   *  DriveBook remains the marketplace operator (PREMIUM tier only).
+   *  Full SaaS white-label (provider-owned payment, portal, notifications) is a
+   *  separate future product — see WLA-016 product contract. */
   whiteLabel: boolean
   /** Direct Stripe charges — money goes straight to school's account, not DriveBook */
   directPayments: boolean
@@ -77,7 +80,9 @@ export function getAccountFeatures(account: {
   const isStudioPlus = tier === 'STUDIO' || isPremium
 
   return {
-    // White label: full removal of DriveBook branding — PREMIUM tier only.
+    // Marketplace branding: provider's business name on customer-facing surfaces.
+    // PREMIUM tier only — DriveBook remains marketplace operator.
+    // Full SaaS white-label is a separate future product (see WLA-016).
     // Provider structure (accountType=BUSINESS) must NOT grant whiteLabel.
     // Architecture decision 2026-10-27: structure defines capacity;
     // subscription defines entitlement.
