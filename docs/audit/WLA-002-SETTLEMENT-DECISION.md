@@ -1,25 +1,31 @@
-# WLA-002 — Provider Settlement Semantics: Architecture Decision Record
+# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v2)
 
 **Finding ID:** WLA-002  
 **Category:** ARCHITECTURAL  
-**Risk:** Not a runtime defect in current code. An undocumented design boundary whose absence will become a code defect when DIRECT mode is activated.  
-**Status:** ARCHITECTURE DECISION DEFINED — pending reviewer acceptance  
-**Authored:** 2026-11-06  
-**Source inspected:**  
-- `lib/utils/account.ts` — `assertPlatformPaymentMode()`, `getAccountFeatures()`  
+**Risk:** Not a runtime defect in current code. An undocumented design boundary whose absence becomes a code defect when DIRECT mode is activated.  
+**Status:** ARCHITECTURE DECISION DEFINED (v2) — pending reviewer acceptance  
+**v1 authored:** 2026-11-06 — NOT ACCEPTED (reviewer found material flaw in dispute liability analysis)  
+**v2 authored:** 2026-11-06  
+**v1 rejection reason:** v1 incorrectly stated that `on_behalf_of + transfer_data.destination` makes the instructor responsible for disputes and limits DriveBook's exposure to the application fee only. Stripe documentation confirms that for destination charges (both with and without `on_behalf_of`), the platform account is debited for disputes and associated fees. Transfer reversal is required to recover funds from the connected account. This is not equivalent to the connected account bearing liability. v1 also did not specify `reverse_transfer: true` in the refund procedure and did not separate Stripe settlement mechanics from legal/tax conclusions.
+
+**Sources inspected (code):**  
+- `lib/services/stripe.ts` — `createConnectAccount()` — `type: 'express'`, `country: 'AU'`  
 - `lib/services/payout-service.ts` — `buildPayout()`, `executePayout()`, `recordPaymentCollected()`, `recordRefundIssued()`  
 - `lib/services/ledger-service.ts` — `LedgerEntryType`, `PlatformLedger`, `availableBalance`  
 - `lib/services/saas-payment.ts` — `createCheckoutSession()`, `applicationFeeAmount`  
 - `lib/services/platform-pricing.ts` — `getCommissionRate()`, `getPlatformFeeRate()`  
 - `lib/services/chargebackAutomation.ts` — dispute webhook handlers  
-- `app/api/stripe/webhook/route.ts` — `payment_intent.succeeded`, `charge.refunded`  
-- `app/api/payments/create-intent/route.ts` — PLATFORM PaymentIntent, inline DIRECT guard  
-- `app/api/public/bookings/bulk/route.ts` — inline DIRECT guard  
-- `app/api/client/quotes/[id]/accept/route.ts` — inline DIRECT guard  
+- `lib/utils/account.ts` — `assertPlatformPaymentMode()`, `getAccountFeatures()`  
+- `prisma/schema.prisma` — `Provider`, `Booking`, `Transaction`, `LedgerEntry`, `PlatformLedger`  
 - `docs/newplan/PAYMENT-WHITE-LABEL.md` — DIRECT mode design spec  
-- `docs/DOCROLEBASE/06-payments/PAYMENT_MODES.md` — current mode documentation  
-- `docs/audit/MONEY-MOVEMENT-INVENTORY.md` — MM-10-A, MM-10-B, MM-10-C  
-- `prisma/schema.prisma` — Provider, Booking, Transaction, LedgerEntry, PlatformLedger, PlatformSettings  
+
+**Stripe documentation referenced:**  
+- [Disputes on Connect platforms](https://docs.stripe.com/connect/disputes) — charge-type dispute debit rules  
+- [Handle refunds and disputes (marketplace)](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes) — destination-charge refund and `reverse_transfer` requirements  
+- [Understand how charges work in a Connect integration](https://docs.stripe.com/connect/charges) — charge type definitions  
+- [Picking the right charge type (Stripe dev.to)](https://dev.to/stripe/picking-the-right-charge-type-for-your-stripe-connect-platform-3m14) — liability and fee comparisons  
+- [Stripe Australia pricing](https://stripe.com/AU/pricing) — current AU rates  
+- [April 2024 AU pricing update](https://support.stripe.com/questions/april-2024-pricing-update-for-businesses-on-standard-pricing-in-australia) — rate change history  
 
 ---
 
@@ -33,308 +39,517 @@
 > *Resolution guidance: Reconcile against MM-10-A and the approved white-label product
 > contract. Define whether and when provider settlement is required; do not duplicate MM-10-A
 > or change current PLATFORM behaviour without a separate approved design.*
->
-> — `docs/audit/WLA-FINDINGS-BRANCH.md`, WLA-002 row
 
-MM-10-A (SUPERSEDED/closed in tracker) confirmed that SaaS money landing on the platform
-account is intentional current architecture, not a security defect. This decision record
-extends that by specifying the boundary rules that must hold when DIRECT mode is eventually
-activated.
+MM-10-A (SUPERSEDED/closed) confirmed that SaaS money landing on the platform account is
+intentional current architecture. This document extends that by specifying the settlement
+boundary rules that must hold when DIRECT mode is eventually activated.
 
 ---
 
-## 2. Current PLATFORM Settlement — Source-Verified State
+## 2. Current Stripe Connect Account Configuration
 
-### 2.1 Fund Flow (PLATFORM mode, driving bookings)
+`createConnectAccount()` in `lib/services/stripe.ts` creates accounts as:
+
+```typescript
+stripe.accounts.create({
+  type: 'express',    // Express account — NOT Standard or Custom
+  country: 'AU',
+  capabilities: {
+    card_payments: { requested: true },
+    transfers: { requested: true },
+  },
+  business_type: 'individual',
+})
+```
+
+**Established facts:**
+- Account type is **Express** (legacy v1 account model)
+- Express accounts use `controller.fees.payer = 'application_express'` by default
+- For **direct charges** on Express accounts: connected account pays Stripe processing fees; connected account balance is debited for disputes, but the **platform is responsible for the connected account's negative balances**
+- For **destination charges** on Express accounts (and any indirect charges): the **platform account** is debited for both the dispute amount and dispute fees; the platform must use `reverse_transfer: true` to recover funds from the connected account
+- The Express Dashboard does not support dispute management; the platform must handle dispute responses for Express accounts
+
+This account type is compatible with both destination charges and direct charges, but with different liability implications for each, as detailed in sections 4–6 below.
+
+---
+
+## 3. Current PLATFORM Settlement — Source-Verified State
+
+### 3.1 Fund Flow
+
+In PLATFORM mode (current and only active mode), DriveBook uses a plain PaymentIntent
+with no `transfer_data` and no `on_behalf_of`. Money flows to DriveBook's Stripe account.
+The instructor receives a weekly Stripe Connect transfer via `executePayout()`.
 
 ```
 Student pays
-  → DriveBook Stripe account (PaymentIntent, AUD)
-  → payment_intent.succeeded webhook
+  → DriveBook Stripe account (PaymentIntent, no transfer_data)
+  → payment_intent.succeeded
       → PlatformLedger.totalCollected += fullAmount
       → PlatformLedger.totalReserved  += fullAmount
       → Booking.status = CONFIRMED
       → Transaction.status = SETTLED
 
-After lesson + dispute buffer (48h default, 2 × lateCancellationWindowHours):
+After lesson + dispute buffer (default 48h):
   → buildPayout()
-      → grossAmount = Σ(Transaction.providerPayout)        [already net of commission]
-      → ADJUSTMENT deductions for any post-payout refunds
+      → grossAmount = Σ(Transaction.providerPayout)     [net of commission]
+      → adjustments for post-payout refunds
       → withholdingTax = grossAmount × Provider.withholdingTaxRate
       → netAmount = grossAmount − withholdingTax
-      → Payout record created (ELIGIBLE)
+      → Payout record (ELIGIBLE)
 
 executePayout():
   → assertSufficientBalance(netAmount)
-  → verifyPayoutDestinationOwnership()                    [PAY-01 fix]
+  → verifyPayoutDestinationOwnership()                  [PAY-01 fix]
   → stripe.transfers.create({ destination: verifiedAccountId, amount: netAmount })
-  → Payout.status = PAID
   → PlatformLedger.totalPaidOut      += netAmount
   → PlatformLedger.totalReserved     -= grossAmount
-  → PlatformLedger.totalTaxWithheld  += withholdingTax
-  → LedgerEntry: PAYOUT_PAID (negative, provider-scoped)
+  → LedgerEntry: PAYOUT_PAID
 ```
 
-### 2.2 Fee Structure (PLATFORM mode, example: BASIC tier, $75 lesson)
+### 3.2 Fee Structure (PLATFORM, example: BASIC tier, $75 domestic card)
 
 | Field | Amount | Source |
 |---|---|---|
 | Student pays | $75.00 | Full lesson price |
-| `platformFeeRate` (3.6%) | $2.70 | `PlatformSettings.platformFeePercentage` — Stripe processing surcharge, collected from student, net to DriveBook |
-| `commissionRate` (15% BASIC) | $11.25 | `PlatformSettings.basicCommissionRate` — DriveBook marketplace commission |
-| `providerPayout` | $63.75 | Stored on `Booking` and `Transaction` |
-| Withholding tax (47% default) | $29.96 | Applied at payout time on providerPayout |
-| Net transfer to instructor | $33.79 | Stripe Connect transfer |
+| Platform fee surcharge (3.6%) | $2.70 | `PlatformSettings.platformFeePercentage` — collected from student |
+| Commission (BASIC 15%) | $11.25 | `PlatformSettings.basicCommissionRate` — DriveBook revenue |
+| `providerPayout` on Booking | $63.75 | Net after commission; withholding tax applied at payout |
+| Stripe processing cost (1.65% + $0.30) | ~$1.54 | Borne by DriveBook from commission margin |
+| Net Stripe charge to DriveBook | ~$9.71 | Commission ($11.25) minus Stripe cost ($1.54) |
 
-**Naming note:** `Booking.platformFee` stores the 3.6% processing surcharge amount, not the
-commission. `Booking.commissionRate` stores the tier-based DriveBook commission percentage.
-`Booking.providerPayout` is the net amount after commission only (withholding tax applied
-later at payout time, not booking time).
+**Naming notes:**
+- `Booking.platformFee` = the 3.6% surcharge amount in AUD
+- `Booking.commissionRate` = the tier-based commission percentage
+- `Booking.providerPayout` = net after commission, before withholding tax
+- Withholding tax is applied at `buildPayout()` time, not booking time
 
-### 2.3 Merchant of Record
+### 3.3 PLATFORM Dispute Handling (Current)
 
-In PLATFORM mode, **DriveBook is the merchant of record** for every transaction:
-- Student's card statement: `DRIVEBOOK.COM.AU`
-- Stripe receipt: from DriveBook
-- Refund authority: DriveBook
-- Chargeback liability: DriveBook (Stripe deducts from DriveBook's account)
-- GST/BAS: DriveBook's tax obligation
-- Payout to instructor: via Stripe Connect transfer (DriveBook → instructor)
-
----
-
-## 3. Current SaaS Settlement (quote-based, non-driving)
-
-SaaS bookings use `lib/services/saas-payment.ts` → `createCheckoutSession()`. As confirmed
-by MM-10-A and the current source:
-- Stripe Checkout session created **on DriveBook's platform account** (no `transfer_data.destination`)
-- Money lands on DriveBook's Stripe account
-- `applicationFeeAmount = commissionPercent × totalAmountInCents` (per `BusinessSettings.commissionRate`)
-- No weekly payout to the provider from this path
-- `BusinessConfig.capabilities.commission = false` for `paymentModel === 'saas'`
-
-**Current SaaS settlement is functionally identical to PLATFORM mode** — DriveBook holds
-the money, no Stripe Connect transfer occurs. The distinction is that SaaS uses a
-Checkout session (not a PaymentIntent) and per-business commission rates rather than
-tier-based global rates.
+DriveBook is the **sole merchant on the charge**. All disputes debit the DriveBook platform
+account. `chargebackAutomation.ts` holds the instructor's payout on `dispute.opened` and
+reverses on `dispute.won` or cancels on `dispute.lost`. No transfer reversal is needed —
+the instructor has not yet received the funds (they are in the dispute buffer or payout
+queue). The current implementation correctly handles PLATFORM mode disputes.
 
 ---
 
-## 4. Planned DIRECT Mode — Settlement Contract
+## 4. Current SaaS Settlement — Dependency on WLA-004
 
-This section defines the settlement semantics that MUST govern any DIRECT mode
-implementation. No code changes are made here — this is the decision boundary.
+`lib/services/saas-payment.ts` creates a Stripe Checkout session that sets
+`payment_intent_data.application_fee_amount` when `businessConfig.commissionPercent > 0`,
+but does **not** set `transfer_data.destination` or `on_behalf_of`.
 
-### 4.1 Who Receives Funds
+**Per Stripe's API**: `application_fee_amount` is only valid when the charge is created on
+a connected account (direct charge) or with `transfer_data.destination` (destination charge).
+Setting it on a plain platform charge may cause the parameter to be silently ignored or
+result in an API error.
 
-| Event | PLATFORM | DIRECT |
-|---|---|---|
-| Student pays | DriveBook Stripe account | Instructor's Stripe Connect account |
-| Funds available to instructor | After weekly payout | Immediately (Stripe Connect transfer-data) |
-| DriveBook's Stripe account balance change | +fullAmount | ±zero (on_behalf_of; amount in = amount transferred out) |
-| Bank statement shown to student | "DRIVEBOOK.COM.AU" | Instructor's Stripe statement descriptor |
-
-In DIRECT mode, DriveBook uses Stripe's `on_behalf_of` + `transfer_data.destination` pattern:
-the charge is created on DriveBook's account but funds flow immediately to the instructor's
-connected account. DriveBook retains only the `application_fee_amount`.
-
-### 4.2 Who Bears Fees
-
-| Fee | PLATFORM | DIRECT |
-|---|---|---|
-| Stripe processing cost (~1.75% + $0.30) | Absorbed by DriveBook from commission | Deducted by Stripe from DriveBook's `application_fee_amount` |
-| DriveBook commission | % per lesson (tier-based, 10–15%) | Zero |
-| DriveBook `application_fee_amount` | Implicit (platform revenue = fullAmount − providerPayout) | Explicit: 2.5% of lesson price |
-| Platform fee surcharge to student | 3.6% (collected from student) | Not applicable — no surcharge (DriveBook earns via subscription only) |
-| Withholding tax | Applied by DriveBook at payout time | Not applicable — instructor receives funds directly; their own tax obligation |
-
-**Decision: 2.5% is the defined `application_fee_amount` rate for DIRECT mode.**  
-Rationale: 2.5% covers Stripe's ~1.75% + $0.30 processing cost with a narrow $0.27/lesson
-margin for DriveBook's fraud protection and dispute handling services. This is proportionate
-for DIRECT mode where DriveBook does not manage the payment lifecycle. (Source:
-`docs/newplan/PAYMENT-WHITE-LABEL.md` — rate analysis confirmed.)
-
-### 4.3 Refund Semantics
-
-| Scenario | PLATFORM | DIRECT |
-|---|---|---|
-| Refund authority | DriveBook (issues refund from platform Stripe account) | Stripe auto-deducts from instructor's account; DriveBook must also issue `applicationFeeRefunds.create()` to return profit margin |
-| Where refund goes (default policy) | Client's DriveBook wallet (not back to card) | Back to student's card (Stripe handles automatically) |
-| LedgerEntry on refund | `REFUND_ISSUED` + `PlatformLedger.totalRefunded++` | No `PlatformLedger` change (DriveBook never held the money) |
-| Post-payout instructor deduction | `ADJUSTMENT` LedgerEntry on next payout | Not applicable — instructor already holds funds; Stripe auto-deducts |
-| Stripe sunk cost | Non-refundable; absorbed from DriveBook margin | Non-refundable; absorbed from DriveBook's `application_fee_amount` |
-
-**Decision: DIRECT mode refunds require two Stripe API calls:**
-1. `stripe.refunds.create({ charge: chargeId, refund_application_fee: false })` — full student refund
-2. `stripe.applicationFeeRefunds.create(applicationFeeId, { amount: driveBookProfitCents })` — return DriveBook's profit margin only (keep Stripe's sunk cost)
-
-This requires storing `directApplicationFeeId String?` on the `Booking` schema. This field
-does not exist in the current schema and must be added before DIRECT mode is activated.
-
-### 4.4 Dispute and Chargeback Semantics
-
-| Scenario | PLATFORM | DIRECT |
-|---|---|---|
-| Chargeback liability | DriveBook (funds in DriveBook's account) | Instructor's Stripe account (Stripe deducts directly) |
-| DriveBook's exposure | Full booking amount | Only `application_fee_amount` (2.5%) |
-| Webhook: `charge.dispute.created` | Freeze instructor payout, create PAYMENT_DISPUTE task | Do NOT freeze payout (instructor already has funds); alert only |
-| Webhook: `charge.refunded` (chargeback-driven) | `DISPUTE_LOST` LedgerEntry, `totalCollected -= amount` | Do NOT write negative LedgerEntry (DriveBook never collected `totalCollected` for this booking) |
-| `PlatformLedger` impact on chargeback | `totalCollected -= fullAmount`, `totalReserved -= fullAmount` | No LedgerEntry change for the booking amount; `application_fee` recovery handled separately if needed |
-
-**Decision: The dispute webhook handler MUST check `paymentMode` before writing any
-LedgerEntry.** Writing a `DISPUTE_LOST` entry against `PlatformLedger.totalCollected` for a
-DIRECT booking would corrupt the available balance formula:
-`availableBalance = totalCollected − totalPaidOut − totalRefunded`
-because `totalCollected` was never incremented for DIRECT bookings.
-
-### 4.5 Ledger Invariants — What Must NOT Change for DIRECT Bookings
-
-The following `PlatformLedger` fields and `LedgerEntry` types are defined only for
-**PLATFORM money** (funds that passed through DriveBook's Stripe account):
-
-| Field / Entry | PLATFORM | DIRECT |
-|---|---|---|
-| `PlatformLedger.totalCollected` | Increment on `payment_intent.succeeded` | **DO NOT INCREMENT** |
-| `PlatformLedger.totalReserved` | Increment on collect; decrement on payout | **DO NOT TOUCH** |
-| `PlatformLedger.totalPaidOut` | Increment on payout transfer | **DO NOT INCREMENT** (no payout) |
-| `PlatformLedger.totalRefunded` | Increment on `REFUND_ISSUED` | **DO NOT INCREMENT** |
-| `LedgerEntry.PAYMENT_COLLECTED` | Created on booking confirmation | **DO NOT CREATE** |
-| `LedgerEntry.PAYOUT_PAID` | Created on Stripe transfer | **DO NOT CREATE** |
-| `LedgerEntry.REFUND_ISSUED` | Created on refund | **DO NOT CREATE** |
-| `LedgerEntry.DISPUTE_LOST` | Created on lost chargeback | **DO NOT CREATE** for booking amount |
-
-**Allowed for DIRECT bookings:** An `applicationFee` sub-ledger (not yet defined) tracking
-DriveBook's 2.5% `application_fee_amount` per DIRECT booking, and a corresponding
-`applicationFeeRefund` entry on refund. These do not exist in the current schema and must
-be designed before DIRECT mode is activated.
-
-### 4.6 Merchant of Record in DIRECT Mode
-
-In DIRECT mode, **the instructor is the merchant of record**, not DriveBook:
-- Student's card statement: instructor's Stripe business name
-- Stripe receipt: from instructor's Stripe account
-- Refund initiated: by DriveBook UI but executed on instructor's Stripe account
-- Chargeback liability: instructor (Stripe deducts from their account)
-- GST/BAS: instructor's tax obligation for the lesson amount; DriveBook's obligation only for the 2.5% application fee
-- No weekly payout: funds arrive immediately to instructor's Stripe balance
+**Decision: the current SaaS path is NOT a confirmed working baseline for settlement
+semantics.** It is acknowledged as intentionally landing on the platform account (per
+MM-10-A), but whether the `application_fee_amount` field is valid in that context is
+unresolved pending WLA-004 runtime verification. This ADR treats the SaaS flow as
+"money lands on platform" only, and does not rely on `application_fee_amount` semantics
+for any of the decisions below.
 
 ---
 
-## 5. Mode Separation Rules — Boundary Constraints
+## 5. The Central Charge-Type Decision for DIRECT Mode
 
-These rules must hold permanently, regardless of implementation phase:
+The v1 ADR assumed a single model: `on_behalf_of + transfer_data.destination` (destination
+charge). The reviewer correctly identified that this does not shift dispute liability to the
+connected account. This section defines the two viable models and makes an explicit choice.
 
-### Rule S-01: Ledger writes must be conditioned on paymentMode
-Every `LedgerEntry` write and `PlatformLedger` mutation must check `booking.paymentMode`
-(or `paymentIntent.metadata.paymentMode`) before executing. DIRECT bookings must never
-increment `totalCollected`, `totalReserved`, or `totalPaidOut`.
+### 5.1 Model A — Destination Charge (current design doc assumption)
 
-### Rule S-02: assertPlatformPaymentMode() must be the single DIRECT block
-The current four separate inline guards (`create-intent`, `bookings/bulk`, `quotes/accept`,
-`register`) must be consolidated to call `assertPlatformPaymentMode()`. The inline guards
-may remain as belt-and-suspenders, but `assertPlatformPaymentMode()` must be called from
-every payment entry point so that removing an inline guard does not silently open DIRECT mode.
+```typescript
+stripe.paymentIntents.create({
+  amount,
+  currency: 'aud',
+  on_behalf_of: instructorStripeAccountId,   // statement descriptor = instructor
+  payment_method_types: ['card'],
+  transfer_data: { destination: instructorStripeAccountId },
+  application_fee_amount: Math.round(amount * 0.025),
+})
+```
 
-**Note:** The design doc (`PAYMENT-WHITE-LABEL.md`) states `createDirectPaymentIntent()` is
-complete at `lib/services/stripe.ts:110`. Source inspection found no such function in the
-current `stripe.ts`. This discrepancy must be resolved before DIRECT implementation begins —
-either the function was removed or the design doc is aspirational. Do not treat the design
-doc's "What IS built" table as current source truth.
+**Stripe-verified behaviour (destination charges):**
+- Charge is stored on the **DriveBook platform account**
+- Funds transfer atomically to instructor's connected account minus application fee
+- Student sees instructor's Stripe statement descriptor (due to `on_behalf_of`)
+- Stripe processes fees using **DriveBook platform's** pricing (1.65% + $0.30 AU)
+- **Disputes: Stripe debits the DriveBook platform account** for both the disputed amount and the A$25 dispute fee (regardless of `on_behalf_of`)
+- To recover disputed funds from the connected account: **transfer reversal required** (`reverse_transfer: true`)
+- If the connected account has insufficient balance: Stripe may debit its external bank account if `debit_negative_balances` is set; otherwise DriveBook bears the loss
+- DriveBook is the merchant of record for card network dispute rate monitoring
 
-### Rule S-03: SaaS and PLATFORM must not share commission config
-SaaS path uses `BusinessSettings.commissionRate` → `BusinessConfig.commissionPercent`.
-PLATFORM path uses `PlatformSettings.basicCommissionRate / proCommissionRate / studioCommissionRate / businessCommissionRate`.
-DIRECT path must use a separate `directApplicationFeeRate` config (recommended: 2.5%).
-These three stores must not be aliased or collapsed — they govern different revenue models.
+**Refund procedure (destination charges, Stripe-verified):**
+```typescript
+// Refunding a destination charge WITHOUT reverse_transfer leaves connected account
+// with the funds while platform covers the negative balance — do NOT do this.
+stripe.refunds.create({
+  charge: chargeId,
+  reverse_transfer: true,         // mandatory — pulls funds back from connected account
+  refund_application_fee: true,   // returns the application fee proportionally
+})
+```
+Without `reverse_transfer: true`, the connected account retains the transferred funds
+while DriveBook's balance is debited for the full refund — platform bears the full loss.
 
-### Rule S-04: DIRECT mode requires PREMIUM subscription
-`getAccountFeatures().directPayments` is currently hardcoded `false`. When DIRECT is
-activated, the gate must enforce: `subscriptionTier === 'PREMIUM'` AND
-`provider.chargesEnabled === true` (Stripe Connect onboarding complete). No other tier
-grants DIRECT mode. This gate belongs in both the settings-write API and the
-`getAccountFeatures()` function.
+**Summary (Model A):**
+| Aspect | Reality |
+|---|---|
+| Statement descriptor | Instructor's (via `on_behalf_of`) |
+| Stripe processing fees | Charged to DriveBook platform |
+| Dispute debit | DriveBook platform account |
+| Dispute response authority | DriveBook (platform account) |
+| Dispute fee (A$25) | DriveBook platform account |
+| Refund debit | DriveBook platform account |
+| Refund recovery mechanism | `reverse_transfer: true` — funds pulled from connected account |
+| DriveBook's maximum loss if connected account is empty | Full disputed/refunded amount |
+| Connected account Stripe dashboard | Transaction appears (via `on_behalf_of`) |
 
-### Rule S-05: No payoutQueue entry for DIRECT bookings
+### 5.2 Model B — Direct Charge on Connected Account
+
+```typescript
+// Charge created WITH Stripe-Account header pointing to connected account
+stripe.paymentIntents.create(
+  {
+    amount,
+    currency: 'aud',
+    payment_method_types: ['card'],
+    application_fee_amount: Math.round(amount * 0.025),
+  },
+  { stripeAccount: instructorStripeAccountId }   // Stripe-Account header
+)
+```
+
+**Stripe-verified behaviour (direct charges on Express accounts):**
+- Charge is stored on the **connected account** (instructor's Stripe account)
+- Student sees instructor's Stripe statement descriptor
+- Stripe processes fees using the **connected account's** pricing (same as Express account rate, typically same as platform unless custom rate applies)
+- **Disputes: Stripe debits the connected account's balance** for disputed amounts
+  - For Express accounts: connected account pays dispute-related fees
+  - However: **DriveBook remains responsible for the connected account's negative balances** (this is an Express account limitation — Stripe does not absorb negative balances for Express accounts unless Stripe is explicitly set as the negative-balance controller)
+  - DriveBook is **not** the card-network merchant-of-record — the connected account is, but dispute-rate monitoring may still apply to DriveBook's platform depending on Stripe's assessment
+- `application_fee_amount` is valid in this context (charge is on a connected account)
+- Refunds: initiated by DriveBook on the connected account using its `Stripe-Account` header; reduce the connected account's balance; application fee can be refunded via `refund_application_fee: true`
+
+**Summary (Model B):**
+| Aspect | Reality |
+|---|---|
+| Statement descriptor | Instructor's (charge is on their account) |
+| Stripe processing fees | Charged to connected account's balance |
+| Dispute debit | Connected account's balance |
+| Dispute response authority | Connected account (but Express dashboard lacks dispute UI — DriveBook must handle via API) |
+| Dispute fee (A$25) | Connected account (for Express with `fees.payer = application_express`) |
+| Refund debit | Connected account's balance |
+| Refund recovery mechanism | Reduces connected account balance directly (no separate transfer reversal) |
+| DriveBook's exposure if connected account balance goes negative | Full negative balance (platform liable for Express account negative balances) |
+| Connected account Stripe dashboard | Full transaction visibility |
+
+### 5.3 Model Comparison
+
+| Aspect | Model A (Destination) | Model B (Direct) |
+|---|---|---|
+| Charge settles on | Platform account | Connected account |
+| `application_fee_amount` valid? | Yes (with `transfer_data.destination`) | Yes (charge on connected account) |
+| Dispute debit | **Platform** | Connected account |
+| Dispute fee | **Platform** | Connected account (Express) |
+| Refund debit | **Platform** | Connected account |
+| Platform's max exposure | Full amount if connected account empty | Full negative balance if connected account empty |
+| Radar rules apply to | Platform account rules | Connected account must be configured per-account |
+| Dispute management UI | Platform Stripe Dashboard | Express Dashboard lacks it — must use API |
+| Consistent with Express account type? | Yes — recommended for Express | Technically possible but complex |
+| `createDirectPaymentIntent()` in design doc | Uses this model | Requires Stripe-Account header instead |
+
+**Critical finding common to both models:** In neither model does DriveBook escape financial
+exposure when the connected account balance is empty. For destination charges, the platform
+is debited directly. For direct charges on Express accounts, the platform is responsible for
+negative connected account balances. The risk allocation between models is one of immediacy
+and operational complexity, not fundamentally different total exposure.
+
+### 5.4 Decision: Model A (Destination Charge) — with corrections
+
+**Rationale:**
+1. `createConnectAccount()` creates Express accounts. Model B (direct charges on Express accounts) is operationally complex: Express Dashboard does not support dispute management, Radar rules do not apply, and reporting is fragmented across connected accounts. Stripe explicitly discourages direct charges on Express accounts (source: Stripe dev.to article).
+2. Model A is consistent with Express accounts, uses DriveBook's platform Radar rules and reporting, and centralises dispute responses through the platform Dashboard.
+3. The design doc `PAYMENT-WHITE-LABEL.md` uses `on_behalf_of + transfer_data.destination` (Model A). This is the correct implementation path.
+4. The key correction from v1: Model A does NOT move dispute/refund liability to the instructor. DriveBook bears the immediate debit; recovery from the connected account requires `reverse_transfer: true` and is not guaranteed if the account balance is zero.
+
+**This decision does not change the risk profile — it correctly names it.** DriveBook bears the first-instance financial exposure in both models when a connected account has no balance. The difference is that Model A keeps operational control (Radar, dispute management, reporting) centralised.
+
+---
+
+## 6. Corrected Settlement Contract for DIRECT Mode (Model A)
+
+### 6.1 Who Receives Funds
+
+| | PLATFORM | DIRECT (Model A, destination charge) |
+|---|---|---|
+| Charge created on | DriveBook platform account | DriveBook platform account |
+| Funds transfer to instructor | Weekly Stripe Connect transfer | Atomically at charge creation (`transfer_data.destination`) |
+| Student's bank statement | "DRIVEBOOK.COM.AU" | Instructor's Stripe statement descriptor (via `on_behalf_of`) |
+| DriveBook's Stripe balance change | +fullAmount | +application_fee_amount only |
+
+### 6.2 Who Bears Fees
+
+| Fee | PLATFORM | DIRECT (Model A) |
+|---|---|---|
+| Stripe processing (1.65% + A$0.30, domestic) | DriveBook | DriveBook (destination charge uses platform pricing) |
+| DriveBook commission | Tier-based 10–15% | Zero |
+| DriveBook `application_fee_amount` | Implicit (retained from settlement) | Explicit: recommended 2.5% of lesson price |
+| Platform fee surcharge to student | 3.6% (passed on to student) | Subject to product decision — see section 6.5 |
+
+### 6.3 Dispute and Chargeback Handling (CORRECTED from v1)
+
+**Per Stripe documentation (source: [Connect disputes guide](https://docs.stripe.com/connect/disputes)):**
+
+> For destination and separate charges and transfers, with or without on_behalf_of, Stripe debits dispute amounts and fees from your platform account.
+
+| Step | Action |
+|---|---|
+| `charge.dispute.created` fires | DriveBook platform balance is debited immediately (full disputed amount + A$25 dispute fee) |
+| Dispute response | DriveBook responds via platform Dashboard or Disputes API |
+| If DriveBook accepts or loses | Reverse the transfer: `stripe.transfers.createReversal(transferId)` — pulls funds from connected account |
+| If connected account has insufficient balance | Stripe attempts to debit connected account's external bank (if `debit_negative_balances: true`); otherwise DriveBook bears the loss |
+| If DriveBook wins | Do NOT reverse the transfer; connected account retains funds |
+| `PlatformLedger` impact | Same as PLATFORM: `DISPUTE_OPENED` → hold; `DISPUTE_WON` → release; `DISPUTE_LOST` → `totalCollected -= disputedAmount` |
+
+**Implementation consequence:** The `chargebackAutomation.ts` DIRECT branch must:
+1. Not freeze a payout queue entry (there is none for DIRECT bookings)
+2. Execute `stripe.transfers.createReversal()` on dispute loss/acceptance
+3. Still write `DISPUTE_OPENED`, `DISPUTE_WON`, `DISPUTE_LOST` LedgerEntries — these entries track the application fee exposure, not the full booking amount which never hit `totalCollected`
+
+**See ledger invariants in section 6.4 for why full-amount LedgerEntries must not be written.**
+
+### 6.4 Refund Procedure (CORRECTED from v1)
+
+**For destination charges, refunds debit the DriveBook platform account by default. To recover from the connected account, `reverse_transfer: true` is mandatory.**
+
+```typescript
+// CORRECT refund procedure for DIRECT (destination charge) bookings:
+await stripe.refunds.create({
+  charge: chargeId,
+  amount: refundAmountInCents,   // partial or full
+  reverse_transfer: true,        // MANDATORY — recover from connected account
+  refund_application_fee: true,  // return application fee proportionally
+});
+// Note: refund_application_fee refunds proportionally, e.g. 40% refund → 40% of fee refunded
+// Stripe's sunk processing cost (1.65% + $0.30) is not returned by Stripe in any refund
+```
+
+**Omitting `reverse_transfer: true` leaves the connected account with the lesson funds
+while DriveBook's balance absorbs the full refund.** This is not a product decision — it is
+a required parameter for DIRECT refunds.
+
+**What happens to the application fee on refund:**
+- `refund_application_fee: true` refunds the fee proportionally
+- The Stripe processing cost (1.65% + $0.30 of the original charge) is non-refundable — Stripe does not return it on any refund
+- DriveBook's net cost on a full refund: the Stripe processing cost of the original charge (~1.65% + $0.30)
+
+**`directApplicationFeeId` requirement:**
+- The `application_fee` object ID is returned by Stripe on the charge after `payment_intent.succeeded`
+- If `refund_application_fee: true` is used on the refund (not a separate `applicationFeeRefunds.create()`), the `application_fee` ID is not separately needed — Stripe handles it automatically via the `charge` ID
+- `directApplicationFeeId` on `Booking` is still useful for auditing and reconciliation purposes but is not required for the `reverse_transfer + refund_application_fee` approach
+- Recommendation: store it as `Booking.directApplicationFeeId String?` for audit completeness; it is not a hard blocker for the refund procedure
+
+### 6.5 Ledger Invariants — What Must NOT Change for DIRECT Bookings
+
+`PlatformLedger` tracks money that passed through DriveBook's Stripe account as a
+full-amount settlement. In DIRECT mode, only the `application_fee_amount` passes through
+DriveBook's balance. The full booking amount does not.
+
+| Field / LedgerEntry | PLATFORM | DIRECT (Model A) |
+|---|---|---|
+| `PlatformLedger.totalCollected` | += fullAmount on `payment_intent.succeeded` | **DO NOT INCREMENT by fullAmount** — only application_fee is DriveBook revenue |
+| `PlatformLedger.totalReserved` | += fullAmount on collect; -= on payout | **DO NOT TOUCH** |
+| `PlatformLedger.totalPaidOut` | += netAmount on Stripe transfer | **DO NOT INCREMENT** (no payout queue) |
+| `PlatformLedger.totalRefunded` | += on `REFUND_ISSUED` | **DO NOT INCREMENT by fullAmount** |
+| `LedgerEntry.PAYMENT_COLLECTED` (for full amount) | Created on booking confirmation | **DO NOT CREATE** for full amount |
+| `LedgerEntry.PAYOUT_PAID` | Created on Stripe transfer | **DO NOT CREATE** (no payout) |
+| `LedgerEntry.REFUND_ISSUED` (for full amount) | Created on refund | **DO NOT CREATE** for full amount |
+
+**What to do instead:** An application-fee sub-ledger or separate LedgerEntry type is needed
+to track `application_fee_amount` received per DIRECT booking. This does not exist in the
+current schema and must be designed before DIRECT mode is activated. Until it is designed,
+DIRECT bookings must not write any entries to the existing `PlatformLedger` fields.
+
+**Dispute LedgerEntries for DIRECT:** When a DIRECT booking is disputed, DriveBook is
+debited the full disputed amount from its platform balance (Stripe mechanics). The
+application-fee sub-ledger should record the debit. The existing `DISPUTE_OPENED` /
+`DISPUTE_WON` / `DISPUTE_LOST` entries may be reused but must be scoped to the application
+fee amount only, not the full booking amount.
+
+### 6.6 Payout Queue Exclusion
+
 `buildPayout()` must exclude `Transaction` records where `booking.paymentMode === 'DIRECT'`.
-Including them would create a Stripe transfer for money that never arrived in DriveBook's
-account, resulting in a negative available balance and a failed `assertSufficientBalance()`
-check.
+Including them would instruct `executePayout()` to Stripe-transfer money that is already in
+the connected account, resulting in a double-payment to the instructor and a negative
+`availableBalance` assertion failure.
 
-### Rule S-06: directApplicationFeeId must be stored before refunds are possible
-DIRECT mode refunds require `stripe.applicationFeeRefunds.create(applicationFeeId, ...)`.
-The `applicationFeeId` is only available from the Stripe PaymentIntent after charge
-confirmation. It must be stored on `Booking.directApplicationFeeId` in the
-`payment_intent.succeeded` webhook handler for DIRECT bookings. DIRECT mode must not be
-activatable until this field exists in the schema.
+### 6.7 Application Fee Rate Recalculation (AU, 2026)
+
+**Stripe Australia domestic card processing (current as of stripe.com/AU/pricing):**  
+1.65% + A$0.30 per successful online charge
+
+**Per $75 lesson (DIRECT mode, domestic card):**
+
+| Item | Calculation | Amount |
+|---|---|---|
+| Student pays | — | $75.00 |
+| `application_fee_amount` (2.5%) | 2.5% × $75.00 | $1.875 (= $1.88 rounded) |
+| Stripe processing cost (1.65% + $0.30) | 1.65% × $75.00 + $0.30 | $1.54 |
+| Stripe deducts from application fee | $1.54 from $1.88 | $1.54 |
+| DriveBook net margin | $1.88 − $1.54 | **$0.34** |
+| Instructor nets | $75.00 − $1.88 | $73.12 |
+| On full refund, DriveBook loses | Stripe sunk cost (not refunded) | $1.54 |
+| On full refund, DriveBook net | $0.34 − $1.54 | **−$1.20** per refund |
+
+**Note on refund economics:** With `refund_application_fee: true`, the $1.88 application fee
+is refunded to the connected account (instructor). DriveBook still paid $1.54 to Stripe on
+the original charge, which is non-refundable. On a full refund, DriveBook loses $1.20.
+
+**Rate note:** The design doc uses 1.75% + $0.30 for the Stripe cost estimate. Stripe AU
+lowered the domestic rate to 1.70% + $0.30 in April 2024, and the current published rate
+on stripe.com/AU/pricing is **1.65% + A$0.30**. The 2.5% application fee rate remains
+viable at the current rate — DriveBook earns a small positive margin per transaction and
+loses approximately $1.20 per full refund. The rate should be revisited if Stripe's AU
+pricing changes materially.
+
+**Per $75 lesson, per-dispute cost to DriveBook:**
+
+| Item | Amount |
+|---|---|
+| Stripe dispute received fee | A$25.00 |
+| If dispute lost: full amount debited from platform | $75.00 |
+| Transfer reversal recovery (if connected account has funds) | −$73.12 (instructor's portion) |
+| Net loss to DriveBook on lost dispute, connected account solvent | $25.00 dispute fee + $1.88 application fee = **$26.88** |
+| Net loss to DriveBook on lost dispute, connected account empty | $25.00 + $75.00 = **$100.00** |
+
+This risk profile is the same in kind as PLATFORM mode (DriveBook loses the full amount if
+connected account is empty), but the frequency is expected to be lower for PREMIUM tier
+instructors with established businesses.
 
 ---
 
-## 6. What Must Not Change About Current PLATFORM Behaviour
+## 7. Merchant of Record and Australian Tax — Scope Limitation
 
-This decision record must not be read as justification to change any current PLATFORM code.
-The following are verified and must remain unchanged:
+v1 stated that the instructor is the "merchant of record" in DIRECT mode and that GST/BAS
+obligations shift to the instructor. The reviewer correctly identified that these conclusions
+are not supportable from Stripe settlement mechanics alone.
 
-- `createPaymentIntent()` in `lib/services/stripe.ts` — no `transfer_data`, no `on_behalf_of`
-- `PlatformLedger.totalCollected` increment on `payment_intent.succeeded` webhook
-- `buildPayout()` eligibility: `Transaction.status = 'SETTLED'`, dispute buffer, `chargesEnabled`, `payoutsEnabled`
-- `executePayout()` PAY-01 ownership check via `verifyPayoutDestinationOwnership()`
+**What Stripe mechanics establish:**
+- In Model A (destination charge with `on_behalf_of`): the student sees the instructor's statement descriptor; the charge is stored on DriveBook's platform account
+- In Model B (direct charge): the charge is stored on the connected account; the connected account is the settlement account
+- `on_behalf_of` affects statement descriptor and some presentment details; it does not, by itself, determine who is the legal merchant of record
+
+**What Stripe mechanics do NOT establish:**
+- Legal merchant of record status under Australian consumer law
+- GST/BAS obligation allocation (which party must register, collect and remit GST on lesson fees)
+- Whether the instructor or DriveBook is liable under the AFCA or ASIC regulatory frameworks for payment disputes
+
+**Decision: merchant-of-record and Australian tax conclusions are out of scope for this ADR.**
+These require a separate legal and tax assessment. This ADR defines only the Stripe
+settlement mechanics and ledger invariants. The product team and legal counsel must assess:
+- Whether DriveBook or the instructor is the merchant of record under Australian Consumer Law in DIRECT mode
+- Whether the instructor's ABN/GST registration is sufficient for DIRECT mode
+- Whether DriveBook's existing terms of service cover DIRECT mode payment arrangements
+
+Until that assessment is complete, DIRECT mode must not be described in any public-facing
+material as moving merchant-of-record or tax obligations to the instructor.
+
+---
+
+## 8. Updated Implementation Pre-Conditions (G01–G09)
+
+These gaps must be resolved before DIRECT mode is activated. No code changes are authorised
+by this ADR.
+
+| Gap | Location | Description | Revised from v1? |
+|---|---|---|---|
+| G01 | `lib/services/stripe.ts` | `createDirectPaymentIntent()` referenced in design doc at line 110 as complete; not found in current source. Must be confirmed present or rebuilt. | No change |
+| G02 | `app/api/stripe/webhook/route.ts` | No `paymentMode === 'DIRECT'` branch in `payment_intent.succeeded`. Would incorrectly write full-amount `PAYMENT_COLLECTED` LedgerEntry for DIRECT bookings. | No change |
+| G03 | `app/api/stripe/webhook/route.ts` | No `paymentMode === 'DIRECT'` branch in `charge.refunded`. Would incorrectly write full-amount `REFUND_ISSUED` and corrupt `PlatformLedger.totalRefunded`. | No change |
+| G04 | `lib/services/chargebackAutomation.ts` | No `paymentMode === 'DIRECT'` branch. Must not freeze a payout (none exists); must initiate `stripe.transfers.createReversal()` on dispute loss; must not write full-amount `DISPUTE_LOST` LedgerEntry. | **Revised** — v1 incorrectly said instructor bears chargeback; platform is actually debited first and must reverse transfer to recover |
+| G05 | `prisma/schema.prisma` | `Booking.directApplicationFeeId` field does not exist. Useful for audit/reconciliation; not required if using `reverse_transfer + refund_application_fee` approach but recommended. | **Revised** — no longer a hard blocker for refund procedure |
+| G06 | `lib/services/payout-service.ts` | `buildPayout()` does not exclude `paymentMode === 'DIRECT'` transactions. Would queue DIRECT bookings for payout despite instructor already holding funds. | No change |
+| G07 | `lib/utils/account.ts` | `assertPlatformPaymentMode()` has zero call sites in production payment routes. Four separate inline guards exist instead. | No change |
+| G08 | `lib/services/platform-pricing.ts` / `prisma/schema.prisma` | No `directApplicationFeeRate` config field. Needs `PlatformSettings.directApplicationFeePercentage Decimal @default(2.5)`. | No change |
+| G09 | `lib/services/saas-payment.ts` | `application_fee_amount` set without `transfer_data.destination` or connected-account context. Validity unresolved pending WLA-004. | No change |
+| G10 | Application-fee sub-ledger | No LedgerEntry type or PlatformLedger field exists to track `application_fee_amount` income per DIRECT booking. The existing `totalCollected` must not be used. A new tracking mechanism (e.g. `totalApplicationFeesCollected`) must be designed. | **NEW in v2** |
+| G11 | Transfer-reversal automation | No `stripe.transfers.createReversal()` call exists anywhere in the codebase. Required for DIRECT dispute loss and potentially for DIRECT refunds where the connected account must be debited. | **NEW in v2** |
+
+---
+
+## 9. Mode Separation Rules (Binding Constraints)
+
+These rules are unchanged from v1 except where noted.
+
+| Rule | Constraint |
+|---|---|
+| S-01 | Every `LedgerEntry` write and `PlatformLedger` mutation must check `booking.paymentMode` before executing. DIRECT bookings must not use `totalCollected`, `totalReserved`, or `totalPaidOut`. |
+| S-02 | `assertPlatformPaymentMode()` must be called from every payment entry point. Inline guards may remain as belt-and-suspenders. |
+| S-03 | SaaS, PLATFORM, and DIRECT must not share commission config stores. DIRECT requires a separate `directApplicationFeeRate` in `PlatformSettings`. |
+| S-04 | DIRECT mode requires PREMIUM subscription AND `provider.chargesEnabled === true`. |
+| S-05 | `buildPayout()` must exclude DIRECT booking transactions from the payout queue. |
+| S-06 | Refunds on DIRECT destination charges must include `reverse_transfer: true`. Omitting it leaves the connected account with the funds while DriveBook covers the refund. **(Corrected from v1)** |
+| S-07 | `stripe.transfers.createReversal()` must be called on DIRECT dispute loss/acceptance to recover disputed funds from the connected account. This does not guarantee full recovery if the connected account balance is zero. **(New in v2)** |
+| S-08 | DIRECT mode must not be described as making the instructor the merchant of record or shifting GST/BAS obligations until a separate legal/tax assessment is completed. **(New in v2)** |
+
+---
+
+## 10. What Must Not Change About Current PLATFORM Behaviour
+
+Unchanged from v1. No current code should be modified as a result of this ADR.
+
+- `createPaymentIntent()` in `stripe.ts` — no `transfer_data`, no `on_behalf_of`
+- `PlatformLedger.totalCollected` increment on `payment_intent.succeeded`
+- `buildPayout()` eligibility gates and dispute buffer
+- `executePayout()` PAY-01 ownership check
 - `assertSufficientBalance()` and `assertNonNegativeBalance()` guards
 - `getCommissionRate()` tier-based rates from `PlatformSettings`
-- `REFUND_ISSUED` + `ADJUSTMENT` flow for post-payout refunds (PLATFORM only)
-- Dispute webhook: freeze → `DISPUTE_OPENED` → release/cancel on resolution (PLATFORM only)
+- `REFUND_ISSUED` + `ADJUSTMENT` flow for post-payout refunds
+- Dispute webhook: `DISPUTE_OPENED` → hold payout → `DISPUTE_WON/LOST`
 
 ---
 
-## 7. Existing Code Gaps (informational — not fixes, pre-conditions for DIRECT activation)
+## 11. Decision Summary
 
-These gaps are documented here so they are not lost. They must be addressed before DIRECT
-mode is enabled. They are not assigned separate audit IDs at this time — they are
-implementation prerequisites for WLA-002.
-
-| Gap | Location | Description |
-|---|---|---|
-| G01 | `lib/services/stripe.ts` | `createDirectPaymentIntent()` referenced in `PAYMENT-WHITE-LABEL.md` as complete at line 110; not found in current source. Must be confirmed present or rebuilt. |
-| G02 | `app/api/stripe/webhook/route.ts` | No `paymentMode === 'DIRECT'` branch in `payment_intent.succeeded` handler. Would write incorrect `PAYMENT_COLLECTED` LedgerEntry for DIRECT bookings. |
-| G03 | `app/api/stripe/webhook/route.ts` | No `paymentMode === 'DIRECT'` branch in `charge.refunded` handler. Would write incorrect `REFUND_ISSUED` LedgerEntry and corrupt `PlatformLedger.totalRefunded`. |
-| G04 | `lib/services/chargebackAutomation.ts` | No `paymentMode === 'DIRECT'` branch. Would freeze instructor payout (which doesn't exist for DIRECT) and write `DISPUTE_LOST` against `PlatformLedger.totalCollected` (which was never incremented for DIRECT). |
-| G05 | `prisma/schema.prisma` | `Booking.directApplicationFeeId` field does not exist. Required for two-step DIRECT refunds. |
-| G06 | `lib/services/payout-service.ts` — `buildPayout()` | Does not exclude `paymentMode === 'DIRECT'` transactions. Would queue DIRECT bookings for payout despite instructor already holding funds. |
-| G07 | `lib/utils/account.ts` — `assertPlatformPaymentMode()` | Has zero call sites in production payment routes. Four separate inline guards exist instead. Must be unified before DIRECT is activated. |
-| G08 | `lib/services/platform-pricing.ts` | No `directApplicationFeeRate` config exists. Would need `PlatformSettings.directApplicationFeePercentage Decimal @default(2.5)`. |
-| G09 | `lib/services/saas-payment.ts` | `application_fee_amount` set without `transfer_data.destination` or `on_behalf_of`. Per Stripe API: `application_fee_amount` is only valid on charges to connected accounts. Requires verification (WLA-004). |
-
----
-
-## 8. Decision Summary
-
-| Question | Answer |
+| Question | Answer (v2) |
 |---|---|
-| Who receives funds in PLATFORM mode? | DriveBook's Stripe account; instructor receives weekly payout via Connect transfer |
-| Who receives funds in DIRECT mode? | Instructor's Stripe Connect account immediately; DriveBook retains application_fee only |
-| What does DriveBook earn in PLATFORM? | Commission (10–15% by tier) + 3.6% platform fee surcharge |
-| What does DriveBook earn in DIRECT? | Subscription only + 2.5% application_fee per transaction |
-| Who bears Stripe processing cost in DIRECT? | DriveBook (deducted from application_fee_amount) |
-| Who bears chargeback liability in DIRECT? | Instructor (Stripe deducts from their account); DriveBook's exposure = 2.5% only |
-| Can PLATFORM and DIRECT share a ledger? | No. `PlatformLedger` tracks PLATFORM money only. DIRECT bookings must not touch totalCollected, totalReserved, totalPaidOut, or totalRefunded. |
-| Can PLATFORM and DIRECT share the payout queue? | No. `buildPayout()` must exclude DIRECT bookings. |
-| Can PLATFORM and DIRECT share the refund flow? | No. PLATFORM refunds: DriveBook issues, wallet credit, ADJUSTMENT on next payout. DIRECT refunds: two-step Stripe API (full card refund + applicationFeeRefunds), no LedgerEntry for booking amount. |
-| What subscription tier gates DIRECT? | PREMIUM only, AND chargesEnabled=true (Connect onboarding complete) |
-| Can DIRECT be activated from current source? | No. G01–G09 must be resolved. `DIRECT mode must remain blocked until all preconditions are met.` |
-| Is current PLATFORM behaviour correct? | Yes. Verified as intentional per MM-10-A and source inspection. No changes required to current code. |
+| What Stripe charge type for DIRECT mode? | Model A: destination charge with `on_behalf_of` + `transfer_data.destination` |
+| Who receives funds first in DIRECT? | DriveBook platform account receives full amount; application fee is retained; instructor's account receives the remainder atomically |
+| Who receives full lesson amount? | Instructor's connected account (via atomic transfer in same API call) |
+| Student's bank statement in DIRECT? | Instructor's Stripe statement descriptor (due to `on_behalf_of`) |
+| Who is debited for disputes in DIRECT? | **DriveBook platform account** — destination charge disputes always debit the platform |
+| How does DriveBook recover disputed funds? | `stripe.transfers.createReversal()` — not guaranteed if connected account is empty |
+| Who is debited for Stripe processing fees in DIRECT? | DriveBook (destination charges use platform pricing) |
+| Who is debited for refunds in DIRECT? | DriveBook platform — must use `reverse_transfer: true` to recover from connected account |
+| What application fee rate? | 2.5% — DriveBook nets ~$0.34 per $75 lesson; loses ~$1.20 per full refund (Stripe sunk cost) |
+| Can PLATFORM and DIRECT share the ledger? | No. DIRECT must not touch totalCollected/totalReserved/totalPaidOut for full booking amounts. |
+| Can PLATFORM and DIRECT share the payout queue? | No. `buildPayout()` must exclude DIRECT. |
+| What are the new preconditions vs v1? | G10 (application-fee sub-ledger), G11 (transfer-reversal logic) |
+| Is merchant-of-record/tax addressed? | No — out of scope; requires separate legal/tax assessment |
+| Can DIRECT be activated from current source? | No. G01–G11 must be resolved. |
+| Is current PLATFORM behaviour correct? | Yes — verified per MM-10-A and source inspection. No changes required. |
+| Is current SaaS flow a confirmed baseline? | No — WLA-004 unresolved; `application_fee_amount` validity on plain platform charge is unverified. |
 
 ---
 
-## 9. Relationship to Other Findings
+## 12. Relationship to Other Findings
 
-- **MM-10-A (SUPERSEDED/closed):** Confirmed SaaS money landing on platform is intentional. WLA-002 extends this by specifying what must change when DIRECT is activated.
-- **WLA-001 (closed):** Fixed the missing DIRECT guard on the quote-accept route. G07 above documents the remaining consolidation work.
-- **WLA-004 (FINDING):** `application_fee_amount` validity on non-Connect charges — directly relevant to G09 above.
-- **WLA-005 (OPEN — next):** Wallet ownership semantics. Wallet refunds (PLATFORM mode default) should be re-evaluated once WLA-002 decision is accepted — DIRECT mode refunds go to card, not wallet.
-- **PAY-01 (closed):** `verifyPayoutDestinationOwnership()` must remain in `executePayout()` and must not be called for DIRECT bookings (which have no payout step).
-- **SEC-CRED-01 (ACTIVE CRITICAL — deferred):** Credential rotation. Unrelated to settlement semantics.
+- **MM-10-A (SUPERSEDED):** SaaS money on platform is intentional. WLA-002 extends this for DIRECT.
+- **WLA-001 (closed):** Missing DIRECT guard on quote-accept route fixed. G07 consolidation of inline guards remains open.
+- **WLA-004 (FINDING):** `application_fee_amount` without connected-account context. This ADR explicitly declares it unresolved and does not rely on the SaaS path as a working baseline.
+- **WLA-005 (OPEN — next):** Wallet ownership. DIRECT mode refunds go back to card (Stripe handles via `reverse_transfer`), not to wallet. WLA-005 wallet semantics should not assume DIRECT bookings generate wallet credits.
+- **PAY-01 (closed):** `verifyPayoutDestinationOwnership()` remains in `executePayout()` for PLATFORM. In DIRECT mode there is no `executePayout()` call — the transfer is atomic at charge creation.
+- **SEC-CRED-01 (ACTIVE CRITICAL — deferred):** Unrelated to settlement semantics.
 
 ---
 
 *This document is an architecture decision record. It does not implement any code changes.
 It must be reviewed and accepted before any DIRECT mode implementation work begins.
-The current PLATFORM codebase is unchanged by this document.*
+Current PLATFORM code is unchanged.*
+
+*Content was paraphrased for compliance with licensing restrictions. Stripe documentation sources are cited inline.*
