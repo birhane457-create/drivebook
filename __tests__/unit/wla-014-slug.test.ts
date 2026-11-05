@@ -341,6 +341,84 @@ describe('WLA-014-SLUG REG: SlugRegistry cross-table uniqueness (real DB)', () =
   }, 15000)
 })
 
+// ── NEW01: First-time slug registration regression ────────────────────────────
+
+describe('WLA-014-SLUG NEW: First-time Business creation registers slug (real DB)', () => {
+  it('NEW01 -- upsertBusinessBranding registers customSlug in SlugRegistry when creating Business for the first time', async () => {
+    // Regression test for the first-time creation gap:
+    // Before v4, upsertBusinessBranding() wrote BusinessBranding.customSlug
+    // without calling claimSlug(), leaving no registry entry for the slug.
+    const { upsertBusinessBranding } = await import('@/lib/branding/resolution')
+    const { providerId, userId } = await createFixture('new01')
+    const slug = TEST_SLUG + '-new01'
+    let bizId: string | null = null
+    try {
+      // First save: Provider has no Business yet; upsertBusinessBranding creates one.
+      await upsertBusinessBranding(providerId, { customSlug: slug, primaryColour: '#112233' })
+
+      // Verify Business was created and linked to Provider
+      const row = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${providerId}`
+      bizId = row[0].businessId
+      expect(bizId).toBeTruthy()
+
+      // Verify BusinessBranding.customSlug was written
+      const bb = await (prisma.businessBranding as any).findUnique({
+        where: { businessId: bizId },
+        select: { customSlug: true },
+      })
+      expect(bb?.customSlug).toBe(slug)
+
+      // Verify SlugRegistry entry was created atomically (the v4 fix)
+      const regRows = await prisma.$queryRaw<any[]>`
+        SELECT * FROM "SlugRegistry" WHERE slug = ${slug}
+      `
+      expect(regRows.length).toBe(1)
+      expect(regRows[0].ownerType).toBe('businessBranding')
+      expect(regRows[0].ownerId).toBe(bizId)
+    } finally {
+      if (bizId) {
+        await prisma.$executeRaw`DELETE FROM "SlugRegistry" WHERE slug = ${slug} OR "ownerId" = ${bizId}`.catch(() => {})
+        await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
+        await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
+      }
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 30000)
+
+  it('NEW02 -- second concurrent upsert for the same slug is rejected via SlugRegistry (P2002)', async () => {
+    // Once a slug is registered via upsertBusinessBranding, a subsequent attempt
+    // by a different Business to claim the same slug must fail with P2002.
+    const { claimSlug } = await import('@/lib/branding/slug-registry')
+    const { upsertBusinessBranding } = await import('@/lib/branding/resolution')
+    const { providerId, userId } = await createFixture('new02')
+    const slug = TEST_SLUG + '-new02'
+    let bizId: string | null = null
+    try {
+      // First save: creates Business and registers slug
+      await upsertBusinessBranding(providerId, { customSlug: slug, primaryColour: '#445566' })
+      const row = await prisma.$queryRaw<any[]>`SELECT "businessId" FROM "Provider" WHERE id = ${providerId}`
+      bizId = row[0].businessId
+
+      // Attempt to register the same slug for a different Business — must fail P2002
+      let caught: any = null
+      try {
+        await prisma.$transaction(async (tx) => {
+          await claimSlug(tx, slug, 'businessBranding', 'other-business-new02')
+        })
+      } catch (err) { caught = err }
+      expect(caught).not.toBeNull()
+      expect(caught?.code).toBe('P2002')
+    } finally {
+      if (bizId) {
+        await prisma.$executeRaw`DELETE FROM "SlugRegistry" WHERE slug = ${slug} OR "ownerId" = ${bizId}`.catch(() => {})
+        await (prisma.businessBranding as any).delete({ where: { businessId: bizId } }).catch(() => {})
+        await (prisma.business as any).delete({ where: { id: bizId } }).catch(() => {})
+      }
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+    }
+  }, 30000)
+})
+
 // ── DB01–DB03: Real database tests ───────────────────────────────────────────
 
 describe('WLA-014-SLUG DB: Unique index enforcement (real DB)', () => {
@@ -465,7 +543,7 @@ describe('WLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)'
     }
   }, 15000)
 
-  it('OMIT01 -- omitting customSlug does not release the existing registry claim', async () => {
+  it('OMIT01 -- omitting customSlug (slugIsBeingChanged=false) preserves registry claim (registry service level, not HTTP route test)', async () => {
     const { claimSlug } = await import('@/lib/branding/slug-registry')
     const bizId = 'test-omit01-biz'
     const slug = TEST_SLUG + '-omit01'
@@ -482,7 +560,7 @@ describe('WLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)'
     }
   }, 15000)
 
-  it('CLEAR01 -- explicitly clearing customSlug (empty string → null) releases the registry claim', async () => {
+  it('CLEAR01 -- explicit clear (null/empty) releases registry claim via updateSlugClaim (registry service level, not HTTP route test)', async () => {
     const { claimSlug, updateSlugClaim } = await import('@/lib/branding/slug-registry')
     const bizId = 'test-clear01-biz'
     const slug = TEST_SLUG + '-clear01'

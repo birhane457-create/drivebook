@@ -1,0 +1,7 @@
+[v4-verify] Connecting to production...
+[v4-verify] SlugRegistry row count: 1n
+[v4-verify] Remaining provider-owned entries: 0n (expected 0 after backfill)
+[v4-verify] Duplicate slugs in registry: 0 (expected 0)
+[v4-verify]   ownerType=businessBranding count=1
+[v4-verify] Done
+EXIT:0 

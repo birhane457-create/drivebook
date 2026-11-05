@@ -287,26 +287,46 @@ export async function upsertBusinessBranding(
     }
   }
 
-  await (prisma as any).businessBranding.upsert({
+  // Read existing BusinessBranding slug before the transaction so we can
+  // maintain the registry atomically with the upsert.
+  const existingBranding = bizId ? await (prisma as any).businessBranding.findUnique({
     where: { businessId: bizId },
-    create: {
-      businessId: bizId,
-      logo: fields.logo ?? null,
-      primaryColour: fields.primaryColour ?? DEFAULT_PRIMARY,
-      secondaryColour: fields.secondaryColour ?? null,
-      fontFamily: fields.fontFamily ?? null,
-      theme: fields.theme ?? 'light',
-      showPlatformBranding: fields.showPlatformBranding ?? true,
-      customSlug: fields.customSlug ?? null,
-    },
-    update: {
-      ...(fields.logo !== undefined && { logo: fields.logo }),
-      ...(fields.primaryColour !== undefined && { primaryColour: fields.primaryColour ?? DEFAULT_PRIMARY }),
-      ...(fields.secondaryColour !== undefined && { secondaryColour: fields.secondaryColour }),
-      ...(fields.fontFamily !== undefined && { fontFamily: fields.fontFamily }),
-      ...(fields.theme !== undefined && { theme: fields.theme }),
-      ...(fields.showPlatformBranding !== undefined && { showPlatformBranding: fields.showPlatformBranding }),
-      ...(fields.customSlug !== undefined && { customSlug: fields.customSlug }),
-    },
+    select: { customSlug: true },
+  }) : null
+  const oldSlug: string | null = existingBranding?.customSlug ?? null
+  const slugIsBeingChanged = fields.customSlug !== undefined
+  const newSlug: string | null = slugIsBeingChanged ? (fields.customSlug ?? null) : oldSlug
+
+  // Wrap the BusinessBranding upsert and slug registry update in a single transaction.
+  // This ensures a customSlug cannot be written to BusinessBranding without a
+  // corresponding registry entry (preventing the first-time creation gap).
+  await prisma.$transaction(async (tx) => {
+    if (slugIsBeingChanged && newSlug !== oldSlug) {
+      const { updateSlugClaim } = await import('./slug-registry')
+      await updateSlugClaim(tx, 'businessBranding', bizId!, oldSlug, newSlug)
+    }
+
+    await (tx as any).businessBranding.upsert({
+      where: { businessId: bizId },
+      create: {
+        businessId: bizId,
+        logo: fields.logo ?? null,
+        primaryColour: fields.primaryColour ?? DEFAULT_PRIMARY,
+        secondaryColour: fields.secondaryColour ?? null,
+        fontFamily: fields.fontFamily ?? null,
+        theme: fields.theme ?? 'light',
+        showPlatformBranding: fields.showPlatformBranding ?? true,
+        customSlug: fields.customSlug ?? null,
+      },
+      update: {
+        ...(fields.logo !== undefined && { logo: fields.logo }),
+        ...(fields.primaryColour !== undefined && { primaryColour: fields.primaryColour ?? DEFAULT_PRIMARY }),
+        ...(fields.secondaryColour !== undefined && { secondaryColour: fields.secondaryColour }),
+        ...(fields.fontFamily !== undefined && { fontFamily: fields.fontFamily }),
+        ...(fields.theme !== undefined && { theme: fields.theme }),
+        ...(fields.showPlatformBranding !== undefined && { showPlatformBranding: fields.showPlatformBranding }),
+        ...(fields.customSlug !== undefined && { customSlug: fields.customSlug }),
+      },
+    })
   })
 }

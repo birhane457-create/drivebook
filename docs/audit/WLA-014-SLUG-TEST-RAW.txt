@@ -20,17 +20,19 @@
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG REG: SlugRegistry cross-table uniqueness (real DB)[2m > [22mREG01 -- claimSlug() creates a SlugRegistry row
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG REG: SlugRegistry cross-table uniqueness (real DB)[2m > [22mREG02 -- claimSlug() throws P2002 for a duplicate slug (cross-table race prevention)
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG REG: SlugRegistry cross-table uniqueness (real DB)[2m > [22mREG03 -- updateSlugClaim() releases old entry and creates new one atomically
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG NEW: First-time Business creation registers slug (real DB)[2m > [22mNEW01 -- upsertBusinessBranding registers customSlug in SlugRegistry when creating Business for the first time
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG NEW: First-time Business creation registers slug (real DB)[2m > [22mNEW02 -- second concurrent upsert for the same slug is rejected via SlugRegistry (P2002)
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG DB: Unique index enforcement (real DB)[2m > [22mDB01 -- Provider unique index rejects a duplicate customSlug
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG DB: Unique index enforcement (real DB)[2m > [22mDB02 -- BusinessBranding unique index rejects a duplicate customSlug
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG DB: Unique index enforcement (real DB)[2m > [22mDB03 -- SlugRegistry prevents the same slug appearing in both Provider and BusinessBranding
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)[2m > [22mOWN01 -- updateSlugClaim with same ownerType/ownerId is idempotent across both routes
- [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)[2m > [22mOMIT01 -- omitting customSlug does not release the existing registry claim
- [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)[2m > [22mCLEAR01 -- explicitly clearing customSlug (empty string → null) releases the registry claim
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)[2m > [22mOMIT01 -- omitting customSlug (slugIsBeingChanged=false) preserves registry claim (registry service level, not HTTP route test)
+ [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)[2m > [22mCLEAR01 -- explicit clear (null/empty) releases registry claim via updateSlugClaim (registry service level, not HTTP route test)
  [32m✓[39m __tests__/unit/wla-014-slug.test.ts[2m > [22mWLA-014-SLUG V3: Omit, clear, and cross-route slug handling (real DB)[2m > [22mCROSS-ROUTE01 -- slug claimed by one bizId blocks the same slug from a different bizId
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m22 passed[39m[22m[90m (22)[39m
-[2m   Start at [22m 12:41:07
-[2m   Duration [22m 1.18s[2m (transform 100ms, setup 54ms, collect 146ms, tests 280ms, environment 0ms, prepare 241ms)[22m
+[2m      Tests [22m [1m[32m24 passed[39m[22m[90m (24)[39m
+[2m   Start at [22m 13:17:05
+[2m   Duration [22m 1.22s[2m (transform 101ms, setup 49ms, collect 135ms, tests 452ms, environment 0ms, prepare 254ms)[22m
 
 VITEST_EXIT:0 
