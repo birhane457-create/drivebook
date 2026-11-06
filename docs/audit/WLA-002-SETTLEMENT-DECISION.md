@@ -1,12 +1,12 @@
-# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v8)
+# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v9)
 
 **Finding ID:** WLA-002  
 **Category:** ARCHITECTURAL  
 **Risk:** Not a runtime defect in current code. An undocumented design boundary that becomes a code defect when DIRECT mode is activated.  
-**Status:** ARCHITECTURE DECISION DEFINED (v8) — pending reviewer acceptance  
-**v1–v7 history:** NOT ACCEPTED (see appendix A for full rejection history)  
-**v8 authored:** 2026-11-06  
-**v7 rejection reason:** (1) Partial application-fee refund described as "proportional by default" — incorrect; the full fee is retained unless the platform explicitly refunds it. (2) DIRECT package refunds claimed to use the PLATFORM `calculatePartialPackageRefund()` function — the provider manages DIRECT refunds independently; PLATFORM function does not transfer. (3) Refund funding not documented — connected account balance requirements and insufficient-balance outcomes missing. (4) Webhook specification incomplete — no connected-account event context, signature verification, idempotency, partial/full refund handling, or reconciliation design. (5) G01–G11 references not updated to G01–G12 in section 10 heading and decision summary. (6) Stripe Managed Risk eligibility unverified — must not claim complete legal/financial isolation.
+**Status:** ARCHITECTURE DECISION DEFINED (v9) — pending reviewer acceptance  
+**v1–v8 history:** NOT ACCEPTED (see appendix A for full rejection history)  
+**v9 authored:** 2026-11-06  
+**v8 rejection reason:** (1) Accounts v2 terminology imprecise — "Standard (Accounts v2)" should be "Accounts v2 connected account with full Dashboard access" with `dashboard: "full"`; must address whether existing Express accounts require replacement and provider re-onboarding. (2) DIRECT package purchases still partially in scope — must be fully excluded until provider-facing refund policy defined. (3) Webhook specification covered only connected-account events — must also specify platform-account handling for `application_fee.created` and `application_fee.refunded`; two separate webhook contexts required.
 
 **Sources inspected (code):**  
 - `lib/services/stripe.ts` — `createConnectAccount()`: `type: 'express'`, `country: 'AU'`  
@@ -120,16 +120,20 @@ stripe.paymentIntents.create(
 
 | Setting | Value | Rationale |
 |---|---|---|
-| Account type | **Standard** (Accounts v2) | Full Stripe Dashboard access — provider can manage payments, issue refunds, and respond to disputes directly |
-| `fees_collector` | **`"stripe"`** | Stripe collects its own processing fees from the connected account's payment; provider sees Stripe's standard pricing, not DriveBook's |
-| `losses_collector` | **`"stripe"`** | Stripe absorbs negative balances on connected accounts — DriveBook is not liable for connected-account shortfalls (unlike Express) |
+| Account type | **Accounts v2 connected account with full Dashboard access** | Provider can manage payments, issue refunds, and respond to disputes directly via Stripe Dashboard |
+| `dashboard` | **`"full"`** | Full Stripe Dashboard — not Express Dashboard (which lacks dispute management) |
+| `defaults.responsibilities.fees_collector` | **`"stripe"`** | Stripe collects its own processing fees from the connected account's payment; provider sees Stripe's standard pricing, not DriveBook's |
+| `defaults.responsibilities.losses_collector` | **`"stripe"`** | Stripe absorbs negative balances on connected accounts — DriveBook is not liable for connected-account shortfalls (unlike Express) |
 | Charge type | **Direct charges** | Charge created on the connected account using `Stripe-Account` header |
 
-**Accounts v2 with Managed Risk:** Per [Stripe docs](https://docs.stripe.com/connect/risk-management/connected-accounts-with-managed-risk), Stripe manages credit and fraud risk and assumes losses from unrecoverable negative balances when `losses_collector: "stripe"` is configured. This is recommended for SaaS platforms using direct charges.
+**Accounts v2 with Managed Risk:** Per [Stripe docs](https://docs.stripe.com/connect/risk-management/connected-accounts-with-managed-risk), Stripe manages credit and fraud risk and assumes losses from unrecoverable negative balances when `defaults.responsibilities.losses_collector: "stripe"` is configured. This is recommended for SaaS platforms using direct charges.
 
-**Unresolved assumption — Australian eligibility:** Accounts v2 features (`fees_collector: "stripe"`, `losses_collector: "stripe"`) must be verified for Australian-registered connected accounts. The Stripe changelog indicates Express connected accounts v2 support was added with Stripe-owned pricing and negative-balance liability, but actual availability for DriveBook's AU integration must be confirmed with Stripe before recording this as an established capability.
+**Unresolved assumptions — Australian eligibility and account migration:**
+- Accounts v2 features (`defaults.responsibilities.fees_collector: "stripe"`, `defaults.responsibilities.losses_collector: "stripe"`, `dashboard: "full"`) must be verified for Australian-registered connected accounts on DriveBook's Stripe platform.
+- The Stripe changelog indicates Express connected accounts v2 support was added with Stripe-owned pricing and negative-balance liability, but actual availability for DriveBook's AU integration must be confirmed with Stripe.
+- **Existing Express accounts:** Current `createConnectAccount()` creates v1 Express accounts. It is unresolved whether existing Express accounts can be migrated in place to Accounts v2 with `dashboard: "full"`, or whether they must be replaced entirely (requiring provider re-onboarding). This must be determined before DIRECT mode can be activated.
 
-**Migration required:** Current `createConnectAccount()` creates Express accounts. Migrating to Accounts v2 Standard accounts is a precondition for DIRECT mode. This migration has not been authorised and is out of scope for this ADR.
+**Migration required (G12, not authorised):** Migrating to Accounts v2 connected accounts with full Dashboard access is a precondition for DIRECT mode. This migration has not been authorised and is out of scope for this ADR.
 
 ---
 
@@ -210,7 +214,7 @@ DriveBook's contractual obligation to the student on a DIRECT booking is not aut
 | Step | Action |
 |---|---|
 | `charge.dispute.created` fires | Stripe debits **provider's connected account** (not DriveBook's platform) |
-| Dispute response | **Provider manages dispute responses through the full Stripe Dashboard** (requires Standard account type) |
+| Dispute response | **Provider manages dispute responses through the full Stripe Dashboard** (requires Accounts v2 with `dashboard: "full"`) |
 | If dispute lost | Connected account balance is debited; provider bears the loss |
 | Negative-balance responsibility | **Depends on account configuration** — see below |
 
@@ -229,33 +233,40 @@ The actual configuration must be verified at implementation time. This ADR recom
 
 ### 5.4 Webhook Event-Handling Specification (G03 + G11)
 
-Direct-charge events fire against the **connected account**, not the platform. DriveBook must use Connect webhooks (or per-account webhook endpoints) to receive these events. The following specification defines the minimum event-handling design.
+DIRECT mode requires **two separate webhook contexts**. Direct-charge events (refunds, disputes) fire against the connected account. Application-fee events fire against the platform account. One webhook endpoint or event context does not cover all Stripe objects.
 
-**Connected-account event context:**
-- All DIRECT-mode webhook events arrive with the connected account's ID in the event payload
-- DriveBook must verify the event's `account` field matches a known provider's `stripeAccountId`
-- Events from unknown accounts must be logged and ignored (not 500'd — Stripe retries on non-2xx)
+#### Context 1 — Connected-account webhook (refund and dispute events)
 
-**Event signature verification:**
-- Connect webhook endpoints must verify the Stripe signature using the **Connect webhook signing secret** (separate from the platform-level webhook secret)
-- The endpoint must use `stripe.webhooks.constructEvent(rawBody, signature, connectWebhookSecret)`
+**Endpoint:** Separate Connect webhook endpoint, signed with the Connect webhook signing secret (not the platform-level webhook secret).
 
-**Idempotency and duplicate-event handling:**
-- Stripe may deliver the same event multiple times. Each event has a unique `id` field.
-- DriveBook must maintain an idempotency table (e.g. `WebhookEvent` model already exists for this purpose) keyed on `event.id`
-- If the event ID has already been processed, return 200 without reprocessing
+**Event context:**
+- Direct-charge events arrive with the connected account's ID in the event payload (`event.account`)
+- DriveBook must verify `event.account` matches a known provider's `stripeAccountId`
+- Events from unknown accounts must be logged and ignored (return 200 — Stripe retries on non-2xx)
 
-**Refund events — full specification:**
+**Signature verification:**
+- Use the **Connect webhook signing secret** (separate from the platform-level webhook secret)
+- `stripe.webhooks.constructEvent(rawBody, signature, connectWebhookSecret)`
+
+**Account identification:**
+- Each event's `event.account` field identifies the connected account
+- DriveBook must look up the provider by `stripeAccountId === event.account`
+- If no provider matches: log, return 200, do not process
+
+**Idempotency:**
+- Each event has a unique `id` field. DriveBook must maintain an idempotency table (existing `WebhookEvent` model) keyed on `event.id`
+- If already processed: return 200 without reprocessing
+
+**Refund events:**
 
 | Event | Handling |
 |---|---|
-| `charge.refunded` (full) | Verify connected account; verify charge belongs to a DIRECT booking; update Booking status to `CANCELLED` or `REFUNDED`; record `DirectSettlementEntry` if application fee was returned; do NOT write `PlatformLedger` entries |
-| `charge.refunded` (partial) | Verify the `amount_refunded` field — this is cumulative, not per-event. Compare against the charge's total amount to determine the remaining unrefunded balance. Update Booking to `PARTIALLY_REFUNDED` (new status if needed). Do NOT mark the booking as fully cancelled. |
-| Multiple refunds on one charge | Stripe allows multiple partial refunds against a single charge. Each `charge.refunded` event represents one refund object, but `amount_refunded` on the charge is cumulative. DriveBook must track individual refund objects and sum them. |
-| `refund.updated` (failed reversal) | If a refund that was `succeeded` transitions to `failed` (e.g. insufficient funds after extended pending), Stripe fires `refund.updated`. DriveBook must revert any booking state change that was made based on the original refund success. |
-| `charge.refund.updated` | Not a standard Stripe event. Use `refund.updated` for refund status changes. |
+| `charge.refunded` (full) | Verify connected account; verify charge belongs to a DIRECT booking; update Booking status to `CANCELLED` or `REFUNDED`; do NOT write `PlatformLedger` entries |
+| `charge.refunded` (partial) | Check `amount_refunded` on the charge (cumulative, not per-event). Compare against charge total to determine remaining unrefunded balance. Update Booking to `PARTIALLY_REFUNDED`. Do NOT mark as fully cancelled. |
+| Multiple refunds on one charge | Stripe allows multiple partial refunds. Each `charge.refunded` event represents one refund object; `amount_refunded` on the charge is cumulative. DriveBook must track individual refund objects and sum them. |
+| `refund.updated` (failed reversal) | If a `succeeded` refund transitions to `failed`, Stripe fires `refund.updated`. DriveBook must revert any booking state change made based on the original refund success. |
 
-**Booking state transitions for DIRECT refunds:**
+**Booking state transitions:**
 
 ```
 CONFIRMED → PARTIALLY_REFUNDED  (partial refund issued by provider)
@@ -264,18 +275,56 @@ PARTIALLY_REFUNDED → REFUNDED    (subsequent refund brings total to full)
 REFUNDED → CONFIRMED              (refund failed/reversed — rare; must revert)
 ```
 
-**Reconciliation against Stripe objects:**
-- After each refund event, DriveBook must reconcile by fetching the charge and its `refunds` collection via the Stripe API (using the `Stripe-Account` header)
-- Verify the `amount_refunded` matches DriveBook's expected refund total
-- Verify the `application_fee` object on the charge — check whether the fee was refunded by checking the `amount_refunded` field on the `ApplicationFee` object. If the fee was refunded (which requires the platform to have set `refund_application_fee: true`), record `APPLICATION_FEE_REFUNDED` in `DirectSettlementEntry`
-- The provider cannot independently refund the application fee — only the platform can. If the application fee appears refunded, it was DriveBook's action (or a Stripe Dashboard setting the platform configured)
-
 **Dispute events:**
 
 | Event | Handling |
 |---|---|
 | `charge.dispute.created` (on connected account) | Verify connected account; log dispute; do NOT write `PlatformLedger` entries; alert admin if needed |
 | `charge.dispute.closed` | Record outcome in `DirectSettlementEntry` if applicable; do NOT write `DISPUTE_OPENED/WON/LOST` LedgerEntries against `PlatformLedger` |
+
+**Reconciliation against Stripe objects (connected-account context):**
+- After each refund event, fetch the charge and its `refunds` collection via the Stripe API (using the `Stripe-Account` header)
+- Verify `amount_refunded` matches DriveBook's expected refund total
+- Verify the `application_fee` object on the charge — check whether the fee was refunded by examining the `ApplicationFee` object's `amount_refunded` field
+
+#### Context 2 — Platform-account webhook (application-fee events)
+
+**Endpoint:** Platform-level webhook endpoint (existing `app/api/stripe/webhook/route.ts`), signed with the platform webhook signing secret. These events fire on the DriveBook platform account, not the connected account.
+
+**Event context:**
+- `application_fee.created` fires when Stripe transfers the application fee to the DriveBook platform account after a successful direct charge
+- `application_fee.refunded` fires when an application fee is partially or fully refunded (only if DriveBook explicitly set `refund_application_fee: true`)
+
+**Signature verification:**
+- Use the **platform webhook signing secret** (the existing one already used for PLATFORM-mode events)
+- `stripe.webhooks.constructEvent(rawBody, signature, platformWebhookSecret)`
+
+**Account identification:**
+- The `ApplicationFee` object contains an `account` field (the connected account ID) and an `originating_transaction` (the charge ID)
+- DriveBook must look up the DIRECT booking by matching the charge ID in `originating_transaction`
+- If no DIRECT booking matches: this may be a PLATFORM-mode event — route to existing PLATFORM handler
+
+**Idempotency:**
+- Same `WebhookEvent` idempotency table, keyed on `event.id`
+- Platform-account and connected-account events have different `event.id` values even if they refer to the same underlying transaction
+
+**Platform-account events:**
+
+| Event | Handling |
+|---|---|
+| `application_fee.created` | Record `DirectSettlementEntry(APPLICATION_FEE_RECEIVED)` with the fee amount and originating charge ID. This confirms DriveBook received the fee. Do NOT write `PlatformLedger` entries. |
+| `application_fee.refunded` | Record `DirectSettlementEntry(APPLICATION_FEE_REFUNDED)` (negative). This only fires if DriveBook explicitly refunded the fee (which under the non-refundable policy it does not). If this event arrives unexpectedly, investigate. |
+
+**Reconciliation (platform-account context):**
+- After `application_fee.created`, verify the `ApplicationFee.amount` matches the expected 2.5% × bookingRate
+- After `application_fee.refunded`, verify the refunded amount matches DriveBook's records
+- Cross-reference: the `ApplicationFee.originating_transaction` links to the charge on the connected account. DriveBook can fetch the charge using the `Stripe-Account` header to verify the full picture.
+
+**Why two endpoints are needed:**
+- Connected-account events (`charge.refunded`, `charge.dispute.created`) are scoped to the connected account and require the Connect webhook signing secret
+- Platform-account events (`application_fee.created`, `application_fee.refunded`) are scoped to the platform account and use the platform webhook signing secret
+- A single endpoint cannot receive both event types — Stripe routes events to the webhook endpoint registered for the account that owns the event
+- The existing `app/api/stripe/webhook/route.ts` handles platform-account events; a new endpoint (G11) is required for connected-account events
 
 ---
 
@@ -372,22 +421,17 @@ DriveBook's refund position is positive because Stripe's processing cost was nev
 
 ## 8. Scope Limitations
 
+**In scope (this ADR):**
+- DIRECT-mode single-booking payments (the charge structure, fee, refund, dispute, and ledger mechanics defined in sections 4–7)
+
 **Out of scope until WLA-005 is resolved:**
 - DIRECT-mode wallet top-ups
 - DIRECT-mode wallet-funded package purchases
 - Wallet credit reversals and cash refund distinctions
 
-Wallet ownership semantics (WLA-005) must be resolved before any DIRECT wallet integration is designed. This ADR covers single-booking and package purchases only.
-
-**Package purchases in scope (single-booking charge structure only):**
-- Provider pays the 2.5% application fee (same as single bookings)
-- Student pays the package price only
-- Application fee is retained on refund under the non-refundable policy
-
-**DIRECT package refund policy — not yet defined:**
-The existing `calculatePartialPackageRefund()` is a PLATFORM-mode implementation that applies DriveBook's discounted-package repricing formula. It does **not** automatically apply to DIRECT mode, where the provider manages refunds independently through their Stripe Dashboard. The provider's package refund calculation (including discount clawback, used-hours repricing, and minimum-hours qualification) is a separate policy that must be defined contractually with the provider. The ADR does not assume the PLATFORM calculation transfers to DIRECT.
-
-DIRECT package refund policy is **out of scope for this ADR** until a provider-facing package refund contract is defined. Single-booking DIRECT refunds are in scope.
+**Explicitly excluded until a provider-facing package refund policy is defined:**
+- DIRECT-mode package purchases (all package payment types)
+- The existing PLATFORM `calculatePartialPackageRefund()` does not transfer to DIRECT mode. The provider manages DIRECT refunds independently through their Stripe Dashboard. A separate provider-facing package refund contract (including discount clawback, used-hours repricing, and minimum-hours qualification) must be defined before DIRECT package purchases are activated. This ADR does not assume the PLATFORM calculation transfers.
 
 **Marketplace behaviour unchanged:** This ADR does not change any PLATFORM-mode behaviour, including wallet top-ups, wallet-funded bookings, commission rates, payout schedules, or package refund clawback.
 
@@ -430,7 +474,7 @@ These must all be resolved before DIRECT mode is activated. No code changes are 
 | G09 | `lib/services/saas-payment.ts` | `application_fee_amount` without connected-account context — validity unresolved pending WLA-004 |
 | G10 | `prisma/schema.prisma` | `DirectSettlementEntry` model and `DirectSettlementEntryType` enum not implemented |
 | G11 | `app/api/stripe/webhook/route.ts` | No Connect webhook listener for connected-account events — required for DIRECT refund and dispute visibility. Design specified in section 5.4 (event context, signature verification, idempotency, partial/full refund handling, reconciliation) |
-| G12 | `lib/services/stripe.ts` | `createConnectAccount()` creates Express accounts (v1); must migrate to Accounts v2 Standard with `fees_collector: "stripe"`, `losses_collector: "stripe"` — migration not authorised by this ADR |
+| G12 | `lib/services/stripe.ts` | `createConnectAccount()` creates v1 Express accounts; must migrate to Accounts v2 connected accounts with `dashboard: "full"`, `defaults.responsibilities.fees_collector: "stripe"`, `defaults.responsibilities.losses_collector: "stripe"`. Existing Express accounts may require replacement and provider re-onboarding (unresolved). Migration not authorised by this ADR |
 
 ---
 
@@ -459,10 +503,11 @@ No current code is modified by this ADR. The following are verified correct and 
 | DriveBook's refund role | Processes refund webhooks to update booking/accounting state only |
 | Is application fee refunded? | No — non-refundable policy; `refund_application_fee` defaults to `false` |
 | DriveBook net on full DIRECT refund? | +$1.75 (full application fee retained; Stripe processing cost is provider's) |
-| Who manages dispute responses? | **Provider** — through full Stripe Dashboard (Standard account) |
+| Who manages dispute responses? | **Provider** — through full Stripe Dashboard (Accounts v2 with `dashboard: "full"`) |
 | Who bears dispute cost? | Connected account debited first; negative-balance responsibility depends on `losses_collector` configuration |
 | Does DriveBook have zero legal liability? | Not claimed — depends on provider agreement, Stripe config, and Australian law |
 | Are DIRECT wallet top-ups in scope? | No — out of scope until WLA-005 is resolved |
+| Are DIRECT package purchases in scope? | No — excluded until provider-facing package refund policy is defined |
 | Can PLATFORM and DIRECT share PlatformLedger? | No — DIRECT must use `DirectSettlementEntry` only |
 | Can DIRECT be activated from current source? | No — G01–G12 must be resolved |
 | Is PLATFORM behaviour changed by this ADR? | No |
@@ -481,6 +526,7 @@ No current code is modified by this ADR. The following are verified correct and 
 | v5 | NOT ACCEPTED | Entire charge type wrong — destination charge assumed; correct model is direct charge on connected account; fee is provider-funded not student-funded |
 | v6 | NOT ACCEPTED | Arithmetic error ($1.49 written as $1.19); wrong account config (Express, not Accounts v2 Standard); DriveBook facilitating refunds (should be provider-initiated); zero-liability claim for disputes; wallet top-ups in scope (should be out until WLA-005); no AU surcharge compliance review |
 | v7 | NOT ACCEPTED | Partial application-fee refund described as proportional (incorrect — full fee retained unless platform explicitly refunds); DIRECT package refunds claimed to use PLATFORM function (provider manages independently); refund funding/insufficient-balance not documented; webhook specification incomplete; G01–G11 not updated to G01–G12; Managed Risk eligibility unverified |
+| v8 | NOT ACCEPTED | Accounts v2 terminology imprecise ("Standard" not "Accounts v2 with full Dashboard"); DIRECT packages still partially in scope (must be fully excluded); webhook specification covered only connected-account events (must also cover platform-account `application_fee.created`/`application_fee.refunded`); two webhook contexts not defined |
 
 ---
 
@@ -488,9 +534,9 @@ No current code is modified by this ADR. The following are verified correct and 
 
 These assumptions must be verified before the ADR is accepted or DIRECT mode is activated:
 
-1. **Accounts v2 Australian eligibility:** `fees_collector: "stripe"` and `losses_collector: "stripe"` must be confirmed available for Australian-registered connected accounts on DriveBook's Stripe platform. The Stripe changelog indicates support was added but actual availability must be verified.
+1. **Accounts v2 Australian eligibility:** `defaults.responsibilities.fees_collector: "stripe"` and `defaults.responsibilities.losses_collector: "stripe"` must be confirmed available for Australian-registered connected accounts on DriveBook's Stripe platform. The Stripe changelog indicates support was added but actual availability must be verified.
 
-2. **Standard account Dashboard access:** The recommendation assumes Standard accounts provide full Stripe Dashboard access in Australia. This must be confirmed for the specific Stripe product configuration DriveBook uses.
+2. **Accounts v2 Dashboard access:** The recommendation assumes Accounts v2 connected accounts with `dashboard: "full"` provide full Stripe Dashboard access in Australia. This must be confirmed for the specific Stripe product configuration DriveBook uses.
 
 3. **Connect webhook event delivery:** Direct-charge dispute and refund events fire against the connected account. DriveBook must verify that Connect webhooks deliver these events reliably to the platform for reconciliation.
 
@@ -505,6 +551,7 @@ These assumptions must be verified before the ADR is accepted or DIRECT mode is 
 8. **Merchant-of-record and tax obligations:** Out of scope for this ADR. Requires separate legal/tax assessment.
 9. **DIRECT package refund policy:** The provider manages DIRECT refunds independently. The existing PLATFORM `calculatePartialPackageRefund()` function does not transfer to DIRECT mode. A provider-facing package refund contract (including discount clawback, used-hours repricing, and minimum-hours qualification) must be defined before DIRECT package purchases are activated. Single-booking DIRECT refunds are in scope; DIRECT packages are deferred.
 10. **Refund funding and provider obligations:** When a provider issues a refund with insufficient connected-account balance, the refund may pend or fail. DriveBook's contractual obligations to the student in this scenario are not defined. The provider agreement must specify who bears the cost when a refund cannot be funded from the connected account.
+11. **Express account replacement and re-onboarding:** It is unresolved whether existing v1 Express accounts can be migrated in place to Accounts v2 with `dashboard: "full"`, or whether they must be replaced entirely. If replacement is required, existing providers would need to complete new onboarding. The operational impact of this migration on active providers is not assessed.
 
 ---
 
